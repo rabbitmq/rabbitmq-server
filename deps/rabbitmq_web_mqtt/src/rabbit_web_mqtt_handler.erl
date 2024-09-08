@@ -35,14 +35,13 @@
 -record(state, {
           socket :: {rabbit_proxy_socket, any(), any()} | rabbit_net:socket(),
           parse_state = rabbit_mqtt_packet:init_state() :: rabbit_mqtt_packet:state(),
-          proc_state = connect_packet_unprocessed :: connect_packet_unprocessed |
-                                                     rabbit_mqtt_processor:state(),
+          proc_state = connect_packet_unprocessed :: connect_packet_unprocessed | rabbit_mqtt_processor:state(),
           connection_state = running :: running | blocked,
           conserve = false :: boolean(),
-          stats_timer :: option(rabbit_event:state()),
+          stats_timer :: rabbit_event:state(),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
           conn_name :: option(binary())
-        }).
+         }).
 
 -type state() :: #state{}.
 
@@ -81,10 +80,11 @@ init(Req, Opts) ->
                 true ->
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
                     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-
+                    State = #state{socket = maps:get(proxy_header, Req, undefined),
+                                   stats_timer = rabbit_event:init_stats_timer()},
                     {?MODULE,
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
-                     #state{socket = maps:get(proxy_header, Req, undefined)},
+                     State,
                      WsOpts}
             end
     end.
@@ -112,8 +112,7 @@ websocket_init(State0 = #state{socket = Sock}) ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
             _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-            State1 = State0#state{conn_name = ConnName},
-            State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+            State = State0#state{conn_name = ConnName},
             process_flag(trap_exit, true),
             {[], State, hibernate};
         {error, Reason} ->

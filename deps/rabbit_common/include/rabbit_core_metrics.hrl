@@ -26,7 +26,8 @@
 
 -define(CORE_EXTRA_TABLES, [{gen_server2_metrics, set},
                             {auth_attempt_metrics, set},
-                            {auth_attempt_detailed_metrics, set}]).
+                            {auth_attempt_detailed_metrics, set},
+                            {session_metrics, set}]).
 
 % `CORE_NON_CHANNEL_TABLES` are tables that store counters representing the
 % same info as some of the channel_queue_metrics, channel_exchange_metrics and

@@ -36,6 +36,7 @@ defmodule RabbitMQ.CLI.Core.DocGuide do
   Macros.defguide("alarms")
   Macros.defguide("disk_alarms")
   Macros.defguide("alternate_exchange", path_segment: "ae")
+  Macros.defguide("amqp")
   Macros.defguide("channels")
   Macros.defguide("cli")
   Macros.defguide("clustering")

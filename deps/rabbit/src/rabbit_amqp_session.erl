@@ -79,9 +79,58 @@
 -define(HIBERNATE_AFTER, 6_000).
 -define(CREDIT_REPLY_TIMEOUT, 30_000).
 
+%% Session begin/end events contain immutable facts.
+%% They are emitted only when the session begins/ends.
+-define(EVENT_KEYS,
+        [pid,
+         name,
+         connection_pid,
+         channel_number,
+         user,
+         vhost,
+         handle_max]).
+
+%% Statistics contain mutable facts.
+%% They are emitted every collect_statistics_interval.
+-define(STATISTICS_KEYS,
+        [%% incoming frame stats
+         in_attach,
+         in_flow,
+         in_transfer,
+         in_disposition,
+         in_detach,
+         %% outgoing frame stats
+         out_attach,
+         out_flow,
+         out_transfer,
+         out_disposition,
+         out_detach,
+         %% incoming message stats
+         in_msgs_unsettled,
+         in_msgs_settled,
+         in_msgs_accepted,
+         in_msgs_rejected,
+         in_msgs_released,
+         in_msgs_unroutable_dropped,
+         %% outgoing message stats
+         out_msgs_unsettled,
+         out_msgs_settled,
+         out_msgs_accepted,
+         out_msgs_rejected,
+         out_msgs_released,
+         out_msgs_modified,
+         %% AMQP process stats
+         in_links,
+         out_links,
+         %% other process stats
+         reductions
+        ]).
+
 -export([start_link/8,
          process_frame/2,
          list_local/0,
+         emit_info_all/4,
+         emit_info_local/3,
          conserve_resources/3,
          check_resource_access/4,
          check_read_permitted_on_topic/4
@@ -157,6 +206,7 @@
           %% TRANSFER delivery IDs published to queues but not yet confirmed by queues
           incoming_unconfirmed_map = #{} :: #{delivery_number() =>
                                               {#{rabbit_amqqueue:name() := ok},
+                                               Exchange :: rabbit_misc:resource_name(),
                                                IsTransferSettled :: boolean(),
                                                AtLeastOneQueueConfirmed :: boolean()}},
           multi_transfer_msg :: undefined | #multi_transfer_msg{}
@@ -242,6 +292,47 @@
 -record(pending_management_delivery, {
           %% A large message can be split into multiple transfer frames.
           frames :: [transfer_frame_body(), ...]
+         }).
+
+-record(exchange_stats, {
+          published = #{} :: #{rabbit_misc:resource_name() => non_neg_integer()},
+          %%TODO This metric belongs better to queues than to exchanges.
+          accepted = #{} :: #{rabbit_misc:resource_name() => non_neg_integer()},
+          unroutable_returned = #{} :: #{rabbit_misc:resource_name() => non_neg_integer()},
+          unroutable_dropped = #{} :: #{rabbit_misc:resource_name() => non_neg_integer()}
+         }).
+
+-record(stats, {
+          %% incoming frame stats
+          in_attach = 0 :: non_neg_integer(),
+          in_flow = 0 :: non_neg_integer(),
+          in_transfer = 0 :: non_neg_integer(),
+          in_disposition = 0 :: non_neg_integer(),
+          in_detach = 0 :: non_neg_integer(),
+          %% outgoing frame stats
+          out_attach = 0 :: non_neg_integer(),
+          out_flow = 0 :: non_neg_integer(),
+          out_transfer = 0 :: non_neg_integer(),
+          out_disposition = 0 :: non_neg_integer(),
+          out_detach = 0 :: non_neg_integer(),
+          %% incoming message stats
+          in_msgs_unsettled = 0 :: non_neg_integer(),
+          in_msgs_settled = 0 :: non_neg_integer(),
+          in_msgs_accepted = 0 :: non_neg_integer(),
+          in_msgs_rejected = 0 :: non_neg_integer(),
+          in_msgs_released = 0 :: non_neg_integer(),
+          in_msgs_unroutable_dropped = 0 :: non_neg_integer(),
+          %% outgoing message stats
+          out_msgs_unsettled = 0 :: non_neg_integer(),
+          out_msgs_settled = 0 :: non_neg_integer(),
+          out_msgs_accepted = 0 :: non_neg_integer(),
+          out_msgs_rejected = 0 :: non_neg_integer(),
+          out_msgs_released = 0 :: non_neg_integer(),
+          out_msgs_modified  = 0 :: non_neg_integer(),
+          %% If stats level is 'fine', we stash exchange stats in order to emit them in
+          %% batches every collect_statistics_interval. This avoids calling the costly
+          %% ets:update_counter/4 operation per message.
+          exchange_stats :: not_fine | #exchange_stats{}
          }).
 
 -record(cfg, {
@@ -363,7 +454,10 @@
 
           queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
           permission_cache = [] :: permission_cache(),
-          topic_permission_cache = [] :: topic_permission_cache()
+          topic_permission_cache = [] :: topic_permission_cache(),
+
+          stats_timer :: rabbit_event:state(),
+          stats :: #stats{}
          }).
 
 -type state() :: #state{}.
@@ -387,7 +481,6 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
     process_flag(trap_exit, true),
     process_flag(message_queue_data, off_heap),
 
-    ok = pg:join(pg_scope(), self(), self()),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     Alarms = sets:from_list(Alarms0, [{version, 2}]),
 
@@ -419,6 +512,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                      end,
     NextOutgoingId = ?INITIAL_OUTGOING_TRANSFER_ID,
 
+    {StatsTimer, Stats} = init_stats(),
     Reply = #'v1_0.begin'{
                %% "When an endpoint responds to a remotely initiated session, the remote-channel
                %% MUST be set to the channel on which the remote session sent the begin." [2.7.2]
@@ -428,31 +522,39 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                outgoing_window = ?UINT_OUTGOING_WINDOW,
                handle_max = ?UINT(EffectiveHandleMax)},
     rabbit_amqp_writer:send_command(WriterPid, ChannelNum, Reply),
+    State = #state{next_incoming_id = RemoteNextOutgoingId,
+                   next_outgoing_id = NextOutgoingId,
+                   incoming_window = IncomingWindow,
+                   remote_incoming_window = RemoteIncomingWindow,
+                   remote_outgoing_window = RemoteOutgoingWindow,
+                   outgoing_delivery_id = ?INITIAL_OUTGOING_DELIVERY_ID,
+                   stats_timer = StatsTimer,
+                   stats = Stats,
+                   cfg = #cfg{reader_pid = ReaderPid,
+                              writer_pid = WriterPid,
+                              outgoing_max_frame_size = MaxFrameSize,
+                              user = User,
+                              vhost = Vhost,
+                              channel_num = ChannelNum,
+                              resource_alarms = Alarms,
+                              trace_state = rabbit_trace:init(Vhost),
+                              conn_name = ConnName,
+                              max_handle = EffectiveHandleMax,
+                              max_incoming_window = MaxIncomingWindow,
+                              max_link_credit = MaxLinkCredit,
+                              max_queue_credit = MaxQueueCredit
+                             }},
+    Infos = infos(?EVENT_KEYS, State),
+    ok = rabbit_core_metrics:session_begun(Infos),
+    ok = rabbit_event:notify(session_begun, Infos),
+    ok = rabbit_event:if_enabled(State,
+                                 #state.stats_timer,
+                                 fun() -> emit_stats(State) end),
+    {ok, State}.
 
-    {ok, #state{next_incoming_id = RemoteNextOutgoingId,
-                next_outgoing_id = NextOutgoingId,
-                incoming_window = IncomingWindow,
-                remote_incoming_window = RemoteIncomingWindow,
-                remote_outgoing_window = RemoteOutgoingWindow,
-                outgoing_delivery_id = ?INITIAL_OUTGOING_DELIVERY_ID,
-                cfg = #cfg{reader_pid = ReaderPid,
-                           writer_pid = WriterPid,
-                           outgoing_max_frame_size = MaxFrameSize,
-                           user = User,
-                           vhost = Vhost,
-                           channel_num = ChannelNum,
-                           resource_alarms = Alarms,
-                           trace_state = rabbit_trace:init(Vhost),
-                           conn_name = ConnName,
-                           max_handle = EffectiveHandleMax,
-                           max_incoming_window = MaxIncomingWindow,
-                           max_link_credit = MaxLinkCredit,
-                           max_queue_credit = MaxQueueCredit
-                          }}}.
-
-terminate(_Reason, #state{incoming_links = IncomingLinks,
-                          outgoing_links = OutgoingLinks,
-                          queue_states = QStates}) ->
+terminate(_Reason, State = #state{incoming_links = IncomingLinks,
+                                  outgoing_links = OutgoingLinks,
+                                  queue_states = QStates}) ->
     maps:foreach(
       fun (_, _) ->
               rabbit_global_counters:publisher_deleted(?PROTOCOL)
@@ -461,11 +563,19 @@ terminate(_Reason, #state{incoming_links = IncomingLinks,
       fun (_, _) ->
               rabbit_global_counters:consumer_deleted(?PROTOCOL)
       end, OutgoingLinks),
-    ok = rabbit_queue_type:close(QStates).
+    ok = rabbit_queue_type:close(QStates),
+    ok = rabbit_event:if_enabled(State,
+                                 #state.stats_timer,
+                                 fun() -> emit_stats(State) end),
+    %%TODO set delete marker
+    %% [delete_stats(Tag) || {Tag, _} <- get()],
+    ok = rabbit_core_metrics:session_ended(),
+    Infos = infos(?EVENT_KEYS, State),
+    ok = rabbit_event:notify(session_ended, Infos).
 
 -spec list_local() -> [pid()].
 list_local() ->
-    pg:which_groups(pg_scope()).
+    rabbit_core_metrics:session_pids().
 
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
@@ -483,6 +593,14 @@ handle_info({bump_credit, Msg}, State) ->
     %% We are receiving credit from the writer proc.
     credit_flow:handle_bump_msg(Msg),
     noreply(State);
+handle_info(emit_stats, State0) ->
+    State1 = send_buffered(State0),
+    %% Emit stats **after** sending any buffered data.
+    State2 = emit_stats(State1),
+    State = rabbit_event:reset_stats_timer(State2, #state.stats_timer),
+    %% NB: Don't call noreply/1 since we don't want to kick off the stats
+    %% timer because we want to have a chance to hibernate eventually.
+    {noreply, State};
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             #state{queue_states = QStates0,
                    stashed_eol = Eol} = State0) ->
@@ -497,10 +615,12 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             noreply(State)
     end.
 
-handle_cast({frame_body, FrameBody},
+handle_cast({frame_body, FrameBody0},
             #state{cfg = #cfg{writer_pid = WriterPid,
                               channel_num = Ch}} = State0) ->
-    try handle_frame(FrameBody, State0) of
+    FrameBody = ensure_transfer_payload(FrameBody0),
+    State1 = frame_received(FrameBody, State0),
+    try handle_frame(FrameBody, State1) of
         {ok, ReplyFrames, State} ->
             lists:foreach(fun(Frame) ->
                                   rabbit_amqp_writer:send_command(WriterPid, Ch, Frame)
@@ -509,11 +629,11 @@ handle_cast({frame_body, FrameBody},
         {stop, _, _} = Stop ->
             Stop
     catch exit:#'v1_0.error'{} = Error ->
-              log_error_and_close_session(Error, State0);
+              log_error_and_close_session(Error, State1);
           exit:normal ->
-              {stop, normal, State0};
+              {stop, normal, State1};
           _:Reason:Stacktrace ->
-              {stop, {Reason, Stacktrace}, State0}
+              {stop, {Reason, Stacktrace}, State1}
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
@@ -561,6 +681,14 @@ handle_cast({conserve_resources, Alarm, Conserve},
             ok
     end,
     noreply(State);
+handle_cast({force_event_refresh, Ref}, State0) ->
+    %%TODO test this branch
+    Infos = infos(?EVENT_KEYS, State0),
+    ok = rabbit_event:notify(session_created, Infos, Ref),
+    {StatsTimer, Stats} = init_stats(),
+    State = State0#state{stats_timer = StatsTimer,
+                         stats = Stats},
+    noreply(State);
 handle_cast(refresh_config, #state{cfg = #cfg{vhost = Vhost} = Cfg} = State0) ->
     State = State0#state{cfg = Cfg#cfg{trace_state = rabbit_trace:init(Vhost)}},
     noreply(State).
@@ -586,11 +714,13 @@ noreply_coalesce(State) ->
     {noreply, State, Timeout}.
 
 noreply(State0) ->
-    State = send_buffered(State0),
+    State1 = send_buffered(State0),
+    State = rabbit_event:ensure_stats_timer(State1, #state.stats_timer, emit_stats),
     {noreply, State}.
 
 reply(Reply, State0) ->
-    State = send_buffered(State0),
+    State1 = send_buffered(State0),
+    State = rabbit_event:ensure_stats_timer(State1, #state.stats_timer, emit_stats),
     {reply, Reply, State}.
 
 send_buffered(State0) ->
@@ -645,7 +775,7 @@ handle_stashed_rejected(#state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                         case Links0 of
                             #{HandleInt := Link0 = #incoming_link{incoming_unconfirmed_map = U0}} ->
                                 case maps:take(DeliveryId, U0) of
-                                    {{_, Settled, _}, U} ->
+                                    {{_, _, Settled, _}, U} ->
                                         Ids1 = case Settled of
                                                    true -> Ids0;
                                                    false -> [DeliveryId | Ids0]
@@ -672,37 +802,43 @@ handle_stashed_settled(GrantCredits, #state{stashed_settled = []} = State) ->
     {[], GrantCredits, State};
 handle_stashed_settled(GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                                              stashed_settled = Actions,
-                                             incoming_links = Links} = State0) ->
-    {Ids, GrantCredits, Ls} =
+                                             incoming_links = Links,
+                                             stats = Stats = #stats{exchange_stats = ExchangeStats0}
+                                            } = State0) ->
+    {Ids, GrantCredits, Ls, ExchangeStats} =
     lists:foldl(
       fun({settled, QName, Correlations}, Accum) ->
               lists:foldl(
-                fun({HandleInt, DeliveryId}, {Ids0, GrantCreds0, Links0} = Acc) ->
+                fun({HandleInt, DeliveryId}, {Ids0, GrantCreds0, Links0, XStats0} = Acc) ->
                         case Links0 of
                             #{HandleInt := Link0 = #incoming_link{incoming_unconfirmed_map = U0}} ->
                                 case maps:take(DeliveryId, U0) of
-                                    {{#{QName := _} = Qs, Settled, _}, U1} ->
+                                    {{#{QName := _} = Qs, XNameBin, Settled, _}, U1} ->
                                         UnconfirmedQs = map_size(Qs),
-                                        {Ids2, U} =
+                                        {Ids1, U, XStats} =
                                         if UnconfirmedQs =:= 1 ->
                                                %% last queue confirmed
-                                               Ids1 = case Settled of
-                                                          true -> Ids0;
-                                                          false -> [DeliveryId | Ids0]
-                                                      end,
-                                               {Ids1, U1};
+                                               case Settled of
+                                                   true ->
+                                                       {Ids0, U1, XStats0};
+                                                   false ->
+                                                       {[DeliveryId | Ids0],
+                                                        U1,
+                                                        exchange_accepted(XNameBin, XStats0)}
+                                               end;
                                            UnconfirmedQs > 1 ->
                                                U2 = maps:update(
                                                       DeliveryId,
-                                                      {maps:remove(QName, Qs), Settled, true},
+                                                      {maps:remove(QName, Qs), XNameBin, Settled, true},
                                                       U0),
-                                               {Ids0, U2}
+                                               {Ids0, U2, XStats0}
                                         end,
                                         Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                                         {Link, GrantCreds} = maybe_grant_link_credit(
                                                                MaxLinkCredit, HandleInt,
                                                                Link1, GrantCreds0),
-                                        {Ids2, GrantCreds, maps:update(HandleInt, Link, Links0)};
+                                        Links1 = maps:update(HandleInt, Link, Links0),
+                                        {Ids1, GrantCreds, Links1, XStats};
                                     _ ->
                                         Acc
                                 end;
@@ -710,10 +846,11 @@ handle_stashed_settled(GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLin
                                 Acc
                         end
                 end, Accum, Correlations)
-      end, {[], GrantCredits0, Links}, Actions),
+      end, {[], GrantCredits0, Links, ExchangeStats0}, Actions),
 
     State = State0#state{stashed_settled = [],
-                         incoming_links = Ls},
+                         incoming_links = Ls,
+                         stats = Stats#stats{exchange_stats = ExchangeStats}},
     {Ids, GrantCredits, State}.
 
 handle_stashed_down(#state{stashed_down = []} = State) ->
@@ -744,14 +881,16 @@ handle_stashed_eol(DetachFrames, GrantCredits, #state{stashed_eol = []} = State)
 handle_stashed_eol(DetachFrames0, GrantCredits0, #state{cfg = #cfg{max_link_credit = MaxLinkCredit},
                                                         stashed_eol = Eols} = State0) ->
     {ReleasedIs, AcceptedIds, DetachFrames, GrantCredits, State1} =
-    lists:foldl(fun(QName, {RIds0, AIds0, DetachFrames1, GrantCreds0, S0 = #state{incoming_links = Links0,
-                                                                                  queue_states = QStates0}}) ->
-                        {RIds, AIds, GrantCreds1, Links} = settle_eol(
-                                                             QName, MaxLinkCredit,
-                                                             {RIds0, AIds0, GrantCreds0, Links0}),
+    lists:foldl(fun(QName, {RIds0, AIds0, DetachFrames1, GrantCreds0,
+                            S0 = #state{incoming_links = Links0,
+                                        queue_states = QStates0,
+                                        stats = Stats = #stats{exchange_stats = XStats0}}}) ->
+                        {RIds, AIds, GrantCreds1, Links, XStats} =
+                        settle_eol(QName, MaxLinkCredit, {RIds0, AIds0, GrantCreds0, Links0, XStats0}),
                         QStates = rabbit_queue_type:remove(QName, QStates0),
                         S1 = S0#state{incoming_links = Links,
-                                      queue_states = QStates},
+                                      queue_states = QStates,
+                                      stats = Stats#stats{exchange_stats = XStats}},
                         {DetachFrames2, GrantCreds, S} = destroy_links(QName, DetachFrames1, GrantCreds1, S1),
                         {RIds, AIds, DetachFrames2, GrantCreds, S}
                 end, {[], [], DetachFrames0, GrantCredits0, State0}, Eols),
@@ -759,32 +898,32 @@ handle_stashed_eol(DetachFrames0, GrantCredits0, #state{cfg = #cfg{max_link_cred
     State = State1#state{stashed_eol = []},
     {ReleasedIs, AcceptedIds, DetachFrames, GrantCredits, State}.
 
-settle_eol(QName, MaxLinkCredit, {_ReleasedIds, _AcceptedIds, _GrantCredits, Links} = Acc) ->
+settle_eol(QName, MaxLinkCredit, {_ReleasedIds, _AcceptedIds, _GrantCredits, Links, _XStats} = Acc) ->
     maps:fold(fun(HandleInt,
                   #incoming_link{incoming_unconfirmed_map = U0} = Link0,
-                  {RelIds0, AcceptIds0, GrantCreds0, Links0}) ->
-                      {RelIds, AcceptIds, U} = settle_eol0(QName, {RelIds0, AcceptIds0, U0}),
+                  {RelIds0, AcceptIds0, GrantCreds0, Links0, XStats0}) ->
+                      {RelIds, AcceptIds, U, XStats} = settle_eol0(QName, {RelIds0, AcceptIds0, U0, XStats0}),
                       Link1 = Link0#incoming_link{incoming_unconfirmed_map = U},
                       {Link, GrantCreds} = maybe_grant_link_credit(
                                              MaxLinkCredit, HandleInt, Link1, GrantCreds0),
                       Links1 = maps:update(HandleInt,
                                            Link,
                                            Links0),
-                      {RelIds, AcceptIds, GrantCreds, Links1}
+                      {RelIds, AcceptIds, GrantCreds, Links1, XStats}
               end, Acc, Links).
 
-settle_eol0(QName, {_ReleasedIds, _AcceptedIds, UnconfirmedMap} = Acc) ->
+settle_eol0(QName, {_ReleasedIds, _AcceptedIds, UnconfirmedMap, _XStats} = Acc) ->
     maps:fold(
       fun(DeliveryId,
-          {#{QName := _} = Qs, Settled, AtLeastOneQueueConfirmed},
-          {RelIds, AcceptIds, U0}) ->
+          {#{QName := _} = Qs, XNameBin, Settled, AtLeastOneQueueConfirmed},
+          {RelIds, AcceptIds, U0, XStats0}) ->
               UnconfirmedQs = map_size(Qs),
               if UnconfirmedQs =:= 1 ->
                      %% The last queue that this delivery ID was waiting a confirm for got deleted.
                      U = maps:remove(DeliveryId, U0),
                      case Settled of
                          true ->
-                             {RelIds, AcceptIds, U};
+                             {RelIds, AcceptIds, U, XStats0};
                          false ->
                              case AtLeastOneQueueConfirmed of
                                  true ->
@@ -792,18 +931,19 @@ settle_eol0(QName, {_ReleasedIds, _AcceptedIds, UnconfirmedMap} = Acc) ->
                                      %% the client with ACCEPTED. This allows e.g. for large fanout
                                      %% scenarios where temporary target queues are deleted
                                      %% (think about an MQTT subscriber disconnects).
-                                     {RelIds, [DeliveryId | AcceptIds], U};
+                                     XStats = exchange_accepted(XNameBin, XStats0),
+                                     {RelIds, [DeliveryId | AcceptIds], U, XStats};
                                  false ->
                                      %% Since no queue confirmed this message, we reply to the client
                                      %% with RELEASED. (The client can then re-publish this message.)
-                                     {[DeliveryId | RelIds], AcceptIds, U}
+                                     {[DeliveryId | RelIds], AcceptIds, U, XStats0}
                              end
                      end;
                  UnconfirmedQs > 1 ->
                      U = maps:update(DeliveryId,
-                                     {maps:remove(QName, Qs), Settled, AtLeastOneQueueConfirmed},
+                                     {maps:remove(QName, Qs), XNameBin, Settled, AtLeastOneQueueConfirmed},
                                      U0),
-                     {RelIds, AcceptIds, U}
+                     {RelIds, AcceptIds, U, XStats0}
               end;
          (_, _, A) ->
               A
@@ -890,14 +1030,23 @@ disposition(DeliveryState, First, Last) ->
        first = ?UINT(First),
        last = Last1}.
 
-handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
+ensure_transfer_payload(Performative = #'v1_0.transfer'{}) ->
+    %% Although the AMQP message format [3.2] requires a body, it is valid to send a transfer frame without payload.
+    %% For example, when a large multi transfer message is streamed using the ProtonJ2 client, the client could send
+    %% a final #'v1_0.transfer'{more=false} frame without a payload.
+    Payload = <<>>,
+    {Performative, Payload};
+ensure_transfer_payload(FrameBody) ->
+    FrameBody.
+
+handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Payload},
              State0 = #state{incoming_links = IncomingLinks}) ->
     {Flows, State1} = session_flow_control_received_transfer(State0),
 
     {Reply, State} =
     case IncomingLinks of
         #{Handle := Link0} ->
-            case incoming_link_transfer(Performative, Paylaod, Link0, State1) of
+            case incoming_link_transfer(Performative, Payload, Link0, State1) of
                 {ok, Reply0, Link, State2} ->
                     {Reply0, State2#state{incoming_links = IncomingLinks#{Handle := Link}}};
                 {error, Reply0} ->
@@ -907,15 +1056,9 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
                     {Reply0, State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
             end;
         _ ->
-            incoming_mgmt_link_transfer(Performative, Paylaod, State1)
+            incoming_mgmt_link_transfer(Performative, Payload, State1)
     end,
     reply_frames(Reply ++ Flows, State);
-
-%% Although the AMQP message format [3.2] requires a body, it is valid to send a transfer frame without payload.
-%% For example, when a large multi transfer message is streamed using the ProtonJ2 client, the client could send
-%% a final #'v1_0.transfer'{more=false} frame without a payload.
-handle_frame(Performative = #'v1_0.transfer'{}, State) ->
-    handle_frame({Performative, <<>>}, State);
 
 %% Flow control. These frames come with two pieces of information:
 %% the session window, and optionally, credit for a particular link.
@@ -2092,7 +2235,8 @@ handle_deliver(ConsumerTag, AckRequired,
             Sections = mc:protocol_state(Mc),
             validate_message_size(Sections, MaxMessageSize),
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
-            messages_delivered(Redelivered, QType),
+            messages_delivered(AckRequired, Redelivered, QType),
+            % State = queue_delivered(QName#resource.name, AckRequired, Redelivered, State0),
             rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, Trace),
             {OutgoingLinks, QPid
             } = case CreditApiVsn of
@@ -2353,6 +2497,8 @@ incoming_link_transfer(
             TopicPermCache = check_write_permitted_on_topic(
                                X, User, RoutingKey, TopicPermCache0),
             messages_received(Settled),
+            XNameBin = X#exchange.name#resource.name,
+            State1 = exchange_published(XNameBin, State0),
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
@@ -2361,14 +2507,14 @@ incoming_link_transfer(
             Mc = ensure_mc_cluster_compat(Mc2),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
-                    State1 = State0#state{queue_states = QStates,
+                    State2 = State1#state{queue_states = QStates,
                                           permission_cache = PermCache,
                                           topic_permission_cache = TopicPermCache},
                     %% Confirms must be registered before processing actions
                     %% because actions may contain rejections of publishes.
-                    {U, Reply0} = process_routing_confirm(
-                                    Qs, Settled, DeliveryId, U0),
-                    State = handle_queue_actions(Actions, State1),
+                    {U, Reply0, State3} = process_routing_confirm(
+                                            Qs, Settled, DeliveryId, U0, XNameBin, State2),
+                    State = handle_queue_actions(Actions, State3),
                     DeliveryCount = add(DeliveryCount0, 1),
                     Credit1 = Credit0 - 1,
                     {Credit, Reply1} = maybe_grant_link_credit(
@@ -2446,20 +2592,22 @@ lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
     Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc1),
     {ok, X, RKey, Mc, PermCache}.
 
-process_routing_confirm([], _SenderSettles = true, _, U) ->
+process_routing_confirm([], _SenderSettles = true, _, U, XNameBin, State0) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
-    {U, []};
-process_routing_confirm([], _SenderSettles = false, DeliveryId, U) ->
+    State = exchange_unroutable_dropped(XNameBin, State0),
+    {U, [], State};
+process_routing_confirm([], _SenderSettles = false, DeliveryId, U, XNameBin, State0) ->
     rabbit_global_counters:messages_unroutable_returned(?PROTOCOL, 1),
+    State = exchange_unroutable_returned(XNameBin, State0),
     Disposition = released(DeliveryId),
-    {U, [Disposition]};
-process_routing_confirm([_|_] = Qs, SenderSettles, DeliveryId, U0) ->
+    {U, [Disposition], State};
+process_routing_confirm([_|_] = Qs, SenderSettles, DeliveryId, U0, XNameBin, State0) ->
     QNames = rabbit_amqqueue:queue_names(Qs),
     false = maps:is_key(DeliveryId, U0),
     Map = maps:from_keys(QNames, ok),
-    U = U0#{DeliveryId => {Map, SenderSettles, false}},
+    U = U0#{DeliveryId => {Map, XNameBin, SenderSettles, false}},
     rabbit_global_counters:messages_routed(?PROTOCOL, map_size(Map)),
-    {U, []}.
+    {U, [], State0}.
 
 released(DeliveryId) ->
     #'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
@@ -3262,6 +3410,67 @@ remove_outgoing_link(Ctag, OutgoingUnsettledMap0, OutgoingPending0)
                         end, OutgoingPending0),
     {OutgoingUnsettledMap, OutgoingPending}.
 
+incr(N) ->
+    N + 1.
+
+exchange_published(_, State = #state{stats = #stats{exchange_stats = not_fine}}) ->
+    State;
+exchange_published(
+  XNameBin,
+  State = #state{stats = Stats = #stats{exchange_stats = XStats = #exchange_stats{published = Map0}}}) ->
+    Map = maps_update_with(XNameBin, fun incr/1, 1, Map0),
+    State#state{stats = Stats#stats{exchange_stats = XStats#exchange_stats{published = Map}}}.
+
+exchange_accepted(_, not_fine) ->
+    not_fine;
+exchange_accepted(
+  XNameBin,
+  Stats = #exchange_stats{accepted = Map0}) ->
+    Map = maps_update_with(XNameBin, fun incr/1, 1, Map0),
+    Stats#exchange_stats{accepted = Map}.
+
+exchange_unroutable_returned(_, State = #state{stats = #stats{exchange_stats = not_fine}}) ->
+    State;
+exchange_unroutable_returned(
+  XNameBin,
+  State = #state{stats = Stats = #stats{exchange_stats = XStats = #exchange_stats{unroutable_returned = Map0}}}) ->
+    Map = maps_update_with(XNameBin, fun incr/1, 1, Map0),
+    State#state{stats = Stats#stats{exchange_stats = XStats#exchange_stats{unroutable_returned = Map}}}.
+
+exchange_unroutable_dropped(_, State = #state{stats = #stats{exchange_stats = not_fine}}) ->
+    State;
+exchange_unroutable_dropped(
+  XNameBin,
+  State = #state{stats = Stats = #stats{exchange_stats = XStats = #exchange_stats{unroutable_dropped = Map0}}}) ->
+    Map = maps_update_with(XNameBin, fun incr/1, 1, Map0),
+    State#state{stats = Stats#stats{exchange_stats = XStats#exchange_stats{unroutable_dropped = Map}}}.
+
+% queue_delivered(_, _, _, State = #state{stashed_stats = not_fine}) ->
+%     State;
+% queue_delivered(
+%   QNameBin, AckRequired, Redelivered,
+%   State = #state{stashed_stats = Stats0 = #stats{queue_delivered_unsettled = Unsettled0,
+%                                                  queue_delivered_settled = Settled0,
+%                                                  queue_redelivered = Redelivered0}}) ->
+%     {Unsettled, Settled} = case AckRequired of
+%                                true ->
+%                                    {maps_update_with(QNameBin, fun incr/1, 1, Unsettled0),
+%                                     Settled0};
+%                                false ->
+%                                    {Unsettled0,
+%                                     maps_update_with(QNameBin, fun incr/1, 1, Settled0)}
+%                            end,
+%     Redelivered = case Redelivered of
+%                       true ->
+%                           maps_update_with(QNameBin, fun incr/1, 1, Redelivered0);
+%                       false ->
+%                           Redelivered0
+%                   end,
+%     Stats = Stats0#stats{queue_delivered_unsettled = Unsettled,
+%                          queue_delivered_settled = Settled,
+%                          queue_redelivered = Redelivered},
+%     State#state{stashed_stats = Stats}.
+
 messages_received(Settled) ->
     rabbit_global_counters:messages_received(?PROTOCOL, 1),
     case Settled of
@@ -3269,8 +3478,13 @@ messages_received(Settled) ->
         false -> rabbit_global_counters:messages_received_confirm(?PROTOCOL, 1)
     end.
 
-messages_delivered(Redelivered, QueueType) ->
+messages_delivered(AckRequired, Redelivered, QueueType) ->
     rabbit_global_counters:messages_delivered(?PROTOCOL, QueueType, 1),
+    %%TODO backport to 4.0.x?
+    case AckRequired of
+        true -> rabbit_global_counters:messages_delivered_consume_manual_ack(?PROTOCOL, QueueType, 1);
+        false -> rabbit_global_counters:messages_delivered_consume_auto_ack(?PROTOCOL, QueueType, 1)
+    end,
     case Redelivered of
         true -> rabbit_global_counters:messages_redelivered(?PROTOCOL, QueueType, 1);
         false -> ok
@@ -3285,6 +3499,23 @@ messages_acknowledged(complete, QName, QS, MsgIds) ->
     end;
 messages_acknowledged(_, _, _, _) ->
     ok.
+
+frame_received(FrameBody, State = #state{stats = Stats}) ->
+    Stats1 = case FrameBody of
+                 {#'v1_0.transfer'{}, _Payload} ->
+                     Stats#stats{in_transfer = Stats#stats.in_transfer + 1};
+                 #'v1_0.flow'{} ->
+                     Stats#stats{in_flow = Stats#stats.in_flow + 1};
+                 #'v1_0.disposition'{} ->
+                     Stats#stats{in_disposition = Stats#stats.in_disposition + 1};
+                 #'v1_0.attach'{} ->
+                     Stats#stats{in_attach = Stats#stats.in_attach + 1};
+                 #'v1_0.detach'{} ->
+                     Stats#stats{in_detach = Stats#stats.in_detach + 1};
+                 _ ->
+                     Stats
+             end,
+    State#state{stats = Stats1}.
 
 publisher_or_consumer_deleted(#incoming_link{}) ->
     rabbit_global_counters:publisher_deleted(?PROTOCOL);
@@ -3508,9 +3739,6 @@ is_valid_max(Val) ->
     Val > 0 andalso
     Val =< ?UINT_MAX.
 
-pg_scope() ->
-    rabbit:pg_local_scope(amqp_session).
-
 -spec cap_credit(rabbit_queue_type:credit(), pos_integer()) ->
     rabbit_queue_type:credit().
 cap_credit(DesiredCredit, MaxCredit) ->
@@ -3529,6 +3757,115 @@ ensure_mc_cluster_compat(Mc) ->
             %% for compatibility
             mc:convert(mc_amqpl, Mc, McEnv)
     end.
+
+init_stats() ->
+    StatsTimer = rabbit_event:init_stats_timer(),
+    Stats = case rabbit_event:stats_level(StatsTimer) of
+                fine ->
+                    #stats{exchange_stats = #exchange_stats{}};
+                _ ->
+                    #stats{exchange_stats = not_fine}
+            end,
+    {StatsTimer, Stats}.
+
+emit_stats(State = #state{stats = Stats = #stats{exchange_stats = ExchangeStats0},
+                          cfg = #cfg{vhost = Vhost}}) ->
+    Infos = infos(?STATISTICS_KEYS, State),
+    rabbit_core_metrics:session_stats(Infos),
+    ExchangeStats = emit_exchange_stats(ExchangeStats0, Vhost),
+    State#state{stats = Stats#stats{exchange_stats = ExchangeStats}}.
+
+emit_exchange_stats(not_fine, _Vhost) ->
+    not_fine;
+emit_exchange_stats(#exchange_stats{published = Published,
+                                    accepted = Accepted,
+                                    unroutable_returned = UnroutableReturned,
+                                    unroutable_dropped = UnroutableDropped},
+                    Vhost) ->
+    maps:foreach(fun(XNameBin, Num) ->
+                         XName = exchange_resource(Vhost, XNameBin),
+                         rabbit_core_metrics:exchange_stats(publish, XName, Num)
+                 end, Published),
+    maps:foreach(fun(XNameBin, Num) ->
+                         XName = exchange_resource(Vhost, XNameBin),
+                         rabbit_core_metrics:exchange_stats(confirm, XName, Num)
+                 end, Accepted),
+    maps:foreach(fun(XNameBin, Num) ->
+                         XName = exchange_resource(Vhost, XNameBin),
+                         rabbit_core_metrics:exchange_stats(return_unroutable, XName, Num)
+                 end, UnroutableReturned),
+    maps:foreach(fun(XNameBin, Num) ->
+                         XName = exchange_resource(Vhost, XNameBin),
+                         rabbit_core_metrics:exchange_stats(drop_unroutable, XName, Num)
+                 end, UnroutableDropped),
+    %% Reset stashed exchange stats.
+    #exchange_stats{}.
+
+emit_info_all(Nodes, Items, Ref, AggregatorPid) ->
+    Pids = [spawn_link(Node, ?MODULE, emit_info_local, [Items, Ref, AggregatorPid])
+            || Node <- Nodes],
+    rabbit_control_misc:await_emitters_termination(Pids).
+
+emit_info_local(Items, Ref, AggregatorPid) ->
+    rabbit_control_misc:emitting_map(
+      AggregatorPid,
+      Ref,
+      fun(one) -> rabbit_core_metrics:session_infos(Items) end,
+      [one]).
+
+infos(Items, State) ->
+    lists:map(fun(Item) ->
+                      Result = info(Item, State),
+                      {Item, Result}
+              end, Items).
+
+%% Immutable facts:
+info(pid, _) ->
+    self();
+info(connection_pid, #state{cfg = #cfg{reader_pid = Pid}}) ->
+    Pid;
+info(channel_number, #state{cfg = #cfg{channel_num = Num}}) ->
+    Num;
+info(user, #state{cfg = #cfg{user = #user{username = Username}}}) ->
+    Username;
+info(vhost, #state{cfg = #cfg{vhost = Vhost}}) ->
+    Vhost;
+info(handle_max, #state{cfg = #cfg{max_handle = Max}}) ->
+    Max;
+info(name, #state{cfg = #cfg{conn_name = ConnName,
+                             channel_num = ChannelNum}}) ->
+    unicode:characters_to_binary(rabbit_misc:format("~ts (~b)", [ConnName, ChannelNum]));
+
+%% Mutable facts:
+info(in_attach, #state{stats = #stats{in_attach = N}}) -> N;
+info(in_flow, #state{stats = #stats{in_flow = N}}) -> N;
+info(in_transfer, #state{stats = #stats{in_transfer = N}}) -> N;
+info(in_disposition, #state{stats = #stats{in_disposition = N}}) -> N;
+info(in_detach, #state{stats = #stats{in_detach = N}}) -> N;
+info(out_attach, #state{stats = #stats{out_attach = N}}) -> N;
+info(out_flow, #state{stats = #stats{out_flow = N}}) -> N;
+info(out_transfer, #state{stats = #stats{out_transfer = N}}) -> N;
+info(out_disposition, #state{stats = #stats{out_disposition = N}}) -> N;
+info(out_detach, #state{stats = #stats{out_detach = N}}) -> N;
+info(in_msgs_unsettled, #state{stats = #stats{in_msgs_unsettled = N}}) -> N;
+info(in_msgs_settled, #state{stats = #stats{in_msgs_settled = N}}) -> N;
+info(in_msgs_accepted, #state{stats = #stats{in_msgs_accepted = N}}) -> N;
+info(in_msgs_rejected, #state{stats = #stats{in_msgs_rejected = N}}) -> N;
+info(in_msgs_released, #state{stats = #stats{in_msgs_released = N}}) -> N;
+info(in_msgs_unroutable_dropped, #state{stats = #stats{in_msgs_unroutable_dropped = N}}) -> N;
+info(out_msgs_unsettled, #state{stats = #stats{out_msgs_unsettled = N}}) -> N;
+info(out_msgs_settled, #state{stats = #stats{out_msgs_settled = N}}) -> N;
+info(out_msgs_accepted, #state{stats = #stats{out_msgs_accepted = N}}) -> N;
+info(out_msgs_rejected, #state{stats = #stats{out_msgs_rejected = N}}) -> N;
+info(out_msgs_released, #state{stats = #stats{out_msgs_released = N}}) -> N;
+info(out_msgs_modified, #state{stats = #stats{out_msgs_modified = N}}) -> N;
+info(in_links, #state{incoming_links = Links}) ->
+    maps:size(Links);
+info(out_links, #state{outgoing_links = Links}) ->
+    maps:size(Links);
+info(reductions = Item, _State) ->
+    {Item, Reductions} = erlang:process_info(self(), Item),
+    Reductions.
 
 format_status(
   #{state := #state{cfg = Cfg,
@@ -3551,7 +3888,9 @@ format_status(
                     stashed_eol = StashedEol,
                     queue_states = QueueStates,
                     permission_cache = PermissionCache,
-                    topic_permission_cache = TopicPermissionCache}} = Status) ->
+                    topic_permission_cache = TopicPermissionCache,
+                    stats_timer = StatsTimer,
+                    stats = Stats}} = Status) ->
     State = #{cfg => Cfg,
               outgoing_pending => queue:len(OutgoingPending),
               remote_incoming_window => RemoteIncomingWindow,
@@ -3572,7 +3911,10 @@ format_status(
               stashed_eol => StashedEol,
               queue_states => rabbit_queue_type:format_status(QueueStates),
               permission_cache => PermissionCache,
-              topic_permission_cache => TopicPermissionCache},
+              topic_permission_cache => TopicPermissionCache,
+              stats_timer => StatsTimer,
+              %% TODO remove exchange_stats
+              stats => Stats},
     maps:update(state, State, Status).
 
 unwrap({_Tag, V}) ->

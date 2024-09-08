@@ -18,6 +18,14 @@
          connection_stats/2,
          connection_stats/4]).
 
+-export([session_begun/1,
+         session_ended/0,
+         session_pids/0,
+         session_infos/1,
+         session_stats/1
+         % session_stats/4
+        ]).
+
 -export([channel_created/2,
          channel_closed/1,
          channel_stats/2,
@@ -38,6 +46,8 @@
          queue_deleted/1,
          queues_deleted/1]).
 
+-export([exchange_stats/3]).
+
 -export([node_stats/2]).
 
 -export([node_node_stats/2]).
@@ -54,17 +64,35 @@
          get_auth_attempts/0,
          get_auth_attempts_by_source/0]).
 
+% -define(QUEUE_METRICS_DEFAULT(QName),
+%         %% Last field is delete marker.
+%         {QName, 0, 0, 0, 0, 0, 0, 0, 0}).
+
+% -define(SESSION_EXCHANGE_METRICS_DEFAULT(Key),
+%         %% Last field is delete marker.
+%         {Key, 0, 0, 0, 0, 0}).
+
+% -define(SESSION_QUEUE_METRICS_DEFAULT(Key),
+%         %% Last field is delete marker.
+%         {Key, 0, 0, 0, 0, 0, 0, 0, 0}).
+
 %%----------------------------------------------------------------------------
 %% Types
 %%----------------------------------------------------------------------------
--type(channel_stats_id() :: pid() |
-			    {pid(),
-			     {rabbit_types:rabbit_amqqueue_name(), rabbit_types:exchange_name()}} |
-			    {pid(), rabbit_types:rabbit_amqqueue_name()} |
-			    {pid(), rabbit_types:exchange_name()}).
+
+% -type(session_stats_key() :: {pid(), rabbit_types:r(exchange | queue)}).
+% -type(session_stats_type() :: exchange_stats | queue_stats).
+
+-type(channel_stats_id() ::
+      pid() |
+      {pid(),
+       {rabbit_types:rabbit_amqqueue_name(), rabbit_types:exchange_name()} |
+       rabbit_types:r(exchange | queue)}).
 
 -type(channel_stats_type() :: queue_exchange_stats | queue_stats |
 			      exchange_stats | reductions).
+
+-type(exchange_operation() :: publish | confirm | return_unroutable | drop_unroutable).
 
 -type(activity_status() :: up | single_active | waiting | suspected_down).
 %%----------------------------------------------------------------------------
@@ -107,8 +135,7 @@
 %%----------------------------------------------------------------------------
 
 create_table({Table, Type}) ->
-   ets:new(Table, [Type, public, named_table, {write_concurrency, true},
-    {read_concurrency, true}]).
+    ets:new(Table, [Type, public, named_table, {write_concurrency, true}]).
 
 init() ->
     Tables = ?CORE_TABLES ++ ?CORE_EXTRA_TABLES ++ ?CORE_NON_CHANNEL_TABLES,
@@ -146,6 +173,92 @@ connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
     ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions, 0}),
     ok.
 
+-spec session_begun(rabbit_types:infos()) -> ok.
+session_begun(ImmutableInfos) ->
+    ets:insert(session_metrics, {self(), ImmutableInfos, _MutableInfos = []}),
+    ok.
+
+-spec session_ended() -> ok.
+session_ended() ->
+    ets:delete(session_metrics, self()),
+    ok.
+
+-spec session_pids() -> [pid()].
+session_pids() ->
+    lists:map(fun([Pid]) ->
+                      Pid
+              end, ets:match(session_metrics, {'$1', '_', '_'})).
+
+-spec session_infos(rabbit_types:info_keys()) -> [rabbit_types:infos()].
+session_infos(Items) ->
+    lists:map(fun({Pid, ImmutableInfos, MutableInfos}) ->
+                      Infos = maps:from_list([{pid, Pid}] ++ ImmutableInfos ++ MutableInfos),
+                      lists:map(fun(Item) ->
+                                        {Item, maps:get(Item, Infos)}
+                                end, Items)
+              end, ets:tab2list(session_metrics)).
+
+-spec session_stats(rabbit_types:infos()) -> ok.
+session_stats(MutableInfos) ->
+    ets:update_element(session_metrics, self(), {3, MutableInfos}),
+    ok.
+
+% -spec session_stats(session_stats_type(), atom(), session_stats_key(), pos_integer()) -> ok.
+% session_stats(exchange_stats, publish, {_SessionPid, XName} = Key, Value) ->
+%     _ = ets:update_counter(session_exchange_metrics, Key, {2, Value}, ?SESSION_EXCHANGE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(exchange_metrics, XName, {2, Value}, ?EXCHANGE_METRICS_DEFAULT(XName)),
+%     ok;
+% session_stats(exchange_stats, accept, {_SessionPid, XName} = Key, Value) ->
+%     _ = ets:update_counter(session_exchange_metrics, Key, {3, Value}, ?SESSION_EXCHANGE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(exchange_metrics, XName, {3, Value}, ?EXCHANGE_METRICS_DEFAULT(XName)),
+%     ok;
+% session_stats(exchange_stats, return_unroutable, {_SessionPid, XName} = Key, Value) ->
+%     _ = ets:update_counter(session_exchange_metrics, Key, {4, Value}, ?SESSION_EXCHANGE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(exchange_metrics, XName, {4, Value}, ?EXCHANGE_METRICS_DEFAULT(XName)),
+%     ok;
+% session_stats(exchange_stats, drop_unroutable, {_SessionPid, XName} = Key, Value) ->
+%     _ = ets:update_counter(session_exchange_metrics, Key, {5, Value}, ?SESSION_EXCHANGE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(exchange_metrics, XName, {5, Value}, ?EXCHANGE_METRICS_DEFAULT(XName)),
+%     ok;
+
+% session_stats(queue_stats, deliver_unsettled, {_SessionPid, QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {2, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(queue_delivery_metrics, QName, {4, Value}, ?QUEUE_METRICS_DEFAULT(QName)),
+%     ok;
+% session_stats(queue_stats, deliver_settled, {_SessionPid, QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {3, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(queue_delivery_metrics, QName, {5, Value}, ?QUEUE_METRICS_DEFAULT(QName)),
+%     ok;
+% session_stats(queue_stats, redeliver, {_SessionPid, QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {4, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(queue_delivery_metrics, QName, {6, Value}, ?QUEUE_METRICS_DEFAULT(QName)),
+%     ok;
+% session_stats(queue_stats, accept, {_SessionPid, QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {5, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     _ = ets:update_counter(queue_delivery_metrics, QName, {7, Value}, ?QUEUE_METRICS_DEFAULT(QName)),
+%     ok;
+% session_stats(queue_stats, reject, {_SessionPid, _QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {6, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     ok;
+% session_stats(queue_stats, release, {_SessionPid, _QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {7, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     ok;
+% session_stats(queue_stats, modify, {_SessionPid,  _QName} = Key, Value) ->
+%     _ = ets:update_counter(session_queue_metrics, Key, {8, Value}, ?SESSION_QUEUE_METRICS_DEFAULT(Key)),
+%     ok.
+
+-spec exchange_stats(exchange_operation(), rabbit_types:exchange_name(), pos_integer()) -> ok.
+exchange_stats(Operation, XName, Incr) ->
+    Pos = case Operation of
+              publish -> 2;
+              confirm -> 3;
+              return_unroutable -> 4;
+              drop_unroutable -> 5
+          end,
+    %% Last field is delete marker.
+    _ = ets:update_counter(exchange_metrics, XName, {Pos, Incr}, {XName, 0, 0, 0, 0, 0}),
+    ok.
+
 channel_created(Pid, Infos) ->
     ets:insert(channel_created, {Pid, Infos}),
     ets:update_counter(connection_churn_metrics, node(), {4, 1},
@@ -168,26 +281,22 @@ channel_stats(reductions, Id, Value) ->
     ets:insert(channel_process_metrics, {Id, Value}),
     ok.
 
-channel_stats(exchange_stats, publish, {_ChannelPid, XName} = Id, Value) ->
+channel_stats(exchange_stats, Op = publish, {_ChannelPid, XName} = Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_exchange_metrics, Id, {2, Value}, {Id, 0, 0, 0, 0, 0}),
-    _ = ets:update_counter(exchange_metrics, XName, {2, Value}, {XName, 0, 0, 0, 0, 0}),
-    ok;
-channel_stats(exchange_stats, confirm, {_ChannelPid, XName} = Id, Value) ->
+    exchange_stats(Op, XName, Value);
+channel_stats(exchange_stats, Op = confirm, {_ChannelPid, XName} = Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_exchange_metrics, Id, {3, Value}, {Id, 0, 0, 0, 0, 0}),
-    _ = ets:update_counter(exchange_metrics, XName, {3, Value}, {XName, 0, 0, 0, 0, 0}),
-    ok;
-channel_stats(exchange_stats, return_unroutable, {_ChannelPid, XName} = Id, Value) ->
+    exchange_stats(Op, XName, Value);
+channel_stats(exchange_stats, Op = return_unroutable, {_ChannelPid, XName} = Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_exchange_metrics, Id, {4, Value}, {Id, 0, 0, 0, 0, 0}),
-    _ = ets:update_counter(exchange_metrics, XName, {4, Value}, {XName, 0, 0, 0, 0, 0}),
-    ok;
-channel_stats(exchange_stats, drop_unroutable, {_ChannelPid, XName} = Id, Value) ->
+    exchange_stats(Op, XName, Value);
+channel_stats(exchange_stats, Op = drop_unroutable, {_ChannelPid, XName} = Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_exchange_metrics, Id, {5, Value}, {Id, 0, 0, 0, 0, 0}),
-    _ = ets:update_counter(exchange_metrics, XName, {5, Value}, {XName, 0, 0, 0, 0, 0}),
-    ok;
+    exchange_stats(Op, XName, Value);
 channel_stats(queue_exchange_stats, publish, {_ChannelPid, QueueExchange} = Id, Value) ->
     %% Includes delete marker
     _ = ets:update_counter(channel_queue_exchange_metrics, Id, Value, {Id, 0, 0}),

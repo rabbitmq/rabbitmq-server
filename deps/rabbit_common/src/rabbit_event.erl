@@ -10,9 +10,9 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
--export([init_stats_timer/2, init_disabled_stats_timer/2,
+-export([init_stats_timer/0, init_stats_timer/2, init_disabled_stats_timer/2,
          ensure_stats_timer/3, stop_stats_timer/2, reset_stats_timer/2]).
--export([stats_level/2, if_enabled/3]).
+-export([stats_level/1, stats_level/2, if_enabled/3]).
 -export([notify/2, notify/3, notify_if/3]).
 -export([sync_notify/2, sync_notify/3]).
 
@@ -49,7 +49,6 @@
 -spec ensure_stats_timer(container(), pos(), term()) -> container().
 -spec stop_stats_timer(container(), pos()) -> container().
 -spec reset_stats_timer(container(), pos()) -> container().
--spec stats_level(container(), pos()) -> level().
 -spec if_enabled(container(), pos(), timer_fun()) -> 'ok'.
 -spec notify(event_type(), event_props()) -> 'ok'.
 -spec notify(event_type(), event_props(), reference() | 'none') -> 'ok'.
@@ -89,12 +88,18 @@ start_link() ->
 %% Nowadays, instead of sending a message to rabbit_event via notify(stats),
 %% some stat-emitting objects update ETS tables directly via module rabbit_core_metrics.
 
-init_stats_timer(C, P) ->
+-spec init_stats_timer() -> state().
+init_stats_timer() ->
     %% If the rabbit app is not loaded - use default none:5000
     StatsLevel = application:get_env(rabbit, collect_statistics, none),
-    Interval   = application:get_env(rabbit, collect_statistics_interval, 5000),
-    setelement(P, C, #state{level = StatsLevel, interval = Interval,
-                            timer = undefined}).
+    Interval = application:get_env(rabbit, collect_statistics_interval, 5000),
+    #state{level = StatsLevel,
+           interval = Interval,
+           timer = undefined}.
+
+init_stats_timer(C, P) ->
+    State = init_stats_timer(),
+    setelement(P, C, State).
 
 init_disabled_stats_timer(C, P) ->
     setelement(P, C, #state{level = none, interval = 0, timer = undefined}).
@@ -128,9 +133,13 @@ reset_stats_timer(C, P) ->
             C
     end.
 
-stats_level(C, P) ->
-    #state{level = Level} = element(P, C),
+-spec stats_level(state()) -> level().
+stats_level(#state{level = Level}) ->
     Level.
+
+-spec stats_level(container(), pos()) -> level().
+stats_level(C, P) ->
+    stats_level(element(P, C)).
 
 if_enabled(C, P, Fun) ->
     case element(P, C) of
@@ -156,5 +165,5 @@ event_cons(Type, Props, Ref) ->
     #event{type      = Type,
            props     = Props,
            reference = Ref,
-           timestamp = os:system_time(milli_seconds)}.
+           timestamp = os:system_time(millisecond)}.
 

@@ -37,7 +37,7 @@
                                                     rabbit_mqtt_processor:state(),
          connection_state :: running | blocked,
          conserve :: boolean(),
-         stats_timer :: option(rabbit_event:state()),
+         stats_timer :: rabbit_event:state(),
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
          conn_name :: binary()
         }).
@@ -87,9 +87,9 @@ init(Ref) ->
                             await_recv = false,
                             connection_state = running,
                             conserve = false,
-                            parse_state = rabbit_mqtt_packet:init_state()},
-            State1 = control_throttle(State0),
-            State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+                            parse_state = rabbit_mqtt_packet:init_state(),
+                            stats_timer = rabbit_event:init_stats_timer()},
+            State = control_throttle(State0),
             gen_server:enter_loop(?MODULE, [], State);
         {error, Reason = enotconn} ->
             ?LOG_INFO("MQTT could not get connection string: ~s", [Reason]),

@@ -233,7 +233,15 @@
 
     {queue_exchange_metrics, [
         {2, undefined, queue_exchange_messages_published_total, counter, "Total number of messages published into a queue through an exchange"}
-    ]}]).
+    ]},
+
+    {session_metrics, [
+        {2, undefined, session_attach_received_total, counter, "Total number of received attach frames", in_attach},
+        {2, undefined, session_flow_received_total, counter, "Total number of received flow frames", in_flow},
+        {2, undefined, session_transfer_received_total, counter, "Total number of received transfer frames", in_transfer}
+    ]}
+
+   ]).
 
 %% Metrics that can be only requested through `/metrics/detailed`
 -define(METRICS_CLUSTER,[
@@ -319,9 +327,11 @@ collect_mf(_Registry, Callback) ->
 
 collect(PerObjectMetrics, Prefix, VHostsFilter, IncludedMFs, Callback) ->
     _ = [begin
-         Data = get_data(Table, PerObjectMetrics, VHostsFilter),
-         mf(Callback, Prefix, Contents, Data)
-     end || {Table, Contents} <- IncludedMFs, not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs)],
+             Data = get_data(Table, PerObjectMetrics, VHostsFilter),
+             mf(Callback, Prefix, Contents, Data)
+         end || {Table, Contents} <- IncludedMFs,
+                not mutually_exclusive_mf(PerObjectMetrics, Table, IncludedMFs),
+                collect_table(Table, PerObjectMetrics)],
     ok.
 
 totals(Callback) ->
@@ -348,6 +358,13 @@ mutually_exclusive_mf(_, queue_consumer_count, MFs) ->
     lists:keymember(queue_metrics, 1, MFs);
 mutually_exclusive_mf(_, _, _) ->
     false.
+
+collect_table(session_metrics, false) ->
+    %% Prometheus counters must only increase or be reset to zero.
+    %% We omit aggregation for session metrics because individual sessions can end at any time.
+    false;
+collect_table(_Table, _PerObjectMetrics) ->
+    true.
 
 build_info() ->
     ProductInfo = rabbit:product_info(),
@@ -504,7 +521,7 @@ label({I1, I2}) ->
         {L1, L2} -> <<L1/binary, ",", L2/binary>>
     end;
 label(P) when is_pid(P) ->
-    <<"channel=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\"">>;
+    <<"pid=\"", (iolist_to_binary(pid_to_list(P)))/binary, "\"">>;
 label(A) when is_atom(A) ->
     case is_protocol(A) of
         true -> <<"protocol=\"", (atom_to_binary(A, utf8))/binary, "\"">>;
@@ -781,9 +798,12 @@ get_data(exchange_names, _, _) ->
                         Label = <<"vhost=\"", VHost/binary, "\",exchange=\"", Name/binary, "\",type=\"", (atom_to_binary(EType))/binary, "\"">>,
                         [{Label, 1}|Acc]
                 end, [], rabbit_exchange:list());
+get_data(session_metrics = Table, true, _) ->
+    lists:map(fun([Pid, Metrics]) ->
+                      {Pid, Metrics}
+              end, ets:match(Table, {'$1', '_', '$2'}));
 get_data(Table, _, _) ->
     ets:tab2list(Table).
-
 
 sum_queue_metrics(Props, {T, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11,
                           A12, A13, A14, A15, A16, A17}) ->
@@ -840,7 +860,7 @@ enabled_mfs_from_pdict(AllMFs) ->
         undefined ->
             [];
         MFNames ->
-            MFNameSet = sets:from_list(MFNames),
+            MFNameSet = sets:from_list(MFNames, [{version, 2}]),
             [ MF || MF = {Table, _} <- AllMFs, sets:is_element(Table, MFNameSet) ]
     end.
 
