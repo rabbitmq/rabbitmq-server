@@ -1164,7 +1164,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "metadata_store_clustering_SUITE",
     size = "large",
-    shard_count = 18,
+    shard_count = 19,
     sharding_method = "case",
 )
 
