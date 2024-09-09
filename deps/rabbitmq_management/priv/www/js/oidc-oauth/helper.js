@@ -46,15 +46,9 @@ function auth_settings_apply_defaults(authSettings) {
         }
         if (!resource_server.oauth_response_type) {
           resource_server.oauth_response_type = authSettings.oauth_response_type
-          if (!resource_server.oauth_response_type) {
-            resource_server.oauth_response_type = "code"
-          }
         }
         if (!resource_server.oauth_scopes) {
           resource_server.oauth_scopes = authSettings.oauth_scopes
-          if (!resource_server.oauth_scopes) {
-            resource_server.oauth_scopes = "openid profile"
-          }
         }
         if (!resource_server.oauth_client_id) {
           resource_server.oauth_client_id = authSettings.oauth_client_id
@@ -98,21 +92,21 @@ function get_oauth_settings() {
 export function oauth_initialize_if_required(state = "index") {
   let oauth = oauth_initialize(get_oauth_settings())
   if (!oauth.enabled) return oauth;
-  switch (state) { 
-    case 'login-callback': 
-      oauth_completeLogin(); break; 
-    case 'logout-callback': 
-      oauth_completeLogout(); break; 
-    default: 
+  switch (state) {
+    case 'login-callback':
+      oauth_completeLogin(); break;
+    case 'logout-callback':
+      oauth_completeLogout(); break;
+    default:
       oauth = oauth_initiate(oauth);
   }
-  return oauth; 
+  return oauth;
 }
 
 export function oauth_initiate(oauth) {
   if (oauth.enabled) {
     if (!oauth.sp_initiated) {
-        oauth.logged_in = has_auth_credentials();        
+        oauth.logged_in = has_auth_credentials();
     } else {
       oauth_is_logged_in().then( status => {
         if (status.loggedIn && !has_auth_credentials()) {
@@ -122,7 +116,7 @@ export function oauth_initiate(oauth) {
           if (!status.loggedIn) {
             clear_auth();
           } else {
-            oauth.logged_in = true;            
+            oauth.logged_in = true;
             oauth.expiryDate = new Date(status.user.expires_at * 1000);  // it is epoch in seconds
             let current = new Date();
             _management_logger.debug('token expires in ', (oauth.expiryDate-current)/1000,
@@ -146,7 +140,7 @@ function oauth_initialize_user_manager(resource_server) {
         client_id: resource_server.oauth_client_id,
         response_type: resource_server.oauth_response_type,
         scope: resource_server.oauth_scopes,
-        resource: resource_server.id,
+//        resource: resource_server.id,  deprecated 
         redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri() + "/",
 
