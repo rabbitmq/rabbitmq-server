@@ -195,7 +195,14 @@ update_config(Conf, State) ->
     Overflow = maps:get(overflow_strategy, Conf, drop_head),
     MaxLength = maps:get(max_length, Conf, undefined),
     MaxBytes = maps:get(max_bytes, Conf, undefined),
-    DeliveryLimit = maps:get(delivery_limit, Conf, undefined),
+    DeliveryLimit = case maps:get(delivery_limit, Conf, undefined) of
+                        DL when is_number(DL) andalso
+                                DL < 0 ->
+                            undefined;
+                        DL ->
+                            DL
+                    end,
+
     Expires = maps:get(expires, Conf, undefined),
     MsgTTL = maps:get(msg_ttl, Conf, undefined),
     ConsumerStrategy = case maps:get(single_active_consumer_on, Conf, false) of
@@ -615,16 +622,17 @@ apply(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
     checkout(Meta, State0, State, Effects);
 apply(_, {nodedown, _Node}, State) ->
     {State, ok};
-apply(#{index := _Idx} = Meta, #purge_nodes{nodes = Nodes}, State0) ->
+apply(Meta, #purge_nodes{nodes = Nodes}, State0) ->
     {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
     {State, ok, Effects};
-apply(#{index := _Idx} = Meta,
-      #update_config{config = #{dead_letter_handler := NewDLH} = Conf},
+apply(Meta,
+      #update_config{config = #{} = Conf},
       #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
                          resource = QRes},
               dlx = DlxState0} = State0) ->
+    NewDLH = maps:get(dead_letter_handler, Conf, OldDLH),
     {DlxState, Effects0} = rabbit_fifo_dlx:update_config(OldDLH, NewDLH, QRes,
                                                          DlxState0),
     State1 = update_config(Conf, State0#?STATE{dlx = DlxState}),
@@ -632,7 +640,7 @@ apply(#{index := _Idx} = Meta,
 apply(Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
     State = convert(Meta, FromVersion, ToVersion, V0State),
     {State, ok, [{aux, {dlx, setup}}]};
-apply(#{index := _IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
+apply(Meta, {dlx, _} = Cmd,
       #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                dlx = DlxState0} = State0) ->
     {DlxState, Effects0} = rabbit_fifo_dlx:apply(Meta, Cmd, DLH, DlxState0),
