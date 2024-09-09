@@ -12,17 +12,16 @@
 -include_lib("jose/include/jose_jws.hrl").
 
 
-decode_and_verify(OauthProviderId, Jwk, Token) ->
-    Verify =
-        case rabbit_oauth2_config:get_algorithms(OauthProviderId) of
-            undefined -> jose_jwt:verify(Jwk, Token);
-            Algs -> jose_jwt:verify_strict(Jwk, Algs, Token)
-        end,
+-spec decode_and_verify(list() | undefined, map(), binary()) -> {boolean(), map()}.
+decode_and_verify(Algs, Jwk, Token) ->
+    Verify = case Algs of
+        undefined -> jose_jwt:verify(Jwk, Token);
+        _ -> jose_jwt:verify_strict(Jwk, Algs, Token)
+    end,
     case Verify of
         {true, #jose_jwt{fields = Fields}, _}  -> {true, Fields};
         {false, #jose_jwt{fields = Fields}, _} -> {false, Fields}
     end.
-
 
 get_key_id(DefaultKey, Token) ->
     try

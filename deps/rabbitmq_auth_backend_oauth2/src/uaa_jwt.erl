@@ -32,7 +32,7 @@ add_signing_key(KeyId, Type, Value) ->
 -spec update_jwks_signing_keys(oauth_provider()) -> ok | {error, term()}.
 update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
         ssl_options = SslOptions}) ->
-    rabbit_log:debug("OAuth 2 JWT: downloading keys from ~tp (TLS options: ~p)",
+    rabbit_log:debug("Downloading signing keys from ~tp (TLS options: ~p)",
         [JwksUrl, SslOptions]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
         {ok, {_, _, JwksBody}} ->
@@ -40,13 +40,13 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
                 jose:decode(erlang:iolist_to_binary(JwksBody)), []),
             Keys = maps:from_list(lists:map(fun(Key) ->
                 {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-            rabbit_log:debug("OAuth 2 JWT: downloaded keys ~tp", [Keys]),
+            rabbit_log:debug("Downloaded signing keys ~tp", [Keys]),
             case rabbit_oauth2_config:replace_signing_keys(Keys, Id) of
               {error, _} = Err -> Err;
               _ -> ok
             end;
         {error, _} = Err ->
-            rabbit_log:error("OAuth 2 JWT: failed to download keys: ~tp", [Err]),
+            rabbit_log:error("Failed to download signing keys: ~tp", [Err]),
             Err
     end.
 
@@ -56,28 +56,30 @@ decode_and_verify(Token) ->
         {error, _} = Err ->
             Err;
         ResourceServerId ->
-            OAuthProviderId =
-                rabbit_oauth2_config:get_oauth_provider_id_for_resource_server_id(ResourceServerId),
-            rabbit_log:debug("OAuth 2 JWT: resolved resource_server_id: ~p oauth_provider_id: ~p",
-                [ResourceServerId, OAuthProviderId]),
-            case uaa_jwt_jwt:get_key_id(rabbit_oauth2_config:get_default_key(OAuthProviderId), Token) of
-                {ok, KeyId} ->
-                    rabbit_log:debug("OAuth 2 JWT: signing_key_id : '~tp'", [KeyId]),
-                    case get_jwk(KeyId, OAuthProviderId) of
-                        {ok, JWK} ->
-                            case uaa_jwt_jwt:decode_and_verify(
-                                            OAuthProviderId,
-                                            JWK,
-                                            Token) of
-                                {true, Payload} -> {true, ResourceServerId, Payload};
-                                {false, Payload} -> {false, ResourceServerId, Payload}
-                            end;
-                        {error, _} = Err ->
-                            Err
-                    end;
-                {error, _} = Err -> Err
-          end
+            decode_and_verify(Token, ResourceServerId,
+                rabbit_oauth2_config:get_oauth_provider_id_for_resource_server_id(
+                    ResourceServerId))
     end.
+
+decode_and_verify(Token, ResourceServerId, OAuthProviderId) ->
+    rabbit_log:debug("Resolved resource_server_id: ~p -> oauth_provider_id: ~p",
+        [ResourceServerId, OAuthProviderId]),
+    case uaa_jwt_jwt:get_key_id(rabbit_oauth2_config:get_default_key(OAuthProviderId), Token) of
+        {ok, KeyId} ->
+            case get_jwk(KeyId, OAuthProviderId) of
+                {ok, JWK} ->
+                    Algorithms = rabbit_oauth2_config:get_algorithms(OAuthProviderId),
+                    rabbit_log:debug("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
+                        [KeyId, Algorithms]),
+                    case uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token) of
+                        {true, Payload} -> {true, ResourceServerId, Payload};
+                        {false, Payload} -> {false, ResourceServerId, Payload}
+                    end;
+                {error, _} = Err ->
+                    Err
+            end;
+        {error, _} = Err -> Err
+  end.
 
 resolve_resource_server_id(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of

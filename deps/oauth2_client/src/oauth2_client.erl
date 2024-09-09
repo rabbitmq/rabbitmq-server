@@ -254,7 +254,7 @@ get_oauth_provider(ListOfRequiredAttributes) ->
 
 get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_oauth_provider_from_keyconfig(),
-    rabbit_log:debug("Using oauth_provider ~s from keyconfig", [format_oauth_provider(OAuthProvider)]),
+    rabbit_log:debug("Using oauth_provider ~p from keyconfig", [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             {ok, OAuthProvider};
@@ -557,27 +557,27 @@ format_ssl_options(TlsOptions) ->
         [] -> 0;
         Certs -> length(Certs)
     end,
-    io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, " ++
+    lists:flatten(io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, " ++
         "depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
         proplists:get_value(verify, TlsOptions),
         proplists:get_value(fail_if_no_peer_cert, TlsOptions),
         proplists:get_value(crl_check, TlsOptions),
         proplists:get_value(depth, TlsOptions),
         proplists:get_value(cacertfile, TlsOptions),
-        CaCertsCount]).
+        CaCertsCount])).
 
 format_oauth_provider_id(root) -> "<from keyconfig>";
 format_oauth_provider_id(Id) -> binary_to_list(Id).
 
 -spec format_oauth_provider(oauth_provider()) -> string().
 format_oauth_provider(OAuthProvider) ->
-    io_lib:format("{id: ~p, issuer: ~p, token_endpoint: ~p, " ++
+    lists:flatten(io_lib:format("{id: ~p, issuer: ~p, token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "jwks_uri: ~p, ssl_options: ~s }", [
+        "jwks_uri: ~p, ssl_options: ~p }", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.token_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
         OAuthProvider#oauth_provider.jwks_uri,
-        format_ssl_options(OAuthProvider#oauth_provider.ssl_options)]).
+        format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).

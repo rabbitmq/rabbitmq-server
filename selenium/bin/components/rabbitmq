@@ -52,6 +52,7 @@ start_local_rabbitmq() {
   init_rabbitmq
 
   RABBITMQ_SERVER_ROOT=$(realpath ../)
+  
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 

@@ -158,6 +158,31 @@
  "rabbitmq_auth_backend_oauth2.authorization_endpoint",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
+%% auth_oauth2.authorization_endpoint = https://a.com/authorize
+%% auth_oauth2.authorization_endpoint.params.resource = ${resource_id}
+%% auth_oauth2.authorization_endpoint.params.audience = ${resource_id}
+
+{mapping,
+ "auth_oauth2.authorization_endpoint.params.$param",
+ "rabbitmq_auth_backend_oauth2.authorization_endpoint.req_params",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.authorization_endpoint.req_params",
+ fun(Conf) ->
+     Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.authorization_endpoint.req_params", Conf),
+     rabbit_oauth2_schema:translate_endpoint_req_params(Settings)
+ end}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
+ end}.
+
 {mapping,
  "auth_oauth2.https.peer_verification",
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
@@ -333,5 +358,5 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->
-    rabbit_oauth2_schema:translate_resource_servers(Conf)    
+    rabbit_oauth2_schema:translate_resource_servers(Conf)
  end}.
