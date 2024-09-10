@@ -1552,7 +1552,15 @@ get_feature_state(Node) ->
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
     maybe
         ok ?= sync_cluster_membership_from_mnesia(FeatureName),
+        ?LOG_INFO(
+           "Feature flag `~s`: unregistering legacy projections",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
         ok ?= unregister_legacy_projections(),
+        ?LOG_INFO(
+           "Feature flag `~s`: registering projections",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
         ok ?= register_projections(),
         migrate_mnesia_tables(FeatureName)
     end.
