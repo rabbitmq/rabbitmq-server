@@ -10,6 +10,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([
          get_all/0,
          get_all/1,
@@ -894,15 +896,11 @@ maybe_auto_delete_in_khepri(XName, OnlyDurable) ->
 khepri_exchange_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_exchange_path(VHost, Name).
 
-khepri_exchange_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, exchanges, VHost, Name].
+khepri_exchange_path(VHost, Name) when ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [exchanges, Name].
 
-khepri_exchange_serial_path(#resource{virtual_host = VHost, name = Name}) ->
-    khepri_exchange_serial_path(VHost, Name).
+khepri_exchange_serial_path(#resource{} = Resource) ->
+    khepri_exchange_path(Resource) ++ [serial].
 
-khepri_exchange_serial_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, exchange_serials, VHost, Name].
+khepri_exchange_serial_path(VHost, Name) ->
+    khepri_exchange_path(VHost, Name) ++ [serial].

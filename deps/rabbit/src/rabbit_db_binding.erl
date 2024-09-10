@@ -38,8 +38,7 @@
 
 -export([
          khepri_route_path/1, khepri_route_path/5,
-         khepri_route_path_to_args/1,
-         khepri_route_exchange_path/1
+         khepri_route_path_to_args/1
         ]).
 
 %% Recovery is only needed for transient entities. Once mnesia is removed, these
@@ -202,8 +201,6 @@ create_in_khepri(#binding{source = SrcName,
                     MaybeSerial = rabbit_exchange:serialise_events(Src),
                     Serial = rabbit_khepri:transaction(
                                fun() ->
-                                       ExchangePath = khepri_route_exchange_path(SrcName),
-                                       ok = khepri_tx:put(ExchangePath, #{type => Src#exchange.type}),
                                        case khepri_tx:get(RoutePath) of
                                            {ok, Set} ->
                                                case sets:is_element(Binding, Set) of
@@ -1010,18 +1007,21 @@ clear_in_khepri() ->
 %% --------------------------------------------------------------
 
 khepri_route_path(
-  #binding{source = #resource{virtual_host = VHost, name = SrcName},
-           destination = #resource{kind = Kind, name = DstName},
+  #binding{source = #resource{virtual_host = VHost,
+                              kind = exchange,
+                              name = SrcName},
+           destination = #resource{virtual_host = VHost,
+                                   kind = Kind,
+                                   name = DstName},
            key = RoutingKey}) ->
     khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey).
 
 khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(SrcName) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Kind) andalso
+  when ?IS_KHEPRI_PATH_CONDITION(Kind) andalso
        ?IS_KHEPRI_PATH_CONDITION(DstName) andalso
        ?IS_KHEPRI_PATH_CONDITION(RoutingKey) ->
-    [?MODULE, routes, VHost, SrcName, Kind, DstName, RoutingKey].
+    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, SrcName),
+    ExchangePath ++ [bindings, Kind, DstName, RoutingKey].
 
 khepri_route_path_to_args(Path) ->
     Pattern = khepri_route_path(
@@ -1046,9 +1046,6 @@ khepri_route_path_to_args(
     '$DstName' := DstName,
     '$RoutingKey' := RoutingKey}) ->
     {VHost, SrcName, Kind, DstName, RoutingKey}.
-
-khepri_route_exchange_path(#resource{virtual_host = VHost, name = SrcName}) ->
-    [?MODULE, routes, VHost, SrcName].
 
 %% --------------------------------------------------------------
 %% Internal

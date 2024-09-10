@@ -224,7 +224,6 @@ khepri_consistent_hash_path(#exchange{name = Name}) ->
 khepri_consistent_hash_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_consistent_hash_path(VHost, Name).
 
-khepri_consistent_hash_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, exchange_type_consistent_hash_ring_state, VHost, Name].
+khepri_consistent_hash_path(VHost, Name) ->
+    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, Name),
+    ExchangePath ++ [consistent_hash_ring_state].

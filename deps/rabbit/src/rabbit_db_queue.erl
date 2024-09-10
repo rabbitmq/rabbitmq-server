@@ -1359,7 +1359,5 @@ list_with_possible_retry_in_khepri(Fun) ->
 khepri_queue_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_queue_path(VHost, Name).
 
-khepri_queue_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, queues, VHost, Name].
+khepri_queue_path(VHost, Name) when ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [queues, Name].

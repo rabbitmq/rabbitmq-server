@@ -94,6 +94,8 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([setup/0,
          setup/1,
          init/0,
@@ -145,6 +147,7 @@
 
          dir/0,
          info/0,
+         root_path/0,
 
          handle_async_ret/1,
 
@@ -895,6 +898,15 @@ cluster_status_from_khepri() ->
             {error, khepri_not_running}
     end.
 
+-spec root_path() -> RootPath when
+      RootPath :: khepri_path:path().
+%% @doc Returns the path where RabbitMQ stores every metadata.
+%%
+%% This path must be prepended to all paths used by RabbitMQ subsystems.
+
+root_path() ->
+    ?KHEPRI_ROOT_PATH.
+
 %% -------------------------------------------------------------------
 %% "Proxy" functions to Khepri API.
 %% -------------------------------------------------------------------
@@ -1213,10 +1225,11 @@ register_rabbit_index_route_projection() ->
     Options = #{type => bag, keypos => #index_route.source_key},
     Projection = khepri_projection:new(
                    rabbit_khepri_index_route, ProjectionFun, Options),
-    DirectOrFanout = #if_data_matches{pattern = #{type => '$1'},
-                                      conditions = [{'andalso',
-                                                     {'=/=', '$1', headers},
-                                                     {'=/=', '$1', topic}}]},
+    DirectOrFanout = #if_data_matches{
+                        pattern = #exchange{type = '$1', _ = '_'},
+                        conditions = [{'andalso',
+                                       {'=/=', '$1', headers},
+                                       {'=/=', '$1', topic}}]},
     PathPattern = rabbit_db_binding:khepri_route_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _Exchange = DirectOrFanout,
@@ -1319,7 +1332,8 @@ register_rabbit_topic_graph_projection() ->
     Projection = khepri_projection:new(Name, ProjectionFun, Options),
     PathPattern = rabbit_db_binding:khepri_route_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
-                    _Exchange = #if_data_matches{pattern = #{type => topic}},
+                    _Exchange = #if_data_matches{
+                                   pattern = #exchange{type = topic, _ = '_'}},
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),

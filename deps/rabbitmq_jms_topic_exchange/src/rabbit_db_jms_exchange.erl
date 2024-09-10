@@ -235,7 +235,6 @@ remove_items(Dict, [Key | Keys]) -> remove_items(dict:erase(Key, Dict), Keys).
 khepri_jms_topic_exchange_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_jms_topic_exchange_path(VHost, Name).
 
-khepri_jms_topic_exchange_path(VHost, Name)
-  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
-       ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    [?MODULE, jms_topic_exchange, VHost, Name].
+khepri_jms_topic_exchange_path(VHost, Name) ->
+    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, Name),
+    ExchangePath ++ [jms_topic].
