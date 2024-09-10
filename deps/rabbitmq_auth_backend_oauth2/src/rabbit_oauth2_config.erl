@@ -155,7 +155,8 @@ do_replace_signing_keys(SigningKeys, root) ->
         proplists:get_value(signing_keys, KeyConfig1, #{}),
         SigningKeys)} | KeyConfig1],
     application:set_env(?APP, key_config, KeyConfig2),
-    rabbit_log:debug("Replacing signing keys  ~p", [ KeyConfig2]),
+    rabbit_log:debug("Replacing signing keys for key_config with ~p keys",
+        [maps:size(SigningKeys)]),
     SigningKeys;
 
 do_replace_signing_keys(SigningKeys, OauthProviderId) ->
@@ -168,7 +169,8 @@ do_replace_signing_keys(SigningKeys, OauthProviderId) ->
 
     OauthProviders = maps:put(OauthProviderId, OauthProvider, OauthProviders0),
     application:set_env(?APP, oauth_providers, OauthProviders),
-    rabbit_log:debug("Replacing signing keys for ~p -> ~p", [OauthProviderId, OauthProvider]),
+    rabbit_log:debug("Replacing signing keys for ~p -> ~p with ~p keys",
+        [OauthProviderId, OauthProvider, maps:size(SigningKeys)]),
     SigningKeys.
 
 

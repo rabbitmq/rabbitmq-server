@@ -33,14 +33,14 @@ add_signing_key(KeyId, Type, Value) ->
 update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
         ssl_options = SslOptions}) ->
     rabbit_log:debug("Downloading signing keys from ~tp (TLS options: ~p)",
-        [JwksUrl, SslOptions]),
+        [JwksUrl, oauth2_client:format_ssl_options(SslOptions)]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
         {ok, {_, _, JwksBody}} ->
             KeyList = maps:get(<<"keys">>,
                 jose:decode(erlang:iolist_to_binary(JwksBody)), []),
             Keys = maps:from_list(lists:map(fun(Key) ->
                 {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-            rabbit_log:debug("Downloaded signing keys ~tp", [Keys]),
+            rabbit_log:debug("Downloaded ~p signing keys", [maps:size(Keys)]),
             case rabbit_oauth2_config:replace_signing_keys(Keys, Id) of
               {error, _} = Err -> Err;
               _ -> ok
@@ -63,7 +63,7 @@ decode_and_verify(Token) ->
 
 decode_and_verify(Token, ResourceServerId, OAuthProviderId) ->
     rabbit_log:debug("Resolved resource_server_id: ~p -> oauth_provider_id: ~p",
-        [ResourceServerId, OAuthProviderId]),
+        [ResourceServerId, oauth2_client:format_oauth_provider_id(OAuthProviderId)]),
     case uaa_jwt_jwt:get_key_id(rabbit_oauth2_config:get_default_key(OAuthProviderId), Token) of
         {ok, KeyId} ->
             case get_jwk(KeyId, OAuthProviderId) of

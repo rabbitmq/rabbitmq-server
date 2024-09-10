@@ -11,7 +11,8 @@
         get_openid_configuration/2, get_openid_configuration/3,
         merge_openid_configuration/2,
         merge_oauth_provider/2,
-        extract_ssl_options_as_list/1
+        extract_ssl_options_as_list/1,
+        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1
         ]).
 
 -include("oauth2_client.hrl").
@@ -557,8 +558,7 @@ format_ssl_options(TlsOptions) ->
         [] -> 0;
         Certs -> length(Certs)
     end,
-    lists:flatten(io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, " ++
-        "depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
+    lists:flatten(io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
         proplists:get_value(verify, TlsOptions),
         proplists:get_value(fail_if_no_peer_cert, TlsOptions),
         proplists:get_value(crl_check, TlsOptions),
