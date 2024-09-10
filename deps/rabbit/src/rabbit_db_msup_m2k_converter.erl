@@ -10,6 +10,7 @@
 -behaviour(mnesia_to_khepri_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("mirrored_supervisor.hrl").
@@ -96,8 +97,4 @@ delete_from_khepri(
       Table :: atom().
 
 clear_data_in_khepri(mirrored_sup_childspec) ->
-    Path = rabbit_db_msup:khepri_mirrored_supervisor_path(),
-    case rabbit_khepri:delete(Path) of
-        ok -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_db_msup:clear_in_khepri().

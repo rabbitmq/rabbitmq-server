@@ -19,14 +19,15 @@
          exists/1,
          get/1,
          get_all/0,
+         count_all/0,
          list/0,
          update/2,
          with_fun_in_mnesia_tx/2,
          with_fun_in_khepri_tx/2,
-         delete/1]).
+         delete/1,
+         clear_in_khepri/0]).
 
--export([khepri_vhost_path/1,
-         khepri_vhosts_path/0]).
+-export([khepri_vhost_path/1]).
 
 %% For testing
 -export([clear/0]).
@@ -314,6 +315,33 @@ get_all_in_khepri() ->
     end.
 
 %% -------------------------------------------------------------------
+%% count_all().
+%% -------------------------------------------------------------------
+
+-spec count_all() -> {ok, Count} | {error, any()} when
+      Count :: non_neg_integer().
+%% @doc Returns all virtual host records.
+%%
+%% @returns the count of virtual host records.
+%%
+%% @private
+
+count_all() ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> count_all_in_mnesia() end,
+        khepri => fun() -> count_all_in_khepri() end}).
+
+count_all_in_mnesia() ->
+    List = mnesia:dirty_match_object(
+             ?MNESIA_TABLE,
+             vhost:pattern_match_all()),
+    {ok, length(List)}.
+
+count_all_in_khepri() ->
+    Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
+    rabbit_khepri:count(Path).
+
+%% -------------------------------------------------------------------
 %% list().
 %% -------------------------------------------------------------------
 
@@ -493,7 +521,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_vhosts_path(),
+    Path = khepri_vhost_path(?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok    -> ok;
         Error -> throw(Error)
@@ -503,5 +531,5 @@ clear_in_khepri() ->
 %% Paths
 %% --------------------------------------------------------------
 
-khepri_vhosts_path()     -> [?MODULE].
-khepri_vhost_path(VHost) -> [?MODULE, VHost].
+khepri_vhost_path(VHost) when ?IS_KHEPRI_PATH_CONDITION(VHost) ->
+    [?MODULE, VHost].

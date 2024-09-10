@@ -257,12 +257,14 @@ child_id_format(Config) ->
         mnesia ->
             ok;
         khepri ->
-            Path = rabbit_db_msup:khepri_mirrored_supervisor_path(),
+            Pattern = rabbit_db_msup:khepri_mirrored_supervisor_path(
+                        ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR_STAR),
+            Path = rabbit_db_msup:khepri_mirrored_supervisor_path(
+                     rabbit_shovel_dyn_worker_sup_sup, {VHost, ShovelName}),
+            ct:pal("Pattern=~0p~nPath=~0p", [Pattern, Path]),
             ?assertMatch(
-               {ok,
-                #{[rabbit_db_msup, mirrored_supervisor_childspec,
-                   rabbit_shovel_dyn_worker_sup_sup, VHost, ShovelName] := _}},
+               {ok, #{Path := _}},
                rabbit_ct_broker_helpers:rpc(
                  Config, NewNode, rabbit_khepri, list,
-                 [Path ++ [?KHEPRI_WILDCARD_STAR_STAR]]))
+                 [Pattern]))
     end.
