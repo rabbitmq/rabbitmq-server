@@ -23,8 +23,8 @@
         ]).
 
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
--define(KHEPRI_GLOBAL_PROJECTION, rabbit_khepri_global_rtparams).
--define(KHEPRI_VHOST_PROJECTION, rabbit_khepri_per_vhost_rtparams).
+-define(KHEPRI_GLOBAL_PROJECTION, rabbit_khepri_global_rtparam).
+-define(KHEPRI_VHOST_PROJECTION, rabbit_khepri_per_vhost_rtparam).
 -define(any(Value), case Value of
                         '_' -> ?KHEPRI_WILDCARD_STAR;
                         _ -> Value
