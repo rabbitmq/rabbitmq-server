@@ -11,7 +11,6 @@
 -export([adjust_for_message_handling_proc/0
         ]).
 
-%% @doc Enqueues a message.
 %% Adjust process flags for processes that handle RabbitMQ messages.
 %% For example any process that uses the `rabbit_queue_type' module
 %% may benefit from this tuning.
@@ -24,7 +23,7 @@ adjust_for_message_handling_proc() ->
             %% 46422 is the default min_bin_vheap_size and for OTP 27 and above
             %% we want to substantially increase it for processes that may buffer
             %% messages. 32x has proven workable in testing whilst not being
-            %% rediculously large
+            %% ridiculously large
             process_flag(min_bin_vheap_size, 46422 * 32),
             ok;
         _ ->
