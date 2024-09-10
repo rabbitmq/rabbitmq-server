@@ -1190,21 +1190,21 @@ register_rabbit_vhost_projection() ->
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_users_projection() ->
-    Name = rabbit_khepri_users,
+    Name = rabbit_khepri_user,
     PathPattern = rabbit_db_user:khepri_user_path(
                     _UserName = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #internal_user.username
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_global_runtime_parameters_projection() ->
-    Name = rabbit_khepri_global_rtparams,
+    Name = rabbit_khepri_global_rtparam,
     PathPattern = rabbit_db_rtparams:khepri_global_rp_path(
                     _Key = ?KHEPRI_WILDCARD_STAR_STAR),
     KeyPos = #runtime_parameters.key,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_per_vhost_runtime_parameters_projection() ->
-    Name = rabbit_khepri_per_vhost_rtparams,
+    Name = rabbit_khepri_per_vhost_rtparam,
     PathPattern = rabbit_db_rtparams:khepri_vhost_rp_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR_STAR,
                     _Component = ?KHEPRI_WILDCARD_STAR_STAR,
@@ -1213,7 +1213,7 @@ register_rabbit_per_vhost_runtime_parameters_projection() ->
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_user_permissions_projection() ->
-    Name = rabbit_khepri_user_permissions,
+    Name = rabbit_khepri_user_permission,
     PathPattern = rabbit_db_user:khepri_user_permission_path(
                     _UserName = ?KHEPRI_WILDCARD_STAR,
                     _VHost = ?KHEPRI_WILDCARD_STAR),
@@ -1232,7 +1232,7 @@ register_rabbit_bindings_projection() ->
     ProjectionFun = projection_fun_for_sets(MapFun),
     Options = #{keypos => #route.binding},
     Projection = khepri_projection:new(
-                   rabbit_khepri_bindings, ProjectionFun, Options),
+                   rabbit_khepri_binding, ProjectionFun, Options),
     PathPattern = rabbit_db_binding:khepri_route_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _ExchangeName = ?KHEPRI_WILDCARD_STAR,
