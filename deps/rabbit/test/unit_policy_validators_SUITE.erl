@@ -9,6 +9,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-compile(nowarn_export_all).
 -compile(export_all).
 
 all() ->
@@ -93,7 +94,7 @@ max_in_memory_length(_Config) ->
     requires_non_negative_integer_value(<<"max-in-memory-bytes">>).
 
 delivery_limit(_Config) ->
-    requires_non_negative_integer_value(<<"delivery-limit">>).
+    requires_integer_value(<<"delivery-limit">>).
 
 classic_queue_lazy_mode(_Config) ->
     test_valid_and_invalid_values(<<"queue-mode">>,
@@ -142,3 +143,8 @@ requires_non_negative_integer_value(Key) ->
     test_valid_and_invalid_values(Key,
         [0, 1, 1000],
         [-1000, -1, <<"a.binary">>]).
+
+requires_integer_value(Key) ->
+    test_valid_and_invalid_values(Key,
+        [-1, 0, 1, 1000, -10000],
+        [<<"a.binary">>, 0.1]).

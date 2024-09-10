@@ -179,7 +179,7 @@ const QUEUE_EXTRA_CONTENT_REQUESTS = [];
 // All help ? popups
 var HELP = {
     'delivery-limit':
-      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration.',
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration. The default is always 20. A value of -1 or lower sets the limit to "unlimited".',
 
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
