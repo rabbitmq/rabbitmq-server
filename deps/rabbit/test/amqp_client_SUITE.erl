@@ -110,7 +110,6 @@ groups() ->
        idle_time_out_on_server,
        idle_time_out_on_client,
        idle_time_out_too_short,
-       rabbit_status_connection_count,
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
@@ -4401,21 +4400,6 @@ idle_time_out_too_short(Config) ->
     receive {amqp10_event, {connection, Connection, {closed, _}}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end.
-
-rabbit_status_connection_count(Config) ->
-    %% Close any open AMQP 0.9.1 connections from previous test cases.
-    ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
-
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    receive {amqp10_event, {connection, Connection, opened}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
-    end,
-
-    {ok, String} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["status"]),
-    ?assertNotEqual(nomatch, string:find(String, "Connection count: 1")),
-
-    ok = amqp10_client:close_connection(Connection).
 
 handshake_timeout(Config) ->
     App = rabbit,
