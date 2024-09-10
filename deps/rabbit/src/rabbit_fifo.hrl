@@ -222,7 +222,7 @@
                     max_bytes => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
-                    delivery_limit => non_neg_integer(),
+                    delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
                     created => non_neg_integer()

@@ -152,6 +152,7 @@ all_tests() ->
      queue_length_limit_drop_head,
      queue_length_limit_reject_publish,
      subscribe_redelivery_limit,
+     subscribe_redelivery_limit_disable,
      subscribe_redelivery_limit_many,
      subscribe_redelivery_policy,
      subscribe_redelivery_limit_with_dead_letter,
@@ -2495,8 +2496,8 @@ subscribe_redelivery_count(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
             ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     after 5000 ->
               exit(basic_deliver_timeout)
     end,
@@ -2508,8 +2509,8 @@ subscribe_redelivery_count(Config) ->
             ct:pal("H1 ~p", [H1]),
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     after 5000 ->
               flush(1),
               exit(basic_deliver_timeout_2)
@@ -2521,7 +2522,7 @@ subscribe_redelivery_count(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H2}}} ->
             ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag2,
-                                               multiple     = false}),
+                                               multiple = false}),
             ct:pal("wait_for_messages_ready", []),
             wait_for_messages_ready(Servers, RaName, 0),
             ct:pal("wait_for_messages_pending_ack", []),
@@ -2551,8 +2552,8 @@ subscribe_redelivery_limit(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
             ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
@@ -2562,8 +2563,8 @@ subscribe_redelivery_limit(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
@@ -2573,6 +2574,51 @@ subscribe_redelivery_limit(Config) ->
     after 5000 ->
             ok
     end.
+
+subscribe_redelivery_limit_disable(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
+                                  {<<"x-delivery-limit">>, long, -1}])),
+    publish(Ch, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    subscribe(Ch, QQ, false),
+
+    DCHeader = <<"x-delivery-count">>,
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag,
+                          redelivered  = false},
+         #amqp_msg{props = #'P_basic'{headers = H0}}} ->
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
+                                                multiple = false,
+                                                requeue = true})
+    end,
+
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
+    %% set an operator policy, this should always win
+    ok = rabbit_ct_broker_helpers:set_operator_policy(
+           Config, 0, <<"delivery-limit">>, QQ, <<"queues">>,
+           [{<<"delivery-limit">>, 0}]),
+
+    receive
+        {#'basic.deliver'{delivery_tag = DeliveryTag2,
+                          redelivered = true},
+         #amqp_msg{props = #'P_basic'{}}} ->
+            % ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
+            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
+                                                multiple = false,
+                                                requeue = true})
+    after 5000 ->
+              flush(1),
+              ct:fail("message did not arrive as expected")
+    end,
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok = rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"delivery-limit">>),
+    ok.
 
 %% Test that consumer credit is increased correctly.
 subscribe_redelivery_limit_many(Config) ->
@@ -2637,8 +2683,8 @@ subscribe_redelivery_policy(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
             ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
@@ -2648,8 +2694,8 @@ subscribe_redelivery_policy(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
@@ -2687,8 +2733,8 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
             ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
@@ -2698,8 +2744,8 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
             ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple     = false,
-                                                requeue      = true})
+                                                multiple = false,
+                                                requeue = true})
     end,
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
@@ -2726,8 +2772,8 @@ consume_redelivery_count(Config) ->
                                            no_ack = false}),
     ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                        multiple     = false,
-                                        requeue      = true}),
+                                        multiple = false,
+                                        requeue = true}),
     %% wait for requeuing
     {#'basic.get_ok'{delivery_tag = DeliveryTag1,
                      redelivered = true},
@@ -2736,8 +2782,8 @@ consume_redelivery_count(Config) ->
 
     ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                        multiple     = false,
-                                        requeue      = true}),
+                                        multiple = false,
+                                        requeue = true}),
 
     {#'basic.get_ok'{delivery_tag = DeliveryTag2,
                      redelivered = true},
@@ -2746,8 +2792,8 @@ consume_redelivery_count(Config) ->
                                            no_ack = false}),
     ?assertMatch({DCHeader, _, 2}, rabbit_basic:header(DCHeader, H2)),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
-                                        multiple     = false,
-                                        requeue      = true}),
+                                        multiple = false,
+                                        requeue = true}),
     ok.
 
 message_bytes_metrics(Config) ->
@@ -2784,8 +2830,8 @@ message_bytes_metrics(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag,
                           redelivered  = false}, _} ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple     = false,
-                                                requeue      = false}),
+                                                multiple = false,
+                                                requeue = false}),
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 0),
             rabbit_ct_helpers:await_condition(

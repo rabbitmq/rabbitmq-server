@@ -2137,7 +2137,6 @@ reject_publish_applied_after_limit_test(Config) ->
              queue_resource => QName,
              max_length => 2,
              overflow_strategy => reject_publish,
-             max_in_memory_length => 0,
              dead_letter_handler => undefined
             },
     {State5, ok, Efx1} = apply(meta(Config, 5), rabbit_fifo:make_update_config(Conf), State4),
@@ -2146,6 +2145,31 @@ reject_publish_applied_after_limit_test(Config) ->
     Pid2 = test_util:fake_pid(node()),
     {_State6, reject_publish, _} =
         apply(meta(Config, 1), make_register_enqueuer(Pid2), State5),
+    ok.
+
+update_config_delivery_limit_test(Config) ->
+    QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    InitConf = #{name => ?FUNCTION_NAME,
+                 queue_resource => QName,
+                 delivery_limit => 20
+                },
+    State0 = init(InitConf),
+    ?assertMatch(#{config := #{delivery_limit := 20}},
+                 rabbit_fifo:overview(State0)),
+
+    %% A delivery limit of -1 (or any negative value) turns the delivery_limit
+    %% off
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => QName,
+             delivery_limit => -1,
+             dead_letter_handler => undefined
+            },
+    {State1, ok, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_update_config(Conf), State0),
+
+    ?assertMatch(#{config := #{delivery_limit := undefined}},
+                 rabbit_fifo:overview(State1)),
+
     ok.
 
 purge_nodes_test(Config) ->

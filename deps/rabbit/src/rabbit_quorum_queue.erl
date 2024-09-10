@@ -82,7 +82,8 @@
          file_handle_release_reservation/0]).
 
 -ifdef(TEST).
--export([filter_promotable/2]).
+-export([filter_promotable/2,
+         ra_machine_config/1]).
 -endif.
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3,
@@ -322,7 +323,8 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     OverflowBin = args_policy_lookup(<<"overflow">>, fun policy_has_precedence/2, Q),
     Overflow = overflow(OverflowBin, drop_head, QName),
     MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>, fun min/2, Q) of
+    DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>,
+                                            fun resolve_delivery_limit/2, Q) of
                         undefined ->
                             rabbit_log:info("~ts: delivery_limit not set, defaulting to ~b",
                                              [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]),
@@ -345,6 +347,12 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       expires => Expires,
       msg_ttl => MsgTTL
      }.
+
+resolve_delivery_limit(PolVal, ArgVal)
+  when PolVal < 0 orelse ArgVal < 0 ->
+    max(PolVal, ArgVal);
+resolve_delivery_limit(PolVal, ArgVal) ->
+    min(PolVal, ArgVal).
 
 policy_has_precedence(Policy, _QueueArg) ->
     Policy.
@@ -1897,8 +1905,6 @@ make_mutable_config(Q) ->
     Formatter = {?MODULE, format_ra_event, [QName]},
     #{tick_timeout => TickTimeout,
       ra_event_formatter => Formatter}.
-
-
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),

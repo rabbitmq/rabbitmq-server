@@ -3,12 +3,62 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
+-include_lib("eunit/include/eunit.hrl").
+
 all() ->
     [
      all_replica_states_includes_nonvoters,
      filter_nonvoters,
-     filter_quorum_critical_accounts_nonvoters
+     filter_quorum_critical_accounts_nonvoters,
+     ra_machine_conf_delivery_limit
     ].
+
+ra_machine_conf_delivery_limit(_Config) ->
+    Q0 = amqqueue:new(rabbit_misc:r(<<"/">>, queue, <<"q2">>),
+                      {q2, test@leader},
+                      false, false, none, [], undefined, #{}),
+    %% ensure default is set
+    ?assertMatch(#{delivery_limit := 20},
+                 rabbit_quorum_queue:ra_machine_config(Q0)),
+
+    Q = amqqueue:set_policy(Q0, [{name, <<"p1">>},
+                                 {definition, [{<<"delivery-limit">>,-1}]}]),
+    %% a policy of -1
+    ?assertMatch(#{delivery_limit := -1},
+                 rabbit_quorum_queue:ra_machine_config(Q)),
+
+    %% if therre is a queue arg with a non neg value this takes precedence
+    Q1 = amqqueue:set_arguments(Q, [{<<"x-delivery-limit">>, long, 5}]),
+    ?assertMatch(#{delivery_limit := 5},
+                 rabbit_quorum_queue:ra_machine_config(Q1)),
+
+    Q2 = amqqueue:set_policy(Q1, [{name, <<"o1">>},
+                                  {definition, [{<<"delivery-limit">>, 5}]}]),
+    Q3 = amqqueue:set_arguments(Q2, [{<<"x-delivery-limit">>, long, -1}]),
+    ?assertMatch(#{delivery_limit := 5},
+                 rabbit_quorum_queue:ra_machine_config(Q3)),
+
+    %% non neg takes precedence
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, -1, -1, 5)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, -1, 5, -1)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, 5, -1, -1)),
+
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, -1, 10, 5)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, -1, 5, 10)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, 5, 15, 10)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, 15, 5, 10)),
+    ?assertMatch(#{delivery_limit := 5},
+                 make_ra_machine_conf(Q0, 15, 10, 5)),
+
+    ok.
+
 
 filter_quorum_critical_accounts_nonvoters(_Config) ->
     Nodes = [test@leader, test@follower1, test@follower2],
@@ -69,3 +119,12 @@ all_replica_states_includes_nonvoters(_Config) ->
 
     true = ets:delete(ra_state),
     ok.
+
+make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
+    Q1 = amqqueue:set_arguments(Q0, [{<<"x-delivery-limit">>, long, Arg}]),
+    Q2 = amqqueue:set_policy(Q1, [{name, <<"p1">>},
+                                  {definition, [{<<"delivery-limit">>,Pol}]}]),
+    Q = amqqueue:set_operator_policy(Q2, [{name, <<"p1">>},
+                                          {definition, [{<<"delivery-limit">>,OpPol}]}]),
+    rabbit_quorum_queue:ra_machine_config(Q).
+
