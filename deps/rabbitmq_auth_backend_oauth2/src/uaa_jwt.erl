@@ -98,7 +98,7 @@ get_jwk(KeyId, OAuthProviderId, AllowUpdateJwks) ->
         undefined ->
             if
                 AllowUpdateJwks ->
-                    rabbit_log:debug("OAuth 2 JWT: signing key '~tp' not found. Downloading it... ", [KeyId]),
+                    rabbit_log:debug("Signing key '~tp' not found. Downloading it... ", [KeyId]),
                     case rabbit_oauth2_config:get_oauth_provider(OAuthProviderId, [jwks_uri]) of
                         {ok, OAuthProvider} ->
                             case update_jwks_signing_keys(OAuthProvider) of
@@ -110,15 +110,15 @@ get_jwk(KeyId, OAuthProviderId, AllowUpdateJwks) ->
                                     Err
                             end;
                         {error, _} = Error ->
-                            rabbit_log:debug("OAuth 2 JWT: unable to download keys due to ~p", [Error]),
+                            rabbit_log:debug("Unable to download signing keys due to ~p", [Error]),
                             Error
                     end;
                 true            ->
-                    rabbit_log:debug("OAuth 2 JWT: signing key '~tp' not found. Downloading is not allowed", [KeyId]),
+                    rabbit_log:debug("Signing key '~tp' not found. Downloading is not allowed", [KeyId]),
                     {error, key_not_found}
             end;
         {Type, Value} ->
-            rabbit_log:debug("OAuth 2 JWT: signing key found: '~tp', '~tp'", [Type, Value]),
+            rabbit_log:debug("Signing key ~p found", [KeyId]),
             case Type of
                 json     -> uaa_jwt_jwk:make_jwk(Value);
                 pem      -> uaa_jwt_jwk:from_pem(Value);
