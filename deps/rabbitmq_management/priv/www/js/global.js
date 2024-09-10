@@ -445,10 +445,6 @@ var HELP = {
         <dd>Rate at which empty queues are hit in response to basic.get.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
-        <dt>Disk read</dt>\
-        <dd>Rate at which queues read messages from disk.</dd>\
-        <dt>Disk write</dt>\
-        <dd>Rate at which queues write messages to disk.</dd>\
       </dl>\
       <p>\
         Note that the last two items originate in queues rather than \
