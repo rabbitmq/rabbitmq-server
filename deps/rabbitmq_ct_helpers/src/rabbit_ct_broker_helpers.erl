@@ -992,7 +992,7 @@ enable_khepri_metadata_store(Config, FFs0) ->
                         case enable_feature_flag(C, FF) of
                             ok ->
                                 C;
-                            Skip ->
+                            {skip, _} = Skip ->
                                 ct:pal("Enabling metadata store failed: ~p", [Skip]),
                                 Skip
                         end

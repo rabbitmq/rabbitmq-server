@@ -53,7 +53,7 @@
 -define(MNESIA_SEMI_DURABLE_TABLE, rabbit_semi_durable_route).
 -define(MNESIA_REVERSE_TABLE, rabbit_reverse_route).
 -define(MNESIA_INDEX_TABLE, rabbit_index_route).
--define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_bindings).
+-define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_binding).
 -define(KHEPRI_INDEX_ROUTE_PROJECTION, rabbit_khepri_index_route).
 
 %% -------------------------------------------------------------------
@@ -835,9 +835,8 @@ delete_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
              _Kind = ?KHEPRI_WILDCARD_STAR,
              _DstName = ?KHEPRI_WILDCARD_STAR,
              _RoutingKey = #if_has_data{}),
-    {ok, Bindings} = khepri_tx:get_many(Path),
-    ok = khepri_tx:delete_many(Path),
-    maps:fold(fun(_P, Set, Acc) ->
+    {ok, Bindings} = khepri_tx_adv:delete_many(Path),
+    maps:fold(fun(_P, #{data := Set}, Acc) ->
                       sets:to_list(Set) ++ Acc
               end, [], Bindings).
 
@@ -881,24 +880,19 @@ delete_for_destination_in_mnesia(DstName, OnlyDurable, Fun) ->
       OnlyDurable :: boolean(),
       Deletions :: rabbit_binding:deletions().
 
-delete_for_destination_in_khepri(DstName, OnlyDurable) ->
-    BindingsMap = match_destination_in_khepri(DstName),
-    maps:foreach(fun(K, _V) -> khepri_tx:delete(K) end, BindingsMap),
-    Bindings = maps:fold(fun(_, Set, Acc) ->
+delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}, OnlyDurable) ->
+    Pattern = khepri_route_path(
+                VHost,
+                _SrcName = ?KHEPRI_WILDCARD_STAR,
+                Kind,
+                Name,
+                _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    {ok, BindingsMap} = khepri_tx_adv:delete_many(Pattern),
+    Bindings = maps:fold(fun(_, #{data := Set}, Acc) ->
                                  sets:to_list(Set) ++ Acc
                          end, [], BindingsMap),
     rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
-
-match_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}) ->
-    Path = khepri_route_path(
-             VHost,
-             _SrcName = ?KHEPRI_WILDCARD_STAR,
-             Kind,
-             Name,
-             _RoutingKey = ?KHEPRI_WILDCARD_STAR),
-    {ok, Map} = khepri_tx:get_many(Path),
-    Map.
 
 %% -------------------------------------------------------------------
 %% delete_transient_for_destination_in_mnesia().
