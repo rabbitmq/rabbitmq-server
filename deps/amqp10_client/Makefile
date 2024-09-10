@@ -34,8 +34,9 @@ TEST_DEPS = rabbit rabbitmq_ct_helpers
 LOCAL_DEPS = ssl inets crypto public_key
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-# We do not depend on rabbit therefore can't run the broker.
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
+# We do not depend on rabbit therefore can't run the broker;
+# however we can run a test broker in the test suites.
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
 	      rabbit_common/mk/rabbitmq-hexpm.mk
 
 DEP_PLUGINS += elvis_mk
