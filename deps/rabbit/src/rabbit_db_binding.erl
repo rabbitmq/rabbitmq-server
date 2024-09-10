@@ -53,7 +53,7 @@
 -define(MNESIA_SEMI_DURABLE_TABLE, rabbit_semi_durable_route).
 -define(MNESIA_REVERSE_TABLE, rabbit_reverse_route).
 -define(MNESIA_INDEX_TABLE, rabbit_index_route).
--define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_bindings).
+-define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_binding).
 -define(KHEPRI_INDEX_ROUTE_PROJECTION, rabbit_khepri_index_route).
 
 %% -------------------------------------------------------------------
