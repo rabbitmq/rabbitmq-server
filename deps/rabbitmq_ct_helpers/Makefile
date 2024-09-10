@@ -10,8 +10,9 @@ XREF_IGNORE = [ \
 
 dep_inet_tcp_proxy = git https://github.com/rabbitmq/inet_tcp_proxy master
 
-# As this is a helper application we don't need other plugins.
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
+# As this is a helper application we don't need other plugins;
+# however we can run a test broker in the test suites.
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk

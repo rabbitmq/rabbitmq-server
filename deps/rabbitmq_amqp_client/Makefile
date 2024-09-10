@@ -8,8 +8,9 @@ BUILD_DEPS = rabbit_common
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 TEST_DEPS = rabbit rabbitmq_ct_helpers
 
-# We do not depend on rabbit therefore can't run the broker.
-DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk
+# We do not depend on rabbit therefore can't run the broker;
+# however we can run a test broker in the test suites.
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 .DEFAULT_GOAL = all
 
