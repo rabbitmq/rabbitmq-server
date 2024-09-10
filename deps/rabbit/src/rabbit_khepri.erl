@@ -1107,14 +1107,23 @@ collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
               Acc
       end, Acc0, Props).
 
--spec unregister_all_projections() -> Ret when
+-spec unregister_legacy_projections() -> Ret when
       Ret :: ok | timeout_error().
+%% @doc Unregisters any projections which were registered in RabbitMQ 3.13.x
+%% versions.
+%%
+%% In 3.13.x until 3.13.8 we mistakenly registered these projections even if
+%% Khepri was not enabled. This function is used by the `khepri_db' enable
+%% callback to remove those projections before we register the ones necessary
+%% for 4.0.x.
+%%
+%% @private
 
-unregister_all_projections() ->
+unregister_legacy_projections() ->
     %% Note that we don't use `all' since `khepri_mnesia_migration' also
     %% creates a projection table which we don't want to unregister. Instead
-    %% we list all of the currently used projection names:
-    Names = [
+    %% we list all of the legacy projection names:
+    LegacyNames = [
         rabbit_khepri_exchange,
         rabbit_khepri_queue,
         rabbit_khepri_vhost,
@@ -1126,7 +1135,7 @@ unregister_all_projections() ->
         rabbit_khepri_index_route,
         rabbit_khepri_topic_trie
     ],
-    khepri:unregister_projections(?STORE_ID, Names).
+    khepri:unregister_projections(?STORE_ID, LegacyNames).
 
 register_projections() ->
     RegFuns = [fun register_rabbit_exchange_projection/0,
@@ -1543,7 +1552,7 @@ get_feature_state(Node) ->
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
     maybe
         ok ?= sync_cluster_membership_from_mnesia(FeatureName),
-        ok ?= unregister_all_projections(),
+        ok ?= unregister_legacy_projections(),
         ok ?= register_projections(),
         migrate_mnesia_tables(FeatureName)
     end.
