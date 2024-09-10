@@ -314,6 +314,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
+        subscribe_redelivery_limit_disable when IsMixed ->
+            {skip, "subscribe_redelivery_limit_disable isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
