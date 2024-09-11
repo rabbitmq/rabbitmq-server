@@ -1,0 +1,97 @@
+title: "[Questions] "
+body:
+  - type: dropdown
+    id: rabbitmq_version
+    attributes:
+      label: RabbitMQ version used
+      options:
+        - 4.0.x
+        - 3.13.x
+        - Older (unsupported)
+    validations:
+      required: true
+  - type: input
+    id: erlang_version
+    attributes:
+      label: Erlang version used
+      description: What Erlang version do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system (distribution) used
+      description: What OS or distribution do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment_type
+    attributes:
+      label: How is RabbitMQ deployed?
+      options:
+        - Debian package
+        - RPM package
+        - Generic binary package
+        - Kubernetes Operator(s) from Team RabbitMQ
+        - Bitnami Helm chart
+        - Windows installer
+        - Windows binary package
+        - RabbitMQ-as-a-Service from a public cloud provider
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: rabbitmq_conf
+    attributes:
+      label: rabbitmq.conf
+      description: rabbitmq.conf contents
+    validations:
+      required: true
+  - type: textarea
+    id: advanced_config
+    attributes:
+      label: advanced.config
+      description: advanced.config contents (if applicable)
+    validations:
+      required: false
+  - type: markdown
+    id: app_code
+    attributes:
+      label: Application code
+      description: Relevant messaging-related parts of application code
+      value: |
+        ```python
+        # relevant messaging-related parts of your code go here
+        ```
+    validations:
+      required: false
+  - type: textarea
+    id: k8s_deployment
+    attributes:
+      label: Kubernetes deployment file
+      description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
+    validations:
+      required: false
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for using RabbitMQ.
+
+        **STOP NOW AND READ THIS** before proceeding.
+
+        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md first.
+
+        If you are **certain** that you are eligible for community support from the core team, please
+        provide a **detailed** description of how you run RabbitMQ. This will save everyone time.
+
+        We do not guess in this community. Guessing is a very time consuming, and therefore expensive,
+        approach to troubleshooting distributed infrastructure, including distributed messaging
+        infrastructure.
+
+        Please provide reasonably detailed responses to the following question:
+
+        1. How would you describe the steps you take to deploy RabbitMQ to a (hypothetical) new colleague?
+        2. What client libraries, frameworks and their versions are used with RabbitMQ?
+        3. How would you describe the steps you take to reproduce the behavior in question to your colleague?
+        4. How do you expect RabbitMQ (client library, etc) to behave and why?
+        5. 
