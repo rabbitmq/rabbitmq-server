@@ -3,14 +3,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for using RabbitMQ.
-
-        **STOP NOW AND READ THIS** before proceeding.
-
-        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md first.
-
-        If you are **certain** that you are eligible for community support from the core team, please
-        provide a **detailed** description of how you run RabbitMQ. This will save everyone time.
+        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md to learn more.
 
         We do not guess in this community. Guessing is a very time consuming, and therefore expensive,
         approach to troubleshooting distributed infrastructure, including distributed messaging
@@ -58,6 +51,27 @@ body:
     validations:
       required: true
   - type: textarea
+    id: rabbitmq_logs
+    attributes:
+      label: Logs from node 1 (with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+    validations:
+      required: true
+  - type: textarea
+    id: logs_node_2
+    attributes:
+      label: Logs from node 2 (with sensitive values edited out) (if applicable)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+    validations:
+      required: false
+  - type: textarea
+    id: logs_node_3
+    attributes:
+      label: Logs from node 3 (with sensitive values edited out) (if applicable)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+    validations:
+      required: false
+  - type: textarea
     id: rabbitmq_conf
     attributes:
       label: rabbitmq.conf
@@ -82,11 +96,11 @@ body:
         ```
     validations:
       required: false
-  # - type: textarea
-  #   id: k8s_deployment
-  #   attributes:
-  #     label: Kubernetes deployment file
-  #     description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
-  #   validations:
-  #     required: false
+  - type: textarea
+    id: k8s_deployment
+    attributes:
+      label: Kubernetes deployment file
+      description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
+    validations:
+      required: false
 
