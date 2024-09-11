@@ -3,30 +3,39 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md to learn more.
-
-        We do not guess in this community. Guessing is a very time consuming, and therefore expensive,
-        approach to troubleshooting distributed infrastructure, including distributed messaging
-        infrastructure.
+        ## Before We Start
 
         Please provide reasonably detailed responses to the question below to help others help you.
+
+        If you omit relevant information, those trying to reproduce what you are about to report will have to guess.
+        Guessing is a very time consuming, and therefore expensive,
+        approach to troubleshooting distributed infrastructure, including distributed messaging
+        infrastructure.
+  - type: checkboxes
+    attributes:
+      label: Community Support Policy
+      description:
+      options:
+        - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
+          required: true
   - type: dropdown
     id: rabbitmq_version
     attributes:
       label: RabbitMQ version used
       options:
-        - 4.0.x
         - 3.13.x
-        - Older (unsupported)
+        - 4.0.x
+        - Older (out of support without a commercial license)
     validations:
       required: true
-  - type: input
+  - type: dropdown
     id: erlang_version
     attributes:
-      label: Erlang version used
-      description: What Erlang version do you run RabbitMQ on?
-    validations:
-      required: true
+      label: RabbitMQ version used
+      options:
+        - 26.2.x
+        - 26.1.x
+        - 26.0.x
   - type: input
     id: os
     attributes:
@@ -39,11 +48,13 @@ body:
     attributes:
       label: How is RabbitMQ deployed?
       options:
+        - Community Docker image
         - Debian package
         - RPM package
         - Generic binary package
         - Kubernetes Operator(s) from Team RabbitMQ
         - Bitnami Helm chart
+        - Chocolatey package
         - Windows installer
         - Windows binary package
         - RabbitMQ-as-a-Service from a public cloud provider
@@ -53,21 +64,21 @@ body:
   - type: textarea
     id: rabbitmq_logs
     attributes:
-      label: Logs from node 1 (with sensitive values edited out)
+      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
       description: Relevant RabbitMQ logs with sensitive values edited out
     validations:
       required: true
   - type: textarea
     id: logs_node_2
     attributes:
-      label: Logs from node 2 (with sensitive values edited out) (if applicable)
+      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 2 (with sensitive values edited out) (if applicable)
       description: Relevant RabbitMQ logs with sensitive values edited out
     validations:
       required: false
   - type: textarea
     id: logs_node_3
     attributes:
-      label: Logs from node 3 (with sensitive values edited out) (if applicable)
+      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 3 (with sensitive values edited out) (if applicable)
       description: Relevant RabbitMQ logs with sensitive values edited out
     validations:
       required: false
@@ -76,6 +87,20 @@ body:
     attributes:
       label: rabbitmq.conf
       description: rabbitmq.conf contents
+    validations:
+      required: true
+  - type: textarea
+    id: deployment_steps
+    attributes:
+      label: Steps to deploy RabbitMQ cluster
+      description: How would you explain how you deploy RabbitMQ to a new colleague?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Steps to reproduce the behavior in question
+      description: What specific steps need to be performed in order to reproduce this behavior? Why?
     validations:
       required: true
   - type: textarea
@@ -103,4 +128,3 @@ body:
       description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
     validations:
       required: false
-
