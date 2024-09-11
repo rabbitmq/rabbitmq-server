@@ -68,6 +68,13 @@ body:
     validations:
       required: true
   - type: textarea
+    id: diagnostics_status
+    attributes:
+      label: rabbitmq-diagnostics status output
+      value: See https://www.rabbitmq.com/docs/cli to learn how to use rabbitmq-diagnostics
+    validations:
+      required: true
+  - type: textarea
     id: rabbitmq_logs
     attributes:
       label: Logs from node 1 (with sensitive values edited out)
