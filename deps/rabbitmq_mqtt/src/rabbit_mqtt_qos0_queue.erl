@@ -112,8 +112,14 @@ declare(Q0, _Node) ->
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     QName = amqqueue:get_name(Q),
     log_delete(QName, amqqueue:get_exclusive_owner(Q)),
-    ok = rabbit_amqqueue:internal_delete(Q, ActingUser),
-    {ok, 0}.
+    case rabbit_amqqueue:internal_delete(Q, ActingUser) of
+        ok ->
+            {ok, 0};
+        {error, timeout} ->
+            {protocol_error, internal_error,
+             "The operation to delete ~ts from the metadata store timed "
+             "out", [rabbit_misc:rs(QName)]}
+    end.
 
 -spec deliver([{amqqueue:amqqueue(), stateless}],
               Msg :: mc:state(),
