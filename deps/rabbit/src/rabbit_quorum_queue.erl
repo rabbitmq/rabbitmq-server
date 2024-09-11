@@ -753,10 +753,23 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     ok = force_delete_queue(Servers)
             end,
             notify_decorators(QName, shutdown),
+<<<<<<< HEAD
             ok = delete_queue_data(Q, ActingUser),
             _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
                           ?RPC_TIMEOUT),
             {ok, ReadyMsgs};
+=======
+            case delete_queue_data(Q, ActingUser) of
+                ok ->
+                    _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
+                                  ?RPC_TIMEOUT),
+                    {ok, ReadyMsgs};
+                {error, timeout} ->
+                    {protocol_error, internal_error,
+                     "The operation to delete ~ts from the metadata store "
+                     "timed out", [rabbit_misc:rs(QName)]}
+            end;
+>>>>>>> 8435a70d90 (minor: Delete duplicate "queue" in QQ deletion error message)
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
                               (_) -> false
