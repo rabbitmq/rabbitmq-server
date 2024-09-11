@@ -31,11 +31,13 @@ body:
   - type: dropdown
     id: erlang_version
     attributes:
-      label: RabbitMQ version used
+      label: Erlang version used
       options:
         - 26.2.x
         - 26.1.x
         - 26.0.x
+    validations:
+      required: true
   - type: input
     id: os
     attributes:
