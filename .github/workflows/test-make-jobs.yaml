@@ -36,7 +36,20 @@ jobs:
       make_target: ${{ matrix.make_target }}
       plugin: rabbit
 
-# @todo test-mqtt using parallel ct
+  test-rabbitmq-mqtt:
+    name: Test rabbitmq_mqtt
+    strategy:
+      fail-fast: false
+      matrix:
+        make_target:
+          - parallel-ct-set-1
+    uses: ./.github/workflows/test-make-ct-par.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: ${{ matrix.make_target }}
+      plugin: rabbitmq_mqtt
 
   test-ct-seq:
     name: Test plugins
