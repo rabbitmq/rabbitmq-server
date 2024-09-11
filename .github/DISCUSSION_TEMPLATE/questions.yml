@@ -1,5 +1,22 @@
 title: "[Questions] "
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for using RabbitMQ.
+
+        **STOP NOW AND READ THIS** before proceeding.
+
+        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md first.
+
+        If you are **certain** that you are eligible for community support from the core team, please
+        provide a **detailed** description of how you run RabbitMQ. This will save everyone time.
+
+        We do not guess in this community. Guessing is a very time consuming, and therefore expensive,
+        approach to troubleshooting distributed infrastructure, including distributed messaging
+        infrastructure.
+
+        Please provide reasonably detailed responses to the question below to help others help you.
   - type: dropdown
     id: rabbitmq_version
     attributes:
@@ -47,24 +64,24 @@ body:
       description: rabbitmq.conf contents
     validations:
       required: true
-  # - type: textarea
-  #   id: advanced_config
-  #   attributes:
-  #     label: advanced.config
-  #     description: advanced.config contents (if applicable)
-  #   validations:
-  #     required: false
-  # - type: markdown
-  #   id: app_code
-  #   attributes:
-  #     label: Application code
-  #     description: Relevant messaging-related parts of application code
-  #     value: |
-  #       ```python
-  #       # relevant messaging-related parts of your code go here
-  #       ```
-  #   validations:
-  #     required: false
+  - type: textarea
+    id: advanced_config
+    attributes:
+      label: advanced.config
+      description: advanced.config contents (if applicable)
+    validations:
+      required: false
+  - type: textarea
+    id: app_code
+    attributes:
+      label: Application code
+      description: Relevant messaging-related parts of application code
+      value: |
+        ```python
+        # relevant messaging-related parts of your code go here
+        ```
+    validations:
+      required: false
   # - type: textarea
   #   id: k8s_deployment
   #   attributes:
@@ -72,26 +89,4 @@ body:
   #     description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
   #   validations:
   #     required: false
-  - type: markdown
-    attributes:
-      value: |
-        Thank you for using RabbitMQ.
 
-        **STOP NOW AND READ THIS** before proceeding.
-
-        Please read https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md first.
-
-        If you are **certain** that you are eligible for community support from the core team, please
-        provide a **detailed** description of how you run RabbitMQ. This will save everyone time.
-
-        We do not guess in this community. Guessing is a very time consuming, and therefore expensive,
-        approach to troubleshooting distributed infrastructure, including distributed messaging
-        infrastructure.
-
-        Please provide reasonably detailed responses to the following question:
-
-        1. How would you describe the steps you take to deploy RabbitMQ to a (hypothetical) new colleague?
-        2. What client libraries, frameworks and their versions are used with RabbitMQ?
-        3. How would you describe the steps you take to reproduce the behavior in question to your colleague?
-        4. How do you expect RabbitMQ (client library, etc) to behave and why?
-        5.
