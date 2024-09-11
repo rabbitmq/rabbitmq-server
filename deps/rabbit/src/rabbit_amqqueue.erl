@@ -1691,7 +1691,10 @@ delete_crashed(Q) when ?amqqueue_is_classic(Q) ->
 delete_crashed(Q, ActingUser) when ?amqqueue_is_classic(Q) ->
     rabbit_classic_queue:delete_crashed(Q, ActingUser).
 
--spec delete_crashed_internal(amqqueue:amqqueue(), rabbit_types:username()) -> 'ok'.
+-spec delete_crashed_internal(Q, ActingUser) -> Ret when
+      Q :: amqqueue:amqqueue(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok | {error, timeout}.
 delete_crashed_internal(Q, ActingUser) when ?amqqueue_is_classic(Q) ->
     rabbit_classic_queue:delete_crashed_internal(Q, ActingUser).
 
