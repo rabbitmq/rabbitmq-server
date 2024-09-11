@@ -10,43 +10,43 @@ body:
         - Older (unsupported)
     validations:
       required: true
-  # - type: input
-  #   id: erlang_version
-  #   attributes:
-  #     label: Erlang version used
-  #     description: What Erlang version do you run RabbitMQ on?
-  #   validations:
-  #     required: true
-  # - type: input
-  #   id: os
-  #   attributes:
-  #     label: Operating system (distribution) used
-  #     description: What OS or distribution do you run RabbitMQ on?
-  #   validations:
-  #     required: true
-  # - type: dropdown
-  #   id: deployment_type
-  #   attributes:
-  #     label: How is RabbitMQ deployed?
-  #     options:
-  #       - Debian package
-  #       - RPM package
-  #       - Generic binary package
-  #       - Kubernetes Operator(s) from Team RabbitMQ
-  #       - Bitnami Helm chart
-  #       - Windows installer
-  #       - Windows binary package
-  #       - RabbitMQ-as-a-Service from a public cloud provider
-  #       - Other
-  #   validations:
-  #     required: true
-  # - type: textarea
-  #   id: rabbitmq_conf
-  #   attributes:
-  #     label: rabbitmq.conf
-  #     description: rabbitmq.conf contents
-  #   validations:
-  #     required: true
+  - type: input
+    id: erlang_version
+    attributes:
+      label: Erlang version used
+      description: What Erlang version do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system (distribution) used
+      description: What OS or distribution do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment_type
+    attributes:
+      label: How is RabbitMQ deployed?
+      options:
+        - Debian package
+        - RPM package
+        - Generic binary package
+        - Kubernetes Operator(s) from Team RabbitMQ
+        - Bitnami Helm chart
+        - Windows installer
+        - Windows binary package
+        - RabbitMQ-as-a-Service from a public cloud provider
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: rabbitmq_conf
+    attributes:
+      label: rabbitmq.conf
+      description: rabbitmq.conf contents
+    validations:
+      required: true
   # - type: textarea
   #   id: advanced_config
   #   attributes:
