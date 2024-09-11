@@ -23,11 +23,11 @@ decode_and_verify(Algs, Jwk, Token) ->
         {false, #jose_jwt{fields = Fields}, _} -> {false, Fields}
     end.
 
-get_key_id(DefaultKey, Token) ->
+get_key_id(Token) ->
     try
         case jose_jwt:peek_protected(Token) of
             #jose_jws{fields = #{<<"kid">> := Kid}} -> {ok, Kid};
-            #jose_jws{}                             -> DefaultKey
+            #jose_jws{}                             -> undefined
         end
     catch Type:Err:Stacktrace ->
         {error, {invalid_token, Type, Err, Stacktrace}}

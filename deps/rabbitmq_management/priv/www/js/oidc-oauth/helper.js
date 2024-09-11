@@ -140,7 +140,7 @@ function oauth_initialize_user_manager(resource_server) {
         client_id: resource_server.oauth_client_id,
         response_type: resource_server.oauth_response_type,
         scope: resource_server.oauth_scopes,
-//        resource: resource_server.id,  deprecated 
+//        resource: resource_server.id,
         redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
         post_logout_redirect_uri: rabbit_base_uri() + "/",
 

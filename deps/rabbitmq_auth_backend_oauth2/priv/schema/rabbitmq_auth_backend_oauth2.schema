@@ -158,19 +158,19 @@
  "rabbitmq_auth_backend_oauth2.authorization_endpoint",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
-%% auth_oauth2.authorization_endpoint = https://a.com/authorize
-%% auth_oauth2.authorization_endpoint.params.resource = ${resource_id}
-%% auth_oauth2.authorization_endpoint.params.audience = ${resource_id}
+%% auth_oauth2.authorization_endpoint_params.audience
+%% auth_oauth2.resource_servers.rabbitmq.authorization_endpoint_params.audience
+%% auth_oauth2.resource_servers.rabbitmq.token_endpoint_params.audience
+%% auth_oauth2.resource_servers.rabbitmq.jkws_uri_params.appId =
 
 {mapping,
- "auth_oauth2.authorization_endpoint.params.$param",
- "rabbitmq_auth_backend_oauth2.authorization_endpoint.req_params",
+ "auth_oauth2.authorization_endpoint_params.$param",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, string}]}.
 
-{translation, "rabbitmq_auth_backend_oauth2.authorization_endpoint.req_params",
+{translation, "rabbitmq_auth_backend_oauth2.authorization_endpoint_params",
  fun(Conf) ->
-     Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.authorization_endpoint.req_params", Conf),
-     rabbit_oauth2_schema:translate_endpoint_req_params(Settings)
+    rabbit_oauth2_schema:translate_authorization_endpoint_params(Conf)
  end}.
 
 {mapping,
@@ -325,6 +325,7 @@
   "rabbitmq_auth_backend_oauth2.resource_servers",
   [{datatype, string}]
 }.
+
 
 {mapping,
   "auth_oauth2.resource_servers.$name.scope_prefix",

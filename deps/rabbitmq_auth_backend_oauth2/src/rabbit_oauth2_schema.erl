@@ -12,7 +12,7 @@
     translate_oauth_providers/1,
     translate_resource_servers/1,
     translate_signing_keys/1,
-    translate_endpoint_req_params/1
+    translate_authorization_endpoint_params/1
 ]).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
@@ -64,9 +64,10 @@ translate_list_of_signing_keys(ListOfKidPath) ->
         end,
     maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, maps:from_list(ListOfKidPath)).
 
--spec translate_endpoint_req_params([{list(), binary()}]) -> map().
-translate_endpoint_req_params(ListOfReqParams) ->
-    lists:map(fun({Id, Value}) -> {list_to_binary(lists:last(Id)), Value} end, ListOfReqParams).
+-spec translate_authorization_endpoint_params([{list(), binary()}]) -> map().
+translate_authorization_endpoint_params(Conf) ->
+    Params = cuttlefish_variable:filter_by_prefix("auth_oauth2.authorization_endpoint_params", Conf),
+    lists:map(fun({Id, Value}) -> {list_to_binary(lists:last(Id)), Value} end, Params).
 
 validator_file_exists(Attr, Filename) ->
     case file:read_file(Filename) of

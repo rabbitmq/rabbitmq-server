@@ -221,36 +221,39 @@ post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
     Payload4.
 
 
--spec post_process_payload_with_scope_aliases(ResourceServerId :: binary(), Payload :: map()) -> map().
+-spec post_process_payload_with_scope_aliases(
+    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
 %% This is for those hopeless environments where the token structure is so out of
 %% messaging team's control that even the extra scopes field is no longer an option.
 %%
 %% This assumes that scopes can be random values that do not follow the RabbitMQ
 %% convention, or any other convention, in any way. They are just random client role IDs.
 %% See rabbitmq/rabbitmq-server#4588 for details.
-post_process_payload_with_scope_aliases(ResourceServerId, Payload) ->
+post_process_payload_with_scope_aliases(ResourceServer, Payload) ->
     %% try JWT scope field value for alias
-    Payload1 = post_process_payload_with_scope_alias_in_scope_field(ResourceServerId, Payload),
+    Payload1 = post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload),
     %% try the configurable 'extra_scopes_source' field value for alias
-    post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServerId, Payload1).
+    post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServer, Payload1).
 
 
--spec post_process_payload_with_scope_alias_in_scope_field(ResourceServerId :: binary(), Payload :: map()) -> map().
+-spec post_process_payload_with_scope_alias_in_scope_field(
+    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
 %% First attempt: use the value in the 'scope' field for alias
-post_process_payload_with_scope_alias_in_scope_field(ResourceServerId, Payload) ->
-    ScopeMappings = rabbit_oauth2_config:get_scope_aliases(ResourceServerId),
+post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload) ->
+    ScopeMappings = ResourceServer#resource_server.scope_aliases,
     post_process_payload_with_scope_alias_field_named(Payload, ?SCOPE_JWT_FIELD, ScopeMappings).
 
 
--spec post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServerId :: binary(), Payload :: map()) -> map().
+-spec post_process_payload_with_scope_alias_in_extra_scopes_source(
+    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
 %% Second attempt: use the value in the configurable 'extra scopes source' field for alias
-post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServerId, Payload) ->
-    ExtraScopesField = rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId),
+post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServer, Payload) ->
+    ExtraScopesField = ResourceServer#resource_server.additional_scopes_key,
     case ExtraScopesField of
         %% nothing to inject
         {error, not_found} -> Payload;
         {ok, ExtraScopes} ->
-            ScopeMappings = rabbit_oauth2_config:get_scope_aliases(ResourceServerId),
+            ScopeMappings = ResourceServer#resource_server.scope_aliases,
             post_process_payload_with_scope_alias_field_named(Payload, ExtraScopes, ScopeMappings)
     end.
 
@@ -280,16 +283,19 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
        maps:put(?SCOPE_JWT_FIELD, ExpandedScopes, Payload).
 
 
--spec does_include_complex_claim_field(ResourceServerId :: binary(), Payload :: map()) -> boolean().
-does_include_complex_claim_field(ResourceServerId, Payload) when is_map(Payload) ->
-  case rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId) of
+-spec does_include_complex_claim_field(
+    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> boolean().
+does_include_complex_claim_field(ResourceServer, Payload) when is_map(Payload) ->
+  case ResourceServer#resource_server.additional_scopes_key of
     {ok, ScopeKey} -> maps:is_key(ScopeKey, Payload);
     {error, not_found} -> false
   end.
 
--spec post_process_payload_with_complex_claim(ResourceServerId :: binary(), Payload :: map()) -> map().
-post_process_payload_with_complex_claim(ResourceServerId, Payload) ->
-    case rabbit_oauth2_config:get_additional_scopes_key(ResourceServerId) of
+-spec post_process_payload_with_complex_claim(
+    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
+post_process_payload_with_complex_claim(ResourceServer, Payload) ->
+    ResourceServerId =  ResourceServer#resource_server.id,
+    case ResourceServer#resource_server.additional_scopes_key of
       {ok, ScopesKey} ->
         ComplexClaim = maps:get(ScopesKey, Payload),
         AdditionalScopes =
@@ -479,10 +485,12 @@ is_recognized_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIE
 is_recognized_permission(_, _) -> false.
 
 
--spec post_process_payload_in_rich_auth_request_format(ResourceServerId :: binary(), Payload :: map()) -> map().
+-spec post_process_payload_in_rich_auth_request_format(ResourceServer :: resource_server(),
+        Payload :: map()) -> map().
 %% https://oauth.net/2/rich-authorization-requests/
-post_process_payload_in_rich_auth_request_format(ResourceServerId, #{<<"authorization_details">> := Permissions} = Payload) ->
-    ResourceServerType = rabbit_oauth2_config:get_resource_server_type(ResourceServerId),
+post_process_payload_in_rich_auth_request_format(ResourceServer,
+        #{<<"authorization_details">> := Permissions} = Payload) ->
+    ResourceServerType = ResourceServer#resource_server.resource_server_type,
 
     FilteredPermissionsByType = lists:filter(fun(P) ->
       is_recognized_permission(P, ResourceServerType) end, Permissions),

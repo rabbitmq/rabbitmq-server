@@ -488,7 +488,6 @@ end}.
 {mapping, "management.oauth_initiated_logon_type", "rabbitmq_management.oauth_initiated_logon_type",
     [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
-
 {mapping,
   "management.oauth_resource_servers.$name.id",
   "rabbitmq_management.oauth_resource_servers",

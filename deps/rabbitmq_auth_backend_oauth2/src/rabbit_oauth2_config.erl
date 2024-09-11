@@ -15,73 +15,129 @@
 -define(TOP_RESOURCE_SERVER_ID, application:get_env(?APP, resource_server_id)).
 %% scope aliases map "role names" to a set of scopes
 
+-record(internal_oauth_provider, {
+    id :: oauth_provider_id(),
+    default_key :: binary() | undefined,
+    algorithms :: list() | undefined
+}).
+-type internal_oauth_provider() :: #internal_oauth_provider{}.
+
+-record(resource_server, {
+  id :: resource_server_id(),
+  resource_server_type :: binary(),
+  verify_aud :: boolean(),
+  scope_prefix :: binary(),
+  additional_scopes_key :: binary(),
+  preferred_username_claims :: list(),
+  scope_aliases :: undefined | map(),
+  oauth_provider_id :: oauth_provider_id()
+ }).
+
+-type resource_server() :: #resource_server{}.
+-type resource_server_id() :: binary() | list().
+
 -export([
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
     get_signing_keys/0, get_signing_keys/1, get_signing_key/1, get_signing_key/2,
-    get_default_key/0,
-    get_default_resource_server_id/0,
-    get_resource_server_id_for_audience/1,
-    get_algorithms/0, get_algorithms/1, get_default_key/1,
-    get_oauth_provider_id_for_resource_server_id/1,
+    resolve_resource_server_id_from_audience/1,
     get_oauth_provider/2,
-    get_allowed_resource_server_ids/0, find_audience_in_resource_server_ids/1,
-    is_verify_aud/0, is_verify_aud/1,
-    get_additional_scopes_key/0, get_additional_scopes_key/1,
-    get_default_preferred_username_claims/0, get_preferred_username_claims/0,
-    get_preferred_username_claims/1,
-    get_scope_prefix/0, get_scope_prefix/1,
-    get_resource_server_type/0, get_resource_server_type/1,
-    has_scope_aliases/1, get_scope_aliases/1
+    get_internal_oauth_provider/2,
+    get_allowed_resource_server_ids/0, find_audience_in_resource_server_ids/1
     ]).
+export_type([resource_server/0, internal_oauth_provider/0]).
 
--spec get_default_preferred_username_claims() -> list().
-get_default_preferred_username_claims() -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS.
-
--spec get_preferred_username_claims() -> list().
-get_preferred_username_claims() ->
-    case application:get_env(?APP, preferred_username_claims) of
-      {ok, Value} ->
-        append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS);
-      _ -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS
+-spec get_resource_server(resource_server_id()) -> resource_server() | {error, term()}.
+get_resource_server(ResourceServerId) ->
+    case get_default_resource_server_id() of
+        {error, _} ->
+            get_resource_server(undefined, ResourceServerId);
+        V ->
+            get_resource_server(V, ResourceServerId)
     end.
--spec get_preferred_username_claims(binary() | list()) -> list().
-get_preferred_username_claims(ResourceServerId) ->
-    ResourceServers = application:get_env(?APP, resource_servers, #{}),
-    ResourceServer = maps:get(ResourceServerId, ResourceServers, []),
-    case proplists:get_value(preferred_username_claims, ResourceServer, undefined) of
-      undefined ->
-        get_preferred_username_claims();
-      Value ->
-        append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS)
-    end.
+get_resource_server(TopResourceServerId, ResourceServerId) ->
+  when ResourceServerId =:= TopResourceServerId ->
+    ScopeAlises =
+        application:get_env(?APP, scope_aliases, undefined),
+    PreferredUsernameClaims =
+        case application:get_env(?APP, preferred_username_claims) of
+            {ok, Value} ->
+                append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS);
+            _ -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS
+        end,
+    ResourceServerType =
+        application:get_env(?APP, resource_server_type, <<>>),
+    VerifyAud =
+        application:get_env(?APP, verify_aud, true),
+    AdditionalScopesKey =
+        case application:get_env(?APP, extra_scopes_source, undefined) of
+            undefined -> {error, not_found};
+            ScopeKey -> {ok, ScopeKey}
+        end,
+    DefaultScopePrefix =
+        case get_default_resource_server_id() of
+            {error, _} -> <<"">>;
+            V -> erlang:iolist_to_binary([V, <<".">>])
+        end,
+    ScopePrefix =
+        application:get_env(?APP, scope_prefix, DefaultScopePrefix).
+    OAuthProviderId =
+        case application:get_env(?APP, default_oauth_provider) of
+            undefined -> root;
+            {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
+        end,
 
--spec get_default_key() -> {ok, binary()} | {error, no_default_key_configured}.
-get_default_key() ->
-    get_default_key(root).
+    #resource_server{
+        id = ResourceServerId,
+        resource_server_type = ResourceServerType,
+        verify_aud = VerifyAud,
+        scope_prefix = ScopePrefix,
+        additional_scopes_key = AdditionalScopesKey,
+        preferred_username_claims = PreferredUsernameClaims,
+        scope_aliases = ScopeAliases,
+        oauth_provider_id = OAuthProviderId
+    };
 
--spec get_default_key(oauth_provider_id()) -> {ok, binary()} | {error, no_default_key_configured}.
-get_default_key(root) ->
-    case application:get_env(?APP, key_config, undefined) of
-        undefined ->
-            {error, no_default_key_configured};
-        KeyConfig ->
-            case proplists:get_value(default_key, KeyConfig, undefined) of
-                undefined -> {error, no_default_key_configured};
-                V -> {ok, V}
-            end
-    end;
-get_default_key(OauthProviderId) ->
-    OauthProviders = application:get_env(?APP, oauth_providers, #{}),
-    case maps:get(OauthProviderId, OauthProviders, []) of
-        [] ->
-            {error, no_default_key_configured};
-        OauthProvider ->
-            case proplists:get_value(default_key, OauthProvider, undefined) of
-                undefined -> {error, no_default_key_configured};
-                V -> {ok, V}
-            end
-    end.
+get_resource_server(TopResourceServerId, ResourceServerId) ->
+  when ResourceServerId =/= TopResourceServerId ->
+    ResourceServerProps =
+        maps:get(ResourceServerId, application:get_env(?APP, resource_servers,
+            #{}),[]),
+    TopResourseServer =
+        get_resource_server(TopResourceServerId, TopResourceServerId),
+    ScopeAlises =
+        proplists:get_value(scope_aliases, ResourceServerProps,
+            TopResourseServer#resource_server.scope_aliases),
+    PreferredUsernameClaims =
+        proplists:get_value(preferred_username_claims, ResourceServerProps,
+            TopResourseServer#resource_server.preferred_username_claims),
+    ResourceServerType =
+        proplists:get_value(resource_server_type, ResourceServerProps,
+            TopResourseServer#resource_server.resource_server_type),
+    VerifyAud =
+        proplists:get_value(verify_aud, ResourceServerProps,
+            TopResourseServer#resource_server.verify_aud),
+    AdditionalScopesKey =
+        proplists:get_value(extra_scopes_source, ResourceServerProps,
+            TopResourseServer#resource_server.extra_scopes_source),
+    ScopePrefix =
+        proplists:get_value(scope_prefix, ResourceServerProps,
+            TopResourseServer#resource_server.scope_prefix),
+    OAuthProviderId =
+        proplists:get_value(oauth_provider_id, ResourceServerProps,
+            TopResourseServer#resource_server.oauth_provider_id),
+
+    #resource_server{
+        id = ResourceServerId,
+        resource_server_type = ResourceServerType,
+        verify_aud = VerifyAud,
+        scope_prefix = ScopePrefix,
+        additional_scopes_key = AdditionalScopesKey,
+        preferred_username_claims = PreferredUsernameClaims,
+        scope_aliases = ScopeAliases,
+        oauth_provider_id = OAuthProviderId
+    }.
+
 
 %%
 %% Signing Key storage:
@@ -199,7 +255,13 @@ get_signing_keys(OauthProviderId) ->
             Jwks
     end.
 
--spec get_resource_server_id_for_audience(binary() | list() | none) -> binary() | {error, term()}.
+-spec resolve_resource_server_id_from_audience(binary() | list() | none) -> resource_server() | {error, term()}.
+resolve_resource_server_id_from_audience(Audience) ->
+    case get_resource_server_id_for_audience(Audience) of
+        {error, _} = Error -> Error;
+        ResourceServerId -> get_resource_server(ResourceServerId)
+    end.
+
 get_resource_server_id_for_audience(none) ->
     case is_verify_aud() of
         true ->
@@ -230,36 +292,37 @@ get_resource_server_id_for_audience(Audience) ->
             end
     end.
 
--spec get_oauth_provider_id_for_resource_server_id(binary()) -> oauth_provider_id().
-
-get_oauth_provider_id_for_resource_server_id(ResourceServerId) ->
-    get_oauth_provider_id_for_resource_server_id(get_default_resource_server_id(),
-        ResourceServerId).
-get_oauth_provider_id_for_resource_server_id(TopResourceServerId,
-  ResourceServerId) when ResourceServerId =:= TopResourceServerId ->
-    case application:get_env(?APP, default_oauth_provider) of
-        undefined -> root;
-        {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
-    end;
-get_oauth_provider_id_for_resource_server_id(TopResourceServerId,
-  ResourceServerId) when ResourceServerId =/= TopResourceServerId ->
-    case proplists:get_value(oauth_provider_id, get_resource_server_props(ResourceServerId)) of
-        undefined ->
-            case application:get_env(?APP, default_oauth_provider) of
-                undefined -> root;
-                {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
-            end;
-        OauthProviderId -> OauthProviderId
-    end.
 
 -spec get_oauth_provider(oauth_provider_id(), list()) ->
     {ok, oauth_provider()} | {error, any()}.
 get_oauth_provider(OAuthProviderId, RequiredAttributeList) ->
     oauth2_client:get_oauth_provider(OAuthProviderId, RequiredAttributeList).
 
--spec get_algorithms() -> list() | undefined.
-get_algorithms() ->
-    get_algorithms(root).
+-spec get_internal_oauth_provider(oauth_provider_id(), list()) ->
+    {ok, internal_oauth_provider()} | {error, any()}.
+get_internal_oauth_provider(OAuthProviderId) ->
+    #internal_oauth_provider{
+        id = OAuthProvider#oauth_provider.id,
+        default_key = get_default_key(OAuthProvider#oauth_provider.id),
+        algorithms :: get_algorithms(OAuthProvider#oauth_provider.id)
+    }.
+
+-spec get_default_key(oauth_provider_id()) -> binary() | undefined.
+get_default_key(root) ->
+    case application:get_env(?APP, key_config, undefined) of
+        undefined ->
+            undefined;
+        KeyConfig ->
+            proplists:get_value(default_key, KeyConfig, undefined)
+    end;
+get_default_key(OauthProviderId) ->
+    OauthProviders = application:get_env(?APP, oauth_providers, #{}),
+    case maps:get(OauthProviderId, OauthProviders, []) of
+        [] ->
+            undefined;
+        OauthProvider ->
+            proplists:get_value(default_key, OauthProvider, undefined)
+    end.
 
 -spec get_algorithms(oauth_provider_id()) -> list() | undefined.
 get_algorithms(root) ->
@@ -271,10 +334,6 @@ get_algorithms(OAuthProviderId) ->
         undefined -> undefined;
         V -> proplists:get_value(algorithms, V, undefined)
     end.
-
-get_resource_server_props(ResourceServerId) ->
-    ResourceServers = application:get_env(?APP, resource_servers, #{}),
-    maps:get(ResourceServerId, ResourceServers, []).
 
 get_signing_key(KeyId) ->
     maps:get(KeyId, get_signing_keys(root), undefined).
@@ -319,142 +378,6 @@ find_audience_in_resource_server_ids(AudList) when is_list(AudList) ->
         [_One|_Tail] -> {error, only_one_resource_server_as_audience_found_many};
         [] -> {error, no_matching_aud_found}
     end.
-
--spec is_verify_aud() -> boolean().
-is_verify_aud() -> application:get_env(?APP, verify_aud, true).
-
--spec is_verify_aud(binary()) -> boolean().
-is_verify_aud(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            is_verify_aud(undefined, ResourceServerId);
-        V ->
-            is_verify_aud(V, ResourceServerId)
-    end.
-is_verify_aud(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId -> is_verify_aud();
-is_verify_aud(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    proplists:get_value(verify_aud, maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}), []), is_verify_aud()).
-
--spec get_additional_scopes_key() -> {ok, binary()} | {error, not_found}.
-get_additional_scopes_key() ->
-    case application:get_env(?APP, extra_scopes_source, undefined) of
-        undefined -> {error, not_found};
-        ScopeKey -> {ok, ScopeKey}
-    end.
--spec get_additional_scopes_key(binary()) -> {ok, binary()} | {error, not_found}.
-get_additional_scopes_key(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            get_additional_scopes_key(undefined, ResourceServerId);
-        V ->
-            get_additional_scopes_key(V, ResourceServerId)
-    end.
-get_additional_scopes_key(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId -> get_additional_scopes_key();
-get_additional_scopes_key(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServer = maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}), []),
-    case proplists:get_value(extra_scopes_source, ResourceServer) of
-        undefined -> get_additional_scopes_key();
-        <<>> -> get_additional_scopes_key();
-        ScopeKey -> {ok, ScopeKey}
-    end.
-
--spec get_scope_prefix() -> binary().
-get_scope_prefix() ->
-    DefaultScopePrefix = case get_default_resource_server_id() of
-        {error, _} -> <<"">>;
-        V -> erlang:iolist_to_binary([V, <<".">>])
-    end,
-    application:get_env(?APP, scope_prefix, DefaultScopePrefix).
-
--spec get_scope_prefix(binary()) -> binary().
-get_scope_prefix(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            get_scope_prefix(undefined, ResourceServerId);
-        V ->
-            get_scope_prefix(V, ResourceServerId)
-    end.
-get_scope_prefix(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId -> get_scope_prefix();
-get_scope_prefix(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServer = maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}), []),
-    case proplists:get_value(scope_prefix, ResourceServer) of
-        undefined ->
-            case application:get_env(?APP, scope_prefix) of
-               undefined ->  <<ResourceServerId/binary, ".">>;
-               {ok, Prefix} -> Prefix
-            end;
-        Prefix -> Prefix
-    end.
-
--spec get_resource_server_type() -> binary().
-get_resource_server_type() -> application:get_env(?APP, resource_server_type, <<>>).
-
--spec get_resource_server_type(binary()) -> binary().
-get_resource_server_type(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            get_resource_server_type(undefined, ResourceServerId);
-        V ->
-            get_resource_server_type(V, ResourceServerId)
-    end.
-get_resource_server_type(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId -> get_resource_server_type();
-get_resource_server_type(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServer = maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}), []),
-    proplists:get_value(resource_server_type, ResourceServer,
-        get_resource_server_type()).
-
--spec has_scope_aliases(binary()) -> boolean().
-has_scope_aliases(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            has_scope_aliases(undefined, ResourceServerId);
-        V ->
-            has_scope_aliases(V, ResourceServerId)
-    end.
-has_scope_aliases(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-    case application:get_env(?APP, scope_aliases) of
-        undefined -> false;
-        _ -> true
-    end;
-has_scope_aliases(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServerProps = maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}),[]),
-    case proplists:is_defined(scope_aliases, ResourceServerProps) of
-        true -> true;
-        false ->  has_scope_aliases(TopResourceServerId)
-    end.
-
--spec get_scope_aliases(binary()) -> map().
-get_scope_aliases(ResourceServerId) ->
-    case get_default_resource_server_id() of
-        {error, _} ->
-            get_scope_aliases(undefined, ResourceServerId);
-        V ->
-            get_scope_aliases(V, ResourceServerId)
-    end.
-get_scope_aliases(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =:= TopResourceServerId ->
-    application:get_env(?APP, scope_aliases, #{});
-get_scope_aliases(TopResourceServerId, ResourceServerId)
-  when ResourceServerId =/= TopResourceServerId ->
-    ResourceServerProps = maps:get(ResourceServerId,
-        application:get_env(?APP, resource_servers, #{}),[]),
-    proplists:get_value(scope_aliases, ResourceServerProps,
-        get_scope_aliases(TopResourceServerId)).
 
 
 intersection(List1, List2) ->
