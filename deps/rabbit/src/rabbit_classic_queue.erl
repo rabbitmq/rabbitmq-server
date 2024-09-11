@@ -111,12 +111,37 @@ delete(Q, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q) ->
                                      [Name, Vhost]),
                     {error, not_empty};
                 false ->
+<<<<<<< HEAD
                     rabbit_log:warning("Queue ~ts in vhost ~ts has its master node is down and "
                                        "no mirrors available or eligible for promotion. "
                                        "Forcing queue deletion.",
                                        [Name, Vhost]),
                     delete_crashed_internal(Q1, ActingUser),
                     {ok, 0}
+=======
+                    #resource{name = Name, virtual_host = Vhost} = QName,
+                    case IfEmpty of
+                        true ->
+                            rabbit_log:error("Queue ~ts in vhost ~ts is down. "
+                                             "The queue may be non-empty. "
+                                             "Refusing to force-delete.",
+                                             [Name, Vhost]),
+                            {error, not_empty};
+                        false ->
+                            rabbit_log:warning("Queue ~ts in vhost ~ts is down. "
+                                               "Forcing queue deletion.",
+                                               [Name, Vhost]),
+                            case delete_crashed_internal(Q, ActingUser) of
+                                ok ->
+                                    {ok, 0};
+                                {error, timeout} ->
+                                    {error, protocol_error,
+                                     "The operation to delete ~ts from the "
+                                     "metadata store timed out",
+                                     [rabbit_misc:rs(QName)]}
+                            end
+                    end
+>>>>>>> 7ca4063281 (Handle Khepri timeouts when attempting to delete crashed classic Qs)
             end;
         {error, not_found} ->
             %% Assume the queue was deleted
@@ -520,7 +545,7 @@ delete_crashed(Q, ActingUser) ->
 
 delete_crashed_internal(Q, ActingUser) ->
     delete_crashed_in_backing_queue(Q),
-    ok = rabbit_amqqueue:internal_delete(Q, ActingUser).
+    rabbit_amqqueue:internal_delete(Q, ActingUser).
 
 delete_crashed_in_backing_queue(Q) ->
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
