@@ -1,0 +1,39 @@
+title: "[Other] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before We Start
+
+        This category exists for free form questions where deployment details are less relevant, e.g. application and topology
+        advice kind of questions. Please provide a reasonably detailed description of how you use RabbitMQ.
+  - type: checkboxes
+    attributes:
+      label: Community Support Policy
+      description:
+      options:
+        - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
+          required: true
+  - type: markdown
+    attributes:
+      value: |
+        ## Relevant Details
+  - type: dropdown
+    id: rabbitmq_version
+    attributes:
+      label: RabbitMQ version used
+      options:
+        - 3.13.7
+        - 3.13.6
+        - 3.13.5
+        - 4.0.0-rc.1
+        - Older (out of support without a commercial license)
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Steps to reproduce the behavior in question
+      description: What specific steps need to be performed in order to reproduce this behavior? Why?
+    validations:
+      required: true
