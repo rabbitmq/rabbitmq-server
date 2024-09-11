@@ -64,8 +64,9 @@ body:
   - type: textarea
     id: rabbitmq_logs
     attributes:
-      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
+      label: Logs from node 1 (with sensitive values edited out)
       description: Relevant RabbitMQ logs with sensitive values edited out
+      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
     validations:
       required: true
   # - type: textarea
