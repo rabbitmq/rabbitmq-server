@@ -61,13 +61,13 @@ body:
         - Other
     validations:
       required: true
-  # - type: textarea
-  #   id: rabbitmq_logs
-  #   attributes:
-  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
-  #     description: Relevant RabbitMQ logs with sensitive values edited out
-  #   validations:
-  #     required: true
+  - type: textarea
+    id: rabbitmq_logs
+    attributes:
+      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+    validations:
+      required: true
   # - type: textarea
   #   id: logs_node_2
   #   attributes:
