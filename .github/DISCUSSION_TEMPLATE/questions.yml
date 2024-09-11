@@ -92,7 +92,7 @@ body:
     attributes:
       label: rabbitmq.conf
       description: rabbitmq.conf contents
-      value: See https://www.rabbitmq.com/docs/configure#config-location to find advanced.config file location
+      value: See https://www.rabbitmq.com/docs/configure#config-location to find rabbitmq.conf file location
     validations:
       required: true
   - type: textarea
@@ -133,5 +133,9 @@ body:
     attributes:
       label: Kubernetes deployment file
       description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
+      value: |
+        ```yaml
+        # Relevant parts of K8S deployment that demonstrate how RabbitMQ is deployed
+        ```
     validations:
       required: false
