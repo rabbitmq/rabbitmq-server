@@ -61,27 +61,27 @@ body:
         - Other
     validations:
       required: true
-  - type: textarea
-    id: rabbitmq_logs
-    attributes:
-      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
-      description: Relevant RabbitMQ logs with sensitive values edited out
-    validations:
-      required: true
-  - type: textarea
-    id: logs_node_2
-    attributes:
-      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 2 (with sensitive values edited out) (if applicable)
-      description: Relevant RabbitMQ logs with sensitive values edited out
-    validations:
-      required: false
-  - type: textarea
-    id: logs_node_3
-    attributes:
-      label: [Logs](https://www.rabbitmq.com/docs/logging) from node 3 (with sensitive values edited out) (if applicable)
-      description: Relevant RabbitMQ logs with sensitive values edited out
-    validations:
-      required: false
+  # - type: textarea
+  #   id: rabbitmq_logs
+  #   attributes:
+  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 1 (with sensitive values edited out)
+  #     description: Relevant RabbitMQ logs with sensitive values edited out
+  #   validations:
+  #     required: true
+  # - type: textarea
+  #   id: logs_node_2
+  #   attributes:
+  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 2 (with sensitive values edited out) (if applicable)
+  #     description: Relevant RabbitMQ logs with sensitive values edited out
+  #   validations:
+  #     required: false
+  # - type: textarea
+  #   id: logs_node_3
+  #   attributes:
+  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 3 (with sensitive values edited out) (if applicable)
+  #     description: Relevant RabbitMQ logs with sensitive values edited out
+  #   validations:
+  #     required: false
   - type: textarea
     id: rabbitmq_conf
     attributes:
