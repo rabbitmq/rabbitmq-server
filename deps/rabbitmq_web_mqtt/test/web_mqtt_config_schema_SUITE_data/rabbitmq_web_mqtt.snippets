@@ -73,18 +73,18 @@
  {ssl_with_listener,
   "web_mqtt.ssl.listener   = 127.0.0.2:15671
    web_mqtt.ssl.backlog    = 1024
-   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.certfile   = test/web_mqtt_config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/web_mqtt_config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem
    web_mqtt.ssl.password   = changeme",
   [{rabbitmq_web_mqtt,
        [{ssl_config,
             [{ip,"127.0.0.2"},
              {port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/web_mqtt_config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem"},
              {password,<<"changeme">>}]}]}],
   [rabbitmq_web_mqtt]},
 
@@ -92,9 +92,9 @@
   "web_mqtt.ssl.ip         = 127.0.0.2
    web_mqtt.ssl.port       = 15671
    web_mqtt.ssl.backlog    = 1024
-   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.certfile   = test/web_mqtt_config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/web_mqtt_config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem
    web_mqtt.ssl.password   = changeme
 
    web_mqtt.ssl.versions.tls1_2 = tlsv1.2
@@ -105,9 +105,9 @@
              {ip,"127.0.0.2"},
              {port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/web_mqtt_config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem"},
              {password,<<"changeme">>},
 
              {versions,['tlsv1.2','tlsv1.1']}
@@ -117,9 +117,9 @@
  {ssl_ciphers,
   "web_mqtt.ssl.port       = 15671
    web_mqtt.ssl.backlog    = 1024
-   web_mqtt.ssl.certfile   = test/config_schema_SUITE_data/certs/cert.pem
-   web_mqtt.ssl.keyfile    = test/config_schema_SUITE_data/certs/key.pem
-   web_mqtt.ssl.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   web_mqtt.ssl.certfile   = test/web_mqtt_config_schema_SUITE_data/certs/cert.pem
+   web_mqtt.ssl.keyfile    = test/web_mqtt_config_schema_SUITE_data/certs/key.pem
+   web_mqtt.ssl.cacertfile = test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem
    web_mqtt.ssl.password   = changeme
 
    web_mqtt.ssl.honor_cipher_order   = true
@@ -142,9 +142,9 @@
        [{ssl_config,
             [{port,15671},
              {backlog,1024},
-             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
-             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
-             {cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/web_mqtt_config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/web_mqtt_config_schema_SUITE_data/certs/key.pem"},
+             {cacertfile,"test/web_mqtt_config_schema_SUITE_data/certs/cacert.pem"},
              {password,<<"changeme">>},
 
              {honor_cipher_order,   true},

@@ -10,7 +10,9 @@
 %%
 %% In other words, this test suite should not contain any test case that is executed
 %% only with a particular plugin or particular MQTT version.
--module(shared_SUITE).
+%%
+%% When adding a test case here the same function must be defined in web_mqtt_shared_SUITE.
+-module(mqtt_shared_SUITE).
 -compile([export_all,
           nowarn_export_all]).
 
@@ -53,24 +55,13 @@
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 
 all() ->
-    [{group, mqtt},
-    %% @todo Move web_mqtt to rabbitmq_web_mqtt directly.
-     {group, web_mqtt}].
+    [{group, mqtt}].
 
 %% The code being tested under v3 and v4 is almost identical.
 %% To save time in CI, we therefore run only a very small subset of tests in v3.
 groups() ->
     [
      {mqtt, [],
-      [{cluster_size_1, [],
-        [{v3, [], cluster_size_1_tests_v3()},
-         {v4, [], cluster_size_1_tests()},
-         {v5, [], cluster_size_1_tests()}]},
-       {cluster_size_3, [],
-        [{v4, [], cluster_size_3_tests()},
-         {v5, [], cluster_size_3_tests()}]}
-      ]},
-     {web_mqtt, [],
       [{cluster_size_1, [],
         [{v3, [], cluster_size_1_tests_v3()},
          {v4, [], cluster_size_1_tests()},
@@ -175,9 +166,6 @@ end_per_suite(Config) ->
 
 init_per_group(mqtt, Config) ->
     rabbit_ct_helpers:set_config(Config, {websocket, false});
-init_per_group(web_mqtt, Config) ->
-    rabbit_ct_helpers:set_config(Config, {websocket, true});
-
 init_per_group(Group, Config)
   when Group =:= v3;
        Group =:= v4;
@@ -218,9 +206,6 @@ init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
 init_per_testcase0(Testcase, Config) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    %% @todo This should only be necessary for Bazel's mixed version testing.
-    [ok = rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_web_mqtt) || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(T, Config)

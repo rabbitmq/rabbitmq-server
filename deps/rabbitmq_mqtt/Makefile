@@ -43,7 +43,7 @@ export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
 DEPS = ranch rabbit_common rabbit amqp10_common
-TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_web_mqtt amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream
+TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream
 
 PLT_APPS += rabbitmqctl elixir
 
