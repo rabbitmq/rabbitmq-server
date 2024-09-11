@@ -8,9 +8,7 @@ body:
         Please provide reasonably detailed responses to the question below to help others help you.
 
         If you omit relevant information, those trying to reproduce what you are about to report will have to guess.
-        Guessing is a very time consuming, and therefore expensive,
-        approach to troubleshooting distributed infrastructure, including distributed messaging
-        infrastructure.
+        Guessing is a very time consuming, and therefore expensive, approach to troubleshooting distributed messaging infrastructure.
   - type: checkboxes
     attributes:
       label: Community Support Policy
@@ -18,13 +16,19 @@ body:
       options:
         - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
           required: true
+  - type: markdown
+    attributes:
+      value: |
+        ## Relevant Details
   - type: dropdown
     id: rabbitmq_version
     attributes:
       label: RabbitMQ version used
       options:
-        - 3.13.x
-        - 4.0.x
+        - 3.13.7
+        - 3.13.6
+        - 3.13.5
+        - 4.0.0-rc.1
         - Older (out of support without a commercial license)
     validations:
       required: true
