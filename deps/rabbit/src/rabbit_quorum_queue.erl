@@ -825,8 +825,8 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     {ok, ReadyMsgs};
                 {error, timeout} ->
                     {protocol_error, internal_error,
-                     "The operation to delete queue ~ts from the metadata "
-                     "store timed out", [rabbit_misc:rs(QName)]}
+                     "The operation to delete ~ts from the metadata store "
+                     "timed out", [rabbit_misc:rs(QName)]}
             end;
         {error, {no_more_servers_to_try, Errs}} ->
             case lists:all(fun({{error, noproc}, _}) -> true;
