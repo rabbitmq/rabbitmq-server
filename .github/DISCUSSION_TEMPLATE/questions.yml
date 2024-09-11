@@ -69,25 +69,28 @@ body:
       value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
     validations:
       required: true
-  # - type: textarea
-  #   id: logs_node_2
-  #   attributes:
-  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 2 (with sensitive values edited out) (if applicable)
-  #     description: Relevant RabbitMQ logs with sensitive values edited out
-  #   validations:
-  #     required: false
-  # - type: textarea
-  #   id: logs_node_3
-  #   attributes:
-  #     label: [Logs](https://www.rabbitmq.com/docs/logging) from node 3 (with sensitive values edited out) (if applicable)
-  #     description: Relevant RabbitMQ logs with sensitive values edited out
-  #   validations:
-  #     required: false
+  - type: textarea
+    id: logs_node_2
+    attributes:
+      label: Logs from node 2 (if applicable, with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+    validations:
+      required: false
+  - type: textarea
+    id: logs_node_3
+    attributes:
+      label: Logs from node 3 (if applicable, with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+    validations:
+      required: false
   - type: textarea
     id: rabbitmq_conf
     attributes:
       label: rabbitmq.conf
       description: rabbitmq.conf contents
+      value: See https://www.rabbitmq.com/docs/configure#config-location to find advanced.config file location
     validations:
       required: true
   - type: textarea
@@ -109,6 +112,7 @@ body:
     attributes:
       label: advanced.config
       description: advanced.config contents (if applicable)
+      value: See https://www.rabbitmq.com/docs/configure#config-location to find advanced.config file location
     validations:
       required: false
   - type: textarea
