@@ -16,6 +16,7 @@
         [connect/3, connect/4]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand').
+-define(MQTT_COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
 all() ->
     [
@@ -93,12 +94,16 @@ run(BaseConfig) ->
     [] = 'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
     %% Open a WebMQTT connection
-
     C2 = connect(<<"simpleWebMqttClient">>, Config, [{ack_timeout, 1}]),
     timer:sleep(200),
 
+    %% WebMQTT CLI should list only WebMQTT connection.
     [[{client_id, <<"simpleWebMqttClient">>}]] =
-        'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+    'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+
+    %% MQTT CLI should list only MQTT connection.
+    [[{client_id, <<"simpleMqttClient">>}]] =
+    'Elixir.Enum':to_list(?MQTT_COMMAND:run([<<"client_id">>], Opts)),
 
     C3 = connect(<<"simpleWebMqttClient1">>, Config, [{ack_timeout, 1}]),
     timer:sleep(200),
