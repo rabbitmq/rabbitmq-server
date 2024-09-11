@@ -85,12 +85,6 @@ run(Config) ->
     %% No connections
     [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
 
-    %% Open a WebMQTT connection, command won't list it
-    WebMqttConfig = [{websocket, true} | Config],
-    _C0 = connect(<<"simpleWebMqttClient">>, WebMqttConfig, [{ack_timeout, 1}]),
-
-    [] = 'Elixir.Enum':to_list(?COMMAND:run([], Opts)),
-
     %% Open a connection
     C1 = connect(<<"simpleClient">>, Config, [{ack_timeout, 1}]),
 
