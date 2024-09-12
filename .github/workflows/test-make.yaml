@@ -64,3 +64,31 @@ jobs:
 
     - name: BUILD
       run: make
+
+  xref:
+    name: Xref
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - 26
+        - 27
+        elixir_version:
+        - 1.17
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+
+    - name: SETUP OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: XREF
+      run: make xref
