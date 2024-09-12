@@ -245,7 +245,11 @@ update_vhost(Config) ->
                                               [<<"/">>, [carrots], <<"user">>])).
 
 delete_vhost(Config) ->
-    ?assertMatch({'EXIT', _}, rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>)).
+    ?assertError(
+       {erpc, timeout},
+       rabbit_ct_broker_helpers:rpc(
+         Config, 0,
+         rabbit_vhost, delete, [<<"vhost1">>, <<"acting-user">>], 1_000)).
 
 add_user(Config) ->
     ?assertMatch({error, timeout},
