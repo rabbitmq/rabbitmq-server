@@ -87,7 +87,8 @@
   <div class="hider">
 <% if (feature_flags.length > 0) { %>
 <p class="warning">
-  Feature flags listed below are experimental. They should not be enabled in a production deployment.
+  Feature flags listed below are experimental (maturing). They can be enabled in production deployments
+  after careful consideration and testing in non-production environments.
 </p>
 <table class="list">
   <thead>
@@ -119,7 +120,7 @@
            <% if (feature_flag.state == "disabled") { %>
 	      <div>
               <input id="<%= feature_flag.name %>" type="checkbox" class="riskCheckbox" onclick="this.parentNode.querySelector('.enable-feature-flag input[type=submit]').disabled = !this.checked;">
-              <label for="<%= feature_flag.name %>"> I understand the risk</label><br>
+              <label for="<%= feature_flag.name %>">I understand the potential risks and want to enable this feature flag</label><br>
 	      <br>
               <form action="#/feature-flags-enable" method="put" style="display: inline-block" class="enable-feature-flag">
               <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
