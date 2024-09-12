@@ -107,4 +107,4 @@ jobs:
 #        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
 #          --verbose_failures
 
-# @todo Dialyzer xref
+# @todo Dialyzer
