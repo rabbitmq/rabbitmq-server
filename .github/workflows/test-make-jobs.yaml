@@ -28,7 +28,7 @@ jobs:
           - ct-metadata_store_clustering
           - ct-quorum_queue
           - ct-rabbit_stream_queue
-    uses: ./.github/workflows/test-make-ct-par.yaml
+    uses: ./.github/workflows/test-make-target.yaml
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
@@ -38,7 +38,7 @@ jobs:
 
   test-rabbitmq-mqtt:
     name: Test rabbitmq_mqtt
-    uses: ./.github/workflows/test-make-ct-par.yaml
+    uses: ./.github/workflows/test-make-target.yaml
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
@@ -46,7 +46,7 @@ jobs:
       make_target: parallel-ct-set-1
       plugin: rabbitmq_mqtt
 
-  test-ct-seq:
+  test-plugin-generic:
     name: Test plugins
     strategy:
       fail-fast: false
@@ -91,13 +91,20 @@ jobs:
           - rabbitmq_web_dispatch
           - rabbitmq_web_mqtt
           - rabbitmq_web_stomp
-    uses: ./.github/workflows/test-make-ct-seq.yaml
+    uses: ./.github/workflows/test-make-target.yaml
     with:
       erlang_version: ${{ inputs.erlang_version }}
       elixir_version: ${{ inputs.elixir_version }}
       metadata_store: ${{ inputs.metadata_store }}
+      make_target: tests
       plugin: ${{ matrix.plugin }}
 
 # @todo Test rabbitmq_cli
+# @todo Why this step?
+#    - name: CLI COMPILE WARNINGS AS ERRORS
+#      if: inputs.plugin == 'rabbitmq_cli'
+#      run: |
+#        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
+#          --verbose_failures
 
 # @todo Dialyzer xref

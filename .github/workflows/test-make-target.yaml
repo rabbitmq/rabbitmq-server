@@ -1,4 +1,4 @@
-name: Parallel CT (make)
+name: Test target (make)
 on:
   workflow_call:
     inputs:
@@ -40,6 +40,17 @@ jobs:
       if: inputs.plugin == 'rabbit'
       with:
         dotnet-version: '3.1.x'
+
+    - name: SETUP SLAPD (rabbitmq_auth_backend_ldap)
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          apparmor-utils \
+          ldap-utils \
+          slapd
+
+        sudo aa-complain `which slapd`
 
     - name: RUN TESTS
       run: |
