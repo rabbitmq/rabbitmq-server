@@ -13,6 +13,7 @@
 
 -export([client_id/1, sub/1, client_id/2, sub/2]).
 
+-include("oauth2.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 

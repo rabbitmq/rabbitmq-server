@@ -13,7 +13,8 @@ def all_beam_files(name = "all_beam_files"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
-            "src/rabbit_oauth2_config.erl",
+            "src/rabbit_oauth2_oauth_provider.erl",
+            "src/rabbit_oauth2_resource_server.erl",
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -48,7 +49,8 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
-            "src/rabbit_oauth2_config.erl",
+            "src/rabbit_oauth2_resource_server.erl",
+            "src/rabbit_oauth2_oauth_provider.erl",
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -85,6 +87,7 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+        srcs = ["include/oauth2.hrl"],
     )
 
     filegroup(
@@ -94,7 +97,8 @@ def all_srcs(name = "all_srcs"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
-            "src/rabbit_oauth2_config.erl",
+            "src/rabbit_oauth2_oauth_provider.erl",
+            "src/rabbit_oauth2_resource_server.erl",
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -236,10 +240,19 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
-        name = "rabbit_oauth2_config_SUITE_beam_files",
+        name = "rabbit_oauth2_oauth_provider_SUITE_beam_files",
         testonly = True,
-        srcs = ["test/rabbit_oauth2_config_SUITE.erl"],
-        outs = ["test/rabbit_oauth2_config_SUITE.beam"],
+        srcs = ["test/rabbit_oauth2_oauth_provider_SUITE.erl"],
+        outs = ["test/rabbit_oauth2_oauth_provider_SUITE.beam"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/oauth2_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "rabbit_oauth2_resource_server_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_oauth2_resource_server_SUITE.erl"],
+        outs = ["test/rabbit_oauth2_resource_server_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/oauth2_client:erlang_app"],
