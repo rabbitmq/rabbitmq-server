@@ -129,7 +129,7 @@
 
 -rabbit_feature_flag(
    {khepri_db,
-    #{desc          => "Use the new Khepri Raft-based metadata store",
+    #{desc          => "New Raft-based metadata store",
       doc_url       => "", %% TODO
       stability     => experimental,
       depends_on    => [feature_flags_v2,
