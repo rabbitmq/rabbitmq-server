@@ -640,7 +640,7 @@ clear_all_permissions_for_vhost_in_khepri(VHostName) ->
                             TopicProps,
                             rabbit_khepri:collect_payloads(UserProps)),
               {ok, Deletions}
-      end, rw).
+      end, rw, #{timeout => infinity}).
 
 %% -------------------------------------------------------------------
 %% get_topic_permissions().
