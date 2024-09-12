@@ -1,4 +1,4 @@
-name: Test jobs (make)
+name: Run tests (make)
 on:
   workflow_call:
     inputs:
@@ -46,7 +46,7 @@ jobs:
       make_target: parallel-ct-set-1
       plugin: rabbitmq_mqtt
 
-  test-plugin-generic:
+  test-plugin:
     name: Test plugins
     strategy:
       fail-fast: false
@@ -106,5 +106,3 @@ jobs:
 #      run: |
 #        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
 #          --verbose_failures
-
-# @todo Dialyzer

@@ -17,27 +17,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  version-matrix:
-    name: Test
-    strategy:
-      fail-fast: false
-      matrix:
-        erlang_version:
-        - 26
-        - 27
-        elixir_version:
-        - 1.17
-        metadata_store:
-          - mnesia
-          - khepri
-    uses: ./.github/workflows/test-make-jobs.yaml
-    with:
-      erlang_version: ${{ matrix.erlang_version }}
-      elixir_version: ${{ matrix.elixir_version }}
-      metadata_store: ${{ matrix.metadata_store }}
-
-  build:
-    name: Build
+  build-and-xref:
+    name: Build and Xref
     strategy:
       fail-fast: false
       matrix:
@@ -65,8 +46,11 @@ jobs:
     - name: BUILD
       run: make
 
-  xref:
-    name: Xref
+    - name: XREF
+      run: make xref
+
+  test:
+    name: Test
     strategy:
       fail-fast: false
       matrix:
@@ -75,20 +59,25 @@ jobs:
         - 27
         elixir_version:
         - 1.17
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+        metadata_store:
+          - mnesia
+          - khepri
+    uses: ./.github/workflows/test-make-tests.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
+      metadata_store: ${{ matrix.metadata_store }}
 
-    - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.17
-      with:
-        otp-version: ${{ matrix.erlang_version }}
-        elixir-version: ${{ matrix.elixir_version }}
-        hexpm-mirrors: |
-          https://builds.hex.pm
-          https://cdn.jsdelivr.net/hex
-
-    - name: XREF
-      run: make xref
+  type-check:
+    name: Type check
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version: # Latest OTP
+        - 27
+        elixir_version: # Latest Elixir
+        - 1.17
+    uses: ./.github/workflows/test-make-type-check.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
