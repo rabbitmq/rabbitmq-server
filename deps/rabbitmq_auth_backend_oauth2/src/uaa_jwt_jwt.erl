@@ -6,7 +6,7 @@
 %%
 -module(uaa_jwt_jwt).
 
--export([decode_and_verify/3, get_key_id/2, get_aud/1]).
+-export([decode_and_verify/3, get_key_id/1, get_aud/1]).
 
 -include_lib("jose/include/jose_jwt.hrl").
 -include_lib("jose/include/jose_jws.hrl").

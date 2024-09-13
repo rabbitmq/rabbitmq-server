@@ -15,9 +15,19 @@
 
 -include("oauth2.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
--include_lib("oauth2_client/include/oauth2_client.hrl").
 
--define(APP, rabbitmq_auth_backend_oauth2).
+-import(rabbit_data_coercion, [
+    to_map/1]).
+-import(oauth2_client, [
+    format_ssl_options/1,
+    format_oauth_provider_id/1,
+    get_oauth_provider/2]).
+-import(rabbit_resource_server, [
+    resolve_resource_server_from_audience/1]).
+-import(rabbit_oauth_provider, [
+    add_signing_key/2, get_signing_key/2,
+    get_internal_oauth_provider/1,
+    replace_signing_keys/2]).
 
 -type key_type() :: json | pem | map.
 
@@ -25,7 +35,7 @@
 add_signing_key(KeyId, Type, Value) ->
     case verify_signing_key(Type, Value) of
         ok ->
-            {ok, rabbit_oauth2_config:add_signing_key(KeyId, {Type, Value})};
+            {ok, add_signing_key(KeyId, {Type, Value})};
         {error, _} = Err ->
             Err
     end.
@@ -34,7 +44,7 @@ add_signing_key(KeyId, Type, Value) ->
 update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
         ssl_options = SslOptions}) ->
     rabbit_log:debug("Downloading signing keys from ~tp (TLS options: ~p)",
-        [JwksUrl, oauth2_client:format_ssl_options(SslOptions)]),
+        [JwksUrl, format_ssl_options(SslOptions)]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
         {ok, {_, _, JwksBody}} ->
             KeyList = maps:get(<<"keys">>,
@@ -42,7 +52,7 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
             Keys = maps:from_list(lists:map(fun(Key) ->
                 {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
             rabbit_log:debug("Downloaded ~p signing keys", [maps:size(Keys)]),
-            case rabbit_oauth2_config:replace_signing_keys(Keys, Id) of
+            case replace_signing_keys(Keys, Id) of
               {error, _} = Err -> Err;
               _ -> ok
             end;
@@ -66,56 +76,56 @@ decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
     OAuthProviderId = InternalOAuthProvider#internal_oauth_provider.id,
     rabbit_log:debug("Decoding token for resource_server: ~p using oauth_provider_id: ~p",
         [ResourceServer#resource_server.id,
-        oauth2_client:format_oauth_provider_id(OAuthProviderId)]),
+        format_oauth_provider_id(OAuthProviderId)]),
     Result = case uaa_jwt_jwt:get_key_id(Token) of
-        undefined ->
-            InternalOAuthProvider#internal_oauth_provider.default_key;
-        {ok, KeyId} ->
-            KeyId;
-        {error, _} = Err ->
-            Err
+        undefined -> InternalOAuthProvider#internal_oauth_provider.default_key;
+        {ok, KeyId0} -> KeyId0;
+        {error, _} = Err -> Err
     end,
     case Result of
-        {error, _} = Err ->
-            Err;
+        {error, _} = Err2 ->
+            Err2;
         KeyId ->
-            case get_jwk(KeyId, OAuthProvider) of
+            case get_jwk(KeyId, InternalOAuthProvider) of
                 {ok, JWK} ->
-                    Algorithms = OAuthProvider#internal_oauth_provider.algorithms,
+                    Algorithms = InternalOAuthProvider#internal_oauth_provider.algorithms,
                     rabbit_log:debug("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
                         [KeyId, Algorithms]),
                     case uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token) of
                         {true, Payload} -> {true, ResourceServer, Payload};
                         {false, Payload} -> {false, ResourceServer, Payload}
                     end;
-                {error, _} = Err ->
-                    Err
+                {error, _} = Err3 ->
+                    Err3
             end
     end.
-
 
 resolve_resource_server(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of
         {error, _} = Error ->
             Error;
         {ok, Audience} ->
-            ResourceServer = rabbit_oauth2_config:resolve_resource_server_from_audience(Audience)
-            {ResourceServer,
-            rabbit_oauth2_config:get_internal_oauth_provider(ResourceServer#resource_server.id)}
+            case resolve_resource_server_from_audience(Audience) of
+                {error, _} = Error ->
+                    Error;
+                {ok, ResourceServer} ->
+                    {ResourceServer, get_internal_oauth_provider(
+                        ResourceServer#resource_server.id)}
+            end
     end.
 
 -spec get_jwk(binary(), internal_oauth_provider()) -> {ok, map()} | {error, term()}.
-get_jwk(KeyId, OAuthProvider) ->
-    get_jwk(KeyId, OAuthProvider, true).
+get_jwk(KeyId, InternalOAuthProvider) ->
+    get_jwk(KeyId, InternalOAuthProvider, true).
 
 get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
     OAuthProviderId = InternalOAuthProvider#internal_oauth_provider.id,
-    case rabbit_oauth2_config:get_signing_key(KeyId, OAuthProviderId) of
+    case get_signing_key(KeyId, OAuthProviderId) of
         undefined ->
             case AllowUpdateJwks of
                 true ->
                     rabbit_log:debug("Signing key '~tp' not found. Downloading it... ", [KeyId]),
-                    case rabbit_oauth2_config:get_oauth_provider(OAuthProviderId, [jwks_uri]) of
+                    case get_oauth_provider(OAuthProviderId, [jwks_uri]) of
                         {ok, OAuthProvider} ->
                             case update_jwks_signing_keys(OAuthProvider) of
                                 ok ->

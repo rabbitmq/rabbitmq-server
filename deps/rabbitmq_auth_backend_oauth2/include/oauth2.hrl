@@ -6,11 +6,10 @@
 %%
 
 
--include_lib("oauth2_client/include/oauth2_client.hrl").
+-include_lib("oauth2_client/include/types.hrl").
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 -define(DEFAULT_PREFERRED_USERNAME_CLAIMS, [<<"sub">>, <<"client_id">>]).
--define(TOP_RESOURCE_SERVER_ID, application:get_env(?APP, resource_server_id)).
 %% scope aliases map "role names" to a set of scopes
 
 -record(internal_oauth_provider, {
@@ -22,7 +21,7 @@
 
 -record(resource_server, {
   id :: resource_server_id(),
-  resource_server_type :: binary(),
+  resource_server_type :: binary() | undefined,
   verify_aud :: boolean(),
   scope_prefix :: binary(),
   additional_scopes_key :: binary(),

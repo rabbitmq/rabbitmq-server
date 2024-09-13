@@ -70,10 +70,10 @@ do_add_signing_key(KeyId, Key, OAuthProviderId) ->
         get_signing_keys_from_jwks(OAuthProviderId)), OAuthProviderId).
 
 get_signing_keys_from_jwks(root) ->
-    KeyConfig = application:get_env(?APP, key_config, []),
+    KeyConfig = get_env(key_config, []),
     proplists:get_value(jwks, KeyConfig, #{});
 get_signing_keys_from_jwks(OAuthProviderId) ->
-    OAuthProviders0 = application:get_env(?APP, oauth_providers, #{}),
+    OAuthProviders0 = get_env(oauth_providers, #{}),
     OAuthProvider0 = maps:get(OAuthProviderId, OAuthProviders0, []),
     proplists:get_value(jwks, OAuthProvider0, #{}).
 
@@ -95,18 +95,18 @@ replace_signing_keys(SigningKeys, OAuthProviderId) ->
     end.
 
 do_replace_signing_keys(SigningKeys, root) ->
-    KeyConfig = application:get_env(?APP, key_config, []),
+    KeyConfig = get_env(key_config, []),
     KeyConfig1 = proplists:delete(jwks, KeyConfig),
     KeyConfig2 = [{jwks, maps:merge(
         proplists:get_value(signing_keys, KeyConfig1, #{}),
         SigningKeys)} | KeyConfig1],
-    application:set_env(?APP, key_config, KeyConfig2),
+    set_env(key_config, KeyConfig2),
     rabbit_log:debug("Replacing signing keys for key_config with ~p keys",
         [maps:size(SigningKeys)]),
     SigningKeys;
 
 do_replace_signing_keys(SigningKeys, OauthProviderId) ->
-    OauthProviders0 = application:get_env(?APP, oauth_providers, #{}),
+    OauthProviders0 = get_env(oauth_providers, #{}),
     OauthProvider0 = maps:get(OauthProviderId, OauthProviders0, []),
     OauthProvider1 = proplists:delete(jwks, OauthProvider0),
     OauthProvider = [{jwks, maps:merge(
@@ -114,7 +114,7 @@ do_replace_signing_keys(SigningKeys, OauthProviderId) ->
         SigningKeys)} | OauthProvider1],
 
     OauthProviders = maps:put(OauthProviderId, OauthProvider, OauthProviders0),
-    application:set_env(?APP, oauth_providers, OauthProviders),
+    set_env(oauth_providers, OauthProviders),
     rabbit_log:debug("Replacing signing keys for ~p -> ~p with ~p keys",
         [OauthProviderId, OauthProvider, maps:size(SigningKeys)]),
     SigningKeys.
@@ -126,7 +126,7 @@ get_signing_keys() ->
 
 -spec get_signing_keys(oauth_provider_id()) -> map().
 get_signing_keys(root) ->
-    case application:get_env(?APP, key_config, undefined) of
+    case get_env(key_config) of
         undefined ->
             #{};
         KeyConfig ->
@@ -136,7 +136,7 @@ get_signing_keys(root) ->
             end
     end;
 get_signing_keys(OauthProviderId) ->
-    OauthProviders = application:get_env(?APP, oauth_providers, #{}),
+    OauthProviders = get_env(oauth_providers, #{}),
     OauthProvider = maps:get(OauthProviderId, OauthProviders, []),
     case proplists:get_value(jwks, OauthProvider, undefined) of
         undefined ->
@@ -159,22 +159,27 @@ get_default_key(root) ->
 get_default_key(OauthProviderId) ->
     OauthProviders = application:get_env(?APP, oauth_providers, #{}),
     case maps:get(OauthProviderId, OauthProviders, []) of
-        [] ->
-            undefined;
-        OauthProvider ->
-            proplists:get_value(default_key, OauthProvider, undefined)
+        [] -> undefined;
+        OauthProvider -> proplists:get_value(default_key, OauthProvider, undefined)
     end.
 
 -spec get_algorithms(oauth_provider_id()) -> list() | undefined.
 get_algorithms(root) ->
-    proplists:get_value(algorithms, application:get_env(?APP, key_config, []),
-                undefined);
+    proplists:get_value(algorithms, get_env(key_config, []), undefined);
 get_algorithms(OAuthProviderId) ->
-    OAuthProviders = application:get_env(?APP, oauth_providers, #{}),
+    OAuthProviders = get_env(oauth_providers, #{}),
     case maps:get(OAuthProviderId, OAuthProviders, undefined) of
         undefined -> undefined;
         V -> proplists:get_value(algorithms, V, undefined)
     end.
+
+get_env(Par) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
+get_env(Par, Def) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, Def).
+set_env(Par, Value) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, Par, Value).
+
 
 lock() ->
     Nodes   = rabbit_nodes:list_running(),
