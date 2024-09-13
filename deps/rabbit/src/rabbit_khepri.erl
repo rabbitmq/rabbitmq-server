@@ -538,6 +538,7 @@ remove_reachable_member(NodeToRemove) ->
             NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
     case Ret of
         ok ->
+            rabbit_amqqueue:forget_all_durable(NodeToRemove),
             ?LOG_DEBUG(
                "Node ~s removed from Khepri cluster \"~s\"",
                [NodeToRemove, ?RA_CLUSTER_NAME],
@@ -559,6 +560,7 @@ remove_down_member(NodeToRemove) ->
     Ret = ra:remove_member(ServerRef, ServerId, Timeout),
     case Ret of
         {ok, _, _} ->
+            rabbit_amqqueue:forget_all_durable(NodeToRemove),
             ?LOG_DEBUG(
                "Node ~s removed from Khepri cluster \"~s\"",
                [NodeToRemove, ?RA_CLUSTER_NAME],
