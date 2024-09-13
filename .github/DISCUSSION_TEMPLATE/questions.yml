@@ -29,7 +29,7 @@ body:
         - 3.13.6
         - 3.13.5
         - 4.0.0-rc.1
-        - Older (out of support without a commercial license)
+        - 3.12.x or older
     validations:
       required: true
   - type: dropdown
