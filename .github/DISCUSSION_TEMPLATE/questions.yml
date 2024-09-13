@@ -16,6 +16,8 @@ body:
       options:
         - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
           required: true
+        - label: I agree to provide all relevant information (versions, logs, rabbitmq-diagnostics output, detailed reproduction steps)
+          required: true
   - type: markdown
     attributes:
       value: |
