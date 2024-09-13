@@ -66,7 +66,7 @@ do_await_safe_online_quorum(IterationsLeft) ->
                 0 ->
                     case length(EndangeredQueues) of
                         0 -> ok;
-                        N -> rabbit_log:info("Waiting for ~ts queues and streams to have quorum+1 replicas online."
+                        N -> rabbit_log:info("Waiting for ~p queues and streams to have quorum+1 replicas online. "
                                              "You can list them with `rabbitmq-diagnostics check_if_node_is_quorum_critical`", [N])
                     end,
                     case endangered_critical_components() of
