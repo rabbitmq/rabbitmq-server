@@ -8,7 +8,6 @@
 -module(rabbit_resource_server).
 
 -include("oauth2.hrl").
--define(ROOT_RESOURCE_SERVER_ID, application:get_env(?APP, resource_server_id)).
 
 -export([
     resolve_resource_server_from_audience/1
@@ -19,41 +18,38 @@
     {error, aud_matched_many_resource_servers_only_one_allowed} |
     {error, no_matching_aud_found} |
     {error, no_aud_found} |
-    {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}.
+    {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers} |
+    {error, too_many_resources_with_verify_aud_false}.
 resolve_resource_server_from_audience(none) ->
-    translate_error_if_any(find_unique_resource_server_without_verify_aud(
-        get_root_resource_server()));
+    translate_error_if_any(
+        find_unique_resource_server_without_verify_aud(), false);
 
 resolve_resource_server_from_audience(Audience) ->
-    Root = get_root_resource_server(),
+    RootResourseServerId = get_root_resource_server_id(),
     ResourceServers = get_env(resource_servers, #{}),
     ResourceServerIds = maps:fold(fun(K, V, List) -> List ++
         [proplists:get_value(id, V, K)] end, [], ResourceServers),
-    AllowedResourceServerIds = ResourceServerIds ++
-        case Root#resource_server.id of
-            undefined -> [];
-            ID -> [ID]
-        end,
-    RootResourseServerId = Root#resource_server.id,
+    AllowedResourceServerIds = append(ResourceServerIds, RootResourseServerId),
+
     case find_audience(Audience, AllowedResourceServerIds) of
-        {error, only_one_resource_server_as_audience_found_many} = Error ->
+        {error, aud_matched_many_resource_servers_only_one_allowed} = Error ->
             Error;
         {error, no_matching_aud_found} ->
             translate_error_if_any(
-                find_unique_resource_server_without_verify_aud(Root));
-        {ok, RootResourseServerId} ->
-            {ok, Root};
+                find_unique_resource_server_without_verify_aud(),
+                true);
         {ok, ResourceServerId} ->
-            {ok, get_resource_server(ResourceServerId, Root)}
+            {ok, get_resource_server(ResourceServerId)}
     end.
+
+-spec get_root_resource_server_id() -> resource_server_id().
+get_root_resource_server_id() ->
+    get_env(resource_server_id).
 
 -spec get_root_resource_server() -> resource_server().
 get_root_resource_server() ->
     ResourceServerId =
-        case ?ROOT_RESOURCE_SERVER_ID of
-            undefined -> undefined;
-            {ok, V} -> V
-        end,
+        get_root_resource_server_id(),
     ScopeAliases =
         get_env(scope_aliases),
     PreferredUsernameClaims =
@@ -92,9 +88,22 @@ get_root_resource_server() ->
         oauth_provider_id = OAuthProviderId
     }.
 
--spec get_resource_server(resource_server_id(), resource_server()) ->
-    resource_server().
-get_resource_server(ResourceServerId, RootResourseServer) ->
+-spec get_resource_server(resource_server_id()) -> resource_server().
+get_resource_server(ResourceServerId) ->
+    RootResourseServer = get_root_resource_server(),
+    RootResourseServerId = RootResourseServer#resource_server.id,
+    case ResourceServerId of
+        undefined -> undefined;
+        RootResourseServerId -> RootResourseServer;
+        _ -> get_resource_server(ResourceServerId, RootResourseServer)
+    end.
+
+-spec get_resource_server(resource_server_id(), resource_server()) -> resource_server().
+get_resource_server(ResourceServerId, RootResourseServer) when
+        ResourceServerId == RootResourseServer#resource_server.id ->
+    RootResourseServer;
+get_resource_server(ResourceServerId, RootResourseServer) when
+        ResourceServerId =/= RootResourseServer#resource_server.id ->
     ResourceServerProps =
         maps:get(ResourceServerId, get_env(resource_servers, #{}), []),
     ScopeAliases =
@@ -132,7 +141,7 @@ get_resource_server(ResourceServerId, RootResourseServer) ->
 
 -spec find_audience(binary() | list(), list()) ->
     {ok, resource_server_id()} |
-    {error, only_one_resource_server_as_audience_found_many} |
+    {error, aud_matched_many_resource_servers_only_one_allowed} |
     {error, no_matching_aud_found}.
 find_audience(Audience, ResourceIdList) when is_binary(Audience) ->
     AudList = binary:split(Audience, <<" ">>, [global, trim_all]),
@@ -140,36 +149,49 @@ find_audience(Audience, ResourceIdList) when is_binary(Audience) ->
 find_audience(AudList, ResourceIdList) when is_list(AudList) ->
     case intersection(AudList, ResourceIdList) of
         [One] -> {ok, One};
-        [_One|_Tail] -> {error, only_one_resource_server_as_audience_found_many};
+        [_One|_Tail] -> {error, aud_matched_many_resource_servers_only_one_allowed};
         [] -> {error, no_matching_aud_found}
     end.
 
--spec translate_error_if_any({ok, resource_server()} |
-    {error, not_found} | {error, found_too_many}) ->
+-spec translate_error_if_any(
+    {ok, resource_server()} |
+    {error, not_found} |
+    {error, found_too_many}, boolean()) ->
         {ok, resource_server()} |
         {error, no_aud_found} |
-        {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}.
-translate_error_if_any(ResourceServerOrError) ->
-    case ResourceServerOrError of
-        {ok, _} = Ok ->
+        {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers} |
+        {error, no_matching_aud_found} |
+        {error, too_many_resources_with_verify_aud_false}.
+translate_error_if_any(ResourceServerOrError, HasAudience) ->
+    case {ResourceServerOrError, HasAudience} of
+        {{ok, _}, _} = Ok ->
             Ok;
-        {error, not_found} ->
+        {{error, not_found}, false} ->
             {error, no_aud_found};
-        {error, found_too_many} ->
-            {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}
+        {{error, not_found}, _} ->
+            {error, no_matching_aud_found};
+        {{error, found_too_many}, false} ->
+            {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers};
+        {{error, found_too_many}, _} ->
+            {error, too_many_resources_with_verify_aud_false}
     end.
--spec find_unique_resource_server_without_verify_aud(resource_server()) ->
+-spec find_unique_resource_server_without_verify_aud() ->
     {ok, resource_server()} |
     {error, not_found} |
     {error, found_too_many}.
-find_unique_resource_server_without_verify_aud(Root) ->
-    Map = maps:filter(fun(_K,V) -> not get_boolean_value(verify_aud, V,
+find_unique_resource_server_without_verify_aud() ->
+    Root = get_root_resource_server(),
+    Map0 = maps:filter(fun(_K,V) -> not get_boolean_value(verify_aud, V,
         Root#resource_server.verify_aud) end, get_env(resource_servers, #{})),
-    case {maps:size(Map), Root} of
-        {0, undefined} -> {error, not_found};
-        {0, _} -> {ok, Root};
-        {1, undefined} -> {ok, get_resource_server(lists:last(maps:keys(Map)), Root)};
-        {_, _} -> {error, found_too_many}
+    Map = case {Root#resource_server.id, Root#resource_server.verify_aud}  of
+        {undefined, _} -> Map0;
+        {_, true} -> Map0;
+        {Id, false} -> maps:put(Id, Root, Map0)
+    end,
+    case maps:size(Map) of
+        0 -> {error, not_found};
+        1 -> {ok, get_resource_server(lists:last(maps:keys(Map)), Root)};
+        _ -> {error, found_too_many}
     end.
 
 append_or_return_default(ListOrBinary, Default) ->
@@ -178,7 +200,11 @@ append_or_return_default(ListOrBinary, Default) ->
         VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
         _ -> Default
     end.
-
+append(List, Value) ->
+    case Value of
+        undefined -> List;
+        _ -> List ++ [Value]
+    end.
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
 get_env(Par, Def) ->

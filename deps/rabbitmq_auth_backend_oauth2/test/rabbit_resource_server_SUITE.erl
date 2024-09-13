@@ -42,7 +42,7 @@ groups() -> [
             verify_get_rabbitmq_server_configuration()}
     ]},
     {without_resource_server_id, [], [
-        resolve_resource_server_id_for_any_audience_returns_error
+        resolve_resource_server_id_for_any_audience_returns_no_matching_aud_found
     ]},
 
     {with_two_resource_servers, [], [
@@ -258,7 +258,7 @@ resolve_resource_server_for_none_audience_returns_rabbitmq(_) ->
 resolve_resource_server_for_unknown_audience_returns_rabbitmq(_) ->
     assert_resource_server_id(?RABBITMQ, <<"unknown">>).
 
-resolve_resource_server_id_for_any_audience_returns_error(_) ->
+resolve_resource_server_id_for_any_audience_returns_no_matching_aud_found(_) ->
     assert_resource_server_id({error, no_matching_aud_found}, ?RABBITMQ),
     assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
 
@@ -379,34 +379,34 @@ verify_rabbitmq1_server_configuration(Config) ->
 
 %% -----
 
-assert_resource_server_id(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
-    ?assertEqual(Expected, Actual#resource_server.id);
 assert_resource_server_id({error, ExpectedError}, Audience) ->
-    {error, ExpectedError} = resolve_resource_server_from_audience(Audience).
+    {error, ExpectedError} = resolve_resource_server_from_audience(Audience);
+assert_resource_server_id(Expected, Audience) ->
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.id).
 
 assert_verify_aud(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.verify_aud).
 
 assert_oauth_provider_id(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.oauth_provider_id).
 
 assert_scope_prefix(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.scope_prefix).
 
 assert_additional_scopes_key(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.additional_scopes_key).
 
 assert_preferred_username_claims(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.preferred_username_claims).
 
 assert_scope_aliases(Expected, Audience) ->
-    Actual = resolve_resource_server_from_audience(Audience),
+    {ok, Actual} = resolve_resource_server_from_audience(Audience),
     ?assertEqual(Expected, Actual#resource_server.scope_aliases).
 
 get_env(Par) ->
