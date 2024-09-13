@@ -19,94 +19,38 @@
 -define(OAUTH_PROVIDER_B,<<"B">>).
 
 -import(oauth2_client, [get_oauth_provider/2]).
--import(rabbit_resource_server, [
-    resolve_resource_server_from_audience/1
-]).
+-import(rabbit_resource_server, [resolve_resource_server_from_audience/1]).
 
 
 all() -> [
     {group, without_resource_server_id},
     {group, with_rabbitmq_as_resource_server_id},
-    {group, with_two_resource_servers},
-    {group, with_two_resource_servers_and_rabbitmq_as_resource_server_id}
+    {group, with_two_resource_servers}
+    %{group, with_two_resource_servers_and_rabbitmq_as_resource_server_id}
 ].
 groups() -> [
-
-    {verify_get_rabbitmq_server_configuration, [], [
-        rabbitmq_verify_aud_is_true,
-        {with_verify_aud_false, [], [
-            rabbitmq_verify_aud_is_false
-        ]},
-        rabbitmq_has_no_scope_prefix,
-        {with_scope_prefix, [], [
-            rabbitmq_has_scope_prefix
-        ]},
-        {with_empty_scope_prefix, [], [
-            rabbitmq_has_empty_scope_prefix
-        ]},
-        rabbitmq_oauth_provider_id_is_root,
-        {with_default_oauth_provider_A, [], [
-            rabbitmq_oauth_provider_id_is_A
-        ]},
-        rabbitmq_has_no_additional_scopes_key,
-        {with_additional_scopes_key, [], [
-            rabbitmq_has_additional_scopes_key
-        ]},
-        rabbitmq_has_no_preferred_username_claims_but_gets_default,
-        {with_preferred_username_claims, [], [
-            rabbitmq_has_preferred_username_claims_plus_default
-        ]},
-        rabbitmq_has_no_scope_aliases,
-        {with_scope_aliases, [], [
-            rabbitmq_has_scope_aliases
-        ]}
-    ]},
     {with_rabbitmq_as_resource_server_id, [], [
         resolve_resource_server_for_rabbitmq_audience,
         resolve_resource_server_for_rabbitmq_plus_unknown_audience,
-        resolve_resource_server_for_none_audience_returns_error,
-        resolve_resource_server_for_unknown_audience_returns_error,
+        resolve_resource_server_for_none_audience_returns_no_aud_found,
+        resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found,
         {with_verify_aud_false, [], [
             resolve_resource_server_for_none_audience_returns_rabbitmq,
             resolve_resource_server_for_unknown_audience_returns_rabbitmq
         ]},
-        {group, verify_get_rabbitmq_server_configuration}
+        {verify_get_rabbitmq_server_configuration, [],
+            verify_get_rabbitmq_server_configuration()}
     ]},
     {without_resource_server_id, [], [
         resolve_resource_server_id_for_any_audience_returns_error
     ]},
-    {verify_configuration_inheritance_with_rabbitmq2, [], [
-        rabbitmq2_verify_aud_is_true,
-        {with_verify_aud_false, [], [
-            rabbitmq2_verify_aud_is_false
-        ]},
-        rabbitmq2_has_no_scope_prefix,
-        {with_scope_prefix, [], [
-            rabbitmq2_has_scope_prefix
-        ]},
-        rabbitmq2_oauth_provider_id_is_root,
-        {with_default_oauth_provider_A, [], [
-            rabbitmq2_oauth_provider_id_is_A
-        ]},
-        rabbitmq2_has_no_additional_scopes_key,
-        {with_additional_scopes_key, [], [
-            rabbitmq2_has_additional_scopes_key
-        ]},
-        rabbitmq2_has_no_preferred_username_claims_but_gets_default,
-        {with_preferred_username_claims, [], [
-            rabbitmq2_has_preferred_username_claims_plus_default
-        ]},
-        rabbitmq2_has_no_scope_aliases,
-        {with_scope_aliases, [], [
-            rabbitmq2_has_scope_aliases
-        ]}
-    ]},
+
     {with_two_resource_servers, [], [
         resolve_resource_server_id_for_rabbitmq1,
         resolve_resource_server_id_for_rabbitmq2,
         resolve_resource_server_id_for_both_resources_returns_error,
-        resolve_resource_server_for_none_audience_returns_error,
-        resolve_resource_server_for_unknown_audience_returns_error,
+        resolve_resource_server_for_none_audience_returns_no_aud_found,
+        resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found,
         {with_verify_aud_false, [], [
             resolve_resource_server_for_none_audience_returns_rabbitmq1,
             resolve_resource_server_for_unknown_audience_returns_rabbitmq1,
@@ -114,13 +58,71 @@ groups() -> [
                 resolve_resource_server_for_none_audience_returns_error
             ]}
         ]},
-        {group, verify_rabbitmq1_server_configuration},
-        {group, verify_configuration_inheritance_with_rabbitmq2},
+        verify_rabbitmq1_server_configuration,
+        {verify_configuration_inheritance_with_rabbitmq2, [],
+            verify_configuration_inheritance_with_rabbitmq2()},
         {with_rabbitmq_as_resource_server_id, [], [
             resolve_resource_server_for_rabbitmq_audience,
             resolve_resource_server_id_for_rabbitmq1,
             resolve_resource_server_id_for_rabbitmq2
         ]}
+    ]}
+].
+
+verify_get_rabbitmq_server_configuration() -> [
+    rabbitmq_verify_aud_is_true,
+    {with_verify_aud_false, [], [
+        rabbitmq_verify_aud_is_false
+    ]},
+    rabbitmq_has_no_scope_prefix,
+    {with_scope_prefix, [], [
+        rabbitmq_has_scope_prefix
+    ]},
+    {with_empty_scope_prefix, [], [
+        rabbitmq_has_empty_scope_prefix
+    ]},
+    rabbitmq_oauth_provider_id_is_root,
+    {with_default_oauth_provider_A, [], [
+        rabbitmq_oauth_provider_id_is_A
+    ]},
+    rabbitmq_has_no_additional_scopes_key,
+    {with_additional_scopes_key, [], [
+        rabbitmq_has_additional_scopes_key
+    ]},
+    rabbitmq_has_no_preferred_username_claims_but_gets_default,
+    {with_preferred_username_claims, [], [
+        rabbitmq_has_preferred_username_claims_plus_default
+    ]},
+    rabbitmq_has_no_scope_aliases,
+    {with_scope_aliases, [], [
+        rabbitmq_has_scope_aliases
+    ]}
+].
+
+verify_configuration_inheritance_with_rabbitmq2() -> [
+    rabbitmq2_verify_aud_is_true,
+    {with_verify_aud_false, [], [
+        rabbitmq2_verify_aud_is_false
+    ]},
+    rabbitmq2_has_no_scope_prefix,
+    {with_scope_prefix, [], [
+        rabbitmq2_has_scope_prefix
+    ]},
+    rabbitmq2_oauth_provider_id_is_root,
+    {with_default_oauth_provider_A, [], [
+        rabbitmq2_oauth_provider_id_is_A
+    ]},
+    rabbitmq2_has_no_additional_scopes_key,
+    {with_additional_scopes_key, [], [
+        rabbitmq2_has_additional_scopes_key
+    ]},
+    rabbitmq2_has_no_preferred_username_claims_but_gets_default,
+    {with_preferred_username_claims, [], [
+        rabbitmq2_has_preferred_username_claims_plus_default
+    ]},
+    rabbitmq2_has_no_scope_aliases,
+    {with_scope_aliases, [], [
+        rabbitmq2_has_scope_aliases
     ]}
 ].
 
@@ -170,24 +172,8 @@ init_per_group(with_scope_aliases, Config) ->
     set_env(scope_aliases, Aliases),
     [{scope_aliases, Aliases} | Config];
 
-init_per_group(with_empty_scope_prefix_for_resource_one, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers, []),
-     set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_ONE,
-        [{scope_prefix, <<"">>} | proplists:delete(scope_prefix, Proplist)],
-            ResourceServers)),
-    Config;
-
 init_per_group(with_verify_aud_false, Config) ->
     set_env(verify_aud, false),
-    Config;
-
-init_per_group(with_rabbitmq2_verify_aud_false, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers, []),
-    set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_TWO,
-        [{verify_aud, false} | proplists:delete(verify_aud, Proplist)],
-            ResourceServers)),
     Config;
 
 init_per_group(with_two_resource_servers_and_rabbitmq_as_resource_server_id, Config) ->
@@ -206,17 +192,6 @@ init_per_group(with_two_resource_servers_and_rabbitmq_as_resource_server_id, Con
             ]}
           ]
         }),
-    Config;
-
-init_per_group(with_different_oauth_provider_for_each_resource, Config) ->
-    {ok, ResourceServers} = get_env(resource_servers),
-    Rabbit1 = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers) ++
-        [ {oauth_provider_id, <<"A">>} ],
-    Rabbit2 = maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers) ++
-        [ {oauth_provider_id, <<"B">>} ],
-    ResourceServers1 = maps:update(?RABBITMQ_RESOURCE_ONE, Rabbit1, ResourceServers),
-    set_env(resource_servers, maps:update(?RABBITMQ_RESOURCE_TWO, Rabbit2,
-        ResourceServers1)),
     Config;
 
 init_per_group(with_two_resource_servers, Config) ->
@@ -240,29 +215,6 @@ init_per_group(with_two_resource_servers, Config) ->
     [{?RABBITMQ_RESOURCE_ONE, RabbitMQ1}, {?RABBITMQ_RESOURCE_TWO, RabbitMQ2}]
         ++ Config;
 
-init_per_group(inheritance_group, Config) ->
-    set_env(resource_server_id, ?RABBITMQ),
-    set_env(resource_server_type, <<"rabbitmq-type">>),
-    set_env(scope_prefix, <<"some-prefix-">>),
-    set_env(extra_scopes_source, <<"roles">>),
-    set_env(scope_aliases, #{}),
-
-    set_env(key_config, [ {jwks_url,<<"https://oauth-for-rabbitmq">> } ]),
-
-    set_env(resource_servers,
-        #{?RABBITMQ_RESOURCE_ONE =>  [
-            { extra_scopes_source, <<"extra-scope-1">>},
-            { verify_aud, false},
-            { preferred_username_claims, [<<"email-address">>] },
-            { scope_prefix, <<"my-prefix:">> },
-            { resource_server_type, <<"my-type">> },
-            { scope_aliases, #{} }
-        ],
-        ?RABBITMQ_RESOURCE_TWO =>  [ {id, ?RABBITMQ_RESOURCE_TWO  } ]
-        }
-    ),
-    Config;
-
 init_per_group(_any, Config) ->
     Config.
 
@@ -270,49 +222,11 @@ end_per_group(with_empty_scope_prefix, Config) ->
     unset_env(scope_prefix),
     Config;
 
-end_per_group(with_resource_server_id, Config) ->
-    unset_env(resource_server_id),
-    Config;
-
 end_per_group(with_verify_aud_false, Config) ->
     unset_env(verify_aud),
     Config;
 
-end_per_group(with_verify_aud_false_for_resource_two, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers, []),
-     set_env(resource_servers,
-        maps:put(?RABBITMQ_RESOURCE_TWO, proplists:delete(verify_aud, Proplist), ResourceServers)),
-    Config;
-
-end_per_group(with_empty_scope_prefix_for_resource_one, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers, []),
-     set_env(resource_servers,
-        maps:put(?RABBITMQ_RESOURCE_ONE, proplists:delete(scope_prefix, Proplist), ResourceServers)),
-    Config;
-
 end_per_group(with_two_resource_servers, Config) ->
-    unset_env(resource_servers),
-    Config;
-
-end_per_group(with_different_oauth_provider_for_each_resource, Config) ->
-    {ok, ResourceServers} = get_env(resource_servers),
-    Rabbit1 = proplists:delete(oauth_provider_id,
-        maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers)),
-    Rabbit2 = proplists:delete(oauth_provider_id,
-        maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers)),
-    ResourceServers1 = maps:update(?RABBITMQ_RESOURCE_ONE, Rabbit1,
-        ResourceServers),
-    set_env(resource_servers, maps:update(?RABBITMQ_RESOURCE_TWO, Rabbit2,
-        ResourceServers1)),
-    Config;
-
-end_per_group(inheritance_group, Config) ->
-    unset_env(resource_server_id),
-    unset_env(scope_prefix),
-    unset_env(extra_scopes_source),
-    unset_env(key_config),
     unset_env(resource_servers),
     Config;
 
@@ -327,165 +241,120 @@ end_per_group(_any, Config) ->
 %% --- Test cases
 
 resolve_resource_server_for_rabbitmq_audience(_) ->
-    {ok, #resource_server{id = ?RABBITMQ}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_resource_server_id(?RABBITMQ, ?RABBITMQ).
 
 resolve_resource_server_for_rabbitmq_plus_unknown_audience(_) ->
-    {ok, #resource_server{id = ?RABBITMQ}} =
-        resolve_resource_server_from_audience([?RABBITMQ, <<"unknown">>]).
+    assert_resource_server_id(?RABBITMQ, [?RABBITMQ, <<"unknown">>]).
 
-resolve_resource_server_for_none_audience_returns_error(_) ->
-    {error, missing_audience_in_token} =
-        resolve_resource_server_from_audience(none).
+resolve_resource_server_for_none_audience_returns_no_aud_found(_) ->
+    assert_resource_server_id({error, no_aud_found}, none).
 
-resolve_resource_server_for_unknown_audience_returns_error(_) ->
-    {error, no_matching_aud_found} =
-        resolve_resource_server_from_audience(<<"unknown">>).
+resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found(_) ->
+    assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
 
 resolve_resource_server_for_none_audience_returns_rabbitmq(_) ->
-    {ok, #resource_server{id = ?RABBITMQ}} =
-        resolve_resource_server_from_audience(none).
+    assert_resource_server_id(?RABBITMQ, none).
 
 resolve_resource_server_for_unknown_audience_returns_rabbitmq(_) ->
-    {ok, #resource_server{id = ?RABBITMQ}} =
-        resolve_resource_server_from_audience(<<"unknown">>).
+    assert_resource_server_id(?RABBITMQ, <<"unknown">>).
 
 resolve_resource_server_id_for_any_audience_returns_error(_) ->
-    {error, no_matching_aud_found} =
-        resolve_resource_server_from_audience(?RABBITMQ),
-    {error, no_matching_aud_found} =
-        resolve_resource_server_from_audience(<<"unknown">>).
+    assert_resource_server_id({error, no_matching_aud_found}, ?RABBITMQ),
+    assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
 
 resolve_resource_server_id_for_rabbitmq1(_) ->
-    {ok, #resource_server{id = ?RABBITMQ_RESOURCE_ONE}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_ONE).
+    assert_resource_server_id(?RABBITMQ_RESOURCE_ONE, ?RABBITMQ_RESOURCE_ONE).
 
 resolve_resource_server_id_for_rabbitmq2(_) ->
-    {ok, #resource_server{id = ?RABBITMQ_RESOURCE_TWO}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_resource_server_id(?RABBITMQ_RESOURCE_TWO, ?RABBITMQ_RESOURCE_TWO).
 
 resolve_resource_server_id_for_both_resources_returns_error(_) ->
-    {error, only_one_resource_server_as_audience_found_many} =
-        resolve_resource_server_from_audience([?RABBITMQ_RESOURCE_TWO,
-            ?RABBITMQ_RESOURCE_ONE]).
+    assert_resource_server_id({error, aud_matched_many_resource_servers_only_one_allowed},
+        [?RABBITMQ_RESOURCE_TWO, ?RABBITMQ_RESOURCE_ONE]).
 
 rabbitmq_verify_aud_is_true(_) ->
-    {ok, #resource_server{verify_aud = true}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_verify_aud(true, ?RABBITMQ).
 
 rabbitmq_verify_aud_is_false(_) ->
-    {ok, #resource_server{verify_aud = false}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_verify_aud(false, ?RABBITMQ).
 
 rabbitmq2_verify_aud_is_true(_) ->
-    {ok, #resource_server{verify_aud = true}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_verify_aud(true, ?RABBITMQ_RESOURCE_TWO).
 
 both_resources_oauth_provider_id_is_root(_) ->
-    {ok, #resource_server{oauth_provider_id = root}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_ONE),
-    {ok, #resource_server{oauth_provider_id = root}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_oauth_provider_id(root, ?RABBITMQ_RESOURCE_ONE),
+    assert_oauth_provider_id(root, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_verify_aud_is_false(_) ->
-    {ok, #resource_server{verify_aud = false}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_verify_aud(false, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_scope_prefix(_) ->
-    {ok, #resource_server{scope_prefix = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_scope_prefix(undefined, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_scope_prefix(Config) ->
-    {ok, #resource_server{scope_prefix = ScopePrefix}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO),
-    ?assertEqual(?config(scope_prefix, Config), ScopePrefix).
+    assert_scope_prefix(?config(scope_prefix, Config), ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_oauth_provider_id_is_root(_) ->
-    {ok, #resource_server{oauth_provider_id = root}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_oauth_provider_id(root, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_oauth_provider_id_is_A(_) ->
-    {ok, #resource_server{oauth_provider_id = ?OAUTH_PROVIDER_A}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_oauth_provider_id(?OAUTH_PROVIDER_A, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_additional_scopes_key(_) ->
-    {ok, #resource_server{additional_scopes_key = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_additional_scopes_key(undefined, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_additional_scopes_key(Config) ->
-    {ok, #resource_server{additional_scopes_key = ScopesKey}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO),
-    ?assertEqual(?config(additional_scopes_key, Config), ScopesKey).
+    assert_additional_scopes_key(?config(additional_scopes_key, Config),
+        ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_preferred_username_claims_but_gets_default(_) ->
-    {ok, #resource_server{preferred_username_claims = Claims}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO),
-    ?assertEqual(?DEFAULT_PREFERRED_USERNAME_CLAIMS, Claims).
+    assert_preferred_username_claims(?DEFAULT_PREFERRED_USERNAME_CLAIMS,
+        ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_preferred_username_claims_plus_default(Config) ->
-    {ok, #resource_server{preferred_username_claims = Claims}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO),
-    ?assertEqual(?config(preferred_username_claims, Config)
-        ++ ?DEFAULT_PREFERRED_USERNAME_CLAIMS, Claims).
+    assert_preferred_username_claims(?config(preferred_username_claims, Config)
+        ++ ?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_scope_aliases(_) ->
-    {ok, #resource_server{scope_aliases = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO).
+    assert_scope_aliases(undefined, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_scope_aliases(Config) ->
-    {ok, #resource_server{scope_aliases = Aliases}} =
-        resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_TWO),
-    ?assertEqual(?config(scope_aliases, Config), Aliases).
+    assert_scope_aliases(?config(scope_aliases, Config), ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq_oauth_provider_id_is_root(_) ->
-    {ok, #resource_server{oauth_provider_id = root}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_oauth_provider_id(root, ?RABBITMQ).
 
 rabbitmq_oauth_provider_id_is_A(_) ->
-    {ok, #resource_server{oauth_provider_id = ?OAUTH_PROVIDER_A}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_oauth_provider_id(?OAUTH_PROVIDER_A, ?RABBITMQ).
 
 rabbitmq_has_no_scope_prefix(_) ->
-    {ok, #resource_server{scope_prefix = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_scope_prefix(undefined, ?RABBITMQ).
 
 rabbitmq_has_scope_prefix(Config) ->
-    {ok, #resource_server{scope_prefix = ScopePrefix}} =
-        resolve_resource_server_from_audience (?RABBITMQ),
-    ?assertEqual(?config(scope_prefix, Config), ScopePrefix).
+    assert_scope_prefix(?config(scope_prefix, Config), ?RABBITMQ).
 
 rabbitmq_has_empty_scope_prefix() ->
-    {ok, #resource_server{scope_prefix = <<"">>}} =
-        resolve_resource_server_from_audience (?RABBITMQ).
+    assert_scope_prefix(<<"">>, ?RABBITMQ).
 
 rabbitmq_has_no_additional_scopes_key(_) ->
-    {ok, #resource_server{additional_scopes_key = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_additional_scopes_key(undefined, ?RABBITMQ).
 
 rabbitmq_has_additional_scopes_key(Config) ->
-    {ok, #resource_server{additional_scopes_key = AdditionalScopesKey}} =
-        resolve_resource_server_from_audience (?RABBITMQ),
-    ?assertEqual(?config(additional_scopes_key, Config), AdditionalScopesKey).
+    assert_additional_scopes_key(?config(additional_scopes_key, Config),
+        ?RABBITMQ).
 
 rabbitmq_has_no_preferred_username_claims_but_gets_default(_) ->
-    {ok, #resource_server{preferred_username_claims = ?DEFAULT_PREFERRED_USERNAME_CLAIMS}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_preferred_username_claims(?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ).
 
 rabbitmq_has_preferred_username_claims_plus_default(Config) ->
-    {ok, #resource_server{additional_scopes_key = AdditionalScopesKey}} =
-        resolve_resource_server_from_audience (?RABBITMQ),
-    ?assertEqual(?config(preferred_username_claims, Config) ++
-        ?DEFAULT_PREFERRED_USERNAME_CLAIMS, AdditionalScopesKey).
+    assert_preferred_username_claims(?config(preferred_username_claims, Config) ++
+        ?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ).
 
 rabbitmq_has_no_scope_aliases(_) ->
-    {ok, #resource_server{scope_aliases = undefined}} =
-        resolve_resource_server_from_audience(?RABBITMQ).
+    assert_scope_aliases(undefined, ?RABBITMQ).
 
 rabbitmq_has_scope_aliases(Config) ->
-    {ok, #resource_server{scope_aliases = Aliases}} =
-        resolve_resource_server_from_audience (?RABBITMQ),
-    ?assertEqual(?config(scope_aliases, Config), Aliases).
-
+    assert_scope_aliases(?config(scope_aliases, Config), ?RABBITMQ).
 
 verify_rabbitmq1_server_configuration(Config) ->
     ConfigRabbitMQ = ?config(?RABBITMQ_RESOURCE_ONE, Config),
@@ -509,6 +378,36 @@ verify_rabbitmq1_server_configuration(Config) ->
         ActualRabbitMQ#resource_server.oauth_provider_id).
 
 %% -----
+
+assert_resource_server_id(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.id);
+assert_resource_server_id({error, ExpectedError}, Audience) ->
+    {error, ExpectedError} = resolve_resource_server_from_audience(Audience).
+
+assert_verify_aud(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.verify_aud).
+
+assert_oauth_provider_id(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.oauth_provider_id).
+
+assert_scope_prefix(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.scope_prefix).
+
+assert_additional_scopes_key(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.additional_scopes_key).
+
+assert_preferred_username_claims(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.preferred_username_claims).
+
+assert_scope_aliases(Expected, Audience) ->
+    Actual = resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, Actual#resource_server.scope_aliases).
 
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par).

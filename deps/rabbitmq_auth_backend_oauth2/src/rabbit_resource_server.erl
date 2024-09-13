@@ -16,12 +16,13 @@
 
 -spec resolve_resource_server_from_audience(binary() | list() | none) ->
     {ok, resource_server()} |
-    {error, only_one_resource_server_as_audience_found_many} |
+    {error, aud_matched_many_resource_servers_only_one_allowed} |
     {error, no_matching_aud_found} |
-    {error, zero_declared_resource_servers} |
-    {error, cannot_default_resource_server_found_many}.
+    {error, no_aud_found} |
+    {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}.
 resolve_resource_server_from_audience(none) ->
-    find_unique_resource_server_without_verify_aud(get_root_resource_server());
+    translate_error_if_any(find_unique_resource_server_without_verify_aud(
+        get_root_resource_server()));
 
 resolve_resource_server_from_audience(Audience) ->
     Root = get_root_resource_server(),
@@ -38,7 +39,8 @@ resolve_resource_server_from_audience(Audience) ->
         {error, only_one_resource_server_as_audience_found_many} = Error ->
             Error;
         {error, no_matching_aud_found} ->
-            find_unique_resource_server_without_verify_aud(Root);
+            translate_error_if_any(
+                find_unique_resource_server_without_verify_aud(Root));
         {ok, RootResourseServerId} ->
             {ok, Root};
         {ok, ResourceServerId} ->
@@ -142,16 +144,32 @@ find_audience(AudList, ResourceIdList) when is_list(AudList) ->
         [] -> {error, no_matching_aud_found}
     end.
 
+-spec translate_error_if_any({ok, resource_server()} |
+    {error, not_found} | {error, found_too_many}) ->
+        {ok, resource_server()} |
+        {error, no_aud_found} |
+        {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}.
+translate_error_if_any(ResourceServerOrError) ->
+    case ResourceServerOrError of
+        {ok, _} = Ok ->
+            Ok;
+        {error, not_found} ->
+            {error, no_aud_found};
+        {error, found_too_many} ->
+            {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers}
+    end.
 -spec find_unique_resource_server_without_verify_aud(resource_server()) ->
-    {ok, resource_server()} | {error, not_found} | {error, too_many}.
+    {ok, resource_server()} |
+    {error, not_found} |
+    {error, found_too_many}.
 find_unique_resource_server_without_verify_aud(Root) ->
     Map = maps:filter(fun(_K,V) -> not get_boolean_value(verify_aud, V,
         Root#resource_server.verify_aud) end, get_env(resource_servers, #{})),
     case {maps:size(Map), Root} of
-        {0, undefined} -> {error, zero_declared_resource_servers};
+        {0, undefined} -> {error, not_found};
         {0, _} -> {ok, Root};
         {1, undefined} -> {ok, get_resource_server(lists:last(maps:keys(Map)), Root)};
-        {_, _} -> {error, cannot_default_resource_server_found_many}
+        {_, _} -> {error, found_too_many}
     end.
 
 append_or_return_default(ListOrBinary, Default) ->
