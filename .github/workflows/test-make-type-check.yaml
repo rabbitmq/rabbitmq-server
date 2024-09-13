@@ -18,6 +18,7 @@ jobs:
           # These are using plugin-specific test jobs.
           - rabbit
           - rabbitmq_mqtt
+          - rabbitmq_peer_discovery_aws
           # These are from the test-plugin test job.
           - amqp10_client
           - amqp10_common
@@ -59,10 +60,8 @@ jobs:
           - rabbitmq_web_dispatch
           - rabbitmq_web_mqtt
           - rabbitmq_web_stomp
-          # These have tests but we don't want to run them
-          # in this workflow so no corresponding test job.
+          # This one we do not want to run tests so no corresponding test job.
           - rabbitmq_ct_helpers
-          - rabbitmq_peer_discovery_aws
           # These do not have tests at this time so no corresponding test job.
           - rabbitmq_ct_client_helpers
           - rabbitmq_random_exchange

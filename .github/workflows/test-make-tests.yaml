@@ -46,6 +46,18 @@ jobs:
       make_target: parallel-ct-set-1
       plugin: rabbitmq_mqtt
 
+  # The integration_SUITE requires secrets and
+  # is therefore run from a separate workflow.
+  test-rabbitmq-peer-discovery-aws:
+    name: Test rabbitmq_peer_discovery_aws (partially)
+    uses: ./.github/workflows/test-make-target.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: ct-config_schema ct-unit
+      plugin: rabbitmq_peer_discovery_aws
+
   test-plugin:
     name: Test plugins
     strategy:
