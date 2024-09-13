@@ -589,7 +589,7 @@ var HELP = {
      </dl> ',
 
     'container-id':
-      'Name of the client application as sent from client to RabbitMQ in field container-id of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.'
+      'Name of the client application as sent from client to RabbitMQ in the "container-id" field of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.'
 
 };
 
