@@ -49,7 +49,7 @@ groups() -> [
         resolve_resource_server_id_for_rabbitmq1,
         resolve_resource_server_id_for_rabbitmq2,
         resolve_resource_server_id_for_both_resources_returns_error,
-        resolve_resource_server_for_none_audience_returns_no_aud_found,
+        resolve_resource_server_for_none_audience_returns_rabbitmq1,
         resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found,
         {with_verify_aud_false, [], [
             resolve_resource_server_for_none_audience_returns_rabbitmq1,
@@ -157,7 +157,7 @@ init_per_group(with_empty_scope_prefix, Config) ->
 
 init_per_group(with_additional_scopes_key, Config) ->
     Key = <<"roles">>,
-    set_env(additional_scopes_key, Key),
+    set_env(extra_scopes_source, Key),
     [{additional_scopes_key, Key} | Config];
 
 init_per_group(with_preferred_username_claims, Config) ->
@@ -206,7 +206,7 @@ init_per_group(with_two_resource_servers, Config) ->
         {oauth_provider_id, ?OAUTH_PROVIDER_A}
     ],
     RabbitMQ2 = [
-        {id, ?RABBITMQ_RESOURCE_ONE}
+        {id, ?RABBITMQ_RESOURCE_TWO}
     ],
     set_env(resource_servers, #{
         ?RABBITMQ_RESOURCE_ONE => RabbitMQ1,
@@ -249,6 +249,9 @@ resolve_resource_server_for_rabbitmq_plus_unknown_audience(_) ->
 resolve_resource_server_for_none_audience_returns_no_aud_found(_) ->
     assert_resource_server_id({error, no_aud_found}, none).
 
+resolve_resource_server_for_none_audience_returns_rabbitmq1(_) ->
+    assert_resource_server_id(?RABBITMQ_RESOURCE_ONE, none).
+
 resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found(_) ->
     assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
 
@@ -289,7 +292,8 @@ rabbitmq2_verify_aud_is_false(_) ->
     assert_verify_aud(false, ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_scope_prefix(_) ->
-    assert_scope_prefix(undefined, ?RABBITMQ_RESOURCE_TWO).
+    assert_scope_prefix(erlang:iolist_to_binary([?RABBITMQ_RESOURCE_TWO, <<".">>]),
+        ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_scope_prefix(Config) ->
     assert_scope_prefix(?config(scope_prefix, Config), ?RABBITMQ_RESOURCE_TWO).
@@ -328,12 +332,12 @@ rabbitmq_oauth_provider_id_is_A(_) ->
     assert_oauth_provider_id(?OAUTH_PROVIDER_A, ?RABBITMQ).
 
 rabbitmq_has_no_scope_prefix(_) ->
-    assert_scope_prefix(undefined, ?RABBITMQ).
+    assert_scope_prefix(erlang:iolist_to_binary([?RABBITMQ, <<".">>]), ?RABBITMQ).
 
 rabbitmq_has_scope_prefix(Config) ->
     assert_scope_prefix(?config(scope_prefix, Config), ?RABBITMQ).
 
-rabbitmq_has_empty_scope_prefix() ->
+rabbitmq_has_empty_scope_prefix(_) ->
     assert_scope_prefix(<<"">>, ?RABBITMQ).
 
 rabbitmq_has_no_additional_scopes_key(_) ->

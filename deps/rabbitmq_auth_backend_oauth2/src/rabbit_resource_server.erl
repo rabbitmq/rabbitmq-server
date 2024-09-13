@@ -54,9 +54,9 @@ get_root_resource_server() ->
         get_env(scope_aliases),
     PreferredUsernameClaims =
         case get_env(preferred_username_claims) of
-            {ok, Value} ->
-                append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS);
-            _ -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS
+            undefined -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS;
+            Value ->
+                append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS)
         end,
     ResourceServerType =
         get_env(resource_server_type),
@@ -74,7 +74,7 @@ get_root_resource_server() ->
     OAuthProviderId =
         case get_env(default_oauth_provider) of
             undefined -> root;
-            {ok, DefaultOauthProviderId} -> DefaultOauthProviderId
+            DefaultOauthProviderId -> DefaultOauthProviderId
         end,
 
     #resource_server{
@@ -164,7 +164,7 @@ find_audience(AudList, ResourceIdList) when is_list(AudList) ->
         {error, too_many_resources_with_verify_aud_false}.
 translate_error_if_any(ResourceServerOrError, HasAudience) ->
     case {ResourceServerOrError, HasAudience} of
-        {{ok, _}, _} = Ok ->
+        {{ok, _} = Ok, _} ->
             Ok;
         {{error, not_found}, false} ->
             {error, no_aud_found};
