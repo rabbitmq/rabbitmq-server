@@ -35,6 +35,7 @@
 
 -record(v1_connection,
         {name :: binary(),
+         container_id :: none | binary(),
          vhost :: none | rabbit_types:vhost(),
          %% server host
          host :: inet:ip_address() | inet:hostname(),
@@ -104,6 +105,7 @@ unpack_from_0_9_1(
         connection_state = received_amqp3100,
         connection = #v1_connection{
                         name = ConnectionName,
+                        container_id = none,
                         vhost = none,
                         host = Host,
                         peer_host = PeerHost,
@@ -491,6 +493,7 @@ handle_connection_frame(
                           end,
     State1 = State0#v1{connection_state = running,
                        connection = Connection#v1_connection{
+                                      container_id = ContainerId,
                                       vhost = Vhost,
                                       incoming_max_frame_size = IncomingMaxFrameSize,
                                       outgoing_max_frame_size = OutgoingMaxFrameSize,
@@ -968,6 +971,8 @@ i(connection_state, #v1{connection_state = Val}) ->
 i(connected_at, #v1{connection = #v1_connection{connected_at = Val}}) ->
     Val;
 i(name, #v1{connection = #v1_connection{name = Val}}) ->
+    Val;
+i(container_id, #v1{connection = #v1_connection{container_id = Val}}) ->
     Val;
 i(vhost, #v1{connection = #v1_connection{vhost = Val}}) ->
     Val;

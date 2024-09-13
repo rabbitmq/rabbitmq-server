@@ -17,8 +17,17 @@
 
 <% if (connection.client_properties.connection_name) { %>
 <tr>
-  <th>Client-provided name</th>
+  <th>Client-provided connection name</th>
   <td><%= fmt_string(connection.client_properties.connection_name) %></td>
+</tr>
+<% } %>
+
+<% if (connection.container_id) { %>
+<tr>
+  <th>Container ID
+    <span class="help" id="container-id"></span>
+  </th>
+  <td><%= fmt_string(connection.container_id) %></td>
 </tr>
 <% } %>
 
