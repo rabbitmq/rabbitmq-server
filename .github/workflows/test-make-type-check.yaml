@@ -30,6 +30,7 @@ jobs:
           - rabbitmq_auth_backend_ldap
           - rabbitmq_auth_backend_oauth2
           - rabbitmq_auth_mechanism_ssl
+          - rabbitmq_aws
           - rabbitmq_consistent_hash_exchange
           - rabbitmq_event_exchange
           - rabbitmq_federation
@@ -60,7 +61,6 @@ jobs:
           - rabbitmq_web_stomp
           # These have tests but we don't want to run them
           # in this workflow so no corresponding test job.
-          - rabbitmq_aws
           - rabbitmq_ct_helpers
           - rabbitmq_peer_discovery_aws
           # These do not have tests at this time so no corresponding test job.
