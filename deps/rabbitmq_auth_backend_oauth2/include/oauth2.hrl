@@ -6,7 +6,7 @@
 %%
 
 
--include_lib("oauth2_client/include/types.hrl").
+-include_lib("oauth2_client/include/oauth2_client.hrl").
 
 -define(APP, rabbitmq_auth_backend_oauth2).
 -define(DEFAULT_PREFERRED_USERNAME_CLAIMS, [<<"sub">>, <<"client_id">>]).
