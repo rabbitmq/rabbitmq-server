@@ -547,7 +547,7 @@ failed_to_recv_proxy_header(Ref, Error) ->
     end,
     rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
-    _ = catch ranch:handshake(Ref),
+    _ = ranch:handshake(Ref),
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
@@ -559,22 +559,14 @@ handshake(Ref, ProxyProtocolEnabled) ->
                 {error, protocol_error, Error} ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
-                    case catch ranch:handshake(Ref) of
-                        {'EXIT', normal} ->
-                            {error, handshake_failed};
-                        {ok, Sock} ->
-                            ok = tune_buffer_size(Sock),
-                            {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
-                    end
+                    {ok, Sock} = ranch:handshake(Ref),
+                    ok = tune_buffer_size(Sock),
+                    {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
-            case catch ranch:handshake(Ref) of
-                {'EXIT', normal} ->
-                    {error, handshake_failed};
-                {ok, Sock} ->
-                    ok = tune_buffer_size(Sock),
-                    {ok, Sock}
-            end
+            {ok, Sock} = ranch:handshake(Ref),
+            ok = tune_buffer_size(Sock),
+            {ok, Sock}
     end.
 
 tune_buffer_size(Sock) ->
