@@ -136,13 +136,10 @@ init([KeepaliveSup,
         heartbeat := Heartbeat,
         transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
-    ProxyProtocolEnabled =
-        application:get_env(rabbitmq_stream, proxy_protocol, false),
-    %% Note:
-    %% This function could return an error if the handshake times out.
-    %% It is less likely to happen here as compared to MQTT, so
-    %% crashing with a `badmatch` seems appropriate.
-    {ok, Sock} = rabbit_networking:handshake(Ref, ProxyProtocolEnabled),
+    {ok, Sock} =
+        rabbit_networking:handshake(Ref,
+                                    application:get_env(rabbitmq_stream,
+                                                        proxy_protocol, false)),
     RealSocket = rabbit_net:unwrap_socket(Sock),
     case rabbit_net:connection_string(Sock, inbound) of
         {ok, ConnStr} ->

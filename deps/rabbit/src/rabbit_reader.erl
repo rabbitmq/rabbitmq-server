@@ -164,10 +164,6 @@ shutdown(Pid, Explanation) ->
     no_return().
 init(Parent, HelperSups, Ref) ->
     ?LG_PROCESS_TYPE(reader),
-    %% Note:
-    %% This function could return an error if the handshake times out.
-    %% It is less likely to happen here as compared to MQTT, so
-    %% crashing with a `badmatch` seems appropriate.
     {ok, Sock} = rabbit_networking:handshake(Ref,
         application:get_env(rabbit, proxy_protocol, false)),
     Deb = sys:debug_options([]),
