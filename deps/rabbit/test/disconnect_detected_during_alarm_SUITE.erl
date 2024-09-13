@@ -96,7 +96,7 @@ disconnect_detected_during_alarm(Config) ->
 
     ListConnections =
         fun() ->
-            rpc:call(A, rabbit_networking, connection_info_all, [])
+            rpc:call(A, rabbit_networking, connection_info_all, [[state]])
         end,
 
     %% We've already disconnected, but blocked connection still should still linger on.

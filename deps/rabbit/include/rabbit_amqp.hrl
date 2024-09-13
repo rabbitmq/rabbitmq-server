@@ -37,6 +37,7 @@
         [pid,
          frame_max,
          timeout,
+         container_id,
          vhost,
          user,
          node

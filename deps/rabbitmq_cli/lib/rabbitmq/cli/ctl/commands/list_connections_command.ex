@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
   @info_keys ~w(pid name port host peer_port peer_host ssl ssl_protocol
                 ssl_key_exchange ssl_cipher ssl_hash peer_cert_subject
                 peer_cert_issuer peer_cert_validity state
-                channels protocol auth_mechanism user vhost timeout frame_max
+                channels protocol auth_mechanism user vhost container_id timeout frame_max
                 channel_max client_properties recv_oct recv_cnt send_oct
                 send_cnt send_pend connected_at)a
 
@@ -79,7 +79,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListConnectionsCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(), do: "Lists AMQP 0.9.1 connections for the node"
+  def description(), do: "Lists AMQP connections for the node"
 
   def banner(_, _), do: "Listing connections ..."
 end

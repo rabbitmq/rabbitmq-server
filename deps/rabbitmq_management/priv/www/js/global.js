@@ -108,7 +108,8 @@ var ALL_COLUMNS =
                         ['rate-redeliver', 'redelivered',        false],
                         ['rate-ack',       'ack',                true]]},
      'connections':
-     {'Overview': [['user',   'User name', true],
+     {'Overview': [['container_id', 'Container ID', true],
+                   ['user',   'User name', true],
                    ['state',  'State',     true]],
       'Details': [['ssl',            'TLS',      true],
                   ['ssl_info',       'TLS details',    false],
@@ -585,7 +586,10 @@ var HELP = {
         <dd>Rate at which queues are created. Declaring a queue that already exists counts for a "Declared" event, but not for a "Created" event. </dd>\
         <dt>Deleted</dt>\
         <dd>Rate at which queues are deleted.</dd>\
-     </dl> '
+     </dl> ',
+
+    'container-id':
+      'Name of the client application as sent from client to RabbitMQ in field container-id of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.'
 
 };
 
