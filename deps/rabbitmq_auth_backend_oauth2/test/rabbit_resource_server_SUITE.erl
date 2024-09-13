@@ -49,11 +49,11 @@ groups() -> [
         resolve_resource_server_id_for_rabbitmq1,
         resolve_resource_server_id_for_rabbitmq2,
         resolve_resource_server_id_for_both_resources_returns_error,
-        resolve_resource_server_for_none_audience_returns_rabbitmq1,
+        resolve_resource_server_for_none_audience_returns_no_aud_found,
         resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found,
         {with_verify_aud_false, [], [
-            resolve_resource_server_for_none_audience_returns_rabbitmq1,
-            resolve_resource_server_for_unknown_audience_returns_rabbitmq1,
+            resolve_resource_server_for_none_audience_returns_rabbitmq2,
+            resolve_resource_server_for_unknown_audience_returns_rabbitmq2,
             {with_rabbitmq1_verify_aud_false, [], [
                 resolve_resource_server_for_none_audience_returns_error
             ]}
@@ -74,7 +74,7 @@ verify_get_rabbitmq_server_configuration() -> [
     {with_verify_aud_false, [], [
         rabbitmq_verify_aud_is_false
     ]},
-    rabbitmq_has_no_scope_prefix,
+    rabbitmq_has_default_scope_prefix,
     {with_scope_prefix, [], [
         rabbitmq_has_scope_prefix
     ]},
@@ -104,7 +104,7 @@ verify_configuration_inheritance_with_rabbitmq2() -> [
     {with_verify_aud_false, [], [
         rabbitmq2_verify_aud_is_false
     ]},
-    rabbitmq2_has_no_scope_prefix,
+    rabbitmq2_has_default_scope_prefix,
     {with_scope_prefix, [], [
         rabbitmq2_has_scope_prefix
     ]},
@@ -176,29 +176,19 @@ init_per_group(with_verify_aud_false, Config) ->
     set_env(verify_aud, false),
     Config;
 
-init_per_group(with_two_resource_servers_and_rabbitmq_as_resource_server_id, Config) ->
-    set_env(resource_server_id, ?RABBITMQ),
-    set_env(key_config, [{jwks_url,<<"https://oauth-for-rabbitmq">> }]),
-    set_env(resource_servers,
-        #{?RABBITMQ_RESOURCE_ONE =>  [
-            { key_config, [
-                {jwks_url,<<"https://oauth-for-rabbitmq1">> }
-            ]}
-
-        ],
-          ?RABBITMQ_RESOURCE_TWO =>  [
-            { key_config, [
-                {jwks_url,<<"https://oauth-for-rabbitmq2">> }
-            ]}
-          ]
-        }),
+init_per_group(with_rabbitmq1_verify_aud_false, Config) ->
+    RabbitMQServers = get_env(resource_servers, #{}),
+    Resource0 = maps:get(?RABBITMQ_RESOURCE_ONE, RabbitMQServers, []),
+    Resource = [{verify_aud, false} | Resource0],
+    set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_ONE, Resource,
+        RabbitMQServers)),
     Config;
 
 init_per_group(with_two_resource_servers, Config) ->
     RabbitMQ1 = [
         {id, ?RABBITMQ_RESOURCE_ONE},
         {resource_server_type, <<"some-type">>},
-        {verify_aud, false},
+        {verify_aud, true},
         {scope_prefix, <<"some-prefix">>},
         {additional_scopes_key, <<"roles">>},
         {preferred_username_claims, [<<"x-username">>, <<"x-email">>]},
@@ -218,6 +208,11 @@ init_per_group(with_two_resource_servers, Config) ->
 init_per_group(_any, Config) ->
     Config.
 
+
+end_per_group(with_rabbitmq_as_resource_server_id, Config) ->
+    unset_env(resource_server_id),
+    Config;
+
 end_per_group(with_empty_scope_prefix, Config) ->
     unset_env(scope_prefix),
     Config;
@@ -232,6 +227,14 @@ end_per_group(with_two_resource_servers, Config) ->
 
 end_per_group(with_scope_prefix, Config) ->
     unset_env(scope_prefix),
+    Config;
+
+end_per_group(with_rabbitmq1_verify_aud_false, Config) ->
+    RabbitMQServers = get_env(resource_servers, #{}),
+    Resource = maps:get(?RABBITMQ_RESOURCE_ONE, RabbitMQServers, []),
+    set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_ONE,
+        proplists:delete(verify_aud, Resource),
+        RabbitMQServers)),
     Config;
 
 end_per_group(_any, Config) ->
@@ -249,8 +252,8 @@ resolve_resource_server_for_rabbitmq_plus_unknown_audience(_) ->
 resolve_resource_server_for_none_audience_returns_no_aud_found(_) ->
     assert_resource_server_id({error, no_aud_found}, none).
 
-resolve_resource_server_for_none_audience_returns_rabbitmq1(_) ->
-    assert_resource_server_id(?RABBITMQ_RESOURCE_ONE, none).
+resolve_resource_server_for_none_audience_returns_rabbitmq2(_) ->
+    assert_resource_server_id(?RABBITMQ_RESOURCE_TWO, none).
 
 resolve_resource_server_for_unknown_audience_returns_no_matching_aud_found(_) ->
     assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
@@ -261,6 +264,13 @@ resolve_resource_server_for_none_audience_returns_rabbitmq(_) ->
 resolve_resource_server_for_unknown_audience_returns_rabbitmq(_) ->
     assert_resource_server_id(?RABBITMQ, <<"unknown">>).
 
+resolve_resource_server_for_unknown_audience_returns_rabbitmq2(_) ->
+    assert_resource_server_id(?RABBITMQ_RESOURCE_TWO, <<"unknown">>).
+
+resolve_resource_server_for_none_audience_returns_error(_) ->
+    assert_resource_server_id(
+        {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers},
+        none).
 resolve_resource_server_id_for_any_audience_returns_no_matching_aud_found(_) ->
     assert_resource_server_id({error, no_matching_aud_found}, ?RABBITMQ),
     assert_resource_server_id({error, no_matching_aud_found}, <<"unknown">>).
@@ -291,7 +301,7 @@ both_resources_oauth_provider_id_is_root(_) ->
 rabbitmq2_verify_aud_is_false(_) ->
     assert_verify_aud(false, ?RABBITMQ_RESOURCE_TWO).
 
-rabbitmq2_has_no_scope_prefix(_) ->
+rabbitmq2_has_default_scope_prefix(_) ->
     assert_scope_prefix(erlang:iolist_to_binary([?RABBITMQ_RESOURCE_TWO, <<".">>]),
         ?RABBITMQ_RESOURCE_TWO).
 
@@ -331,7 +341,7 @@ rabbitmq_oauth_provider_id_is_root(_) ->
 rabbitmq_oauth_provider_id_is_A(_) ->
     assert_oauth_provider_id(?OAUTH_PROVIDER_A, ?RABBITMQ).
 
-rabbitmq_has_no_scope_prefix(_) ->
+rabbitmq_has_default_scope_prefix(_) ->
     assert_scope_prefix(erlang:iolist_to_binary([?RABBITMQ, <<".">>]), ?RABBITMQ).
 
 rabbitmq_has_scope_prefix(Config) ->

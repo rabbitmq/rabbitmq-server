@@ -156,7 +156,7 @@ find_audience(AudList, ResourceIdList) when is_list(AudList) ->
 -spec translate_error_if_any(
     {ok, resource_server()} |
     {error, not_found} |
-    {error, found_too_many}, boolean()) ->
+    {error, found_many}, boolean()) ->
         {ok, resource_server()} |
         {error, no_aud_found} |
         {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers} |
@@ -170,15 +170,15 @@ translate_error_if_any(ResourceServerOrError, HasAudience) ->
             {error, no_aud_found};
         {{error, not_found}, _} ->
             {error, no_matching_aud_found};
-        {{error, found_too_many}, false} ->
+        {{error, found_many}, false} ->
             {error, no_aud_found_cannot_pick_one_from_too_many_resource_servers};
-        {{error, found_too_many}, _} ->
+        {{error, found_many}, _} ->
             {error, too_many_resources_with_verify_aud_false}
     end.
 -spec find_unique_resource_server_without_verify_aud() ->
     {ok, resource_server()} |
     {error, not_found} |
-    {error, found_too_many}.
+    {error, found_many}.
 find_unique_resource_server_without_verify_aud() ->
     Root = get_root_resource_server(),
     Map0 = maps:filter(fun(_K,V) -> not get_boolean_value(verify_aud, V,
@@ -191,7 +191,7 @@ find_unique_resource_server_without_verify_aud() ->
     case maps:size(Map) of
         0 -> {error, not_found};
         1 -> {ok, get_resource_server(lists:last(maps:keys(Map)), Root)};
-        _ -> {error, found_too_many}
+        _ -> {error, found_many}
     end.
 
 append_or_return_default(ListOrBinary, Default) ->
