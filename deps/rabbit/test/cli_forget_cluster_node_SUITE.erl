@@ -37,7 +37,8 @@ groups() ->
                            forget_cluster_node_with_all_last_streams,
                            forget_cluster_node_with_quorum_queues_and_streams,
                            forget_cluster_node_with_one_last_quorum_member_and_streams,
-                           forget_cluster_node_with_one_last_stream_and_quorum_queues
+                           forget_cluster_node_with_one_last_stream_and_quorum_queues,
+                           forget_cluster_node_with_one_classic_queue
                           ]}
     ].
 
@@ -353,6 +354,30 @@ forget_cluster_node_with_one_last_stream_and_quorum_queues(Config) ->
     ?awaitMatch(Members when length(Members) == 2, proplists:get_value(members, find_queue_info(Config, Rabbit, S2, [members]), 30000), 30000),
     ?awaitMatch(Members when length(Members) == 2, get_quorum_members(Rabbit, QQ1), 30000),
     ?awaitMatch(Members when length(Members) == 2, get_quorum_members(Rabbit, QQ2), 30000).
+
+forget_cluster_node_with_one_classic_queue(Config) ->
+    [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    assert_clustered([Rabbit, Hare, Bunny]),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Bunny),
+    CQ1 = <<"classic-queue-1">>,
+    declare(Ch, CQ1, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
+
+    ?awaitMatch([_], rabbit_ct_broker_helpers:rabbitmqctl_list(
+                       Config, Rabbit,
+                       ["list_queues", "name", "--no-table-headers"]),
+                30000),
+
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, Bunny)),
+    ?assertEqual(ok, forget_cluster_node(Rabbit, Bunny)),
+
+    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
+                          [Rabbit, Hare]),
+    ?awaitMatch([], rabbit_ct_broker_helpers:rabbitmqctl_list(
+                      Config, Rabbit,
+                      ["list_queues", "name", "--no-table-headers"]),
+                30000).
 
 forget_cluster_node(Node, Removee) ->
     rabbit_control_helper:command(forget_cluster_node, Node, [atom_to_list(Removee)],
