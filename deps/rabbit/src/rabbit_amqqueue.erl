@@ -1815,7 +1815,7 @@ internal_delete(Queue, ActingUser, Reason) ->
 %% TODO this is used by `rabbit_mnesia:remove_node_if_mnesia_running`
 %% Does it make any sense once mnesia is not used/removed?
 forget_all_durable(Node) ->
-    rabbit_log:info("Asked to remove all classic queues from node ~ts", [Node]),
+    rabbit_log:info("Will remove all classic queues from node ~ts. The node is likely being removed from the cluster.", [Node]),
     UpdateFun = fun(Q) ->
                         forget_node_for_queue(Q)
                 end,
