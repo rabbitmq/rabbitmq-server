@@ -113,7 +113,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "rabbit_oauth2_oauth_provider_SUITE",
+    name = "rabbit_oauth_provider_SUITE",
     additional_beam = [
         "test/oauth2_http_mock.beam",
     ],
@@ -123,7 +123,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "rabbit_oauth2_resource_server_SUITE"
+    name = "rabbit_resource_server_SUITE"
 )
 
 rabbitmq_integration_suite(

@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_oauth2_resource_server).
+-module(rabbit_resource_server).
 
 -include("oauth2.hrl").
 
@@ -25,9 +25,9 @@ get_resource_server(ResourceServerId) ->
         V ->
             get_resource_server(V, ResourceServerId)
     end.
-get_resource_server(TopResourceServerId, ResourceServerId) ->
+get_resource_server(TopResourceServerId, ResourceServerId)
   when ResourceServerId =:= TopResourceServerId ->
-    ScopeAlises =
+    ScopeAliases =
         application:get_env(?APP, scope_aliases, undefined),
     PreferredUsernameClaims =
         case application:get_env(?APP, preferred_username_claims) of
@@ -50,7 +50,7 @@ get_resource_server(TopResourceServerId, ResourceServerId) ->
             V -> erlang:iolist_to_binary([V, <<".">>])
         end,
     ScopePrefix =
-        application:get_env(?APP, scope_prefix, DefaultScopePrefix).
+        application:get_env(?APP, scope_prefix, DefaultScopePrefix),
     OAuthProviderId =
         case application:get_env(?APP, default_oauth_provider) of
             undefined -> root;
@@ -68,14 +68,14 @@ get_resource_server(TopResourceServerId, ResourceServerId) ->
         oauth_provider_id = OAuthProviderId
     };
 
-get_resource_server(TopResourceServerId, ResourceServerId) ->
+get_resource_server(TopResourceServerId, ResourceServerId)
   when ResourceServerId =/= TopResourceServerId ->
     ResourceServerProps =
         maps:get(ResourceServerId, application:get_env(?APP, resource_servers,
             #{}),[]),
     TopResourseServer =
         get_resource_server(TopResourceServerId, TopResourceServerId),
-    ScopeAlises =
+    ScopeAliases =
         proplists:get_value(scope_aliases, ResourceServerProps,
             TopResourseServer#resource_server.scope_aliases),
     PreferredUsernameClaims =
@@ -89,7 +89,7 @@ get_resource_server(TopResourceServerId, ResourceServerId) ->
             TopResourseServer#resource_server.verify_aud),
     AdditionalScopesKey =
         proplists:get_value(extra_scopes_source, ResourceServerProps,
-            TopResourseServer#resource_server.extra_scopes_source),
+            TopResourseServer#resource_server.additional_scopes_key),
     ScopePrefix =
         proplists:get_value(scope_prefix, ResourceServerProps,
             TopResourseServer#resource_server.scope_prefix),

@@ -5,11 +5,9 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_oauth2_config).
+-module(rabbit_oauth_provider).
 
 -include("oauth2.hrl").
-
-%-include_lib("oauth2_client/include/oauth2_client.hrl").
 
 -export([
     get_internal_oauth_provider/0, get_internal_oauth_provider/1,
@@ -19,14 +17,15 @@
 ]).
 
 -spec get_internal_oauth_provider() -> internal_oauth_provider().
+get_internal_oauth_provider() ->
     get_internal_oauth_provider(root).
 
 -spec get_internal_oauth_provider(oauth_provider_id()) -> internal_oauth_provider().
 get_internal_oauth_provider(OAuthProviderId) ->
     #internal_oauth_provider{
-        id = OAuthProvider#oauth_provider.id,
-        default_key = get_default_key(OAuthProvider#oauth_provider.id),
-        algorithms = get_algorithms(OAuthProvider#oauth_provider.id)
+        id = OAuthProviderId,
+        default_key = get_default_key(OAuthProviderId),
+        algorithms = get_algorithms(OAuthProviderId)
     }.
 
 

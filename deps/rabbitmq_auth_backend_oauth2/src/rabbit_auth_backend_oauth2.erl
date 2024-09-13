@@ -8,6 +8,7 @@
 -module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("oauth2.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -18,7 +19,7 @@
          check_topic_access/4, check_token/1, update_state/2,
          expiry_timestamp/1]).
 
-% for testing
+%% for testing
 -export([post_process_payload/2, get_expanded_scopes/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
@@ -494,7 +495,8 @@ post_process_payload_in_rich_auth_request_format(ResourceServer,
 
     FilteredPermissionsByType = lists:filter(fun(P) ->
       is_recognized_permission(P, ResourceServerType) end, Permissions),
-    AdditionalScopes = map_rich_auth_permissions_to_scopes(ResourceServerId, FilteredPermissionsByType),
+    AdditionalScopes = map_rich_auth_permissions_to_scopes(
+        ResourceServer#resource_server.id, FilteredPermissionsByType),
 
     ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
     maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload).
