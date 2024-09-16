@@ -378,14 +378,8 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
             [];
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
-        %% support #eldap_search_result before and after
-        %% https://github.com/erlang/otp/pull/5538
-        {ok, {eldap_search_result, [], _Referrals}} ->
-            [];
         {ok, {eldap_search_result, [], _Referrals, _Controls}}->
             [];
-        {ok, {eldap_search_result, Entries, _Referrals}} ->
-            [ON || #eldap_entry{object_name = ON} <- Entries];
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
             [ON || #eldap_entry{object_name = ON} <- Entries]
     end.
@@ -470,10 +464,6 @@ object_exists(DN, Filter, LDAP) ->
                        {scope, eldap:baseObject()}]) of
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
-        %% support #eldap_search_result before and after
-        %% https://github.com/erlang/otp/pull/5538
-        {ok, {eldap_search_result, Entries, _Referrals}} ->
-            length(Entries) > 0;
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
             length(Entries) > 0;
         {error, _} = E ->
@@ -487,14 +477,8 @@ attribute(DN, AttributeName, LDAP) ->
                        {attributes, [AttributeName]}]) of
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
-        %% support #eldap_search_result before and after
-        %% https://github.com/erlang/otp/pull/5538
-        {ok, {eldap_search_result, E = [#eldap_entry{}|_], _Referrals}} ->
-            get_attributes(AttributeName, E);
         {ok, {eldap_search_result, E = [#eldap_entry{}|_], _Referrals, _Controls}} ->
             get_attributes(AttributeName, E);
-        {ok, {eldap_search_result, _Entries, _Referrals}} ->
-            {error, not_found};
         {ok, {eldap_search_result, _Entries, _Referrals, _Controls}} ->
             {error, not_found};
         {error, _} = E ->
@@ -890,18 +874,9 @@ dn_lookup(Username, LDAP) ->
                        {attributes, ["distinguishedName"]}]) of
         {ok, {referral, Referrals}} ->
             {error, {referrals_not_supported, Referrals}};
-        %% support #eldap_search_result before and after
-        %% https://github.com/erlang/otp/pull/5538
-        {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals}}->
-            ?L1("DN lookup: ~ts -> ~ts", [Username, DN]),
-            DN;
         {ok, {eldap_search_result, [#eldap_entry{object_name = DN}], _Referrals, _Controls}}->
             ?L1("DN lookup: ~ts -> ~ts", [Username, DN]),
             DN;
-        {ok, {eldap_search_result, Entries, _Referrals}} ->
-            rabbit_log_ldap:warning("Searching for DN for ~ts, got back ~tp",
-                               [Filled, Entries]),
-            Filled;
         {ok, {eldap_search_result, Entries, _Referrals, _Controls}} ->
             rabbit_log_ldap:warning("Searching for DN for ~ts, got back ~tp",
                                [Filled, Entries]),
