@@ -107,10 +107,15 @@ init_per_group(with_static_signing_keys_for_specific_oauth_provider, Config) ->
     Config;
 
 init_per_group(oauth_provider_with_jwks_uri, Config) ->
-    URL = build_url_to_oauth_provider(<<"/keys">>),
-    case ?config(oauth_provider_id) of
-        root -> set_env(jkws_url, URL);
-        Id -> set_oauth_provider_properties(Id, [{jwks_uri, URL}])
+    URL = case ?config(oauth_provider_id, Config) of
+        root ->
+            RootUrl = build_url_to_oauth_provider(<<"/keys">>),
+            set_env(key_config, [{jwks_url, RootUrl}]),
+            RootUrl;
+        <<"A">> ->
+            AUrl = build_url_to_oauth_provider(<<"/A/keys">>),
+            set_oauth_provider_properties(<<"A">>, [{jwks_uri, AUrl}]),
+            AUrl
     end,
     [{jwks_uri, URL} | Config];
 
@@ -127,13 +132,18 @@ init_per_group(oauth_provider_with_issuer, Config) ->
 
     start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
     set_env(use_global_locks, false),
-    IssuerUrl = build_url_to_oauth_provider(<<"/">>),
-    case ?config(oauth_provider_id, Config) of
-        root -> set_env(issuer, IssuerUrl);
-        Id -> set_oauth_provider_properties(Id,
-            [{issuer, IssuerUrl}, {ssl_options, SslOptions}])
+    {Issuer, JwksUri} = case ?config(oauth_provider_id, Config) of
+        root ->
+            Url = build_url_to_oauth_provider(<<"/">>),
+            set_env(issuer, Url),
+            set_env(key_config, SslOptions),
+            {Url, build_url_to_oauth_provider(<<"/keys">>)};
+        <<"A">> ->
+            Url = build_url_to_oauth_provider(<<"/A">>),
+            set_oauth_provider_properties(<<"A">>, [{issuer, Url}, {https, SslOptions}]),
+            {Url, build_url_to_oauth_provider(<<"/A/keys">>)}
     end,
-    Config;
+    [{issuer, Issuer}, {jwks_uri, JwksUri}] ++ Config;
 
 init_per_group(with_resource_server_id, Config) ->
     set_env(resource_server_id, ?RABBITMQ),
@@ -191,10 +201,19 @@ end_per_group(with_resource_server_id, Config) ->
 
 end_per_group(oauth_provider_with_issuer, Config) ->
     case ?config(oauth_provider_id, Config) of
-        root -> unset_env(issuer);
-        Id -> unset_oauth_provider_properties(Id, [issuer])
+        root ->
+            unset_env(issuer),
+            unset_env(https);
+        Id ->
+            unset_oauth_provider_properties(Id, [issuer, https])
     end,
     stop_http_auth_server(),
+    Config;
+end_per_group(oauth_provider_with_jwks_uri, Config) ->
+    case ?config(oauth_provider_id, Config) of
+        root -> unset_env(jwks_url);
+        Id -> unset_oauth_provider_properties(Id, [jwks_uri])
+    end,
     Config;
 
 end_per_group(oauth_provider_with_default_key, Config) ->
@@ -383,8 +402,9 @@ get_oauth_provider_with_jwks_uri_returns_error(Config) ->
         ?config(oauth_provider_id, Config), [jwks_uri]).
 
 get_oauth_provider_has_jwks_uri(Config) ->
-    OAuthProvider = get_oauth_provider(
+    {ok, OAuthProvider} = get_oauth_provider(
         ?config(oauth_provider_id, Config), [jwks_uri]),
+        ct:log("OAuthProvider: ~p", [OAuthProvider]),
     ?assertEqual(?config(jwks_uri, Config), OAuthProvider#oauth_provider.jwks_uri).
 
 
@@ -479,15 +499,16 @@ set_oauth_provider_properties(OAuthProviderId, Proplist) ->
     CurProplist = maps:get(OAuthProviderId, OAuthProviders),
     CurMap = proplists:to_map(CurProplist),
     Map = proplists:to_map(Proplist),
-    set_env(oauth_providers, maps:put(OAuthProviderId, maps:to_list(maps:merge(CurMap, Map)),
-        OAuthProviders)).
+    set_env(oauth_providers, maps:put(OAuthProviderId,
+        maps:to_list(maps:merge(CurMap, Map)), OAuthProviders)).
 
 unset_oauth_provider_properties(OAuthProviderId, PropertyNameList) ->
     OAuthProviders = get_env(oauth_providers, #{}),
     CurProplist = maps:get(OAuthProviderId, OAuthProviders),
     CurMap = proplists:to_map(CurProplist),
-    set_env(oauth_provider, maps:put(OAuthProviderId,
-        maps:filter(fun(K,V) -> not proplists:is_defined(K, PropertyNameList) end, CurMap),
+    set_env(oauth_providers, maps:put(OAuthProviderId,
+        maps:to_list(maps:filter(fun(K,V) ->
+            not proplists:is_defined(K, PropertyNameList) end, CurMap)),
         OAuthProviders)).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
