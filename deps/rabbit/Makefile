@@ -135,7 +135,6 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck proper amqp_clie
 PLT_APPS += mnesia runtime_tools
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_systemd = hex 0.6.1
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
