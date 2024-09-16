@@ -30,7 +30,7 @@ jobs:
       run: |
         bazel run gazelle
     - name: CREATE PULL REQUEST
-      uses: peter-evans/create-pull-request@v7.0.2
+      uses: peter-evans/create-pull-request@v7.0.3
       with:
         token: ${{ secrets.REPO_SCOPED_TOKEN }}
         committer: GitHub <noreply@github.com>
