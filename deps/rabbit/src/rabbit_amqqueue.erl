@@ -1619,17 +1619,23 @@ delete_immediately_by_resource(Resources) ->
 -spec delete
         (amqqueue:amqqueue(), 'false', 'false', rabbit_types:username()) ->
             qlen() |
+            rabbit_types:error(timeout) |
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'true' , 'false', rabbit_types:username()) ->
-            qlen() | rabbit_types:error('in_use') |
+            qlen() |
+            rabbit_types:error('in_use') |
+            rabbit_types:error(timeout) |
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'false', 'true', rabbit_types:username()) ->
-            qlen() | rabbit_types:error('not_empty') |
+            qlen() |
+            rabbit_types:error('not_empty') |
+            rabbit_types:error(timeout) |
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()};
         (amqqueue:amqqueue(), 'true' , 'true', rabbit_types:username()) ->
             qlen() |
             rabbit_types:error('in_use') |
             rabbit_types:error('not_empty') |
+            rabbit_types:error(timeout) |
             {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     rabbit_queue_type:delete(Q, IfUnused, IfEmpty, ActingUser).

@@ -109,17 +109,16 @@ declare(Q0, _Node) ->
              boolean(),
              boolean(),
              rabbit_types:username()) ->
-    rabbit_types:ok(non_neg_integer()).
+    rabbit_types:ok(non_neg_integer()) |
+    rabbit_types:error(timeout).
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     QName = amqqueue:get_name(Q),
     log_delete(QName, amqqueue:get_exclusive_owner(Q)),
     case rabbit_amqqueue:internal_delete(Q, ActingUser) of
         ok ->
             {ok, 0};
-        {error, timeout} ->
-            {protocol_error, internal_error,
-             "The operation to delete ~ts from the metadata store timed "
-             "out", [rabbit_misc:rs(QName)]}
+        {error, timeout} = Err ->
+            Err
     end.
 
 -spec deliver([{amqqueue:amqqueue(), stateless}],
