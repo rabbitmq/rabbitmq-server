@@ -1523,7 +1523,14 @@ notify_policy_changed(Q) when ?is_amqqueue(Q) ->
 
 consumers(Q) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
-    delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]});
+    try
+        delegate:invoke(QPid, {gen_server2, call, [consumers, infinity]})
+    catch
+        exit:_ ->
+            %% The queue process exited during the call.
+            %% Note that `delegate:invoke/2' catches errors but not exits.
+            []
+    end;
 consumers(Q) when ?amqqueue_is_quorum(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid, fun rabbit_fifo:query_consumers/1) of
