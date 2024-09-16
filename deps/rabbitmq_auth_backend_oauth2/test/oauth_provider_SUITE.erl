@@ -46,45 +46,25 @@ groups() -> [
             replace_override_static_keys_with_newly_added_keys
         ]}
     ]},
-    {verify_oauth_provider_A, [], [
-        internal_oauth_provider_A_has_no_default_key,
-        {oauth_provider_A_with_default_key, [], [
-            internal_oauth_provider_A_has_default_key
-        ]},
-        internal_oauth_provider_A_has_no_algorithms,
-        {oauth_provider_A_with_algorithms, [], [
-            internal_oauth_provider_A_has_algorithms
-        ]},
-        oauth_provider_A_with_jwks_uri_returns_error,
-        {oauth_provider_A_with_jwks_uri, [], [
-            oauth_provider_A_has_jwks_uri
-        ]},
-        {oauth_provider_A_with_issuer, [], [
-            {oauth_provider_A_with_jwks_uri, [], [
-                oauth_provider_A_has_jwks_uri
-            ]},
-            oauth_provider_A_has_to_discover_jwks_uri_endpoint
-        ]}
+    {verify_oauth_provider_A, [], verify_provider()},
+    {verify_oauth_provider_root, [], verify_provider()}
+].
+
+verify_provider() -> [
+    internal_oauth_provider_has_no_default_key,
+    {oauth_provider_with_default_key, [], [
+        internal_oauth_provider_has_default_key
     ]},
-    {verify_oauth_provider_root, [], [
-        internal_oauth_provider_root_has_no_default_key,
-        {with_default_key, [], [
-            internal_oauth_provider_root_has_default_key
-        ]},
-        internal_oauth_provider_root_has_no_algorithms,
-        {with_algorithms, [], [
-            internal_oauth_provider_root_has_algorithms
-        ]},
-        oauth_provider_root_with_jwks_uri_returns_error,
-        {with_jwks_uri, [], [
-            oauth_provider_root_has_jwks_uri
-        ]},
-        {with_issuer, [], [
-            {with_jwks_uri, [], [
-                oauth_provider_root_has_jwks_uri
-            ]},
-            oauth_provider_root_has_to_discover_jwks_uri_endpoint
-        ]}
+    internal_oauth_provider_has_no_algorithms,
+    {oauth_provider_with_algorithms, [], [
+        internal_oauth_provider_has_algorithms
+    ]},
+    get_oauth_provider_with_jwks_uri_returns_error,
+    {oauth_provider_with_jwks_uri, [], [
+        get_oauth_provider_has_jwks_uri
+    ]},
+    {oauth_provider_with_issuer, [], [
+        get_oauth_provider_has_jwks_uri
     ]}
 ].
 
@@ -101,12 +81,6 @@ init_per_group(with_rabbitmq_node, Config) ->
         {rmq_nodes_count, 1}
     ]),
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
-
-init_per_group(with_default_key, Config) ->
-    KeyConfig = get_env(key_config, []),
-    set_env(key_config, proplists:delete(default_key, KeyConfig) ++
-        [{default_key,<<"default-key">>}]),
-    Config;
 
 init_per_group(with_root_static_signing_keys, Config) ->
     KeyConfig = call_get_env(Config, key_config, []),
@@ -132,13 +106,15 @@ init_per_group(with_static_signing_keys_for_specific_oauth_provider, Config) ->
         OAuthProviders)),
     Config;
 
-init_per_group(with_jwks_url, Config) ->
-    KeyConfig = get_env(key_config, []),
-    set_env(key_config, KeyConfig ++
-        [{jwks_url,build_url_to_oauth_provider(<<"/keys">>)}]),
-    [{key_config_before_group_with_jwks_url, KeyConfig} | Config];
+init_per_group(oauth_provider_with_jwks_uri, Config) ->
+    URL = build_url_to_oauth_provider(<<"/keys">>),
+    case ?config(oauth_provider_id) of
+        root -> set_env(jkws_url, URL);
+        Id -> set_oauth_provider_properties(Id, [{jwks_uri, URL}])
+    end,
+    [{jwks_uri, URL} | Config];
 
-init_per_group(with_issuer, Config) ->
+init_per_group(oauth_provider_with_issuer, Config) ->
     {ok, _} = application:ensure_all_started(inets),
     {ok, _} = application:ensure_all_started(ssl),
     application:ensure_all_started(cowboy),
@@ -151,61 +127,12 @@ init_per_group(with_issuer, Config) ->
 
     start_https_oauth_server(?AUTH_PORT, CertsDir, ListOfExpectations),
     set_env(use_global_locks, false),
-    set_env(issuer,
-        build_url_to_oauth_provider(<<"/">>)),
-    KeyConfig = get_env(key_config, []),
-    set_env(key_config,
-        KeyConfig ++ SslOptions),
-
-    [{key_config_before_group_with_issuer, KeyConfig},
-        {ssl_options, SslOptions} | Config];
-
-init_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
-    set_env(oauth_providers,
-        #{<<"A">> => [
-            {issuer, build_url_to_oauth_provider(<<"/A">>) },
-            {jwks_uri,build_url_to_oauth_provider(<<"/A/keys">>) }
-        ] } ),
-    Config;
-
-init_per_group(with_oauth_providers_A_with_issuer, Config) ->
-    set_env(oauth_providers,
-        #{<<"A">> => [
-            {issuer, build_url_to_oauth_provider(<<"/A">>) },
-            {https, ?config(ssl_options, Config)}
-        ] } ),
-    Config;
-
-init_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
-    set_env(oauth_providers,
-        #{ <<"A">> => [
-            {issuer, build_url_to_oauth_provider(<<"/A">>) },
-            {jwks_uri, build_url_to_oauth_provider(<<"/A/keys">>)}
-        ],
-        <<"B">> => [
-            {issuer, build_url_to_oauth_provider(<<"/B">>) },
-            {jwks_uri, build_url_to_oauth_provider(<<"/B/keys">>)}
-        ] }),
-    Config;
-
-init_per_group(with_oauth_providers_A_B_with_issuer, Config) ->
-    set_env(oauth_providers,
-        #{ <<"A">> => [
-            {issuer, build_url_to_oauth_provider(<<"/A">>) },
-            {https, ?config(ssl_options, Config)}
-            ],
-        <<"B">> => [
-            {issuer, build_url_to_oauth_provider(<<"/B">>) },
-            {https, ?config(ssl_options, Config)}
-        ] }),
-    Config;
-
-init_per_group(with_default_oauth_provider_A, Config) ->
-    set_env(default_oauth_provider, <<"A">>),
-    Config;
-
-init_per_group(with_default_oauth_provider_B, Config) ->
-    set_env(default_oauth_provider, <<"B">>),
+    IssuerUrl = build_url_to_oauth_provider(<<"/">>),
+    case ?config(oauth_provider_id, Config) of
+        root -> set_env(issuer, IssuerUrl);
+        Id -> set_oauth_provider_properties(Id,
+            [{issuer, IssuerUrl}, {ssl_options, SslOptions}])
+    end,
     Config;
 
 init_per_group(with_resource_server_id, Config) ->
@@ -235,23 +162,6 @@ init_per_group(with_different_oauth_provider_for_each_resource, Config) ->
         ResourceServers1)),
     Config;
 
-init_per_group(with_resource_servers, Config) ->
-    set_env(resource_servers,
-        #{?RABBITMQ_RESOURCE_ONE =>  [
-            { key_config, [
-                {jwks_url,<<"https://oauth-for-rabbitmq1">> }
-            ]}
-        ],
-        ?RABBITMQ_RESOURCE_TWO =>  [
-            { key_config, [
-                {jwks_url,<<"https://oauth-for-rabbitmq2">> }
-            ]}
-        ],
-        <<"0">> => [ {id, <<"rabbitmq-0">> } ],
-        <<"1">> => [ {id, <<"rabbitmq-1">> } ]
-
-      }),
-  Config;
 
 init_per_group(verify_oauth_provider_A, Config) ->
     set_env(oauth_providers,
@@ -259,7 +169,10 @@ init_per_group(verify_oauth_provider_A, Config) ->
             {id, <<"A">>}
             ]
         }),
-    Config;
+    [{oauth_provider_id, <<"A">>} |Config];
+
+init_per_group(verify_oauth_provider_root, Config) ->
+    [{oauth_provider_id, root} |Config];
 
 init_per_group(_any, Config) ->
     Config.
@@ -276,99 +189,20 @@ end_per_group(with_resource_server_id, Config) ->
     unset_env(resource_server_id),
     Config;
 
-end_per_group(with_verify_aud_false, Config) ->
-    unset_env(verify_aud),
-    Config;
-
-end_per_group(with_verify_aud_false_for_resource_two, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_TWO, ResourceServers, []),
-    set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_TWO,
-        proplists:delete(verify_aud, Proplist), ResourceServers)),
-    Config;
-
-end_per_group(with_empty_scope_prefix_for_resource_one, Config) ->
-    ResourceServers = get_env(resource_servers, #{}),
-    Proplist = maps:get(?RABBITMQ_RESOURCE_ONE, ResourceServers, []),
-    set_env(resource_servers, maps:put(?RABBITMQ_RESOURCE_ONE,
-        proplists:delete(scope_prefix, Proplist), ResourceServers)),
-    Config;
-
-end_per_group(with_default_key, Config) ->
-    KeyConfig = get_env(key_config, []),
-    set_env(key_config, proplists:delete(default_key, KeyConfig)),
-    Config;
-
-end_per_group(with_algorithms, Config) ->
-    KeyConfig = get_env(key_config, []),
-    set_env(key_config, proplists:delete(algorithms, KeyConfig)),
-    Config;
-
-end_per_group(with_algorithms_for_provider_A, Config) ->
-    OAuthProviders = get_env(oauth_providers, #{}),
-    OAuthProvider = maps:get(<<"A">>, OAuthProviders, []),
-    set_env(oauth_providers, maps:put(<<"A">>,
-        proplists:delete(algorithms, OAuthProvider), OAuthProviders)),
-    Config;
-
-end_per_group(with_jwks_url, Config) ->
-    KeyConfig = ?config(key_config_before_group_with_jwks_url, Config),
-    set_env(key_config, KeyConfig),
-    Config;
-
-end_per_group(with_issuer, Config) ->
-    KeyConfig = ?config(key_config_before_group_with_issuer, Config),
-    unset_env(issuer),
-    set_env(key_config, KeyConfig),
+end_per_group(oauth_provider_with_issuer, Config) ->
+    case ?config(oauth_provider_id, Config) of
+        root -> unset_env(issuer);
+        Id -> unset_oauth_provider_properties(Id, [issuer])
+    end,
     stop_http_auth_server(),
     Config;
 
-end_per_group(with_oauth_providers_A_with_jwks_uri, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_oauth_providers_A_with_issuer, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_oauth_providers_A_B_with_jwks_uri, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_oauth_providers_A_B_with_issuer, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_oauth_providers_A, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_oauth_providers_A_B, Config) ->
-    unset_env(oauth_providers),
-    Config;
-
-end_per_group(with_default_oauth_provider_B, Config) ->
-    unset_env(default_oauth_provider),
-    Config;
-
-end_per_group(with_default_oauth_provider_A, Config) ->
-    unset_env(default_oauth_provider),
-    Config;
-
-end_per_group(get_oauth_provider_for_resource_server_id, Config) ->
-    unset_env(resource_server_id),
-    Config;
-
-end_per_group(with_resource_servers_and_resource_server_id, Config) ->
-    unset_env(resource_server_id),
-    Config;
-
-end_per_group(with_resource_servers, Config) ->
-    unset_env(resource_servers),
-    Config;
-
-end_per_group(with_root_scope_prefix, Config) ->
-    unset_env(scope_prefix),
+end_per_group(oauth_provider_with_default_key, Config) ->
+    DefaultKey = <<"default-key">>,
+    case ?config(oauth_provider_id, Config) of
+        root -> unset_env(default_key);
+        Id -> unset_oauth_provider_properties(Id, [default_key])
+    end,
     Config;
 
 end_per_group(_any, Config) ->
@@ -388,19 +222,19 @@ call_add_signing_key(Config, Args) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, add_signing_key, Args).
 
 call_get_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, get_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, get_signing_keys, Args).
 
 call_get_signing_keys(Config) ->
     call_get_signing_keys(Config, []).
 
 call_get_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, get_signing_key, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, get_signing_key, Args).
 
 call_add_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, add_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, add_signing_keys, Args).
 
 call_replace_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, replace_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, replace_signing_keys, Args).
 
 %% ----- Test cases
 
@@ -515,70 +349,44 @@ get_algorithms_for_provider_A(Config) ->
     Algorithms = OAuthProvider#internal_oauth_provider.algorithms,
     ?assertEqual(?config(algorithms, Config), Algorithms).
 
-get_oauth_provider_root_with_jwks_uri_should_fail(_Config) ->
-    {error, _Message} = get_oauth_provider(root, [jwks_uri]).
-
-get_oauth_provider_A_with_jwks_uri_should_fail(_Config) ->
-    {error, _Message} = get_oauth_provider(<<"A">>, [jwks_uri]).
-
-get_oauth_provider_should_return_root_oauth_provider_with_jwks_uri(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(root, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
-
-get_oauth_provider_for_both_resources_should_return_root_oauth_provider(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(root, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
-
-get_oauth_provider_for_resource_one_should_return_oauth_provider_A(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"A">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
-
-get_oauth_provider_for_both_resources_should_return_oauth_provider_A(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"A">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
-
-get_oauth_provider_for_resource_two_should_return_oauth_provider_B(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"B">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/B/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
-
-get_oauth_provider_should_return_root_oauth_provider_with_all_discovered_endpoints(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(root, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri),
-    ?assertEqual(build_url_to_oauth_provider(<<"/">>),
-        OAuthProvider#oauth_provider.issuer).
-
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
 
-get_oauth_provider_should_return_oauth_provider_B_with_jwks_uri(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"B">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/B/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
 
-get_oauth_provider_should_return_oauth_provider_B_with_all_discovered_endpoints(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"B">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/B/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri),
-    ?assertEqual(build_url_to_oauth_provider(<<"/B">>),
-        OAuthProvider#oauth_provider.issuer).
 
-get_oauth_provider_should_return_oauth_provider_A_with_jwks_uri(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"A">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri).
+internal_oauth_provider_has_no_default_key(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(undefined,
+        InternalOAuthProvider#internal_oauth_provider.default_key).
 
-get_oauth_provider_should_return_oauth_provider_A_with_all_discovered_endpoints(_Config) ->
-    {ok, OAuthProvider} = get_oauth_provider(<<"A">>, [jwks_uri]),
-    ?assertEqual(build_url_to_oauth_provider(<<"/A/keys">>),
-        OAuthProvider#oauth_provider.jwks_uri),
-    ?assertEqual(build_url_to_oauth_provider(<<"/A">>),
-        OAuthProvider#oauth_provider.issuer).
+internal_oauth_provider_has_default_key(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(?config(default_key, Config),
+        InternalOAuthProvider#internal_oauth_provider.default_key).
+
+internal_oauth_provider_has_no_algorithms(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(undefined,
+        InternalOAuthProvider#internal_oauth_provider.algorithms).
+
+internal_oauth_provider_has_algorithms(Config) ->
+    InternalOAuthProvider = get_internal_oauth_provider(
+        ?config(oauth_provider_id, Config)),
+    ?assertEqual(?config(algorithms, Config),
+        InternalOAuthProvider#internal_oauth_provider.algorithms).
+
+get_oauth_provider_with_jwks_uri_returns_error(Config) ->
+    {error, _} = get_oauth_provider(
+        ?config(oauth_provider_id, Config), [jwks_uri]).
+
+get_oauth_provider_has_jwks_uri(Config) ->
+    OAuthProvider = get_oauth_provider(
+        ?config(oauth_provider_id, Config), [jwks_uri]),
+    ?assertEqual(?config(jwks_uri, Config), OAuthProvider#oauth_provider.jwks_uri).
+
 
 %% ---- Utility functions
 
@@ -665,6 +473,22 @@ build_url_to_oauth_provider(Path) ->
 
 stop_http_auth_server() ->
     cowboy:stop_listener(mock_http_auth_listener).
+
+set_oauth_provider_properties(OAuthProviderId, Proplist) ->
+    OAuthProviders = get_env(oauth_providers, #{}),
+    CurProplist = maps:get(OAuthProviderId, OAuthProviders),
+    CurMap = proplists:to_map(CurProplist),
+    Map = proplists:to_map(Proplist),
+    set_env(oauth_providers, maps:put(OAuthProviderId, maps:to_list(maps:merge(CurMap, Map)),
+        OAuthProviders)).
+
+unset_oauth_provider_properties(OAuthProviderId, PropertyNameList) ->
+    OAuthProviders = get_env(oauth_providers, #{}),
+    CurProplist = maps:get(OAuthProviderId, OAuthProviders),
+    CurMap = proplists:to_map(CurProplist),
+    set_env(oauth_provider, maps:put(OAuthProviderId,
+        maps:filter(fun(K,V) -> not proplists:is_defined(K, PropertyNameList) end, CurMap),
+        OAuthProviders)).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
 ssl_options(PeerVerification, FailIfNoPeerCert, CaCertFile) ->
