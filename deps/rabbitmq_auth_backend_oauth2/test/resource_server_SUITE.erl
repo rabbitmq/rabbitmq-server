@@ -91,7 +91,7 @@ verify_get_rabbitmq_server_configuration() -> [
     ]},
     rabbitmq_has_no_preferred_username_claims_but_gets_default,
     {with_preferred_username_claims, [], [
-        rabbitmq_has_preferred_username_claims_plus_default
+        rabbitmq_has_preferred_username_claims
     ]},
     rabbitmq_has_no_scope_aliases,
     {with_scope_aliases, [], [
@@ -244,6 +244,18 @@ end_per_group(with_rabbitmq1_verify_aud_false, Config) ->
         RabbitMQServers)),
     Config;
 
+end_per_group(with_additional_scopes_key, Config) ->
+    unset_env(extra_scopes_source),
+    Config;
+
+end_per_group(with_preferred_username_claims, Config) ->
+    unset_env(preferred_username_claims),
+    Config;
+
+end_per_group(with_scope_aliases, Config) ->
+    unset_env(scope_aliases),
+    Config;
+
 end_per_group(_any, Config) ->
     Config.
 
@@ -334,7 +346,7 @@ rabbitmq2_has_no_preferred_username_claims_but_gets_default(_) ->
 
 rabbitmq2_has_preferred_username_claims_plus_default(Config) ->
     assert_preferred_username_claims(?config(preferred_username_claims, Config)
-        ++ ?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ_RESOURCE_TWO).
+        , ?RABBITMQ_RESOURCE_TWO).
 
 rabbitmq2_has_no_scope_aliases(_) ->
     assert_scope_aliases(undefined, ?RABBITMQ_RESOURCE_TWO).
@@ -367,9 +379,9 @@ rabbitmq_has_additional_scopes_key(Config) ->
 rabbitmq_has_no_preferred_username_claims_but_gets_default(_) ->
     assert_preferred_username_claims(?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ).
 
-rabbitmq_has_preferred_username_claims_plus_default(Config) ->
-    assert_preferred_username_claims(?config(preferred_username_claims, Config) ++
-        ?DEFAULT_PREFERRED_USERNAME_CLAIMS, ?RABBITMQ).
+rabbitmq_has_preferred_username_claims(Config) ->
+    assert_preferred_username_claims(?config(preferred_username_claims, Config),
+        ?RABBITMQ).
 
 rabbitmq_has_no_scope_aliases(_) ->
     assert_scope_aliases(undefined, ?RABBITMQ).
@@ -388,7 +400,7 @@ verify_rabbitmq1_server_configuration(Config) ->
         ActualRabbitMQ#resource_server.verify_aud),
     ?assertEqual(proplists:get_value(scope_prefix, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.scope_prefix),
-    ?assertEqual(proplists:get_value(additional_scopes_key, ConfigRabbitMQ),
+    ?assertEqual(proplists:get_value(extract_scopes_source, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.additional_scopes_key),
     ?assertEqual(proplists:get_value(preferred_username_claims, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.preferred_username_claims),

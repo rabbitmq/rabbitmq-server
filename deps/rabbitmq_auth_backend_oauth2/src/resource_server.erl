@@ -56,7 +56,7 @@ get_root_resource_server() ->
         case get_env(preferred_username_claims) of
             undefined -> ?DEFAULT_PREFERRED_USERNAME_CLAIMS;
             Value ->
-                append_or_return_default(Value, ?DEFAULT_PREFERRED_USERNAME_CLAIMS)
+                Value
         end,
     ResourceServerType =
         get_env(resource_server_type),
