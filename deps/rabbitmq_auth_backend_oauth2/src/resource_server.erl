@@ -121,9 +121,13 @@ get_resource_server(ResourceServerId, RootResourseServer) when
     AdditionalScopesKey =
         proplists:get_value(extra_scopes_source, ResourceServerProps,
             RootResourseServer#resource_server.additional_scopes_key),
+    RootScopePrefix = get_env(scope_prefix, undefined),
     ScopePrefix =
         proplists:get_value(scope_prefix, ResourceServerProps,
-            erlang:iolist_to_binary([ResourceServerId, <<".">>])),
+            case RootScopePrefix of
+                undefined -> erlang:iolist_to_binary([ResourceServerId, <<".">>]);
+                Prefix -> Prefix
+            end),
     OAuthProviderId =
         proplists:get_value(oauth_provider_id, ResourceServerProps,
             RootResourseServer#resource_server.oauth_provider_id),

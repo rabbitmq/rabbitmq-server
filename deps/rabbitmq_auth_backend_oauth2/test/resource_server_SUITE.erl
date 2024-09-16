@@ -208,6 +208,13 @@ init_per_group(with_two_resource_servers, Config) ->
 init_per_group(_any, Config) ->
     Config.
 
+end_per_group(with_default_oauth_provider_A, Config) ->
+    unset_env(default_oauth_provider),
+    Config;
+
+end_per_group(with_default_oauth_provider_B, Config) ->
+    unset_env(default_oauth_provider),
+    Config;
 
 end_per_group(with_rabbitmq_as_resource_server_id, Config) ->
     unset_env(resource_server_id),
@@ -372,23 +379,22 @@ rabbitmq_has_scope_aliases(Config) ->
 
 verify_rabbitmq1_server_configuration(Config) ->
     ConfigRabbitMQ = ?config(?RABBITMQ_RESOURCE_ONE, Config),
-    ActualRabbitMQ = resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_ONE),
-    ?assertEqual(ConfigRabbitMQ#resource_server.id,
+    {ok, ActualRabbitMQ} = resolve_resource_server_from_audience(?RABBITMQ_RESOURCE_ONE),
+    ?assertEqual(proplists:get_value(id, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.id),
-    ?assertEqual(ConfigRabbitMQ#resource_server.resource_server_type,
+    ?assertEqual(proplists:get_value(resource_server_type, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.resource_server_type),
-    ?assertEqual(ConfigRabbitMQ#resource_server.verify_aud,
+    ?assertEqual(proplists:get_value(verify_aud, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.verify_aud),
-    ?assertEqual(ConfigRabbitMQ#resource_server.scope_prefix,
+    ?assertEqual(proplists:get_value(scope_prefix, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.scope_prefix),
-    ?assertEqual(ConfigRabbitMQ#resource_server.additional_scopes_key,
+    ?assertEqual(proplists:get_value(additional_scopes_key, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.additional_scopes_key),
-    ?assertEqual(ConfigRabbitMQ#resource_server.preferred_username_claims ++
-        ?DEFAULT_PREFERRED_USERNAME_CLAIMS,
+    ?assertEqual(proplists:get_value(preferred_username_claims, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.preferred_username_claims),
-    ?assertEqual(ConfigRabbitMQ#resource_server.scope_aliases,
+    ?assertEqual(proplists:get_value(scope_aliases, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.scope_aliases),
-    ?assertEqual(ConfigRabbitMQ#resource_server.oauth_provider_id,
+    ?assertEqual(proplists:get_value(oauth_provider_id, ConfigRabbitMQ),
         ActualRabbitMQ#resource_server.oauth_provider_id).
 
 %% -----
@@ -405,6 +411,7 @@ assert_verify_aud(Expected, Audience) ->
 
 assert_oauth_provider_id(Expected, Audience) ->
     {ok, Actual} = resolve_resource_server_from_audience(Audience),
+    ct:log("Actual:~p", [Actual]),
     ?assertEqual(Expected, Actual#resource_server.oauth_provider_id).
 
 assert_scope_prefix(Expected, Audience) ->
