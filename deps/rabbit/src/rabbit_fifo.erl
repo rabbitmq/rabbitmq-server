@@ -1913,11 +1913,21 @@ checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
     Effects = add_delivery_effects(Effects0, SendAcc, State0),
     {State0, ExpiredMsg, lists:reverse(Effects)}.
 
-evaluate_limit(_Index, Result, _BeforeState,
+evaluate_limit(_Index, Result,
+               #?STATE{cfg = #cfg{max_length = undefined,
+                                  max_bytes = undefined}},
                #?STATE{cfg = #cfg{max_length = undefined,
                                   max_bytes = undefined}} = State,
                Effects) ->
     {State, Result, Effects};
+evaluate_limit(_Index, Result, _BeforeState,
+               #?STATE{cfg = #cfg{max_length = undefined,
+                                  max_bytes = undefined},
+                       enqueuers = Enqs0} = State0,
+               Effects0) ->
+    %% max_length and/or max_bytes policies have just been deleted
+    {Enqs, Effects} = unblock_enqueuers(Enqs0, Effects0),
+    {State0#?STATE{enqueuers = Enqs}, Result, Effects};
 evaluate_limit(Index, Result, BeforeState,
                #?STATE{cfg = #cfg{overflow_strategy = Strategy},
                        enqueuers = Enqs0} = State0,
@@ -1947,16 +1957,7 @@ evaluate_limit(Index, Result, BeforeState,
             case {Before, is_below_soft_limit(State0)} of
                 {false, true} ->
                     %% we have moved below the lower limit
-                    {Enqs, Effects} =
-                        maps:fold(
-                          fun (P, #enqueuer{} = E0, {Enqs, Acc})  ->
-                                  E = E0#enqueuer{blocked = undefined},
-                                  {Enqs#{P => E},
-                                   [{send_msg, P, {queue_status, go}, [ra_event]}
-                                    | Acc]};
-                              (_P, _E, Acc) ->
-                                  Acc
-                          end, {Enqs0, Effects0}, Enqs0),
+                    {Enqs, Effects} = unblock_enqueuers(Enqs0, Effects0),
                     {State0#?STATE{enqueuers = Enqs}, Result, Effects};
                 _ ->
                     {State0, Result, Effects0}
@@ -1965,6 +1966,16 @@ evaluate_limit(Index, Result, BeforeState,
             {State0, Result, Effects0}
     end.
 
+unblock_enqueuers(Enqs0, Effects0) ->
+    maps:fold(
+      fun (P, #enqueuer{} = E0, {Enqs, Acc})  ->
+              E = E0#enqueuer{blocked = undefined},
+              {Enqs#{P => E},
+               [{send_msg, P, {queue_status, go}, [ra_event]}
+               | Acc]};
+          (_P, _E, Acc) ->
+              Acc
+      end, {Enqs0, Effects0}, Enqs0).
 
 %% [6,5,4,3,2,1] -> [[1,2],[3,4],[5,6]]
 chunk_disk_msgs([], _Bytes, [[] | Chunks]) ->
