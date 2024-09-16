@@ -124,8 +124,8 @@ terminate() ->
 
 connection_created(Pid, Infos) ->
     ets:insert(connection_created, {Pid, Infos}),
-    ets:update_counter(connection_churn_metrics, node(), {2, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {2, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 connection_closed(Pid) ->
@@ -133,8 +133,8 @@ connection_closed(Pid) ->
     ets:delete(connection_metrics, Pid),
     %% Delete marker
     ets:update_element(connection_coarse_metrics, Pid, {5, 1}),
-    ets:update_counter(connection_churn_metrics, node(), {3, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {3, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 connection_stats(Pid, Infos) ->
@@ -148,16 +148,16 @@ connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
 
 channel_created(Pid, Infos) ->
     ets:insert(channel_created, {Pid, Infos}),
-    ets:update_counter(connection_churn_metrics, node(), {4, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {4, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 channel_closed(Pid) ->
     ets:delete(channel_created, Pid),
     ets:delete(channel_metrics, Pid),
     ets:delete(channel_process_metrics, Pid),
-    ets:update_counter(connection_churn_metrics, node(), {5, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {5, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 channel_stats(Pid, Infos) ->
@@ -276,20 +276,20 @@ queue_stats(Name, MessagesReady, MessagesUnacknowledge, Messages, Reductions) ->
 
 queue_declared(_Name) ->
     %% Name is not needed, but might be useful in the future.
-    ets:update_counter(connection_churn_metrics, node(), {6, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {6, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 queue_created(_Name) ->
     %% Name is not needed, but might be useful in the future.
-    ets:update_counter(connection_churn_metrics, node(), {7, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {7, 1},
+                           ?CONNECTION_CHURN_METRICS),
     ok.
 
 queue_deleted(Name) ->
     ets:delete(queue_coarse_metrics, Name),
-    ets:update_counter(connection_churn_metrics, node(), {8, 1},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {8, 1},
+                           ?CONNECTION_CHURN_METRICS),
     %% Delete markers
     ets:update_element(queue_metrics, Name, {3, 1}),
     CQX = ets:select(channel_queue_exchange_metrics, match_spec_cqx(Name)),
@@ -302,8 +302,8 @@ queue_deleted(Name) ->
                   end, CQ).
 
 queues_deleted(Queues) ->
-    ets:update_counter(connection_churn_metrics, node(), {8, length(Queues)},
-                       ?CONNECTION_CHURN_METRICS),
+    _ = ets:update_counter(connection_churn_metrics, node(), {8, length(Queues)},
+                           ?CONNECTION_CHURN_METRICS),
     [ delete_queue_metrics(Queue) || Queue <- Queues ],
     [
         begin
