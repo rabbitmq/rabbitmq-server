@@ -212,7 +212,10 @@ CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
 
 ifeq ($(MAKELEVEL),0)
 ifneq ($(filter-out rabbit_common amqp10_common rabbitmq_stream_common,$(PROJECT)),)
+# These do not depend on 'rabbit' as DEPS but may as TEST_DEPS.
+ifneq ($(filter-out amqp_client amqp10_client rabbitmq_amqp_client rabbitmq_ct_helpers,$(PROJECT)),)
 app:: install-cli
+endif
 test-build:: install-cli
 endif
 endif
