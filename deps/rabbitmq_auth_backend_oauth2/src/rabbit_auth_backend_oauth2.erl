@@ -168,7 +168,7 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
 validate_token_expiry(#{}) -> ok.
 
 -spec check_token(binary() | map()) ->
-          {'ok', map()} |
+          {'ok', map(), resource_server()} |
           {'error', term() }|
           {'refused',
            'signature_invalid' |
@@ -181,14 +181,17 @@ check_token(DecodedToken) when is_map(DecodedToken) ->
 check_token(Token) ->
     case uaa_jwt:decode_and_verify(Token) of
         {error, Reason} ->
-          {refused, {error, Reason}};
-        {true, TargetResourceServerId, Payload} ->
-          Payload0 = post_process_payload(TargetResourceServerId, Payload),
-          validate_payload(TargetResourceServerId, Payload0);
+            {refused, {error, Reason}};
+        {true, ResourceServer, Payload} ->
+            Payload0 = post_process_payload(ResourceServer, Payload),
+            case validate_payload(ResourceServer, Payload0) of
+                {ok, DecodedToken} -> {ok, DecodedToken, ResourceServer};
+                {error, _} = Error -> Error
+            end;
         {false, _, _} -> {refused, signature_invalid}
     end.
 
-post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
+post_process_payload(ResourceServer, Payload) when is_map(Payload) ->
     Payload0 = maps:map(fun(K, V) ->
                   case K of
                       ?AUD_JWT_FIELD   when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
@@ -199,8 +202,8 @@ post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
       Payload
     ),
 
-    Payload1 = case does_include_complex_claim_field(ResourceServerId, Payload0) of
-        true  -> post_process_payload_with_complex_claim(ResourceServerId, Payload0);
+    Payload1 = case does_include_complex_claim_field(ResourceServer, Payload0) of
+        true  -> post_process_payload_with_complex_claim(ResourceServer, Payload0);
         false -> Payload0
         end,
 
@@ -209,13 +212,13 @@ post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
         false -> Payload1
         end,
 
-    Payload3 = case rabbit_oauth2_config:has_scope_aliases(ResourceServerId) of
-        true  -> post_process_payload_with_scope_aliases(ResourceServerId, Payload2);
+    Payload3 = case rabbit_oauth2_config:has_scope_aliases(ResourceServer) of
+        true  -> post_process_payload_with_scope_aliases(ResourceServer, Payload2);
         false -> Payload2
         end,
 
     Payload4 = case maps:is_key(<<"authorization_details">>, Payload3) of
-        true  -> post_process_payload_in_rich_auth_request_format(ResourceServerId, Payload3);
+        true  -> post_process_payload_in_rich_auth_request_format(ResourceServer, Payload3);
         false -> Payload3
         end,
 
@@ -223,7 +226,7 @@ post_process_payload(ResourceServerId, Payload) when is_map(Payload) ->
 
 
 -spec post_process_payload_with_scope_aliases(
-    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
+    ResourceServer :: resource_server(), Payload :: map()) -> map().
 %% This is for those hopeless environments where the token structure is so out of
 %% messaging team's control that even the extra scopes field is no longer an option.
 %%
@@ -285,7 +288,7 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
 
 
 -spec does_include_complex_claim_field(
-    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> boolean().
+    ResourceServer :: resource_server(), Payload :: map()) -> boolean().
 does_include_complex_claim_field(ResourceServer, Payload) when is_map(Payload) ->
   case ResourceServer#resource_server.additional_scopes_key of
     {ok, ScopeKey} -> maps:is_key(ScopeKey, Payload);
@@ -293,37 +296,37 @@ does_include_complex_claim_field(ResourceServer, Payload) when is_map(Payload) -
   end.
 
 -spec post_process_payload_with_complex_claim(
-    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
+    ResourceServer :: resource_server(), Payload :: map()) -> map().
 post_process_payload_with_complex_claim(ResourceServer, Payload) ->
     ResourceServerId =  ResourceServer#resource_server.id,
     case ResourceServer#resource_server.additional_scopes_key of
-      {ok, ScopesKey} ->
-        ComplexClaim = maps:get(ScopesKey, Payload),
-        AdditionalScopes =
-            case ComplexClaim of
-                L when is_list(L) -> L;
-                M when is_map(M) ->
-                    case maps:get(ResourceServerId, M, undefined) of
-                        undefined           -> [];
-                        Ks when is_list(Ks) ->
-                            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
-                        ClaimBin when is_binary(ClaimBin) ->
-                            UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
-                            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
-                        _ -> []
-                        end;
-                Bin when is_binary(Bin) ->
-                    binary:split(Bin, <<" ">>, [global, trim_all]);
+        undefined -> Payload;
+        ScopesKey ->
+            AdditionalScopes = extract_additional_scopes(ResourceServerId,
+                maps:get(ScopesKey, Payload))
+            case AdditionalScopes of
+                [] -> Payload;
+                _  ->
+                    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
+                    maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
+            end
+    end.
+extract_additional_scopes(ResourceServerId, ComplexClaim) ->
+    case ComplexClaim of
+        L when is_list(L) -> L;
+        M when is_map(M) ->
+            case maps:get(ResourceServerId, M, undefined) of
+                undefined           -> [];
+                Ks when is_list(Ks) ->
+                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+                ClaimBin when is_binary(ClaimBin) ->
+                    UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
                 _ -> []
-                end,
-
-        case AdditionalScopes of
-            [] -> Payload;
-            _  ->
-                ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-                maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
-            end;
-      {error, not_found} -> Payload
+                end;
+        Bin when is_binary(Bin) ->
+            binary:split(Bin, <<" ">>, [global, trim_all]);
+        _ -> []
     end.
 
 -spec post_process_payload_in_keycloak_format(Payload :: map()) -> map().
@@ -501,22 +504,25 @@ post_process_payload_in_rich_auth_request_format(ResourceServer,
     ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
     maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload).
 
-validate_payload(ResourceServerId, DecodedToken) ->
-    ScopePrefix = rabbit_oauth2_config:get_scope_prefix(ResourceServerId),
-    validate_payload(ResourceServerId, DecodedToken, ScopePrefix).
+validate_payload(ResourceServer, DecodedToken) ->
+    ScopePrefix = ResourceServerId#resource_server.scope_prefix,
+    validate_payload(ResourceServer, DecodedToken, ScopePrefix).
 
-validate_payload(ResourceServerId, #{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
-    case check_aud(Aud, ResourceServerId) of
+validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
+    ResourceServerId = ResourceServer#resource_server.id,
+    VerifyAud = ResourceServer#resource_server.verify_aud,
+    case check_aud(Aud, ResourceServer, VerifyAud) of
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
-validate_payload(ResourceServerId, #{?AUD_JWT_FIELD := Aud} = DecodedToken, _ScopePrefix) ->
-    case check_aud(Aud, ResourceServerId) of
+validate_payload(ResourceServer, #{?AUD_JWT_FIELD := Aud} = DecodedToken, _ScopePrefix) ->
+    case check_aud(Aud, ResourceServer, VerifyAud) of
         ok           -> {ok, DecodedToken};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
-validate_payload(ResourceServerId, #{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ScopePrefix) ->
-    case rabbit_oauth2_config:is_verify_aud(ResourceServerId) of
+validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ScopePrefix) ->
+    VerifyAud = ResourceServer#resource_server.verify_aud,
+    case VerifyAud of
         true -> {error, {badarg, {aud_field_is_missing}}};
         false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
     end.
@@ -525,9 +531,9 @@ filter_scopes(Scopes, <<"">>) -> Scopes;
 filter_scopes(Scopes, ScopePrefix)  ->
     matching_scopes_without_prefix(Scopes, ScopePrefix).
 
-check_aud(_, <<>>)    -> ok;
-check_aud(Aud, ResourceServerId) ->
-  case rabbit_oauth2_config:is_verify_aud(ResourceServerId) of
+check_aud(_, <<>>, _)    -> ok;
+check_aud(Aud, ResourceServerId, Verify) ->
+  case Verify of
     true ->
       case Aud of
         List when is_list(List) ->
