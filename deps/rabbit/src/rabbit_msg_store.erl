@@ -1050,7 +1050,7 @@ internal_sync(State = #msstate { current_file_handle = CurHdl,
 flying_write(Key, #msstate { flying_ets = FlyingEts }) ->
     case ets:lookup(FlyingEts, Key) of
         [{_, ?FLYING_WRITE}] ->
-            ets:update_counter(FlyingEts, Key, ?FLYING_WRITE_DONE),
+            _ = ets:update_counter(FlyingEts, Key, ?FLYING_WRITE_DONE),
             %% We only remove the object if it hasn't changed
             %% (a remove may be sent while we were processing the write).
             true = ets:delete_object(FlyingEts, {Key, ?FLYING_IS_WRITTEN}),
@@ -1318,7 +1318,7 @@ update_msg_cache(CacheEts, MsgId, Msg) ->
             %% but without the debug log that we don't want as the update is
             %% more likely to fail following recent reworkings.
             try
-                ets:update_counter(CacheEts, MsgId, {3, +1}),
+                _ = ets:update_counter(CacheEts, MsgId, {3, +1}),
                 ok
             catch error:badarg ->
                 %% The entry must have been removed between
