@@ -383,6 +383,7 @@ declare(Q0, Node) ->
              boolean(), rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty) |
+    rabbit_types:error(timeout) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod = amqqueue:get_type(Q),

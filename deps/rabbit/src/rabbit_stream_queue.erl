@@ -214,11 +214,14 @@ create_stream(Q0) ->
 -spec delete(amqqueue:amqqueue(), boolean(),
              boolean(), rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()) |
-    rabbit_types:error(in_use | not_empty).
+    rabbit_types:error(timeout) |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     case rabbit_stream_coordinator:delete_stream(Q, ActingUser) of
         {ok, Reply} ->
             Reply;
+        {error, timeout} = Err ->
+            Err;
         Error ->
             {protocol_error, internal_error, "Cannot delete ~ts on node '~ts': ~255p ",
              [rabbit_misc:rs(amqqueue:get_name(Q)), node(), Error]}
