@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_oauth_provider_SUITE).
+-module(oauth_provider_SUITE).
 
 -compile(export_all).
 -include_lib("common_test/include/ct.hrl").
@@ -17,7 +17,7 @@
 -define(RABBITMQ_RESOURCE_TWO,<<"rabbitmq2">>).
 -define(AUTH_PORT, 8000).
 
--import(rabbit_oauth_provider, [
+-import(oauth_provider, [
     get_internal_oauth_provider/0,get_internal_oauth_provider/1,
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
@@ -27,8 +27,8 @@
 
 all() -> [
     {group, with_rabbitmq_node},
-    {group, with_resource_server_id},
-    {group, with_resource_servers}
+    {group, verify_oauth_provider_A},
+    {group, verify_oauth_provider_root}
 ].
 groups() -> [
     {with_rabbitmq_node, [], [
@@ -385,7 +385,7 @@ call_get_env(Config, Par, Def) ->
         [rabbitmq_auth_backend_oauth2, Par, Def]).
 
 call_add_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, add_signing_key, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, add_signing_key, Args).
 
 call_get_signing_keys(Config, Args) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_config, get_signing_keys, Args).
