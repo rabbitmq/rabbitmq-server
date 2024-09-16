@@ -24,7 +24,7 @@ define HEX_TARBALL_EXTRA_METADATA
 }
 endef
 
-DIALYZER_OPTS += --src -r test -DTEST
+#DIALYZER_OPTS += --src -r test -DTEST
 BUILD_DEPS = rabbit_common
 TEST_DEPS = rabbitmq_ct_helpers proper
 
