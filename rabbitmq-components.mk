@@ -54,6 +54,7 @@ dep_ra = hex 2.14.0
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.6
 dep_redbug = hex 2.1.0
+dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.7.5
 dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
