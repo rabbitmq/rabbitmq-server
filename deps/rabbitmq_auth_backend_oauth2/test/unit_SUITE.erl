@@ -11,7 +11,11 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("oauth2.hrl").
 
+-import(rabbit_auth_backend_oauth2, [
+    normalize_token_scope/2,
+    check_vhost_access/34]).
 
 all() ->
     [
@@ -1250,7 +1254,7 @@ test_own_scope(_) ->
     ],
     lists:map(
         fun({ScopePrefix, Src, Dest}) ->
-            Dest = rabbit_auth_backend_oauth2:filter_scopes(Src, ScopePrefix)
+            Dest = rabbit_oauth2_scope:filter_matching_scope_prefix_and_drop_it(Src, ScopePrefix)
         end,
         Examples).
 
@@ -1325,6 +1329,11 @@ test_validate_payload_when_verify_aud_false(_) ->
 %%
 %% Helpers
 %%
+
+verify_normalize_token_scope(Expected, Token) ->
+    Audience = maps:get(?AUD_JWT_FIELD, Token, none),
+    ResourceServer = resource_server:resolve_resource_server_from_audience(Audience),
+    ?assertEqual(Expected, normalize_token_scope(ResourceServer, Token)).
 
 assert_vhost_access_granted(AuthUser, VHost) ->
     assert_vhost_access_response(true, AuthUser, VHost).

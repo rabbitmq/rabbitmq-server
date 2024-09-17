@@ -12,7 +12,7 @@
          verify_signing_key/2,
          resolve_resource_server/1]).
 
--export([client_id/1, sub/1, client_id/2, sub/2, get_scopes/1]).
+-export([client_id/1, sub/1, client_id/2, sub/2, get_scope/1, set_scope/2]).
 
 -include("oauth2.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
@@ -165,9 +165,13 @@ verify_signing_key(Type, Value) ->
         Err -> Err
     end.
 
--spec get_scopes(map()) -> binary() | list().
-get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
-get_scopes(#{}) -> [].
+-spec get_scope(map()) -> binary() | list().
+get_scope(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
+get_scope(#{}) -> [].
+
+-spec set_scope(list(), map()) -> map().
+set_scope(Scopes, DecodedToken) ->
+     DecodedToken#{?SCOPE_JWT_FIELD => Scopes}.
 
 -spec client_id(map()) -> binary() | undefined.
 client_id(DecodedToken) ->

@@ -20,9 +20,15 @@
          expiry_timestamp/1]).
 
 %% for testing
--export([post_process_payload/2, get_expanded_scopes/2]).
+-export([normalize_token_scope/2, get_expanded_scopes/2]).
 
 -import(rabbit_data_coercion, [to_map/1]).
+-import(uaa_jwt, [
+    decode_and_verify/3,
+    get_scope/1, set_scope/2,
+    resolve_resource_server/1]).
+
+-import(rabbit_oauth2_scope, [filter_matching_scope_prefix_and_drop_it/2]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -69,7 +75,7 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
     with_decoded_token(DecodedTokenFun(),
         fun(_Token) ->
             DecodedToken = DecodedTokenFun(),
-            Scopes = uaa_jwt:get_scopes(DecodedToken),
+            Scopes = get_scope(DecodedToken),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
@@ -79,7 +85,7 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = uaa_jwt:get_scopes(Token),
+            Scopes = get_scope(Token),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
@@ -92,9 +98,9 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
-    case uaa_jwt:resolve_resource_server(NewToken) of
+    case resolve_resource_server(NewToken) of
         {error, _} = Err0 -> Err0;
-        Tuple ->
+        {_, _} = Tuple ->
             case check_token(NewToken, Tuple) of
                 %% avoid logging the token
                 {error, _} = E  -> E;
@@ -122,10 +128,10 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
-    case uaa_jwt:resolve_resource_server(Token) of
+    case resolve_resource_server(Token) of
         {error, _} = Err0 ->
             Err0;
-        {ResourceServer, _InternalOAuthProvider} = Tuple ->
+        {ResourceServer, _} = Tuple ->
             case check_token(Token, Tuple) of
                 {error, _} = E  -> E;
                 {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
@@ -177,88 +183,52 @@ check_token(DecodedToken, _) when is_map(DecodedToken) ->
     {ok, DecodedToken};
 
 check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
-    case uaa_jwt:decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
+    case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
         {error, Reason} -> {refused, {error, Reason}};
-        {true, Payload} -> validate_payload(ResourceServer,
-                post_process_payload(ResourceServer, Payload));
+        {true, Payload} -> {ok, normalize_token_scope(ResourceServer, Payload)};
         {false, _, _} -> {refused, signature_invalid}
     end.
 
-post_process_payload(ResourceServer, Payload) when is_map(Payload) ->
+-spec normalize_token_scope(
+    ResourceServer :: resource_server(), DecodedToken :: map()) -> map().
+normalize_token_scope(ResourceServer, Payload) ->
     Payload0 = maps:map(fun(K, V) ->
-                  case K of
-                      ?AUD_JWT_FIELD   when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
-                      ?SCOPE_JWT_FIELD when is_binary(V) -> binary:split(V, <<" ">>, [global, trim_all]);
-                      _ -> V
-                  end
-      end,
-      Payload
-    ),
+        case K of
+            ?SCOPE_JWT_FIELD when is_binary(V) ->
+                binary:split(V, <<" ">>, [global, trim_all]);
+             _ -> V
+         end
+       end, Payload),
 
-    Payload1 = case does_include_complex_claim_field(ResourceServer, Payload0) of
-        true  -> post_process_payload_with_complex_claim(ResourceServer, Payload0);
+    Payload1 = case has_additional_scopes_key(ResourceServer, Payload0) of
+        true  -> extract_scopes_from_additional_scopes_key(ResourceServer, Payload0);
         false -> Payload0
         end,
 
     Payload2 = case maps:is_key(<<"authorization">>, Payload1) of
-        true  -> post_process_payload_in_keycloak_format(Payload1);
+        true  -> extract_scopes_from_keycloak_format(Payload1);
         false -> Payload1
         end,
 
     Payload3 = case ResourceServer#resource_server.scope_aliases of
         undefined -> Payload2;
-        _  -> post_process_payload_with_scope_aliases(ResourceServer, Payload2)
+        ScopeAliases  -> extract_scopes_using_scope_aliases(ScopeAliases, Payload2)
         end,
 
     Payload4 = case maps:is_key(<<"authorization_details">>, Payload3) of
-        true  -> post_process_payload_in_rich_auth_request_format(ResourceServer, Payload3);
+        true  -> extract_scopes_from_rich_auth_request(ResourceServer, Payload3);
         false -> Payload3
         end,
 
-    Payload4.
+    FilteredScopes = filter_matching_scope_prefix_and_drop_it(
+        get_scope(Payload4), ResourceServer#resource_server.scope_prefix),
+    set_scope(FilteredScopes, Payload4).
 
 
--spec post_process_payload_with_scope_aliases(
-    ResourceServer :: resource_server(), Payload :: map()) -> map().
-%% This is for those hopeless environments where the token structure is so out of
-%% messaging team's control that even the extra scopes field is no longer an option.
-%%
-%% This assumes that scopes can be random values that do not follow the RabbitMQ
-%% convention, or any other convention, in any way. They are just random client role IDs.
-%% See rabbitmq/rabbitmq-server#4588 for details.
-post_process_payload_with_scope_aliases(ResourceServer, Payload) ->
-    %% try JWT scope field value for alias
-    Payload1 = post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload),
-    %% try the configurable 'extra_scopes_source' field value for alias
-    post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServer, Payload1).
-
-
--spec post_process_payload_with_scope_alias_in_scope_field(
-    ResourceServer :: resource_server(), Payload :: map()) -> map().
-%% First attempt: use the value in the 'scope' field for alias
-post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload) ->
-    ScopeMappings = ResourceServer#resource_server.scope_aliases,
-    post_process_payload_with_scope_alias_field_named(Payload, ?SCOPE_JWT_FIELD, ScopeMappings).
-
-
--spec post_process_payload_with_scope_alias_in_extra_scopes_source(
-    ResourceServer :: resource_server(), Payload :: map()) -> map().
-%% Second attempt: use the value in the configurable 'extra scopes source' field for alias
-post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServer, Payload) ->
-    ExtraScopesField = ResourceServer#resource_server.additional_scopes_key,
-    case ExtraScopesField of
-        undefined -> Payload;
-        ExtraScopes ->
-            ScopeMappings = ResourceServer#resource_server.scope_aliases,
-            post_process_payload_with_scope_alias_field_named(Payload, ExtraScopes, ScopeMappings)
-    end.
-
-
--spec post_process_payload_with_scope_alias_field_named(Payload :: map(),
-                                                        Field :: binary(),
-                                                        ScopeAliasMapping :: map()) -> map().
-post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAliasMapping) ->
-      Scopes0 = maps:get(FieldName, Payload, []),
+-spec extract_scopes_using_scope_aliases(
+    ScopeAliasMapping :: map(), Payload :: map()) -> map().
+extract_scopes_using_scope_aliases(ScopeAliasMapping, Payload) ->
+      Scopes0 = get_scope(Payload),
       Scopes = rabbit_data_coercion:to_list_of_binaries(Scopes0),
       %% for all scopes, look them up in the scope alias map, and if they are
       %% present, add the alias to the final scope list. Note that we also preserve
@@ -276,20 +246,19 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
                                 Acc ++ Binaries
                         end
                       end, Scopes, Scopes),
-       maps:put(?SCOPE_JWT_FIELD, ExpandedScopes, Payload).
+       set_scope(ExpandedScopes, Payload).
 
-
--spec does_include_complex_claim_field(
+-spec has_additional_scopes_key(
     ResourceServer :: resource_server(), Payload :: map()) -> boolean().
-does_include_complex_claim_field(ResourceServer, Payload) when is_map(Payload) ->
+has_additional_scopes_key(ResourceServer, Payload) when is_map(Payload) ->
     case ResourceServer#resource_server.additional_scopes_key of
         undefined -> false;
         ScopeKey -> maps:is_key(ScopeKey, Payload)
     end.
 
--spec post_process_payload_with_complex_claim(
+-spec extract_scopes_from_additional_scopes_key(
     ResourceServer :: resource_server(), Payload :: map()) -> map().
-post_process_payload_with_complex_claim(ResourceServer, Payload) ->
+extract_scopes_from_additional_scopes_key(ResourceServer, Payload) ->
     case ResourceServer#resource_server.additional_scopes_key of
         undefined -> Payload;
         ScopesKey ->
@@ -321,9 +290,9 @@ extract_additional_scopes(ResourceServer, ComplexClaim) ->
         _ -> []
     end.
 
--spec post_process_payload_in_keycloak_format(Payload :: map()) -> map().
+-spec extract_scopes_from_keycloak_format(Payload :: map()) -> map().
 %% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
-post_process_payload_in_keycloak_format(#{<<"authorization">> := Authorization} = Payload) ->
+extract_scopes_from_keycloak_format(#{<<"authorization">> := Authorization} = Payload) ->
     AdditionalScopes = case maps:get(<<"permissions">>, Authorization, undefined) of
         undefined   -> [];
         Permissions -> extract_scopes_from_keycloak_permissions([], Permissions)
@@ -466,10 +435,10 @@ is_recognized_permission(#{?RAR_ACTIONS_FIELD := _, ?RAR_LOCATIONS_FIELD:= _ ,
 is_recognized_permission(_, _) -> false.
 
 
--spec post_process_payload_in_rich_auth_request_format(ResourceServer :: resource_server(),
+-spec extract_scopes_from_rich_auth_request(ResourceServer :: resource_server(),
         Payload :: map()) -> map().
 %% https://oauth.net/2/rich-authorization-requests/
-post_process_payload_in_rich_auth_request_format(ResourceServer,
+extract_scopes_from_rich_auth_request(ResourceServer,
         #{<<"authorization_details">> := Permissions} = Payload) ->
     ResourceServerType = ResourceServer#resource_server.resource_server_type,
 
@@ -478,59 +447,13 @@ post_process_payload_in_rich_auth_request_format(ResourceServer,
     AdditionalScopes = map_rich_auth_permissions_to_scopes(
         ResourceServer#resource_server.id, FilteredPermissionsByType),
 
-    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-    maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload).
-
-validate_payload(ResourceServer, DecodedToken) ->
-    ScopePrefix = ResourceServer#resource_server.scope_prefix,
-    validate_payload(ResourceServer, DecodedToken, ScopePrefix).
-
-validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope,
-        ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
-    case check_aud(Aud, ResourceServer) of
-        ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
-        {error, Err} -> {refused, {invalid_aud, Err}}
-    end;
-validate_payload(ResourceServer, #{?AUD_JWT_FIELD := Aud} = DecodedToken, _ScopePrefix) ->
-    case check_aud(Aud, ResourceServer) of
-        ok           -> {ok, DecodedToken};
-        {error, Err} -> {refused, {invalid_aud, Err}}
-    end;
-validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ScopePrefix) ->
-    case ResourceServer#resource_server.verify_aud of
-        true -> {error, {badarg, {aud_field_is_missing}}};
-        false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
-    end.
-
-filter_scopes(Scopes, <<"">>) -> Scopes;
-filter_scopes(Scopes, ScopePrefix)  ->
-    matching_scopes_without_prefix(Scopes, ScopePrefix).
-
-check_aud(Aud, ResourceServer) ->
-    case ResourceServer#resource_server.id of
-        <<>> -> ok;
-        ResourceServerId ->
-            case ResourceServer#resource_server.verify_aud of
-                true ->
-                    case Aud of
-                        List when is_list(List) ->
-                            case lists:member(ResourceServerId, Aud) of
-                        true  -> ok;
-                        false -> {error, {resource_id_not_found_in_aud,
-                            ResourceServerId, Aud}}
-                    end;
-                _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
-              end;
-            false -> ok
-         end
-    end.
-%%--------------------------------------------------------------------
-
+    ExistingScopes = get_scope(Payload),
+    set_scope(Payload, AdditionalScopes ++ ExistingScopes).
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
 get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
     Context = #{ token => Token , vhost => VHost},
-    case uaa_jwt:get_scopes(Token) of
+    case get_scope(Token) of
         [] -> [];
         Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
     end.
@@ -627,20 +550,5 @@ find_claim_in_token(Claim, Token) ->
 -spec tags_from(map()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
-    TagScopes = matching_scopes_without_prefix(Scopes, ?TAG_SCOPE_PREFIX),
+    TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
     lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
-
-matching_scopes_without_prefix(Scopes, PrefixPattern) ->
-    PatternLength = byte_size(PrefixPattern),
-    lists:filtermap(
-        fun(ScopeEl) ->
-            case binary:match(ScopeEl, PrefixPattern) of
-                {0, PatternLength} ->
-                    ElLength = byte_size(ScopeEl),
-                    {true,
-                     binary:part(ScopeEl,
-                                 {PatternLength, ElLength - PatternLength})};
-                _ -> false
-            end
-        end,
-        Scopes).
