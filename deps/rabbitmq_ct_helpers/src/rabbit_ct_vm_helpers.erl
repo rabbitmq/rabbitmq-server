@@ -499,7 +499,7 @@ spawn_terraform_vms(Config) ->
             rabbit_ct_helpers:register_teardown_steps(
               Config1, teardown_steps());
         _ ->
-            destroy_terraform_vms(Config),
+            _ = destroy_terraform_vms(Config),
             {skip, "Terraform failed to spawn VM"}
     end.
 
@@ -520,7 +520,7 @@ destroy_terraform_vms(Config) ->
           ] ++ TfVarFlags ++ [
            TfConfigDir
           ],
-    rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
+    {ok, _} = rabbit_ct_helpers:exec(Cmd, [{env, Env}]),
     Config.
 
 terraform_var_flags(Config) ->
@@ -696,7 +696,7 @@ ensure_instance_count(Config, TRef) ->
                               poll_vms(Config)
                     end;
                 true ->
-                    timer:cancel(TRef),
+                    _ = timer:cancel(TRef),
                     rabbit_ct_helpers:set_config(Config,
                                                  {terraform_poll_done, true})
             end;
@@ -760,7 +760,7 @@ initialize_ct_peers(Config, NodenamesMap, IPAddrsMap) ->
 set_inet_hosts(Config) ->
     CTPeers = get_ct_peer_entries(Config),
     inet_db:set_lookup([file, native]),
-    [begin
+    _ = [begin
          Hostname = ?config(hostname, CTPeerConfig),
          IPAddr = ?config(ipaddr, CTPeerConfig),
          inet_db:add_host(IPAddr, [Hostname]),
@@ -831,7 +831,7 @@ wait_for_ct_peers(Config, [CTPeer | Rest] = CTPeers, TRef) ->
             end
     end;
 wait_for_ct_peers(Config, [], TRef) ->
-    timer:cancel(TRef),
+    _ = timer:cancel(TRef),
     Config.
 
 set_ct_peers_code_path(Config) ->
@@ -864,7 +864,7 @@ download_dirs(Config) ->
                          ?MODULE,
                          prepare_dirs_to_download_archives,
                          [Config]),
-    inets:start(),
+    _ = inets:start(),
     download_dirs(Config, ConfigsPerCTPeer).
 
 download_dirs(_, [{skip, _} = Error | _]) ->
@@ -964,7 +964,7 @@ add_archive_to_list(Config, Archive) ->
 start_http_server(Config) ->
     PrivDir = ?config(priv_dir, Config),
     {ok, Hostname} = inet:gethostname(),
-    inets:start(),
+    _ = inets:start(),
     Options = [{port, 0},
                {server_name, Hostname},
                {server_root, PrivDir},
@@ -1021,7 +1021,8 @@ do_setup_ct_logs_proxies(Nodes) ->
     [begin
          user_io_proxy(Node),
          ct_logs_proxy(Node)
-     end || Node <- Nodes].
+     end || Node <- Nodes],
+     ok.
 
 user_io_proxy(Node) ->
     ok = setup_proxy(Node, user).

@@ -40,7 +40,8 @@ wait_for_async_command(Node) ->
 
 command_with_output(Command, Node, Args, Opts) ->
     Formatted = format_command(Command, Node, Args, Opts),
-    CommandResult = 'Elixir.RabbitMQCtl':exec_command(
+    Mod = 'Elixir.RabbitMQCtl', %% To silence a Dialyzer warning.
+    CommandResult = Mod:exec_command(
         Formatted, fun(Output,_,_) -> Output end),
     ct:pal("Executed command ~tp against node ~tp~nResult: ~tp~n", [Formatted, Node, CommandResult]),
     CommandResult.
@@ -50,7 +51,8 @@ format_command(Command, Node, Args, Opts) ->
                               [Command,
                                format_args(Args),
                                format_options([{"--node", Node} | Opts])]),
-    'Elixir.OptionParser':split(iolist_to_binary(Formatted)).
+    Mod = 'Elixir.OptionParser', %% To silence a Dialyzer warning.
+    Mod:split(iolist_to_binary(Formatted)).
 
 format_args(Args) ->
     iolist_to_binary([ io_lib:format("~tp ", [Arg]) || Arg <- Args ]).
