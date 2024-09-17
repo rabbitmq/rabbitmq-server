@@ -198,12 +198,6 @@ find_unique_resource_server_without_verify_aud() ->
         _ -> {error, found_many}
     end.
 
-append_or_return_default(ListOrBinary, Default) ->
-    case ListOrBinary of
-        VarList when is_list(VarList) -> VarList ++ Default;
-        VarBinary when is_binary(VarBinary) -> [VarBinary] ++ Default;
-        _ -> Default
-    end.
 append(List, Value) ->
     case Value of
         undefined -> List;

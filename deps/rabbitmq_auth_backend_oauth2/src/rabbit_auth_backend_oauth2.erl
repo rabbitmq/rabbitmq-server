@@ -303,7 +303,7 @@ post_process_payload_with_complex_claim(ResourceServer, Payload) ->
         undefined -> Payload;
         ScopesKey ->
             AdditionalScopes = extract_additional_scopes(ResourceServerId,
-                maps:get(ScopesKey, Payload))
+                maps:get(ScopesKey, Payload)),
             case AdditionalScopes of
                 [] -> Payload;
                 _  ->
@@ -505,18 +505,18 @@ post_process_payload_in_rich_auth_request_format(ResourceServer,
     maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload).
 
 validate_payload(ResourceServer, DecodedToken) ->
-    ScopePrefix = ResourceServerId#resource_server.scope_prefix,
+    ScopePrefix = ResourceServer#resource_server.scope_prefix,
     validate_payload(ResourceServer, DecodedToken, ScopePrefix).
 
 validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
     ResourceServerId = ResourceServer#resource_server.id,
     VerifyAud = ResourceServer#resource_server.verify_aud,
-    case check_aud(Aud, ResourceServer, VerifyAud) of
+    case check_aud(Aud, ResourceServer) of
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
 validate_payload(ResourceServer, #{?AUD_JWT_FIELD := Aud} = DecodedToken, _ScopePrefix) ->
-    case check_aud(Aud, ResourceServer, VerifyAud) of
+    case check_aud(Aud, ResourceServer) of
         ok           -> {ok, DecodedToken};
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
@@ -531,21 +531,24 @@ filter_scopes(Scopes, <<"">>) -> Scopes;
 filter_scopes(Scopes, ScopePrefix)  ->
     matching_scopes_without_prefix(Scopes, ScopePrefix).
 
-check_aud(_, <<>>, _)    -> ok;
-check_aud(Aud, ResourceServerId, Verify) ->
-  case Verify of
-    true ->
-      case Aud of
-        List when is_list(List) ->
-            case lists:member(ResourceServerId, Aud) of
-                true  -> ok;
-                false -> {error, {resource_id_not_found_in_aud, ResourceServerId, Aud}}
-            end;
-        _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
-      end;
-    false -> ok
-  end.
-
+check_aud(Aud, ResourceServer) ->
+    case ResourceServer#resource_server.id of
+        <<>> -> ok;
+        ResourceServerId ->
+            case ResourceServer#resource_server.verify_aud of
+                true ->
+                    case Aud of
+                        List when is_list(List) ->
+                            case lists:member(ResourceServerId, Aud) of
+                        true  -> ok;
+                        false -> {error, {resource_id_not_found_in_aud,
+                            ResourceServerId, Aud}}
+                    end;
+                _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
+              end;
+            false -> ok
+         end
+    end.
 %%--------------------------------------------------------------------
 
 get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;

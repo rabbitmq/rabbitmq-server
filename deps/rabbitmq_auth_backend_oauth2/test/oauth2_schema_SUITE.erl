@@ -33,22 +33,22 @@ all() ->
 
 
 test_without_oauth_providers(_) ->
-    #{} = rabbit_oauth2_schema:translate_oauth_providers([]).
+    #{} = oauth2_schema:translate_oauth_providers([]).
 
 test_without_resource_servers(_) ->
-    #{} = rabbit_oauth2_schema:translate_resource_servers([]).
+    #{} = oauth2_schema:translate_resource_servers([]).
 
 test_with_one_oauth_provider(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://rabbit"}
             ],
     #{<<"keycloak">> := [{issuer, <<"https://rabbit">>}]
-    } = rabbit_oauth2_schema:translate_oauth_providers(Conf).
+    } = oauth2_schema:translate_oauth_providers(Conf).
 
 test_with_one_resource_server(_) ->
     Conf = [{["auth_oauth2","resource_servers","rabbitmq1","id"],"rabbitmq1"}
             ],
     #{<<"rabbitmq1">> := [{id, <<"rabbitmq1">>}]
-    } = rabbit_oauth2_schema:translate_resource_servers(Conf).
+    } = oauth2_schema:translate_resource_servers(Conf).
 
 test_with_many_oauth_providers(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://keycloak"},
@@ -58,7 +58,7 @@ test_with_many_oauth_providers(_) ->
                         ],
       <<"uaa">> := [{issuer, <<"https://uaa">>}
                     ]
-    } = rabbit_oauth2_schema:translate_oauth_providers(Conf).
+    } = oauth2_schema:translate_oauth_providers(Conf).
 
 
 test_with_many_resource_servers(_) ->
@@ -69,7 +69,7 @@ test_with_many_resource_servers(_) ->
                         ],
       <<"rabbitmq2">> := [{id, <<"rabbitmq2">>}
                     ]
-    } = rabbit_oauth2_schema:translate_resource_servers(Conf).
+    } = oauth2_schema:translate_resource_servers(Conf).
 
 test_oauth_providers_attributes(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://keycloak"},
@@ -78,7 +78,7 @@ test_oauth_providers_attributes(_) ->
     #{<<"keycloak">> := [{default_key, <<"token-key">>},
                          {issuer, <<"https://keycloak">>}
                         ]
-    } = sort_settings(rabbit_oauth2_schema:translate_oauth_providers(Conf)).
+    } = sort_settings(oauth2_schema:translate_oauth_providers(Conf)).
 
 test_resource_servers_attributes(_) ->
     Conf = [{["auth_oauth2","resource_servers","rabbitmq1","id"],"rabbitmq1xxx"},
@@ -92,7 +92,7 @@ test_resource_servers_attributes(_) ->
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
                         ]
-    } = sort_settings(rabbit_oauth2_schema:translate_resource_servers(Conf)),
+    } = sort_settings(oauth2_schema:translate_resource_servers(Conf)),
 
     Conf2 = [
             {["auth_oauth2","resource_servers","rabbitmq1","scope_prefix"],"somescope."},
@@ -105,13 +105,13 @@ test_resource_servers_attributes(_) ->
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
                         ]
-    } = sort_settings(rabbit_oauth2_schema:translate_resource_servers(Conf2)).
+    } = sort_settings(oauth2_schema:translate_resource_servers(Conf2)).
 
 test_oauth_providers_attributes_with_invalid_uri(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"http://keycloak"},
             {["auth_oauth2","oauth_providers","keycloak","default_key"],"token-key"}
             ],
-    try sort_settings(rabbit_oauth2_schema:translate_oauth_providers(Conf)) of
+    try sort_settings(oauth2_schema:translate_oauth_providers(Conf)) of
         _ -> {throw, should_have_failed}
     catch
         _ -> ok
@@ -125,7 +125,7 @@ test_oauth_providers_algorithms(_) ->
     #{<<"keycloak">> := [{algorithms, [<<"RS256">>, <<"HS256">>]},
                          {issuer, <<"https://keycloak">>}
                          ]
-    } = sort_settings(rabbit_oauth2_schema:translate_oauth_providers(Conf)).
+    } = sort_settings(oauth2_schema:translate_oauth_providers(Conf)).
 
 test_oauth_providers_https(Conf) ->
 
@@ -148,14 +148,14 @@ test_oauth_providers_https(Conf) ->
                                   ]},
                          {issuer, <<"https://keycloak">>}
                          ]
-    } = sort_settings(rabbit_oauth2_schema:translate_oauth_providers(CuttlefishConf)).
+    } = sort_settings(oauth2_schema:translate_oauth_providers(CuttlefishConf)).
 
 test_oauth_providers_https_with_missing_cacertfile(_) ->
 
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://keycloak"},
             {["auth_oauth2","oauth_providers","keycloak","https","cacertfile"],"/non-existent.pem"}
             ],
-    try sort_settings(rabbit_oauth2_schema:translate_oauth_providers(Conf)) of
+    try sort_settings(oauth2_schema:translate_oauth_providers(Conf)) of
         _ -> {throw, should_have_failed}
     catch
         _ -> ok
@@ -169,7 +169,7 @@ test_oauth_providers_signing_keys(Conf) ->
     #{<<"keycloak">> := [{issuer, <<"https://keycloak">>},
                          {signing_keys, SigningKeys}
                          ]
-    } = sort_settings(rabbit_oauth2_schema:translate_oauth_providers(CuttlefishConf)),
+    } = sort_settings(oauth2_schema:translate_oauth_providers(CuttlefishConf)),
     ct:log("SigningKey: ~p", [SigningKeys]),
     #{<<"1">> := {pem, <<"I'm not a certificate">>},
       <<"2">> := {pem, <<"I'm not a certificate">>}
