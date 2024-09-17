@@ -171,11 +171,8 @@ delete(Q0, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q0) ->
                             case delete_crashed_internal(Q, ActingUser) of
                                 ok ->
                                     {ok, 0};
-                                {error, timeout} ->
-                                    {error, protocol_error,
-                                     "The operation to delete ~ts from the "
-                                     "metadata store timed out",
-                                     [rabbit_misc:rs(QName)]}
+                                {error, timeout} = Err ->
+                                    Err
                             end
                     end
             end;

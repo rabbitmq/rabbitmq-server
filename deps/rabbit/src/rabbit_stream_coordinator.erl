@@ -189,8 +189,12 @@ delete_stream(Q, ActingUser)
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case process_command({delete_stream, StreamId, #{}}) of
         {ok, ok, _} ->
-            _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
-            {ok, {ok, 0}};
+            case rabbit_amqqueue:internal_delete(Q, ActingUser) of
+                ok ->
+                    {ok, {ok, 0}};
+                {error, timeout} = Err ->
+                    Err
+            end;
         Err ->
             Err
     end.
