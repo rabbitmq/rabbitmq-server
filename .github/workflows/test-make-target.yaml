@@ -34,6 +34,9 @@ jobs:
         hexpm-mirrors: |
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
+        # This currently only applies to Elixir; and can be safely
+        # restricted to the build jobs to avoid duplication in output.
+        disable_problem_matchers: true
 
     - name: SETUP DOTNET (rabbit)
       uses: actions/setup-dotnet@v4
