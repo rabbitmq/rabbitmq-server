@@ -314,7 +314,6 @@ extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
     extract_scopes_from_keycloak_permissions(Acc, T).
 
 
-
 put_location_attribute(Attribute, Map) ->
     put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
 
@@ -448,7 +447,7 @@ extract_scopes_from_rich_auth_request(ResourceServer,
         ResourceServer#resource_server.id, FilteredPermissionsByType),
 
     ExistingScopes = get_scope(Payload),
-    set_scope(Payload, AdditionalScopes ++ ExistingScopes).
+    set_scope(AdditionalScopes ++ ExistingScopes, Payload).
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
 get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->

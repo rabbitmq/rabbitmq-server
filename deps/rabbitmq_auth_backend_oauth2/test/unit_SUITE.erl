@@ -19,15 +19,14 @@
 
 all() ->
     [
-        test_own_scope,
-        test_validate_payload_with_scope_prefix,
-        test_validate_payload,
-        test_validate_payload_without_scope,
-        test_validate_payload_when_verify_aud_false,
+        filter_matching_scope_prefix_and_drop_it,
+        test_normalize_token_scopes_with_scope_prefix,
+        test_normalize_token_scopes,
+        test_normalize_token_scopes_without_scope,
 
-        test_unsuccessful_access_without_scopes,
-        test_successful_access_with_a_token_with_variables_in_scopes,
-        test_successful_access_with_a_parsed_token,
+        unsuccessful_access_without_scopes,
+        successful_access_with_a_token_with_variables_in_scopes,
+        successful_access_with_a_parsed_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
         test_restricted_vhost_access_with_a_valid_token,
@@ -108,36 +107,6 @@ end_per_group(_, Config) ->
   application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
   Config.
 
-init_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, <<"additional_rabbitmq_scopes">>),
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-resource">>),
-  Config;
-
-init_per_testcase(test_validate_payload_when_verify_aud_false, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, verify_aud, false),
-  Config;
-
-
-
-init_per_testcase(test_post_process_payload_rich_auth_request, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
-  Config;
-
-init_per_testcase(test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq-test">>),
-  Config;
-
-init_per_testcase(_, Config) ->
-  Config.
-
-end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
-  application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
-  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
-  Config;
-
-end_per_testcase(_, Config) ->
-  Config.
 
 
 %%
@@ -278,8 +247,14 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
 
   lists:foreach(
       fun({Case, Permissions, ExpectedScope}) ->
-          Payload = post_process_payload_with_rich_auth_request(<<"rabbitmq-test">>, Permissions),
-          ?assertEqual(lists:sort(ExpectedScope), lists:sort(maps:get(<<"scope">>, Payload)), Case)
+          ResourceServer = #resource_server{
+            id = ?RESOURCE_SERVER_ID,
+            resource_server_type = ?RESOUR
+          }
+          Token0 = #{<<"authorization_details">> => Permissions]},
+          Token = normalize_token_scope(ResourceServer, Token0),
+          ?assertEqual(lists:sort(ExpectedScope),
+                lists:sort(uaa_jwt:get_scope(Token)), Case)
       end, Pairs).
 
 test_post_process_payload_rich_auth_request(_) ->
@@ -575,17 +550,24 @@ test_post_process_payload_rich_auth_request(_) ->
   ],
 
   lists:foreach(
-      fun({Case, Permissions, ExpectedScope}) ->
-          Payload = post_process_payload_with_rich_auth_request(<<"rabbitmq">>, Permissions),
-          ?assertEqual(lists:sort(ExpectedScope), lists:sort(maps:get(<<"scope">>, Payload)), Case)
+      fun({Case, Permissions, ExpectedScope0}) ->
+          ResourceServer = #resource_server{
+            id = ?RESOURCE_SERVER_ID,
+            resource_server_type = ?RESOURCE_SERVER_TYPE
+          },
+          Token0 = #{<<"authorization_details">> => Permissions]},
+          Token = normalize_token_scope(ResourceServer, Permissions),
+          ExpectedScopes = lists:sort(ExpectedScope0),
+          ActualScopes = lists:sort(uaa_jwt:get_scope(Token)),
+          ?assertEqual(ExpectedScopes, ActualScopes, Case)
       end, Pairs).
 
-post_process_payload_with_rich_auth_request(ResourceServerId, Permissions) ->
+prepare_token_with_rich_authorization_details(ResourceServerId, Permissions) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
-    Token = maps:put(<<"authorization_details">>, Permissions, ?UTIL_MOD:plain_token_without_scopes_and_aud()),
+
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(<<"rabbitmq">>, Jwk, EncodedToken),
-    rabbit_auth_backend_oauth2:post_process_payload(ResourceServerId, Payload).
+    Payload.
 
 test_post_process_token_payload_complex_claims(_) ->
     Pairs = [
@@ -704,7 +686,7 @@ test_successful_access_with_a_token(_) ->
 
     assert_topic_access_granted(User, VHost, <<"bar">>, read, #{routing_key => <<"#/foo">>}).
 
-test_successful_access_with_a_token_with_variables_in_scopes(_) ->
+successful_access_with_a_token_with_variables_in_scopes(_) ->
     %% Generate a token with JOSE
     %% Check authorization with the token
     %% Check user access granted by token
@@ -722,7 +704,7 @@ test_successful_access_with_a_token_with_variables_in_scopes(_) ->
 
     assert_topic_access_granted(User, VHost, <<"bar">>, read, #{routing_key => Username}).
 
-test_successful_access_with_a_parsed_token(_) ->
+successful_access_with_a_parsed_token(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, UaaEnv),
@@ -1041,7 +1023,7 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     ?assertMatch({refused, _, _},
                  rabbit_auth_backend_oauth2:user_login_authentication(Username, [{password, <<"not a token">>}])).
 
-test_unsuccessful_access_without_scopes(_) ->
+unsuccessful_access_without_scopes(_) ->
     Username = <<"username">>,
     application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
 
@@ -1243,7 +1225,7 @@ test_command_pem_no_kid(Config) ->
     rabbit_ct_broker_helpers:rpc(Config,  0, unit_SUITE, login_and_check_vhost_access, [Username, Token, none]).
 
 
-test_own_scope(_) ->
+filter_matching_scope_prefix_and_drop_it(_) ->
     Examples = [
         {<<"foo.">>, [<<"foo">>, <<"foo.bar">>, <<"bar.foo">>,
                      <<"one.two">>, <<"foobar">>, <<"foo.other.third">>],
@@ -1258,82 +1240,57 @@ test_own_scope(_) ->
         end,
         Examples).
 
-test_validate_payload_resource_server_id_mismatch(_) ->
-    NoKnownResourceServerId = #{<<"aud">>   => [<<"foo">>, <<"bar">>],
-                                <<"scope">> => [<<"foo">>, <<"foo.bar">>,
-                                                <<"bar.foo">>, <<"one.two">>,
-                                                <<"foobar">>, <<"foo.other.third">>]},
-    EmptyAud = #{<<"aud">>   => [],
-                 <<"scope">> => [<<"foo.bar">>, <<"bar.foo">>]},
+test_normalize_token_scopes_with_scope_prefix(_) ->
+    Scenarios = [
+        {
+            <<"">>,
+            #{
+                ?SCOPE_JWT_FIELD => [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]
+            },
+            [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]
+        },
+        {
+            <<"some-prefix::">>,
+            #{
+                ?SCOPE_JWT_FIELD => [
+                    <<"some-prefix::foo">>, <<"foo.bar">>,
+                    <<"some-prefix::other.third">> ]
+            },
+            [<<"foo">>, <<"other.third">>]
+         }
+   ],
 
-    ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID,
-                                          [<<"foo">>,<<"bar">>]}}},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, NoKnownResourceServerId, ?DEFAULT_SCOPE_PREFIX)),
+  lists:map(fun({ ScopePrefix, Token0, ExpectedScopes}) ->
+      ResourceServer = #resource_server {
+        id = ?RESOURCE_SERVER_ID,
+        scope_prefix = ScopePrefix
+      },
+      Token = normalize_token_scope(ResourceServer, Token0),
+      ?assertEqual(ExpectedScopes, uaa_jwt:get_scope(Token))
+      end, Scenarios).
 
-    ?assertEqual({refused, {invalid_aud, {resource_id_not_found_in_aud, ?RESOURCE_SERVER_ID, []}}},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, EmptyAud, ?DEFAULT_SCOPE_PREFIX)).
+test_normalize_token_scope(_) ->
+    ResourceServer = #resource_server {
+      id = ?RESOURCE_SERVER_ID
+    },
+    Token0 = #{
+        <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                        <<"bar.foo">>, <<"one.two">>,
+                        <<"foobar">>, <<"rabbitmq.other.third">>]
+    },
+    Token = normalize_token_scope(ResourceServer, Token0),
+    ?assertEqual([<<"bar">>, <<"other.third">>], uaa_jwt:get_scope(Token)).
 
-test_validate_payload_with_scope_prefix(_) ->
-    Scenarios = [ { <<"">>,
-                #{<<"aud">>   => [?RESOURCE_SERVER_ID],
-                  <<"scope">> => [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]},
-                [<<"foo">>, <<"foo.bar">>, <<"foo.other.third">> ]
-                },
-                { <<"some-prefix::">>,
-                  #{<<"aud">>   => [?RESOURCE_SERVER_ID],
-                    <<"scope">> => [<<"some-prefix::foo">>, <<"foo.bar">>, <<"some-prefix::other.third">> ]},
-                 [<<"foo">>, <<"other.third">>]
-                 }
-
-               ],
-
-  lists:map(fun({ ScopePrefix, Token, ExpectedScopes}) ->
-      ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID], <<"scope">> => ExpectedScopes } },
-        rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, Token, ScopePrefix))
-      end
-    , Scenarios).
-
-test_validate_payload(_) ->
-    KnownResourceServerId = #{<<"aud">>   => [?RESOURCE_SERVER_ID],
-                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
-                                              <<"bar.foo">>, <<"one.two">>,
-                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
-    ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
-                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, KnownResourceServerId, ?DEFAULT_SCOPE_PREFIX)).
-
-test_validate_payload_without_scope(_) ->
-    KnownResourceServerId = #{<<"aud">>   => [?RESOURCE_SERVER_ID]
-                              },
-    ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID] }},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, KnownResourceServerId, ?DEFAULT_SCOPE_PREFIX)).
-
-test_validate_payload_when_verify_aud_false(_) ->
-    WithoutAud = #{
-                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
-                                              <<"bar.foo">>, <<"one.two">>,
-                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
-    ?assertEqual({ok, #{
-                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, WithoutAud, ?DEFAULT_SCOPE_PREFIX)),
-
-    WithAudWithUnknownResourceId = #{
-                              <<"aud">>   => [<<"unknown">>],
-                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
-                                              <<"bar.foo">>, <<"one.two">>,
-                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
-    ?assertEqual({ok, #{<<"aud">>   => [<<"unknown">>],
-                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
-                 rabbit_auth_backend_oauth2:validate_payload(?RESOURCE_SERVER_ID, WithAudWithUnknownResourceId, ?DEFAULT_SCOPE_PREFIX)).
+test_normalize_token_scope_without_scope(_) ->
+    ResourceServer = #resource_server {
+      id = ?RESOURCE_SERVER_ID
+    },
+    Token0 = #{ },
+    ?assertEqual([], uaa_jwt:get_scope(normalize_token_scope(ResourceServer, Token0))).
 
 %%
 %% Helpers
 %%
-
-verify_normalize_token_scope(Expected, Token) ->
-    Audience = maps:get(?AUD_JWT_FIELD, Token, none),
-    ResourceServer = resource_server:resolve_resource_server_from_audience(Audience),
-    ?assertEqual(Expected, normalize_token_scope(ResourceServer, Token)).
 
 assert_vhost_access_granted(AuthUser, VHost) ->
     assert_vhost_access_response(true, AuthUser, VHost).
