@@ -130,7 +130,7 @@
 -rabbit_feature_flag(
    {khepri_db,
     #{desc          => "New Raft-based metadata store. Fully supported as of RabbitMQ 4.0",
-      doc_url       => "", %% TODO
+      doc_url       => "https://www.rabbitmq.com/docs/next/metadata-store",
       stability     => experimental,
       depends_on    => [feature_flags_v2,
                         direct_exchange_routing_v2,
