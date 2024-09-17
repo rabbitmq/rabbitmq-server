@@ -64,3 +64,4 @@ jobs:
         path: |
           deps/${{ inputs.plugin }}/logs/
           !deps/${{ inputs.plugin }}/logs/**/log_private
+        if-no-files-found: ignore
