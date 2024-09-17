@@ -16,7 +16,7 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
-         check_topic_access/4, check_token/1, update_state/2,
+         check_topic_access/4, update_state/2,
          expiry_timestamp/1]).
 
 %% for testing
@@ -33,19 +33,12 @@
 %%
 
 
--define(RESOURCE_SERVER_ID, resource_server_id).
 %% a term defined for Rich Authorization Request tokens to identify a RabbitMQ permission
 %% verify server_server_id aud field is on the aud field
 %% a term used by the IdentityServer community
 %% scope aliases map "role names" to a set of scopes
 
 
-%%
-%% Key JWT fields
-%%
-
--define(AUD_JWT_FIELD, <<"aud">>).
--define(SCOPE_JWT_FIELD, <<"scope">>).
 %%
 %% API
 %%
@@ -76,7 +69,7 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
     with_decoded_token(DecodedTokenFun(),
         fun(_Token) ->
             DecodedToken = DecodedTokenFun(),
-            Scopes = get_scopes(DecodedToken),
+            Scopes = uaa_jwt:get_scopes(DecodedToken),
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
@@ -86,7 +79,7 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_scopes(Token),
+            Scopes = uaa_jwt:get_scopes(Token),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
@@ -99,19 +92,22 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
-  case check_token(NewToken) of
-      %% avoid logging the token
-      {error, _} = E  -> E;
-      {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-        {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
-      {refused, Err} ->
-        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
-      {ok, DecodedToken} ->
-          Tags = tags_from(DecodedToken),
-
-          {ok, AuthUser#auth_user{tags = Tags,
-                                  impl = fun() -> DecodedToken end}}
-  end.
+    case uaa_jwt:resolve_resource_server(NewToken) of
+        {error, _} = Err0 -> Err0;
+        Tuple ->
+            case check_token(NewToken, Tuple) of
+                %% avoid logging the token
+                {error, _} = E  -> E;
+                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+                {refused, Err} ->
+                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+                {ok, DecodedToken} ->
+                    Tags = tags_from(DecodedToken),
+                    {ok, AuthUser#auth_user{tags = Tags,
+                                            impl = fun() -> DecodedToken end}}
+            end
+    end.
 
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
     case DecodedTokenFun() of
@@ -126,31 +122,34 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
-
-    case check_token(Token) of
-        %% avoid logging the token
-        {error, _} = E  -> E;
-        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
-        {refused, Err} ->
-          {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-        {ok, DecodedToken} ->
-            Func = fun(Token0) ->
-                        Username = username_from(rabbit_oauth2_config:get_preferred_username_claims(), Token0),
-                        Tags     = tags_from(Token0),
-
-                        {ok, #auth_user{username = Username,
-                                        tags = Tags,
-                                        impl = fun() -> Token0 end}}
-                   end,
-            case with_decoded_token(DecodedToken, Func) of
-                {error, Err} ->
+    case uaa_jwt:resolve_resource_server(Token) of
+        {error, _} = Err0 ->
+            Err0;
+        {ResourceServer, _InternalOAuthProvider} = Tuple ->
+            case check_token(Token, Tuple) of
+                {error, _} = E  -> E;
+                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+                {refused, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                Else ->
-                    Else
+                {ok, DecodedToken} ->
+                    Func = fun(Token0) ->
+                                Username = username_from(
+                                    ResourceServer#resource_server.preferred_username_claims,
+                                    Token0),
+                                Tags     = tags_from(Token0),
+                                {ok, #auth_user{username = Username,
+                                                tags = Tags,
+                                                impl = fun() -> Token0 end}}
+                           end,
+                    case with_decoded_token(DecodedToken, Func) of
+                        {error, Err} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                        Else ->
+                            Else
+                    end
             end
     end.
-
 with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
         ok               -> Fun(DecodedToken);
@@ -167,27 +166,21 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
--spec check_token(binary() | map()) ->
-          {'ok', map(), resource_server()} |
+-spec check_token(binary() | map(), {resource_server(), internal_oauth_provider()}) ->
+          {'ok', map()} |
           {'error', term() }|
-          {'refused',
-           'signature_invalid' |
+          {'refused', 'signature_invalid' |
            {'error', term()} |
            {'invalid_aud', term()}}.
 
-check_token(DecodedToken) when is_map(DecodedToken) ->
+check_token(DecodedToken, _) when is_map(DecodedToken) ->
     {ok, DecodedToken};
 
-check_token(Token) ->
-    case uaa_jwt:decode_and_verify(Token) of
-        {error, Reason} ->
-            {refused, {error, Reason}};
-        {true, ResourceServer, Payload} ->
-            Payload0 = post_process_payload(ResourceServer, Payload),
-            case validate_payload(ResourceServer, Payload0) of
-                {ok, DecodedToken} -> {ok, DecodedToken, ResourceServer};
-                {error, _} = Error -> Error
-            end;
+check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
+    case uaa_jwt:decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
+        {error, Reason} -> {refused, {error, Reason}};
+        {true, Payload} -> validate_payload(ResourceServer,
+                post_process_payload(ResourceServer, Payload));
         {false, _, _} -> {refused, signature_invalid}
     end.
 
@@ -212,9 +205,9 @@ post_process_payload(ResourceServer, Payload) when is_map(Payload) ->
         false -> Payload1
         end,
 
-    Payload3 = case rabbit_oauth2_config:has_scope_aliases(ResourceServer) of
-        true  -> post_process_payload_with_scope_aliases(ResourceServer, Payload2);
-        false -> Payload2
+    Payload3 = case ResourceServer#resource_server.scope_aliases of
+        undefined -> Payload2;
+        _  -> post_process_payload_with_scope_aliases(ResourceServer, Payload2)
         end,
 
     Payload4 = case maps:is_key(<<"authorization_details">>, Payload3) of
@@ -241,7 +234,7 @@ post_process_payload_with_scope_aliases(ResourceServer, Payload) ->
 
 
 -spec post_process_payload_with_scope_alias_in_scope_field(
-    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
+    ResourceServer :: resource_server(), Payload :: map()) -> map().
 %% First attempt: use the value in the 'scope' field for alias
 post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload) ->
     ScopeMappings = ResourceServer#resource_server.scope_aliases,
@@ -249,14 +242,13 @@ post_process_payload_with_scope_alias_in_scope_field(ResourceServer, Payload) ->
 
 
 -spec post_process_payload_with_scope_alias_in_extra_scopes_source(
-    ResourceServer :: rabbit_oauth2_config:resource_server(), Payload :: map()) -> map().
+    ResourceServer :: resource_server(), Payload :: map()) -> map().
 %% Second attempt: use the value in the configurable 'extra scopes source' field for alias
 post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServer, Payload) ->
     ExtraScopesField = ResourceServer#resource_server.additional_scopes_key,
     case ExtraScopesField of
-        %% nothing to inject
-        {error, not_found} -> Payload;
-        {ok, ExtraScopes} ->
+        undefined -> Payload;
+        ExtraScopes ->
             ScopeMappings = ResourceServer#resource_server.scope_aliases,
             post_process_payload_with_scope_alias_field_named(Payload, ExtraScopes, ScopeMappings)
     end.
@@ -290,19 +282,18 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
 -spec does_include_complex_claim_field(
     ResourceServer :: resource_server(), Payload :: map()) -> boolean().
 does_include_complex_claim_field(ResourceServer, Payload) when is_map(Payload) ->
-  case ResourceServer#resource_server.additional_scopes_key of
-    {ok, ScopeKey} -> maps:is_key(ScopeKey, Payload);
-    {error, not_found} -> false
-  end.
+    case ResourceServer#resource_server.additional_scopes_key of
+        undefined -> false;
+        ScopeKey -> maps:is_key(ScopeKey, Payload)
+    end.
 
 -spec post_process_payload_with_complex_claim(
     ResourceServer :: resource_server(), Payload :: map()) -> map().
 post_process_payload_with_complex_claim(ResourceServer, Payload) ->
-    ResourceServerId =  ResourceServer#resource_server.id,
     case ResourceServer#resource_server.additional_scopes_key of
         undefined -> Payload;
         ScopesKey ->
-            AdditionalScopes = extract_additional_scopes(ResourceServerId,
+            AdditionalScopes = extract_additional_scopes(ResourceServer,
                 maps:get(ScopesKey, Payload)),
             case AdditionalScopes of
                 [] -> Payload;
@@ -311,7 +302,8 @@ post_process_payload_with_complex_claim(ResourceServer, Payload) ->
                     maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
             end
     end.
-extract_additional_scopes(ResourceServerId, ComplexClaim) ->
+extract_additional_scopes(ResourceServer, ComplexClaim) ->
+    ResourceServerId = ResourceServer#resource_server.id,
     case ComplexClaim of
         L when is_list(L) -> L;
         M when is_map(M) ->
@@ -353,28 +345,12 @@ extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
     extract_scopes_from_keycloak_permissions(Acc, T).
 
 
--define(ACTIONS_FIELD, <<"actions">>).
--define(LOCATIONS_FIELD, <<"locations">>).
--define(TYPE_FIELD, <<"type">>).
-
--define(CLUSTER_LOCATION_ATTRIBUTE, <<"cluster">>).
--define(VHOST_LOCATION_ATTRIBUTE, <<"vhost">>).
--define(QUEUE_LOCATION_ATTRIBUTE, <<"queue">>).
--define(EXCHANGE_LOCATION_ATTRIBUTE, <<"exchange">>).
--define(ROUTING_KEY_LOCATION_ATTRIBUTE, <<"routing-key">>).
--define(LOCATION_ATTRIBUTES, [?CLUSTER_LOCATION_ATTRIBUTE, ?VHOST_LOCATION_ATTRIBUTE,
-  ?QUEUE_LOCATION_ATTRIBUTE, ?EXCHANGE_LOCATION_ATTRIBUTE, ?ROUTING_KEY_LOCATION_ATTRIBUTE]).
-
--define(ALLOWED_TAG_VALUES, [<<"monitoring">>, <<"administrator">>, <<"management">>, <<"policymaker">> ]).
--define(ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"monitoring">>,
-  <<"administrator">>, <<"management">>, <<"policymaker">> ]).
-
 
 put_location_attribute(Attribute, Map) ->
     put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
 
 put_attribute([Key, Value | _], Map) ->
-    case lists:member(Key, ?LOCATION_ATTRIBUTES) of
+    case lists:member(Key, ?RAR_LOCATION_ATTRIBUTES) of
         true -> maps:put(Key, Value, Map);
         false -> Map
     end;
@@ -390,10 +366,10 @@ convert_attribute_list_to_attribute_map([H|L],Map) when is_binary(H) ->
 convert_attribute_list_to_attribute_map([], Map) -> Map.
 
 build_permission_resource_path(Map) ->
-    Vhost = maps:get(?VHOST_LOCATION_ATTRIBUTE, Map, <<"*">>),
-    Resource = maps:get(?QUEUE_LOCATION_ATTRIBUTE, Map,
-        maps:get(?EXCHANGE_LOCATION_ATTRIBUTE, Map, <<"*">>)),
-    RoutingKey = maps:get(?ROUTING_KEY_LOCATION_ATTRIBUTE, Map, <<"*">>),
+    Vhost = maps:get(?RAR_VHOST_LOCATION_ATTRIBUTE, Map, <<"*">>),
+    Resource = maps:get(?RAR_QUEUE_LOCATION_ATTRIBUTE, Map,
+        maps:get(?RAR_EXCHANGE_LOCATION_ATTRIBUTE, Map, <<"*">>)),
+    RoutingKey = maps:get(?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE, Map, <<"*">>),
 
     <<Vhost/binary,"/",Resource/binary,"/",RoutingKey/binary>>.
 
@@ -417,15 +393,15 @@ map_locations_to_permission_resource_paths(ResourceServerId, L) ->
 
     FilteredLocations.
 
-cluster_matches_resource_server_id(#{?CLUSTER_LOCATION_ATTRIBUTE := Cluster},
+cluster_matches_resource_server_id(#{?RAR_CLUSTER_LOCATION_ATTRIBUTE := Cluster},
   ResourceServerId) ->
       wildcard:match(ResourceServerId, Cluster);
 
 cluster_matches_resource_server_id(_,_) ->
     false.
 
-legal_queue_and_exchange_values(#{?QUEUE_LOCATION_ATTRIBUTE := Queue,
-    ?EXCHANGE_LOCATION_ATTRIBUTE := Exchange}) ->
+legal_queue_and_exchange_values(#{?RAR_QUEUE_LOCATION_ATTRIBUTE := Queue,
+    ?RAR_EXCHANGE_LOCATION_ATTRIBUTE := Exchange}) ->
         case Queue of
             <<>> ->
                 case Exchange of
@@ -444,7 +420,7 @@ map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions) ->
     map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions, []).
 map_rich_auth_permissions_to_scopes(_, [], Acc) -> Acc;
 map_rich_auth_permissions_to_scopes(ResourceServerId,
-  [ #{?ACTIONS_FIELD := Actions, ?LOCATIONS_FIELD := Locations }  | T ], Acc) ->
+  [ #{?RAR_ACTIONS_FIELD := Actions, ?RAR_LOCATIONS_FIELD := Locations }  | T ], Acc) ->
     ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
     case ResourcePaths of
         [] -> map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc);
@@ -462,10 +438,10 @@ map_rich_auth_permissions_to_scopes(ResourceServerId,
     end.
 
 skip_unknown_actions(Actions) ->
-    lists:filter(fun(A) -> lists:member(A, ?ALLOWED_ACTION_VALUES) end, Actions).
+    lists:filter(fun(A) -> lists:member(A, ?RAR_ALLOWED_ACTION_VALUES) end, Actions).
 
 produce_list_of_user_tag_or_action_on_resources(ResourceServerId, ActionOrUserTag, Locations) ->
-    case lists:member(ActionOrUserTag, ?ALLOWED_TAG_VALUES) of
+    case lists:member(ActionOrUserTag, ?RAR_ALLOWED_TAG_VALUES) of
         true -> [<< ResourceServerId/binary, ".tag:", ActionOrUserTag/binary >>];
         _ -> build_scopes_for_action(ResourceServerId, ActionOrUserTag, Locations, [])
     end.
@@ -480,7 +456,8 @@ build_scopes(ResourceServerId, Actions, Locations) ->
         produce_list_of_user_tag_or_action_on_resources(ResourceServerId,
             Action, Locations) end, Actions).
 
-is_recognized_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIELD := Type }, ResourceServerType) ->
+is_recognized_permission(#{?RAR_ACTIONS_FIELD := _, ?RAR_LOCATIONS_FIELD:= _ ,
+        ?RAR_TYPE_FIELD := Type }, ResourceServerType) ->
     case ResourceServerType of
         <<>> -> false;
         V when V == Type -> true;
@@ -508,9 +485,8 @@ validate_payload(ResourceServer, DecodedToken) ->
     ScopePrefix = ResourceServer#resource_server.scope_prefix,
     validate_payload(ResourceServer, DecodedToken, ScopePrefix).
 
-validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
-    ResourceServerId = ResourceServer#resource_server.id,
-    VerifyAud = ResourceServer#resource_server.verify_aud,
+validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope,
+        ?AUD_JWT_FIELD := Aud} = DecodedToken, ScopePrefix) ->
     case check_aud(Aud, ResourceServer) of
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
@@ -521,8 +497,7 @@ validate_payload(ResourceServer, #{?AUD_JWT_FIELD := Aud} = DecodedToken, _Scope
         {error, Err} -> {refused, {invalid_aud, Err}}
     end;
 validate_payload(ResourceServer, #{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ScopePrefix) ->
-    VerifyAud = ResourceServer#resource_server.verify_aud,
-    case VerifyAud of
+    case ResourceServer#resource_server.verify_aud of
         true -> {error, {badarg, {aud_field_is_missing}}};
         false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ScopePrefix)}}
     end.
@@ -551,13 +526,11 @@ check_aud(Aud, ResourceServer) ->
     end.
 %%--------------------------------------------------------------------
 
-get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
-get_scopes(#{}) -> [].
 
 -spec get_expanded_scopes(map(), #resource{}) -> [binary()].
 get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
     Context = #{ token => Token , vhost => VHost},
-    case maps:get(?SCOPE_JWT_FIELD, Token, []) of
+    case uaa_jwt:get_scopes(Token) of
         [] -> [];
         Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
     end.

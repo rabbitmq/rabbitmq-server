@@ -217,8 +217,7 @@ end_per_group(oauth_provider_with_jwks_uri, Config) ->
     Config;
 
 end_per_group(oauth_provider_with_default_key, Config) ->
-    DefaultKey = <<"default-key">>,
-    case ?config(oauth_provider_id, Config) of
+case ?config(oauth_provider_id, Config) of
         root -> unset_env(default_key);
         Id -> unset_oauth_provider_properties(Id, [default_key])
     end,
@@ -507,7 +506,7 @@ unset_oauth_provider_properties(OAuthProviderId, PropertyNameList) ->
     CurProplist = maps:get(OAuthProviderId, OAuthProviders),
     CurMap = proplists:to_map(CurProplist),
     set_env(oauth_providers, maps:put(OAuthProviderId,
-        maps:to_list(maps:filter(fun(K,V) ->
+        maps:to_list(maps:filter(fun(K,_V) ->
             not proplists:is_defined(K, PropertyNameList) end, CurMap)),
         OAuthProviders)).
 

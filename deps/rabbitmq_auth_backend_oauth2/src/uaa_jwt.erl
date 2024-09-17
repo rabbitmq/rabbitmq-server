@@ -7,11 +7,12 @@
 -module(uaa_jwt).
 
 -export([add_signing_key/3,
-         decode_and_verify/1,
+         decode_and_verify/3,
          get_jwk/2,
-         verify_signing_key/2]).
+         verify_signing_key/2,
+         resolve_resource_server/1]).
 
--export([client_id/1, sub/1, client_id/2, sub/2]).
+-export([client_id/1, sub/1, client_id/2, sub/2, get_scopes/1]).
 
 -include("oauth2.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
@@ -61,17 +62,8 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
             Err
     end.
 
--spec decode_and_verify(binary()) -> {boolean(), resource_server(), map()} | {error, term()}.
-decode_and_verify(Token) ->
-    case resolve_resource_server(Token) of
-        {error, _} = Err ->
-            Err;
-        {ResourceServer, InternalOAuthProvider} ->
-            decode_and_verify(Token, ResourceServer, InternalOAuthProvider)
-    end.
-
 -spec decode_and_verify(binary(), resource_server(), internal_oauth_provider())
-        -> {boolean(), resource_server(), map()} | {error, term()}.
+        -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
     OAuthProviderId = InternalOAuthProvider#internal_oauth_provider.id,
     rabbit_log:debug("Decoding token for resource_server: ~p using oauth_provider_id: ~p",
@@ -91,27 +83,29 @@ decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
                     Algorithms = InternalOAuthProvider#internal_oauth_provider.algorithms,
                     rabbit_log:debug("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
                         [KeyId, Algorithms]),
-                    case uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token) of
-                        {true, Payload} -> {true, ResourceServer, Payload};
-                        {false, Payload} -> {false, ResourceServer, Payload}
-                    end;
+                    uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token);
                 {error, _} = Err3 ->
                     Err3
             end
     end.
 
+-spec resolve_resource_server(binary()|map()) -> {error, term()} |
+        {resource_server(), internal_oauth_provider()}.
+resolve_resource_server(DecodedToken) when is_map(DecodedToken) ->
+    Aud = maps:get(?AUD_JWT_FIELD, DecodedToken, none),
+    resolve_resource_server_given_audience(Aud);
 resolve_resource_server(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of
+        {error, _} = Error -> Error;
+        {ok, Audience} -> resolve_resource_server_given_audience(Audience)
+    end.
+resolve_resource_server_given_audience(Audience) ->
+    case resolve_resource_server_from_audience(Audience) of
         {error, _} = Error ->
             Error;
-        {ok, Audience} ->
-            case resolve_resource_server_from_audience(Audience) of
-                {error, _} = Error ->
-                    Error;
-                {ok, ResourceServer} ->
-                    {ResourceServer, get_internal_oauth_provider(
-                        ResourceServer#resource_server.id)}
-            end
+        {ok, ResourceServer} ->
+            {ResourceServer, get_internal_oauth_provider(
+                ResourceServer#resource_server.oauth_provider_id)}
     end.
 
 -spec get_jwk(binary(), internal_oauth_provider()) -> {ok, map()} | {error, term()}.
@@ -171,6 +165,9 @@ verify_signing_key(Type, Value) ->
         Err -> Err
     end.
 
+-spec get_scopes(map()) -> binary() | list().
+get_scopes(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
+get_scopes(#{}) -> [].
 
 -spec client_id(map()) -> binary() | undefined.
 client_id(DecodedToken) ->
