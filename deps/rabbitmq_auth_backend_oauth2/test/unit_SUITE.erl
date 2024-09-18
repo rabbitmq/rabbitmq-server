@@ -36,10 +36,9 @@ all() ->
         test_token_expiration,
         test_invalid_signature,
         test_incorrect_kid,
-        test_post_process_token_payload,
-        test_post_process_token_payload_keycloak,
-        test_post_process_payload_rich_auth_request,
-        test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster,
+        normalize_token_scope_with_keycloak_scopes,
+        normalize_token_scope_with_rich_auth_request,
+        normalize_token_scope_with_rich_auth_request_using_regular_expression_with_cluster,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
         test_username_from,
@@ -62,7 +61,7 @@ groups() ->
           test_successful_authentication_without_scopes,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
-          test_post_process_token_payload_complex_claims,
+          normalize_token_scope_with_additional_scopes_complex_claims,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix
 
       ]}
@@ -121,70 +120,67 @@ end_per_group(_, Config) ->
 -define(DEFAULT_SCOPE_PREFIX, <<"rabbitmq.">>).
 
 
-test_post_process_token_payload_keycloak(_) ->
+normalize_token_scope_with_keycloak_scopes(_) ->
     Pairs = [
         %% common case
-        {
-          #{<<"permissions">> =>
-                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
-                   <<"rsname">> => <<"allvhost">>,
-                   <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
-                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
-                   <<"rsname">> => <<"vhost1">>,
-                   <<"scopes">> => [<<"rabbitmq-resource.write:vhost1/*">>]},
-                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
-                   <<"rsname">> => <<"Default Resource">>,
-                   <<"scopes">> => [<<"unknown-resource.write:vhost1/*">>]}
-                 ]
-          },
-          [<<"read:*/*">>, <<"write:vhost1/*">>]
+    {
+        "common case",
+        #{<<"permissions">> =>
+            [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+               <<"rsname">> => <<"allvhost">>,
+               <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
+             #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+               <<"rsname">> => <<"vhost1">>,
+               <<"scopes">> => [<<"rabbitmq-resource.write:vhost1/*">>]},
+             #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+               <<"rsname">> => <<"Default Resource">>,
+               <<"scopes">> => [<<"unknown-resource.write:vhost1/*">>]}
+             ]
         },
-
-        %% one scopes field with a string instead of an array
-        {
-          #{<<"permissions">> =>
-                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
-                   <<"rsname">> => <<"allvhost">>,
-                   <<"scopes">> => <<"rabbitmq-resource.read:*/*">>},
-                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
-                   <<"rsname">> => <<"vhost1">>,
-                   <<"scopes">> => [<<"unknown-resource-read">>]},
-                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
-                   <<"rsname">> => <<"Default Resource">>}]},
-          [<<"rabbitmq-resource.read:*/*">>]
-        },
-
-        %% no scopes field in permissions
-        {
-          #{<<"permissions">> =>
-                [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
-                   <<"rsname">> => <<"allvhost">>},
-                 #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
-                   <<"rsname">> => <<"vhost1">>},
-                 #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
-                   <<"rsname">> => <<"Default Resource">>}]},
+        [<<"read:*/*">>, <<"write:vhost1/*">>]
+    },
+    {
+        "one scopes field with a string instead of an array",
+        #{<<"permissions">> =>
+            [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+               <<"rsname">> => <<"allvhost">>,
+               <<"scopes">> => <<"rabbitmq-resource.read:*/*">>},
+             #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+               <<"rsname">> => <<"vhost1">>,
+               <<"scopes">> => [<<"unknown-resource-read">>]},
+             #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+               <<"rsname">> => <<"Default Resource">>}]},
+        [<<"read:*/*">>]
+    },
+    {
+        "no scopes field in permissions",
+        #{<<"permissions">> =>
+            [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+               <<"rsname">> => <<"allvhost">>},
+             #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+               <<"rsname">> => <<"vhost1">>},
+             #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+               <<"rsname">> => <<"Default Resource">>}]},
+        []
+    },
+    {
+        "no permissions",
+        #{<<"permissions">> => []},
           []
-        },
-
-        %% no permissions
-        {
-          #{<<"permissions">> => []},
-          []
-        },
-        %% missing permissions key
-        {#{}, []}
+    },
+    {"missing permissions key", #{}, []}
     ],
-    lists:foreach(fun({Authorization, ExpectedScope}) ->
+
+    lists:foreach(fun({Case, Authorization, ExpectedScope}) ->
         ResourceServer = resource_server:new_resource_server(<<"rabbitmq-resource">>),
         Token0 = #{<<"authorization">> => Authorization},
         Token = normalize_token_scope(ResourceServer, Token0),
-        ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token))
+        ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token), Case)
         end, Pairs).
 
-test_post_process_payload_rich_auth_request_using_regular_expression_with_cluster(_) ->
+normalize_token_scope_with_rich_auth_request_using_regular_expression_with_cluster(_) ->
 
   Pairs = [
-
   { "should filter out those permisions whose locations do not refer to cluster : {resource_server_id}",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq-test">>],
@@ -230,7 +226,7 @@ test_post_process_payload_rich_auth_request_using_regular_expression_with_cluste
                 lists:sort(uaa_jwt:get_scope(Token)), Case)
       end, Pairs).
 
-test_post_process_payload_rich_auth_request(_) ->
+normalize_token_scope_with_rich_auth_request(_) ->
 
     Pairs = [
     { "should merge all permissions for the current cluster",
@@ -546,75 +542,75 @@ test_post_process_payload_rich_auth_request(_) ->
         ?assertEqual(ExpectedScopes, ActualScopes, Case)
       end, Pairs).
 
-test_post_process_token_payload_complex_claims(_) ->
+normalize_token_scope_with_additional_scopes_complex_claims(_) ->
     Pairs = [
-        %% claims in form of binary
-        {
-          <<"rabbitmq.rabbitmq-resource.read:*/* rabbitmq.rabbitmq-resource-read">>,
-          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        },
-        %% claims in form of binary - empty result
-        {<<>>, []},
-        %% claims in form of list
-        {
-          [<<"rabbitmq.rabbitmq-resource.read:*/*">>,
+    {
+        "claims in form of binary",
+        <<"rabbitmq.rabbitmq-resource.read:*/* rabbitmq.rabbitmq-resource-read">>,
+        [<<"read:*/*">>]
+    },
+    {"claims in form of binary - empty result", <<>>, []},
+    {
+        "claims in form of list",
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>,
            <<"rabbitmq2.rabbitmq-resource-read">>],
-          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq2.rabbitmq-resource-read">>]
+        [<<"read:*/*">>]
+    },
+    {"claims in form of list - empty result", [], []},
+    {
+        "claims are map with list content",
+        #{<<"rabbitmq">> =>
+            [<<"rabbitmq-resource.read:*/*">>,
+             <<"rabbitmq-resource-read">>],
+        <<"rabbitmq3">> =>
+            [<<"rabbitmq-resource.write:*/*">>,
+             <<"rabbitmq-resource-write">>]},
+        [<<"read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+    },
+    {
+        "claims are map with list content - empty result",
+        #{<<"rabbitmq2">> =>
+             [<<"rabbitmq-resource.read:*/*">>,
+              <<"rabbitmq-resource-read">>]},
+        []
+    },
+    {
+        "claims are map with binary content",
+        #{  <<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
+            <<"rabbitmq3">> => <<"rabbitmq-resource.write:*/* rabbitmq-resource-write">>},
+        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+    },
+    {
+        "claims are map with binary content - empty result",
+        #{<<"rabbitmq2">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>}, []
+    },
+    {
+        "claims are map with empty binary content - empty result",
+        #{<<"rabbitmq">> => <<>>}, []
+    },
+    {
+        "claims are map with empty list content - empty result",
+        #{<<"rabbitmq">> => []}, []
+    },
+    {
+        "no extra claims provided",
+        [], []
+    },
+    {
+        "no extra claims provided", #{}, []
+    }],
+    lists:foreach(fun({Case, Authorization, ExpectedScope0}) ->
+        ResourceServer0 = resource_server:new_resource_server(?RESOURCE_SERVER_ID),
+        ResourceServer = ResourceServer0#resource_server{
+            scope_prefix = <<"rabbitmq.rabbitmq-resource.">>,
+            additional_scopes_key = <<"custom-key">>
         },
-        %% claims in form of list - empty result
-        {[], []},
-        %% claims are map with list content
-        {
-          #{<<"rabbitmq">> =>
-                [<<"rabbitmq-resource.read:*/*">>,
-                 <<"rabbitmq-resource-read">>],
-            <<"rabbitmq3">> =>
-                [<<"rabbitmq-resource.write:*/*">>,
-                 <<"rabbitmq-resource-write">>]},
-          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        },
-        %% claims are map with list content - empty result
-        {
-          #{<<"rabbitmq2">> =>
-                 [<<"rabbitmq-resource.read:*/*">>,
-                  <<"rabbitmq-resource-read">>]},
-          []
-        },
-        %% claims are map with binary content
-        {
-          #{<<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
-           <<"rabbitmq3">> => <<"rabbitmq-resource.write:*/* rabbitmq-resource-write">>},
-          [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
-        },
-        %% claims are map with binary content - empty result
-        {
-          #{<<"rabbitmq2">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>}, []
-        },
-        %% claims are map with empty binary content - empty result
-        {
-          #{<<"rabbitmq">> => <<>>}, []
-        },
-        %% claims are map with empty list content - empty result
-        {
-          #{<<"rabbitmq">> => []}, []
-        },
-        %% no extra claims provided
-        {[], []},
-        %% no extra claims provided
-        {#{}, []}
-    ],
-    lists:foreach(
-        fun({Authorization, ExpectedScope}) ->
-            Payload = post_process_payload_with_complex_claim_authorization(<<"rabbitmq-resource">>, Authorization),
-            ?assertEqual(ExpectedScope, maps:get(<<"scope">>, Payload))
-        end, Pairs).
-
-post_process_payload_with_complex_claim_authorization(ResourceServerId, Authorization) ->
-    Jwk = ?UTIL_MOD:fixture_jwk(),
-    Token =  maps:put(<<"additional_rabbitmq_scopes">>, Authorization, ?UTIL_MOD:fixture_token_with_scopes([])),
-    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
-    {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
-    rabbit_auth_backend_oauth2:post_process_payload(ResourceServerId, Payload).
+        Token0 = #{<<"custom-key">> => Authorization},
+        Token = normalize_token_scope(ResourceServer, Token0),
+        ExpectedScopes = lists:sort(ExpectedScope0),
+        ActualScopes = lists:sort(uaa_jwt:get_scope(Token)),
+        ?assertEqual(ExpectedScopes, ActualScopes, Case)
+      end, Pairs).
 
 test_successful_authentication_without_scopes(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),

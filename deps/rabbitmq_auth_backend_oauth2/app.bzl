@@ -105,7 +105,7 @@ def all_srcs(name = "all_srcs"):
             "src/resource_server.erl",
             "src/oauth2_schema.erl",
             "src/rar.erl",
-            "src/keycloak.erl",            
+            "src/keycloak.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
             "src/uaa_jwt.erl",
@@ -233,9 +233,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
+        hdrs = ["include/oauth2.hrl"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app",
+                "//deps/oauth2_client:erlang_app"],
     )
     erlang_bytecode(
         name = "wildcard_match_SUITE_beam_files",

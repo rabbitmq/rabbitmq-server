@@ -133,7 +133,7 @@ authenticate(_, AuthProps0) ->
     Token     = token_from_context(AuthProps),
     case resolve_resource_server(Token) of
         {error, _} = Err0 ->
-            Err0;
+            {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
         {ResourceServer, _} = Tuple ->
             case check_token(Token, Tuple) of
                 {error, _} = E  -> E;
@@ -189,7 +189,7 @@ check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
     case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
         {error, Reason} -> {refused, {error, Reason}};
         {true, Payload} -> {ok, normalize_token_scope(ResourceServer, Payload)};
-        {false, _, _} -> {refused, signature_invalid}
+        {false, _} -> {refused, signature_invalid}
     end.
 
 -spec normalize_token_scope(
