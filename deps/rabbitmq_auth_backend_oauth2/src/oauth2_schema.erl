@@ -71,7 +71,6 @@ translate_list_of_signing_keys(ListOfKidPath) ->
 -spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
-    ct:log("translate_endpoint_params ~p -> ~p", [Variable, Params0]),
     Params = [{list_to_binary(Param), list_to_binary(V)} ||
         {["auth_oauth2", Name, Param], V} <- Params0],
     maps:from_list(Params).
