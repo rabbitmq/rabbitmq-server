@@ -27,10 +27,13 @@ all() ->
         test_oauth_providers_signing_keys,
         test_without_endpoint_params,
         test_with_endpoint_params,
+        test_with_invalid_endpoint_params,
         test_without_resource_servers,
         test_with_one_resource_server,
         test_with_many_resource_servers,
-        test_resource_servers_attributes
+        test_resource_servers_attributes,
+        test_invalid_oauth_providers_endpoint_params,
+        test_without_oauth_providers_with_endpoint_params
 
     ].
 
@@ -46,6 +49,14 @@ test_without_endpoint_params(_) ->
     #{} = translate_endpoint_params("token_endpoint_params", []),
     #{} = translate_endpoint_params("authorization_endpoint_params", []).
 
+test_with_invalid_endpoint_params(_) ->
+    try translate_endpoint_params("discovery_endpoint_params", [
+            {["auth_oauth2","discovery_endpoint_params"], "some-value1"}]) of
+        _ -> {throw, should_have_failed}
+    catch
+        _ -> ok
+    end.
+
 test_with_endpoint_params(_) ->
     Conf = [
         {["auth_oauth2","discovery_endpoint_params","param1"], "some-value1"},
@@ -59,6 +70,30 @@ test_with_endpoint_params(_) ->
         translate_endpoint_params("token_endpoint_params", Conf),
     #{ <<"resource">> := <<"some-resource">>} =
         translate_endpoint_params("authorization_endpoint_params", Conf).
+
+test_invalid_oauth_providers_endpoint_params() ->
+    try oauth2_schema:translate_oauth_providers([
+            {["auth_oauth2","oauth_providers", "X", "discovery_endpoint_params"], ""}]) of
+        _ -> {throw, should_have_failed}
+    catch
+        _ -> ok
+    end.
+test_without_oauth_providers_with_endpoint_params(_) ->
+    Conf = [
+        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param1"], "some-value1"},
+        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param2"], "some-value2"},
+        {["auth_oauth2","oauth_providers", "B", "token_endpoint_params","audience"], "some-audience"},
+        {["auth_oauth2","oauth_providers", "C", "authorization_endpoint_params","resource"], "some-resource"}
+    ],
+
+    #{
+        <<"A">> := [{discovery_endpoint_params,
+                    #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> }}],
+        <<"B">> := [{token_endpoint_params,
+                    #{ <<"audience">> := <<"some-audience">>}}],
+        <<"C">> := [{authorization_endpoint_params,
+                    #{ <<"resource">> := <<"some-resource">>}}]
+    } = translate_oauth_providers(Conf).
 
 test_with_one_oauth_provider(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://rabbit"}

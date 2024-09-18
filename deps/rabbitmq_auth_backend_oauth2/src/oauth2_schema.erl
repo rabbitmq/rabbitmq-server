@@ -72,7 +72,7 @@ translate_list_of_signing_keys(ListOfKidPath) ->
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
     Params = [{list_to_binary(Param), list_to_binary(V)} ||
-        {["auth_oauth2", Name, Param], V} <- Params0],
+        {["auth_oauth2", _, Param], V} <- Params0],
     maps:from_list(Params).
 
 validator_file_exists(Attr, Filename) ->
@@ -104,8 +104,9 @@ extract_oauth_providers_properties(Settings) ->
     ValueFun = fun extract_value/1,
 
     OAuthProviders = [{Name, mapOauthProviderProperty({list_to_atom(Key), list_to_binary(V)})}
-        || {["auth_oauth2","oauth_providers", Name, Key], V} <- Settings ],
+        || {["auth_oauth2", "oauth_providers", Name, Key], V} <- Settings],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+
 
 extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
@@ -122,6 +123,15 @@ mapOauthProviderProperty({Key, Value}) ->
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);
+        token_endpoint_params ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
+        authorization_endpoint_params ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
+        discovery_endpoint_params ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
         _ -> Value
     end}.
 
@@ -163,9 +173,10 @@ extract_resource_server_preferred_username_claims(Settings) ->
 extract_oauth_providers_endpoint_params(Variable, Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
-    IndexedParams = [{Name, {ParamName, list_to_binary(V)}} ||
-        {["auth_oauth2","oauth_providers", Name, EndpointVar, ParamName], V} <- Settings, EndpointVar == Variable ],
-    maps:map(fun(_K,V)-> [{Variable, V}] end,
+    IndexedParams = [{Name, {list_to_binary(ParamName), list_to_binary(V)}} ||
+        {["auth_oauth2","oauth_providers", Name, EndpointVar, ParamName], V}
+            <- Settings, EndpointVar == atom_to_list(Variable) ],
+    maps:map(fun(_K,V)-> [{Variable, maps:from_list(V)}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedParams)).
 
 extract_oauth_providers_signing_keys(Settings) ->
