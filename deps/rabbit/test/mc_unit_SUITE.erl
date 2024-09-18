@@ -524,8 +524,6 @@ amqp_amqpl(_Config) ->
                        durable = true},
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
-           thead2(list, [utf8(<<"l">>)]),
-           thead2(map, [{utf8(<<"k">>), utf8(<<"v">>)}]),
            thead2('x-list', list, [utf8(<<"l">>)]),
            thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
           ],
@@ -591,9 +589,6 @@ amqp_amqpl(_Config) ->
     ?assertMatch(#'P_basic'{expiration = <<"20000">>}, Props),
 
     ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
-    %% these are not coverted as not x- headers
-    ?assertEqual(undefined, header(<<"list">>, HL)),
-    ?assertEqual(undefined, header(<<"map">>, HL)),
     ?assertMatch({_ ,array, [{longstr,<<"l">>}]}, header(<<"x-list">>, HL)),
     ?assertMatch({_, table, [{<<"k">>,longstr,<<"v">>}]}, header(<<"x-map">>, HL)),
 

@@ -244,21 +244,21 @@ amqp_dead_letter(Config) ->
          Msg1 = case Seq rem 2 of
                     0 ->
                         amqp10_msg:set_message_annotations(
-                          #{<<"k1">> => Seq}, Msg0);
+                          #{<<"x-k1">> => Seq}, Msg0);
                     1 ->
                         Msg0
                 end,
          Msg2 = case Seq rem 3 of
                     0 ->
                         amqp10_msg:set_application_properties(
-                          #{<<"k2">> => Seq}, Msg1);
+                          #{<<"x-k2">> => Seq}, Msg1);
                     _ ->
                         Msg1
                 end,
          Msg = case Seq rem 4 of
                    0 ->
                        amqp10_msg:set_delivery_annotations(
-                         #{<<"k3">> => Seq}, Msg2);
+                         #{<<"x-k3">> => Seq}, Msg2);
                    _ ->
                        Msg2
                end,
