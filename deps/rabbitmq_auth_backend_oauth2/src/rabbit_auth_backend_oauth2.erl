@@ -106,7 +106,6 @@ update_state(AuthUser, NewToken) ->
         {_, _} = Tuple ->
             case check_token(NewToken, Tuple) of
                 %% avoid logging the token
-                {error, _} = E  -> E;
                 {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
                 {refused, Err} ->
@@ -136,7 +135,6 @@ authenticate(_, AuthProps0) ->
             {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
         {ResourceServer, _} = Tuple ->
             case check_token(Token, Tuple) of
-                {error, _} = E  -> E;
                 {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
                 {refused, Err} ->

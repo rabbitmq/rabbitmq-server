@@ -58,7 +58,7 @@ resolve_resource_server_from_audience(Audience) ->
 
 -spec get_root_resource_server_id() -> resource_server_id().
 get_root_resource_server_id() ->
-    get_env(resource_server_id).
+    get_env(resource_server_id, <<>>).
 
 -spec get_root_resource_server() -> resource_server().
 get_root_resource_server() ->
@@ -80,7 +80,7 @@ get_root_resource_server() ->
         get_env(extra_scopes_source),
     DefaultScopePrefix =
         case ResourceServerId of
-            undefined -> undefined;
+            <<>> -> undefined;
             _ -> erlang:iolist_to_binary([ResourceServerId, <<".">>])
         end,
     ScopePrefix =
@@ -102,17 +102,18 @@ get_root_resource_server() ->
         oauth_provider_id = OAuthProviderId
     }.
 
--spec get_resource_server(resource_server_id()) -> resource_server().
+-spec get_resource_server(resource_server_id()) -> resource_server() | undefined.
 get_resource_server(ResourceServerId) ->
     RootResourseServer = get_root_resource_server(),
     RootResourseServerId = RootResourseServer#resource_server.id,
     case ResourceServerId of
-        undefined -> undefined;
+        <<>> -> undefined;
         RootResourseServerId -> RootResourseServer;
         _ -> get_resource_server(ResourceServerId, RootResourseServer)
     end.
 
--spec get_resource_server(resource_server_id(), resource_server()) -> resource_server().
+-spec get_resource_server(ResourceServerId :: resource_server_id(),
+    DefaultResourceServerSettings :: resource_server()) -> resource_server().
 get_resource_server(ResourceServerId, RootResourseServer) when
         ResourceServerId == RootResourseServer#resource_server.id ->
     RootResourseServer;
@@ -202,7 +203,7 @@ find_unique_resource_server_without_verify_aud() ->
     Map0 = maps:filter(fun(_K,V) -> not get_boolean_value(verify_aud, V,
         Root#resource_server.verify_aud) end, get_env(resource_servers, #{})),
     Map = case {Root#resource_server.id, Root#resource_server.verify_aud}  of
-        {undefined, _} -> Map0;
+        {<<>>, _} -> Map0;
         {_, true} -> Map0;
         {Id, false} -> maps:put(Id, Root, Map0)
     end,
@@ -214,7 +215,7 @@ find_unique_resource_server_without_verify_aud() ->
 
 append(List, Value) ->
     case Value of
-        undefined -> List;
+        <<>> -> List;
         _ -> List ++ [Value]
     end.
 get_env(Par) ->
