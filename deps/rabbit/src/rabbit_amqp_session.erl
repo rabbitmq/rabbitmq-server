@@ -1912,13 +1912,15 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                                         undeliverable_here = UndelHere,
                                         message_annotations = Anns0}) ->
     Anns = case Anns0 of
-               #'v1_0.message_annotations'{content = C} ->
-                   Anns1 = lists:map(fun({{symbol, K}, V}) ->
-                                             {K, unwrap(V)}
-                                     end, C),
-                   maps:from_list(Anns1);
-               _ ->
-                   #{}
+               undefined ->
+                   #{};
+               {map, KVList} ->
+                   Anns1 = lists:map(
+                             %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
+                             fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
+                                     {K, unwrap(V)}
+                             end, KVList),
+                   maps:from_list(Anns1)
            end,
     {modify,
      default(DelFailed, false),
