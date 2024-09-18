@@ -121,12 +121,12 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                   end},
                                  {<<"dest-message-annotations">>,
                                   case MapConfig of
-                                     true ->
-                                         #{<<"message-ann-key">> =>
-                                               <<"message-ann-value">>};
-                                     _ ->
-                                         [{<<"message-ann-key">>,
-                                           <<"message-ann-value">>}]
+                                      true ->
+                                          #{<<"x-message-ann-key">> =>
+                                            <<"message-ann-value">>};
+                                      _ ->
+                                          [{<<"x-message-ann-key">>,
+                                            <<"message-ann-value">>}]
                                   end}]),
     Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
     AppProps = amqp10_msg:application_properties(Msg),
@@ -138,7 +138,7 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                     <<"app-prop-key">> := <<"app-prop-value">>}),
                  (AppProps)),
     ?assertEqual(undefined, maps:get(<<"delivery_mode">>, AppProps, undefined)),
-    ?assertMatch((#{<<"message-ann-key">> := <<"message-ann-value">>}),
+    ?assertMatch((#{<<"x-message-ann-key">> := <<"message-ann-value">>}),
                  (amqp10_msg:message_annotations(Msg))).
 
 simple_amqp10_src(Config) ->

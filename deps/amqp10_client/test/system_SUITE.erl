@@ -348,8 +348,8 @@ roundtrip(OpenConf, Body) ->
     Msg0 = amqp10_msg:new(<<"my-tag">>, Body, true),
     Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     Msg2 = amqp10_msg:set_properties(Props, Msg1),
-    Msg = amqp10_msg:set_message_annotations(#{<<"x-key">> => "x-value",
-                                               <<"x_key">> => "x_value"}, Msg2),
+    Msg = amqp10_msg:set_message_annotations(#{<<"x-key 1">> => "value 1",
+                                               <<"x-key 2">> => "value 2"}, Msg2),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
@@ -364,8 +364,8 @@ roundtrip(OpenConf, Body) ->
     % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     ?assertMatch(Props, amqp10_msg:properties(OutMsg)),
     ?assertEqual(#{<<"a_key">> => <<"a_value">>}, amqp10_msg:application_properties(OutMsg)),
-    ?assertMatch(#{<<"x-key">> := <<"x-value">>,
-                   <<"x_key">> := <<"x_value">>}, amqp10_msg:message_annotations(OutMsg)),
+    ?assertMatch(#{<<"x-key 1">> := <<"value 1">>,
+                   <<"x-key 2">> := <<"value 2">>}, amqp10_msg:message_annotations(OutMsg)),
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
