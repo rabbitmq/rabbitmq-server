@@ -298,10 +298,10 @@ module Test =
         use c = connectAnon uri
         let sender, receiver = senderReceiver c "test" "/queues/message_annotations"
         let ann = MessageAnnotations()
-        let k1 = Symbol "key1"
-        let k2 = Symbol "key2"
-        ann.[Symbol "key1"] <- "value1"
-        ann.[Symbol "key2"] <- "value2"
+        let k1 = Symbol "x-key1"
+        let k2 = Symbol "x-key2"
+        ann.[Symbol "x-key1"] <- "value1"
+        ann.[Symbol "x-key2"] <- "value2"
         let m = new Message("testing annotations", MessageAnnotations = ann)
         sender.Send m
         let m' = receive receiver
