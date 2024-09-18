@@ -12,6 +12,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
+-import(oauth2_schema, [translate_endpoint_params/2, translate_oauth_providers/1]).
 
 all() ->
     [
@@ -24,6 +25,8 @@ all() ->
         test_oauth_providers_https,
         test_oauth_providers_https_with_missing_cacertfile,
         test_oauth_providers_signing_keys,
+        test_without_endpoint_params,
+        test_with_endpoint_params,
         test_without_resource_servers,
         test_with_one_resource_server,
         test_with_many_resource_servers,
@@ -37,6 +40,25 @@ test_without_oauth_providers(_) ->
 
 test_without_resource_servers(_) ->
     #{} = oauth2_schema:translate_resource_servers([]).
+
+test_without_endpoint_params(_) ->
+    #{} = translate_endpoint_params("discovery_endpoint_params", []),
+    #{} = translate_endpoint_params("token_endpoint_params", []),
+    #{} = translate_endpoint_params("authorization_endpoint_params", []).
+
+test_with_endpoint_params(_) ->
+    Conf = [
+        {["auth_oauth2","discovery_endpoint_params","param1"], "some-value1"},
+        {["auth_oauth2","discovery_endpoint_params","param2"], "some-value2"},
+        {["auth_oauth2","token_endpoint_params","audience"], "some-audience"},
+        {["auth_oauth2","authorization_endpoint_params","resource"], "some-resource"}
+    ],
+    #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> } =
+        translate_endpoint_params("discovery_endpoint_params", Conf),
+    #{ <<"audience">> := <<"some-audience">>} =
+        translate_endpoint_params("token_endpoint_params", Conf),
+    #{ <<"resource">> := <<"some-resource">>} =
+        translate_endpoint_params("authorization_endpoint_params", Conf).
 
 test_with_one_oauth_provider(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://rabbit"}

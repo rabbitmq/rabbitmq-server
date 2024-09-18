@@ -6,7 +6,7 @@
 %%
 
 %% The closest we have to a type import in Erlang
--type option(T) :: rabbit_types:option(T).
+-type(option(T) :: T | 'undefined').
 
 -type oauth_provider_id() :: root | binary().
 
@@ -22,10 +22,15 @@
 -record(oauth_provider, {
   id :: oauth_provider_id(),
   issuer :: option(uri_string:uri_string()),
+  discovery_endpoint_path :: option(uri_string:uri_string()),
+  discovery_endpoint_params :: option([tuple()]),
   token_endpoint :: option(uri_string:uri_string()),
+  token_endpoint_params :: option([tuple()]),
   authorization_endpoint :: option(uri_string:uri_string()),
+  authorization_endpoint_params :: option([tuple()]),
   end_session_endpoint :: option(uri_string:uri_string()),
   jwks_uri :: option(uri_string:uri_string()),
+  jwks_uri_params :: option([tuple()]),
   ssl_options :: option(list())
   }).
 

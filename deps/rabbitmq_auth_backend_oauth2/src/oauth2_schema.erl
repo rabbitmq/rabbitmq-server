@@ -11,8 +11,8 @@
 -export([
     translate_oauth_providers/1,
     translate_resource_servers/1,
-    translate_signing_keys/1 %,
-    %%translate_authorization_endpoint_params/1
+    translate_signing_keys/1,
+    translate_endpoint_params/2
 ]).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
@@ -40,9 +40,13 @@ translate_oauth_providers(Conf) ->
 
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),
+        extract_oauth_providers_endpoint_params(discovery_endpoint_params, Settings),
+        extract_oauth_providers_endpoint_params(authorization_endpoint_params, Settings),
+        extract_oauth_providers_endpoint_params(token_endpoint_params, Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
-        extract_oauth_providers_signing_keys(Settings)]).
+        extract_oauth_providers_signing_keys(Settings)
+        ]).
 
 -spec translate_signing_keys([{list(), binary()}]) -> map().
 translate_signing_keys(Conf) ->
@@ -64,10 +68,13 @@ translate_list_of_signing_keys(ListOfKidPath) ->
         end,
     maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, maps:from_list(ListOfKidPath)).
 
-%%-spec translate_authorization_endpoint_params([{list(), binary()}]) -> map().
-%%translate_authorization_endpoint_params(Conf) ->
-%%    Params = cuttlefish_variable:filter_by_prefix("auth_oauth2.authorization_endpoint_params", Conf),
-%%    lists:map(fun({Id, Value}) -> {list_to_binary(lists:last(Id)), Value} end, Params).
+-spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
+translate_endpoint_params(Variable, Conf) ->
+    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
+    ct:log("translate_endpoint_params ~p -> ~p", [Variable, Params0]),
+    Params = [{list_to_binary(Param), list_to_binary(V)} ||
+        {["auth_oauth2", Name, Param], V} <- Params0],
+    maps:from_list(Params).
 
 validator_file_exists(Attr, Filename) ->
     case file:read_file(Filename) of
@@ -153,6 +160,14 @@ extract_resource_server_preferred_username_claims(Settings) ->
     Claims = [{Name, V} || {Name, {_I, V}} <- SortedClaims],
     maps:map(fun(_K,V)-> [{preferred_username_claims, V}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, Claims)).
+
+extract_oauth_providers_endpoint_params(Variable, Settings) ->
+    KeyFun = fun extract_key_as_binary/1,
+
+    IndexedParams = [{Name, {ParamName, list_to_binary(V)}} ||
+        {["auth_oauth2","oauth_providers", Name, EndpointVar, ParamName], V} <- Settings, EndpointVar == Variable ],
+    maps:map(fun(_K,V)-> [{Variable, V}] end,
+        maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedParams)).
 
 extract_oauth_providers_signing_keys(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
