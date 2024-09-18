@@ -28,6 +28,9 @@
     get_scope/1, set_scope/2,
     resolve_resource_server/1]).
 
+-import(keycloak, [has_keycloak_scopes/1, extract_scopes_from_keycloak_format/1]).
+-import(rar, [extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
+
 -import(rabbit_oauth2_scope, [filter_matching_scope_prefix_and_drop_it/2]).
 
 -ifdef(TEST).
@@ -205,7 +208,7 @@ normalize_token_scope(ResourceServer, Payload) ->
         false -> Payload0
         end,
 
-    Payload2 = case maps:is_key(<<"authorization">>, Payload1) of
+    Payload2 = case has_keycloak_scopes(Payload1) of
         true  -> extract_scopes_from_keycloak_format(Payload1);
         false -> Payload1
         end,
@@ -215,7 +218,7 @@ normalize_token_scope(ResourceServer, Payload) ->
         ScopeAliases  -> extract_scopes_using_scope_aliases(ScopeAliases, Payload2)
         end,
 
-    Payload4 = case maps:is_key(<<"authorization_details">>, Payload3) of
+    Payload4 = case has_rich_auth_request_scopes(Payload3) of
         true  -> extract_scopes_from_rich_auth_request(ResourceServer, Payload3);
         false -> Payload3
         end,
@@ -259,18 +262,10 @@ has_additional_scopes_key(ResourceServer, Payload) when is_map(Payload) ->
 -spec extract_scopes_from_additional_scopes_key(
     ResourceServer :: resource_server(), Payload :: map()) -> map().
 extract_scopes_from_additional_scopes_key(ResourceServer, Payload) ->
-    case ResourceServer#resource_server.additional_scopes_key of
-        undefined -> Payload;
-        ScopesKey ->
-            AdditionalScopes = extract_additional_scopes(ResourceServer,
-                maps:get(ScopesKey, Payload)),
-            case AdditionalScopes of
-                [] -> Payload;
-                _  ->
-                    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload, []),
-                    maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload)
-            end
-    end.
+    Claim = maps:get(ResourceServer#resource_server.additional_scopes_key, Payload),
+    AdditionalScopes = extract_additional_scopes(ResourceServer, Claim),
+    set_scope(AdditionalScopes ++ get_scope(Payload), Payload).
+
 extract_additional_scopes(ResourceServer, ComplexClaim) ->
     ResourceServerId = ResourceServer#resource_server.id,
     case ComplexClaim of
@@ -290,205 +285,6 @@ extract_additional_scopes(ResourceServer, ComplexClaim) ->
         _ -> []
     end.
 
--spec extract_scopes_from_keycloak_format(Payload :: map()) -> map().
-%% keycloak token format: https://github.com/rabbitmq/rabbitmq-auth-backend-oauth2/issues/36
-extract_scopes_from_keycloak_format(#{<<"authorization">> := Authorization} = Payload) ->
-    AdditionalScopes = case maps:get(<<"permissions">>, Authorization, undefined) of
-        undefined   -> [];
-        Permissions -> extract_scopes_from_keycloak_permissions([], Permissions)
-    end,
-    ExistingScopes = maps:get(?SCOPE_JWT_FIELD, Payload),
-    maps:put(?SCOPE_JWT_FIELD, AdditionalScopes ++ ExistingScopes, Payload).
-
-extract_scopes_from_keycloak_permissions(Acc, []) ->
-    Acc;
-extract_scopes_from_keycloak_permissions(Acc, [H | T]) when is_map(H) ->
-    Scopes = case maps:get(<<"scopes">>, H, []) of
-        ScopesAsList when is_list(ScopesAsList) ->
-            ScopesAsList;
-        ScopesAsBinary when is_binary(ScopesAsBinary) ->
-            [ScopesAsBinary]
-    end,
-    extract_scopes_from_keycloak_permissions(Acc ++ Scopes, T);
-extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
-    extract_scopes_from_keycloak_permissions(Acc, T).
-
-
-put_location_attribute(Attribute, Map) ->
-    put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
-
-put_attribute([Key, Value | _], Map) ->
-    case lists:member(Key, ?RAR_LOCATION_ATTRIBUTES) of
-        true -> maps:put(Key, Value, Map);
-        false -> Map
-    end;
-put_attribute([_|_], Map) -> Map.
-
-
-% convert [ <<"cluster:A">>, <<"vhost:B" >>, <<"A">>, <<"unknown:C">> ] to #{ <<"cluster">> : <<"A">>, <<"vhost">> : <<"B">> }
-% filtering out non-key-value-pairs and keys which are not part of LOCATION_ATTRIBUTES
-convert_attribute_list_to_attribute_map(L) ->
-    convert_attribute_list_to_attribute_map(L, #{}).
-convert_attribute_list_to_attribute_map([H|L],Map) when is_binary(H) ->
-    convert_attribute_list_to_attribute_map(L, put_location_attribute(H,Map));
-convert_attribute_list_to_attribute_map([], Map) -> Map.
-
-build_permission_resource_path(Map) ->
-    Vhost = maps:get(?RAR_VHOST_LOCATION_ATTRIBUTE, Map, <<"*">>),
-    Resource = maps:get(?RAR_QUEUE_LOCATION_ATTRIBUTE, Map,
-        maps:get(?RAR_EXCHANGE_LOCATION_ATTRIBUTE, Map, <<"*">>)),
-    RoutingKey = maps:get(?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE, Map, <<"*">>),
-
-    <<Vhost/binary,"/",Resource/binary,"/",RoutingKey/binary>>.
-
-map_locations_to_permission_resource_paths(ResourceServerId, L) ->
-    Locations = case L of
-        undefined -> [];
-        LocationsAsList when is_list(LocationsAsList) ->
-            lists:map(fun(Location) -> convert_attribute_list_to_attribute_map(
-                binary:split(Location,<<"/">>,[global,trim_all])) end, LocationsAsList);
-        LocationsAsBinary when is_binary(LocationsAsBinary) ->
-            [convert_attribute_list_to_attribute_map(
-                binary:split(LocationsAsBinary,<<"/">>,[global,trim_all]))]
-        end,
-
-    FilteredLocations = lists:filtermap(fun(L2) ->
-        case cluster_matches_resource_server_id(L2, ResourceServerId) and
-          legal_queue_and_exchange_values(L2) of
-            true -> { true, build_permission_resource_path(L2) };
-            false -> false
-        end end, Locations),
-
-    FilteredLocations.
-
-cluster_matches_resource_server_id(#{?RAR_CLUSTER_LOCATION_ATTRIBUTE := Cluster},
-  ResourceServerId) ->
-      wildcard:match(ResourceServerId, Cluster);
-
-cluster_matches_resource_server_id(_,_) ->
-    false.
-
-legal_queue_and_exchange_values(#{?RAR_QUEUE_LOCATION_ATTRIBUTE := Queue,
-    ?RAR_EXCHANGE_LOCATION_ATTRIBUTE := Exchange}) ->
-        case Queue of
-            <<>> ->
-                case Exchange of
-                    <<>> -> true;
-                    _ -> false
-                end;
-            _ ->
-                case Exchange of
-                    Queue -> true;
-                    _ -> false
-                end
-        end;
-legal_queue_and_exchange_values(_) -> true.
-
-map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions) ->
-    map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions, []).
-map_rich_auth_permissions_to_scopes(_, [], Acc) -> Acc;
-map_rich_auth_permissions_to_scopes(ResourceServerId,
-  [ #{?RAR_ACTIONS_FIELD := Actions, ?RAR_LOCATIONS_FIELD := Locations }  | T ], Acc) ->
-    ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
-    case ResourcePaths of
-        [] -> map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc);
-        _ ->
-            Scopes = case Actions of
-                undefined -> [];
-                ActionsAsList when is_list(ActionsAsList) ->
-                    build_scopes(ResourceServerId,
-                        skip_unknown_actions(ActionsAsList), ResourcePaths);
-                ActionsAsBinary when is_binary(ActionsAsBinary) ->
-                    build_scopes(ResourceServerId,
-                        skip_unknown_actions([ActionsAsBinary]), ResourcePaths)
-            end,
-            map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc ++ Scopes)
-    end.
-
-skip_unknown_actions(Actions) ->
-    lists:filter(fun(A) -> lists:member(A, ?RAR_ALLOWED_ACTION_VALUES) end, Actions).
-
-produce_list_of_user_tag_or_action_on_resources(ResourceServerId, ActionOrUserTag, Locations) ->
-    case lists:member(ActionOrUserTag, ?RAR_ALLOWED_TAG_VALUES) of
-        true -> [<< ResourceServerId/binary, ".tag:", ActionOrUserTag/binary >>];
-        _ -> build_scopes_for_action(ResourceServerId, ActionOrUserTag, Locations, [])
-    end.
-
-build_scopes_for_action(ResourceServerId, Action, [Location|Locations], Acc) ->
-    Scope = << ResourceServerId/binary, ".", Action/binary, ":", Location/binary >>,
-    build_scopes_for_action(ResourceServerId, Action, Locations, [ Scope | Acc ] );
-build_scopes_for_action(_, _, [], Acc) -> Acc.
-
-build_scopes(ResourceServerId, Actions, Locations) ->
-    lists:flatmap(fun(Action) ->
-        produce_list_of_user_tag_or_action_on_resources(ResourceServerId,
-            Action, Locations) end, Actions).
-
-is_recognized_permission(#{?RAR_ACTIONS_FIELD := _, ?RAR_LOCATIONS_FIELD:= _ ,
-        ?RAR_TYPE_FIELD := Type }, ResourceServerType) ->
-    case ResourceServerType of
-        <<>> -> false;
-        V when V == Type -> true;
-        _ -> false
-    end;
-is_recognized_permission(_, _) -> false.
-
-
--spec extract_scopes_from_rich_auth_request(ResourceServer :: resource_server(),
-        Payload :: map()) -> map().
-%% https://oauth.net/2/rich-authorization-requests/
-extract_scopes_from_rich_auth_request(ResourceServer,
-        #{<<"authorization_details">> := Permissions} = Payload) ->
-    ResourceServerType = ResourceServer#resource_server.resource_server_type,
-
-    FilteredPermissionsByType = lists:filter(fun(P) ->
-      is_recognized_permission(P, ResourceServerType) end, Permissions),
-    AdditionalScopes = map_rich_auth_permissions_to_scopes(
-        ResourceServer#resource_server.id, FilteredPermissionsByType),
-
-    ExistingScopes = get_scope(Payload),
-    set_scope(AdditionalScopes ++ ExistingScopes, Payload).
-
--spec get_expanded_scopes(map(), #resource{}) -> [binary()].
-get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
-    Context = #{ token => Token , vhost => VHost},
-    case get_scope(Token) of
-        [] -> [];
-        Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
-    end.
-
-parse_scope(Scope, Context) ->
-    { Acc0, _} = lists:foldl(fun(Elem, { Acc, Stage }) -> parse_scope_part(Elem, Acc, Stage, Context) end,
-        { [], undefined }, re:split(Scope,"([\{.*\}])",[{return,list},trim])),
-    Acc0.
-
-parse_scope_part(Elem, Acc, Stage, Context) ->
-    case Stage of
-        error -> {Acc, error};
-        undefined ->
-            case Elem of
-                "{" -> { Acc, fun capture_var_name/3};
-                Value -> { Acc ++ Value, Stage}
-            end;
-        _ -> Stage(Elem, Acc, Context)
-    end.
-
-capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
-    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
-
-expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
-expect_closing_var(_ , _Acc, _Context) -> {"", error}.
-
-resolve_scope_var(Elem, Token, Vhost) ->
-    case Elem of
-        "vhost" -> binary_to_list(Vhost);
-        _ ->
-            ElemAsBinary = list_to_binary(Elem),
-            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
-                          Value when is_binary(Value) -> Value;
-                          _ -> ElemAsBinary
-                        end)
-    end.
 
 %% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
 %% credential.  The former is the most common scenario for the first time authentication.
@@ -544,7 +340,47 @@ find_claim_in_token(Claim, Token) ->
         _ -> false
     end.
 
--define(TAG_SCOPE_PREFIX, <<"tag:">>).
+-spec get_expanded_scopes(map(), #resource{}) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
+    Context = #{ token => Token , vhost => VHost},
+    case get_scope(Token) of
+        [] -> [];
+        Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
+    end.
+
+
+parse_scope(Scope, Context) ->
+    { Acc0, _} = lists:foldl(fun(Elem, { Acc, Stage }) -> parse_scope_part(Elem, Acc, Stage, Context) end,
+        { [], undefined }, re:split(Scope,"([\{.*\}])",[{return,list},trim])),
+    Acc0.
+
+parse_scope_part(Elem, Acc, Stage, Context) ->
+    case Stage of
+        error -> {Acc, error};
+        undefined ->
+            case Elem of
+                "{" -> { Acc, fun capture_var_name/3};
+                Value -> { Acc ++ Value, Stage}
+            end;
+        _ -> Stage(Elem, Acc, Context)
+    end.
+
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
+    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+
+expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
+expect_closing_var(_ , _Acc, _Context) -> {"", error}.
+
+resolve_scope_var(Elem, Token, Vhost) ->
+    case Elem of
+        "vhost" -> binary_to_list(Vhost);
+        _ ->
+            ElemAsBinary = list_to_binary(Elem),
+            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                          Value when is_binary(Value) -> Value;
+                          _ -> ElemAsBinary
+                        end)
+    end.
 
 -spec tags_from(map()) -> list(atom()).
 tags_from(DecodedToken) ->

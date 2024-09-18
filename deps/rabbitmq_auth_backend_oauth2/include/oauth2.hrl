@@ -18,29 +18,9 @@
 
 -define(AUD_JWT_FIELD, <<"aud">>).
 -define(SCOPE_JWT_FIELD, <<"scope">>).
+-define(TAG_SCOPE_PREFIX, <<"tag:">>).
 
 %% End of Key JWT fields
-
-%%
-%% Rich Authorization Request fields
-%%
--define(RAR_ACTIONS_FIELD, <<"actions">>).
--define(RAR_LOCATIONS_FIELD, <<"locations">>).
--define(RAR_TYPE_FIELD, <<"type">>).
-
--define(RAR_CLUSTER_LOCATION_ATTRIBUTE, <<"cluster">>).
--define(RAR_VHOST_LOCATION_ATTRIBUTE, <<"vhost">>).
--define(RAR_QUEUE_LOCATION_ATTRIBUTE, <<"queue">>).
--define(RAR_EXCHANGE_LOCATION_ATTRIBUTE, <<"exchange">>).
--define(RAR_ROUTING_KEY_LOCATION_ATTRIBUTE, <<"routing-key">>).
--define(RAR_LOCATION_ATTRIBUTES, [?RAR_CLUSTER_LOCATION_ATTRIBUTE, ?RAR_VHOST_LOCATION_ATTRIBUTE,
-  ?RAR_QUEUE_LOCATION_ATTRIBUTE, ?RAR_EXCHANGE_LOCATION_ATTRIBUTE, ?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE]).
-
--define(RAR_ALLOWED_TAG_VALUES, [<<"monitoring">>, <<"administrator">>, <<"management">>, <<"policymaker">> ]).
--define(RAR_ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"monitoring">>,
-  <<"administrator">>, <<"management">>, <<"policymaker">> ]).
-
-%% end of Rich Authorization Request fields
 
 
 -record(internal_oauth_provider, {
@@ -55,9 +35,9 @@
   resource_server_type :: binary() | undefined,
   verify_aud :: boolean(),
   scope_prefix :: binary(),
-  additional_scopes_key :: binary(),
+  additional_scopes_key :: binary() | undefined,
   preferred_username_claims :: list(),
-  scope_aliases :: undefined | map(),
+  scope_aliases :: map() | undefined,
   oauth_provider_id :: oauth_provider_id()
  }).
 

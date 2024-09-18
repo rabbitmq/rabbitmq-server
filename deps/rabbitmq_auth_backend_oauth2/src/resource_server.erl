@@ -10,8 +10,22 @@
 -include("oauth2.hrl").
 
 -export([
-    resolve_resource_server_from_audience/1
+    resolve_resource_server_from_audience/1,
+    new_resource_server/1
 ]).
+
+-spec new_resource_server(resource_server_id()) -> resource_server().
+new_resource_server(ResourceServerId) ->
+    #resource_server{
+        id = ResourceServerId,
+        resource_server_type = undefined,
+        verify_aud = true,
+        scope_prefix = erlang:iolist_to_binary([ResourceServerId, <<".">>]),
+        additional_scopes_key = undefined,
+        preferred_username_claims = ?DEFAULT_PREFERRED_USERNAME_CLAIMS,
+        scope_aliases = undefined,
+        oauth_provider_id = root
+    }.
 
 -spec resolve_resource_server_from_audience(binary() | list() | none) ->
     {ok, resource_server()} |
