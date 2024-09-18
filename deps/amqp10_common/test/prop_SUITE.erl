@@ -412,13 +412,20 @@ footer_section() ->
 
 annotations() ->
     ?LET(KvList,
-         list({oneof([amqp_symbol(),
-                      amqp_ulong()]),
+         list({non_reserved_annotation_key(),
                prefer_simple_type()}),
          begin
              KvList1 = lists:uniq(fun({K, _V}) -> K end, KvList),
              lists:filter(fun({_K, V}) -> V =/= null end, KvList1)
          end).
+
+non_reserved_annotation_key() ->
+    {symbol, ?LET(L,
+                  ?SIZED(Size, resize(Size * 10, list(ascii_char()))),
+                  begin
+                      Bin = list_to_binary(L) ,
+                      <<"x-", Bin/binary>>
+                  end)}.
 
 sequence_no() ->
     amqp_uint().

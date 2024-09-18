@@ -355,7 +355,7 @@ reliable_send_receive_with_outcomes(QType, Config) ->
     Outcomes = [
                 accepted,
                 modified,
-                {modified, true, false, #{<<"fruit">> => <<"banana">>}},
+                {modified, true, false, #{<<"x-fruit">> => <<"banana">>}},
                 {modified, false, true, #{}},
                 rejected,
                 released
@@ -1124,7 +1124,7 @@ amqp_amqpl(QType, Config) ->
                #{"my int" => -2},
                amqp10_msg:new(<<>>, Body1, true)))),
     %% Send with footer
-    Footer = #'v1_0.footer'{content = [{{symbol, <<"my footer">>}, {ubyte, 255}}]},
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"x-my footer">>}, {ubyte, 255}}]},
     ok = amqp10_client:send_msg(
            Sender,
            amqp10_msg:from_amqp_records(
@@ -5155,7 +5155,7 @@ footer_checksum(FooterOpt, Config) ->
              priority => 7,
              ttl => 100_000},
            amqp10_msg:set_delivery_annotations(
-             #{"a" => "b"},
+             #{"x-a" => "b"},
              amqp10_msg:set_message_annotations(
                #{"x-string" => "string-value",
                  "x-int" => 3,

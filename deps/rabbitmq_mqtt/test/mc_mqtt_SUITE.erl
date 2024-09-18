@@ -265,7 +265,7 @@ amqp_to_mqtt_reply_to(_Config) ->
 
 amqp_to_mqtt_footer(_Config) ->
     Body = <<"hey">>,
-    Footer = #'v1_0.footer'{content = [{{symbol, <<"key">>}, {utf8, <<"value">>}}]},
+    Footer = #'v1_0.footer'{content = [{{symbol, <<"x-key">>}, {utf8, <<"value">>}}]},
     %% We can translate, but lose the footer.
     #mqtt_msg{payload = Payload} = amqp_to_mqtt([#'v1_0.data'{content = Body}, Footer]),
     ?assertEqual(<<"hey">>, iolist_to_binary(Payload)).
@@ -404,8 +404,6 @@ amqp_mqtt(_Config) ->
                        durable = true},
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
-           thead2(list, [utf8(<<"l">>)]),
-           thead2(map, [{utf8(<<"k">>), utf8(<<"v">>)}]),
            thead2('x-list', list, [utf8(<<"l">>)]),
            thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
           ],

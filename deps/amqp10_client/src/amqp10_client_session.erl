@@ -1171,15 +1171,12 @@ make_link_ref(Role, Session, Handle) ->
     #link_ref{role = Role, session = Session, link_handle = Handle}.
 
 translate_message_annotations(MA)
-  when is_map(MA) andalso
-       map_size(MA) > 0 ->
-    Content = maps:fold(fun (K, V, Acc) ->
-                                [{sym(K), wrap_map_value(V)} | Acc]
-                        end, [], MA),
-    #'v1_0.message_annotations'{content = Content};
+  when map_size(MA) > 0 ->
+    {map, maps:fold(fun(K, V, Acc) ->
+                            [{sym(K), wrap_map_value(V)} | Acc]
+                    end, [], MA)};
 translate_message_annotations(_MA) ->
     undefined.
-
 
 wrap_map_value(true) ->
     {boolean, true};
