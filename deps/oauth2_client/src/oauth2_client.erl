@@ -109,12 +109,7 @@ get_openid_configuration(DiscoverEndpoint, TLSOptions) ->
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
-merge_openid_configuration(OpendIdConfiguration, OAuthProvider) ->
-    OAuthProvider0 = case OpendIdConfiguration#openid_configuration.issuer of
-        undefined -> OAuthProvider;
-        Issuer ->
-            OAuthProvider#oauth_provider{issuer = Issuer}
-    end,
+merge_openid_configuration(OpendIdConfiguration, OAuthProvider0) ->    
     OAuthProvider1 = case OpendIdConfiguration#openid_configuration.token_endpoint of
         undefined -> OAuthProvider0;
         TokenEndpoint ->
@@ -280,7 +275,7 @@ unlock(LockId) ->
 get_oauth_provider(ListOfRequiredAttributes) ->
     case get_env(default_oauth_provider) of
         undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
-        {ok, DefaultOauthProviderId} ->
+        DefaultOauthProviderId ->
             rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProviderId]),
             get_oauth_provider(DefaultOauthProviderId, ListOfRequiredAttributes)
     end.
@@ -292,12 +287,12 @@ get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
         [] ->
             {ok, OAuthProvider};
         _ = MissingAttributes ->
-            rabbit_log:debug("OauthProvider has following missing attributes ~p", [MissingAttributes]),
-            Result2 = case OAuthProvider#oauth_provider.issuer of
+            rabbit_log:debug("Looking up missing attributes ~p ...", [MissingAttributes]),
+            Result2 = case OAuthProvider#oauth_provider.discovery_endpoint of
                 undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
-                Issuer ->
-                    rabbit_log:debug("Downloading oauth_provider using issuer ~p", [Issuer]),
-                    case get_openid_configuration(Issuer, get_ssl_options_if_any(OAuthProvider)) of
+                URL ->
+                    rabbit_log:debug("Downloading oauth_provider using ~p ", [URL]),
+                    case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
                         {ok, OpenIdConfiguration} ->
                             {ok, update_oauth_provider_endpoints_configuration(
                                 merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
@@ -341,12 +336,12 @@ get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) when is_binary(OAu
                     {ok, OAuthProvider};
                 _ = MissingAttributes ->
                     rabbit_log:debug("OauthProvider has following missing attributes ~p", [MissingAttributes]),
-                    Result2 = case OAuthProvider#oauth_provider.issuer of
+                    Result2 = case OAuthProvider#oauth_provider.discovery_endpoint of
                         undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
-                        Issuer ->
-                            rabbit_log:debug("Downloading oauth_provider ~p using issuer ~p",
-                                [OAuthProviderId, Issuer]),
-                            case get_openid_configuration(Issuer, get_ssl_options_if_any(OAuthProvider)) of
+                        URL ->
+                            rabbit_log:debug("Downloading oauth_provider ~p using ~p ...",
+                                [OAuthProviderId, URL]),
+                            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
                                 {ok, OpenIdConfiguration} ->
                                     {ok, update_oauth_provider_endpoints_configuration(OAuthProviderId,
                                         merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
@@ -465,7 +460,7 @@ get_verify_or_peer_verification(Ssl_options, Default) ->
 lookup_oauth_provider_config(OAuth2ProviderId) ->
     case get_env(oauth_providers) of
         undefined -> {error, oauth_providers_not_found};
-        {ok, MapOfProviders} when is_map(MapOfProviders) ->
+        MapOfProviders when is_map(MapOfProviders) ->
             case maps:get(OAuth2ProviderId, MapOfProviders, undefined) of
                 undefined ->
                     {error, {oauth_provider_not_found, OAuth2ProviderId}};
@@ -617,11 +612,13 @@ format_oauth_provider_id(Id) -> binary_to_list(Id).
 
 -spec format_oauth_provider(oauth_provider()) -> string().
 format_oauth_provider(OAuthProvider) ->
-    lists:flatten(io_lib:format("{id: ~p, issuer: ~p, token_endpoint: ~p, " ++
+    lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
+        " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
         "jwks_uri: ~p, ssl_options: ~p }", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
+        OAuthProvider#oauth_provider.discovery_endpoint,
         OAuthProvider#oauth_provider.token_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
