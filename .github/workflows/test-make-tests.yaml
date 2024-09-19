@@ -76,6 +76,7 @@ jobs:
           - rabbitmq_auth_backend_oauth2
           - rabbitmq_auth_mechanism_ssl
           - rabbitmq_aws
+          - rabbitmq_cli
           - rabbitmq_consistent_hash_exchange
           - rabbitmq_event_exchange
           - rabbitmq_federation
