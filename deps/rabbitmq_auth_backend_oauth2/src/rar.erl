@@ -9,9 +9,9 @@
 -module(rar).
 
 -include("oauth2.hrl").
+-import(uaa_jwt, [get_scope/1, set_scope/2]).
 
 -export([extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
--import(uaa_jwt, [get_scope/1, set_scope/2]).
 
 -define(AUTHORIZATION_DETAILS_CLAIM, <<"authorization_details">>).
 -define(RAR_ACTIONS_FIELD, <<"actions">>).
@@ -23,13 +23,26 @@
 -define(RAR_QUEUE_LOCATION_ATTRIBUTE, <<"queue">>).
 -define(RAR_EXCHANGE_LOCATION_ATTRIBUTE, <<"exchange">>).
 -define(RAR_ROUTING_KEY_LOCATION_ATTRIBUTE, <<"routing-key">>).
--define(RAR_LOCATION_ATTRIBUTES, [?RAR_CLUSTER_LOCATION_ATTRIBUTE, ?RAR_VHOST_LOCATION_ATTRIBUTE,
-  ?RAR_QUEUE_LOCATION_ATTRIBUTE, ?RAR_EXCHANGE_LOCATION_ATTRIBUTE, ?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE]).
+-define(RAR_LOCATION_ATTRIBUTES, [
+        ?RAR_CLUSTER_LOCATION_ATTRIBUTE, 
+        ?RAR_VHOST_LOCATION_ATTRIBUTE,
+        ?RAR_QUEUE_LOCATION_ATTRIBUTE, 
+        ?RAR_EXCHANGE_LOCATION_ATTRIBUTE, 
+        ?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE]).
 
--define(RAR_ALLOWED_TAG_VALUES, [<<"monitoring">>, <<"administrator">>, <<"management">>, <<"policymaker">> ]).
--define(RAR_ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"monitoring">>,
-  <<"administrator">>, <<"management">>, <<"policymaker">> ]).
-
+-define(RAR_ALLOWED_TAG_VALUES, [
+        <<"monitoring">>, 
+        <<"administrator">>, 
+        <<"management">>, 
+        <<"policymaker">> ]).
+-define(RAR_ALLOWED_ACTION_VALUES, [
+        <<"read">>, 
+        <<"write">>, 
+        <<"configure">>, 
+        <<"monitoring">>,
+        <<"administrator">>, 
+        <<"management">>, 
+        <<"policymaker">> ]).
 
 -spec has_rich_auth_request_scopes(Payload::map()) -> boolean().
 has_rich_auth_request_scopes(Payload) ->
@@ -49,10 +62,6 @@ extract_scopes_from_rich_auth_request(ResourceServer,
 
     ExistingScopes = get_scope(Payload),
     set_scope(AdditionalScopes ++ ExistingScopes, Payload).
-
-
-
-
 
 put_location_attribute(Attribute, Map) ->
     put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
