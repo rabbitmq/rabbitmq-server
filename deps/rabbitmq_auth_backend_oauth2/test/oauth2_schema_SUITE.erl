@@ -71,13 +71,14 @@ test_with_endpoint_params(_) ->
     #{ <<"resource">> := <<"some-resource">>} =
         translate_endpoint_params("authorization_endpoint_params", Conf).
 
-test_invalid_oauth_providers_endpoint_params() ->
+test_invalid_oauth_providers_endpoint_params(_) ->
     try oauth2_schema:translate_oauth_providers([
             {["auth_oauth2","oauth_providers", "X", "discovery_endpoint_params"], ""}]) of
         _ -> {throw, should_have_failed}
     catch
         _ -> ok
     end.
+
 test_without_oauth_providers_with_endpoint_params(_) ->
     Conf = [
         {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param1"], "some-value1"},
