@@ -2336,8 +2336,9 @@ incoming_link_transfer(
             {MsgBin0, FirstDeliveryId, FirstSettled}
     end,
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
-    validate_message_size(PayloadBin, MaxMessageSize),
-    rabbit_global_counters:message_size(?PROTOCOL, byte_size(PayloadBin)),
+    PayloadSize = iolist_size(PayloadBin),
+    validate_message_size(PayloadSize, MaxMessageSize),
+    rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
 
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
@@ -3067,9 +3068,8 @@ validate_transfer_rcv_settle_mode(_, _) ->
 
 validate_message_size(_, unlimited) ->
     ok;
-validate_message_size(Message, MaxMsgSize)
-  when is_integer(MaxMsgSize) ->
-    MsgSize = iolist_size(Message),
+validate_message_size(MsgSize, MaxMsgSize)
+  when is_integer(MsgSize) ->
     case MsgSize =< MaxMsgSize of
         true ->
             ok;
@@ -3083,7 +3083,9 @@ validate_message_size(Message, MaxMsgSize)
               ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED,
               "message size (~b bytes) > maximum message size (~b bytes)",
               [MsgSize, MaxMsgSize])
-    end.
+    end;
+validate_message_size(Msg, MaxMsgSize) ->
+    validate_message_size(iolist_size(Msg), MaxMsgSize).
 
 -spec ensure_terminus(source | target,
                       term(),

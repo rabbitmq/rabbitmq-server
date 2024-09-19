@@ -13,7 +13,6 @@
          boot_step/0,
          init/1,
          init/2,
-         overview/0,
          prometheus_format/0,
          increase_protocol_counter/3,
          messages_received/2,
@@ -34,10 +33,13 @@
          publisher_deleted/1,
          consumer_created/1,
          consumer_deleted/1,
-         message_size/2,
          messages_dead_lettered/4,
          messages_dead_lettered_confirmed/3
        ]).
+
+-ifdef(TEST).
+-export([overview/0]).
+-endif.
 
 %% PROTOCOL COUNTERS:
 -define(MESSAGES_RECEIVED, 1).
@@ -133,12 +135,14 @@
 boot_step() ->
     [begin
          %% Protocol counters
-         init([{protocol, Proto}]),
+         Protocol = {protocol, Proto},
+         init([Protocol]),
+         rabbit_msg_size_metrics:init(Proto),
 
          %% Protocol & Queue Type counters
-         init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
-         init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]),
-         init([{protocol, Proto}, {queue_type, rabbit_stream_queue}])
+         init([Protocol, {queue_type, rabbit_classic_queue}]),
+         init([Protocol, {queue_type, rabbit_quorum_queue}]),
+         init([Protocol, {queue_type, rabbit_stream_queue}])
      end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
@@ -187,21 +191,19 @@ init(Labels = [{protocol, Protocol}, {queue_type, QueueType}], Extra) ->
 init(Labels = [{protocol, Protocol}], Extra) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
-    persistent_term:put({?MODULE, Protocol}, Counters),
-    rabbit_msg_size_metrics:init(Labels);
+    persistent_term:put({?MODULE, Protocol}, Counters);
 init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], DeadLetterCounters) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, DeadLetterCounters),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
+-ifdef(TEST).
 overview() ->
-    maps:merge_with(
-      fun(_Key, Value1, Value2) -> maps:merge(Value1, Value2) end,
-      rabbit_msg_size_metrics:overview(),
-      seshat:overview(?MODULE)).
+    seshat:overview(?MODULE).
+-endif.
 
 prometheus_format() ->
-    maps:merge(seshat:format(?MODULE), rabbit_msg_size_metrics:prometheus_format()).
+    seshat:format(?MODULE).
 
 increase_protocol_counter(Protocol, Counter, Num) ->
     counters:add(fetch(Protocol), Counter, Num).
@@ -252,16 +254,13 @@ publisher_created(Protocol) ->
     counters:add(fetch(Protocol), ?PUBLISHERS, 1).
 
 publisher_deleted(Protocol) ->
-    counters:add(fetch(Protocol), ?PUBLISHERS, -1).
+    counters:sub(fetch(Protocol), ?PUBLISHERS, 1).
 
 consumer_created(Protocol) ->
     counters:add(fetch(Protocol), ?CONSUMERS, 1).
 
 consumer_deleted(Protocol) ->
-    counters:add(fetch(Protocol), ?CONSUMERS, -1).
-
-message_size(Protocol, MessageSize) ->
-    rabbit_msg_size_metrics:update(Protocol, MessageSize).
+    counters:sub(fetch(Protocol), ?CONSUMERS, 1).
 
 messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
     Index = case Reason of

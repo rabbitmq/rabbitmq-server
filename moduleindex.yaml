@@ -670,6 +670,7 @@ rabbit:
 - rabbit_metrics
 - rabbit_mirror_queue_misc
 - rabbit_mnesia
+- rabbit_msg_size_metrics
 - rabbit_msg_store
 - rabbit_msg_store_gc
 - rabbit_networking
@@ -1097,6 +1098,7 @@ rabbitmq_prometheus:
 - prometheus_rabbitmq_core_metrics_collector
 - prometheus_rabbitmq_dynamic_collector
 - prometheus_rabbitmq_global_metrics_collector
+- prometheus_rabbitmq_message_size_metrics_collector
 - rabbit_prometheus_app
 - rabbit_prometheus_dispatcher
 - rabbit_prometheus_handler

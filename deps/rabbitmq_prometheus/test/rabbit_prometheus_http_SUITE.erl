@@ -38,13 +38,15 @@ groups() ->
             aggregated_metrics_test,
             specific_erlang_metrics_present_test,
             global_metrics_present_test,
-            global_metrics_single_metric_family_test
+            global_metrics_single_metric_family_test,
+            message_size_metrics_present
         ]},
         {per_object_metrics, [], [
             globally_configure_per_object_metrics_test,
             specific_erlang_metrics_present_test,
             global_metrics_present_test,
-            global_metrics_single_metric_family_test
+            global_metrics_single_metric_family_test,
+            message_size_metrics_present
         ]},
         {per_object_endpoint_metrics, [], [
             endpoint_per_object_metrics,
@@ -488,24 +490,36 @@ global_metrics_present_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_redelivered_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_messages_acknowledged_total{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_global_publishers{", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_consumers{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_global_consumers{", [{capture, none}, multiline])).
 
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"64\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"256\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"1024\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"4096\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"16384\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"65536\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"262144\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"1048576\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"4194304\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"16777216\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"67108864\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"268435456\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_bucket{protocol=\"amqp091\",le=\"\\+Inf\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_count{protocol=\"amqp091\"}", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_global_message_size_bytes_sum{protocol=\"amqp091\"}", [{capture, none}, multiline])),
-    ok.
+message_size_metrics_present(Config) ->
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"100\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"1000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"10000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"100000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"1000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"10000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"10000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"50000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"100000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp091\",le=\"\\+Inf\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_count{protocol=\"amqp091\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_sum{protocol=\"amqp091\"}", [{capture, none}, multiline])),
+
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"100\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"1000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"10000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"100000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"1000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"10000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"10000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"50000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"100000000\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_bucket{protocol=\"amqp10\",le=\"\\+Inf\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_count{protocol=\"amqp10\"}", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_message_size_bytes_sum{protocol=\"amqp10\"}", [{capture, none}, multiline])).
 
 global_metrics_single_metric_family_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),

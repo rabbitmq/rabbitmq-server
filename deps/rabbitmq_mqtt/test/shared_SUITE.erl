@@ -88,6 +88,7 @@ cluster_size_1_tests_v3() ->
 cluster_size_1_tests() ->
     [
      global_counters %% must be the 1st test case
+     ,message_size_metrics
      ,block_only_publisher
      ,many_qos1_messages
      ,session_expiry
@@ -690,6 +691,34 @@ global_counters(Config) ->
                                messages_unroutable_dropped_total => 1,
                                messages_unroutable_returned_total => 1},
                              get_global_counters(Config, ProtoVer))).
+
+message_size_metrics(Config) ->
+    Protocol = case ?config(mqtt_version, Config) of
+                   v4 -> mqtt311;
+                   v5 -> mqtt50
+               end,
+    BucketsBefore = rpc(Config, rabbit_msg_size_metrics, raw_buckets, [Protocol]),
+
+    Topic = ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
+    {ok, _, [0]} = emqtt:subscribe(C, Topic, qos0),
+    Payload1B = <<255>>,
+    Payload500B = binary:copy(Payload1B, 500),
+    Payload5KB = binary:copy(Payload1B, 5_000),
+    Payload2MB = binary:copy(Payload1B, 2_000_000),
+    Payloads = [Payload2MB, Payload5KB, Payload500B, Payload1B, Payload500B],
+    [ok = emqtt:publish(C, Topic, P, qos0) || P <- Payloads],
+    ok = expect_publishes(C, Topic, Payloads),
+
+    BucketsAfter = rpc(Config, rabbit_msg_size_metrics, raw_buckets, [Protocol]),
+    ?assertEqual(
+       [{100, 1},
+        {1000, 2},
+        {10_000, 1},
+        {10_000_000, 1}],
+       rabbit_msg_size_metrics:diff_raw_buckets(BucketsAfter, BucketsBefore)),
+
+    ok = emqtt:disconnect(C).
 
 pubsub(Config) ->
     Topic0 = <<"t/0">>,
