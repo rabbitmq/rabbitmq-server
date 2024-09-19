@@ -8,7 +8,9 @@
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
-        get_openid_configuration/2, get_openid_configuration/3,
+        get_openid_configuration/2,
+        build_openid_discovery_endpoint/3, build_openid_discovery_endpoint/1,
+        build_openid_discovery_endpoint/2,
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
@@ -47,28 +49,64 @@ refresh_access_token(OAuthProvider, Request) ->
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
 
--spec get_openid_configuration(uri_string:uri_string(), erlang:iodata() | <<>>,
+-spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string()) 
+        -> uri_string:uri_string().
+build_openid_discovery_endpoint(Issuer) ->
+    build_openid_discovery_endpoint(Issuer, undefined, undefined).
+
+-spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
+    OpenIdConfigurationPath :: uri_string:uri_string() | undefined) 
+        -> uri_string:uri_string().
+build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath) ->
+    build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, undefined).
+
+-spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
+    OpenIdConfigurationPath :: uri_string:uri_string() | undefined,
+    Params :: query_list()) -> uri_string:uri_string().
+
+build_openid_discovery_endpoint(Issuer, undefined, Params) ->
+    build_openid_discovery_endpoint(Issuer, ?DEFAULT_OPENID_CONFIGURATION_PATH, 
+        Params);
+build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, Params) ->
+    URLMap0 = uri_string:parse(Issuer),    
+    OpenIdPath = ensure_leading_path_separator(OpenIdConfigurationPath),
+    URLMap1 = URLMap0#{
+        path := case maps:get(path, URLMap0) of
+                    "/" -> OpenIdPath;
+                    "" -> OpenIdPath;
+                    [] -> OpenIdPath;
+                    P -> append_paths(drop_trailing_path_separator(P), OpenIdPath)                         
+                end
+    },
+    uri_string:recompose(
+        case {Params, maps:get(query, URLMap1, undefined)} of 
+            {undefined, undefined} -> 
+                URLMap1;
+            {_, undefined} -> 
+                URLMap1#{query => uri_string:compose_query(Params)};                                
+            {_, Q} -> 
+                URLMap1#{query => uri_string:compose_query(Q ++ Params)}
+        end).
+ensure_leading_path_separator(Path) ->
+    case string:slice(Path, 0, 1) of 
+        "/" -> Path;
+        _ -> "/" ++ Path
+    end.
+drop_trailing_path_separator(Path) ->
+    case string:slice(Path, string:len(Path)-1, 1) of 
+        "/" -> lists:droplast(Path);
+        _ -> Path
+    end.
+
+-spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
     ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(IssuerURI, OpenIdConfigurationPath, TLSOptions) ->
-    URLMap = uri_string:parse(IssuerURI),
-    Path = case maps:get(path, URLMap) of
-        "/" -> OpenIdConfigurationPath;
-        "" -> OpenIdConfigurationPath;
-        P -> append_paths(P, OpenIdConfigurationPath)
-    end,
-    URL = uri_string:resolve(Path, IssuerURI),
-    rabbit_log:debug("get_openid_configuration issuer URL ~p (~p)", [URL,
+get_openid_configuration(DiscoverEndpoint, TLSOptions) ->    
+    rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
         format_ssl_options(TLSOptions)]),
     Options = [],
-    Response = httpc:request(get, {URL, []}, TLSOptions, Options),
+    Response = httpc:request(get, {DiscoverEndpoint, []}, TLSOptions, Options),
     parse_openid_configuration_response(Response).
 
--spec get_openid_configuration(uri_string:uri_string(), ssl:tls_option() | []) ->
-    {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(IssuerURI, TLSOptions) ->
-    get_openid_configuration(IssuerURI, ?DEFAULT_OPENID_CONFIGURATION_PATH, TLSOptions).
-% Returns {ok, with_modidified_oauth_provider} or {ok} if oauth_provider was
-% not modified
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
 merge_openid_configuration(OpendIdConfiguration, OAuthProvider) ->
@@ -179,43 +217,37 @@ update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) ->
 
 do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
     case OAuthProvider#oauth_provider.token_endpoint of
-        undefined ->
-            do_nothing;
-        TokenEndpoint ->
-            application:set_env(rabbitmq_auth_backend_oauth2, token_endpoint, TokenEndpoint)
+        undefined -> do_nothing;
+        TokenEndpoint -> set_env(token_endpoint, TokenEndpoint)
     end,
     case OAuthProvider#oauth_provider.authorization_endpoint of
-        undefined ->
-            do_nothing;
-        AuthzEndpoint ->
-            application:set_env(rabbitmq_auth_backend_oauth2, authorization_endpoint, AuthzEndpoint)
+        undefined -> do_nothing;
+        AuthzEndpoint -> set_env(authorization_endpoint, AuthzEndpoint)
     end,
     case OAuthProvider#oauth_provider.end_session_endpoint of
-        undefined ->
-            do_nothing;
-        EndSessionEndpoint ->
-            application:set_env(rabbitmq_auth_backend_oauth2, end_session_endpoint, EndSessionEndpoint)
+        undefined -> do_nothing;
+        EndSessionEndpoint -> set_env(end_session_endpoint, EndSessionEndpoint)
     end,
-    List = application:get_env(rabbitmq_auth_backend_oauth2, key_config, []),
+    List = get_env(key_config, []),
     ModifiedList = case OAuthProvider#oauth_provider.jwks_uri of
         undefined ->  List;
         JwksEndPoint -> [{jwks_url, JwksEndPoint} | proplists:delete(jwks_url, List)]
     end,
-    application:set_env(rabbitmq_auth_backend_oauth2, key_config, ModifiedList),
+    set_env(key_config, ModifiedList),
     rabbit_log:debug("Updated oauth_provider details: ~p ", [ format_oauth_provider(OAuthProvider)]),
     OAuthProvider.
 
 do_update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) ->
-    OAuthProviders = application:get_env(rabbitmq_auth_backend_oauth2, oauth_providers, #{}),
+    OAuthProviders = get_env(oauth_providers, #{}),
     Proplist = maps:get(OAuthProviderId, OAuthProviders),
     ModifiedOAuthProviders = maps:put(OAuthProviderId,
         merge_oauth_provider(OAuthProvider, Proplist), OAuthProviders),
-    application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers, ModifiedOAuthProviders),
+    set_env(oauth_providers, ModifiedOAuthProviders),
     rabbit_log:debug("Replaced oauth_providers "),
     OAuthProvider.
 
 use_global_locks_on_all_nodes() ->
-    case application:get_env(rabbitmq_auth_backend_oauth2, use_global_locks, true) of
+    case get_env(use_global_locks, true) of
         true -> {rabbit_nodes:list_running(), rabbit_nodes:lock_retries()};
         _ -> {}
     end.
@@ -246,7 +278,7 @@ unlock(LockId) ->
 
 -spec get_oauth_provider(list()) -> {ok, oauth_provider()} | {error, any()}.
 get_oauth_provider(ListOfRequiredAttributes) ->
-    case application:get_env(rabbitmq_auth_backend_oauth2, default_oauth_provider) of
+    case get_env(default_oauth_provider) of
         undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
         {ok, DefaultOauthProviderId} ->
             rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProviderId]),
@@ -359,18 +391,18 @@ find_missing_attributes(#oauth_provider{} = OAuthProvider, RequiredAttributes) -
     intersection(Filtered, RequiredAttributes).
 
 lookup_oauth_provider_from_keyconfig() ->
-    Issuer = application:get_env(rabbitmq_auth_backend_oauth2, issuer, undefined),
-    TokenEndpoint = application:get_env(rabbitmq_auth_backend_oauth2, token_endpoint, undefined),
-    AuthorizationEndpoint = application:get_env(rabbitmq_auth_backend_oauth2, authorization_endpoint, undefined),
-    EndSessionEndpoint = application:get_env(rabbitmq_auth_backend_oauth2, end_session_endpoint, undefined),
-    Map = maps:from_list(application:get_env(rabbitmq_auth_backend_oauth2, key_config, [])),
+    Map = maps:from_list(get_env(key_config, [])),
+    Issuer = get_env(issuer),
+    DiscoverEndpoint = build_openid_discovery_endpoint(Issuer, 
+        get_env(discovery_endpoint_path), get_env(discovery_endpoint_params)),
     #oauth_provider{
         id = root,
         issuer = Issuer,
+        discovery_endpoint = DiscoverEndpoint,
         jwks_uri = maps:get(jwks_url, Map, undefined), %% jwks_url not uri . _url is the legacy name
-        token_endpoint = TokenEndpoint,
-        authorization_endpoint = AuthorizationEndpoint,
-        end_session_endpoint = EndSessionEndpoint,
+        token_endpoint = get_env(token_endpoint),
+        authorization_endpoint = get_env(authorization_endpoint),
+        end_session_endpoint = get_env(end_session_endpoint),
         ssl_options = extract_ssl_options_as_list(Map)
     }.
 
@@ -431,7 +463,7 @@ get_verify_or_peer_verification(Ssl_options, Default) ->
     end.
 
 lookup_oauth_provider_config(OAuth2ProviderId) ->
-    case application:get_env(rabbitmq_auth_backend_oauth2, oauth_providers) of
+    case get_env(oauth_providers) of
         undefined -> {error, oauth_providers_not_found};
         {ok, MapOfProviders} when is_map(MapOfProviders) ->
             case maps:get(OAuth2ProviderId, MapOfProviders, undefined) of
@@ -522,14 +554,28 @@ map_to_unsuccessful_access_token_response(Map) ->
         error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
     }.
 map_to_oauth_provider(PropList) when is_list(PropList) ->
+    Issuer = proplists:get_value(issuer, PropList),
+    DiscoveryEndpoint = build_openid_discovery_endpoint(Issuer, 
+        proplists:get_value(discovery_endpoint_path, PropList),
+        proplists:get_value(discovery_endpoint_params, PropList)),
     #oauth_provider{
-        id = proplists:get_value(id, PropList),
-        issuer = proplists:get_value(issuer, PropList),
-        token_endpoint = proplists:get_value(token_endpoint, PropList),
-        authorization_endpoint = proplists:get_value(authorization_endpoint, PropList, undefined),
-        end_session_endpoint = proplists:get_value(end_session_endpoint, PropList, undefined),
-        jwks_uri = proplists:get_value(jwks_uri, PropList, undefined),
-        ssl_options = extract_ssl_options_as_list(maps:from_list(proplists:get_value(https, PropList, [])))
+        id = 
+            proplists:get_value(id, PropList),
+        issuer = 
+            Issuer,
+        discovery_endpoint = 
+            DiscoveryEndpoint,
+        token_endpoint = 
+            proplists:get_value(token_endpoint, PropList),
+        authorization_endpoint = 
+            proplists:get_value(authorization_endpoint, PropList, undefined),
+        end_session_endpoint = 
+            proplists:get_value(end_session_endpoint, PropList, undefined),
+        jwks_uri = 
+            proplists:get_value(jwks_uri, PropList, undefined),
+        ssl_options = 
+            extract_ssl_options_as_list(maps:from_list(
+                proplists:get_value(https, PropList, [])))
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
@@ -581,3 +627,10 @@ format_oauth_provider(OAuthProvider) ->
         OAuthProvider#oauth_provider.end_session_endpoint,
         OAuthProvider#oauth_provider.jwks_uri,
         format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
+
+get_env(Par) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
+get_env(Par, Def) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, Def).
+set_env(Par, Val) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
