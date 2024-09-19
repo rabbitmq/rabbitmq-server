@@ -9,8 +9,7 @@
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
-        build_openid_discovery_endpoint/3, build_openid_discovery_endpoint/1,
-        build_openid_discovery_endpoint/2,
+        build_openid_discovery_endpoint/3,         
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
@@ -49,17 +48,6 @@ refresh_access_token(OAuthProvider, Request) ->
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
 
--spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string()) 
-        -> uri_string:uri_string().
-build_openid_discovery_endpoint(Issuer) ->
-    build_openid_discovery_endpoint(Issuer, undefined, undefined).
-
--spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
-    OpenIdConfigurationPath :: uri_string:uri_string() | undefined) 
-        -> uri_string:uri_string().
-build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath) ->
-    build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, undefined).
-
 -spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
     OpenIdConfigurationPath :: uri_string:uri_string() | undefined,
     Params :: query_list()) -> uri_string:uri_string().
@@ -72,8 +60,6 @@ build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, Params) ->
     OpenIdPath = ensure_leading_path_separator(OpenIdConfigurationPath),
     URLMap1 = URLMap0#{
         path := case maps:get(path, URLMap0) of
-                    "/" -> OpenIdPath;
-                    "" -> OpenIdPath;
                     [] -> OpenIdPath;
                     P -> append_paths(drop_trailing_path_separator(P), OpenIdPath)                         
                 end

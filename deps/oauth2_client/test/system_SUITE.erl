@@ -12,8 +12,7 @@
 
 -include_lib("oauth2_client.hrl").
 -import(oauth2_client, [
-    build_openid_discovery_endpoint/1, 
-    build_openid_discovery_endpoint/2]).
+    build_openid_discovery_endpoint/3]).
 
 -compile(export_all).
 
@@ -150,7 +149,6 @@ init_per_group(_, Config) ->
 get_http_oauth_server_expectations(TestCase, Config) ->
     case ?config(TestCase, Config) of
         undefined ->
-            ct:log("get_openid_configuration_http_expectation :  ~p", [get_openid_configuration_http_expectation(TestCase)]),
             [   {token_endpoint, build_http_mock_behaviour(build_http_access_token_request(),
                     build_http_200_access_token_response())},
                 {get_openid_configuration, get_openid_configuration_http_expectation(TestCase)}
@@ -247,7 +245,6 @@ init_per_testcase(TestCase, Config) ->
 
     case ?config(group, Config) of
         https ->
-            ct:log("Start https with expectations ~p", [ListOfExpectations]),
             start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
                 ListOfExpectations);
         _ ->
@@ -279,6 +276,12 @@ end_per_group(with_default_oauth_provider, Config) ->
 
 end_per_group(_, Config) ->
     Config.
+
+build_openid_discovery_endpoint(Issuer) ->
+    build_openid_discovery_endpoint(Issuer, undefined, undefined).
+
+build_openid_discovery_endpoint(Issuer, Path) ->
+    build_openid_discovery_endpoint(Issuer, Path, undefined).
 
 get_openid_configuration(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
@@ -468,7 +471,6 @@ verify_get_oauth_provider_returns_default_oauth_provider(DefaultOAuthProviderId)
     {ok, OAuthProvider2} =
         oauth2_client:get_oauth_provider(DefaultOAuthProviderId,
             [issuer, token_endpoint, jwks_uri]),
-    ct:log("verify_get_oauth_provider_returns_default_oauth_provider ~p vs ~p", [OAuthProvider1, OAuthProvider2]),
     ?assertEqual(OAuthProvider1, OAuthProvider2).
 
 get_oauth_provider(Config) ->
@@ -622,8 +624,6 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}}
             = Expected <- Expectations ]}
     ]),
-    ct:log("start_https_oauth_server with expectation list : ~p -> dispatch: ~p",
-        [Expectations, Dispatch]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -634,8 +634,6 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
-    ct:log("start_https_oauth_server with expectation : ~p  -> dispatch: ~p",
-        [Expected, Dispatch]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
