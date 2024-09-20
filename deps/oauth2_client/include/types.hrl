@@ -37,7 +37,8 @@
 -record(access_token_request, {
     client_id :: string() | binary(),
     client_secret :: string() | binary(),
-    scope :: string() | binary() | undefined,
+    scope :: option(string() | binary()),
+    extra_parameters :: option(query_list()),
     timeout :: option(integer())
 }).
 

@@ -30,6 +30,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
             "src/rabbit_mgmt_nodes.erl",
+            "src/rabbit_mgmt_schema.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -163,6 +164,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
             "src/rabbit_mgmt_nodes.erl",
+            "src/rabbit_mgmt_schema.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -387,6 +389,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_load_definitions.erl",
             "src/rabbit_mgmt_login.erl",
             "src/rabbit_mgmt_nodes.erl",
+            "src/rabbit_mgmt_schema.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
             "src/rabbit_mgmt_stats.erl",
@@ -495,6 +498,15 @@ def all_srcs(name = "all_srcs"):
     )
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
+    erlang_bytecode(
+        name = "rabbit_mgmt_schema_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_mgmt_schema_SUITE.erl"],
+        outs = ["test/rabbit_mgmt_schema_SUITE.beam"],
+        app_name = "rabbitmq_management",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["@proper//:erlang_app"],
+    )
     erlang_bytecode(
         name = "cache_SUITE_beam_files",
         testonly = True,

@@ -45,9 +45,7 @@ test_without_resource_servers(_) ->
     #{} = oauth2_schema:translate_resource_servers([]).
 
 test_without_endpoint_params(_) ->
-    #{} = translate_endpoint_params("discovery_endpoint_params", []),
-    #{} = translate_endpoint_params("token_endpoint_params", []),
-    #{} = translate_endpoint_params("authorization_endpoint_params", []).
+    #{} = translate_endpoint_params("oauth_discovery_endpoint_params", []).
 
 test_with_invalid_endpoint_params(_) ->
     try translate_endpoint_params("discovery_endpoint_params", [
@@ -60,16 +58,10 @@ test_with_invalid_endpoint_params(_) ->
 test_with_endpoint_params(_) ->
     Conf = [
         {["auth_oauth2","discovery_endpoint_params","param1"], "some-value1"},
-        {["auth_oauth2","discovery_endpoint_params","param2"], "some-value2"},
-        {["auth_oauth2","token_endpoint_params","audience"], "some-audience"},
-        {["auth_oauth2","authorization_endpoint_params","resource"], "some-resource"}
+        {["auth_oauth2","discovery_endpoint_params","param2"], "some-value2"}
     ],
     #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> } =
-        translate_endpoint_params("discovery_endpoint_params", Conf),
-    #{ <<"audience">> := <<"some-audience">>} =
-        translate_endpoint_params("token_endpoint_params", Conf),
-    #{ <<"resource">> := <<"some-resource">>} =
-        translate_endpoint_params("authorization_endpoint_params", Conf).
+        translate_endpoint_params("discovery_endpoint_params", Conf).
 
 test_invalid_oauth_providers_endpoint_params(_) ->
     try oauth2_schema:translate_oauth_providers([
@@ -83,17 +75,15 @@ test_without_oauth_providers_with_endpoint_params(_) ->
     Conf = [
         {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param1"], "some-value1"},
         {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param2"], "some-value2"},
-        {["auth_oauth2","oauth_providers", "B", "token_endpoint_params","audience"], "some-audience"},
-        {["auth_oauth2","oauth_providers", "C", "authorization_endpoint_params","resource"], "some-resource"}
+        {["auth_oauth2","oauth_providers", "B", "discovery_endpoint_params","param3"], "some-value3"}
     ],
 
     #{
         <<"A">> := [{discovery_endpoint_params,
                     #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> }}],
-        <<"B">> := [{token_endpoint_params,
-                    #{ <<"audience">> := <<"some-audience">>}}],
-        <<"C">> := [{authorization_endpoint_params,
-                    #{ <<"resource">> := <<"some-resource">>}}]
+        <<"B">> := [{discovery_endpoint_params,
+                    #{ <<"param3">> := <<"some-value3">>}}
+        ]
     } = translate_oauth_providers(Conf).
 
 test_with_one_oauth_provider(_) ->
@@ -110,11 +100,13 @@ test_with_one_resource_server(_) ->
 
 test_with_many_oauth_providers(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://keycloak"},
-            {["auth_oauth2","oauth_providers","uaa","issuer"],"https://uaa"}
+            {["auth_oauth2","oauth_providers","uaa","issuer"],"https://uaa"},
+            {["auth_oauth2","oauth_providers","uaa","discovery_endpoint_path"],"/some-path"}
             ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}
+    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}                
                         ],
-      <<"uaa">> := [{issuer, <<"https://uaa">>}
+      <<"uaa">> := [{issuer, <<"https://uaa">>},
+                    {discovery_endpoint_path, <<"/some-path">>}
                     ]
     } = oauth2_schema:translate_oauth_providers(Conf).
 

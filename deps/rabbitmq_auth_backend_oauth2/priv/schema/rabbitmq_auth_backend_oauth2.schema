@@ -159,16 +159,6 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
- "auth_oauth2.authorization_endpoint_params.$param",
- "rabbitmq_auth_backend_oauth2.authorization_endpoint_params",
- [{datatype, string}]}.
-
-{translation, "rabbitmq_auth_backend_oauth2.authorization_endpoint_params",
- fun(Conf) ->
-    oauth2_schema:translate_endpoint_params("authorization_endpoint_params", Conf)
- end}.
-
-{mapping,
  "auth_oauth2.discovery_endpoint_path",
  "rabbitmq_auth_backend_oauth2.discovery_endpoint_path",
  [{datatype, string}]}.
@@ -189,22 +179,7 @@
  [{datatype, string}]}.
 
 {mapping,
- "auth_oauth2.token_endpoint_params.$param",
- "rabbitmq_auth_backend_oauth2.token_endpoint_params",
- [{datatype, string}]}.
-
-{translation, "rabbitmq_auth_backend_oauth2.token_endpoint_params",
- fun(Conf) ->
-    oauth2_schema:translate_endpoint_params("token_endpoint_params", Conf)
- end}.
-
-{mapping,
- "auth_oauth2.oauth_providers.$name.authorization_endpoint_params.$param",
- "rabbitmq_auth_backend_oauth2.oauth_providers",
- [{datatype, string}]}.
-
-{mapping,
- "auth_oauth2.oauth_providers.$name.token_endpoint_params.$param",
+ "auth_oauth2.oauth_providers.$name.discovery_endpoint_path",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, string}]}.
 

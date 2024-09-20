@@ -41,8 +41,6 @@ translate_oauth_providers(Conf) ->
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),
         extract_oauth_providers_endpoint_params(discovery_endpoint_params, Settings),
-        extract_oauth_providers_endpoint_params(authorization_endpoint_params, Settings),
-        extract_oauth_providers_endpoint_params(token_endpoint_params, Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
         extract_oauth_providers_signing_keys(Settings)
@@ -122,13 +120,7 @@ mapOauthProviderProperty({Key, Value}) ->
         token_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
-        authorization_endpoint -> validator_https_uri(Key, Value);
-        token_endpoint_params ->
-            cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
-        authorization_endpoint_params ->
-            cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
+        authorization_endpoint -> validator_https_uri(Key, Value);        
         discovery_endpoint_params ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));

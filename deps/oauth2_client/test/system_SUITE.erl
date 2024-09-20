@@ -33,6 +33,7 @@ all() ->
 
 groups() ->
 [
+
     {with_all_oauth_provider_settings, [], [
         {group, verify_get_oauth_provider}
     ]},
@@ -399,6 +400,23 @@ grants_access_token(Config) ->
         token_type = TokenType} } =
             oauth2_client:get_access_token(?config(oauth_provider, Config),
                 build_access_token_request(Parameters)),
+    ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
+    ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
+
+grants_access_token_optional_parameters(Config) ->
+    #{request := #{parameters := Parameters},
+        response := [ {code, 200}, {content_type, _CT}, {payload, JsonPayload}] }
+        = lookup_expectation(token_endpoint, Config),
+
+    AccessTokenRequest0 = build_access_token_request(Parameters),
+    AccessTokenRequest = AccessTokenRequest0#access_token_request{
+        scope = "some-scope",
+        extra_parameters = [{"param1", "value1"}]
+    },
+    {ok, #successful_access_token_response{access_token = AccessToken,
+        token_type = TokenType} } =
+            oauth2_client:get_access_token(?config(oauth_provider, Config),
+                AccessTokenRequest),
     ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
     ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
 

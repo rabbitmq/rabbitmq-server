@@ -470,33 +470,50 @@ ensure_oauth_provider_has_id_property(OAuth2ProviderId, OAuth2Provider) ->
     end.
 
 build_access_token_request_body(Request) ->
-    uri_string:compose_query([
-        grant_type_request_parameter(?CLIENT_CREDENTIALS_GRANT_TYPE),
-        client_id_request_parameter(Request#access_token_request.client_id),
-        client_secret_request_parameter(Request#access_token_request.client_secret)]
-        ++ scope_request_parameter_or_default(Request#access_token_request.scope, [])).
+    uri_string:compose_query(
+        append_extra_parameters(Request, 
+            append_scope_request_parameter(Request#access_token_request.scope, [
+                grant_type_request_parameter(?CLIENT_CREDENTIALS_GRANT_TYPE),
+                client_id_request_parameter(
+                    Request#access_token_request.client_id),
+                client_secret_request_parameter(
+                        Request#access_token_request.client_secret)]))).
 
 build_refresh_token_request_body(Request) ->
-    uri_string:compose_query([
-        grant_type_request_parameter(?REFRESH_TOKEN_GRANT_TYPE),
-        refresh_token_request_parameter(Request#refresh_token_request.refresh_token),
-        client_id_request_parameter(Request#refresh_token_request.client_id),
-        client_secret_request_parameter(Request#refresh_token_request.client_secret)]
-        ++ scope_request_parameter_or_default(Request#refresh_token_request.scope, [])).
+    uri_string:compose_query(
+        append_scope_request_parameter(Request#refresh_token_request.scope, [
+            grant_type_request_parameter(?REFRESH_TOKEN_GRANT_TYPE),
+            refresh_token_request_parameter(Request),
+            client_id_request_parameter(Request#refresh_token_request.client_id),
+            client_secret_request_parameter(
+                Request#refresh_token_request.client_secret)])).
 
 grant_type_request_parameter(Type) ->
     {?REQUEST_GRANT_TYPE, Type}.
-client_id_request_parameter(Client_id) ->
-    {?REQUEST_CLIENT_ID, binary_to_list(Client_id)}.
-client_secret_request_parameter(Client_secret) ->
-    {?REQUEST_CLIENT_SECRET, binary_to_list(Client_secret)}.
-refresh_token_request_parameter(RefreshToken) ->
-    {?REQUEST_REFRESH_TOKEN, RefreshToken}.
-scope_request_parameter_or_default(Scope, Default) ->
+
+client_id_request_parameter(ClientId) ->
+    {?REQUEST_CLIENT_ID, 
+        binary_to_list(ClientId)}.
+
+client_secret_request_parameter(ClientSecret) ->
+    {?REQUEST_CLIENT_SECRET, 
+        binary_to_list(ClientSecret)}.
+
+refresh_token_request_parameter(Request) ->
+    {?REQUEST_REFRESH_TOKEN, Request#refresh_token_request.refresh_token}.
+
+append_scope_request_parameter(Scope, QueryList) ->
     case Scope of
-        undefined -> Default;
-        <<>> -> Default;
-        Scope -> [{?REQUEST_SCOPE, Scope}]
+        undefined -> QueryList;
+        <<>> -> QueryList;
+        Scope -> [{?REQUEST_SCOPE, Scope} | QueryList]
+    end.
+
+append_extra_parameters(Request, QueryList) ->
+    case Request#access_token_request.extra_parameters of
+        undefined -> QueryList;
+        [] -> QueryList;
+        Params -> Params ++ QueryList
     end.
 
 get_ssl_options_if_any(OAuthProvider) ->
