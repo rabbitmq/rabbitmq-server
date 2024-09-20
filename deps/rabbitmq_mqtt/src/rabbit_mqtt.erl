@@ -112,6 +112,8 @@ persist_static_configuration() ->
 
     {ok, MaxSizeAuth} = application:get_env(?APP_NAME, max_packet_size_authenticated),
     assert_valid_max_packet_size(MaxSizeAuth),
+    {ok, MaxMsgSize} = application:get_env(rabbit, max_message_size),
+    ?assert(MaxSizeAuth =< MaxMsgSize),
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
 
 assert_valid_max_packet_size(Val) ->
