@@ -129,7 +129,9 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
         case proplists:get_value(oauth_initiated_logon_type, ManagementProps, sp_initiated) of
           sp_initiated -> {};
           idp_initiated -> {oauth_initiated_logon_type, <<"idp_initiated">>}
-        end
+        end,
+        to_tuple(oauth_authorization_endpoint_params, ManagementProps),
+        to_tuple(oauth_token_endpoint_params, ManagementProps)
       ])
   end.
 

@@ -77,12 +77,17 @@ build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, Params) ->
             {_, Q} -> 
                 URLMap1#{query => uri_string:compose_query(Q ++ Params)}
         end).
-ensure_leading_path_separator(Path) ->
+ensure_leading_path_separator(Path) when is_binary(Path) ->
+    ensure_leading_path_separator(binary:bin_to_list(Path));
+ensure_leading_path_separator(Path) when is_list(Path) ->
     case string:slice(Path, 0, 1) of 
         "/" -> Path;
         _ -> "/" ++ Path
     end.
-drop_trailing_path_separator(Path) ->
+drop_trailing_path_separator(Path) when is_binary(Path) ->
+    drop_trailing_path_separator(binary:bin_to_list(Path));
+drop_trailing_path_separator("") -> "";
+drop_trailing_path_separator(Path) when is_list(Path) ->
     case string:slice(Path, string:len(Path)-1, 1) of 
         "/" -> lists:droplast(Path);
         _ -> Path
