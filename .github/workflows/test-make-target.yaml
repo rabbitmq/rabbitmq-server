@@ -59,8 +59,16 @@ jobs:
         sudo aa-complain `which slapd`
 
     - name: RUN TESTS
+      if: inputs.plugin != 'rabbitmq_cli'
       run: |
         make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+
+    # rabbitmq_cli needs a correct broker version for two of its tests.
+    # But setting PROJECT_VERSION makes other plugins fail.
+    - name: RUN TESTS (rabbitmq_cli)
+      if: inputs.plugin == 'rabbitmq_cli'
+      run: |
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} PROJECT_VERSION="4.1.0"
 
     - name: UPLOAD TEST LOGS
       if: always()
