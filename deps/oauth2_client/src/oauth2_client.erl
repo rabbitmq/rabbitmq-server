@@ -17,8 +17,10 @@
         ]).
 
 -include("oauth2_client.hrl").
+
 -spec get_access_token(oauth_provider(), access_token_request()) ->
-    {ok, successful_access_token_response()} | {error, unsuccessful_access_token_response() | any()}.
+    {ok, successful_access_token_response()} | 
+    {error, unsuccessful_access_token_response() | any()}.
 get_access_token(OAuthProvider, Request) ->
     rabbit_log:debug("get_access_token using OAuthProvider:~p and client_id:~p",
         [OAuthProvider, Request#access_token_request.client_id]),
@@ -33,7 +35,8 @@ get_access_token(OAuthProvider, Request) ->
     parse_access_token_response(Response).
 
 -spec refresh_access_token(oauth_provider(), refresh_token_request()) ->
-    {ok, successful_access_token_response()} | {error, unsuccessful_access_token_response() | any()}.
+    {ok, successful_access_token_response()} | 
+    {error, unsuccessful_access_token_response() | any()}.
 refresh_access_token(OAuthProvider, Request) ->
     URL = OAuthProvider#oauth_provider.token_endpoint,
     Header = [],
@@ -50,8 +53,9 @@ append_paths(Path1, Path2) ->
 
 -spec build_openid_discovery_endpoint(Issuer :: uri_string:uri_string(),
     OpenIdConfigurationPath :: uri_string:uri_string() | undefined,
-    Params :: query_list()) -> uri_string:uri_string().
+    Params :: query_list()) -> uri_string:uri_string() | undefined.
 
+build_openid_discovery_endpoint(undefined, _, _) -> undefined;
 build_openid_discovery_endpoint(Issuer, undefined, Params) ->
     build_openid_discovery_endpoint(Issuer, ?DEFAULT_OPENID_CONFIGURATION_PATH, 
         Params);
@@ -95,23 +99,23 @@ get_openid_configuration(DiscoverEndpoint, TLSOptions) ->
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
-merge_openid_configuration(OpendIdConfiguration, OAuthProvider0) ->    
-    OAuthProvider1 = case OpendIdConfiguration#openid_configuration.token_endpoint of
+merge_openid_configuration(OpenId, OAuthProvider0) ->    
+    OAuthProvider1 = case OpenId#openid_configuration.token_endpoint of
         undefined -> OAuthProvider0;
         TokenEndpoint ->
             OAuthProvider0#oauth_provider{token_endpoint = TokenEndpoint}
     end,
-    OAuthProvider2 = case OpendIdConfiguration#openid_configuration.authorization_endpoint of
+    OAuthProvider2 = case OpenId#openid_configuration.authorization_endpoint of
         undefined -> OAuthProvider1;
         AuthorizationEndpoint ->
             OAuthProvider1#oauth_provider{authorization_endpoint = AuthorizationEndpoint}
     end,
-    OAuthProvider3 = case OpendIdConfiguration#openid_configuration.end_session_endpoint of
+    OAuthProvider3 = case OpenId#openid_configuration.end_session_endpoint of
         undefined -> OAuthProvider2;
         EndSessionEndpoint ->
             OAuthProvider2#oauth_provider{end_session_endpoint = EndSessionEndpoint}
     end,
-    case OpendIdConfiguration#openid_configuration.jwks_uri of
+    case OpenId#openid_configuration.jwks_uri of
         undefined -> OAuthProvider3;
         JwksUri ->
             OAuthProvider3#oauth_provider{jwks_uri = JwksUri}
@@ -146,7 +150,8 @@ parse_openid_configuration_response({error, Reason}) ->
 parse_openid_configuration_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_response_to_openid_configuration(Code, Reason, Headers, Body).
 map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
-    case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
+    case decode_body(proplists:get_value("content-type", Headers, 
+            ?CONTENT_JSON), Body) of
         {error, {error, InternalError}} ->
             {error, InternalError};
         {error, _} = Error ->
@@ -162,13 +167,16 @@ map_to_openid_configuration(Map) ->
     #openid_configuration{
         issuer = maps:get(?RESPONSE_ISSUER, Map),
         token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
-        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, Map, undefined),
-        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT, Map, undefined),
+        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, 
+            Map, undefined),
+        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT, 
+            Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     }.
 
 -spec get_expiration_time(successful_access_token_response()) ->
-    {ok, [{expires_in, integer() }| {exp, integer() }]} | {error, missing_exp_field}.
+    {ok, [{expires_in, integer() }| {exp, integer() }]} | 
+    {error, missing_exp_field}.
 get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
         access_token = AccessToken}) ->
     case ExpiresInSec of
@@ -188,15 +196,8 @@ update_oauth_provider_endpoints_configuration(OAuthProvider) ->
         unlock(LockId)
     end.
 
-update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) ->
-    LockId = lock(),
-    try do_update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) of
-        V -> V
-    after
-        unlock(LockId)
-    end.
-
-do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
+do_update_oauth_provider_endpoints_configuration(OAuthProvider) when 
+        OAuthProvider#oauth_provider.id == root ->
     case OAuthProvider#oauth_provider.token_endpoint of
         undefined -> do_nothing;
         TokenEndpoint -> set_env(token_endpoint, TokenEndpoint)
@@ -215,10 +216,12 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
         JwksEndPoint -> [{jwks_url, JwksEndPoint} | proplists:delete(jwks_url, List)]
     end,
     set_env(key_config, ModifiedList),
-    rabbit_log:debug("Updated oauth_provider details: ~p ", [ format_oauth_provider(OAuthProvider)]),
-    OAuthProvider.
+    rabbit_log:debug("Updated oauth_provider details: ~p ", 
+        [format_oauth_provider(OAuthProvider)]),
+    OAuthProvider;
 
-do_update_oauth_provider_endpoints_configuration(OAuthProviderId, OAuthProvider) ->
+do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
+    OAuthProviderId = OAuthProvider#oauth_provider.id,
     OAuthProviders = get_env(oauth_providers, #{}),
     Proplist = maps:get(OAuthProviderId, OAuthProviders),
     ModifiedOAuthProviders = maps:put(OAuthProviderId,
@@ -241,7 +244,8 @@ lock() ->
           false -> undefined
         end;
       {Nodes, Retries} ->
-        case global:set_lock({oauth2_config_lock, rabbitmq_auth_backend_oauth2}, Nodes, Retries) of
+        case global:set_lock({oauth2_config_lock, rabbitmq_auth_backend_oauth2}, 
+            Nodes, Retries) of
           true  -> rabbitmq_auth_backend_oauth2;
           false -> undefined
         end
@@ -252,8 +256,10 @@ unlock(LockId) ->
         undefined -> ok;
         Value ->
             case use_global_locks_on_all_nodes() of
-                {} -> global:del_lock({oauth2_config_lock, Value});
-                {Nodes, _Retries} -> global:del_lock({oauth2_config_lock, Value}, Nodes)
+                {} -> 
+                    global:del_lock({oauth2_config_lock, Value});
+                {Nodes, _Retries} -> 
+                    global:del_lock({oauth2_config_lock, Value}, Nodes)
             end
     end.
 
@@ -262,52 +268,70 @@ get_oauth_provider(ListOfRequiredAttributes) ->
     case get_env(default_oauth_provider) of
         undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
         DefaultOauthProviderId ->
-            rabbit_log:debug("Using default_oauth_provider ~p", [DefaultOauthProviderId]),
+            rabbit_log:debug("Using default_oauth_provider ~p", 
+                [DefaultOauthProviderId]),
             get_oauth_provider(DefaultOauthProviderId, ListOfRequiredAttributes)
+    end.
+
+-spec download_oauth_provider(oauth_provider()) -> {ok, oauth_provider()} | 
+    {error, any()}.
+download_oauth_provider(OAuthProvider) ->
+    case OAuthProvider#oauth_provider.discovery_endpoint of
+        undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
+        URL ->
+            rabbit_log:debug("Downloading oauth_provider using ~p ", [URL]),
+            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
+                {ok, OpenIdConfiguration} ->
+                    {ok, update_oauth_provider_endpoints_configuration(
+                        merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
+                {error, _} = Error2 -> Error2
+            end
+    end.
+
+ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
+    case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
+        [] ->
+            rabbit_log:debug("Resolved oauth_provider ~p", 
+                    [format_oauth_provider(OAuthProvider)]),
+            {ok, OAuthProvider};
+        _ = Attrs ->
+            {error, {missing_oauth_provider_attributes, Attrs}}
     end.
 
 get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_oauth_provider_from_keyconfig(),
-    rabbit_log:debug("Using oauth_provider ~p from keyconfig", [format_oauth_provider(OAuthProvider)]),
+    rabbit_log:debug("Using oauth_provider ~p from keyconfig", 
+        [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             {ok, OAuthProvider};
         _ = MissingAttributes ->
-            rabbit_log:debug("Looking up missing attributes ~p ...", [MissingAttributes]),
-            Result2 = case OAuthProvider#oauth_provider.discovery_endpoint of
-                undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
-                URL ->
-                    rabbit_log:debug("Downloading oauth_provider using ~p ", [URL]),
-                    case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
-                        {ok, OpenIdConfiguration} ->
-                            {ok, update_oauth_provider_endpoints_configuration(
-                                merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
-                        {error, _} = Error2 -> Error2
-                    end
-                end,
-            case Result2 of
-                {ok, OAuthProvider2} ->
-                    case find_missing_attributes(OAuthProvider2, ListOfRequiredAttributes) of
-                        [] ->
-                            rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
-                            {ok, OAuthProvider2};
-                        _ = Attrs->
-                            {error, {missing_oauth_provider_attributes, Attrs}}
-                    end;
-                {error, _} = Error3 -> Error3
+            rabbit_log:debug("Looking up missing attributes ~p ...", 
+                [MissingAttributes]),
+            case download_oauth_provider(OAuthProvider) of
+                {ok, OAuthProvider2} -> 
+                    ensure_oauth_provider_has_attributes(OAuthProvider2,
+                        ListOfRequiredAttributes);                    
+                {error, _} = Error3 -> 
+                    Error3
             end
   end.
 
 
--spec get_oauth_provider(oauth_provider_id(), list()) -> {ok, oauth_provider()} | {error, any()}.
+-spec get_oauth_provider(oauth_provider_id(), list()) -> {ok, oauth_provider()} |
+    {error, any()}.
 get_oauth_provider(root, ListOfRequiredAttributes) ->
     get_oauth_provider(ListOfRequiredAttributes);
 
-get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) when is_list(OAuth2ProviderId) ->
-    get_oauth_provider(list_to_binary(OAuth2ProviderId), ListOfRequiredAttributes);
+get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) 
+        when is_list(OAuth2ProviderId) ->
+    get_oauth_provider(list_to_binary(OAuth2ProviderId), 
+        ListOfRequiredAttributes);
 
-get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) when is_binary(OAuthProviderId) ->
-    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p", [OAuthProviderId, ListOfRequiredAttributes]),
+get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) 
+        when is_binary(OAuthProviderId) ->
+    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p", 
+        [OAuthProviderId, ListOfRequiredAttributes]),
     case lookup_oauth_provider_config(OAuthProviderId) of
         {error, _} = Error0 ->
             rabbit_log:debug("Failed to find oauth_provider ~p configuration due to ~p",
@@ -322,28 +346,12 @@ get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) when is_binary(OAu
                     {ok, OAuthProvider};
                 _ = MissingAttributes ->
                     rabbit_log:debug("OauthProvider has following missing attributes ~p", [MissingAttributes]),
-                    Result2 = case OAuthProvider#oauth_provider.discovery_endpoint of
-                        undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
-                        URL ->
-                            rabbit_log:debug("Downloading oauth_provider ~p using ~p ...",
-                                [OAuthProviderId, URL]),
-                            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
-                                {ok, OpenIdConfiguration} ->
-                                    {ok, update_oauth_provider_endpoints_configuration(OAuthProviderId,
-                                        merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
-                                {error, _} = Error2 -> Error2
-                            end
-                    end,
-                    case Result2 of
+                    case download_oauth_provider(OAuthProvider) of
                         {ok, OAuthProvider2} ->
-                            case find_missing_attributes(OAuthProvider2, ListOfRequiredAttributes) of
-                                [] ->
-                                    rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
-                                    {ok, OAuthProvider2};
-                                _ = Attrs->
-                                    {error, {missing_oauth_provider_attributes, Attrs}}
-                            end;
-                        {error, _} = Error3 -> Error3
+                            ensure_oauth_provider_has_attributes(OAuthProvider2,
+                                ListOfRequiredAttributes);
+                        {error, _} = Error3 -> 
+                            Error3
                     end
             end
     end.
