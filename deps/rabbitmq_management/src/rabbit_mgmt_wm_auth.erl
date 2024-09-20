@@ -77,6 +77,10 @@ getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
     undefined -> OAuth2Resources;
     Id -> maps:put(Id, [{id, Id}], OAuth2Resources)
   end.
+buildRootResourceServerIfAny(Props) ->
+  [ {id, proplists:get_value(resource_server_id, Props) }, 
+    {oauth_client_id, proplists:get_value(oauth_client_id, Props)}, 
+    {oauth_client_id, proplists:get_value(oauth_client_id, Props)} ].
 
 authSettings() ->
   ManagementProps = application:get_all_env(rabbitmq_management),

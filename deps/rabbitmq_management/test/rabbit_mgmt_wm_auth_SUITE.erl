@@ -40,7 +40,7 @@ groups() ->
           should_return_disabled_auth_settings,
           {with_root_issuer_url1, [], [
             {with_resource_server_id_rabbit, [], [
-              should_return_disabled_auth_settings,
+              should_return_disabled_auth_settings,              
               {with_mgt_oauth_client_id_z, [], [
                 should_return_oauth_enabled,
                 should_return_oauth_client_id_z,

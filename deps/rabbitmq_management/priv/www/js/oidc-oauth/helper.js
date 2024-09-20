@@ -133,40 +133,41 @@ export function oauth_initiate(oauth) {
   }
   return oauth;
 }
-function oauth_initialize_user_manager(resource_server) {
-    let oidcSettings = {
-        userStore: new oidc.WebStorageStateStore({ store: window.localStorage }),
-        authority: resource_server.oauth_provider_url,
-        client_id: resource_server.oauth_client_id,
-        response_type: resource_server.oauth_response_type,
-        scope: resource_server.oauth_scopes,
-//        resource: resource_server.id,
-        redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri() + "/",
+export function oidc_settings_from(resource_server) {
+  let oidcSettings = {
+    userStore: new oidc.WebStorageStateStore({ store: window.localStorage }),
+    authority: resource_server.oauth_provider_url,
+    metadataUrl: resource_server.oauth_metadata_url,
+    client_id: resource_server.oauth_client_id,
+    response_type: resource_server.oauth_response_type,
+    scope: resource_server.oauth_scopes,
+    redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
+    post_logout_redirect_uri: rabbit_base_uri() + "/",
+    automaticSilentRenew: true,
+    revokeAccessTokenOnSignout: true   
+  }
+  if (resource_server.end_session_endpoint != "") {
+    oidcSettings.metadataSeed = {
+      end_session_endpoint: resource_server.end_session_endpoint
+    }
+  }
+  if (resource_server.oauth_client_secret != "") {
+    oidcSettings.client_secret = resource_server.oauth_client_secret
+  }
+  if (resource_server.authorization_endpoint_params != "") {
+    oidcSettings.extraQueryParams = resource_server.authorization_endpoint_params
+  }
+  if (resource_server.token_endpoint_params != "") {
+    oidcSettings.extraTokenParams = resource_server.token_endpoint_params
+  }
+  return oidcSettings
+}
 
-        automaticSilentRenew: true,
-        revokeAccessTokenOnSignout: true,
-        extraQueryParams: {
-          audience: resource_server.id, // required by oauth0
-        },
-    };
-    if (resource_server.end_session_endpoint != "") {
-      oidcSettings.metadataSeed = {
-        end_session_endpoint: resource_server.end_session_endpoint
-      }
-    }
-    if (resource_server.oauth_client_secret != "") {
-      oidcSettings.client_secret = resource_server.oauth_client_secret;
-    }
-    if (resource_server.oauth_metadata_url != "") {
-      oidcSettings.metadataUrl = resource_server.oauth_metadata_url;
-    }
-
+function oauth_initialize_user_manager(resource_server) {  
     oidc.Log.setLevel(oidc.Log.DEBUG);
     oidc.Log.setLogger(console);
 
-    mgr = new oidc.UserManager(oidcSettings);
-//    oauth.readiness_url = mgr.settings.metadataUrl;
+    mgr = new oidc.UserManager(oidc_settings_from(resource_server))
 
     _management_logger = new oidc.Logger("Management");
 
@@ -210,20 +211,6 @@ export function oauth_initialize(authSettings) {
     }
 
     return oauth;
-}
-
-function log() {
-    message = ""
-    Array.prototype.forEach.call(arguments, function(msg) {
-        if (msg instanceof Error) {
-            msg = "Error: " + msg.message;
-        }
-        else if (typeof msg !== "string") {
-            msg = JSON.stringify(msg, null, 2);
-        }
-        message += msg
-    });
-    _management_logger.info(message)
 }
 
 function oauth_is_logged_in() {
