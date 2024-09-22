@@ -9,7 +9,7 @@
 
 -export([
     create/0, create/2, ensure_local_copies/1, ensure_table_copy/3,
-    wait_for_replicated/1, wait/1, wait/2,
+    wait_for_replicated/1, wait/1, wait/2, wait_silent/2,
     force_load/0, is_present/0, is_empty/0, needs_default_data/0,
     check_schema_integrity/1,
     clear_ram_only_tables/0, maybe_clear_ram_only_tables/0,
@@ -109,19 +109,40 @@ wait(TableNames, Retry) ->
     {Timeout, Retries} = retry_timeout(Retry),
     wait(TableNames, Timeout, Retries).
 
+wait_silent(TableNames, Retry) ->
+    %% The check to validate if the deprecated feature
+    %% Classic Mirrored Queues is in use, calls this wait
+    %% for tables to ensure `rabbit_runtime_parameters` are
+    %% ready. This happens every time a user clicks on any
+    %% tab on the management UI (to warn about deprecated ff
+    %% in use), which generates some suspicious
+    %% `Waiting for Mnesia tables...` log messages.
+    %% They're normal, but better to avoid them as it might
+    %% confuse users, wondering if there is any issue with Mnesia.
+    {Timeout, Retries} = retry_timeout(Retry),
+    wait(TableNames, Timeout, Retries, _Silent = true).
+
 wait(TableNames, Timeout, Retries) ->
+    wait(TableNames, Timeout, Retries, _Silent = false).
+
+wait(TableNames, Timeout, Retries, Silent) ->
     %% Wait for tables must only wait for tables that have already been declared.
     %% Otherwise, node boot returns a timeout when the Khepri ff is enabled from the start
     ExistingTables = mnesia:system_info(tables),
     MissingTables = TableNames -- ExistingTables,
     TablesToMigrate = TableNames -- MissingTables,
-    wait1(TablesToMigrate, Timeout, Retries).
+    wait1(TablesToMigrate, Timeout, Retries, Silent).
 
-wait1(TableNames, Timeout, Retries) ->
+wait1(TableNames, Timeout, Retries, Silent) ->
     %% We might be in ctl here for offline ops, in which case we can't
     %% get_env() for the rabbit app.
-    rabbit_log:info("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
-                    [Timeout, Retries - 1]),
+    case Silent of
+        true ->
+            ok;
+        false ->
+            rabbit_log:info("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
+                            [Timeout, Retries - 1])
+    end,
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
                  ok ->
                      ok;
@@ -134,13 +155,23 @@ wait1(TableNames, Timeout, Retries) ->
              end,
     case {Retries, Result} of
         {_, ok} ->
-            rabbit_log:info("Successfully synced tables from a peer"),
-            ok;
+            case Silent of
+                true ->
+                    ok;
+                false ->
+                    rabbit_log:info("Successfully synced tables from a peer"),
+                    ok
+            end;
         {1, {error, _} = Error} ->
             throw(Error);
         {_, {error, Error}} ->
-            rabbit_log:warning("Error while waiting for Mnesia tables: ~tp", [Error]),
-            wait1(TableNames, Timeout, Retries - 1)
+            case Silent of
+                true ->
+                    ok;
+                false ->
+                    rabbit_log:warning("Error while waiting for Mnesia tables: ~tp", [Error])
+            end,
+            wait1(TableNames, Timeout, Retries - 1, Silent)
     end.
 
 retry_timeout(_Retry = false) ->

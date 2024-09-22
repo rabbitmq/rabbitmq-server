@@ -75,7 +75,7 @@ are_cmqs_used(_) ->
                     %% may be unavailable. For instance, Mnesia needs another
                     %% replica on another node before it considers it to be
                     %% available.
-                    rabbit_table:wait(
+                    rabbit_table:wait_silent(
                       [rabbit_runtime_parameters], _Retry = true),
                     are_cmqs_used1();
                 false ->
