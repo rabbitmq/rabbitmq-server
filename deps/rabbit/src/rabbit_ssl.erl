@@ -194,7 +194,7 @@ auth_config_sane() ->
         verify_peer -> true;
         V           -> rabbit_log:warning("TLS peer verification (authentication) is "
                                           "disabled, ssl_options.verify value used: ~tp. "
-                                          "See https://www.rabbitmq.com/ssl.html#peer-verification to learn more.", [V]),
+                                          "See https://www.rabbitmq.com/docs/ssl#peer-verification to learn more.", [V]),
                        false
     end.
 

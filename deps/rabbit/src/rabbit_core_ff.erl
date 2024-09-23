@@ -16,14 +16,14 @@
 -rabbit_feature_flag(
    {quorum_queue,
     #{desc          => "Support queues of type `quorum`",
-      doc_url       => "https://www.rabbitmq.com/quorum-queues.html",
+      doc_url       => "https://www.rabbitmq.com/docs/quorum-queues",
       stability     => required
      }}).
 
 -rabbit_feature_flag(
    {stream_queue,
     #{desc          => "Support queues of type `stream`",
-      doc_url       => "https://www.rabbitmq.com/stream.html",
+      doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
       depends_on    => [quorum_queue]
      }}).
@@ -56,7 +56,7 @@
 -rabbit_feature_flag(
    {stream_single_active_consumer,
     #{desc          => "Single active consumer for streams",
-      doc_url       => "https://www.rabbitmq.com/stream.html",
+      doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
       depends_on    => [stream_queue]
      }}).
