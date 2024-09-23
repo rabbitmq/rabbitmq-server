@@ -74,8 +74,13 @@ groups() ->
               should_return_disabled_auth_settings,
               {with_mgt_oauth_client_id_z, [], [
                 should_return_mgt_oauth_provider_url_url1,
+                should_return_mgt_oauth_metadata_url_url1,
                 {with_mgt_oauth_provider_url_url0, [], [
-                  should_return_mgt_oauth_provider_url_url0
+                  should_return_mgt_oauth_provider_url_url0,
+                  should_return_mgt_oauth_metadata_url_url1,
+                  {with_mgt_oauth_metadata_url_url0, [], [
+                    should_return_mgt_oauth_metadata_url_url0
+                  ]}
                 ]}
               ]}
             ]}
@@ -299,10 +304,15 @@ init_per_suite(Config) ->
     {idp2, <<"idp2">>},
     {idp3, <<"idp3">>},
     {idp1_url, <<"https://idp1">>},
+    {idp1_meta_url, <<"https://idp1/.well-known/openid-configuration">>},
     {idp2_url, <<"https://idp2">>},
+    {idp2_meta_url, <<"https://idp2/.well-known/openid-configuration">>},
     {idp3_url, <<"https://idp3">>},
+    {idp3_meta_url, <<"https://idp3/.well-known/openid-configuration">>},
     {url0, <<"https://url0">>},
+    {meta_url0, <<"https://url0/.well-known/openid-configuration">>},
     {url1, <<"https://url1">>},
+    {meta_url1, <<"https://url1/.well-known/openid-configuration">>},
     {logout_url_0, <<"https://logout_0">>},
     {logout_url_1, <<"https://logout_1">>},
     {logout_url_2, <<"https://logout_2">>},
@@ -339,6 +349,9 @@ init_per_group(with_mgt_oauth_client_secret_q, Config) ->
   Config;
 init_per_group(with_mgt_oauth_provider_url_url0, Config) ->
   application:set_env(rabbitmq_management, oauth_provider_url, ?config(url0, Config)),
+  Config;
+init_per_group(with_mgt_oauth_metadata_url_url0, Config) ->
+  application:set_env(rabbitmq_management, oauth_metadata_url, ?config(meta_url0, Config)),
   Config;
 init_per_group(with_root_issuer_url1, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, issuer, ?config(url1, Config)),
@@ -542,6 +555,14 @@ should_return_mgt_oauth_provider_url_url1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, rabbit, oauth_provider_url, url1).
 
+should_return_mgt_oauth_metadata_url_url1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_metadata_url, meta_url1).
+
+should_return_mgt_oauth_metadata_url_url0(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_metadata_url, meta_url0).
+
 should_return_mgt_oauth_provider_url_url0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, rabbit, oauth_provider_url, url0).
@@ -585,6 +606,10 @@ should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url1(Config) 
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, rabbit, oauth_provider_url, url1).
 
+should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_url1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
+    Config, rabbit, oauth_provider_url, url1 ).
+
 should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(rabbit_mgmt_wm_auth:authSettings(),
     Config, rabbit, oauth_provider_url, url0).
@@ -617,9 +642,9 @@ should_not_return_oauth_scopes(_Config) ->
 
 should_return_oauth_enabled(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
-  log(Actual),
   ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)).
 
+  
 should_return_oauth_idp_initiated_logon(_Config) ->
   Actual = rabbit_mgmt_wm_auth:authSettings(),
   ?assertEqual(<<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).
@@ -698,6 +723,12 @@ assertEqual_on_attribute_for_oauth_resource_server(Actual, Config, ConfigKey, At
     _ -> ?config(ConfigValue, Config)
   end,
   ?assertEqual(Value, proplists:get_value(Attribute, OauthResource)).
+
+assert_attribute_is_defined_for_oauth_resource_server(Actual, Config, ConfigKey, Attribute) ->
+  log(Actual),
+  OAuthResourceServers =  proplists:get_value(oauth_resource_servers, Actual),
+  OauthResource = maps:get(?config(ConfigKey, Config), OAuthResourceServers),
+  ?assertEqual(true, proplists:is_defined(Attribute, OauthResource)).
 
 assert_attribute_not_defined_for_oauth_resource_server(Actual, Config, ConfigKey, Attribute) ->
   log(Actual),

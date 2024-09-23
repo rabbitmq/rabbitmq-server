@@ -25,6 +25,18 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
+merge_property(Key, List, MapIn) -> 
+  case proplists:get_value(Key, List) of 
+    undefined -> MapIn;
+    V0 -> MapIn#{Key => V0}
+  end.
+
+extract_oauth_provider_info_props_as_map(ManagementProps) ->
+  lists:foldl(fun(K, Acc) -> 
+    merge_property(K, ManagementProps, Acc) end, #{}, [oauth_provider_url, 
+      oauth_metadata_url, oauth_authorization_endpoint_params, 
+      oauth_token_endpoint_params]).
+
 merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
   OAuthProviderResult = case proplists:get_value(oauth_provider_id, OAuthResourceServer) of
     undefined -> oauth2_client:get_oauth_provider([issuer]);
@@ -35,15 +47,17 @@ merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProp
     {error, _} -> #{}
   end,
   OAuthProviderInfo1 = maps:merge(OAuthProviderInfo0, 
-    case proplists:get_value(oauth_provider_url, ManagementProps) of
-      undefined -> #{};
-      V1 -> #{oauth_provider_url => V1}
-    end),
+    extract_oauth_provider_info_props_as_map(ManagementProps)),
   maps:merge(OAuthProviderInfo1, proplists:to_map(MgtResourceServer)).
 
 oauth_provider_to_map(OAuthProvider) ->
   % only include issuer and end_session_endpoint for now. The other endpoints are resolved by oidc-client library
-  Map0 = #{ oauth_provider_url => OAuthProvider#oauth_provider.issuer },
+  Map0 = case OAuthProvider#oauth_provider.issuer of 
+    undefined -> #{};
+    Issuer -> #{ oauth_provider_url => Issuer,
+                oauth_metadata_url => OAuthProvider#oauth_provider.discovery_endpoint 
+              }
+  end,
   case OAuthProvider#oauth_provider.end_session_endpoint of 
     undefined -> Map0;
     V -> maps:put(end_session_endpoint, V, Map0)
@@ -75,12 +89,22 @@ getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
   OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps, #{}),
   case proplists:get_value(resource_server_id, OAuth2BackendProps) of
     undefined -> OAuth2Resources;
-    Id -> maps:put(Id, [{id, Id}], OAuth2Resources)
+    Id -> maps:put(Id, buildRootResourceServerIfAny(Id, OAuth2BackendProps), 
+    OAuth2Resources)
   end.
-buildRootResourceServerIfAny(Props) ->
-  [ {id, proplists:get_value(resource_server_id, Props) }, 
-    {oauth_client_id, proplists:get_value(oauth_client_id, Props)}, 
-    {oauth_client_id, proplists:get_value(oauth_client_id, Props)} ].
+buildRootResourceServerIfAny(Id, Props) ->
+  [ {id, Id}, 
+    {oauth_client_id, 
+        proplists:get_value(oauth_client_id, Props)}, 
+    {oauth_client_secret,
+        proplists:get_value(oauth_client_secret, Props)},
+    {oauth_response_type, 
+        proplists:get_value(oauth_response_type, Props)},
+    {authorization_endpoint_params, 
+        proplists:get_value(authorization_endpoint_params, Props)},
+    {token_endpoint_params, 
+        proplists:get_value(token_endpoint_params, Props)} 
+  ].
 
 authSettings() ->
   ManagementProps = application:get_all_env(rabbitmq_management),
