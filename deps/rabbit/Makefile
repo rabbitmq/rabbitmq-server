@@ -307,6 +307,7 @@ web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
 	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
 	    gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \
+	    gsub(/\.html/, "", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"
