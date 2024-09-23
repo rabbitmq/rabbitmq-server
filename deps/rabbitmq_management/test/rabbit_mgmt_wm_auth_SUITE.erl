@@ -317,6 +317,15 @@ groups() ->
                 ]},
                 {with_token_endpoint_params_0, [], [
                   should_return_mgt_oauth_resource_rabbit_with_token_endpoint_params_0
+                ]},
+                {with_resource_server_a, [], [
+                  {with_mgt_resource_server_a_with_authorization_endpoint_params_1, [], [
+                    should_return_mgt_oauth_resource_a_with_authorization_endpoint_params_1
+                  ]},
+                  {with_mgt_resource_server_a_with_token_endpoint_params_1, [], [
+                    should_return_mgt_oauth_resource_a_with_token_endpoint_params_1
+                  ]}
+
                 ]}
               ]}
             ]}
@@ -472,6 +481,14 @@ init_per_group(with_token_endpoint_params_0, Config) ->
   set_env(rabbitmq_management, oauth_token_endpoint_params,
     ?config(token_params_0, Config)),
   Config;
+init_per_group(with_mgt_resource_server_a_with_authorization_endpoint_params_1, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_authorization_endpoint_params, ?config(authorization_params_1, Config)),
+  Config;
+init_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_token_endpoint_params, ?config(token_params_1, Config)),
+  Config;
 
 
 init_per_group(_, Config) ->
@@ -582,6 +599,14 @@ end_per_group(with_authorization_endpoint_params_0, Config) ->
   Config;
 end_per_group(with_token_endpoint_params_0, Config) ->
   unset_env(rabbitmq_management, oauth_token_endpoint_params),
+  Config;
+end_per_group(with_mgt_resource_server_a_with_authorization_endpoint_params_1, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_authorization_endpoint_params),
+  Config;
+end_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_token_endpoint_params),
   Config;
 
 
@@ -785,6 +810,14 @@ should_return_mgt_oauth_resource_rabbit_with_authorization_endpoint_params_0(Con
 should_return_mgt_oauth_resource_rabbit_with_token_endpoint_params_0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, rabbit, oauth_token_endpoint_params, token_params_0).
+
+should_return_mgt_oauth_resource_a_with_authorization_endpoint_params_1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
+    Config, a, oauth_authorization_endpoint_params, authorization_params_1).
+
+should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
+  assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
+    Config, a, oauth_token_endpoint_params, token_params_1).
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions
