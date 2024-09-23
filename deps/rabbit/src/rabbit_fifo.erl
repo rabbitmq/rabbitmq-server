@@ -1064,7 +1064,7 @@ handle_aux(_RaState, cast, tick, #?AUX{name = Name,
                undefined ->
                    [{release_cursor, ra_aux:last_applied(RaAux)}];
                Smallest ->
-                   [{release_cursor, Smallest}]
+                   [{release_cursor, Smallest - 1}]
            end,
     {no_reply, Aux, RaAux, Effs};
 handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, RaAux) ->
@@ -2915,7 +2915,10 @@ release_cursor(LastSmallest, Smallest)
   when is_integer(LastSmallest) andalso
        is_integer(Smallest) andalso
        Smallest > LastSmallest ->
-    [{release_cursor, Smallest}];
+    [{release_cursor, Smallest - 1}];
+release_cursor(undefined, Smallest)
+  when is_integer(Smallest) ->
+    [{release_cursor, Smallest - 1}];
 release_cursor(_, _) ->
     [].
 
