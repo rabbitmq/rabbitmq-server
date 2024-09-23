@@ -329,7 +329,8 @@ init(IsVirgin) ->
                 %% minority when this node went down. We wait for a majority
                 %% while registering projections above though so this deletion
                 %% is likely to succeed.
-                rabbit_amqqueue:delete_transient_queues_on_node(node())
+                ok ?= rabbit_amqqueue:delete_transient_queues_on_node(node()),
+                ok ?= rabbit_db_queue:setup()
             end
     end.
 
@@ -1584,6 +1585,11 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
            [FeatureName],
            #{domain => ?RMQLOG_DOMAIN_DB}),
         ok ?= register_projections(),
+        ?LOG_INFO(
+           "Feature flag `~s`: setting up rabbit_db_queue",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= rabbit_db_queue:setup(),
         migrate_mnesia_tables(FeatureName)
     end.
 
