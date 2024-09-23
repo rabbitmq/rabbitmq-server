@@ -2347,6 +2347,31 @@ aux_test(_) ->
     ?assert(X > 0.0),
     ok.
 
+handle_aux_tick_test(Config) ->
+    _ = ra_machine_ets:start_link(),
+    Aux0 = init_aux(aux_test),
+    LastApplied = 1,
+    MacState0 = init(#{name => ?FUNCTION_NAME,
+                       queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                       single_active_consumer_on => false}),
+    State0 = #{machine_state => MacState0,
+               log => mock_log,
+               last_applied => LastApplied},
+    {MacState1, _} = enq(Config, 1, 1, first, MacState0),
+    State1 = State0#{machine_state => MacState1},
+    meck:expect(ra_log, last_index_term, fun (_) -> {1, 0} end),
+    ?assertEqual(1, rabbit_fifo:smallest_raft_index(MacState1)),
+    %% the release cursor should be 1 lower than the smallest raft index
+    {no_reply, _, _,
+     [{release_cursor, 0}]} = handle_aux(leader, cast, tick, Aux0, State1),
+    timer:sleep(10),
+
+    persistent_term:put(quorum_queue_checkpoint_config, {1, 0, 1}),
+    {no_reply, _, _,
+     [{checkpoint, 1, _},
+      {release_cursor, 0}]} = handle_aux(follower, cast, force_checkpoint, Aux0, State1),
+    ok.
+
 
 %% machine version conversion test
 
