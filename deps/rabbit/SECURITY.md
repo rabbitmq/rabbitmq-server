@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-See [RabbitMQ Release Series](https://www.rabbitmq.com/versions.html) for a list of currently supported
+See [RabbitMQ Release Series](https://www.rabbitmq.com/release-information) for a list of currently supported
 versions.
 
 Vulnerabilities reported for versions out of support will not be investigated.
