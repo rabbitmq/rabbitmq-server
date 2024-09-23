@@ -139,8 +139,17 @@ filter_mgt_resource_servers_without_oauth_client_id_for_sp_initiated(MgtResource
 filter_mgt_resource_servers_without_oauth_provider_url(MgtResourceServers) ->
   maps:filter(fun(_K1,V1) -> maps:is_key(oauth_provider_url, V1) end, MgtResourceServers).    
 
+ensure_oauth_resource_server_properties_are_binaries(Key, Value) ->
+  case Key of 
+    oauth_authorization_endpoint_params -> Value;
+    oauth_token_endpoint_params -> Value;
+    _ -> to_binary(Value)
+  end.
+
 produce_auth_settings(MgtResourceServers, ManagementProps) ->
-  ConvertValuesToBinary = fun(_K,V) -> [ {K1, to_binary(V1)} || {K1,V1} <- maps:to_list(V) ] end,
+  ConvertValuesToBinary = fun(_K,V) -> [ 
+    {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)} || {K1,V1} 
+      <- maps:to_list(V)] end,
   FilteredMgtResourceServers = filter_mgt_resource_servers_without_oauth_provider_url(
     filter_mgt_resource_servers_without_oauth_client_id_for_sp_initiated(MgtResourceServers, ManagementProps)),
 
@@ -150,7 +159,7 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
        filter_empty_properties([
         {oauth_enabled, true},
         {oauth_resource_servers, maps:map(ConvertValuesToBinary, FilteredMgtResourceServers)},
-        to_tuple(oauth_disable_basic_auth, ManagementProps, true),
+        to_tuple(oauth_disable_basic_auth, ManagementProps, fun to_binary/1, true),
         to_tuple(oauth_client_id, ManagementProps),
         to_tuple(oauth_client_secret, ManagementProps),
         to_tuple(oauth_scopes, ManagementProps),
@@ -158,8 +167,8 @@ produce_auth_settings(MgtResourceServers, ManagementProps) ->
           sp_initiated -> {};
           idp_initiated -> {oauth_initiated_logon_type, <<"idp_initiated">>}
         end,
-        to_tuple(oauth_authorization_endpoint_params, ManagementProps),
-        to_tuple(oauth_token_endpoint_params, ManagementProps)
+        to_tuple(oauth_authorization_endpoint_params, ManagementProps, undefined, undefined),
+        to_tuple(oauth_token_endpoint_params, ManagementProps, undefined, undefined)
       ])
   end.
 
@@ -171,6 +180,7 @@ filter_empty_properties(ListOfProperties) ->
       end
     end, ListOfProperties).
 
+to_binary(Value) when is_boolean(Value)-> Value;
 to_binary(Value) -> rabbit_data_coercion:to_binary(Value).
 
 to_json(ReqData, Context) ->
@@ -188,9 +198,19 @@ is_invalid(List) ->
     end end, List).
 
 to_tuple(Key, Proplist) ->
-  case proplists:is_defined(Key, Proplist) of
-    true -> {Key, rabbit_data_coercion:to_binary(proplists:get_value(Key, Proplist))};
-    false -> {}
-  end.
-to_tuple(Key, Proplist, DefaultValue) ->
-  {Key, proplists:get_value(Key, Proplist, DefaultValue)}.
+    to_tuple(Key, Proplist, fun to_binary/1, undefined).
+
+to_tuple(Key, Proplist, ConvertFun, DefaultValue) ->
+    case proplists:is_defined(Key, Proplist) of
+        true -> 
+            {Key, case ConvertFun of 
+                    undefined -> proplists:get_value(Key, Proplist);
+                    _ -> ConvertFun(proplists:get_value(Key, Proplist))
+                end
+            };
+        false -> 
+            case DefaultValue of 
+                undefined -> {};
+                _ -> {Key, proplists:get_value(Key, Proplist, DefaultValue)}
+            end
+    end.
