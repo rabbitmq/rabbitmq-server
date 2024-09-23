@@ -26,7 +26,7 @@ all() ->
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
      {group, verify_oauth_scopes},
-     {group, verify_extra_endpoint_params} 
+     {group, verify_extra_endpoint_params}
     ].
 
 groups() ->
@@ -42,7 +42,7 @@ groups() ->
           should_return_disabled_auth_settings,
           {with_root_issuer_url1, [], [
             {with_resource_server_id_rabbit, [], [
-              should_return_disabled_auth_settings,              
+              should_return_disabled_auth_settings,
               {with_mgt_oauth_client_id_z, [], [
                 should_return_oauth_enabled,
                 should_return_oauth_client_id_z,
@@ -110,7 +110,7 @@ groups() ->
         {with_resource_server_id_rabbit, [], [
           {with_root_issuer_url1, [], [
             {with_oauth_enabled, [], [
-              {with_mgt_oauth_client_id_z, [], [ 
+              {with_mgt_oauth_client_id_z, [], [
                 should_not_return_end_session_endpoint,
                 {with_root_end_session_endpoint_0, [], [
                   should_return_end_session_endpoint_0
@@ -120,7 +120,7 @@ groups() ->
           ]},
           {with_oauth_providers_idp1_idp2, [], [
             {with_default_oauth_provider_idp1, [], [
-              {with_oauth_enabled, [], [                
+              {with_oauth_enabled, [], [
                 {with_mgt_oauth_client_id_z, [], [
                   should_not_return_end_session_endpoint,
                   {with_end_session_endpoint_for_idp1_1, [], [
@@ -149,7 +149,7 @@ groups() ->
                   should_return_oauth_resource_server_a_without_end_session_endpoint,
                   {with_root_end_session_endpoint_0, [], [
                     should_return_end_session_endpoint_0,
-                    should_return_oauth_resource_server_a_with_end_session_endpoint_0                  
+                    should_return_oauth_resource_server_a_with_end_session_endpoint_0
                   ]},
                   {with_oauth_providers_idp1_idp2, [], [
                     {with_default_oauth_provider_idp1, [], [
@@ -159,11 +159,11 @@ groups() ->
                         {with_oauth_provider_idp2_for_resource_server_a, [], [
                           {with_end_session_endpoint_for_idp2_2, [], [
                             should_return_oauth_resource_server_a_with_end_session_endpoint_2
-                          ]}                          
+                          ]}
                         ]}
                       ]}
                     ]}
-                  ]} 
+                  ]}
                 ]}
               ]}
             ]}
@@ -190,9 +190,9 @@ groups() ->
                       should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
                       should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
                       {with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url0, [], [
-                        should_return_oauth_resource_server_a_with_oauth_metadata_url_url0 
+                        should_return_oauth_resource_server_a_with_oauth_metadata_url_url0
                       ]}
-                    ]}                    
+                    ]}
                   ]}
                 ]}
               ]}
@@ -212,7 +212,7 @@ groups() ->
                       should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_idp1_url,
                       {with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, [], [
                         should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
-                        should_return_oauth_resource_server_a_with_oauth_provider_url_url1                        
+                        should_return_oauth_resource_server_a_with_oauth_provider_url_url1
                       ]}
                     ]}
                   ]}
@@ -221,7 +221,7 @@ groups() ->
             ]}
           ]}
         ]}
-      ]},      
+      ]},
       {verify_oauth_initiated_logon_type_for_sp_initiated, [], [
         should_return_disabled_auth_settings,
         {with_resource_server_id_rabbit, [], [
@@ -313,7 +313,7 @@ groups() ->
                 should_return_mgt_oauth_resource_rabbit_without_authorization_endpoint_params,
                 should_return_mgt_oauth_resource_rabbit_without_token_endpoint_params,
                 {with_authorization_endpoint_params_0, [], [
-                  should_return_mgt_oauth_resource_rabbit_with_authorization_endpoint_params_0                  
+                  should_return_mgt_oauth_resource_rabbit_with_authorization_endpoint_params_0
                 ]},
                 {with_token_endpoint_params_0, [], [
                   should_return_mgt_oauth_resource_rabbit_with_token_endpoint_params_0
@@ -330,7 +330,7 @@ groups() ->
               ]}
             ]}
           ]}
-        ]}        
+        ]}
       ]}
     ].
 
@@ -361,10 +361,10 @@ init_per_suite(Config) ->
     {w, <<"w">>},
     {z, <<"z">>},
     {x, <<"x">>},
-    {authorization_params_0, [{<<"a-param0">>, <<"value0">>}]},
-    {authorization_params_1, [{<<"a-param1">>, <<"value1">>}]},
-    {token_params_0, [{<<"t-param0">>, <<"value0">>}]},
-    {token_params_1, [{<<"t-param1">>, <<"value1">>}]},
+    {authorization_params_0, [{"a-param0", "value0"}]},
+    {authorization_params_1, [{"a-param1", "value1"}]},
+    {token_params_0, [{"t-param0", "value0"}]},
+    {token_params_1, [{"t-param1", "value1"}]},
     {admin_mgt, <<"admin mgt">>},
     {read_write, <<"read write">>} | Config].
 
@@ -750,7 +750,7 @@ should_return_oauth_enabled(_Config) ->
   Actual = authSettings(),
   ?assertEqual(true, proplists:get_value(oauth_enabled, Actual)).
 
-  
+
 should_return_oauth_idp_initiated_logon(_Config) ->
   Actual = authSettings(),
   ?assertEqual(<<"idp_initiated">>, proplists:get_value(oauth_initiated_logon_type, Actual)).

@@ -69,8 +69,7 @@ translate_list_of_signing_keys(ListOfKidPath) ->
 -spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
-    Params = [{list_to_binary(Param), list_to_binary(V)} ||
-        {["auth_oauth2", _, Param], V} <- Params0],
+    Params = [{Param, V} || {["auth_oauth2", _, Param], V} <- Params0],
     maps:from_list(Params).
 
 validator_file_exists(Attr, Filename) ->
@@ -120,7 +119,7 @@ mapOauthProviderProperty({Key, Value}) ->
         token_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
-        authorization_endpoint -> validator_https_uri(Key, Value);        
+        authorization_endpoint -> validator_https_uri(Key, Value);
         discovery_endpoint_params ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));

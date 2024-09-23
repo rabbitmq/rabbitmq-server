@@ -60,7 +60,7 @@ test_with_endpoint_params(_) ->
         {["auth_oauth2","discovery_endpoint_params","param1"], "some-value1"},
         {["auth_oauth2","discovery_endpoint_params","param2"], "some-value2"}
     ],
-    #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> } =
+    #{ "param1" := "some-value1", "param2" := "some-value2" } =
         translate_endpoint_params("discovery_endpoint_params", Conf).
 
 test_invalid_oauth_providers_endpoint_params(_) ->
@@ -103,7 +103,7 @@ test_with_many_oauth_providers(_) ->
             {["auth_oauth2","oauth_providers","uaa","issuer"],"https://uaa"},
             {["auth_oauth2","oauth_providers","uaa","discovery_endpoint_path"],"/some-path"}
             ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}                
+    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}
                         ],
       <<"uaa">> := [{issuer, <<"https://uaa">>},
                     {discovery_endpoint_path, <<"/some-path">>}

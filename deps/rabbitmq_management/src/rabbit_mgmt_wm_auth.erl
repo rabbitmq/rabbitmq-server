@@ -25,16 +25,16 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-merge_property(Key, List, MapIn) -> 
-  case proplists:get_value(Key, List) of 
+merge_property(Key, List, MapIn) ->
+  case proplists:get_value(Key, List) of
     undefined -> MapIn;
     V0 -> MapIn#{Key => V0}
   end.
 
 extract_oauth_provider_info_props_as_map(ManagementProps) ->
-  lists:foldl(fun(K, Acc) -> 
-    merge_property(K, ManagementProps, Acc) end, #{}, [oauth_provider_url, 
-      oauth_metadata_url, oauth_authorization_endpoint_params, 
+  lists:foldl(fun(K, Acc) ->
+    merge_property(K, ManagementProps, Acc) end, #{}, [oauth_provider_url,
+      oauth_metadata_url, oauth_authorization_endpoint_params,
       oauth_token_endpoint_params]).
 
 merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
@@ -46,19 +46,19 @@ merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProp
     {ok, OAuthProvider} -> oauth_provider_to_map(OAuthProvider);
     {error, _} -> #{}
   end,
-  OAuthProviderInfo1 = maps:merge(OAuthProviderInfo0, 
+  OAuthProviderInfo1 = maps:merge(OAuthProviderInfo0,
     extract_oauth_provider_info_props_as_map(ManagementProps)),
   maps:merge(OAuthProviderInfo1, proplists:to_map(MgtResourceServer)).
 
 oauth_provider_to_map(OAuthProvider) ->
   % only include issuer and end_session_endpoint for now. The other endpoints are resolved by oidc-client library
-  Map0 = case OAuthProvider#oauth_provider.issuer of 
+  Map0 = case OAuthProvider#oauth_provider.issuer of
     undefined -> #{};
     Issuer -> #{ oauth_provider_url => Issuer,
-                oauth_metadata_url => OAuthProvider#oauth_provider.discovery_endpoint 
+                oauth_metadata_url => OAuthProvider#oauth_provider.discovery_endpoint
               }
   end,
-  case OAuthProvider#oauth_provider.end_session_endpoint of 
+  case OAuthProvider#oauth_provider.end_session_endpoint of
     undefined -> Map0;
     V -> maps:put(end_session_endpoint, V, Map0)
   end.
@@ -80,7 +80,7 @@ extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
   MgtResources = maps:map(
     fun(K,V) -> merge_oauth_provider_info(maps:get(K, OAuth2Resources, #{}), V, ManagementProps) end,
     skip_disabled_mgt_resource_servers(MgtResources1)),
-  case maps:size(MgtResources) of 
+  case maps:size(MgtResources) of
     0 -> {};
     _ -> {MgtResources}
   end.
@@ -89,21 +89,21 @@ getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
   OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps, #{}),
   case proplists:get_value(resource_server_id, OAuth2BackendProps) of
     undefined -> OAuth2Resources;
-    Id -> maps:put(Id, buildRootResourceServerIfAny(Id, OAuth2BackendProps), 
+    Id -> maps:put(Id, buildRootResourceServerIfAny(Id, OAuth2BackendProps),
     OAuth2Resources)
   end.
 buildRootResourceServerIfAny(Id, Props) ->
-  [ {id, Id}, 
-    {oauth_client_id, 
-        proplists:get_value(oauth_client_id, Props)}, 
+  [ {id, Id},
+    {oauth_client_id,
+        proplists:get_value(oauth_client_id, Props)},
     {oauth_client_secret,
         proplists:get_value(oauth_client_secret, Props)},
-    {oauth_response_type, 
+    {oauth_response_type,
         proplists:get_value(oauth_response_type, Props)},
-    {authorization_endpoint_params, 
+    {authorization_endpoint_params,
         proplists:get_value(authorization_endpoint_params, Props)},
-    {token_endpoint_params, 
-        proplists:get_value(token_endpoint_params, Props)} 
+    {token_endpoint_params,
+        proplists:get_value(token_endpoint_params, Props)}
   ].
 
 authSettings() ->
@@ -114,7 +114,10 @@ authSettings() ->
     false -> [{oauth_enabled, false}];
     true ->
       case extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) of
-        {MgtResources} -> produce_auth_settings(MgtResources, ManagementProps);
+        {MgtResources} ->
+            Settings = produce_auth_settings(MgtResources, ManagementProps),
+            rabbit_log:debug("authSettings: ~p", [Settings]),
+            Settings;
         {} -> [{oauth_enabled, false}]
       end
   end.
@@ -137,18 +140,18 @@ filter_mgt_resource_servers_without_oauth_client_id_for_sp_initiated(MgtResource
   end.
 
 filter_mgt_resource_servers_without_oauth_provider_url(MgtResourceServers) ->
-  maps:filter(fun(_K1,V1) -> maps:is_key(oauth_provider_url, V1) end, MgtResourceServers).    
+  maps:filter(fun(_K1,V1) -> maps:is_key(oauth_provider_url, V1) end, MgtResourceServers).
 
 ensure_oauth_resource_server_properties_are_binaries(Key, Value) ->
-  case Key of 
+  case Key of
     oauth_authorization_endpoint_params -> Value;
     oauth_token_endpoint_params -> Value;
     _ -> to_binary(Value)
   end.
 
 produce_auth_settings(MgtResourceServers, ManagementProps) ->
-  ConvertValuesToBinary = fun(_K,V) -> [ 
-    {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)} || {K1,V1} 
+  ConvertValuesToBinary = fun(_K,V) -> [
+    {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)} || {K1,V1}
       <- maps:to_list(V)] end,
   FilteredMgtResourceServers = filter_mgt_resource_servers_without_oauth_provider_url(
     filter_mgt_resource_servers_without_oauth_client_id_for_sp_initiated(MgtResourceServers, ManagementProps)),
@@ -202,14 +205,14 @@ to_tuple(Key, Proplist) ->
 
 to_tuple(Key, Proplist, ConvertFun, DefaultValue) ->
     case proplists:is_defined(Key, Proplist) of
-        true -> 
-            {Key, case ConvertFun of 
+        true ->
+            {Key, case ConvertFun of
                     undefined -> proplists:get_value(Key, Proplist);
                     _ -> ConvertFun(proplists:get_value(Key, Proplist))
                 end
             };
-        false -> 
-            case DefaultValue of 
+        false ->
+            case DefaultValue of
                 undefined -> {};
                 _ -> {Key, proplists:get_value(Key, Proplist, DefaultValue)}
             end

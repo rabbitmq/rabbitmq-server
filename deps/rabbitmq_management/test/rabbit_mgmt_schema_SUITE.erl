@@ -14,7 +14,7 @@
 -import(rabbit_mgmt_schema, [translate_endpoint_params/2, translate_oauth_resource_servers/1]).
 
 all() ->
-    [        
+    [
         test_empty_endpoint_params,
         test_invalid_endpoint_params,
         test_translate_endpoint_params,
@@ -25,7 +25,7 @@ all() ->
 
 test_empty_endpoint_params(_) ->
     #{} = translate_endpoint_params("oauth_authorization_endpoint_params", []),
-    #{} = translate_endpoint_params("oauth_token_endpoint_params", []).    
+    #{} = translate_endpoint_params("oauth_token_endpoint_params", []).
 
 test_invalid_endpoint_params(_) ->
     try translate_endpoint_params("oauth_authorization_endpoint_params", [
@@ -35,8 +35,8 @@ test_invalid_endpoint_params(_) ->
         _ -> ok
     end.
 
-test_translate_endpoint_params(_) ->    
-    #{ <<"param1">> := <<"some-value1">> } =
+test_translate_endpoint_params(_) ->
+    #{ "param1" := "some-value1" } =
         translate_endpoint_params("oauth_authorization_endpoint_params", [
             {["management","oauth_authorization_endpoint_params","param1"], "some-value1"}
         ]).
@@ -44,10 +44,10 @@ test_translate_endpoint_params(_) ->
 test_with_one_resource_server(_) ->
     Conf = [
         {["management","oauth_resource_servers","rabbitmq1","id"],"rabbitmq1"}
-    ],    
+    ],
     #{
-        <<"rabbitmq1">> := [
-            {id, <<"rabbitmq1">>}
+        "rabbitmq1" := [
+            {id, "rabbitmq1"}
         ]
     } = translate_oauth_resource_servers(Conf).
 
@@ -57,13 +57,13 @@ test_with_many_resource_servers(_) ->
         {["management","oauth_resource_servers","uaa","label"],"Uaa"}
     ],
     #{
-        <<"keycloak">> := [            
-            {label, <<"Keycloak">>},
-            {id, <<"keycloak">>}
+        "keycloak" := [
+            {label, "Keycloak"},
+            {id, "keycloak"}
         ],
-        <<"uaa">> := [            
-            {label, <<"Uaa">>},
-            {id, <<"uaa">>}
+        "uaa" := [
+            {label, "Uaa"},
+            {id, "uaa"}
         ]
     } = translate_oauth_resource_servers(Conf).
 

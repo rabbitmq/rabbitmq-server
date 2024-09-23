@@ -18,6 +18,8 @@
         auth_oauth2.https.depth = 5
         auth_oauth2.https.fail_if_no_peer_cert = false
         auth_oauth2.https.hostname_verification = wildcard
+        auth_oauth2.discovery_endpoint_path = /.well-known/openid-configuration
+        auth_oauth2.discovery_endpoint_params.param1 = value1
         auth_oauth2.https.crl_check = true
         auth_oauth2.algorithms.1 = HS256
         auth_oauth2.algorithms.2 = RS256",
@@ -30,6 +32,10 @@
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
             {issuer, "https://my-jwt-issuer"},
+            {discovery_endpoint_path, "/.well-known/openid-configuration"},
+            {discovery_endpoint_params, #{
+                "param1" => "value1"
+            }},
             {key_config, [
               {default_key, <<"id1">>},
               {signing_keys,

@@ -473,7 +473,7 @@ end}.
     [{datatype, string}]}.
 
 %% Configure OAuth2 authorization_endpoint additional request parameters
-{mapping, "management.oauth_authorization_endpoint_params.$name", 
+{mapping, "management.oauth_authorization_endpoint_params.$name",
     "rabbitmq_management.oauth_authorization_endpoint_params",
     [{datatype, string}]}.
 
@@ -483,7 +483,7 @@ end}.
  end}.
 
 %% Configure OAuth2 token_endpoint additional request parameters
-{mapping, "management.oauth_token_endpoint_params.$name", 
+{mapping, "management.oauth_token_endpoint_params.$name",
     "rabbitmq_management.oauth_token_endpoint_params",
     [{datatype, string}]}.
 
@@ -568,17 +568,17 @@ end}.
     "rabbitmq_management.oauth_resource_servers",
   [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
-{mapping, "management.oauth_resource_servers.$name.oauth_authorization_endpoint_params.$name", 
-    ""rabbitmq_management.oauth_resource_servers",
+{mapping, "management.oauth_resource_servers.$name.oauth_authorization_endpoint_params.$name",
+    "rabbitmq_management.oauth_resource_servers",
     [{datatype, string}]}.
 
-{mapping, "management.oauth_resource_servers.$name.oauth_token_endpoint_params.$name", 
-    ""rabbitmq_management.oauth_resource_servers",
+{mapping, "management.oauth_resource_servers.$name.oauth_token_endpoint_params.$name",
+    "rabbitmq_management.oauth_resource_servers",
     [{datatype, string}]}.
 
 {translation, "rabbitmq_management.oauth_resource_servers",
  fun(Conf) ->
-     rabbit_mgmt_schema:translate_resource_servers(Conf)
+     rabbit_mgmt_schema:translate_oauth_resource_servers(Conf)
  end}.
 
 %% ===========================================================================
