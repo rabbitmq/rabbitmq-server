@@ -14,6 +14,7 @@
 -include("amqqueue.hrl").
 
 -export([
+         setup/0,
          get/1,
          get_many/1,
          get_all/0,
@@ -80,6 +81,11 @@
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_queue).
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_queue).
+
+-define(KHEPRI_DELETION_SPROC_PATH, [rabbitmq, sprocs, ?MODULE, delete]).
+
+setup() ->
+    rabbit_khepri:put(?KHEPRI_DELETION_SPROC_PATH, khepri_deletion_sproc()).
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -404,18 +410,31 @@ delete_in_khepri(QueueName) ->
     delete_in_khepri(QueueName, false).
 
 delete_in_khepri(QueueName, OnlyDurable) ->
-    rabbit_khepri:transaction(
-      fun () ->
-              Path = khepri_queue_path(QueueName),
-              case khepri_tx_adv:delete(Path) of
-                  {ok, #{data := _}} ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, _} ->
-                      ok
-              end
-      end, rw).
+    Result = khepri:transaction(
+               rabbitmq_metadata,
+               ?KHEPRI_DELETION_SPROC_PATH, [QueueName, OnlyDurable], rw, #{}),
+    case Result of
+        ok ->
+            ok;
+        {ok, Ret} ->
+            Ret;
+        {error, _} = Err ->
+            Err
+    end.
+
+khepri_deletion_sproc() ->
+    fun(QueueName, OnlyDurable) ->
+        Path = khepri_queue_path(QueueName),
+        case khepri_tx_adv:delete(Path) of
+            {ok, #{data := _}} ->
+                %% we want to execute some things, as decided by rabbit_exchange,
+                %% after the transaction.
+                rabbit_db_binding:delete_for_destination_in_khepri(
+                  QueueName, OnlyDurable);
+            {ok, _} ->
+                ok
+        end
+    end.
 
 %% -------------------------------------------------------------------
 %% internal_delete().
