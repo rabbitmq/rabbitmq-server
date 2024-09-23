@@ -480,7 +480,7 @@
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##
-## Relevant doc guide: https://rabbitmq.com//cluster-formation.html
+## Relevant doc guide: https://www.rabbitmq.com//cluster-formation.html
 ##
 
 # cluster_formation.peer_discovery_backend     = rabbit_peer_discovery_classic_config
