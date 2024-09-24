@@ -122,13 +122,13 @@ end}.
 %%
 
 %% Original key for definition loading from a JSON file or directory of files. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "load_definitions", "rabbit.load_definitions",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
 
 %% Newer syntax for definition loading from a JSON file or directory of files. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "definitions.local.path", "rabbit.definitions.local_path",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
@@ -161,7 +161,7 @@ end}.
     {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
 
 %% Load definitions from a remote URL over HTTPS. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "definitions.https.url", "rabbit.definitions.url",
     [{datatype, string}]}.
 
@@ -295,7 +295,7 @@ fun(Conf) ->
 end}.
 
 %% TLS options.
-%% See https://www.rabbitmq.com/ssl.html for full documentation.
+%% See https://www.rabbitmq.com/docs/ssl for full documentation.
 %%
 %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
 %%                {certfile,             "/path/to/server/cert.pem"},
@@ -639,7 +639,7 @@ end}.
 
 %% On first start RabbitMQ will create a vhost and a user. These
 %% config items control what gets created. See
-%% https://www.rabbitmq.com/access-control.html for further
+%% https://www.rabbitmq.com/docs/access-control for further
 %% information about vhosts and access control.
 %%
 %% {default_vhost,       <<"/">>},
@@ -871,7 +871,7 @@ end}.
 %% Tags for default user
 %%
 %% For more details about tags, see the documentation for the
-%% Management Plugin at https://www.rabbitmq.com/management.html.
+%% Management Plugin at https://www.rabbitmq.com/docs/management.
 %%
 %% {default_user_tags, [administrator]},
 
@@ -1113,7 +1113,7 @@ end}.
 %% Resource Limits & Flow Control
 %% ==============================
 %%
-%% See https://www.rabbitmq.com/memory.html for full details.
+%% See https://www.rabbitmq.com/docs/memory for full details.
 
 %% Memory-based Flow Control threshold.
 %%
@@ -1247,7 +1247,7 @@ end}.
 %%
 
 %% How to respond to cluster partitions.
-%% See https://www.rabbitmq.com/partitions.html for further details.
+%% See https://www.rabbitmq.com/docs/partitions for further details.
 %%
 %% {cluster_partition_handling, ignore},
 
@@ -1420,7 +1420,7 @@ end}.
 %%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
-%% See https://www.rabbitmq.com/clustering.html#auto-config for
+%% See https://www.rabbitmq.com/docs/clustering#auto-config for
 %% further details.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
@@ -1569,7 +1569,7 @@ end}.
     ]}.
 
 %% Size in bytes below which to embed messages in the queue index. See
-%% https://www.rabbitmq.com/persistence-conf.html
+%% https://www.rabbitmq.com/docs/persistence-conf
 %%
 %% {queue_index_embed_msgs_below, 4096}
 

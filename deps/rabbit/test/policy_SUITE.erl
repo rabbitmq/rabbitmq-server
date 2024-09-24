@@ -268,7 +268,7 @@ overflow_policies(Config) ->
     passed.
 
 
-%% See supported policies in https://www.rabbitmq.com/parameters.html#operator-policies
+%% See supported policies in https://www.rabbitmq.com/docs/parameters#operator-policies
 %% This test applies all supported operator policies to all queue types,
 %% and later verifies the effective policy definitions.
 %% Just those supported by each queue type should be present.

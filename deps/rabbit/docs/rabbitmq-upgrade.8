@@ -28,7 +28,7 @@
 .Nm
 is a command line tool that provides commands used during the upgrade of RabbitMQ nodes.
 See the
-.Lk https://www.rabbitmq.com/upgrade.html "RabbitMQ upgrade guide"
+.Lk https://www.rabbitmq.com/docs/upgrade "RabbitMQ upgrade guide"
 to learn more about RabbitMQ installation upgrades.
 .
 .\" ------------------------------------------------------------------
@@ -70,14 +70,14 @@ Default is
 .It Fl l , Fl -longnames
 Must be specified when the cluster is configured to use long (FQDN) node names.
 To learn more, see the
-.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.Lk https://www.rabbitmq.com/docs/clustering "RabbitMQ Clustering guide"
 .It Fl -erlang-cookie Ar cookie
 Shared secret to use to authenticate to the target node.
 Prefer using a local file or the
 .Ev RABBITMQ_ERLANG_COOKIE
 environment variable instead of specifying this option on the command line.
 To learn more, see the
-.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.Lk https://www.rabbitmq.com/docs/cli "RabbitMQ CLI Tools guide"
 .El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
@@ -104,7 +104,7 @@ Puts the node in maintenance mode. Such nodes will not serve any
 client traffic or considered for hosting any queue leader replicas.
 .Pp
 To learn more, see the
-.Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
+.Lk https://www.rabbitmq.com/docs/upgrade#maintenance-mode "RabbitMQ Upgrade guide"
 .\" ------------------------------------
 .It Cm revive
 .Pp
@@ -112,7 +112,7 @@ Puts the node out of maintenance and into regular operating mode.
 Such nodes will again serve client traffic and considered for queue leader replica placement.
 .Pp
 To learn more, see the
-.Lk https://www.rabbitmq.com/upgrade.html#maintenance-mode "RabbitMQ Upgrade guide"
+.Lk https://www.rabbitmq.com/docs/upgrade#maintenance-mode "RabbitMQ Upgrade guide"
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
 .\" ------------------------------------------------------------------

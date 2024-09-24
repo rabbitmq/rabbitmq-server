@@ -29,7 +29,7 @@
 is a command line tool that provides commands used for diagnostics, monitoring
 and health checks of RabbitMQ nodes.
 See the
-.Lk https://rabbitmq.com/documentation.html "RabbitMQ documentation guides"
+.Lk https://www.rabbitmq.com/docs "RabbitMQ documentation guides"
 to learn more about RabbitMQ diagnostics, monitoring and health checks.
 
 .Nm
@@ -40,7 +40,7 @@ health checks are available to be used interactively and by monitoring tools.
 By default if it is not possible to connect to and authenticate with the target node
 (for example if it is stopped), the operation will fail.
 To learn more, see the
-.Lk https://rabbitmq.com/monitoring.html "RabbitMQ Monitoring guide"
+.Lk https://www.rabbitmq.com/docs/monitoring "RabbitMQ Monitoring guide"
 .
 .\" ------------------------------------------------------------------
 .Sh OPTIONS
@@ -81,14 +81,14 @@ Default is
 .It Fl l , Fl -longnames
 Must be specified when the cluster is configured to use long (FQDN) node names.
 To learn more, see the
-.Lk https://rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.Lk https://www.rabbitmq.com/docs/clustering "RabbitMQ Clustering guide"
 .It Fl -erlang-cookie Ar cookie
 Shared secret to use to authenticate to the target node.
 Prefer using a local file or the
 .Ev RABBITMQ_ERLANG_COOKIE
 environment variable instead of specifying this option on the command line.
 To learn more, see the
-.Lk https://rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.Lk https://www.rabbitmq.com/docs/cli "RabbitMQ CLI Tools guide"
 .El
 .\" ------------------------------------------------------------------
 .Sh COMMANDS
@@ -215,7 +215,7 @@ in
 Lists resource alarms, if any, in the cluster.
 .Pp
 See
-.Lk https://rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+.Lk https://www.rabbitmq.com/docs/alarms "RabbitMQ Resource Alarms guide"
 to learn more.
 .Pp
 Example:
@@ -236,7 +236,7 @@ Health check that fails (returns with a non-zero code) if there are alarms
 in effect on any of the cluster nodes.
 .Pp
 See
-.Lk https://rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+.Lk https://www.rabbitmq.com/docs/alarms "RabbitMQ Resource Alarms guide"
 to learn more.
 .Pp
 Example:
@@ -268,7 +268,7 @@ Health check that fails (returns with a non-zero code) if there are alarms
 in effect on the target node.
 .Pp
 See
-.Lk https://rabbitmq.com/alarms.html "RabbitMQ Resource Alarms guide"
+.Lk https://www.rabbitmq.com/docs/alarms "RabbitMQ Resource Alarms guide"
 to learn more.
 .Pp
 Example:
@@ -285,7 +285,7 @@ The check only validates if a new TCP connection is accepted. It does not
 perform messaging protocol handshake or authenticate.
 .Pp
 See
-.Lk https://rabbitmq.com/networking.html "RabbitMQ Networking guide"
+.Lk https://www.rabbitmq.com/docs/networking "RabbitMQ Networking guide"
 to learn more.
 .Pp
 Example:
@@ -299,7 +299,7 @@ is not listening on the specified port (there is no listener that
 uses that port).
 .Pp
 See
-.Lk https://rabbitmq.com/networking.html "RabbitMQ Networking guide"
+.Lk https://www.rabbitmq.com/docs/networking "RabbitMQ Networking guide"
 to learn more.
 .Pp
 Example:
@@ -312,7 +312,7 @@ Health check that fails (returns with a non-zero code) if the target node
 does not have a listener for the specified protocol.
 .Pp
 See
-.Lk https://rabbitmq.com/networking.html "RabbitMQ Networking guide"
+.Lk https://www.rabbitmq.com/docs/networking "RabbitMQ Networking guide"
 to learn more.
 .Pp
 Example:
@@ -369,7 +369,7 @@ Example:
 Runs a peer discovery on the target node and prints the discovered nodes, if any.
 .Pp
 See
-.Lk https://rabbitmq.com/cluster-formation.html "RabbitMQ Cluster Formation guide"
+.Lk https://www.rabbitmq.com/docs/cluster-formation "RabbitMQ Cluster Formation guide"
 to learn more.
 .Pp
 Example:
@@ -389,7 +389,7 @@ to authenticate CLI tools and peers. The value can be compared with the hash
 found in error messages of CLI tools.
 .Pp
 See
-.Lk https://rabbitmq.com/clustering.html#erlang-cookie "RabbitMQ Clustering guide"
+.Lk https://www.rabbitmq.com/docs/clustering#erlang-cookie "RabbitMQ Clustering guide"
 to learn more.
 .Pp
 Example:
@@ -492,7 +492,7 @@ what protocols and ports the node is listening on for client, CLI tool
 and peer connections.
 .Pp
 See
-.Lk https://rabbitmq.com/networking.html "RabbitMQ Networking guide"
+.Lk https://www.rabbitmq.com/docs/networking "RabbitMQ Networking guide"
 to learn more.
 .Pp
 Example:
@@ -544,7 +544,7 @@ terabytes
 .El
 .Pp
 See
-.Lk https://rabbitmq.com/memory-use.html "RabbitMQ Memory Use guide"
+.Lk https://www.rabbitmq.com/docs/memory-use "RabbitMQ Memory Use guide"
 to learn more.
 .Pp
 Example:
@@ -615,7 +615,7 @@ Note that RabbitMQ can be configured to only accept a subset of those
 versions, for example, SSLv3 is deactivated by default.
 .Pp
 See
-.Lk https://rabbitmq.com/ssl.html "RabbitMQ TLS guide"
+.Lk https://www.rabbitmq.com/docs/ssl "RabbitMQ TLS guide"
 to learn more.
 .Pp
 Example:
