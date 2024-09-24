@@ -292,8 +292,8 @@ endif
 
 
 define tpl_parallel_ct_test_spec
-{logdir, "logs/"}.
-{logdir, master, "logs/"}.
+{logdir, "$(CT_LOGS_DIR)"}.
+{logdir, master, "$(CT_LOGS_DIR)"}.
 {create_priv_dir, all_nodes, auto_per_run}.
 
 {node, shard1, 'rabbit_shard1@localhost'}.
