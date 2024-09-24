@@ -985,7 +985,7 @@ check_msg_size(Content, GCThreshold) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
     case Size =< MaxMessageSize of
         true ->
-            ok;
+            rabbit_msg_size_metrics:observe(amqp091, Size);
         false ->
             Fmt = case MaxMessageSize of
                       ?MAX_MSG_SIZE ->
