@@ -46,8 +46,8 @@ test_with_one_resource_server(_) ->
         {["management","oauth_resource_servers","rabbitmq1","id"],"rabbitmq1"}
     ],
     #{
-        "rabbitmq1" := [
-            {id, "rabbitmq1"}
+        <<"rabbitmq1">> := [
+            {id, <<"rabbitmq1">>}
         ]
     } = translate_oauth_resource_servers(Conf).
 
@@ -57,13 +57,13 @@ test_with_many_resource_servers(_) ->
         {["management","oauth_resource_servers","uaa","label"],"Uaa"}
     ],
     #{
-        "keycloak" := [
-            {label, "Keycloak"},
-            {id, "keycloak"}
+        <<"keycloak">> := [
+            {label, <<"Keycloak">>},
+            {id, <<"keycloak">>}
         ],
-        "uaa" := [
-            {label, "Uaa"},
-            {id, "uaa"}
+        <<"uaa">> := [
+            {label, <<"Uaa">>},
+            {id, <<"uaa">>}
         ]
     } = translate_oauth_resource_servers(Conf).
 

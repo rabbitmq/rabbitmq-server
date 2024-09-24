@@ -80,6 +80,9 @@ extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
   MgtResources = maps:map(
     fun(K,V) -> merge_oauth_provider_info(maps:get(K, OAuth2Resources, #{}), V, ManagementProps) end,
     skip_disabled_mgt_resource_servers(MgtResources1)),
+  rabbit_log:debug("ManagementProps: ~p", [ManagementProps]),
+  rabbit_log:debug("extract_oauth2_and_mgt_resources OAuth2Resources: ~p, MgtResources0: ~p MgtResources1: ~p MgtResources: ~p",
+    [OAuth2Resources, MgtResources0, MgtResources1, MgtResources]),
   case maps:size(MgtResources) of
     0 -> {};
     _ -> {MgtResources}

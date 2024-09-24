@@ -636,7 +636,7 @@
                           {oauth_scopes, "openid profile rabbitmq.*"},
                           {oauth_initiated_logon_type, idp_initiated},
                           {oauth_token_endpoint_params, [
-                            {"param2", <<"value2">>}
+                            {<<"param2">>, <<"value2">>}
                           ]}
                          ]}
   ], [rabbitmq_management]
@@ -660,28 +660,28 @@
                           {oauth_enabled, true},
                           {oauth_resource_servers,
                             #{
-                             "3" => [
-                               {oauth_provider_url, "http://three"},
+                             <<"3">> => [
+                               {oauth_provider_url, <<"http://three">>},
                                {oauth_initiated_logon_type, idp_initiated},
-                               {id, "3"}
+                               {id, <<"3">>}
                              ],
-                             "resource-one" => [
+                             <<"resource-one">> => [
                                 {oauth_token_endpoint_params, [
                                    {<<"param2">>, <<"value2">>}
                                 ]},
-                                {oauth_scopes, "openid profile rabbitmq.*"},
-                                {oauth_client_id, "one"},
-                                {label, "One"},
-                                {id, "resource-one"},
-                                {oauth_provider_url, "http://one:8080"}
+                                {oauth_scopes, <<"openid profile rabbitmq.*">>},
+                                {oauth_client_id, <<"one">>},
+                                {label, <<"One">>},
+                                {id, <<"resource-one">>},
+                                {oauth_provider_url, <<"http://one:8080">>}
                               ],
-                              "resource-two" => [
+                              <<"resource-two">> => [
                                 {oauth_authorization_endpoint_params, [
                                    {<<"param1">>, <<"value1">>}
                                 ]},
-                                {oauth_client_id, "two"},
-                                {id, "resource-two"},
-                                {oauth_provider_url, "http://two"}
+                                {oauth_client_id, <<"two">>},
+                                {id, <<"resource-two">>},
+                                {oauth_provider_url, <<"http://two">>}
                               ]
                             }
                           }

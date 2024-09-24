@@ -22,6 +22,7 @@ all() ->
      {group, verify_mgt_oauth_provider_url_with_single_resource_and_another_resource},
      {group, verify_end_session_endpoint_with_single_resource},
      {group, verify_end_session_endpoint_with_single_resource_and_another_resource},
+     {group, verify_multi_resource_and_provider},
      {group, verify_oauth_initiated_logon_type_for_sp_initiated},
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
@@ -31,6 +32,22 @@ all() ->
 
 groups() ->
     [
+
+      {verify_multi_resource_and_provider, [], [
+        {with_oauth_enabled, [], [
+            {with_oauth_providers_idp1_idp2, [], [
+                {with_default_oauth_provider_idp1, [], [
+                    {with_resource_server_a, [], [
+                        should_return_disabled_auth_settings,
+                        {with_mgt_resource_server_a_with_client_id_x, [], [
+                            should_return_oauth_enabled,
+                            should_return_oauth_resource_server_a_with_client_id_x
+                        ]}
+                    ]}
+                ]}
+            ]}
+        ]}
+      ]},
       {without_any_settings, [], [
         should_return_disabled_auth_settings
       ]},
@@ -325,7 +342,6 @@ groups() ->
                   {with_mgt_resource_server_a_with_token_endpoint_params_1, [], [
                     should_return_mgt_oauth_resource_a_with_token_endpoint_params_1
                   ]}
-
                 ]}
               ]}
             ]}
@@ -452,6 +468,7 @@ init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_client_id, ?config(x, Config)),
   Config;
+
 init_per_group(with_default_oauth_provider_idp1, Config) ->
   set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, ?config(idp1, Config)),
   Config;
