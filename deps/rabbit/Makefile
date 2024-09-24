@@ -85,7 +85,7 @@ define PROJECT_ENV
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
-	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% See https://www.rabbitmq.com/docs/consumers#acknowledgement-timeout
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 
@@ -295,6 +295,7 @@ web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
 	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
 	    gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \
+	    gsub(/\.html/, "", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"

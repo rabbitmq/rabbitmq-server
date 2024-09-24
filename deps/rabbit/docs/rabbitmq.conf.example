@@ -117,7 +117,7 @@
 # ssl_options.secure_renegotiate   = true
 #
 ## Limits what TLS versions the server enables for client TLS
-## connections. See https://www.rabbitmq.com/ssl.html#tls-versions for details.
+## connections. See https://www.rabbitmq.com/docs/ssl#tls-versions for details.
 ##
 ## Cutting edge TLS version which requires recent client runtime
 ## versions and has no cipher suite in common with earlier TLS versions.
@@ -132,7 +132,7 @@
 ## from connecting.
 ## If TLSv1.3 is enabled and cipher suites are overridden, TLSv1.3-specific
 ## cipher suites must also be explicitly enabled.
-## See https://www.rabbitmq.com/ssl.html#cipher-suites and https://wiki.openssl.org/index.php/TLS1.3#Ciphersuites
+## See https://www.rabbitmq.com/docs/ssl#cipher-suites and https://wiki.openssl.org/index.php/TLS1.3#Ciphersuites
 ## for details.
 #
 ## The example below uses TLSv1.3 cipher suites only
@@ -269,7 +269,7 @@
 ## Loading Definitions
 ## ====================
 ##
-## Relevant documentation: https://www.rabbitmq.com/definitions.html#import-on-boot
+## Relevant documentation: https://www.rabbitmq.com/docs/definitions#import-on-boot
 ##
 ## To import definitions from a local file on node boot, set the
 ## load_definitions config key to a path of a previously exported
@@ -501,7 +501,7 @@
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##
-## Relevant doc guide: https://rabbitmq.com//cluster-formation.html
+## Relevant doc guide: https://www.rabbitmq.com/docs//cluster-formation
 ##
 
 # cluster_formation.peer_discovery_backend     = rabbit_peer_discovery_classic_config
@@ -668,7 +668,7 @@
 ## Inter-node communication port range.
 ## The parameters inet_dist_listen_min and inet_dist_listen_max
 ## can be configured in the classic config format only.
-## Related doc guide: https://www.rabbitmq.com/networking.html#epmd-inet-dist-port-range.
+## Related doc guide: https://www.rabbitmq.com/docs/networking#epmd-inet-dist-port-range.
 
 
 ## ----------------------------------------------------------------------------
