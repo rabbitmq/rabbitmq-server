@@ -110,7 +110,7 @@ ensure_stats_timer(C, P, Msg) ->
           when Level =/= none ->
             TRef = erlang:send_after(Interval, self(), Msg),
             setelement(P, C, State#state{timer = TRef});
-        #state{} ->
+        _State ->
             C
     end.
 

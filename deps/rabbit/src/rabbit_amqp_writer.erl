@@ -31,7 +31,8 @@
           pending :: iolist(),
           %% This field is just an optimisation to minimize the cost of erlang:iolist_size/1
           pending_size :: non_neg_integer(),
-          monitored_sessions :: #{pid() => true}
+          monitored_sessions :: #{pid() => true},
+          stats_timer :: rabbit_event:state()
          }).
 
 -define(HIBERNATE_AFTER, 6_000).
@@ -100,7 +101,8 @@ init({Sock, ReaderPid}) ->
                    reader = ReaderPid,
                    pending = [],
                    pending_size = 0,
-                   monitored_sessions = #{}},
+                   monitored_sessions = #{},
+                   stats_timer = rabbit_event:init_stats_timer()},
     process_flag(message_queue_data, off_heap),
     {ok, State}.
 
@@ -123,6 +125,9 @@ handle_call({send_command, ChannelNum, Performative}, _From, State0) ->
     State = flush(State1),
     {reply, ok, State}.
 
+handle_info(emit_stats, State = #state{reader = ReaderPid}) ->
+    ReaderPid ! ensure_stats_timer,
+    rabbit_event:reset_stats_timer(State, #state.stats_timer);
 handle_info(timeout, State0) ->
     State = flush(State0),
     {noreply, State};
@@ -229,12 +234,13 @@ maybe_flush(State = #state{pending_size = PendingSize}) ->
 
 flush(State = #state{pending = []}) ->
     State;
-flush(State = #state{sock = Sock,
-                     pending = Pending}) ->
+flush(State0 = #state{sock = Sock,
+                      pending = Pending}) ->
     case rabbit_net:send(Sock, lists:reverse(Pending)) of
         ok ->
-            State#state{pending = [],
-                        pending_size = 0};
+            State = State0#state{pending = [],
+                                 pending_size = 0},
+            rabbit_event:ensure_stats_timer(State, #state.stats_timer, emit_stats);
         {error, Reason} ->
             exit({writer, send_failed, Reason})
     end.
