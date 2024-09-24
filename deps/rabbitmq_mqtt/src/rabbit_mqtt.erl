@@ -87,7 +87,8 @@ init_global_counters(ProtoVer) ->
     rabbit_global_counters:init([Proto]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]),
-    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]).
+    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
+    rabbit_msg_size_metrics:init(ProtoVer).
 
 persist_static_configuration() ->
     rabbit_mqtt_util:init_sparkplug(),
