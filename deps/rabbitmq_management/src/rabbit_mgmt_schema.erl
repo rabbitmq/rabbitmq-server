@@ -39,7 +39,7 @@ translate_oauth_resource_servers(Conf) ->
 -spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("management." ++ Variable, Conf),
-    Params = [{Param, list_to_binary(V)} || {["management", _, Param], V} <- Params0].
+    [{list_to_binary(Param), list_to_binary(V)} || {["management", _, Param], V} <- Params0].
 
 merge_list_of_maps(ListOfMaps) ->
     lists:foldl(fun(Elem, AccIn) -> maps:merge_with(fun(_K,V1,V2) -> V1 ++ V2 end,
@@ -62,7 +62,7 @@ extract_resource_server_endpoint_params(Variable, Settings) ->
     KeyFun = fun extract_key/1,
 
     rabbit_log:debug("extract_resource_server_endpoint_params ~p ~p", [Variable, Settings]),
-    IndexedParams = [{Name, {ParamName, list_to_binary(V)}} ||
+    IndexedParams = [{Name, {list_to_binary(ParamName), list_to_binary(V)}} ||
         {["management","oauth_resource_servers", Name, EndpointVar, ParamName], V}
             <- Settings, EndpointVar == atom_to_list(Variable) ],
     maps:map(fun(_K,V)-> [{Variable, V}] end,

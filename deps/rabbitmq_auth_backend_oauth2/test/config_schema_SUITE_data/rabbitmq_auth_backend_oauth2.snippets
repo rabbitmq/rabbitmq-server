@@ -33,9 +33,9 @@
             {verify_aud, true},
             {issuer, "https://my-jwt-issuer"},
             {discovery_endpoint_path, "/.well-known/openid-configuration"},
-            {discovery_endpoint_params, #{
-                "param1" => "value1"
-            }},
+            {discovery_endpoint_params, [
+                {<<"param1">>, <<"value1">>}
+            ]},
             {key_config, [
               {default_key, <<"id1">>},
               {signing_keys,
@@ -142,6 +142,8 @@
         auth_oauth2.oauth_providers.keycloak.https.depth = 2
         auth_oauth2.oauth_providers.keycloak.default_key = token-key
         auth_oauth2.oauth_providers.keycloak.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
+        auth_oauth2.oauth_providers.keycloak.discovery_endpoint_path = /.well-known/openid-configuration
+        auth_oauth2.oauth_providers.keycloak.discovery_endpoint_params.param1 = value1
         auth_oauth2.oauth_providers.keycloak.algorithms.1 = HS256
         auth_oauth2.oauth_providers.keycloak.algorithms.2 = RS256",
         [
@@ -166,14 +168,18 @@
                     {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"}
                   ]},
                   {algorithms, [<<"HS256">>, <<"RS256">>]},
+                  {discovery_endpoint_params, [
+                     {<<"param1">>, <<"value1">>}
+                  ]},
+                  {discovery_endpoint_path, "/.well-known/openid-configuration"},
                   {default_key, <<"token-key">>},
-                  {end_session_endpoint, <<"https://keycloak/logout">>},
-                  {authorization_endpoint, <<"https://keycloak/authorize">>},
-                  {jwks_uri, <<"https://keycloak/keys">>},
-                  {token_endpoint, <<"https://keycloak/token">>}
+                  {end_session_endpoint, "https://keycloak/logout"},
+                  {authorization_endpoint, "https://keycloak/authorize"},
+                  {jwks_uri, "https://keycloak/keys"},
+                  {token_endpoint, "https://keycloak/token"}
                 ],
                <<"uaa">> => [
-                  {issuer, <<"https://uaa">>}
+                  {issuer, "https://uaa"}
                ]
 
               }

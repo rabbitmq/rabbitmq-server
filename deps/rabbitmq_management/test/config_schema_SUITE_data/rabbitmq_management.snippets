@@ -627,7 +627,7 @@
   [
    {rabbitmq_management, [
                           {oauth_authorization_endpoint_params, [
-                            {"param1", <<"value1">>}
+                            {<<"param1">>, <<"value1">>}
                           ]},
                           {oauth_enabled, true},
                           {oauth_provider_url, "http://localhost:8080"},
@@ -667,7 +667,7 @@
                              ],
                              "resource-one" => [
                                 {oauth_token_endpoint_params, [
-                                   {"param2", <<"value2">>}
+                                   {<<"param2">>, <<"value2">>}
                                 ]},
                                 {oauth_scopes, "openid profile rabbitmq.*"},
                                 {oauth_client_id, "one"},
@@ -677,7 +677,7 @@
                               ],
                               "resource-two" => [
                                 {oauth_authorization_endpoint_params, [
-                                   {"param1", <<"value1">>}
+                                   {<<"param1">>, <<"value1">>}
                                 ]},
                                 {oauth_client_id, "two"},
                                 {id, "resource-two"},

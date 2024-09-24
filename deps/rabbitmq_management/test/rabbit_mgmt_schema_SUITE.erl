@@ -24,8 +24,8 @@ all() ->
 
 
 test_empty_endpoint_params(_) ->
-    #{} = translate_endpoint_params("oauth_authorization_endpoint_params", []),
-    #{} = translate_endpoint_params("oauth_token_endpoint_params", []).
+    [] = translate_endpoint_params("oauth_authorization_endpoint_params", []),
+    [] = translate_endpoint_params("oauth_token_endpoint_params", []).
 
 test_invalid_endpoint_params(_) ->
     try translate_endpoint_params("oauth_authorization_endpoint_params", [
@@ -36,7 +36,7 @@ test_invalid_endpoint_params(_) ->
     end.
 
 test_translate_endpoint_params(_) ->
-    #{ "param1" := "some-value1" } =
+    [ {<<"param1">>, <<"some-value1">>} ] =
         translate_endpoint_params("oauth_authorization_endpoint_params", [
             {["management","oauth_authorization_endpoint_params","param1"], "some-value1"}
         ]).

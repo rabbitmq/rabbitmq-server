@@ -361,10 +361,10 @@ init_per_suite(Config) ->
     {w, <<"w">>},
     {z, <<"z">>},
     {x, <<"x">>},
-    {authorization_params_0, [{"a-param0", "value0"}]},
-    {authorization_params_1, [{"a-param1", "value1"}]},
-    {token_params_0, [{"t-param0", "value0"}]},
-    {token_params_1, [{"t-param1", "value1"}]},
+    {authorization_params_0, [{<<"a-param0">>, <<"value0">>}]},
+    {authorization_params_1, [{<<"a-param1">>, <<"value1">>}]},
+    {token_params_0, [{<<"t-param0">>, <<"value0">>}]},
+    {token_params_1, [{<<"t-param1">>, <<"value1">>}]},
     {admin_mgt, <<"admin mgt">>},
     {read_write, <<"read write">>} | Config].
 

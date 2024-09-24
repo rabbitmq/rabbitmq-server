@@ -45,7 +45,7 @@ test_without_resource_servers(_) ->
     #{} = oauth2_schema:translate_resource_servers([]).
 
 test_without_endpoint_params(_) ->
-    #{} = translate_endpoint_params("oauth_discovery_endpoint_params", []).
+    [] = translate_endpoint_params("oauth_discovery_endpoint_params", []).
 
 test_with_invalid_endpoint_params(_) ->
     try translate_endpoint_params("discovery_endpoint_params", [
@@ -60,7 +60,7 @@ test_with_endpoint_params(_) ->
         {["auth_oauth2","discovery_endpoint_params","param1"], "some-value1"},
         {["auth_oauth2","discovery_endpoint_params","param2"], "some-value2"}
     ],
-    #{ "param1" := "some-value1", "param2" := "some-value2" } =
+    [ {<<"param1">>, <<"some-value1">>}, {<<"param2">>, <<"some-value2">>} ] =
         translate_endpoint_params("discovery_endpoint_params", Conf).
 
 test_invalid_oauth_providers_endpoint_params(_) ->
@@ -79,17 +79,20 @@ test_without_oauth_providers_with_endpoint_params(_) ->
     ],
 
     #{
-        <<"A">> := [{discovery_endpoint_params,
-                    #{ <<"param1">> := <<"some-value1">>, <<"param2">> := <<"some-value2">> }}],
-        <<"B">> := [{discovery_endpoint_params,
-                    #{ <<"param3">> := <<"some-value3">>}}
-        ]
+        <<"A">> := [{discovery_endpoint_params, [
+                      {<<"param1">>, <<"some-value1">>},
+                      {<<"param2">>, <<"some-value2">>}
+                    ]}],
+        <<"B">> := [{discovery_endpoint_params, [
+                      {<<"param3">>, <<"some-value3">>}
+                    ]}]
+
     } = translate_oauth_providers(Conf).
 
 test_with_one_oauth_provider(_) ->
     Conf = [{["auth_oauth2","oauth_providers","keycloak","issuer"],"https://rabbit"}
             ],
-    #{<<"keycloak">> := [{issuer, <<"https://rabbit">>}]
+    #{<<"keycloak">> := [{issuer, "https://rabbit"}]
     } = oauth2_schema:translate_oauth_providers(Conf).
 
 test_with_one_resource_server(_) ->
@@ -103,10 +106,10 @@ test_with_many_oauth_providers(_) ->
             {["auth_oauth2","oauth_providers","uaa","issuer"],"https://uaa"},
             {["auth_oauth2","oauth_providers","uaa","discovery_endpoint_path"],"/some-path"}
             ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}
+    #{<<"keycloak">> := [{issuer, "https://keycloak"}
                         ],
-      <<"uaa">> := [{issuer, <<"https://uaa">>},
-                    {discovery_endpoint_path, <<"/some-path">>}
+      <<"uaa">> := [{issuer, "https://uaa"},
+                    {discovery_endpoint_path, "/some-path"}
                     ]
     } = oauth2_schema:translate_oauth_providers(Conf).
 
@@ -126,7 +129,7 @@ test_oauth_providers_attributes(_) ->
             {["auth_oauth2","oauth_providers","keycloak","default_key"],"token-key"}
             ],
     #{<<"keycloak">> := [{default_key, <<"token-key">>},
-                         {issuer, <<"https://keycloak">>}
+                         {issuer, "https://keycloak"}
                         ]
     } = sort_settings(oauth2_schema:translate_oauth_providers(Conf)).
 
@@ -173,7 +176,7 @@ test_oauth_providers_algorithms(_) ->
             {["auth_oauth2","oauth_providers","keycloak","algorithms","1"],"RS256"}
             ],
     #{<<"keycloak">> := [{algorithms, [<<"RS256">>, <<"HS256">>]},
-                         {issuer, <<"https://keycloak">>}
+                         {issuer, "https://keycloak"}
                          ]
     } = sort_settings(oauth2_schema:translate_oauth_providers(Conf)).
 
@@ -196,7 +199,7 @@ test_oauth_providers_https(Conf) ->
                                   {fail_if_no_peer_cert, true},
                                   {cacertfile, _CaCertFile}
                                   ]},
-                         {issuer, <<"https://keycloak">>}
+                         {issuer, "https://keycloak"}
                          ]
     } = sort_settings(oauth2_schema:translate_oauth_providers(CuttlefishConf)).
 
@@ -216,7 +219,7 @@ test_oauth_providers_signing_keys(Conf) ->
             {["auth_oauth2","oauth_providers","keycloak","signing_keys","2"], cert_filename(Conf)},
             {["auth_oauth2","oauth_providers","keycloak","signing_keys","1"], cert_filename(Conf)}
             ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>},
+    #{<<"keycloak">> := [{issuer, "https://keycloak"},
                          {signing_keys, SigningKeys}
                          ]
     } = sort_settings(oauth2_schema:translate_oauth_providers(CuttlefishConf)),

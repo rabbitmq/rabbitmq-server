@@ -69,8 +69,7 @@ translate_list_of_signing_keys(ListOfKidPath) ->
 -spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
-    Params = [{Param, V} || {["auth_oauth2", _, Param], V} <- Params0],
-    maps:from_list(Params).
+    [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V} <- Params0].
 
 validator_file_exists(Attr, Filename) ->
     case file:read_file(Filename) of
@@ -81,10 +80,21 @@ validator_file_exists(Attr, Filename) ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: file ~p does not exist or cannot be read by the node", [Attr, Filename]))
     end.
-validator_https_uri(Attr, Uri) when is_binary(Uri) ->
-    list_to_binary(validator_https_uri(Attr, binary_to_list(Uri)));
 
-validator_https_uri(Attr, Uri) ->
+validator_uri(Attr, Uri) when is_binary(Uri) ->
+    validator_uri(Attr, binary_to_list(Uri));
+validator_uri(Attr, Uri) when is_list(Uri) ->
+    case uri_string:parse(Uri) of
+        {error, _, _} = Error ->
+            cuttlefish:invalid(io_lib:format(
+                "Invalid attribute (~p) value: ~p (~p)", [Attr, Uri, Error]));
+        _ -> Uri
+    end.
+
+validator_https_uri(Attr, Uri) when is_binary(Uri) ->
+    validator_https_uri(Attr, binary_to_list(Uri));
+
+validator_https_uri(Attr, Uri) when is_list(Uri) ->
     case string:nth_lexeme(Uri, 1, "://") == "https" of
         true -> Uri;
         false ->
@@ -120,6 +130,7 @@ mapOauthProviderProperty({Key, Value}) ->
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);
+        discovery_endpoint_path -> validator_uri(Key, Value);
         discovery_endpoint_params ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
@@ -167,7 +178,7 @@ extract_oauth_providers_endpoint_params(Variable, Settings) ->
     IndexedParams = [{Name, {list_to_binary(ParamName), list_to_binary(V)}} ||
         {["auth_oauth2","oauth_providers", Name, EndpointVar, ParamName], V}
             <- Settings, EndpointVar == atom_to_list(Variable) ],
-    maps:map(fun(_K,V)-> [{Variable, maps:from_list(V)}] end,
+    maps:map(fun(_K,V)-> [{Variable, V}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedParams)).
 
 extract_oauth_providers_signing_keys(Settings) ->
