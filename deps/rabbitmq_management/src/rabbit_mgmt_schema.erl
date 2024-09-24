@@ -34,7 +34,7 @@ translate_oauth_resource_servers(Conf) ->
     lists:foldl(fun(Elem,AccMap)-> maps:put(proplists:get_value(id, Elem), Elem, AccMap) end, #{},
         ResourceServers).
 
--spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
+-spec translate_endpoint_params(list(), [{list(), binary()}]) -> [{binary(), binary()}].
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("management." ++ Variable, Conf),
     [{list_to_binary(Param), list_to_binary(V)} || {["management", _, Param], V} <- Params0].

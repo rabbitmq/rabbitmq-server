@@ -66,7 +66,7 @@ translate_list_of_signing_keys(ListOfKidPath) ->
         end,
     maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, maps:from_list(ListOfKidPath)).
 
--spec translate_endpoint_params(list(), [{list(), binary()}]) -> map().
+-spec translate_endpoint_params(list(), [{list(), binary()}]) -> [{binary(), binary()}].
 translate_endpoint_params(Variable, Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
     [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V} <- Params0].
