@@ -72,6 +72,14 @@ function auth_settings_apply_defaults(authSettings) {
         if (!resource_server.oauth_metadata_url) {
           resource_server.oauth_metadata_url = authSettings.metadata_url
         }
+        if (!resource_server.oauth_authorization_endpoint_params) {
+          resource_server.oauth_authorization_endpoint_params =
+            authSettings.oauth_authorization_endpoint_params
+        }
+        if (!resource_server.oauth_token_endpoint_params) {
+          resource_server.oauth_token_endpoint_params =
+            authSettings.oauth_token_endpoint_params
+        }
         resource_server.id = resource_server_id
         authSettings.resource_servers.push(resource_server)
     }
@@ -144,7 +152,7 @@ export function oidc_settings_from(resource_server) {
     redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
     post_logout_redirect_uri: rabbit_base_uri() + "/",
     automaticSilentRenew: true,
-    revokeAccessTokenOnSignout: true   
+    revokeAccessTokenOnSignout: true
   }
   if (resource_server.end_session_endpoint != "") {
     oidcSettings.metadataSeed = {
@@ -154,16 +162,16 @@ export function oidc_settings_from(resource_server) {
   if (resource_server.oauth_client_secret != "") {
     oidcSettings.client_secret = resource_server.oauth_client_secret
   }
-  if (resource_server.authorization_endpoint_params != "") {
-    oidcSettings.extraQueryParams = resource_server.authorization_endpoint_params
+  if (resource_server.oauth_authorization_endpoint_params) {
+    oidcSettings.extraQueryParams = resource_server.oauth_authorization_endpoint_params
   }
-  if (resource_server.token_endpoint_params != "") {
-    oidcSettings.extraTokenParams = resource_server.token_endpoint_params
+  if (resource_server.oauth_token_endpoint_params) {
+    oidcSettings.extraTokenParams = resource_server.oauth_token_endpoint_params
   }
   return oidcSettings
 }
 
-function oauth_initialize_user_manager(resource_server) {  
+function oauth_initialize_user_manager(resource_server) {
     oidc.Log.setLevel(oidc.Log.DEBUG);
     oidc.Log.setLogger(console);
 

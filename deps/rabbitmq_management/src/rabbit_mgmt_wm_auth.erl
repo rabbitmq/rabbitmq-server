@@ -103,10 +103,10 @@ buildRootResourceServerIfAny(Id, Props) ->
         proplists:get_value(oauth_client_secret, Props)},
     {oauth_response_type,
         proplists:get_value(oauth_response_type, Props)},
-    {authorization_endpoint_params,
-        proplists:get_value(authorization_endpoint_params, Props)},
-    {token_endpoint_params,
-        proplists:get_value(token_endpoint_params, Props)}
+    {oauth_authorization_endpoint_params,
+        proplists:get_value(oauth_authorization_endpoint_params, Props)},
+    {oauth_token_endpoint_params,
+        proplists:get_value(oauth_token_endpoint_params, Props)}
   ].
 
 authSettings() ->
