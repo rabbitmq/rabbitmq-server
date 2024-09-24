@@ -2598,7 +2598,7 @@ single_active_consumer_drain(QType, Config) ->
 %% "After a consumer is cancelled there will be no future deliveries dispatched to it.
 %% Note that there can still be "in flight" deliveries dispatched previously.
 %% Cancelling a consumer will neither discard nor requeue them."
-%% [https://www.rabbitmq.com/consumers.html#unsubscribing]
+%% [https://www.rabbitmq.com/docs/consumers#unsubscribing]
 detach_requeues_one_session_classic_queue(Config) ->
     detach_requeue_one_session(<<"classic">>, Config).
 
@@ -4235,7 +4235,7 @@ trace(Config) ->
     ok = end_session_sync(SessionReceiver),
     ok = amqp10_client:close_connection(Connection).
 
-%% https://www.rabbitmq.com/validated-user-id.html
+%% https://www.rabbitmq.com/docs/validated-user-id
 user_id(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),

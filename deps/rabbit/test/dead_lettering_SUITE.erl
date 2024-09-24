@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
-%% For the full spec see: https://www.rabbitmq.com/dlx.html
+%% For the full spec see: https://www.rabbitmq.com/docs/dlx
 %%
 -module(dead_lettering_SUITE).
 
