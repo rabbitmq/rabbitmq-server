@@ -42,6 +42,7 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_amqp_reader.hrl").
 
 -export([start_link/2, info/2, force_event_refresh/2,
          shutdown/2]).
@@ -115,10 +116,6 @@
   %% false otherwise
   connection_blocked_message_sent
 }).
-
--define(SIMPLE_METRICS, [pid, recv_oct, send_oct, reductions]).
--define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, state, channels,
-                        garbage_collection]).
 
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
@@ -1582,8 +1579,8 @@ i(state, #v1{connection_state = ConnectionState,
     end;
 i(garbage_collection, _State) ->
     rabbit_misc:get_gc_info(self());
-i(reductions, _State) ->
-    {reductions, Reductions} = erlang:process_info(self(), reductions),
+i(reductions = Item, _State) ->
+    {Item, Reductions} = erlang:process_info(self(), Item),
     Reductions;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
@@ -1623,12 +1620,12 @@ maybe_emit_stats(State) ->
 
 emit_stats(State) ->
     [{_, Pid},
-     {_, Recv_oct},
-     {_, Send_oct},
+     {_, RecvOct},
+     {_, SendOct},
      {_, Reductions}] = infos(?SIMPLE_METRICS, State),
     Infos = infos(?OTHER_METRICS, State),
     rabbit_core_metrics:connection_stats(Pid, Infos),
-    rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+    rabbit_core_metrics:connection_stats(Pid, RecvOct, SendOct, Reductions),
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
     ensure_stats_timer(State1).
 
@@ -1643,6 +1640,7 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                               pending_recv = PendingRecv,
                               helper_sup = {_HelperSup091, HelperSup10},
                               proxy_socket = ProxySocket,
+                              stats_timer = StatsTimer,
                               connection = #connection{
                                               name = Name,
                                               host = Host,
@@ -1651,7 +1649,7 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                                               peer_port = PeerPort,
                                               connected_at = ConnectedAt}}) ->
     {Sock, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
-     Name, Host, PeerHost, Port, PeerPort, ConnectedAt}.
+     Name, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer}.
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),

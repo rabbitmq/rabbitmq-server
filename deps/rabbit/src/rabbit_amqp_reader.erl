@@ -10,6 +10,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include("rabbit_amqp_reader.hrl").
 -include("rabbit_amqp.hrl").
 
 -export([init/1,
@@ -79,7 +80,8 @@
          pending_recv :: boolean(),
          buf :: list(),
          buf_len :: non_neg_integer(),
-         tracked_channels :: #{channel_number() => Session :: pid()}
+         tracked_channels :: #{channel_number() => Session :: pid()},
+         stats_timer :: rabbit_event:state()
         }).
 
 -type state() :: #v1{}.
@@ -90,7 +92,7 @@
 
 unpack_from_0_9_1(
   {Sock, PendingRecv, SupPid, Buf, BufLen, ProxySocket,
-   ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt},
+   ConnectionName, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer},
   Parent) ->
     logger:update_process_metadata(#{connection => ConnectionName}),
     #v1{parent           = Parent,
@@ -106,6 +108,7 @@ unpack_from_0_9_1(
         tracked_channels = maps:new(),
         writer           = none,
         connection_state = received_amqp3100,
+        stats_timer      = StatsTimer,
         connection = #v1_connection{
                         name = ConnectionName,
                         container_id = none,
@@ -201,6 +204,10 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
             end
     end.
 
+handle_other(emit_stats, State) ->
+    emit_stats(State);
+handle_other(ensure_stats_timer, State) ->
+    ensure_stats_timer(State);
 handle_other({'EXIT', Parent, Reason}, State = #v1{parent = Parent}) ->
     ReasonString = rabbit_misc:format("broker forced connection closure with reason '~w'",
                                       [Reason]),
@@ -247,8 +254,16 @@ handle_other({'$gen_call', From, {info, Items}}, State) ->
             end,
     gen_server:reply(From, Reply),
     State;
-handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
-    State;
+handle_other({'$gen_cast', {force_event_refresh, Ref}}, State) ->
+    case ?IS_RUNNING(State) of
+        true ->
+            Infos = infos(?CONNECTION_EVENT_KEYS, State),
+            rabbit_event:notify(connection_created, Infos, Ref),
+            rabbit_event:init_stats_timer(State, #v1.stats_timer);
+        false ->
+            %% Ignore, we will emit a connection_created event once we start running.
+            State
+    end;
 handle_other(terminate_connection, _State) ->
     stop;
 handle_other({set_credential, Cred}, State) ->
@@ -527,6 +542,7 @@ handle_connection_frame(
            proplists:get_value(pid, Infos),
            Infos),
     ok = rabbit_event:notify(connection_created, Infos),
+    ok = maybe_emit_stats(State),
     ok = rabbit_amqp1_0:register_connection(self()),
     Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
             <<"LINK_PAIR_V1_0">>,
@@ -629,25 +645,26 @@ handle_input(handshake,
     switch_callback(State, {frame_header, amqp}, 8);
 handle_input({frame_header, Mode},
              Header = <<Size:32, DOff:8, Type:8, Channel:16>>,
-             State) when DOff >= 2 ->
+             State0) when DOff >= 2 ->
     case {Mode, Type} of
         {amqp, 0} -> ok;
         {sasl, 1} -> ok;
-        _         -> throw({bad_1_0_header_type, Header, Mode})
+        _ -> throw({bad_1_0_header_type, Header, Mode})
     end,
-    MaxFrameSize = State#v1.connection#v1_connection.incoming_max_frame_size,
-    if Size =:= 8 ->
-           %% heartbeat
-           State;
-       Size > MaxFrameSize ->
-           handle_exception(
-             State, Channel, error_frame(
-                               ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
-                               "frame size (~b bytes) > maximum frame size (~b bytes)",
-                               [Size, MaxFrameSize]));
-       true ->
-           switch_callback(State, {frame_body, Mode, DOff, Channel}, Size - 8)
-    end;
+    MaxFrameSize = State0#v1.connection#v1_connection.incoming_max_frame_size,
+    State = if Size =:= 8 ->
+                   %% heartbeat
+                   State0;
+               Size > MaxFrameSize ->
+                   Err = error_frame(
+                           ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                           "frame size (~b bytes) > maximum frame size (~b bytes)",
+                           [Size, MaxFrameSize]),
+                   handle_exception(State0, Channel, Err);
+               true ->
+                   switch_callback(State0, {frame_body, Mode, DOff, Channel}, Size - 8)
+            end,
+    ensure_stats_timer(State);
 handle_input({frame_header, _Mode}, Malformed, _State) ->
     throw({bad_1_0_header, Malformed});
 handle_input({frame_body, Mode, DOff, Channel},
@@ -1013,13 +1030,18 @@ i(peer_host, #v1{connection = #v1_connection{peer_host = Val}}) ->
     Val;
 i(peer_port, #v1{connection = #v1_connection{peer_port = Val}}) ->
     Val;
-i(SockStat, S) when SockStat =:= recv_oct;
-                    SockStat =:= recv_cnt;
-                    SockStat =:= send_oct;
-                    SockStat =:= send_cnt;
-                    SockStat =:= send_pend ->
-    socket_info(fun (Sock) -> rabbit_net:getstat(Sock, [SockStat]) end,
-                fun ([{_, I}]) -> I end, S);
+i(SockStat, #v1{sock = Sock})
+  when SockStat =:= recv_oct;
+       SockStat =:= recv_cnt;
+       SockStat =:= send_oct;
+       SockStat =:= send_cnt;
+       SockStat =:= send_pend ->
+    case rabbit_net:getstat(Sock, [SockStat]) of
+        {ok, [{SockStat, Val}]} ->
+            Val;
+        {error, _} ->
+            ''
+    end;
 i(ssl, #v1{sock = Sock}) -> rabbit_net:is_ssl(Sock);
 i(SSL, #v1{sock = Sock, proxy_socket = ProxySock})
   when SSL =:= ssl_protocol;
@@ -1045,15 +1067,37 @@ i(channels, #v1{tracked_channels = Channels}) ->
     maps:size(Channels);
 i(channel_max, #v1{connection = #v1_connection{channel_max = Max}}) ->
     Max;
+i(reductions = Item, _State) ->
+    {Item, Reductions} = erlang:process_info(self(), Item),
+    Reductions;
+i(garbage_collection, _State) ->
+    rabbit_misc:get_gc_info(self());
 i(Item, #v1{}) ->
     throw({bad_argument, Item}).
 
-%% From rabbit_reader
-socket_info(Get, Select, #v1{sock = Sock}) ->
-    case Get(Sock) of
-        {ok,    T} -> Select(T);
-        {error, _} -> ''
-    end.
+maybe_emit_stats(State) ->
+    ok = rabbit_event:if_enabled(
+           State,
+           #v1.stats_timer,
+           fun() -> emit_stats(State) end).
+
+emit_stats(State) ->
+    [{_, Pid},
+     {_, RecvOct},
+     {_, SendOct},
+     {_, Reductions}] = infos(?SIMPLE_METRICS, State),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_stats(Pid, Infos),
+    rabbit_core_metrics:connection_stats(Pid, RecvOct, SendOct, Reductions),
+    %% NB: Don't call ensure_stats_timer because it becomes expensive
+    %% if all idle non-hibernating connections emit stats.
+    rabbit_event:reset_stats_timer(State, #v1.stats_timer).
+
+ensure_stats_timer(State)
+  when ?IS_RUNNING(State) ->
+    rabbit_event:ensure_stats_timer(State, #v1.stats_timer, emit_stats);
+ensure_stats_timer(State) ->
+    State.
 
 ignore_maintenance({map, Properties}) ->
     lists:member(

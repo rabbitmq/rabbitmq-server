@@ -141,9 +141,9 @@ connection_stats(Pid, Infos) ->
     ets:insert(connection_metrics, {Pid, Infos}),
     ok.
 
-connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
+connection_stats(Pid, RecvOct, SendOct, Reductions) ->
     %% Includes delete marker
-    ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions, 0}),
+    ets:insert(connection_coarse_metrics, {Pid, RecvOct, SendOct, Reductions, 0}),
     ok.
 
 channel_created(Pid, Infos) ->
