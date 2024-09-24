@@ -13,7 +13,6 @@
     translate_endpoint_params/2
 ]).
 
-extract_key({Name,_}) -> Name.
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
 
