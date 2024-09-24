@@ -29,22 +29,16 @@
 register() ->
     ok = prometheus_registry:register_collector(?MODULE).
 
-deregister_cleanup(_) -> ok.
+deregister_cleanup(_) ->
+    ok.
 
 collect_mf(_Registry, Callback) ->
-    _ = maps:fold(
-          fun (Name, #{type := Type, help := Help, values := Values}, Acc) ->
-                  Callback(
-                    create_mf(?METRIC_NAME(Name),
-                              Help,
-                              Type,
-                              maps:to_list(Values))),
-                  Acc
-          end,
-          ok,
-          rabbit_global_counters:prometheus_format()
-         ).
-
-%% ===================================================================
-%% Private functions
-%% ===================================================================
+    maps:foreach(
+      fun(Name, #{type := Type, help := Help, values := Values}) ->
+              Callback(
+                create_mf(?METRIC_NAME(Name),
+                          Help,
+                          Type,
+                          maps:to_list(Values)))
+      end,
+      rabbit_global_counters:prometheus_format()).

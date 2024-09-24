@@ -479,6 +479,13 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+    name = "msg_size_metrics_SUITE",
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
     name = "list_consumers_sanity_check_SUITE",
     size = "medium",
 )
@@ -991,6 +998,11 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "unit_log_management_SUITE",
     size = "medium",
+)
+
+rabbitmq_suite(
+    name = "unit_msg_size_metrics_SUITE",
+    size = "small",
 )
 
 rabbitmq_suite(
