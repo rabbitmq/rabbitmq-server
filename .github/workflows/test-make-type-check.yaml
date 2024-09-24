@@ -4,10 +4,10 @@ on:
     inputs:
       erlang_version:
         required: true
-        type: number
+        type: string
       elixir_version:
         required: true
-        type: number
+        type: string
 jobs:
   type-check-plugin:
     name: Type check plugins

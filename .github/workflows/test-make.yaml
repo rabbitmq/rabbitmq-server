@@ -23,10 +23,10 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - 26
-        - 27
+        - '26'
+        - '27'
         elixir_version:
-        - 1.17
+        - '1.17'
     # @todo Add macOS and Windows.
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -58,10 +58,10 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - 26
-        - 27
+        - '26'
+        - '27'
         elixir_version:
-        - 1.17
+        - '1.17'
         metadata_store:
           - mnesia
           - khepri
@@ -77,9 +77,9 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version: # Latest OTP
-        - 27
+        - '27'
         elixir_version: # Latest Elixir
-        - 1.17
+        - '1.17'
     uses: ./.github/workflows/test-make-type-check.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
