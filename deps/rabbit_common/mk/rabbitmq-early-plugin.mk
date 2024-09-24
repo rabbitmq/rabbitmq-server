@@ -10,6 +10,10 @@ dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/
 # Common Test flags.
 # --------------------------------------------------------------------
 
+ifneq ($(PROJECT),rabbitmq_server_release)
+CT_LOGS_DIR = $(abspath $(CURDIR)/../../logs)
+endif
+
 # We start the common_test node as a hidden Erlang node. The benefit
 # is that other Erlang nodes won't try to connect to each other after
 # discovering the common_test node if they are not meant to.
