@@ -23,6 +23,7 @@ on:
   push:
     branches:
       - main
+      - v4.0.x
       - v3.13.x
       - v3.12.x
       - v3.11.x
