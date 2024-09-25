@@ -493,6 +493,7 @@ label({
     #resource{kind=queue, virtual_host=VHost, name=QName},
     #resource{kind=exchange, name=ExName}
  }) ->
+    %% queue_exchange_metrics {queue_id, exchange_id}
     <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
       "exchange=\"", (escape_label_value(ExName))/binary, "\",",
       "queue=\"", (escape_label_value(QName))/binary, "\"">>;
