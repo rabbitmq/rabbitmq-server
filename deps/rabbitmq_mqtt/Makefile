@@ -99,7 +99,7 @@ PARALLEL_CT_SET_1_D = mqtt_shared
 PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT_SET_1_C) $(PARALLEL_CT_SET_1_D)
 
 ifneq ($(filter-out $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
-$(error Some test suites in CT_SUITES but not configured for CI.)
+$(error Some test suites in CT_SUITES but not configured for CI: $(filter-out $(PARALLEL_CT_SUITES),$(CT_SUITES)))
 endif
 
 define tpl_parallel_ct_test_spec
