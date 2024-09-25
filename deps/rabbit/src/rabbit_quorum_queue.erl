@@ -625,7 +625,8 @@ handle_tick(QName,
                       _ ->
                           ok
                   end,
-                  maybe_apply_policies(Q, Overview)
+                  maybe_apply_policies(Q, Overview),
+                  ok
               catch
                   _:Err ->
                       rabbit_log:debug("~ts: handle tick failed with ~p",
