@@ -489,6 +489,14 @@ label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_bin
                          V =/= <<>>
                  end, [{remote_address, RemoteAddress}, {username, Username},
                        {protocol, atom_to_binary(Protocol, utf8)}]);
+label({
+    #resource{kind=queue, virtual_host=VHost, name=QName},
+    #resource{kind=exchange, name=ExName}
+ }) ->
+    %% queue_exchange_metrics {queue_id, exchange_id}
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(ExName))/binary, "\",",
+      "queue=\"", (escape_label_value(QName))/binary, "\"">>;
 label({I1, I2}) ->
     case {label(I1), label(I2)} of
         {<<>>, L} -> L;
