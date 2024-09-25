@@ -104,7 +104,7 @@ body:
     attributes:
       label: rabbitmq.conf
       description: rabbitmq.conf contents
-      value: See https://www.rabbitmq.com/docs/configure#config-location to find rabbitmq.conf file location
+      value: See https://www.rabbitmq.com/docs/configure#config-location to learn how to find rabbitmq.conf file location
     validations:
       required: true
   - type: textarea
@@ -126,7 +126,7 @@ body:
     attributes:
       label: advanced.config
       description: advanced.config contents (if applicable)
-      value: See https://www.rabbitmq.com/docs/configure#config-location to find advanced.config file location
+      value: See https://www.rabbitmq.com/docs/configure#config-location to learn how to find advanced.config file location
     validations:
       required: false
   - type: textarea
