@@ -74,8 +74,13 @@ connect_source(State = #{name := Name,
                          ack_mode := AckMode,
                          source := #{uris := [Uri | _],
                                      source_address := Addr} = Src}) ->
+    SndSettleMode = case AckMode of
+                        no_ack -> settled;
+                        on_publish -> unsettled;
+                        on_confirm -> unsettled
+                    end,
     AttachFun = fun amqp10_client:attach_receiver_link/5,
-    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "receiver", Addr, Src,
+    {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "receiver", Addr, Src,
                                     AttachFun),
     State#{source => Src#{current => #{conn => Conn,
                                        session => Sess,
@@ -87,8 +92,13 @@ connect_dest(State = #{name := Name,
                        ack_mode := AckMode,
                        dest := #{uris := [Uri | _],
                                  target_address := Addr} = Dst}) ->
+    SndSettleMode = case AckMode of
+                        no_ack -> settled;
+                        on_publish -> settled;
+                        on_confirm -> unsettled
+                    end,
     AttachFun = fun amqp10_client:attach_sender_link_sync/5,
-    {Conn, Sess, LinkRef} = connect(Name, AckMode, Uri, "sender", Addr, Dst,
+    {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "sender", Addr, Dst,
                                     AttachFun),
     %% wait for link credit here as if there are messages waiting we may try
     %% to forward before we've received credit
@@ -99,7 +109,7 @@ connect_dest(State = #{name := Name,
                                      link => LinkRef,
                                      uri => Uri}}}.
 
-connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
+connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Config0} = amqp10_client:parse_uri(Uri),
     %% As done for AMQP 0.9.1, exclude AMQP 1.0 shovel connections from maintenance mode
     %% to prevent crashes and errors being logged by the shovel plugin when a node gets drained.
@@ -113,16 +123,11 @@ connect(Name, AckMode, Uri, Postfix, Addr, Map, AttachFun) ->
                    LinkName0 = gen_unique_name(Name, Postfix),
                    rabbit_data_coercion:to_binary(LinkName0)
                end,
-    % mixed settlement mode covers all the ack_modes
-    SettlementMode = case AckMode of
-                         no_ack -> settled;
-                         _ -> unsettled
-                     end,
     % needs to be sync, i.e. awaits the 'attach' event as
     % else we may try to use the link before it is ready
     Durability = maps:get(durability, Map, unsettled_state),
     {ok, LinkRef} = AttachFun(Sess, LinkName, Addr,
-                              SettlementMode,
+                              SndSettleMode,
                               Durability),
     {Conn, Sess, LinkRef}.
 
