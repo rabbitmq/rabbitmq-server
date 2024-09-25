@@ -15,5 +15,10 @@
 -define(AMQP_ROLE_SENDER, false).
 -define(AMQP_ROLE_RECEIVER, true).
 
+% [2.8.2]
+-type snd_settle_mode() :: unsettled | settled | mixed.
+% [2.8.3]
+-type rcv_settle_mode() :: first | second.
+
 % [3.2.16]
 -define(MESSAGE_FORMAT, 0).
