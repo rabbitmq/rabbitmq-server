@@ -114,7 +114,7 @@ authSettings() ->
     false -> [{oauth_enabled, false}];
     true ->
       case extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) of
-        {MgtResources} -> produce_auth_settings(MgtResources, ManagementProps),                    
+        {MgtResources} -> produce_auth_settings(MgtResources, ManagementProps);
         {} -> [{oauth_enabled, false}]
       end
   end.
