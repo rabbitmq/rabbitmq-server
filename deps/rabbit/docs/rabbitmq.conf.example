@@ -925,25 +925,6 @@
 
 
 
-## ----------------------------------------------------------------------------
-## RabbitMQ AMQP 1.0 Support
-##
-## See https://github.com/rabbitmq/rabbitmq-amqp1.0/blob/stable/README.md.
-## ----------------------------------------------------------------------------
-
-# =======================================
-# AMQP 1.0 section
-# =======================================
-
-
-## Connections that are not authenticated with SASL will connect as this
-## account. See the README for more information.
-##
-## Please note that setting this will allow clients to connect without
-## authenticating!
-##
-# amqp1_0.default_user = guest
-
 ## Logging settings.
 ##
 ## See https://www.rabbitmq.com/docs/logging for details.
