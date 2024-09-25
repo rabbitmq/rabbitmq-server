@@ -3,8 +3,6 @@ on:
   push:
     branches:
     - main
-    - bump-otp-for-oci
-    - bump-rbe-*
     paths:
     - deps/**
     - scripts/**

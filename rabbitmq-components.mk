@@ -61,9 +61,6 @@ dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
-# @todo Move up in the list later.
-dep_osiris = git https://github.com/rabbitmq/osiris v1.8.3
-
 # RabbitMQ applications found in the monorepo.
 #
 # Note that rabbitmq_server_release is not a real application
