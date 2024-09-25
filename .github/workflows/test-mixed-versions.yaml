@@ -2,7 +2,7 @@ name: Test Mixed Version Clusters
 on:
   push:
     branches:
-#    - main
+    - main
     - v4.0.x
     - v3.13.x
     - bump-otp-*
@@ -20,7 +20,7 @@ on:
     - BUILD.*
     - '*.bzl'
     - '*.bazel'
-#    - .github/workflows/test-mixed-versions.yaml
+    - .github/workflows/test-mixed-versions.yaml
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

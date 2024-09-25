@@ -60,10 +60,8 @@ include ../../erlang.mk
 clean::
 	if test -d test/java_SUITE_data; then cd test/java_SUITE_data && $(MAKE) clean; fi
 
-
-
-
-
+# Parallel CT.
+#
 # @todo Move most of this in common files.
 
 define ct_master.erl
@@ -103,8 +101,6 @@ PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT
 ifneq ($(filter-out $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
 $(error Some test suites in CT_SUITES but not configured for CI.)
 endif
-
-
 
 define tpl_parallel_ct_test_spec
 {logdir, "$(CT_LOGS_DIR)"}.

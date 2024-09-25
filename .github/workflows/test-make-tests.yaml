@@ -112,11 +112,3 @@ jobs:
       metadata_store: ${{ inputs.metadata_store }}
       make_target: tests
       plugin: ${{ matrix.plugin }}
-
-# @todo Test rabbitmq_cli
-# @todo Why this step?
-#    - name: CLI COMPILE WARNINGS AS ERRORS
-#      if: inputs.plugin == 'rabbitmq_cli'
-#      run: |
-#        bazel build //deps/rabbitmq_cli:compile_warnings_as_errors \
-#          --verbose_failures

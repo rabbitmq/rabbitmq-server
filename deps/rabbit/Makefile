@@ -217,6 +217,11 @@ ct-slow:
 
 CT_OPTS += -ct_hooks rabbit_ct_hook []
 
+# Parallel CT.
+#
+# @todo We must ensure that the CT_OPTS also apply to ct-master
+# @todo We should probably refactor ct_master.erl to have node init in a separate .erl
+
 define ct_master.erl
 	StartOpts = #{
 		host => "localhost",
@@ -242,20 +247,6 @@ define ct_master.erl
 	peer:stop(Pid1),
 	halt()
 endef
-
-# @todo We must ensure that the CT_OPTS also apply to ct-master
-# @todo We should probably refactor ct_master.erl to have node init in a separate .erl
-# @todo We would benefit from having rabbit nodes started with peer (no leftovers)
-# @todo We need ct-master to be expanded to all components and not just rabbit
-# @todo Generate ct.test.spec from Makefile variables instead of hardcoded for ct-master
-
-
-#PARALLEL_CT_NUM_NODES ?= 4
-#PARALLEL_CT_NODE_NAME = rabbit_shard$1@localhost
-#PARALLEL_CT_NODE_INIT_FUN = fun(Pid, Num) -> peer:call(Pid, net_kernel, set_net_ticktime, [5]), peer:call(Pid, persistent_term, put, [rabbit_ct_tcp_port_base, 21000 + 2000 * Num]) end
-
-#PARALLEL_CT_NUM_SETS = 8
-
 
 PARALLEL_CT_SET_1_A = amqp_client unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
 PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_credit_api_v2 amqp_system signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
@@ -289,8 +280,6 @@ ifneq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),
 $(error Some test suites in CT_SUITES but not configured for CI.)
 endif
 
-
-
 define tpl_parallel_ct_test_spec
 {logdir, "$(CT_LOGS_DIR)"}.
 {logdir, master, "$(CT_LOGS_DIR)"}.
@@ -323,13 +312,7 @@ endef
 
 $(foreach set,1 2 3 4,$(eval $(call parallel_ct_set_target,$(set))))
 
-
-
-
-
-
-
-
+# @todo Generate ct.test.spec from Makefile variables instead of hardcoded for ct-master
 
 parallel-ct: test-build
 	$(verbose) mkdir -p $(CT_LOGS_DIR)
