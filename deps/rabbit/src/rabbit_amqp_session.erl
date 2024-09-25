@@ -140,6 +140,7 @@
          }).
 
 -record(incoming_link, {
+          snd_settle_mode :: snd_settle_mode(),
           %% The exchange is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
           %% "to" field (address v2).
@@ -1232,7 +1233,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                              name = LinkName,
                              handle = Handle = ?UINT(HandleInt),
                              source = Source,
-                             snd_settle_mode = SndSettleMode,
+                             snd_settle_mode = MaybeSndSettleMode,
                              target = Target,
                              initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
                             },
@@ -1243,8 +1244,10 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                                          user = User}}) ->
     case ensure_target(Target, Vhost, User, PermCache0) of
         {ok, Exchange, RoutingKey, QNameBin, PermCache} ->
+            SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
             IncomingLink = #incoming_link{
+                              snd_settle_mode = SndSettleMode,
                               exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
@@ -1256,7 +1259,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
                        name = LinkName,
                        handle = Handle,
                        source = Source,
-                       snd_settle_mode = SndSettleMode,
+                       snd_settle_mode = MaybeSndSettleMode,
                        rcv_settle_mode = ?V_1_0_RECEIVER_SETTLE_MODE_FIRST,
                        target = Target,
                        %% We are the receiver.
@@ -2304,7 +2307,8 @@ incoming_link_transfer(
                    rcv_settle_mode = RcvSettleMode,
                    handle = Handle = ?UINT(HandleInt)},
   MsgPart,
-  #incoming_link{exchange = LinkExchange,
+  #incoming_link{snd_settle_mode = SndSettleMode,
+                 exchange = LinkExchange,
                  routing_key = LinkRKey,
                  max_message_size = MaxMessageSize,
                  delivery_count = DeliveryCount0,
@@ -2335,6 +2339,7 @@ incoming_link_transfer(
             ok = validate_multi_transfer_settled(MaybeSettled, FirstSettled),
             {MsgBin0, FirstDeliveryId, FirstSettled}
     end,
+    validate_transfer_snd_settle_mode(SndSettleMode, Settled),
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
     validate_message_size(PayloadBin, MaxMessageSize),
 
@@ -2912,6 +2917,15 @@ credit_reply_timeout(QType, QName) ->
 default(undefined, Default) -> Default;
 default(Thing,    _Default) -> Thing.
 
+snd_settle_mode({ubyte, Val}) ->
+    case Val of
+        0 -> unsettled;
+        1 -> settled;
+        2 -> mixed
+    end;
+snd_settle_mode(undefined) ->
+    mixed.
+
 transfer_frames(Transfer, Sections, unlimited) ->
     [[Transfer, Sections]];
 transfer_frames(Transfer, Sections, MaxFrameSize) ->
@@ -3056,6 +3070,22 @@ validate_multi_transfer_settled(Other, First)
       "field 'settled' of continuation transfer (~p) differs from "
       "(interpreted) field 'settled' on first transfer (~p)",
       [Other, First]).
+
+validate_transfer_snd_settle_mode(mixed, _Settled) ->
+    ok;
+validate_transfer_snd_settle_mode(unsettled, false) ->
+    %% "If the negotiated value for snd-settle-mode at attachment is unsettled,
+    %% then this field MUST be false (or unset) on every transfer frame for a delivery" [2.7.5]
+    ok;
+validate_transfer_snd_settle_mode(settled, true) ->
+    %% "If the negotiated value for snd-settle-mode at attachment is settled,
+    %% then this field MUST be true on at least one transfer frame for a delivery" [2.7.5]
+    ok;
+validate_transfer_snd_settle_mode(SndSettleMode, Settled) ->
+    protocol_error(
+      ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+      "sender settle mode is '~s' but transfer settled flag is interpreted as being '~s'",
+      [SndSettleMode, Settled]).
 
 %% "If the message is being sent settled by the sender,
 %% the value of this field [rcv-settle-mode] is ignored." [2.7.5]

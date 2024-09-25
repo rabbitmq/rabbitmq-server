@@ -44,6 +44,7 @@ groups() ->
        sender_settle_mode_unsettled,
        sender_settle_mode_unsettled_fanout,
        sender_settle_mode_mixed,
+       invalid_transfer_settled_flag,
        quorum_queue_rejects,
        receiver_settle_mode_first,
        publishing_to_non_existing_queue_should_settle_with_released,
@@ -755,6 +756,51 @@ sender_settle_mode_mixed(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+invalid_transfer_settled_flag(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session1} = amqp10_client:begin_session(Connection),
+    {ok, Session2} = amqp10_client:begin_session(Connection),
+    TargetAddr = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
+    {ok, SenderSettled} = amqp10_client:attach_sender_link_sync(
+                            Session1, <<"link 1">>, TargetAddr, settled),
+    {ok, SenderUnsettled} = amqp10_client:attach_sender_link_sync(
+                              Session2, <<"link 2">>, TargetAddr, unsettled),
+    ok = wait_for_credit(SenderSettled),
+    ok = wait_for_credit(SenderUnsettled),
+
+    ok = amqp10_client:send_msg(SenderSettled, amqp10_msg:new(<<"tag1">>, <<"m1">>, false)),
+    receive
+        {amqp10_event,
+         {session, Session1,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+              description = {utf8, Description1}}}}} ->
+            ?assertEqual(
+               <<"sender settle mode is 'settled' but transfer settled flag is interpreted as being 'false'">>,
+               Description1)
+    after 5000 -> flush(missing_ended),
+                  ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:send_msg(SenderUnsettled, amqp10_msg:new(<<"tag2">>, <<"m2">>, true)),
+    receive
+        {amqp10_event,
+         {session, Session2,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+              description = {utf8, Description2}}}}} ->
+            ?assertEqual(
+               <<"sender settle mode is 'unsettled' but transfer settled flag is interpreted as being 'true'">>,
+               Description2)
+    after 5000 -> flush(missing_ended),
+                  ct:fail({missing_event, ?LINE})
+    end,
+
     ok = amqp10_client:close_connection(Connection).
 
 quorum_queue_rejects(Config) ->
@@ -4749,7 +4795,7 @@ dead_letter_reject_message_order(QType, Config) ->
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
 
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"sender">>, rabbitmq_amqp_address:queue(QName1), unsettled),
+                     Session, <<"sender">>, rabbitmq_amqp_address:queue(QName1), settled),
     wait_for_credit(Sender),
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), unsettled),
@@ -4840,7 +4886,7 @@ dead_letter_reject_many_message_order(QType, Config) ->
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
 
     {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"sender">>, rabbitmq_amqp_address:queue(QName1), unsettled),
+                     Session, <<"sender">>, rabbitmq_amqp_address:queue(QName1), settled),
     wait_for_credit(Sender),
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), unsettled),
@@ -5129,7 +5175,7 @@ footer_checksum(FooterOpt, Config) ->
     SndAttachArgs = #{name => <<"my sender">>,
                       role => {sender, #{address => Addr,
                                          durable => configuration}},
-                      snd_settle_mode => settled,
+                      snd_settle_mode => mixed,
                       rcv_settle_mode => first,
                       footer_opt => FooterOpt},
     {ok, Receiver} = amqp10_client:attach_link(Session, RecvAttachArgs),

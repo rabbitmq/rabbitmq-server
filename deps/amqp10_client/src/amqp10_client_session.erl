@@ -69,9 +69,6 @@
 %% "The remotely chosen handle is referred to as the input handle." [2.6.2]
 -type input_handle() :: link_handle().
 
--type snd_settle_mode() :: unsettled | settled | mixed.
--type rcv_settle_mode() :: first | second.
-
 -type terminus_durability() :: none | configuration | unsettled_state.
 
 -type target_def() :: #{address => link_address(),
