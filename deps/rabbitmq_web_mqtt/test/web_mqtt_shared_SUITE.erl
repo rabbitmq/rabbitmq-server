@@ -40,6 +40,7 @@ end_per_testcase(Testcase, Config) ->
     mqtt_shared_SUITE:end_per_testcase(Testcase, Config).
 
 global_counters(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+message_size_metrics(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 block_only_publisher(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 many_qos1_messages(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 session_expiry(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
