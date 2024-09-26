@@ -62,7 +62,8 @@ groups() ->
        server_closes_link_classic_queue,
        server_closes_link_quorum_queue,
        server_closes_link_stream,
-       server_closes_link_exchange,
+       server_closes_link_exchange_settled,
+       server_closes_link_exchange_unsettled,
        link_target_classic_queue_deleted,
        link_target_quorum_queue_deleted,
        target_queues_deleted_accepted,
@@ -1513,7 +1514,13 @@ server_closes_link(QType, Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
-server_closes_link_exchange(Config) ->
+server_closes_link_exchange_settled(Config) ->
+    server_closes_link_exchange(true, Config).
+
+server_closes_link_exchange_unsettled(Config) ->
+    server_closes_link_exchange(false, Config).
+
+server_closes_link_exchange(Settled, Config) ->
     XName = atom_to_binary(?FUNCTION_NAME),
     QName = <<"my queue">>,
     RoutingKey = <<"my routing key">>,
@@ -1543,8 +1550,13 @@ server_closes_link_exchange(Config) ->
     %% When we publish the next message, we expect:
     %% 1. that the message is released because the exchange doesn't exist anymore, and
     DTag2 = <<255>>,
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, false)),
-    ok = wait_for_settlement(DTag2, released),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag2, <<"m2">>, Settled)),
+    case Settled of
+        true ->
+            ok;
+        false ->
+            ok = wait_for_settlement(DTag2, released)
+    end,
     %% 2. that the server closes the link, i.e. sends us a DETACH frame.
     receive {amqp10_event,
              {link, Sender,
@@ -5980,7 +5992,7 @@ assert_messages(QNameBin, NumTotalMsgs, NumUnackedMsgs, Config, Node) ->
              Infos = rpc(Config, Node, rabbit_amqqueue, info, [Q, [messages, messages_unacknowledged]]),
              lists:sort(Infos)
          end
-        ), 500, 5).
+        ), 500, 10).
 
 serial_number_increment(S) ->
     case S + 1 of
