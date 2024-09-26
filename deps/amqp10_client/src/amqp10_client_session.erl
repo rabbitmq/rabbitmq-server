@@ -961,7 +961,8 @@ rcv_settle_mode(_) -> undefined.
 % TODO: work out if we can assume accepted
 translate_delivery_state(undefined) -> undefined;
 translate_delivery_state(#'v1_0.accepted'{}) -> accepted;
-translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
+translate_delivery_state(#'v1_0.rejected'{error = undefined}) -> rejected;
+translate_delivery_state(#'v1_0.rejected'{error = Error}) -> {rejected, Error};
 translate_delivery_state(#'v1_0.modified'{}) -> modified;
 translate_delivery_state(#'v1_0.released'{}) -> released;
 translate_delivery_state(#'v1_0.received'{}) -> received;
