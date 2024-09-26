@@ -629,6 +629,22 @@ msg_store_file_scan1(Config) ->
     %% Messages with no content.
     ok = Scan([{bin, <<0:64, "deadbeefdeadbeef", 255>>}]),
     ok = Scan([{msg, gen_id(), <<>>}]),
+    %% Tricky messages.
+    %%
+    %% These only get properly detected when the index is populated.
+    %% In this test case we simulate the index with a fun.
+    TrickyScan = fun (Blocks, Expected, Fun) ->
+        Path = gen_msg_file(Config, Blocks),
+        Result = rabbit_msg_store:scan_file_for_valid_messages(Path, Fun),
+        case Result of
+            Expected -> ok;
+            _ -> {expected, Expected, got, Result}
+        end
+    end,
+    ok = TrickyScan(
+        [{bin, <<0, 0:48, 17, 17, "idididididididid", 255, 0:4352/unit:8, 255>>}],
+        {ok, [{<<"idididididididid">>, 4378, 1}]},
+        fun(Obj = {<<"idididididididid">>, 4378, 1}) -> {valid, Obj}; (_) -> invalid end),
     %% All good!!
     passed.
 
@@ -661,12 +677,7 @@ gen_msg_file(Config, Blocks) ->
 
 gen_result(Blocks) ->
     Messages = gen_result(Blocks, 0, []),
-    case Messages of
-        [] ->
-            {ok, [], 0};
-        [{_, TotalSize, Offset}|_] ->
-            {ok, Messages, Offset + TotalSize}
-    end.
+    {ok, Messages}.
 
 gen_result([], _, Acc) ->
     Acc;
