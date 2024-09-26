@@ -711,35 +711,9 @@ system_recover(quorum_queues) ->
     end.
 
 maybe_apply_policies(Q, Overview) ->
-    rabbit_log:debug("Maybe applying policies to ~p", [amqqueue:get_name(Q)]),
-    EffectiveDefinition = rabbit_policy:effective_definition(Q),
-    #{
-        config := #{
-            overflow_strategy := OverflowStrategy,
-            max_length := MaxLength,
-            max_bytes := MaxBytes,
-            delivery_limit := DeliverLimit,
-            expires := Expires,
-            msg_ttl := MsgTTL
-        }
-    } = Overview,
-    Checks = [
-        {<<"max-length">>, MaxLength},
-        {<<"max-length-bytes">>, MaxBytes},
-        {<<"delivery-limit">>, DeliverLimit},
-        {<<"expires">>, Expires},
-        {<<"message-ttl">>, MsgTTL},
-        {<<"overflow">>, OverflowStrategy}
-    ],
-    ShouldUpdate = lists:any(
-        fun({Key, Val}) ->
-            case proplists:get_value(Key, EffectiveDefinition) of
-                undefined -> false;
-                V -> V =/= Val
-            end
-        end,
-        Checks
-    ),
+    NewConfig = ra_machine_config(Q),
+    Keys = maps:keys(NewConfig),
+    ShouldUpdate = (NewConfig =/= maps:with(Keys, Overview)),
     case ShouldUpdate of
         true -> 
             rabbit_log:debug("Re-applying policies to ~p", [amqqueue:get_name(Q)]),
