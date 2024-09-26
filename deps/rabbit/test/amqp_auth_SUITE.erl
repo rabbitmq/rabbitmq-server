@@ -530,7 +530,7 @@ target_per_message_internal_exchange(Config) ->
     ExpectedErr = error_unauthorized(
                     <<"forbidden to publish to internal exchange '", XName/binary, "' in vhost 'test vhost'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(aaa),
+    after 5000 -> flush(missing_event),
                   ct:fail({missing_event, ?LINE})
     end,
     ok = close_connection_sync(Conn1),
