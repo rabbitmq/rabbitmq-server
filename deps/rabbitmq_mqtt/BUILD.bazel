@@ -226,7 +226,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "shared_SUITE",
+    name = "mqtt_shared_SUITE",
     size = "large",
     additional_beam = [
         ":test_util_beam",
