@@ -29,10 +29,7 @@ jobs:
         - 26
         metadata_store:
           - mnesia
-          # Khepri is currently skipped because Khepri is an unstable feature: we don't guarantee upgrability.
-          # Mixed-version tests currently fail with Khepri because of a new machine version introduced in
-          # Khepri v0.14.0.
-          # - khepri
+          - khepri
         include:
         - erlang_version: 26
           elixir_version: 1.15
