@@ -2341,14 +2341,8 @@ incoming_link_transfer(
     end,
     validate_transfer_snd_settle_mode(SndSettleMode, Settled),
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
-<<<<<<< HEAD
     validate_message_size(PayloadBin, MaxMessageSize),
-=======
-    PayloadSize = iolist_size(PayloadBin),
-    validate_message_size(PayloadSize, MaxMessageSize),
-    rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
     messages_received(Settled),
->>>>>>> 6863ae14dd (Comply with §2.2.2 of Anonymous Terminus extension)
 
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
