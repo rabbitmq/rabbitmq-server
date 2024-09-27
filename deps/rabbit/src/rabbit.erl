@@ -26,6 +26,7 @@
 -export([product_info/0,
          product_name/0,
          product_version/0,
+         product_license_line/0,
          base_product_name/0,
          base_product_version/0,
          motd_file/0,
@@ -920,14 +921,14 @@ start(normal, []) ->
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
                     BaseName, BaseVersion,
-                    ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
+                    ?COPYRIGHT_MESSAGE, product_license_line()],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
             _ ->
                 ?LOG_INFO(
                    "~n Starting ~ts ~ts on Erlang ~ts [~ts]~n ~ts~n ~ts",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
-                    ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
+                    ?COPYRIGHT_MESSAGE, product_license_line()],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
         end,
         log_motd(),
@@ -1338,7 +1339,7 @@ print_banner() ->
               "~n  Logs: ~ts" ++ LogFmt ++ "~n"
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
               "~n  Starting broker...",
-              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
+              [Product, Version, ?COPYRIGHT_MESSAGE, product_license_line()] ++
               [rabbit_misc:otp_release(), emu_flavor(), crypto_version()] ++
               MOTDArgs ++
               LogLocations ++
@@ -1521,6 +1522,10 @@ product_name() ->
         #{product_name := ProductName}   -> ProductName;
         #{product_base_name := BaseName} -> BaseName
     end.
+
+-spec product_license_line() -> string().
+product_license_line() ->
+    application:get_env(rabbit, license_line, ?INFORMATION_MESSAGE).
 
 -spec product_version() -> string().
 
