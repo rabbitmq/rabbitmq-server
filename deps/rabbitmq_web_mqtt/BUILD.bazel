@@ -103,11 +103,11 @@ eunit(
 broker_for_integration_suites()
 
 rabbitmq_integration_suite(
-    name = "config_schema_SUITE",
+    name = "web_mqtt_config_schema_SUITE",
 )
 
 rabbitmq_integration_suite(
-    name = "command_SUITE",
+    name = "web_mqtt_command_SUITE",
     additional_beam = [
         "test/rabbit_web_mqtt_test_util.beam",
     ],
@@ -117,7 +117,7 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "proxy_protocol_SUITE",
+    name = "web_mqtt_proxy_protocol_SUITE",
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
@@ -125,7 +125,23 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "system_SUITE",
+    name = "web_mqtt_shared_SUITE",
+    additional_beam = [
+        "test/src/rabbit_ws_test_util.beam",
+        "test/src/rfc6455_client.beam",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "web_mqtt_system_SUITE",
+    additional_beam = [
+        "test/src/rabbit_ws_test_util.beam",
+        "test/src/rfc6455_client.beam",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "web_mqtt_v5_SUITE",
     additional_beam = [
         "test/src/rabbit_ws_test_util.beam",
         "test/src/rfc6455_client.beam",
