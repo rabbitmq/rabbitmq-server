@@ -54,7 +54,8 @@ common_tests() ->
      target_per_message_queue,
      target_per_message_unset_to_address,
      target_per_message_bad_to_address,
-     target_per_message_exchange_absent,
+     target_per_message_exchange_absent_settled,
+     target_per_message_exchange_absent_unsettled,
      target_bad_address,
      source_bad_address
     ].
@@ -393,16 +394,15 @@ target_per_message_unset_to_address(Config) ->
     %% Send message with 'to' unset.
     DTag = <<1>>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag, <<0>>)),
-    ok = wait_for_settled(released, DTag),
-    receive {amqp10_event,
-             {link, Sender,
-              {detached,
-               #'v1_0.error'{
-                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                  description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}}} -> ok
-    after 5000 -> ct:fail("server did not close our outgoing link")
-    end,
+    ExpectedError = #'v1_0.error'{
+                       condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                       description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}},
+    ok = wait_for_settled({rejected, ExpectedError}, DTag),
 
+    ok = amqp10_client:detach_link(Sender),
+    receive {amqp10_event, {link, Sender, {detached, normal}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
@@ -449,34 +449,32 @@ bad_v2_addresses() ->
 
 %% Test v2 target address 'null' with an invalid 'to' addresses.
 target_per_message_bad_to_address(Config) ->
-    lists:foreach(fun(Addr) ->
-                          ok = target_per_message_bad_to_address0(Addr, Config)
-                  end, bad_v2_addresses()).
-
-target_per_message_bad_to_address0(Address, Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
     ok = wait_for_credit(Sender),
 
-    DTag = <<255>>,
-    Msg = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag, <<0>>)),
-    ok = amqp10_client:send_msg(Sender, Msg),
-    ok = wait_for_settled(released, DTag),
-    receive {amqp10_event,
-             {link, Sender,
-              {detached,
-               #'v1_0.error'{
-                  condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                  description = {utf8, <<"bad 'to' address", _Rest/binary>>}}}}} -> ok
-    after 5000 -> ct:fail("server did not close our outgoing link")
-    end,
+    lists:foreach(
+      fun(Addr) ->
+              DTag = <<"some delivery tag">>,
+              Msg = amqp10_msg:set_properties(#{to => Addr}, amqp10_msg:new(DTag, <<0>>, false)),
+              ok = amqp10_client:send_msg(Sender, Msg),
+              receive
+                  {amqp10_disposition, {{rejected, Error}, DTag}} ->
+                      ?assertMatch(#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                                                 description = {utf8, <<"bad 'to' address", _Rest/binary>>}},
+                                   Error)
+              after 5000 ->
+                        flush(missing_disposition),
+                        ct:fail(missing_disposition)
+              end
+      end, bad_v2_addresses()),
 
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
-target_per_message_exchange_absent(Config) ->
+target_per_message_exchange_absent_settled(Config) ->
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     XName = <<"🎈"/utf8>>,
     Address = rabbitmq_amqp_address:exchange(XName),
@@ -492,17 +490,56 @@ target_per_message_exchange_absent(Config) ->
     ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
 
     DTag2 = <<2>>,
-    Msg2 = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag2, <<"m2">>)),
+    Msg2 = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag2, <<"m2">>, true)),
     ok = amqp10_client:send_msg(Sender, Msg2),
-    ok = wait_for_settled(released, DTag2),
+
+    %% "the routing node MUST detach the link over which the message was sent with an error.
+    %% [...] Additionally the info field of error MUST contain an entry with symbolic key delivery-tag
+    %% and binary value of the delivery-tag of the message which caused the failure."
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
     receive {amqp10_event, {link, Sender, {detached, Error}}} ->
                 ?assertEqual(
                    #'v1_0.error'{
                       condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
-                      description = {utf8, <<"no exchange '", XName/binary, "' in vhost '/'">>}},
+                      description = {utf8, <<"no exchange '", XName/binary, "' in vhost '/'">>},
+                      info = {map, [{{symbol, <<"delivery-tag">>}, {binary, DTag2}}]}
+                     },
                    Error)
     after 5000 -> ct:fail("server did not close our outgoing link")
     end,
+
+    ok = cleanup(Init).
+
+target_per_message_exchange_absent_unsettled(Config) ->
+    Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
+    XName = <<"🎈"/utf8>>,
+    Address = rabbitmq_amqp_address:exchange(XName),
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+    ok = wait_for_credit(Sender),
+
+    DTag1 = <<"my tag">>,
+    Msg1 = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag1, <<"hey">>)),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = wait_for_settled(released, DTag1),
+
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
+
+    %% "If the source of the link supports the rejected outcome, and the message has not
+    %% already been settled by the sender, then the routing node MUST reject the message.
+    %% In this case the error field of rejected MUST contain the error which would have been communicated
+    %% in the detach which would have be sent if a link to the same address had been attempted."
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
+    %% We test here multiple rejections implicilty checking that link flow control works correctly.
+    ExpectedError = #'v1_0.error'{
+                       condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
+                       description = {utf8, <<"no exchange '", XName/binary, "' in vhost '/'">>}},
+    [begin
+         DTag = Body = integer_to_binary(N),
+         Msg = amqp10_msg:set_properties(#{to => Address}, amqp10_msg:new(DTag, Body, false)),
+         ok = amqp10_client:send_msg(Sender, Msg),
+         ok = wait_for_settled({rejected, ExpectedError}, DTag)
+     end || N <- lists:seq(1, 300)],
 
     ok = cleanup(Init).
 
