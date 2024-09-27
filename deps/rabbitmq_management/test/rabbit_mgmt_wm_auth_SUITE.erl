@@ -96,10 +96,7 @@ groups() ->
                 should_return_mgt_oauth_metadata_url_url1,
                 {with_mgt_oauth_provider_url_url0, [], [
                   should_return_mgt_oauth_provider_url_url0,
-                  should_return_mgt_oauth_metadata_url_url1,
-                  {with_mgt_oauth_metadata_url_url0, [], [
-                    should_return_mgt_oauth_metadata_url_url0
-                  ]}
+                  should_return_mgt_oauth_metadata_url_url1                  
                 ]}
               ]}
             ]}
@@ -205,10 +202,7 @@ groups() ->
                     should_return_oauth_resource_server_a_with_oauth_metadata_url_url1,
                     {with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, [], [
                       should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
-                      should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
-                      {with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url0, [], [
-                        should_return_oauth_resource_server_a_with_oauth_metadata_url_url0
-                      ]}
+                      should_return_oauth_resource_server_a_with_oauth_provider_url_url1                      
                     ]}
                   ]}
                 ]}
@@ -409,9 +403,6 @@ init_per_group(with_mgt_oauth_client_secret_q, Config) ->
 init_per_group(with_mgt_oauth_provider_url_url0, Config) ->
   set_env(rabbitmq_management, oauth_provider_url, ?config(url0, Config)),
   Config;
-init_per_group(with_mgt_oauth_metadata_url_url0, Config) ->
-  set_env(rabbitmq_management, oauth_metadata_url, ?config(meta_url0, Config)),
-  Config;
 init_per_group(with_root_issuer_url1, Config) ->
   set_env(rabbitmq_auth_backend_oauth2, issuer, ?config(url1, Config)),
   Config;
@@ -459,10 +450,6 @@ init_per_group(with_mgt_resource_server_a_with_scopes_read_write, Config) ->
 init_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_provider_url, ?config(url1, Config)),
-  Config;
-init_per_group(with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url0, Config) ->
-  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
-    ?config(a, Config), oauth_metadata_url, ?config(meta_url0, Config)),
   Config;
 init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
@@ -538,9 +525,6 @@ end_per_group(with_resource_server_id_rabbit, Config) ->
 end_per_group(with_mgt_oauth_provider_url_url0, Config) ->
   unset_env(rabbitmq_management, oauth_provider_url),
   Config;
-end_per_group(with_mgt_oauth_metadata_url_url0, Config) ->
-  unset_env(rabbitmq_management, oauth_metadata_url),
-  Config;
 end_per_group(with_root_issuer_url1, Config) ->
   unset_env(rabbitmq_auth_backend_oauth2, issuer),
   unset_env(rabbitmq_auth_backend_oauth2, discovery_endpoint),
@@ -573,10 +557,6 @@ end_per_group(with_mgt_resource_server_a_with_scopes_read_write, Config) ->
 end_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_provider_url),
-  Config;
-end_per_group(with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url0, Config) ->
-  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
-    ?config(a, Config), oauth_metadata_url),
   Config;
 end_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
@@ -704,10 +684,6 @@ should_return_oauth_resource_server_a_with_oauth_provider_url_url1(Config) ->
 should_return_oauth_resource_server_a_with_oauth_metadata_url_url1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_metadata_url, meta_url1).
-
-should_return_oauth_resource_server_a_with_oauth_metadata_url_url0(Config) ->
-  assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, a, oauth_metadata_url, meta_url0).
 
 should_return_oauth_resource_server_a_with_oauth_provider_url_url0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),

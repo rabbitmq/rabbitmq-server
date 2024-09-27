@@ -144,8 +144,8 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
- "auth_oauth2.jwks_url",
- "rabbitmq_auth_backend_oauth2.key_config.jwks_url",
+ "auth_oauth2.jwks_uri",
+ "rabbitmq_auth_backend_oauth2.key_config.jwks_uri",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,

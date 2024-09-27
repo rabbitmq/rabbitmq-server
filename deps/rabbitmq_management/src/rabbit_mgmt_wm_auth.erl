@@ -34,7 +34,7 @@ merge_property(Key, List, MapIn) ->
 extract_oauth_provider_info_props_as_map(ManagementProps) ->
   lists:foldl(fun(K, Acc) ->
     merge_property(K, ManagementProps, Acc) end, #{}, [oauth_provider_url,
-      oauth_metadata_url, oauth_authorization_endpoint_params,
+      oauth_authorization_endpoint_params,
       oauth_token_endpoint_params]).
 
 merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
@@ -55,8 +55,8 @@ oauth_provider_to_map(OAuthProvider) ->
   Map0 = case OAuthProvider#oauth_provider.issuer of
     undefined -> #{};
     Issuer -> #{ oauth_provider_url => Issuer,
-                oauth_metadata_url => OAuthProvider#oauth_provider.discovery_endpoint
-              }
+                 oauth_metadata_url => OAuthProvider#oauth_provider.discovery_endpoint
+               }
   end,
   case OAuthProvider#oauth_provider.end_session_endpoint of
     undefined -> Map0;
