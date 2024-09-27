@@ -328,8 +328,7 @@ get_openid_configuration_using_path_and_custom_endpoint(Config) ->
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH),
-            ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT),
-        SslOptions),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 get_openid_configuration_using_custom_endpoint(Config) ->
@@ -337,8 +336,7 @@ get_openid_configuration_using_custom_endpoint(Config) ->
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
         build_openid_discovery_endpoint(build_issuer("https"),
-            ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT),
-        SslOptions),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 
