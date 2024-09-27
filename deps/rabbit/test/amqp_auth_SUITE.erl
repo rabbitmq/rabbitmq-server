@@ -21,6 +21,10 @@
 -import(event_recorder,
         [assert_event_type/2,
          assert_event_prop/2]).
+-import(amqp_utils,
+        [flush/1,
+         wait_for_credit/1,
+         close_connection_sync/1]).
 
 all() ->
     [
@@ -1077,34 +1081,7 @@ amqp_error(Condition, Description)
        condition = Condition,
        description = {utf8, Description}}.
 
-% before we can send messages we have to wait for credit from the server
-wait_for_credit(Sender) ->
-    receive
-        {amqp10_event, {link, Sender, credited}} ->
-            flush(?FUNCTION_NAME),
-            ok
-    after 5000 ->
-              flush("wait_for_credit timed out"),
-              ct:fail(credited_timeout)
-    end.
-
-flush(Prefix) ->
-    receive Msg ->
-                ct:pal("~ts flushed: ~p~n", [Prefix, Msg]),
-                flush(Prefix)
-    after 1 ->
-              ok
-    end.
-
 delete_all_queues(Config) ->
     Qs = rpc(Config, rabbit_amqqueue, list, []),
     [{ok, _QLen} = rpc(Config, rabbit_amqqueue, delete, [Q, false, false, <<"fake-user">>])
      || Q <- Qs].
-
-close_connection_sync(Connection)
-  when is_pid(Connection) ->
-    ok = amqp10_client:close_connection(Connection),
-    receive {amqp10_event, {connection, Connection, {closed, normal}}} -> ok
-    after 5000 -> flush(missing_closed),
-                  ct:fail("missing CLOSE from server")
-    end.

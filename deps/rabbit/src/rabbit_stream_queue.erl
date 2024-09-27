@@ -78,13 +78,14 @@
                  ack :: boolean(),
                  start_offset = 0 :: non_neg_integer(),
                  listening_offset = 0 :: non_neg_integer(),
-                 last_consumed_offset = 0 :: non_neg_integer(),
+                 last_consumed_offset :: non_neg_integer(),
                  log :: undefined | osiris_log:state(),
                  chunk_iterator :: undefined | osiris_log:chunk_iterator(),
                  %% These messages were already read ahead from the Osiris log,
                  %% were part of an uncompressed sub batch, and are buffered in
                  %% reversed order until the consumer has more credits to consume them.
                  buffer_msgs_rev = [] :: [rabbit_amqqueue:qmsg()],
+                 filter :: rabbit_amqp_filtex:filter_expressions(),
                  reader_options :: map()}).
 
 -record(stream_client, {stream_id :: string(),
@@ -333,7 +334,8 @@ consume(Q, Spec, #stream_client{} = QState0)
                     %% begins sending
                     maybe_send_reply(ChPid, OkMsg),
                     _ = rabbit_stream_coordinator:register_local_member_listener(Q),
-                    begin_stream(QState, ConsumerTag, OffsetSpec, Mode, AckRequired, filter_spec(Args))
+                    Filter = maps:get(filter, Spec, []),
+                    begin_stream(QState, ConsumerTag, OffsetSpec, Mode, AckRequired, Filter, filter_spec(Args))
             end;
         {undefined, _} ->
             {protocol_error, precondition_failed,
@@ -424,7 +426,7 @@ query_local_pid(#stream_client{stream_id = StreamId} = State) ->
 begin_stream(#stream_client{name = QName,
                             readers = Readers0,
                             local_pid = LocalPid} = State,
-             Tag, Offset, Mode, AckRequired, Options)
+             Tag, Offset, Mode, AckRequired, Filter, Options)
   when is_pid(LocalPid) ->
     CounterSpec = {{?MODULE, QName, Tag, self()}, []},
     {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options),
@@ -451,6 +453,7 @@ begin_stream(#stream_client{name = QName,
                    listening_offset = NextOffset,
                    last_consumed_offset = StartOffset,
                    log = Seg0,
+                   filter = Filter,
                    reader_options = Options},
     {ok, State#stream_client{readers = Readers0#{Tag => Str0}}}.
 
@@ -1158,7 +1161,8 @@ stream_entries(QName, Name, LocalPid,
                #stream{chunk_iterator = Iter0,
                        delivery_count = DC,
                        credit = Credit,
-                       start_offset = StartOffset} = Str0, Acc0) ->
+                       start_offset = StartOffset,
+                       filter = Filter} = Str0, Acc0) ->
     case osiris_log:iterator_next(Iter0) of
         end_of_chunk ->
             case chunk_iterator(Str0, LocalPid) of
@@ -1172,7 +1176,7 @@ stream_entries(QName, Name, LocalPid,
                              {batch, _NumRecords, 0, _Len, BatchedEntries} ->
                                  {MsgsRev, NumMsgs} = parse_uncompressed_subbatch(
                                                         BatchedEntries, Offset, StartOffset,
-                                                        QName, Name, LocalPid, {[], 0}),
+                                                        QName, Name, LocalPid, Filter, {[], 0}),
                                  case Credit >= NumMsgs of
                                      true ->
                                          {Str0#stream{chunk_iterator = Iter,
@@ -1199,12 +1203,19 @@ stream_entries(QName, Name, LocalPid,
                              _SimpleEntry ->
                                  case Offset >= StartOffset of
                                      true ->
-                                         Msg = entry_to_msg(Entry, Offset, QName, Name, LocalPid),
-                                         {Str0#stream{chunk_iterator = Iter,
-                                                      delivery_count = delivery_count_add(DC, 1),
-                                                      credit = Credit - 1,
-                                                      last_consumed_offset = Offset},
-                                          [Msg | Acc0]};
+                                         case entry_to_msg(Entry, Offset, QName,
+                                                           Name, LocalPid, Filter) of
+                                             none ->
+                                                 {Str0#stream{chunk_iterator = Iter,
+                                                              last_consumed_offset = Offset},
+                                                  Acc0};
+                                             Msg ->
+                                                 {Str0#stream{chunk_iterator = Iter,
+                                                              delivery_count = delivery_count_add(DC, 1),
+                                                              credit = Credit - 1,
+                                                              last_consumed_offset = Offset},
+                                                  [Msg | Acc0]}
+                                         end;
                                      false ->
                                          {Str0#stream{chunk_iterator = Iter}, Acc0}
                                  end
@@ -1236,25 +1247,30 @@ chunk_iterator(#stream{credit = Credit,
     end.
 
 %% Deliver each record of an uncompressed sub batch individually.
-parse_uncompressed_subbatch(<<>>, _Offset, _StartOffset, _QName, _Name, _LocalPid, Acc) ->
+parse_uncompressed_subbatch(
+  <<>>, _Offset, _StartOffset, _QName, _Name, _LocalPid, _Filter, Acc) ->
     Acc;
 parse_uncompressed_subbatch(
   <<0:1, %% simple entry
     Len:31/unsigned,
     Entry:Len/binary,
     Rem/binary>>,
-  Offset, StartOffset, QName, Name, LocalPid, Acc0 = {AccList, AccCount}) ->
+  Offset, StartOffset, QName, Name, LocalPid, Filter, Acc0 = {AccList, AccCount}) ->
     Acc = case Offset >= StartOffset of
               true ->
-                  Msg = entry_to_msg(Entry, Offset, QName, Name, LocalPid),
-                  {[Msg | AccList], AccCount + 1};
+                  case entry_to_msg(Entry, Offset, QName, Name, LocalPid, Filter) of
+                      none ->
+                          Acc0;
+                      Msg ->
+                          {[Msg | AccList], AccCount + 1}
+                  end;
               false ->
                   Acc0
           end,
-    parse_uncompressed_subbatch(Rem, Offset + 1, StartOffset, QName, Name, LocalPid, Acc).
+    parse_uncompressed_subbatch(Rem, Offset + 1, StartOffset, QName,
+                                Name, LocalPid, Filter, Acc).
 
-entry_to_msg(Entry, Offset, #resource{kind = queue,
-                                      name = QName}, Name, LocalPid) ->
+entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName}, Name, LocalPid, Filter) ->
     Mc0 = mc:init(mc_amqp, Entry, #{}),
     %% If exchange or routing_keys annotation isn't present the entry most likely came
     %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
@@ -1268,7 +1284,12 @@ entry_to_msg(Entry, Offset, #resource{kind = queue,
               _ -> Mc1
           end,
     Mc = mc:set_annotation(<<"x-stream-offset">>, Offset, Mc2),
-    {Name, LocalPid, Offset, false, Mc}.
+    case rabbit_amqp_filtex:filter(Filter, Mc) of
+        true ->
+            {Name, LocalPid, Offset, false, Mc};
+        false ->
+            none
+    end.
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies
@@ -1288,6 +1309,9 @@ capabilities() ->
       consumer_arguments => [<<"x-stream-offset">>,
                              <<"x-stream-filter">>,
                              <<"x-stream-match-unfiltered">>],
+      %% AMQP property filter expressions
+      %% https://groups.oasis-open.org/higherlogic/ws/public/document?document_id=66227
+      amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>],
       server_named => false}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->

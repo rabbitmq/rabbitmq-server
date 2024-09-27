@@ -1284,12 +1284,13 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
-                            name = LinkName,
-                            handle = Handle = ?UINT(HandleInt),
-                            source = Source,
-                            snd_settle_mode = SndSettleMode,
-                            rcv_settle_mode = RcvSettleMode,
-                            max_message_size = MaybeMaxMessageSize} = Attach,
+                             name = LinkName,
+                             handle = Handle = ?UINT(HandleInt),
+                             source = Source = #'v1_0.source'{filter = DesiredFilter},
+                             snd_settle_mode = SndSettleMode,
+                             rcv_settle_mode = RcvSettleMode,
+                             max_message_size = MaybeMaxMessageSize,
+                             properties = Properties},
              State0 = #state{queue_states = QStates0,
                              outgoing_links = OutgoingLinks0,
                              permission_cache = PermCache0,
@@ -1359,6 +1360,10 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                     credit_api_v1,
                                     credit_api_v1}
                            end,
+                           ConsumerArgs0 = parse_attach_properties(Properties),
+                           {EffectiveFilter, ConsumerFilter, ConsumerArgs1} =
+                           parse_filter(DesiredFilter),
+                           ConsumerArgs = ConsumerArgs0 ++ ConsumerArgs1,
                            Spec = #{no_ack => SndSettled,
                                     channel_pid => self(),
                                     limiter_pid => none,
@@ -1366,11 +1371,14 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                     mode => Mode,
                                     consumer_tag => handle_to_ctag(HandleInt),
                                     exclusive_consume => false,
-                                    args => consumer_arguments(Attach),
+                                    args => ConsumerArgs,
+                                    filter => ConsumerFilter,
                                     ok_msg => undefined,
                                     acting_user => Username},
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
                                {ok, QStates} ->
+                                   OfferedCaps0 = rabbit_queue_type:amqp_capabilities(QType),
+                                   OfferedCaps = rabbit_amqp_util:capabilities(OfferedCaps0),
                                    A = #'v1_0.attach'{
                                           name = LinkName,
                                           handle = Handle,
@@ -1382,10 +1390,13 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           %% will be requeued. That's why the we only support RELEASED as the default outcome.
                                           source = Source#'v1_0.source'{
                                                             default_outcome = #'v1_0.released'{},
-                                                            outcomes = outcomes(Source)},
+                                                            outcomes = outcomes(Source),
+                                                            %% "the sending endpoint sets the filter actually in place" [3.5.3]
+                                                            filter = EffectiveFilter},
                                           role = ?AMQP_ROLE_SENDER,
                                           %% Echo back that we will respect the client's requested max-message-size.
-                                          max_message_size = MaybeMaxMessageSize},
+                                          max_message_size = MaybeMaxMessageSize,
+                                          offered_capabilities = OfferedCaps},
                                    MaxMessageSize = max_message_size(MaybeMaxMessageSize),
                                    Link = #outgoing_link{
                                              queue_name = queue_resource(Vhost, QNameBin),
@@ -2705,11 +2716,10 @@ parse_target_v2_string(String) ->
     end.
 
 parse_target_v2_string0(<<"/exchanges/", Rest/binary>>) ->
-    Key = cp_slash,
-    Pattern = try persistent_term:get(Key)
+    Pattern = try persistent_term:get(cp_slash)
               catch error:badarg ->
                         Cp = binary:compile_pattern(<<"/">>),
-                        ok = persistent_term:put(Key, Cp),
+                        ok = persistent_term:put(cp_slash, Cp),
                         Cp
               end,
     case binary:split(Rest, Pattern, [global]) of
@@ -2980,87 +2990,81 @@ encode_frames(T, Msg, MaxPayloadSize, Transfers) ->
             lists:reverse([[T, Msg] | Transfers])
     end.
 
-consumer_arguments(#'v1_0.attach'{
-                      source = #'v1_0.source'{filter = Filter},
-                      properties = Properties}) ->
-    properties_to_consumer_args(Properties) ++
-    filter_to_consumer_args(Filter).
-
-properties_to_consumer_args({map, KVList}) ->
+parse_attach_properties(undefined) ->
+    [];
+parse_attach_properties({map, KVList}) ->
     Key = {symbol, <<"rabbitmq:priority">>},
     case proplists:lookup(Key, KVList) of
         {Key, Val = {int, _Prio}} ->
             [mc_amqpl:to_091(<<"x-priority">>, Val)];
         _ ->
             []
+    end.
+
+parse_filter(undefined) ->
+    {undefined, [], []};
+parse_filter({map, DesiredKVList}) ->
+    {EffectiveKVList, ConsusumerFilter, ConsumerArgs} =
+    lists:foldr(fun parse_filters/2, {[], [], []}, DesiredKVList),
+    {{map, EffectiveKVList}, ConsusumerFilter, ConsumerArgs}.
+
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-offset-spec">>}, Value}},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case Value of
+        {timestamp, Ts} ->
+            %% 0.9.1 uses second based timestamps
+            Arg = {<<"x-stream-offset">>, timestamp, Ts div 1000},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        {utf8, Spec} ->
+            %% next, last, first and "10m" etc
+            Arg = {<<"x-stream-offset">>, longstr, Spec},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        {_Type, Offset}
+          when is_integer(Offset) andalso Offset >= 0 ->
+            Arg = {<<"x-stream-offset">>, long, Offset},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        _ ->
+            Acc
     end;
-properties_to_consumer_args(_) ->
-    [].
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-filter">>}, Value}},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case Value of
+        {list, Filters0} ->
+            Filters = lists:filtermap(fun({utf8, Filter0}) ->
+                                              {true, {longstr, Filter0}};
+                                         (_) ->
+                                              false
+                                      end, Filters0),
+            Arg = {<<"x-stream-filter">>, array, Filters},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
 
-filter_to_consumer_args({map, KVList}) ->
-    filter_to_consumer_args(
-      [<<"rabbitmq:stream-offset-spec">>,
-       <<"rabbitmq:stream-filter">>,
-       <<"rabbitmq:stream-match-unfiltered">>],
-      KVList,
-      []);
-filter_to_consumer_args(_) ->
-    [].
-
-filter_to_consumer_args([], _KVList, Acc) ->
-    Acc;
-filter_to_consumer_args([<<"rabbitmq:stream-offset-spec">> = H | T], KVList, Acc) ->
-    Key = {symbol, H},
-    Arg = case keyfind_unpack_described(Key, KVList) of
-              {_, {timestamp, Ts}} ->
-                  [{<<"x-stream-offset">>, timestamp, Ts div 1000}]; %% 0.9.1 uses second based timestamps
-              {_, {utf8, Spec}} ->
-                  [{<<"x-stream-offset">>, longstr, Spec}]; %% next, last, first and "10m" etc
-              {_, {_, Offset}} when is_integer(Offset) ->
-                  [{<<"x-stream-offset">>, long, Offset}]; %% integer offset
-              _ ->
-                  []
-          end,
-    filter_to_consumer_args(T, KVList, Arg ++ Acc);
-filter_to_consumer_args([<<"rabbitmq:stream-filter">> = H | T], KVList, Acc) ->
-    Key = {symbol, H},
-    Arg = case keyfind_unpack_described(Key, KVList) of
-              {_, {list, Filters0}} when is_list(Filters0) ->
-                  Filters = lists:foldl(fun({utf8, Filter}, L) ->
-                                                [{longstr, Filter} | L];
-                                           (_, L) ->
-                                                L
-                                        end, [], Filters0),
-                  [{<<"x-stream-filter">>, array, Filters}];
-              {_, {utf8, Filter}} ->
-                  [{<<"x-stream-filter">>, longstr, Filter}];
-              _ ->
-                  []
-          end,
-    filter_to_consumer_args(T, KVList, Arg ++ Acc);
-filter_to_consumer_args([<<"rabbitmq:stream-match-unfiltered">> = H | T], KVList, Acc) ->
-    Key = {symbol, H},
-    Arg = case keyfind_unpack_described(Key, KVList) of
-              {_, MU} when is_boolean(MU) ->
-                  [{<<"x-stream-match-unfiltered">>, bool, MU}];
-              _ ->
-                  []
-          end,
-    filter_to_consumer_args(T, KVList, Arg ++ Acc);
-filter_to_consumer_args([_ | T], KVList, Acc) ->
-    filter_to_consumer_args(T, KVList, Acc).
-
-keyfind_unpack_described(Key, KvList) ->
-    %% filterset values _should_ be described values
-    %% they aren't always however for historical reasons so we need this bit of
-    %% code to return a plain value for the given filter key
-    case lists:keyfind(Key, 1, KvList) of
-        {Key, {described, Key, Value}} ->
-            {Key, Value};
-        {Key, _} = Kv ->
-            Kv;
-        false ->
-            false
+        {utf8, Filter0} ->
+            Arg = {<<"x-stream-filter">>, longstr, Filter0},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        _ ->
+            Acc
+    end;
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-match-unfiltered">>}, Match}},
+              {EffectiveFilters, ConsumerFilter, ConsumerArgs})
+  when is_boolean(Match) ->
+    Arg = {<<"x-stream-match-unfiltered">>, bool, Match},
+    {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+parse_filters(Filter = {{symbol, _Key}, Value},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case rabbit_amqp_filtex:validate(Value) of
+        {ok, FilterExpression = {FilterType, _}} ->
+            case proplists:is_defined(FilterType, ConsumerFilter) of
+                true ->
+                    %% For now, let's prohibit multiple top level filters of the same type
+                    %% (properties or application-properties). There should be no use case.
+                    %% In future, we can allow multiple times the same top level grouping
+                    %% filter expression type (all/any/not).
+                    Acc;
+                false ->
+                    {[Filter | EffectiveFilters], [FilterExpression | ConsumerFilter], ConsumerArgs}
+            end;
+        error ->
+            Acc
     end.
 
 validate_attach(#'v1_0.attach'{target = #'v1_0.coordinator'{}}) ->

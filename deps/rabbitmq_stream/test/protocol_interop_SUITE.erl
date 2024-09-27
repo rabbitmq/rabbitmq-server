@@ -14,6 +14,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_filtex.hrl").
 
 all() ->
     [{group, tests}].
@@ -24,7 +25,8 @@ groups() ->
        amqpl,
        amqp_credit_multiple_grants,
        amqp_credit_single_grant,
-       amqp_attach_sub_batch
+       amqp_attach_sub_batch,
+       amqp_filter_expression
       ]
      }].
 
@@ -270,6 +272,51 @@ amqp_attach_sub_batch(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:close_connection(Connection).
 
+%% Test that AMQP filter expressions work when messages
+%% are published via the stream protocol and consumed via AMQP.
+amqp_filter_expression(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME),
+    publish_via_stream_protocol(Stream, Config),
+
+    %% Consume from the stream via AMQP 1.0.
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = <<"/queue/", Stream/binary>>,
+
+    AppPropsFilter = [{{utf8, <<"my key">>},
+                       {utf8, <<"my value">>}}],
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"test-receiver">>, Address, settled, configuration,
+                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                         ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter}
+                        }),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 100, never),
+    receive {amqp10_msg, Receiver, M2} ->
+                ?assertEqual([<<"m2">>], amqp10_msg:body(M2))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M4} ->
+                ?assertEqual([<<"m4">>], amqp10_msg:body(M4))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M5} ->
+                ?assertEqual([<<"m5">>], amqp10_msg:body(M5))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M6} ->
+                ?assertEqual([<<"m6">>], amqp10_msg:body(M6))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, _} = Msg ->
+                ct:fail({received_unexpected_msg, Msg})
+    after 10 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:close_connection(Connection).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -310,7 +357,9 @@ publish_via_stream_protocol(Stream, Config) ->
     {{response, 1, {declare_publisher, _}}, C7} = receive_stream_commands(S, C6),
 
     M1 = simple_entry(1, <<"m1">>),
-    M2 = simple_entry(2, <<"m2">>),
+    M2 = simple_entry(2, <<"m2">>, #'v1_0.application_properties'{
+                                      content = [{{utf8, <<"my key">>},
+                                                  {utf8, <<"my value">>}}]}),
     M3 = simple_entry(3, <<"m3">>),
     Messages1 = [M1, M2, M3],
     PublishFrame1 = rabbit_stream_core:frame({publish, PublisherId, length(Messages1), Messages1}),
@@ -342,11 +391,25 @@ simple_entry(Sequence, Body)
     DataSectSize = byte_size(DataSect),
     <<Sequence:64, 0:1, DataSectSize:31, DataSect:DataSectSize/binary>>.
 
-%% Here, each AMQP 1.0 encoded message contains a single data section.
+%% Streams contain AMQP 1.0 encoded messages.
+%% In this case, the AMQP 1.0 encoded message consists of an application-properties section and a data section.
+simple_entry(Sequence, Body, AppProps)
+  when is_binary(Body) ->
+    AppPropsSect = iolist_to_binary(amqp10_framing:encode_bin(AppProps)),
+    DataSect = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
+    Sects = <<AppPropsSect/binary, DataSect/binary>>,
+    SectSize = byte_size(Sects),
+    <<Sequence:64, 0:1, SectSize:31, Sects:SectSize/binary>>.
+
+%% Here, each AMQP 1.0 encoded message consists of an application-properties section and a data section.
 %% All data sections are delivered uncompressed in 1 batch.
 sub_batch_entry_uncompressed(Sequence, Bodies) ->
     Batch = lists:foldl(fun(Body, Acc) ->
-                                Sect = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
+                                AppProps = #'v1_0.application_properties'{
+                                              content = [{{utf8, <<"my key">>}, {utf8, <<"my value">>}}]},
+                                Sect0 = iolist_to_binary(amqp10_framing:encode_bin(AppProps)),
+                                Sect1 = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
+                                Sect = <<Sect0/binary, Sect1/binary>>,
                                 <<Acc/binary, 0:1, (byte_size(Sect)):31, Sect/binary>>
                         end, <<>>, Bodies),
     Size = byte_size(Batch),

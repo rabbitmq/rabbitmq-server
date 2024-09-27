@@ -301,7 +301,7 @@ message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
 
 -spec property(atom(), state()) ->
-    {utf8, binary()} | undefined.
+    tagged_value().
 property(Property, #?MODULE{protocol = Proto,
                             data = Data}) ->
     Proto:property(Property, Data);

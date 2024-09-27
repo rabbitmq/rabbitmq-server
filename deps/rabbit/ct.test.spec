@@ -16,6 +16,7 @@
 ,   amqp_auth_SUITE
 ,   amqp_client_SUITE
 ,   amqp_credit_api_v2_SUITE
+,   amqp_filtex_SUITE
 ,   amqp_proxy_protocol_SUITE
 ,   amqp_system_SUITE
 ,   amqpl_consumer_ack_SUITE

@@ -543,6 +543,7 @@ rabbit:
 - rabbit_access_control
 - rabbit_alarm
 - rabbit_amqp1_0
+- rabbit_amqp_filtex
 - rabbit_amqp_management
 - rabbit_amqp_reader
 - rabbit_amqp_session
