@@ -2,7 +2,6 @@ name: Test
 on:
   push:
     branches:
-#    - main
     - v4.0.x
     - v3.13.x
     - v3.12.x
@@ -22,7 +21,6 @@ on:
     - '*.bzl'
     - '*.bazel'
     - .github/workflows/test.yaml
-#  pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -141,23 +139,6 @@ jobs:
     with:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: trust_store_http
-    secrets: inherit
-  test-rabbit-make:
-    needs:
-    - check-workflow
-    - test-amqp10_client
-    - test-amqp10_common
-    - test-amqp_client
-    - test-oauth2_client
-    - test-rabbit_common
-    - test-rabbitmq_ct_client_helpers
-    - test-rabbitmq_ct_helpers
-    - test-rabbitmq_stream_common
-    - test-trust_store_http
-    uses: ./.github/workflows/test-plugin-make.yaml
-    with:
-      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
-      plugin: rabbit
     secrets: inherit
   test-rabbit-0:
     needs:
