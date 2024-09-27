@@ -198,7 +198,7 @@ configure_all_oauth_provider_settings(Config) ->
         OAuthProvider#oauth_provider.end_session_endpoint),
     application:set_env(rabbitmq_auth_backend_oauth2, authorization_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint),
-    KeyConfig = [ { jwks_url, OAuthProvider#oauth_provider.jwks_uri } ] ++
+    KeyConfig = [ { jwks_uri, OAuthProvider#oauth_provider.jwks_uri } ] ++
         case OAuthProvider#oauth_provider.ssl_options of
             undefined ->
                 [];
@@ -474,7 +474,7 @@ verify_get_oauth_provider_returns_oauth_provider_from_key_config() ->
         oauth2_client:get_oauth_provider([issuer, token_endpoint, jwks_uri]),
     ExpectedIssuer = application:get_env(rabbitmq_auth_backend_oauth2, issuer, undefined),
     ExpectedTokenEndPoint = application:get_env(rabbitmq_auth_backend_oauth2, token_endpoint, undefined),
-    ExpectedJwks_uri = proplists:get_value(jwks_url,
+    ExpectedJwks_uri = proplists:get_value(jwks_uri,
         application:get_env(rabbitmq_auth_backend_oauth2, key_config, [])),
     ?assertEqual(root, Id),
     ?assertEqual(ExpectedIssuer, Issuer),

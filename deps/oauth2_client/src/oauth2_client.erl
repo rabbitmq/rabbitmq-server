@@ -218,7 +218,7 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
     List = get_env(key_config, []),
     ModifiedList = case OAuthProvider#oauth_provider.jwks_uri of
         undefined ->  List;
-        JwksEndPoint -> [{jwks_url, JwksEndPoint} | proplists:delete(jwks_url, List)]
+        JwksEndPoint -> [{jwks_uri, JwksEndPoint} | proplists:delete(jwks_uri, List)]
     end,
     set_env(key_config, ModifiedList),
     rabbit_log:debug("Updated oauth_provider details: ~p ", 
@@ -393,7 +393,7 @@ lookup_oauth_provider_from_keyconfig() ->
         id = root,
         issuer = Issuer,
         discovery_endpoint = DiscoverEndpoint,
-        jwks_uri = maps:get(jwks_url, Map, undefined), %% jwks_url not uri . _url is the legacy name
+        jwks_uri = maps:get(jwks_uri, Map, undefined),
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
@@ -437,7 +437,8 @@ extract_ssl_options_as_list(Map) ->
     ++
     case maps:get(hostname_verification, Map, none) of
         wildcard ->
-            [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]}];
+            [{customize_hostname_check, [{match_fun, 
+                public_key:pkix_verify_hostname_match_fun(https)}]}];
         none ->
             []
     end.
@@ -445,7 +446,8 @@ extract_ssl_options_as_list(Map) ->
 % Replace peer_verification with verify to make it more consistent with other
 % ssl_options in RabbitMQ and Erlang's ssl options
 % Eventually, peer_verification will be removed. For now, both are allowed
--spec get_verify_or_peer_verification(#{atom() => any()}, verify_none | verify_peer ) -> verify_none | verify_peer.
+-spec get_verify_or_peer_verification(#{atom() => 
+    any()}, verify_none | verify_peer ) -> verify_none | verify_peer.
 get_verify_or_peer_verification(Ssl_options, Default) ->
     case maps:get(verify, Ssl_options, undefined) of
         undefined ->
@@ -464,7 +466,8 @@ lookup_oauth_provider_config(OAuth2ProviderId) ->
                 undefined ->
                     {error, {oauth_provider_not_found, OAuth2ProviderId}};
                 OAuthProvider ->
-                    ensure_oauth_provider_has_id_property(OAuth2ProviderId, OAuthProvider)
+                    ensure_oauth_provider_has_id_property(OAuth2ProviderId, 
+                        OAuthProvider)
             end;
         _ ->  {error, invalid_oauth_provider_configuration}
     end.
@@ -535,8 +538,9 @@ get_timeout_of_default(Timeout) ->
 is_json(?CONTENT_JSON) -> true;
 is_json(_) -> false.
 
--spec decode_body(string(), string() | binary() | term()) -> 'false' | 'null' | 'true' |
-                                                              binary() | [any()] | number() | map() | {error, term()}.
+-spec decode_body(string(), string() | binary() | term()) -> 
+    'false' | 'null' | 'true' | binary() | [any()] | number() | map() | 
+    {error, term()}.
 
 decode_body(_, []) -> [];
 decode_body(?CONTENT_JSON, Body) ->
@@ -615,7 +619,8 @@ format_ssl_options(TlsOptions) ->
         [] -> 0;
         Certs -> length(Certs)
     end,
-    lists:flatten(io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, crl_check: ~p, depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
+    lists:flatten(io_lib:format("{verify: ~p, fail_if_no_peer_cert: ~p, " ++
+        "crl_check: ~p, depth: ~p, cacertfile: ~p, cacerts(count): ~p }", [
         proplists:get_value(verify, TlsOptions),
         proplists:get_value(fail_if_no_peer_cert, TlsOptions),
         proplists:get_value(crl_check, TlsOptions),
