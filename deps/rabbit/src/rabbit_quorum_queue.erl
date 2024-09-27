@@ -316,64 +316,27 @@ declare_queue_error(Error, Queue, Leader, ActingUser) ->
 ra_machine(Q) ->
     {module, rabbit_fifo, ra_machine_config(Q)}.
 
-gather_policy_config(Q) ->
+gather_policy_config(Q, ShouldLog) ->
+    QName = amqqueue:get_name(Q),
     %% take the minimum value of the policy and the queue arg if present
     MaxLength = args_policy_lookup(<<"max-length">>, fun min/2, Q),
-    Overflow = args_policy_lookup(<<"overflow">>, fun policy_has_precedence/2, Q),
-    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
-    DeliveryLimit = args_policy_lookup(<<"delivery-limit">>,fun resolve_delivery_limit/2, Q),
-    Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
-    MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
-    DLExchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
-    DLRoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queue_arg_has_precedence/2, Q),
-    DLStrategy = args_policy_lookup(<<"dead-letter-strategy">>, fun queue_arg_has_precedence/2, Q),
-    #{
-      max_length => MaxLength,
-      overflow => Overflow,
-      max_bytes => MaxBytes,
-      delivery_limit => DeliveryLimit,
-      expires => Expires,
-      msg_ttl => MsgTTL,
-      dl_exchange => DLExchange,
-      dl_routing_key => DLRoutingKey,
-      dl_strategy => DLStrategy
-     }.
-
-ra_machine_config(Q) when ?is_amqqueue(Q) ->
-    PolicyConfig = gather_policy_config(Q),
-    ra_machine_config(Q, PolicyConfig).
-
-ra_machine_config(Q, PolicyConfig) ->
-    ra_machine_config(Q, PolicyConfig, true).
-
-ra_machine_config(Q, PolicyConfig, ShouldLog) when ?is_amqqueue(Q) ->
-    #{
-      max_length := MaxLength,
-      overflow := OverflowBin,
-      max_bytes := MaxBytes,
-      delivery_limit := DeliveryLimit0,
-      expires := Expires,
-      msg_ttl := MsgTTL,
-      dl_exchange := DLExchange,
-      dl_routing_key := DLRoutingKey,
-      dl_strategy := DLStrategy
-    } = PolicyConfig,
-    QName = amqqueue:get_name(Q),
-    {Name, _} = amqqueue:get_pid(Q),
+    OverflowBin = args_policy_lookup(<<"overflow">>, fun policy_has_precedence/2, Q),
     Overflow = overflow(OverflowBin, drop_head, QName, ShouldLog),
-    DeliveryLimit = case DeliveryLimit0 of
+    MaxBytes = args_policy_lookup(<<"max-length-bytes">>, fun min/2, Q),
+    DeliveryLimit = case args_policy_lookup(<<"delivery-limit">>,
+                                            fun resolve_delivery_limit/2, Q) of
                         undefined ->
-                            maybe_log(ShouldLog, info,"~ts: delivery_limit not set, defaulting to ~b",
-                                             [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]),
+                            maybe_log(ShouldLog, info,
+                                      "~ts: delivery_limit not set, defaulting to ~b",
+                                      [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]),
                             ?DEFAULT_DELIVERY_LIMIT;
                         DL ->
                             DL
                     end,
-    DeadLetterHandler = dead_letter_handler(DLExchange, DLRoutingKey, DLStrategy, QName, Overflow, ShouldLog),
-    #{name => Name,
-      queue_resource => QName,
-      dead_letter_handler => DeadLetterHandler,
-      become_leader_handler => {?MODULE, become_leader, [QName]},
+    Expires = args_policy_lookup(<<"expires">>, fun min/2, Q),
+    MsgTTL = args_policy_lookup(<<"message-ttl">>, fun min/2, Q),
+    DeadLetterHandler = dead_letter_handler(Q, Overflow, ShouldLog),
+    #{dead_letter_handler => DeadLetterHandler,
       max_length => MaxLength,
       max_bytes => MaxBytes,
       single_active_consumer_on => single_active_consumer_on(Q),
@@ -382,6 +345,18 @@ ra_machine_config(Q, PolicyConfig, ShouldLog) when ?is_amqqueue(Q) ->
       created => erlang:system_time(millisecond),
       expires => Expires,
       msg_ttl => MsgTTL
+     }.
+
+ra_machine_config(Q) when ?is_amqqueue(Q) ->
+    PolicyConfig = gather_policy_config(Q, _ShouldLog = true),
+    QName = amqqueue:get_name(Q),
+    {Name, _} = amqqueue:get_pid(Q),
+    PolicyConfig#{
+      name => Name,
+      queue_resource => QName,
+      become_leader_handler => {?MODULE, become_leader, [QName]},
+      single_active_consumer_on => single_active_consumer_on(Q),
+      created => erlang:system_time(millisecond)
      }.
 
 resolve_delivery_limit(PolVal, ArgVal)
@@ -745,20 +720,15 @@ system_recover(quorum_queues) ->
             ok
     end.
 
-maybe_apply_policies(Q, Overview) ->
-    PolicyConfig = gather_policy_config(Q),
-    RelevantKeys = [dead_letter_handler, max_length, max_bytes, delivery_limit,
-                    overflow_strategy, expires, msg_ttl],
+maybe_apply_policies(Q, #{config := CurrentConfig}) ->
+    NewPolicyConfig = gather_policy_config(Q, _ShoudLog = false),
 
-    NewConfig = ra_machine_config(Q, PolicyConfig, false),
-    RelevantNewConfig = maps:with(RelevantKeys, NewConfig),
-    
-    CurrentConfig = maps:get(config, Overview),
-    RelevantCurrentConfig = maps:with(RelevantKeys, CurrentConfig),
-    
-    ShouldUpdate = RelevantNewConfig =/= RelevantCurrentConfig,
+    RelevantKeys = maps:keys(NewPolicyConfig),
+    CurrentPolicyConfig = maps:with(RelevantKeys, CurrentConfig),
+
+    ShouldUpdate = NewPolicyConfig =/= CurrentPolicyConfig,
     case ShouldUpdate of
-        true -> 
+        true ->
             rabbit_log:debug("Re-applying policies to ~p", [amqqueue:get_name(Q)]),
             policy_changed(Q),
             ok;
@@ -1587,35 +1557,35 @@ reclaim_memory(Vhost, QueueName) ->
     ra_log_wal:force_roll_over({?RA_WAL_NAME, Node}).
 
 %%----------------------------------------------------------------------------
-dead_letter_handler(
-  _Exchange = undefined, 
-  _RoutingKey = undefined, 
-  _Strategy = undefined, 
-  _QName, 
-  _Overflow, 
-  _ShouldLog
-) ->
+dead_letter_handler(Q, Overflow, ShouldLog) ->
+    Exchange = args_policy_lookup(<<"dead-letter-exchange">>, fun queue_arg_has_precedence/2, Q),
+    RoutingKey = args_policy_lookup(<<"dead-letter-routing-key">>, fun queue_arg_has_precedence/2, Q),
+    Strategy = args_policy_lookup(<<"dead-letter-strategy">>, fun queue_arg_has_precedence/2, Q),
+    QName = amqqueue:get_name(Q),
+    dlh(Exchange, RoutingKey, Strategy, Overflow, QName, ShouldLog).
+
+dlh(undefined, undefined, undefined, _, _, _) ->
     undefined;
-dead_letter_handler(undefined, RoutingKey, undefined, _, QName, ShouldLog) ->
+dlh(undefined, RoutingKey, undefined, _, QName, ShouldLog) ->
     maybe_log(ShouldLog, warning, "Disabling dead-lettering for ~ts despite configured dead-letter-routing-key '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), RoutingKey]),
     undefined;
-dead_letter_handler(undefined, _, Strategy, _, QName, ShouldLog) ->
+dlh(undefined, _, Strategy, _, QName, ShouldLog) ->
     maybe_log(ShouldLog, warning, "Disabling dead-lettering for ~ts despite configured dead-letter-strategy '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
-dead_letter_handler(_, _, <<"at-least-once">>, reject_publish, _, _) ->
+dlh(_, _, <<"at-least-once">>, reject_publish, _, _) ->
     at_least_once;
-dead_letter_handler(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName, ShouldLog) ->
+dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName, ShouldLog) ->
     maybe_log(ShouldLog, warning, "Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
                        "effective overflow strategy drop-head. To enable dead-letter-strategy "
                        "at-least-once, set overflow strategy to reject-publish.",
                        [rabbit_misc:rs(QName)]),
     dlh_at_most_once(Exchange, RoutingKey, QName);
-dead_letter_handler(Exchange, RoutingKey, _, _, QName, _) ->
+dlh(Exchange, RoutingKey, _, _, QName, _) ->
     dlh_at_most_once(Exchange, RoutingKey, QName).
 
 dlh_at_most_once(Exchange, RoutingKey, QName) ->
