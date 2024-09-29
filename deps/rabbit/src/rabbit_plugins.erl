@@ -265,7 +265,7 @@ prepare_plugins(Enabled) ->
                                       [ExpandDir, E2]}})
     end,
     [prepare_plugin(Plugin, ExpandDir) || Plugin <- ValidPlugins],
-    Wanted.
+    [P#plugin.name || P <- ValidPlugins].
 
 maybe_warn_about_invalid_plugins([]) ->
     ok;
