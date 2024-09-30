@@ -100,7 +100,14 @@ amqpl_compat(_Config) ->
 
     XName= <<"exch">>,
     RoutingKey = <<"apple">>,
-    {ok, Msg} = rabbit_basic:message_no_id(XName, RoutingKey, Content),
+    {ok, Msg00} = rabbit_basic:message_no_id(XName, RoutingKey, Content),
+
+    %% Quorum queues set the AMQP 1.0 specific annotation delivery_count.
+    %% This should be a no-op for mc_compat.
+    Msg0 = mc:set_annotation(delivery_count, 1, Msg00),
+    %% However, annotation x-delivery-count has a meaning for mc_compat messages.
+    Msg = mc:set_annotation(<<"x-delivery-count">>, 2, Msg0),
+    ?assertEqual({long, 2}, mc:x_header(<<"x-delivery-count">>, Msg)),
 
     ?assertEqual(98, mc:priority(Msg)),
     ?assertEqual(false, mc:is_persistent(Msg)),
