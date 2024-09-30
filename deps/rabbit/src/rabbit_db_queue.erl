@@ -425,15 +425,9 @@ delete_in_khepri(QueueName, OnlyDurable) ->
 khepri_deletion_sproc() ->
     fun(QueueName, OnlyDurable) ->
         Path = khepri_queue_path(QueueName),
-        case khepri_tx_adv:delete(Path) of
-            {ok, #{data := _}} ->
-                %% we want to execute some things, as decided by rabbit_exchange,
-                %% after the transaction.
-                rabbit_db_binding:delete_for_destination_in_khepri(
-                  QueueName, OnlyDurable);
-            {ok, _} ->
-                ok
-        end
+        Options = #{accumulate_keep_while_expirations => true},
+        {ok, Props} = khepri_tx_adv:delete_many(Path, Options),
+        rabbit_db_binding:handle_deletions_in_khepri(Props, OnlyDurable)
     end.
 
 %% -------------------------------------------------------------------
