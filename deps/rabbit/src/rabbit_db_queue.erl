@@ -407,12 +407,9 @@ delete_in_mnesia(QueueName, Reason) ->
       end).
 
 delete_in_khepri(QueueName) ->
-    delete_in_khepri(QueueName, false).
-
-delete_in_khepri(QueueName, OnlyDurable) ->
     Result = khepri:transaction(
                rabbitmq_metadata,
-               ?KHEPRI_DELETION_SPROC_PATH, [QueueName, OnlyDurable], rw, #{}),
+               ?KHEPRI_DELETION_SPROC_PATH, [QueueName], rw, #{}),
     case Result of
         ok ->
             ok;
@@ -423,11 +420,11 @@ delete_in_khepri(QueueName, OnlyDurable) ->
     end.
 
 khepri_deletion_sproc() ->
-    fun(QueueName, OnlyDurable) ->
+    fun(QueueName) ->
         Path = khepri_queue_path(QueueName),
         Options = #{accumulate_keep_while_expirations => true},
         {ok, Props} = khepri_tx_adv:delete_many(Path, Options),
-        rabbit_db_binding:handle_deletions_in_khepri(Props, OnlyDurable)
+        rabbit_db_binding:handle_deletions_in_khepri(Props)
     end.
 
 %% -------------------------------------------------------------------
@@ -446,7 +443,7 @@ internal_delete(QueueName, OnlyDurable, Reason) ->
     %% HA queues are removed it can be removed.
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName, OnlyDurable) end
+        khepri => fun() -> delete_in_khepri(QueueName) end
        }).
 
 internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
@@ -1084,7 +1081,7 @@ do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
                               case khepri_tx_adv:delete(Path) of
                                   {ok, #{data := _}} ->
                                       Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
-                                                    QName, false),
+                                                    QName),
                                       {ok, [{QName, Deletions} | Acc]};
                                   {ok, _} ->
                                       {ok, Acc};

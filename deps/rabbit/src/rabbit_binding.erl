@@ -14,7 +14,8 @@
          list_for_source_and_destination/2, list_for_source_and_destination/3,
          list_explicit/0]).
 -export([new_deletions/0, combine_deletions/2, add_deletion/3,
-         process_deletions/1, notify_deletions/2, group_bindings_fold/3]).
+         process_deletions/1, notify_deletions/2,
+         group_bindings_fold/2, group_bindings_fold/3]).
 -export([info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4]).
 
 -export([reverse_binding/1]).
@@ -294,6 +295,16 @@ durable(Q) when ?is_amqqueue(Q) ->
 sort_args(#binding{args = Arguments} = Binding) ->
     SortedArgs = rabbit_misc:sort_field_table(Arguments),
     Binding#binding{args = SortedArgs}.
+
+group_bindings_fold(Fun, Bindings) when is_function(Fun, 3) ->
+    %% This `group_bindings_fold/2' clause was introduced to eliminate the
+    %% `OnlyDurable' parameter since Khepri doesn't care about that value.
+    %% Once Mnesia has been removed the main `group_bindings_fold/3` can be
+    %% refactored to drop the parameter altogether.
+    Fun1 = fun(SrcName, Bindings1, Acc, _OnlyDurable) ->
+                   Fun(SrcName, Bindings1, Acc)
+           end,
+    group_bindings_fold(Fun1, Bindings, false).
 
 %% Requires that its input binding list is sorted in exchange-name
 %% order, so that the grouping of bindings (for passing to

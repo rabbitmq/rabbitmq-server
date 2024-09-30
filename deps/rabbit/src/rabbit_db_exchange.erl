@@ -35,11 +35,11 @@
 
 %% Used by other rabbit_db_* modules
 -export([
-         maybe_auto_delete_in_khepri/2,
+         maybe_auto_delete_in_khepri/1,
          maybe_auto_delete_in_mnesia/2,
          next_serial_in_mnesia_tx/1,
          next_serial_in_khepri_tx/1,
-         delete_in_khepri/3,
+         delete_in_khepri2/2,
          delete_in_mnesia/3,
          get_in_khepri_tx/1,
          update_in_mnesia_tx/2,
@@ -634,29 +634,29 @@ delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSour
 
 delete_in_khepri(XName, IfUnused) ->
     DeletionFun = case IfUnused of
-                      true  -> fun conditional_delete_in_khepri/2;
-                      false -> fun unconditional_delete_in_khepri/2
+                      true  -> fun conditional_delete_in_khepri/1;
+                      false -> fun unconditional_delete_in_khepri/1
                   end,
     rabbit_khepri:transaction(
       fun() ->
               case khepri_tx:get(khepri_exchange_path(XName)) of
-                  {ok, X} -> DeletionFun(X, false);
+                  {ok, X} -> DeletionFun(X);
                   _ -> {error, not_found}
               end
       end, rw).
 
-conditional_delete_in_khepri(X = #exchange{name = XName}, OnlyDurable) ->
+conditional_delete_in_khepri(X = #exchange{name = XName}) ->
     case rabbit_db_binding:has_for_source_in_khepri(XName) of
-        false  -> delete_in_khepri(X, OnlyDurable, false);
+        false  -> delete_in_khepri2(X, false);
         true   -> {error, in_use}
     end.
 
-unconditional_delete_in_khepri(X, OnlyDurable) ->
-    delete_in_khepri(X, OnlyDurable, true).
+unconditional_delete_in_khepri(X) ->
+    delete_in_khepri2(X, true).
 
-delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
+delete_in_khepri2(X = #exchange{name = XName}, RemoveBindingsForSource) ->
     ok = khepri_tx:delete(khepri_exchange_path(XName)),
-    rabbit_db_binding:delete_all_for_exchange_in_khepri(X, OnlyDurable, RemoveBindingsForSource).
+    rabbit_db_binding:delete_all_for_exchange_in_khepri(X, RemoveBindingsForSource).
 
 %% -------------------------------------------------------------------
 %% delete_all().
@@ -714,7 +714,7 @@ delete_all_in_khepri_tx(VHostName) ->
       fun(_Path, #{data := X}, Deletions) ->
               {deleted, #exchange{name = XName}, Bindings, XDeletions} =
                 rabbit_db_binding:delete_all_for_exchange_in_khepri(
-                  X, false, true),
+                  X, true),
               Deletions1 = rabbit_binding:add_deletion(
                              XName, {X, deleted, Bindings}, XDeletions),
               rabbit_binding:combine_deletions(Deletions, Deletions1)
@@ -933,19 +933,19 @@ maybe_auto_delete_in_mnesia(XName, OnlyDurable) ->
 %% maybe_auto_delete_in_khepri().
 %% -------------------------------------------------------------------
 
--spec maybe_auto_delete_in_khepri(ExchangeName, boolean()) -> Ret when
+-spec maybe_auto_delete_in_khepri(ExchangeName) -> Ret when
       ExchangeName :: rabbit_exchange:name(),
       Exchange :: rabbit_types:exchange(),
       Deletions :: rabbit_binding:deletions(),
       Ret ::  {'not_deleted', 'undefined' | Exchange} |
               {'deleted', Exchange, Deletions}.
 
-maybe_auto_delete_in_khepri(XName, OnlyDurable) ->
+maybe_auto_delete_in_khepri(XName) ->
     case khepri_tx:get(khepri_exchange_path(XName)) of
         {ok, #exchange{auto_delete = false} = X} ->
             {not_deleted, X};
         {ok, #exchange{auto_delete = true} = X} ->
-            case conditional_delete_in_khepri(X, OnlyDurable) of
+            case conditional_delete_in_khepri(X) of
                 {error, in_use}             -> {not_deleted, X};
                 {deleted, X, [], Deletions} -> {deleted, X, Deletions}
             end;

@@ -26,10 +26,10 @@
 %% Exported to be used by various rabbit_db_* modules
 -export([
          delete_for_destination_in_mnesia/2,
-         delete_for_destination_in_khepri/2,
-         handle_deletions_in_khepri/2,
+         delete_for_destination_in_khepri/1,
+         handle_deletions_in_khepri/1,
          delete_all_for_exchange_in_mnesia/3,
-         delete_all_for_exchange_in_khepri/3,
+         delete_all_for_exchange_in_khepri/2,
          delete_transient_for_destination_in_mnesia/1,
          has_for_source_in_mnesia/1,
          has_for_source_in_khepri/1,
@@ -346,7 +346,7 @@ delete_in_khepri(#binding{source = SrcName,
                                    case ChecksFun(Src, Dst) of
                                        ok ->
                                            ok = delete_in_khepri(Binding),
-                                           maybe_auto_delete_exchange_in_khepri(Binding#binding.source, [Binding], rabbit_binding:new_deletions(), false);
+                                           maybe_auto_delete_exchange_in_khepri(Binding#binding.source, [Binding], rabbit_binding:new_deletions());
                                        {error, _} = Err ->
                                            Err
                                    end
@@ -387,9 +387,9 @@ delete_in_khepri(Binding) ->
             ok
     end.
 
-maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions, OnlyDurable) ->
+maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions) ->
     {Entry, Deletions1} =
-        case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName, OnlyDurable) of
+        case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName) of
             {not_deleted, X} ->
                 {{X, not_deleted, Bindings}, Deletions};
             {deleted, X, Deletions2} ->
@@ -822,20 +822,19 @@ delete_for_source_in_mnesia(SrcName, ShouldIndexTable) ->
 %% delete_all_for_exchange_in_khepri().
 %% -------------------------------------------------------------------
 
--spec delete_all_for_exchange_in_khepri(Exchange, OnlyDurable, RemoveBindingsForSource)
+-spec delete_all_for_exchange_in_khepri(Exchange, RemoveBindingsForSource)
                                        -> Ret when
       Exchange :: rabbit_types:exchange(),
-      OnlyDurable :: boolean(),
       RemoveBindingsForSource :: boolean(),
       Binding :: rabbit_types:binding(),
       Ret :: {deleted, Exchange, [Binding], rabbit_binding:deletions()}.
 
-delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
+delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, RemoveBindingsForSource) ->
     Bindings = case RemoveBindingsForSource of
                    true  -> delete_for_source_in_khepri(XName);
                    false -> []
                end,
-    {deleted, X, Bindings, delete_for_destination_in_khepri(XName, OnlyDurable)}.
+    {deleted, X, Bindings, delete_for_destination_in_khepri(XName)}.
 
 delete_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
     Path = khepri_route_path(
@@ -884,12 +883,11 @@ delete_for_destination_in_mnesia(DstName, OnlyDurable, Fun) ->
 %% delete_for_destination_in_khepri().
 %% -------------------------------------------------------------------
 
--spec delete_for_destination_in_khepri(Dst, OnlyDurable) -> Deletions when
+-spec delete_for_destination_in_khepri(Dst) -> Deletions when
       Dst :: rabbit_types:binding_destination(),
-      OnlyDurable :: boolean(),
       Deletions :: rabbit_binding:deletions().
 
-delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}, OnlyDurable) ->
+delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}) ->
     Pattern = khepri_route_path(
                 VHost,
                 _SrcName = ?KHEPRI_WILDCARD_STAR,
@@ -900,10 +898,10 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
     Bindings = maps:fold(fun(_, #{data := Set}, Acc) ->
                                  sets:to_list(Set) ++ Acc
                          end, [], BindingsMap),
-    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
-                                       lists:keysort(#binding.source, Bindings), OnlyDurable).
+    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/3,
+                                       lists:keysort(#binding.source, Bindings)).
 
-handle_deletions_in_khepri(NodeProps, OnlyDurable) ->
+handle_deletions_in_khepri(NodeProps) ->
     Bindings = maps:fold(
                  fun ([rabbitmq,
                        vhosts, _VHost,
@@ -914,8 +912,8 @@ handle_deletions_in_khepri(NodeProps, OnlyDurable) ->
                      (_Path, _Props, Acc) ->
                          Acc
                  end, [], NodeProps),
-    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
-                                       lists:keysort(#binding.source, Bindings), OnlyDurable).
+    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/3,
+                                       lists:keysort(#binding.source, Bindings)).
 
 
 %% -------------------------------------------------------------------
