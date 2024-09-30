@@ -142,6 +142,7 @@ force_delete_if_no_consensus(Config) ->
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(BCh2, #'queue.delete'{queue = QName})),
     ok = rabbit_ct_broker_helpers:restart_node(Config, C),
+    ct:pal("ok"), %% force re-test bazel
     ok.
 
 takeover_on_failure(Config) ->
