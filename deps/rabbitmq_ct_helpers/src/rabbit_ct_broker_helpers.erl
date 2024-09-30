@@ -1134,7 +1134,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
     ],
     Cmd = ["stop-node" | MakeVars],
-    {ok, _} = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
             rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         RunCmd ->
