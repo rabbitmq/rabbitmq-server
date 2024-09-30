@@ -65,7 +65,8 @@
 ]}.
 
 {define, 'Set4', [
-    peer_discovery_dns_SUITE
+    msg_size_metrics_SUITE
+,   peer_discovery_dns_SUITE
 ,   peer_discovery_tmp_hidden_node_SUITE
 ,   per_node_limit_SUITE
 ,   per_user_connection_channel_limit_SUITE
@@ -80,6 +81,7 @@
 ,   product_info_SUITE
 ,   proxy_protocol_SUITE
 ,   publisher_confirms_parallel_SUITE
+,   unit_msg_size_metrics_SUITE
 ]}.
 
 {define, 'Set5', [
