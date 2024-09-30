@@ -131,8 +131,8 @@ delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
-    ?assertMatch({#exchange{}, not_deleted, [#binding{}], none},
-                 dict:fetch(XName1, Deletions)),
+    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
     ?assertEqual(false, rabbit_db_binding:exists(Binding)),
     passed.
 
@@ -152,8 +152,8 @@ auto_delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
-    ?assertMatch({#exchange{}, deleted, [#binding{}], none},
-                 dict:fetch(XName1, Deletions)),
+    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
     ?assertEqual(false, rabbit_db_binding:exists(Binding)),
     passed.
 
