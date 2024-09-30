@@ -24,6 +24,8 @@
 -export([put_vhost/6]).
 -export([default_queue_type/1, default_queue_type/2]).
 
+-define(WORK_POOL, vhost_deletion_work_pool).
+
 %%
 %% API
 %%
@@ -294,10 +296,14 @@ delete(VHost, ActingUser) ->
     ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(VHost, ActingUser),
     rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [VHost]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
-    [begin
-         Name = amqqueue:get_name(Q),
-         assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
-     end || Q <- rabbit_amqqueue:list(VHost)],
+    PoolSize = 512,
+    rabbit_sup:start_supervisor_child(vhost_deletion_pool_sup, worker_pool_sup, [PoolSize, ?WORK_POOL]),
+    do_concurrent_for_all(
+      rabbit_amqqueue:list(VHost),
+      fun(Q) ->
+              Name = amqqueue:get_name(Q),
+              assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
+      end),
     rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
     ok = rabbit_exchange:delete_all(VHost, ActingUser),
     rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
@@ -318,6 +324,33 @@ delete(VHost, ActingUser) ->
     %% supervisors on all the nodes.
     rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
     Ret.
+
+do_concurrent_for_all(List, WorkPoolFun) ->
+    {ok, Gatherer} = gatherer:start_link(),
+    [begin
+         %% keys are expected to be atoms
+         ok = gatherer:fork(Gatherer),
+         worker_pool:submit_async(
+           ?WORK_POOL,
+           fun() ->
+                   _ = try
+                       WorkPoolFun(M)
+                   catch {error, E}     -> gatherer:in(Gatherer, {error, E});
+                         _:E:Stacktrace ->
+                             rabbit_log:debug("Definition import: a work pool operation has thrown an exception ~st, stacktrace: ~p",
+                                              [E, Stacktrace]),
+                             gatherer:in(Gatherer, {error, E})
+                   end,
+                   gatherer:finish(Gatherer)
+           end)
+     end || M <- List],
+    case gatherer:out(Gatherer) of
+        empty ->
+            ok = gatherer:stop(Gatherer);
+        {value, {error, E}} ->
+            ok = gatherer:stop(Gatherer),
+            throw({error, E})
+    end.
 
 -spec put_vhost(vhost:name(),
     binary(),
