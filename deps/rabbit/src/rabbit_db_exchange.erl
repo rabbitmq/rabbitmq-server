@@ -573,7 +573,7 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       IfUnused :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {deleted, Exchange, [Binding], Deletions} |
              {error, not_found} |
              {error, in_use} |
@@ -624,7 +624,7 @@ unconditional_delete_in_mnesia(X, OnlyDurable) ->
       RemoveBindingsForSource :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
 delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = mnesia:delete({?MNESIA_TABLE, XName}),
@@ -695,7 +695,7 @@ delete_all_in_mnesia_tx(VHostName) ->
               {deleted, #exchange{name = XName}, Bindings, XDeletions} =
               unconditional_delete_in_mnesia( X, false),
               XDeletions1 = rabbit_binding:add_deletion(
-                              XName, {X, deleted, Bindings}, XDeletions),
+                              XName, X, deleted, Bindings, XDeletions),
               rabbit_binding:combine_deletions(Acc, XDeletions1)
       end, rabbit_binding:new_deletions(), Xs),
     {ok, Deletions}.
@@ -716,7 +716,7 @@ delete_all_in_khepri_tx(VHostName) ->
                 rabbit_db_binding:delete_all_for_exchange_in_khepri(
                   X, false, true),
               Deletions1 = rabbit_binding:add_deletion(
-                             XName, {X, deleted, Bindings}, XDeletions),
+                             XName, X, deleted, Bindings, XDeletions),
               rabbit_binding:combine_deletions(Deletions, Deletions1)
       end, rabbit_binding:new_deletions(), NodeProps),
     {ok, Deletions}.

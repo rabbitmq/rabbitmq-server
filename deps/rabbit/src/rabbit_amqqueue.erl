@@ -1818,8 +1818,8 @@ internal_delete(Queue, ActingUser, Reason) ->
         {error, timeout} = Err ->
             Err;
         Deletions ->
-            _ = rabbit_binding:process_deletions(Deletions),
-            rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER),
+            ok = rabbit_binding:process_deletions(Deletions),
+            ok = rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER),
             rabbit_core_metrics:queue_deleted(QueueName),
             ok = rabbit_event:notify(queue_deleted,
                                      [{name, QueueName},
@@ -1942,14 +1942,14 @@ filter_transient_queues_to_delete(Node) ->
     end.
 
 notify_queue_binding_deletions(QueueDeletions) when is_list(QueueDeletions) ->
-    Deletions = rabbit_binding:process_deletions(
-                  lists:foldl(fun rabbit_binding:combine_deletions/2,
-                              rabbit_binding:new_deletions(),
-                              QueueDeletions)),
+    Deletions = lists:foldl(
+                  fun rabbit_binding:combine_deletions/2,
+                  rabbit_binding:new_deletions(), QueueDeletions),
+    ok = rabbit_binding:process_deletions(Deletions),
     rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER);
 notify_queue_binding_deletions(QueueDeletions) ->
-    Deletions = rabbit_binding:process_deletions(QueueDeletions),
-    rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER).
+    ok = rabbit_binding:process_deletions(QueueDeletions),
+    rabbit_binding:notify_deletions(QueueDeletions, ?INTERNAL_USER).
 
 notify_transient_queues_deleted(QueueDeletions) ->
     lists:foreach(
