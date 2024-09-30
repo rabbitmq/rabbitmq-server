@@ -141,6 +141,7 @@
          delete/1, delete/2,
          delete_or_fail/1,
          adv_delete_many/1,
+         adv_delete_many/2,
 
          transaction/1,
          transaction/2,
@@ -1044,6 +1045,10 @@ delete_or_fail(Path) ->
 
 adv_delete_many(Path) ->
     khepri_adv:delete_many(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS).
+
+adv_delete_many(Path, Options0) ->
+    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
+    khepri_adv:delete_many(?STORE_ID, Path, Options).
 
 put(PathPattern, Data) ->
     khepri:put(
