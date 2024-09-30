@@ -573,7 +573,7 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       IfUnused :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {deleted, Exchange, [Binding], Deletions} |
              {error, not_found} |
              {error, in_use} |
@@ -624,7 +624,7 @@ unconditional_delete_in_mnesia(X, OnlyDurable) ->
       RemoveBindingsForSource :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
 delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = mnesia:delete({?MNESIA_TABLE, XName}),

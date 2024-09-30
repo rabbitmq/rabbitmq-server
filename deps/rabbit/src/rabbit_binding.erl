@@ -51,9 +51,11 @@
                    rabbit_types:ok_or_error(rabbit_types:amqp_error())).
 -type bindings() :: [rabbit_types:binding()].
 
-%% TODO this should really be opaque but that seems to confuse 17.1's
-%% dialyzer into objecting to everything that uses it.
--type deletions() :: dict:dict().
+-type deletion() :: {Exchange :: rabbit_types:exchange(),
+                     WasDeleted :: 'deleted' | 'not_deleted',
+                     Bindings :: bindings()}.
+
+-opaque deletions() :: #{XName :: rabbit_exchange:name() => deletion()}.
 
 %%----------------------------------------------------------------------------
 
@@ -159,6 +161,19 @@ binding_type0(false, true) ->
     semi_durable;
 binding_type0(_, _) ->
     transient.
+
+binding_checks(Binding, InnerFun) ->
+    fun(Src, Dst) ->
+            case rabbit_exchange:validate_binding(Src, Binding) of
+                ok ->
+                    %% this argument is used to check queue exclusivity;
+                    %% in general, we want to fail on that in preference to
+                    %% anything else
+                    InnerFun(Src, Dst);
+                Err ->
+                    Err
+            end
+    end.
 
 -spec remove(rabbit_types:binding(), rabbit_types:username()) -> bind_res().
 remove(Binding, ActingUser) -> remove(Binding, fun (_Src, _Dst) -> ok end, ActingUser).
@@ -371,57 +386,80 @@ index_route(#route{binding = #binding{source = Source,
 %% ----------------------------------------------------------------------------
 %% Binding / exchange deletion abstraction API
 %% ----------------------------------------------------------------------------
-
-anything_but( NotThis, NotThis, NotThis) -> NotThis;
-anything_but( NotThis, NotThis,    This) -> This;
-anything_but( NotThis,    This, NotThis) -> This;
-anything_but(_NotThis,    This,    This) -> This.
+%%
+%% `deletions()' describe the deletion from the metadata store of bindings
+%% and/or exchanges.
+%%
+%% These deletion records are used for two purposes:
+%%
+%% <ul>
+%% <li>"<em>Processing</em>" of deletions. Processing here means that the
+%% exchanges and bindings are passed into the {@link rabbit_exchange}
+%% callbacks. When an exchange is deleted the `rabbit_exchange:delete/1'
+%% callback is invoked and when the exchange is not deleted but some bindings
+%% are deleted the `rabbit_exchange:remove_bindings/2' is invoked.</li>
+%% <li><em>Notification</em> of metadata deletion. Like other internal
+%% notifications, {@link rabbit_binding:notify_deletions()} uses {@link
+%% rabbit_event} to notify any interested consumers of a resource deletion.
+%% An example consumer of {@link rabbit_event} is the `rabbitmq_event_exchange'
+%% plugin which routes these notifications as messages.</li>
+%% </ul>
+%%
+%% The point of a specialized opaque type for this term is to be able to
+%% collect all bindings deleted in one action into a list. This allows us to
+%% invoke the `rabbit_exchange:remove_bindings/2' callback with all bindings
+%% at once rather than passing each binding individually.
 
 -spec new_deletions() -> deletions().
 
-new_deletions() -> dict:new().
+new_deletions() -> #{}.
 
--spec add_deletion
-        (rabbit_exchange:name(),
-         {'undefined' | rabbit_types:exchange(),
-          'deleted' | 'not_deleted',
-          bindings()},
-         deletions()) ->
-            deletions().
+-spec add_deletion(XName, Deletion, Deletions) -> Deletions1 when
+      XName :: rabbit_exchange:name(),
+      Deletion :: deletion(),
+      Deletions :: deletions(),
+      Deletions1 :: deletions().
 
-add_deletion(XName, Entry, Deletions) ->
-    dict:update(XName, fun (Entry1) -> merge_entry(Entry1, Entry) end,
-                Entry, Deletions).
+add_deletion(XName, Deletion, Deletions) ->
+    maps:update_with(
+      XName,
+      fun(Deletion1) ->
+              merge_entry(Deletion1, Deletion)
+      end, Deletion, Deletions).
 
 -spec combine_deletions(deletions(), deletions()) -> deletions().
 
 combine_deletions(Deletions1, Deletions2) ->
-    dict:merge(fun (_XName, Entry1, Entry2) -> merge_entry(Entry1, Entry2) end,
-               Deletions1, Deletions2).
+    maps:merge_with(
+      fun (_XName, Entry1, Entry2) ->
+              merge_entry(Entry1, Entry2)
+      end, Deletions1, Deletions2).
 
-merge_entry({X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
-    {anything_but(undefined, X1, X2),
-     anything_but(not_deleted, Deleted1, Deleted2),
-     Bindings1 ++ Bindings2};
-merge_entry({X1, Deleted1, Bindings1, none}, {X2, Deleted2, Bindings2, none}) ->
-    {anything_but(undefined, X1, X2),
-     anything_but(not_deleted, Deleted1, Deleted2),
-     Bindings1 ++ Bindings2, none}.
+merge_entry({_X1, Deleted1, Bindings1}, {X2, Deleted2, Bindings2}) ->
+    %% Assume that X2 is more up to date than X1.
+    X = X2,
+    Deleted = case {Deleted1, Deleted2} of
+                  {deleted, _} ->
+                      deleted;
+                  {_, deleted} ->
+                      deleted;
+                  {not_deleted, not_deleted} ->
+                      not_deleted
+              end,
+    {X, Deleted, Bindings1 ++ Bindings2}.
 
-notify_deletions({error, not_found}, _) ->
-    ok;
+-spec notify_deletions(Deletions, ActingUser) -> ok when
+      Deletions :: rabbit_binding:deletions(),
+      ActingUser :: rabbit_types:username().
+
 notify_deletions(Deletions, ActingUser) ->
-    dict:fold(fun (XName, {_X, deleted, Bs, _}, ok) ->
-                      notify_exchange_deletion(XName, ActingUser),
-                      notify_bindings_deletion(Bs, ActingUser);
-                  (_XName, {_X, not_deleted, Bs, _}, ok) ->
-                      notify_bindings_deletion(Bs, ActingUser);
-                  (XName, {_X, deleted, Bs}, ok) ->
-                      notify_exchange_deletion(XName, ActingUser),
-                      notify_bindings_deletion(Bs, ActingUser);
-                  (_XName, {_X, not_deleted, Bs}, ok) ->
-                      notify_bindings_deletion(Bs, ActingUser)
-              end, ok, Deletions).
+    maps:foreach(
+      fun (XName, {_X, deleted, Bs}) ->
+              notify_exchange_deletion(XName, ActingUser),
+              notify_bindings_deletion(Bs, ActingUser);
+          (_XName, {_X, not_deleted, Bs}) ->
+              notify_bindings_deletion(Bs, ActingUser)
+      end, Deletions).
 
 notify_exchange_deletion(XName, ActingUser) ->
     ok = rabbit_event:notify(
@@ -435,29 +473,13 @@ notify_bindings_deletion(Bs, ActingUser) ->
      || B <- Bs],
     ok.
 
--spec process_deletions(deletions()) -> deletions().
+-spec process_deletions(deletions()) -> ok.
 process_deletions(Deletions) ->
-    dict:map(fun (_XName, {X, deleted, Bindings}) ->
-                     Bs = lists:flatten(Bindings),
-                     Serial = rabbit_exchange:serial(X),
-                     rabbit_exchange:callback(X, delete, Serial, [X]),
-                     {X, deleted, Bs, none};
-                 (_XName, {X, not_deleted, Bindings}) ->
-                     Bs = lists:flatten(Bindings),
-                     Serial = rabbit_exchange:serial(X),
-                     rabbit_exchange:callback(X, remove_bindings, Serial, [X, Bs]),
-                     {X, not_deleted, Bs, none}
-             end, Deletions).
-
-binding_checks(Binding, InnerFun) ->
-    fun(Src, Dst) ->
-            case rabbit_exchange:validate_binding(Src, Binding) of
-                ok ->
-                    %% this argument is used to check queue exclusivity;
-                    %% in general, we want to fail on that in preference to
-                    %% anything else
-                    InnerFun(Src, Dst);
-                Err ->
-                    Err
-            end
-    end.
+    maps:foreach(
+      fun (_XName, {X, deleted, _Bs}) ->
+              Serial = rabbit_exchange:serial(X),
+              rabbit_exchange:callback(X, delete, Serial, [X]);
+          (_XName, {X, not_deleted, Bs}) ->
+              Serial = rabbit_exchange:serial(X),
+              rabbit_exchange:callback(X, remove_bindings, Serial, [X, Bs])
+      end, Deletions).

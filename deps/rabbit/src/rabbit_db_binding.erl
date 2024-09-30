@@ -311,7 +311,10 @@ delete_in_mnesia(Src, Dst, B) ->
                     should_index_table(Src), fun delete/3),
     Deletions0 = maybe_auto_delete_exchange_in_mnesia(
                    B#binding.source, [B], rabbit_binding:new_deletions(), false),
-    fun() -> {ok, rabbit_binding:process_deletions(Deletions0)} end.
+    fun() ->
+            ok = rabbit_binding:process_deletions(Deletions0),
+            {ok, Deletions0}
+    end.
 
 absent_errs_only_in_mnesia(Names) ->
     Errs = [E || Name <- Names,
@@ -361,7 +364,8 @@ delete_in_khepri(#binding{source = SrcName,
         {error, _} = Err ->
             Err;
         Deletions ->
-            {ok, rabbit_binding:process_deletions(Deletions)}
+            ok = rabbit_binding:process_deletions(Deletions),
+            {ok, Deletions}
     end.
 
 exists_in_khepri(Path, Binding) ->
@@ -388,15 +392,18 @@ delete_in_khepri(Binding) ->
     end.
 
 maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions) ->
-    {Entry, Deletions1} =
-        case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName) of
-            {not_deleted, X} ->
-                {{X, not_deleted, Bindings}, Deletions};
-            {deleted, X, Deletions2} ->
-                {{X, deleted, Bindings},
-                 rabbit_binding:combine_deletions(Deletions, Deletions2)}
-        end,
-    rabbit_binding:add_deletion(XName, Entry, Deletions1).
+    case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName) of
+        {not_deleted, undefined} ->
+            Deletions;
+        {not_deleted, X} ->
+            rabbit_binding:add_deletion(
+              XName, {X, not_deleted, Bindings}, Deletions);
+        {deleted, X, Deletions1} ->
+            Deletions2 = rabbit_binding:combine_deletions(
+                           Deletions, Deletions1),
+            rabbit_binding:add_deletion(
+              XName, {X, deleted, Bindings}, Deletions2)
+    end.
 
 %% -------------------------------------------------------------------
 %% get_all().
