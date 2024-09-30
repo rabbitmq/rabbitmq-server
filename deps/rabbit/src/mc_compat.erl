@@ -94,7 +94,11 @@ set_annotation(?ANN_TIMESTAMP, Millis,
                #basic_message{content = #content{properties = B} = C0} = Msg) ->
     C = C0#content{properties = B#'P_basic'{timestamp = Millis div 1000},
                    properties_bin = none},
-    Msg#basic_message{content = C}.
+    Msg#basic_message{content = C};
+set_annotation(delivery_count, _Value, #basic_message{} = Msg) ->
+    %% Ignore AMQP 1.0 specific delivery-count.
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/12398
+    Msg.
 
 is_persistent(#basic_message{content = Content}) ->
     get_property(durable, Content).
