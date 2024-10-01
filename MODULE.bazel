@@ -147,8 +147,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "csv",
     build_file = "@rabbitmq-server//bazel:BUILD.csv",
-    sha256 = "f5ee7299a55ff84fbe623d9aea7218b800d19ecccb2b3eac2bcb327d644365ea",
-    version = "3.2.0",
+    sha256 = "8f55a0524923ae49e97ff2642122a2ce7c61e159e7fe1184670b2ce847aee6c8",
+    version = "3.2.1",
 )
 
 erlang_package.hex_package(
@@ -161,8 +161,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "eetcd",
     build_file = "@rabbitmq-server//bazel:BUILD.eetcd",
-    sha256 = "66493bfd6698c1b6baa49679034c3def071ff329961ca1aa7b1dee061c2809af",
-    version = "0.3.6",
+    sha256 = "c35471e081753959b21eec5b3077d055929f49b66debef5a6eb95ad0a09c49ee",
+    version = "0.4.0",
 )
 
 erlang_package.hex_package(
@@ -189,8 +189,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "gun",
     build_file = "@rabbitmq-server//bazel:BUILD.gun",
-    sha256 = "3106ce167f9c9723f849e4fb54ea4a4d814e3996ae243a1c828b256e749041e0",
-    version = "1.3.3",
+    sha256 = "52fc7fc246bfc3b00e01aea1c2854c70a366348574ab50c57dfe796d24a0101d",
+    version = "2.1.0",
 )
 
 erlang_package.hex_package(
@@ -231,8 +231,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
-    sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
-    version = "1.0.0",
+    sha256 = "e38697edffd6e91bd12cea41b155115282630075c2a727e7a6b2947f5408b86a",
+    version = "1.2.1",
 )
 
 erlang_package.hex_package(
@@ -284,15 +284,15 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "recon",
     build_file = "@rabbitmq-server//bazel:BUILD.recon",
-    sha256 = "6c6683f46fd4a1dfd98404b9f78dcabc7fcd8826613a89dcb984727a8c3099d7",
-    version = "2.5.3",
+    sha256 = "96c6799792d735cc0f0fd0f86267e9d351e63339cbe03df9d162010cefc26bb0",
+    version = "2.5.6",
 )
 
 erlang_package.hex_package(
     name = "redbug",
     build_file = "@rabbitmq-server//bazel:BUILD.redbug",
-    sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
-    version = "2.0.7",
+    sha256 = "55d6d59697481ca4cc5ad54749aa6d78299aa8a8096027e7ae1f59db9dc94c78",
+    version = "2.1.0",
 )
 
 erlang_package.hex_package(
@@ -318,8 +318,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "systemd",
     build_file = "@rabbitmq-server//bazel:BUILD.systemd",
-    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
-    version = "0.6.1",
+    sha256 = "5062b911800c1ab05157c7bf9a9fbe23dd24c58891c87fd12d2e3ed8fc1708b8",
+    version = "0.6.2",
 )
 
 use_repo(
