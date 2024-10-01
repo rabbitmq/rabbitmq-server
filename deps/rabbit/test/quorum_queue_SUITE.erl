@@ -92,7 +92,15 @@ groups() ->
                                             leader_locator_policy,
                                             status,
                                             format,
+<<<<<<< HEAD
                                             add_member_2
+=======
+                                            add_member_2,
+                                            single_active_consumer_priority_take_over,
+                                            single_active_consumer_priority,
+                                            force_shrink_member_to_current_member,
+                                            force_all_queues_shrink_member_to_current_member
+>>>>>>> 2e37ac607d (QQ tests for force-shrink to current member operations)
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -992,6 +1000,267 @@ consume_in_minority(Config) ->
     rabbit_quorum_queue:restart_server({RaName, Server2}),
     ok.
 
+<<<<<<< HEAD
+=======
+single_active_consumer_priority_take_over(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
+    [Server0, Server1, _Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QName = ?config(queue_name, Config),
+    Q1 = <<QName/binary, "_1">>,
+    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-single-active-consumer">>, bool, true}],
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
+    ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 1}]),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
+    publish_confirm(Ch2, Q1),
+    %% higher priority consumer attaches
+    ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 3}]),
+
+    %% Q1 should still have Ch1 as consumer as it has pending messages
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query,
+                          [RaNameQ1, QueryFun])),
+
+    %% ack the message
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ch1-ctag1">>,
+                          delivery_tag = DeliveryTag}, _} ->
+            amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
+                                                multiple     = false})
+    after 5000 ->
+              flush(1),
+              exit(basic_deliver_timeout)
+    end,
+
+    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
+               ?DEFAULT_AWAIT),
+    ok.
+
+single_active_consumer_priority(Config) ->
+    check_quorum_queues_v4_compat(Config),
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    QName = ?config(queue_name, Config),
+    Q1 = <<QName/binary, "_1">>,
+    Q2 = <<QName/binary, "_2">>,
+    Q3 = <<QName/binary, "_3">>,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-single-active-consumer">>, bool, true}],
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
+    ?assertEqual({'queue.declare_ok', Q2, 0, 0}, declare(Ch2, Q2, Args)),
+    ?assertEqual({'queue.declare_ok', Q3, 0, 0}, declare(Ch3, Q3, Args)),
+
+    ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 3}]),
+    ok = subscribe(Ch1, Q2, false, <<"ch1-ctag2">>, [{"x-priority", byte, 2}]),
+    ok = subscribe(Ch1, Q3, false, <<"ch1-ctag3">>, [{"x-priority", byte, 1}]),
+
+
+    ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 1}]),
+    ok = subscribe(Ch2, Q2, false, <<"ch2-ctag2">>, [{"x-priority", byte, 3}]),
+    ok = subscribe(Ch2, Q3, false, <<"ch2-ctag3">>, [{"x-priority", byte, 2}]),
+
+    ok = subscribe(Ch3, Q1, false, <<"ch3-ctag1">>, [{"x-priority", byte, 2}]),
+    ok = subscribe(Ch3, Q2, false, <<"ch3-ctag2">>, [{"x-priority", byte, 1}]),
+    ok = subscribe(Ch3, Q3, false, <<"ch3-ctag3">>, [{"x-priority", byte, 3}]),
+
+
+    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    RaNameQ2 = binary_to_atom(<<"%2F", "_", Q2/binary>>, utf8),
+    RaNameQ3 = binary_to_atom(<<"%2F", "_", Q3/binary>>, utf8),
+    %% assert each queue has a different consumer
+    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
+
+    %% Q1 should have the consumer on Ch1
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+
+    %% Q2 Ch2
+    ?assertMatch({ok, {_, {value, {<<"ch2-ctag2">>, _}}}, _},
+                rpc:call(Server1, ra, local_query, [RaNameQ2, QueryFun])),
+
+    %% Q3 Ch3
+    ?assertMatch({ok, {_, {value, {<<"ch3-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+
+    %% close Ch3
+    _ = rabbit_ct_client_helpers:close_channel(Ch3),
+    flush(100),
+
+    %% assert Q3 has Ch2 (priority 2) as consumer
+    ?assertMatch({ok, {_, {value, {<<"ch2-ctag3">>, _}}}, _},
+                rpc:call(Server2, ra, local_query, [RaNameQ3, QueryFun])),
+
+    %% close Ch2
+    _ = rabbit_ct_client_helpers:close_channel(Ch2),
+    flush(100),
+
+    %% assert all queues as has Ch1 as consumer
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag2">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ2, QueryFun])),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag3">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ3, QueryFun])),
+    ok.
+
+force_shrink_member_to_current_member(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    RaName = ra_name(QQ),
+    rabbit_ct_client_helpers:publish(Ch, QQ, 3),
+    wait_for_messages_ready([Server0], RaName, 3),
+
+    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+    ?assertEqual(3, length(Nodes0)),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_shrink_member_to_current_member, [<<"/">>, QQ]),
+
+    wait_for_messages_ready([Server0], RaName, 3),
+
+    {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
+    ?assertEqual(1, length(Nodes1)),
+
+    %% grow queues back to all nodes
+    [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+
+    wait_for_messages_ready([Server0], RaName, 3),
+    {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+    #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
+    ?assertEqual(3, length(Nodes2)).
+
+force_all_queues_shrink_member_to_current_member(Config) ->
+    [Server0, Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    AQ = ?config(alt_queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    QQs = [QQ, AQ],
+
+    [begin
+        RaName = ra_name(Q),
+        rabbit_ct_client_helpers:publish(Ch, Q, 3),
+        wait_for_messages_ready([Server0], RaName, 3),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(3, length(Nodes0))
+    end || Q <- QQs],
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+
+    [begin
+        RaName = ra_name(Q),
+        wait_for_messages_ready([Server0], RaName, 3),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(1, length(Nodes0))
+    end || Q <- QQs],
+
+    %% grow queues back to all nodes
+    [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+
+    [begin
+        RaName = ra_name(Q),
+        wait_for_messages_ready([Server0], RaName, 3),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(3, length(Nodes0))
+    end || Q <- QQs].
+
+priority_queue_fifo(Config) ->
+    %% testing: if hi priority messages are published before lo priority
+    %% messages they are always consumed first (fifo)
+    check_quorum_queues_v4_compat(Config),
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Queue = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Queue, 0, 0},
+                 declare(Ch, Queue,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ExpectedHi =
+        [begin
+             MsgP5 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP5}),
+             MsgP5
+             %% high priority is > 4
+         end || P <- lists:seq(5, 10)],
+
+    ExpectedLo =
+        [begin
+             MsgP1 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP1}),
+             MsgP1
+         end || P <- lists:seq(0, 4)],
+
+    validate_queue(Ch, Queue, ExpectedHi ++ ExpectedLo),
+    ok.
+
+priority_queue_2_1_ratio(Config) ->
+    %% testing: if lo priority messages are published before hi priority
+    %% messages are consumed in a 2:1 hi to lo ratio
+    check_quorum_queues_v4_compat(Config),
+    [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Queue = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Queue, 0, 0},
+                 declare(Ch, Queue,
+                         [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    ExpectedLo =
+        [begin
+             MsgP1 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP1}),
+             MsgP1
+         end || P <- lists:seq(0, 4)],
+    ExpectedHi =
+        [begin
+             MsgP5 = integer_to_binary(P),
+             ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = Queue},
+                                    #amqp_msg{props = #'P_basic'{priority = P},
+                                              payload = MsgP5}),
+             MsgP5
+             %% high priority is > 4
+         end || P <- lists:seq(5, 14)],
+
+    Expected = lists_interleave(ExpectedLo, ExpectedHi),
+
+    validate_queue(Ch, Queue, Expected),
+    ok.
+
+>>>>>>> 2e37ac607d (QQ tests for force-shrink to current member operations)
 reject_after_leader_transfer(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
