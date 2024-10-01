@@ -407,7 +407,24 @@ cluster_nodes(WhichNodes) -> cluster_status(WhichNodes).
 cluster_status_from_mnesia() ->
     case is_running() of
         false ->
-            {error, mnesia_not_running};
+            case rabbit_khepri:get_feature_state() of
+                enabled ->
+                    %% To keep this API compatible with older remote nodes who
+                    %% don't know about Khepri, we take the cluster status
+                    %% from `rabbit_khepri' and reformat the return value to
+                    %% ressemble the node from this module.
+                    %%
+                    %% Both nodes won't be compatible, but let's leave that
+                    %% decision to the Feature flags subsystem.
+                    case rabbit_khepri:cluster_status_from_khepri() of
+                        {ok, {All, Running}} ->
+                            {ok, {All, All, Running}};
+                        {error, _} = Error ->
+                            Error
+                    end;
+                _ ->
+                    {error, mnesia_not_running}
+            end;
         true ->
             %% If the tables are not present, it means that
             %% `init_db/3' hasn't been run yet. In other words, either
@@ -475,8 +492,23 @@ members() ->
     end.
 
 node_info() ->
+    %% Once Khepri is enabled, the Mnesia protocol is irrelevant obviously.
+    %%
+    %% That said, older remote nodes who don't known about Khepri will request
+    %% this information anyway as part of calling `node_info/0'. Here, we
+    %% simply return `unsupported' as the Mnesia protocol. Older versions of
+    %% RabbitMQ will skip the protocol negotiation and use other ways.
+    %%
+    %% The goal is mostly to let older nodes which check Mnesia before feature
+    %% flags to reach the feature flags check. This one will correctly
+    %% indicate that they are incompatible. That's why we return `unsupported'
+    %% here, even if we could return the actual Mnesia protocol.
+    MnesiaProtocol = case rabbit_khepri:get_feature_state() of
+                         enabled -> unsupported;
+                         _       -> mnesia:system_info(protocol_version)
+                     end,
     {rabbit_misc:otp_release(), rabbit_misc:version(),
-     mnesia:system_info(protocol_version),
+     MnesiaProtocol,
      cluster_status_from_mnesia()}.
 
 -spec node_type() -> rabbit_db_cluster:node_type().
@@ -694,10 +726,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, _Protocol, {ok, Status}} ->
-            case rabbit_db_cluster:check_compatibility(Node) of
-                ok    -> {ok, Status};
-                Error -> Error
-            end
+            {ok, Status}
     end.
 
 remote_node_info(Node) ->

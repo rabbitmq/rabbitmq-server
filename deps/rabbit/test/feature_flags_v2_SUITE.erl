@@ -49,6 +49,7 @@
          failed_enable_feature_flag_with_post_enable/1,
          have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
          have_required_feature_flag_in_cluster_and_add_member_without_it/1,
+         have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled/1,
          error_during_migration_after_initial_success/1,
          controller_waits_for_own_task_to_finish_before_exiting/1,
          controller_waits_for_remote_task_to_finish_before_exiting/1
@@ -98,6 +99,7 @@ groups() ->
        failed_enable_feature_flag_with_post_enable,
        have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
        have_required_feature_flag_in_cluster_and_add_member_without_it,
+       have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled,
        error_during_migration_after_initial_success,
        controller_waits_for_own_task_to_finish_before_exiting,
        controller_waits_for_remote_task_to_finish_before_exiting
@@ -1504,6 +1506,53 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
            end,
            [])
          || Node <- AllNodes],
+    ok.
+
+have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled(
+  Config) ->
+    [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       stability => stable}},
+    ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
+
+    ct:pal(
+      "Checking the feature flag is unsupported on the cluster but enabled on "
+      "the standalone node"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(ok, rabbit_feature_flags:enable(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           []),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode, true)),
+                   ok
+           end, []),
     ok.
 
 error_during_migration_after_initial_success(Config) ->
