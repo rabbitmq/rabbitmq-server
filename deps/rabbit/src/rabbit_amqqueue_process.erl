@@ -119,7 +119,8 @@
          arguments,
          owner_pid,
          exclusive,
-         user_who_performed_action
+         user_who_performed_action,
+         leader
         ]).
 
 -define(INFO_KEYS, [pid | ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [name, type]]).
@@ -1083,6 +1084,7 @@ i(auto_delete, #q{q = Q}) -> amqqueue:is_auto_delete(Q);
 i(arguments,   #q{q = Q}) -> amqqueue:get_arguments(Q);
 i(pid, _) ->
     self();
+i(leader, State) -> node(i(pid, State));
 i(owner_pid, #q{q = Q}) when ?amqqueue_exclusive_owner_is(Q, none) ->
     '';
 i(owner_pid, #q{q = Q}) ->
