@@ -331,7 +331,8 @@ init(IsVirgin) ->
                 %% while registering projections above though so this deletion
                 %% is likely to succeed.
                 ok ?= rabbit_amqqueue:delete_transient_queues_on_node(node()),
-                ok ?= rabbit_db_queue:setup()
+                ok ?= rabbit_db_queue:setup(),
+                ok ?= rabbit_db_binding:setup()
             end
     end.
 
@@ -1592,6 +1593,11 @@ khepri_db_migration_enable(#{feature_name := FeatureName}) ->
            [FeatureName],
            #{domain => ?RMQLOG_DOMAIN_DB}),
         ok ?= rabbit_db_queue:setup(),
+        ?LOG_INFO(
+           "Feature flag `~s`: setting up rabbit_db_binding",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= rabbit_db_binding:setup(),
         migrate_mnesia_tables(FeatureName)
     end.
 

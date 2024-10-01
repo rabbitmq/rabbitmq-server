@@ -10,7 +10,9 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--export([exists/1,
+-export([setup/0,
+
+         exists/1,
          create/2,
          delete/2,
          get_all/0,
@@ -56,6 +58,16 @@
 -define(MNESIA_INDEX_TABLE, rabbit_index_route).
 -define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_binding).
 -define(KHEPRI_INDEX_ROUTE_PROJECTION, rabbit_khepri_index_route).
+-define(KHEPRI_CREATION_SPROC_PATH, [rabbitmq, sprocs, ?MODULE, create]).
+
+%% -------------------------------------------------------------------
+%% setup().
+%% -------------------------------------------------------------------
+
+-spec setup() -> ok | rabbit_khepri:timeout_error().
+
+setup() ->
+    rabbit_khepri:put(?KHEPRI_CREATION_SPROC_PATH, create_in_khepri_tx_fn()).
 
 %% -------------------------------------------------------------------
 %% exists().
@@ -198,32 +210,11 @@ create_in_khepri(#binding{source = SrcName,
         {[Src], [Dst]} ->
             case ChecksFun(Src, Dst) of
                 ok ->
-                    RoutePath = khepri_route_path(Binding),
-                    QueuePath = rabbit_db_queue:khepri_queue_path(DstName),
                     MaybeSerial = rabbit_exchange:serialise_events(Src),
-                    Serial = rabbit_khepri:transaction(
-                               fun() ->
-                                       %% Tie the lifetime of the binding to
-                                       %% the lifetime of the queue.
-                                       KeepWhile = #{QueuePath => #if_node_exists{exists = true}},
-                                       Options = #{keep_while => KeepWhile},
-                                       case khepri_tx:get(RoutePath) of
-                                           {ok, Set} ->
-                                               case sets:is_element(Binding, Set) of
-                                                   true ->
-                                                       already_exists;
-                                                   false ->
-                                                       Set1 = sets:add_element(Binding, Set),
-                                                       ok = khepri_tx:put(RoutePath, Set1, Options),
-                                                       serial_in_khepri(MaybeSerial, Src)
-                                               end;
-                                           _ ->
-                                               Set = sets:new([{version, 2}]),
-                                               Set1 = sets:add_element(Binding, Set),
-                                               ok = khepri_tx:put(RoutePath, Set1, Options),
-                                               serial_in_khepri(MaybeSerial, Src)
-                                       end
-                               end, rw),
+                    Serial = khepri:transaction(
+                               rabbitmq_metadata,
+                               ?KHEPRI_CREATION_SPROC_PATH,
+                               [Binding, Src, DstName, MaybeSerial], rw, #{}),
                     case Serial of
                         already_exists ->
                             ok;
@@ -237,6 +228,31 @@ create_in_khepri(#binding{source = SrcName,
             end;
         Errs ->
             not_found_errs_in_khepri(not_found(Errs, SrcName, DstName))
+    end.
+
+create_in_khepri_tx_fn() ->
+    fun(Binding, Src, DstName, MaybeSerial) ->
+            RoutePath = khepri_route_path(Binding),
+            QueuePath = rabbit_db_queue:khepri_queue_path(DstName),
+            %% Tie the lifetime of the binding to the lifetime of the queue.
+            KeepWhile = #{QueuePath => #if_node_exists{exists = true}},
+            Options = #{keep_while => KeepWhile},
+            case khepri_tx:get(RoutePath) of
+                {ok, Set} ->
+                    case sets:is_element(Binding, Set) of
+                        true ->
+                            already_exists;
+                        false ->
+                            Set1 = sets:add_element(Binding, Set),
+                            ok = khepri_tx:put(RoutePath, Set1, Options),
+                            serial_in_khepri(MaybeSerial, Src)
+                    end;
+                _ ->
+                    Set = sets:new([{version, 2}]),
+                    Set1 = sets:add_element(Binding, Set),
+                    ok = khepri_tx:put(RoutePath, Set1, Options),
+                    serial_in_khepri(MaybeSerial, Src)
+            end
     end.
 
 lookup_resource(#resource{kind = queue} = Name) ->
