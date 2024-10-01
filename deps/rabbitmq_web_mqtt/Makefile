@@ -19,7 +19,7 @@ export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
 DEPS = rabbit_common rabbit cowboy rabbitmq_mqtt
-TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
+TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_stomp rabbitmq_consistent_hash_exchange
 
 PLT_APPS += rabbitmqctl elixir cowlib
 
@@ -34,3 +34,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
+
+# We are using mqtt_shared_SUITE from rabbitmq_mqtt.
+CT_OPTS += -pa ../rabbitmq_mqtt/test/
+
+test-build::
+	$(verbose) $(MAKE) -C ../rabbitmq_mqtt test-dir

@@ -13,6 +13,7 @@
          boot_step/0,
          init/1,
          init/2,
+         overview/0,
          prometheus_format/0,
          increase_protocol_counter/3,
          messages_received/2,
@@ -36,10 +37,6 @@
          messages_dead_lettered/4,
          messages_dead_lettered_confirmed/3
        ]).
-
--ifdef(TEST).
--export([overview/0]).
--endif.
 
 %% PROTOCOL COUNTERS:
 -define(MESSAGES_RECEIVED, 1).
@@ -197,10 +194,8 @@ init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], DeadLetter
     Counters = seshat:new(?MODULE, Labels, DeadLetterCounters),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
--ifdef(TEST).
 overview() ->
     seshat:overview(?MODULE).
--endif.
 
 prometheus_format() ->
     seshat:format(?MODULE).

@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 
--module(command_SUITE).
+-module(web_mqtt_command_SUITE).
 -compile([export_all, nowarn_export_all]).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -16,6 +16,7 @@
         [connect/3, connect/4]).
 
 -define(COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListWebMqttConnectionsCommand').
+-define(MQTT_COMMAND, 'Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand').
 
 all() ->
     [
@@ -93,12 +94,16 @@ run(BaseConfig) ->
     [] = 'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
 
     %% Open a WebMQTT connection
-
     C2 = connect(<<"simpleWebMqttClient">>, Config, [{ack_timeout, 1}]),
     timer:sleep(200),
 
+    %% WebMQTT CLI should list only WebMQTT connection.
     [[{client_id, <<"simpleWebMqttClient">>}]] =
-        'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+    'Elixir.Enum':to_list(?COMMAND:run([<<"client_id">>], Opts)),
+
+    %% MQTT CLI should list only MQTT connection.
+    [[{client_id, <<"simpleMqttClient">>}]] =
+    'Elixir.Enum':to_list(?MQTT_COMMAND:run([<<"client_id">>], Opts)),
 
     C3 = connect(<<"simpleWebMqttClient1">>, Config, [{ack_timeout, 1}]),
     timer:sleep(200),

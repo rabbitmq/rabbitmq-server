@@ -2,7 +2,13 @@ PROJECT = rabbitmq_ct_helpers
 PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
 DEPS = rabbit_common proper inet_tcp_proxy meck
-TEST_DEPS = rabbit
+LOCAL_DEPS = common_test eunit inets
+#TEST_DEPS = rabbit
+
+# We are calling one function from 'rabbit' so we need it in the PLT.
+# But really this should be a full dependency; or we don't use the
+# function anymore; or move it to rabbit_common. @todo
+dialyze: DEPS += rabbit
 
 XREF_IGNORE = [ \
     {'Elixir.OptionParser',split,1}, \

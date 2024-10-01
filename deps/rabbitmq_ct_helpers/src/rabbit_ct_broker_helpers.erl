@@ -393,7 +393,7 @@ wait_for_rabbitmq_nodes(Config, Starting, NodeConfigs, Clustered) ->
             NodeConfigs1 = [NC || {_, NC} <- NodeConfigs],
             Config1 = rabbit_ct_helpers:set_config(Config,
               {rmq_nodes, NodeConfigs1}),
-            stop_rabbitmq_nodes(Config1),
+            _ = stop_rabbitmq_nodes(Config1),
             Error;
         {Pid, I, NodeConfig} when NodeConfigs =:= [] ->
             wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
@@ -741,7 +741,6 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
       {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
-      "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
@@ -917,7 +916,7 @@ wait_for_node_handling(Procs, Fun, T0, Results) ->
 move_nonworking_nodedir_away(NodeConfig) ->
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
-    case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
+    ok = case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
         andalso ?OTP_RELEASE >= 23 of
         true ->
             file:del_dir_r(ConfigDir);
@@ -1135,7 +1134,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
     ],
     Cmd = ["stop-node" | MakeVars],
-    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
             rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         RunCmd ->
@@ -1914,10 +1913,8 @@ restart_node(Config, Node) ->
 
 stop_node(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
-    case stop_rabbitmq_node(Config, NodeConfig) of
-        {skip, _} = Error -> Error;
-        _                 -> ok
-    end.
+    _ = stop_rabbitmq_node(Config, NodeConfig),
+    ok.
 
 stop_node_after(Config, Node, Sleep) ->
     timer:sleep(Sleep),
@@ -1940,7 +1937,7 @@ kill_node(Config, Node) ->
               _ ->
                   rabbit_misc:format("kill -9 ~ts", [Pid])
           end,
-    os:cmd(Cmd),
+    _ = os:cmd(Cmd),
     await_os_pid_death(Pid).
 
 kill_node_after(Config, Node, Sleep) ->
@@ -2231,7 +2228,7 @@ if_cover(F) ->
       os:getenv("COVERAGE")
      } of
         {false, false} -> ok;
-        _ -> F()
+        _ -> _ = F(), ok
     end.
 
 setup_meck(Config) ->

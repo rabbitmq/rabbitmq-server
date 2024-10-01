@@ -126,7 +126,7 @@ unregister_tracked_by_pid(ChPid) when node(ChPid) == node() ->
     case ets:lookup(?TRACKED_CHANNEL_TABLE, ChPid) of
         []     -> ok;
         [#tracked_channel{username = Username}] ->
-            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
+            _ = ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
             ets:delete(?TRACKED_CHANNEL_TABLE, ChPid)
     end.
 
@@ -139,7 +139,7 @@ unregister_tracked(ChId = {Node, _Name}) when Node == node() ->
     case get_tracked_channel_by_id(ChId) of
         []     -> ok;
         [#tracked_channel{pid = ChPid, username = Username}] ->
-            ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
+            _ = ets:update_counter(?TRACKED_CHANNEL_TABLE_PER_USER, Username, -1),
             ets:delete(?TRACKED_CHANNEL_TABLE, ChPid)
     end.
 

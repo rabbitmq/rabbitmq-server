@@ -1,0 +1,81 @@
+name: Test target (make)
+on:
+  workflow_call:
+    inputs:
+      erlang_version:
+        required: true
+        type: string
+      elixir_version:
+        required: true
+        type: string
+      metadata_store:
+        required: true
+        type: string
+      make_target:
+        required: true
+        type: string
+      plugin:
+        required: true
+        type: string
+jobs:
+  test:
+    name: ${{ inputs.plugin }} (${{ inputs.make_target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: CHECKOUT REPOSITORY
+      uses: actions/checkout@v4
+
+    - name: FETCH TAGS
+      run: git fetch --tags
+
+    - name: SETUP OTP & ELIXIR
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ inputs.erlang_version }}
+        elixir-version: ${{ inputs.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+        # This currently only applies to Elixir; and can be safely
+        # restricted to the build jobs to avoid duplication in output.
+        disable_problem_matchers: true
+
+    - name: SETUP DOTNET (rabbit)
+      uses: actions/setup-dotnet@v4
+      if: inputs.plugin == 'rabbit'
+      with:
+        dotnet-version: '3.1.x'
+
+    - name: SETUP SLAPD (rabbitmq_auth_backend_ldap)
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          apparmor-utils \
+          ldap-utils \
+          slapd
+
+        sudo aa-complain `which slapd`
+
+    - name: RUN TESTS
+      if: inputs.plugin != 'rabbitmq_cli'
+      run: |
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+
+    # rabbitmq_cli needs a correct broker version for two of its tests.
+    # But setting PROJECT_VERSION makes other plugins fail.
+    - name: RUN TESTS (rabbitmq_cli)
+      if: inputs.plugin == 'rabbitmq_cli'
+      run: |
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} PROJECT_VERSION="4.1.0"
+
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
+        path: |
+          logs/
+          !logs/**/log_private
+        if-no-files-found: ignore

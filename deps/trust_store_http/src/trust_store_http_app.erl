@@ -15,7 +15,7 @@ start(_Type, _Args) ->
                {"/certs/[...]", cowboy_static,
                 {dir, Directory, [{mimetypes, {<<"text">>, <<"html">>, []}}]}}]}
     ]),
-    case get_ssl_options() of
+    _ = case get_ssl_options() of
         undefined  -> start_http(Dispatch, Port);
         SslOptions -> start_https(Dispatch, Port, SslOptions)
     end,

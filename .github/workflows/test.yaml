@@ -2,7 +2,6 @@ name: Test
 on:
   push:
     branches:
-    - main
     - v4.0.x
     - v3.13.x
     - v3.12.x
@@ -22,7 +21,6 @@ on:
     - '*.bzl'
     - '*.bazel'
     - .github/workflows/test.yaml
-  pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
