@@ -1396,36 +1396,8 @@ policy_repair(Config) ->
     ?assert((GottenFails4 =:= 10) or (GottenFails4 =:= 9)), 
     consume_all(Ch, QQ),
 
-    % Make the queue process unavailable.
-    % Kill the process multiple times until its supervisor stops restarting it.
-    lists:foreach(fun(Srv) ->
-        KillUntil = fun KillUntil() ->
-            case
-                rabbit_ct_broker_helpers:rpc(
-                    Config,
-                    Srv,
-                    erlang,
-                    whereis,
-                    [RaName])
-            of
-                undefined ->
-                    ok;
-                Pid -> 
-                    rabbit_ct_broker_helpers:rpc(
-                        Config,
-                        Srv,
-                        erlang,
-                        exit,
-                        [Pid, kill]
-                    ),
-                    % Give some time for the supervisor to restart the process
-                    timer:sleep(500),
-                    KillUntil()
-            end
-        end,
-        KillUntil()
-    end,
-    Servers),
+    % Ensure the queue process is unavailable
+    lists:foreach(fun(Srv) -> ensure_qq_proc_dead(Config, Srv, RaName) end, Servers),
 
     % Add policy with higher priority, allowing even more messages.
     ExpectedMaxLength3 = 30,
@@ -4560,3 +4532,15 @@ consume_all(Ch, QQ) ->
         end
     end,
     Consume([]).
+
+ensure_qq_proc_dead(Config, Server, RaName) ->
+    case rabbit_ct_broker_helpers:rpc(Config, Server, erlang, whereis, [RaName]) of
+        undefined ->
+            ok;
+        Pid ->
+            rabbit_ct_broker_helpers:rpc(Config, Server, erlang, exit, [Pid, kill]),
+            %% Give some time for the supervisor to restart the process
+            timer:sleep(500),
+            ensure_qq_proc_dead(Config, Server, RaName)
+    end.
+
