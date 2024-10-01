@@ -4495,12 +4495,7 @@ lists_interleave([Item | Items], List)
     Left ++ [Item | lists_interleave(Items, Right)].
 
 publish_confirm_many(Ch, Queue, Count) ->
-    lists:foldl(fun(_, {Oks, Fails}) -> 
-                    case publish_confirm(Ch, Queue) of
-                        ok -> {Oks + 1, Fails};
-                        _ -> {Oks, Fails + 1}
-                    end
-                end, {0,0}, lists:seq(1, Count)).
+    lists:foreach(fun(_) -> publish_confirm(Ch, Queue) end, lists:seq(1, Count)).
 
 consume_all(Ch, QQ) ->
     Consume = fun C(Acc) ->
