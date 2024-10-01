@@ -94,8 +94,12 @@ groups() ->
                                             single_active_consumer_priority_take_over,
                                             single_active_consumer_priority,
                                             force_shrink_member_to_current_member,
+<<<<<<< HEAD
                                             force_all_queues_shrink_member_to_current_member,
                                             force_vhost_queues_shrink_member_to_current_member
+=======
+                                            force_all_queues_shrink_member_to_current_member
+>>>>>>> 10dbde1f71 (QQ tests for force-shrink to current member operations)
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -1236,6 +1240,7 @@ force_all_queues_shrink_member_to_current_member(Config) ->
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs].
 
+<<<<<<< HEAD
 force_vhost_queues_shrink_member_to_current_member(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1302,6 +1307,8 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs, VHost <- VHosts].
 
+=======
+>>>>>>> 10dbde1f71 (QQ tests for force-shrink to current member operations)
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
