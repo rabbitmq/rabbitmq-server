@@ -1345,18 +1345,11 @@ policy_repair(Config) ->
     %   Insert MaxLength1 + some messages but after consuming all messages only 
     %   MaxLength1 are retrieved.
     %   Checking twice to ensure consistency
-    %   
-    %   Once
-    {GottenOks1, GottenFails1} = publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
-    ct:pal("GottenOks1: ~p, GottenFails1: ~p", [GottenOks1, GottenFails1]),
-    ?assert((GottenOks1 =:= ExpectedMaxLength1) or (GottenOks1 =:= ExpectedMaxLength1 + 1)), 
-    ?assert((GottenFails1 =:= 1) or (GottenFails1 =:= 0)), 
-    consume_all(Ch, QQ),
-    %   Twice
-    {GottenOks2, GottenFails2} = publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 10),
-    ct:pal("GottenOks2: ~p, GottenFails2: ~p", [GottenOks2, GottenFails2]),
-    ?assert((GottenOks2 =:= ExpectedMaxLength1) or (GottenOks2 =:= ExpectedMaxLength1 + 1)), 
-    ?assert((GottenFails2 =:= 10) or (GottenFails2 =:= 9)), 
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
+    % +1 because QQs let one pass
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1), 
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
     consume_all(Ch, QQ),
 
     % Set higher priority policy, allowing more messages
@@ -1386,18 +1379,11 @@ policy_repair(Config) ->
     %   Insert MaxLength2 + some messages but after consuming all messages only 
     %   MaxLength2 are retrieved.
     %   Checking twice to ensure consistency.
-    %   
-    %   Once
-    {GottenOks3, GottenFails3} = publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 1),
-    ct:pal("GottenOks3: ~p, GottenFails3: ~p", [GottenOks3, GottenFails3]),
-    ?assert((GottenOks3 =:= ExpectedMaxLength2) or (GottenOks3 =:= ExpectedMaxLength2 + 1)), 
-    ?assert((GottenFails3 =:= 1) or (GottenFails3 =:= 0)), 
-    consume_all(Ch, QQ),
-    %   Twice
-    {GottenOks4, GottenFails4} = publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 10),
-    ct:pal("GottenOks4: ~p, GottenFails4: ~p", [GottenOks4, GottenFails4]),
-    ?assert((GottenOks4 =:= ExpectedMaxLength2) or (GottenOks4 =:= ExpectedMaxLength2 + 1)), 
-    ?assert((GottenFails4 =:= 10) or (GottenFails4 =:= 9)), 
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength2 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
     consume_all(Ch, QQ),
 
     % Ensure the queue process is unavailable
@@ -1472,18 +1458,12 @@ policy_repair(Config) ->
     %   Insert MaxLength3 + some messages but after consuming all messages only 
     %   MaxLength3 are retrieved.
     %   Checking twice to ensure consistency.
-    %   
-    %   Once
-    {GottenOks5, GottenFails5} = publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 1),
-    ct:pal("GottenOks5: ~p, GottenFails5: ~p", [GottenOks5, GottenFails5]),
-    ?assert((GottenOks5 =:= ExpectedMaxLength3) or (GottenOks5 =:= ExpectedMaxLength3 + 1)), 
-    ?assert((GottenFails5 =:= 1) or (GottenFails5 =:= 0)), 
-    consume_all(Ch, QQ),
-    %   Twice
-    {GottenOks6, GottenFails6} = publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 10),
-    ct:pal("GottenOks6: ~p, GottenFails6: ~p", [GottenOks6, GottenFails6]),
-    ?assert((GottenOks6 =:= ExpectedMaxLength3) or (GottenOks6 =:= ExpectedMaxLength3 + 1)), 
-    ?assert((GottenFails6 =:= 10) or (GottenFails6 =:= 9)). 
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength3 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ).
 
 
 gh_12635(Config) ->
