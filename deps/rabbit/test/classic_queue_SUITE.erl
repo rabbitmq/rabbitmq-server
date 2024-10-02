@@ -83,7 +83,8 @@ leader_locator_client_local(Config) ->
                                       {<<"x-queue-leader-locator">>, longstr, <<"client-local">>}])),
          {ok, Leader0} = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, Q)]),
          Leader = amqqueue:qnode(Leader0),
-         ?assertEqual([{leader, Leader}], rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, info, [Leader0, [leader]])),
+         ?assertEqual([{leader, Leader}, {members, [Leader]}],
+            rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_amqqueue, info, [Leader0, [leader, members]])),
          ?assertEqual(Server, Leader),
          ?assertMatch(#'queue.delete_ok'{},
                       amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
