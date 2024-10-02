@@ -72,7 +72,14 @@ body:
     id: diagnostics_status
     attributes:
       label: rabbitmq-diagnostics status output
-      value: See https://www.rabbitmq.com/docs/cli to learn how to use rabbitmq-diagnostics
+      value: |
+        See https://www.rabbitmq.com/docs/cli to learn how to use rabbitmq-diagnostics
+        <details>
+
+        ```
+        # PASTE OUTPUT HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: true
   - type: textarea
@@ -80,7 +87,14 @@ body:
     attributes:
       label: Logs from node 1 (with sensitive values edited out)
       description: Relevant RabbitMQ logs with sensitive values edited out
-      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: true
   - type: textarea
@@ -88,7 +102,14 @@ body:
     attributes:
       label: Logs from node 2 (if applicable, with sensitive values edited out)
       description: Relevant RabbitMQ logs with sensitive values edited out
-      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: false
   - type: textarea
@@ -96,7 +117,14 @@ body:
     attributes:
       label: Logs from node 3 (if applicable, with sensitive values edited out)
       description: Relevant RabbitMQ logs with sensitive values edited out
-      value: See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: false
   - type: textarea
@@ -104,7 +132,14 @@ body:
     attributes:
       label: rabbitmq.conf
       description: rabbitmq.conf contents
-      value: See https://www.rabbitmq.com/docs/configure#config-location to learn how to find rabbitmq.conf file location
+      value: |
+        See https://www.rabbitmq.com/docs/configure#config-location to learn how to find rabbitmq.conf file location
+        <details>
+
+        ```
+        # PASTE rabbitmq.conf HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: true
   - type: textarea
@@ -126,7 +161,14 @@ body:
     attributes:
       label: advanced.config
       description: advanced.config contents (if applicable)
-      value: See https://www.rabbitmq.com/docs/configure#config-location to learn how to find advanced.config file location
+      value: |
+        See https://www.rabbitmq.com/docs/configure#config-location to learn how to find advanced.config file location
+        <details>
+
+        ```
+        # PASTE advanced.config HERE, BETWEEN BACKTICKS
+        ```
+        </details>
     validations:
       required: false
   - type: textarea
@@ -135,9 +177,12 @@ body:
       label: Application code
       description: Relevant messaging-related parts of application code
       value: |
+        <details>
+
         ```python
-        # relevant messaging-related parts of your code go here
+        # PASTE CODE HERE, BETWEEN BACKTICKS
         ```
+        </details>
     validations:
       required: false
   - type: textarea
@@ -146,8 +191,12 @@ body:
       label: Kubernetes deployment file
       description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
       value: |
+        <details>
+
         ```yaml
         # Relevant parts of K8S deployment that demonstrate how RabbitMQ is deployed
+        # PASTE YAML HERE, BETWEEN BACKTICKS
         ```
+        </details>
     validations:
       required: false
