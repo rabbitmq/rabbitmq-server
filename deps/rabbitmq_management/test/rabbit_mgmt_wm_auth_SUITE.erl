@@ -96,7 +96,10 @@ groups() ->
                 should_return_mgt_oauth_metadata_url_url1,
                 {with_mgt_oauth_provider_url_url0, [], [
                   should_return_mgt_oauth_provider_url_url0,
-                  should_return_mgt_oauth_metadata_url_url1                  
+                  should_return_mgt_oauth_metadata_url_url1,
+                  {with_mgt_oauth_resource_server_rabbit_with_oauth_metadata_url_url1, [], [
+                    should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_url1
+                  ]}                 
                 ]}
               ]}
             ]}
@@ -215,6 +218,9 @@ groups() ->
                   {with_mgt_oauth_client_id_z, [], [
                     should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url,
                     should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_idp1_url,
+                    {with_mgt_oauth_resource_server_rabbit_with_oauth_metadata_url_url1, [], [
+                      should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_url1
+                    ]},
                     {with_root_issuer_url1, [], [
                       should_return_oauth_resource_server_rabbit_with_oauth_provider_url_idp1_url
                     ]},
@@ -223,7 +229,10 @@ groups() ->
                       should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_idp1_url,
                       {with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, [], [
                         should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
-                        should_return_oauth_resource_server_a_with_oauth_provider_url_url1
+                        should_return_oauth_resource_server_a_with_oauth_provider_url_url1,
+                        {with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url1, [], [
+                          should_return_oauth_resource_server_a_with_oauth_metadata_url_url1
+                        ]}
                       ]}
                     ]}
                   ]}
@@ -459,6 +468,9 @@ init_per_group(with_mgt_resource_server_a_with_client_id_x, Config) ->
 init_per_group(with_default_oauth_provider_idp1, Config) ->
   set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, ?config(idp1, Config)),
   Config;
+init_per_group(with_mgt_oauth_resource_server_rabbit_with_oauth_metadata_url_url1, Config) ->
+  set_env(rabbitmq_management, oauth_metadata_url, ?config(meta_url1, Config)),
+  Config;
 init_per_group(with_default_oauth_provider_idp3, Config) ->
   set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, ?config(idp3, Config)),
   Config;
@@ -488,6 +500,10 @@ init_per_group(with_token_endpoint_params_0, Config) ->
 init_per_group(with_mgt_resource_server_a_with_authorization_endpoint_params_1, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_authorization_endpoint_params, ?config(authorization_params_1, Config)),
+  Config;
+init_per_group(with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url1, Config) ->
+  set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_metadata_url, ?config(meta_url1, Config)),
   Config;
 init_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) ->
   set_attribute_in_entry_for_env_variable(rabbitmq_management, oauth_resource_servers,
@@ -522,8 +538,14 @@ end_per_group(with_oauth_disable_basic_auth_false, Config) ->
 end_per_group(with_resource_server_id_rabbit, Config) ->
   unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
   Config;
+end_per_group(with_default_oauth_provider_idp1, Config) ->
+  unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
+  Config;
 end_per_group(with_mgt_oauth_provider_url_url0, Config) ->
   unset_env(rabbitmq_management, oauth_provider_url),
+  Config;
+end_per_group(with_mgt_oauth_resource_server_rabbit_with_oauth_metadata_url_url1, Config) ->
+  unset_env(rabbitmq_management, oauth_metadata_url),
   Config;
 end_per_group(with_root_issuer_url1, Config) ->
   unset_env(rabbitmq_auth_backend_oauth2, issuer),
@@ -557,6 +579,10 @@ end_per_group(with_mgt_resource_server_a_with_scopes_read_write, Config) ->
 end_per_group(with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
     ?config(a, Config), oauth_provider_url),
+  Config;
+end_per_group(with_mgt_oauth_resource_server_a_with_oauth_metadata_url_url1, Config) ->
+  remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,
+    ?config(a, Config), oauth_metadata_url),
   Config;
 end_per_group(with_mgt_resource_server_a_with_oauth_initiated_logon_type_sp_initiated, Config) ->
   remove_attribute_from_entry_from_env_variable(rabbitmq_management, oauth_resource_servers,

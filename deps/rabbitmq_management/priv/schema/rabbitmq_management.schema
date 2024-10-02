@@ -472,6 +472,13 @@ end}.
 {mapping, "management.oauth_response_type", "rabbitmq_management.oauth_response_type",
     [{datatype, string}]}.
 
+%% THIS VARIABLE IS DEPRECATED. CHECKOUT auth_oauth2.discovery_endpoint_path VARIABLE.
+%% The URL of the OIDC discovery url where the provider is listening on
+%% by default it is <oauth_provider_url>/.well-known/openid-configuration which is the
+%% default OIDC discovery endpoint
+{mapping, "management.oauth_metadata_url", "rabbitmq_management.oauth_metadata_url",
+      [{datatype, string}]}.
+
 %% Configure OAuth2 authorization_endpoint additional request parameters
 {mapping, "management.oauth_authorization_endpoint_params.$name",
     "rabbitmq_management.oauth_authorization_endpoint_params",
@@ -548,6 +555,12 @@ end}.
 
 {mapping,
   "management.oauth_resource_servers.$name.oauth_scopes",
+  "rabbitmq_management.oauth_resource_servers",
+  [{datatype, string}]
+}.
+
+{mapping,
+  "management.oauth_resource_servers.$name.oauth_metadata_url",
   "rabbitmq_management.oauth_resource_servers",
   [{datatype, string}]
 }.
