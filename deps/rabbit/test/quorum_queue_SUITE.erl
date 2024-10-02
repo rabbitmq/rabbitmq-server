@@ -95,11 +95,16 @@ groups() ->
                                             single_active_consumer_priority,
                                             force_shrink_member_to_current_member,
 <<<<<<< HEAD
+<<<<<<< HEAD
                                             force_all_queues_shrink_member_to_current_member,
                                             force_vhost_queues_shrink_member_to_current_member
 =======
                                             force_all_queues_shrink_member_to_current_member
 >>>>>>> 10dbde1f71 (QQ tests for force-shrink to current member operations)
+=======
+                                            force_all_queues_shrink_member_to_current_member,
+                                            force_vhost_queues_shrink_member_to_current_member
+>>>>>>> c9d97e61de (Add test for QQ force_vhost_queues_shrink_member_to_current_member/1)
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -1241,6 +1246,9 @@ force_all_queues_shrink_member_to_current_member(Config) ->
     end || Q <- QQs].
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> c9d97e61de (Add test for QQ force_vhost_queues_shrink_member_to_current_member/1)
 force_vhost_queues_shrink_member_to_current_member(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1307,8 +1315,11 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs, VHost <- VHosts].
 
+<<<<<<< HEAD
 =======
 >>>>>>> 10dbde1f71 (QQ tests for force-shrink to current member operations)
+=======
+>>>>>>> c9d97e61de (Add test for QQ force_vhost_queues_shrink_member_to_current_member/1)
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
