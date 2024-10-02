@@ -74,7 +74,7 @@ jobs:
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
     - name: AUTHENTICATE TO GOOGLE CLOUD
-      uses: google-github-actions/auth@v2.1.5
+      uses: google-github-actions/auth@v2.1.6
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: BUILD SECONDARY UMBRELLA ARCHIVE
