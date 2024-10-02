@@ -1980,12 +1980,20 @@ force_shrink_member_to_current_member(VHost, Name) ->
     end.
 
 force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) ->
+<<<<<<< HEAD
     rabbit_log:warning("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts", [VHost, node()]),
+=======
+    rabbit_log:warning("Disaster recovery procedure: shrinking all quorum queues in vhost ~tp to a single node cluster", [VHost]),
+>>>>>>> b03637f8ec (Implement force_vhost_queues_shrink_member_to_current_member/1)
     ListQQs = fun() -> rabbit_amqqueue:list(VHost) end,
     force_all_queues_shrink_member_to_current_member(ListQQs).
 
 force_all_queues_shrink_member_to_current_member() ->
+<<<<<<< HEAD
     rabbit_log:warning("Shrinking all quorum queues to a single node: ~ts", [node()]),
+=======
+    rabbit_log:warning("Disaster recovery procedure: shrinking all quorum queues to a single node cluster"),
+>>>>>>> b03637f8ec (Implement force_vhost_queues_shrink_member_to_current_member/1)
     ListQQs = fun() -> rabbit_amqqueue:list() end,
     force_all_queues_shrink_member_to_current_member(ListQQs).
 
@@ -2009,10 +2017,14 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
              _ = rabbit_amqqueue:update(QName, Fun),
              _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
 <<<<<<< HEAD
+<<<<<<< HEAD
          end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Shrinking finished"),
 =======
          end || Q <- rabbit_amqqueue:list(), amqqueue:get_type(Q) == ?MODULE],
+=======
+         end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
+>>>>>>> b03637f8ec (Implement force_vhost_queues_shrink_member_to_current_member/1)
     rabbit_log:warning("Disaster recovery procedure: shrinking finished"),
 >>>>>>> d9de6d989c (Shutdown peer QQ FSMs on connected nodes on force-shrink execution for cluster)
     ok.
