@@ -66,7 +66,7 @@ jobs:
         ecs-cli --version
     - name: AUTHENTICATE TO GOOGLE CLOUD
       if: steps.authorized.outputs.authorized == 'true'
-      uses: google-github-actions/auth@v2.1.5
+      uses: google-github-actions/auth@v2.1.6
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: CONFIGURE BAZEL
