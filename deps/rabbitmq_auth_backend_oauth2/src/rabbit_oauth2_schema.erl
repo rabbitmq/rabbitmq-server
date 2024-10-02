@@ -251,7 +251,7 @@ extract_oauth_providers_signing_keys(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedSigningKeys = [{Name, {list_to_binary(Kid), list_to_binary(V)}} ||
-        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "signing_keys", Kid], V} 
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, ?SIGNING_KEYS, Kid], V} 
             <- Settings ],
     maps:map(fun(_K,V)-> [{signing_keys, translate_list_of_signing_keys(V)}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedSigningKeys)).
