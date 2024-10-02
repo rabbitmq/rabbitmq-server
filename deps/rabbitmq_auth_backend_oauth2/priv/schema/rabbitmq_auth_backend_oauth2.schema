@@ -74,7 +74,12 @@
  end}.
 
 {mapping,
- "auth_oauth2.scope_aliases.$alias",
+ "auth_oauth2.scope_aliases.$index.alias",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.scope_aliases.$index.scope",
  "rabbitmq_auth_backend_oauth2.scope_aliases",
  [{datatype, string}]}.
 
