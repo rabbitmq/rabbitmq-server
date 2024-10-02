@@ -215,12 +215,10 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
         undefined -> do_nothing;
         EndSessionEndpoint -> set_env(end_session_endpoint, EndSessionEndpoint)
     end,
-    List = get_env(key_config, []),
-    ModifiedList = case OAuthProvider#oauth_provider.jwks_uri of
-        undefined ->  List;
-        JwksEndPoint -> [{jwks_uri, JwksEndPoint} | proplists:delete(jwks_uri, List)]
+    case OAuthProvider#oauth_provider.jwks_uri of
+        undefined -> do_nothing;
+        JwksUri -> set_env(jwks_uri, JwksUri)
     end,
-    set_env(key_config, ModifiedList),
     rabbit_log:debug("Updated oauth_provider details: ~p ", 
         [format_oauth_provider(OAuthProvider)]),
     OAuthProvider;
@@ -271,7 +269,7 @@ unlock(LockId) ->
 -spec get_oauth_provider(list()) -> {ok, oauth_provider()} | {error, any()}.
 get_oauth_provider(ListOfRequiredAttributes) ->
     case get_env(default_oauth_provider) of
-        undefined -> get_oauth_provider_from_keyconfig(ListOfRequiredAttributes);
+        undefined -> get_root_oauth_provider(ListOfRequiredAttributes);
         DefaultOauthProviderId ->
             rabbit_log:debug("Using default_oauth_provider ~p", 
                 [DefaultOauthProviderId]),
@@ -303,9 +301,9 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
             {error, {missing_oauth_provider_attributes, Attrs}}
     end.
 
-get_oauth_provider_from_keyconfig(ListOfRequiredAttributes) ->
-    OAuthProvider = lookup_oauth_provider_from_keyconfig(),
-    rabbit_log:debug("Using oauth_provider ~p from keyconfig", 
+get_root_oauth_provider(ListOfRequiredAttributes) ->
+    OAuthProvider = lookup_root_oauth_provider(),
+    rabbit_log:debug("Using root oauth_provider ~p", 
         [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
@@ -384,7 +382,7 @@ find_missing_attributes(#oauth_provider{} = OAuthProvider, RequiredAttributes) -
     Filtered = filter_undefined_props(PropList),
     intersection(Filtered, RequiredAttributes).
 
-lookup_oauth_provider_from_keyconfig() ->
+lookup_root_oauth_provider() ->
     Map = maps:from_list(get_env(key_config, [])),
     Issuer = get_env(issuer),
     DiscoverEndpoint = build_openid_discovery_endpoint(Issuer, 
@@ -393,7 +391,7 @@ lookup_oauth_provider_from_keyconfig() ->
         id = root,
         issuer = Issuer,
         discovery_endpoint = DiscoverEndpoint,
-        jwks_uri = maps:get(jwks_uri, Map, undefined),
+        jwks_uri = get_env(jwks_uri, maps:get(jwks_url, Map, undefined)),
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),

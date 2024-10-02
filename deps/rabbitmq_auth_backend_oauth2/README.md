@@ -149,13 +149,13 @@ In that case, the configuration would look like this:
   {rabbitmq_auth_backend_oauth2, [
     {resource_server_id, <<"my_rabbit_server">>},
     {key_config, [
-      {jwks_url, <<"https://jwt-issuer.my-domain.local/jwks.json">>}
+      {jwks_uri, <<"https://jwt-issuer.my-domain.local/jwks.json">>}
     ]}
   ]},
 ].
 ```
 
-Note: if both are configured, `jwks_url` takes precedence over `signing_keys`.
+Note: if both are configured, `jwks_uri` takes precedence over `signing_keys`.
 
 ### Variables Configurable in rabbitmq.conf
 
@@ -166,7 +166,7 @@ Note: if both are configured, `jwks_url` takes precedence over `signing_keys`.
 | `auth_oauth2.additional_scopes_key`      | Key to fetch additional scopes from (maps to `additional_rabbitmq_scopes` in the `advanced.config` format)
 | `auth_oauth2.default_key`                | ID (name) of the default signing key
 | `auth_oauth2.signing_keys`               | Paths to signing key files
-| `auth_oauth2.jwks_url`                   | The URL of key server. According to the [JWT Specification](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.2) key server URL must be https
+| `auth_oauth2.jwks_uri`                   | The URL of key server. According to the [JWT Specification](https://datatracker.ietf.org/doc/html/rfc7515#section-4.1.2) key server URL must be https
 | `auth_oauth2.https.cacertfile`           | Path to a file containing PEM-encoded CA certificates. The CA certificates are used during key server [peer verification](https://rabbitmq.com/ssl.html#peer-verification)
 | `auth_oauth2.https.depth`                | The maximum number of non-self-issued intermediate certificates that may follow the peer certificate in a valid [certification path](https://rabbitmq.com/ssl.html#peer-verification-depth). Default is 10.
 | `auth_oauth2.https.peer_verification`    | Should [peer verification](https://rabbitmq.com/ssl.html#peer-verification) be enabled Available values: `verify_none`, `verify_peer`. Default is `verify_none`. It is recommended to configure `verify_peer`. Peer verification requires a certain amount of setup and is more secure.
@@ -194,7 +194,7 @@ auth_oauth2.algorithms.2 = RS256
 
 ```
 auth_oauth2.resource_server_id = new_resource_server_id
-auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
+auth_oauth2.jwks_uri = https://my-jwt-issuer/jwks.json
 auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
 auth_oauth2.https.peer_verification = verify_peer
 auth_oauth2.https.depth = 5
@@ -234,7 +234,7 @@ resolve the user's identity: `username`, `user_name`, `email`, `sub`, `client_id
     {resource_server_id, <<"my_rabbit_server">>},
     {preferred_username_claims, [ <<"username">>, <<"user_name">>, <<"email">> ]}
     {key_config, [
-      {jwks_url, <<"https://jwt-issuer.my-domain.local/jwks.json">>}
+      {jwks_uri, <<"https://jwt-issuer.my-domain.local/jwks.json">>}
     ]}
   ]},
 ].

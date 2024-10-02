@@ -170,12 +170,18 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(no_peer_verification, Config) ->
+<<<<<<< HEAD
     KeyConfig = set_config(?config(key_config, Config), [
             {jwks_url, ?config(non_strict_jwks_url, Config)}, 
             {peer_verification, verify_none}
     ]),
     ok = rpc_set_env(Config,key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
+=======
+    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_uri, ?config(non_strict_jwks_uri, Config)}, {peer_verification, verify_none}]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
+    rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
+>>>>>>> 2586207266 (Deprecate jwks_url but it is still supported)
 
 init_per_group(without_kid, Config) ->
     set_config(Config, [{include_kid, false}]);
@@ -224,7 +230,6 @@ init_per_group(with_oauth_provider_A_with_jwks_with_one_signing_key, Config) ->
     OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
     OAuthProviders1 = maps:put(<<"A">>, [
         {jwks_uri, strict_jwks_url(Config, "/jwksA")} | OAuthProvider],
-        OAuthProviders0),
 
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
@@ -269,7 +274,7 @@ init_per_group(with_root_oauth_provider_with_two_static_keys_and_one_jwks_key, C
         ?UTIL_MOD:token_key(Jwks2) => {json, Jwks2}
     },
     KeyConfig1 = [{signing_keys, SigningKeys},
-                  {jwks_url, strict_jwks_url(Config, "/jwks")}| KeyConfig],
+                  {jwks_url, strict_jwks_uri(Config, "/jwks")}| KeyConfig],
     ok = rpc_set_env(Config, key_config, KeyConfig1),
     Config;
 init_per_group(with_root_oauth_provider_with_default_key_1, Config) ->
@@ -296,7 +301,7 @@ init_per_group(with_oauth_provider_B_with_one_static_key_and_jwks_with_two_signi
     },
     OAuthProviders1 = maps:put(<<"B">>, [
         {signing_keys, SigningKeys},
-        {jwks_uri, strict_jwks_url(Config, "/jwksB")} | OAuthProvider],
+        {jwks_uri, strict_jwks_uri(Config, "/jwksB")} | OAuthProvider],
         OAuthProviders0),
 
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
@@ -331,7 +336,7 @@ end_per_group(without_kid, Config) ->
 
 end_per_group(no_peer_verification, Config) ->
     KeyConfig = set_config(?config(key_config, Config), [
-        {jwks_url, ?config(strict_jwks_url, Config)}, 
+        {jwks_uri, ?config(strict_jwks_uri, Config)}, 
         {peer_verification, verify_peer}]),
     ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
@@ -460,8 +465,8 @@ start_jwks_server(Config0) ->
 
     %% Both URLs direct to the same JWKS server
     %% The NonStrictJwksUrl identity cannot be validated while StrictJwksUrl identity can be validated
-    NonStrictJwksUrl = non_strict_jwks_url(Config),
-    StrictJwksUrl = strict_jwks_url(Config),
+    NonStrictJwksUri = non_strict_jwks_uri(Config),
+    StrictJwksUri = strict_jwks_uri(Config),
 
     {ok, _} = application:ensure_all_started(ssl),
     {ok, _} = application:ensure_all_started(cowboy),
@@ -474,13 +479,13 @@ start_jwks_server(Config0) ->
         {"/jwks1", [Jwk1, Jwk3]},
         {"/jwks2", [Jwk2]}
       ]),
-    KeyConfig = [{jwks_url, StrictJwksUrl},
+    KeyConfig = [{jwks_uri, StrictJwksUri},
                  {peer_verification, verify_peer},
                  {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])}],
     ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, [
-                        {non_strict_jwks_url, NonStrictJwksUrl},
-                        {strict_jwks_url, StrictJwksUrl},
+                        {non_strict_jwks_uri, NonStrictJwksUri},
+                        {strict_jwks_uri, StrictJwksUri},
                         {key_config, KeyConfig},
                         {fixture_static_1, Jwk7},
                         {fixture_static_2, Jwk8},
@@ -494,13 +499,13 @@ start_jwks_server(Config0) ->
                         {fixture_jwks_1, [Jwk1, Jwk3]},
                         {fixture_jwks_2, [Jwk2]}
     ]).
-strict_jwks_url(Config) ->
-  strict_jwks_url(Config, "/jwks").
-strict_jwks_url(Config, Path) ->
+strict_jwks_uri(Config) ->
+  strict_jwks_uri(Config, "/jwks").
+strict_jwks_uri(Config, Path) ->
   "https://localhost:" ++ integer_to_list(?config(jwksServerPort, Config)) ++ Path.
-non_strict_jwks_url(Config) ->
-  non_strict_jwks_url(Config, "/jwks").
-non_strict_jwks_url(Config, Path) ->
+non_strict_jwks_uri(Config) ->
+  non_strict_jwks_uri(Config, "/jwks").
+non_strict_jwks_uri(Config, Path) ->
   "https://127.0.0.1:" ++ integer_to_list(?config(jwksServerPort, Config)) ++ Path.
 
 
