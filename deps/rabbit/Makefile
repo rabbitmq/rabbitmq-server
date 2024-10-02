@@ -239,12 +239,22 @@ define ct_master.erl
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
-	ct_master:run("$1"),
+	ct_master_fork:run("$1"),
+	Fail1 = peer:call(Pid1, cth_parallel_ct_detect_failure, has_failures, []),
+	Fail2 = peer:call(Pid2, cth_parallel_ct_detect_failure, has_failures, []),
+	Fail3 = peer:call(Pid3, cth_parallel_ct_detect_failure, has_failures, []),
+	Fail4 = peer:call(Pid4, cth_parallel_ct_detect_failure, has_failures, []),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
 	peer:stop(Pid1),
-	halt()
+	if
+		Fail1 -> halt(1);
+		Fail2 -> halt(2);
+		Fail3 -> halt(3);
+		Fail4 -> halt(4);
+		true -> halt(0)
+	end
 endef
 
 PARALLEL_CT_SET_1_A = amqp_client unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
