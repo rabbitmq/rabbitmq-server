@@ -196,5 +196,45 @@
             {scope_prefix,<<>>}
         ]}
         ],[]
+  }, 
+  {scope_aliases_1, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.scope_aliases.admin = rabbitmq.tag:administrator 
+       auth_oauth2.scope_aliases.developer = rabbitmq.tag:management rabbitmq.read:*/*",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {scope_aliases, #{
+              <<"admin">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                              ],
+              <<"developer">> => [ 
+                              <<"rabbitmq.tag:administrator">>,
+                              <<"rabbitmq.read:*/*">>
+                              ]                              
+            }}
+        ]}
+       ], []
+  },
+  {scope_aliases_2, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.scope_aliases.1.alias = admin
+       auth_oauth2.scope_aliases.1.scope = rabbitmq.tag:administrator 
+       auth_oauth2.scope_aliases.2.alias = developer
+       auth_oauth2.scope_aliases.2.scope = rabbitmq.tag:management rabbitmq.read:*/*",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {scope_aliases, #{
+              <<"admin">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                              ],
+              <<"developer">> => [ 
+                              <<"rabbitmq.tag:administrator">>,
+                              <<"rabbitmq.read:*/*">>
+                              ]                              
+            }}
+        ]}
+       ], []
   }
 ].

@@ -12,11 +12,53 @@
     translate_oauth_providers/1,
     translate_resource_servers/1,
     translate_signing_keys/1,
-    translate_endpoint_params/2
+    translate_endpoint_params/2,
+    translate_scope_aliases/1
 ]).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
+
+-spec translate_scope_aliases([{list(), binary()}]) -> map().
+translate_scope_aliases(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.scope_aliases", Conf),
+    maps:merge(extract_scope_aliases_as_a_map(Settings),
+        extract_scope_aliases_as_a_list_of_alias_scope_props(Settings)).
+
+convert_space_separated_string_to_list_of_binaries(String) ->
+    [ list_to_binary(V) || V <- string:tokens(String, " ")].
+
+extract_scope_aliases_as_a_map(Settings) ->    
+    maps:from_list([{
+            list_to_binary(K), 
+            convert_space_separated_string_to_list_of_binaries(V)
+            } || {["auth_oauth2", "scope_aliases", K], V} <- Settings ]).
+extract_scope_aliases_as_a_list_of_alias_scope_props(Settings) ->    
+    KeyFun = fun extract_key_as_binary/1,
+    ValueFun = fun extract_value/1,
+
+    List0 = [{K, {list_to_atom(Attr), list_to_binary(V)}}
+        || {["auth_oauth2", "scope_aliases", K, Attr], V} <- Settings ],
+    List1 = maps:to_list(maps:groups_from_list(KeyFun, ValueFun, List0)),
+    maps:from_list([ 
+        extract_scope_alias_mapping(Proplist) || {_, Proplist} <- List1]).
+    
+extract_scope_alias_mapping(Proplist) ->
+    Alias = 
+        case proplists:get_value(alias, Proplist) of 
+            undefined -> {error, missing_alias_attribute};
+            A -> A
+        end,
+    Scope = 
+        case proplists:get_value(scope, Proplist) of 
+            undefined -> {error, missing_scope_attribute};
+            S -> convert_space_separated_string_to_list_of_binaries(S)
+        end,
+    case {Alias, Scope} of
+        {{error, _} = Err0, _} -> Err0;
+        {_, {error, _} = Err1 } -> Err1;
+        _ = V -> V
+    end.
 
 -spec translate_resource_servers([{list(), binary()}]) -> map().
 translate_resource_servers(Conf) ->
@@ -134,7 +176,7 @@ extract_resource_server_properties(Settings) ->
     ValueFun = fun extract_value/1,
 
     OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
-        || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings ],
+        || {["auth_oauth2", "resource_servers", Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
 mapOauthProviderProperty({Key, Value}) ->
@@ -156,7 +198,7 @@ extract_oauth_providers_https(Settings) ->
     ExtractProviderNameFun = fun extract_key_as_binary/1,
 
     AttributesPerProvider = [{Name, mapHttpProperty({list_to_atom(Key), V})} ||
-        {["auth_oauth2","oauth_providers", Name, "https", Key], V} <- Settings ],
+        {["auth_oauth2", "oauth_providers", Name, "https", Key], V} <- Settings ],
 
     maps:map(fun(_K,V)-> [{https, V}] end,
         maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, 
