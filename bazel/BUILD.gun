@@ -23,10 +23,15 @@ erlc_opts(
 
 erlang_bytecode(
     name = "behaviours",
-    srcs = ["src/gun_content_handler.erl"],
-    outs = ["ebin/gun_content_handler.beam"],
-    hdrs = [],
+    srcs = [
+        "src/gun_content_handler.erl",
+        "src/gun_cookies.erl",
+        "src/gun_event.erl",
+        "src/gun_ws_protocol.erl",
+    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "gun",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -35,32 +40,35 @@ erlang_bytecode(
     srcs = [
         "src/gun.erl",
         "src/gun_app.erl",
+        "src/gun_conns_sup.erl",
+        "src/gun_cookies_list.erl",
         "src/gun_data_h.erl",
+        "src/gun_default_event_h.erl",
         "src/gun_http.erl",
         "src/gun_http2.erl",
+        "src/gun_pool.erl",
+        "src/gun_pool_events_h.erl",
+        "src/gun_pools_sup.erl",
+        "src/gun_protocols.erl",
+        "src/gun_public_suffix.erl",
+        "src/gun_raw.erl",
+        "src/gun_socks.erl",
         "src/gun_sse_h.erl",
         "src/gun_sup.erl",
         "src/gun_tcp.erl",
+        "src/gun_tcp_proxy.erl",
         "src/gun_tls.erl",
+        "src/gun_tls_proxy.erl",
+        "src/gun_tls_proxy_cb.erl",
+        "src/gun_tls_proxy_http2_connect.erl",
+        "src/gun_tunnel.erl",
         "src/gun_ws.erl",
         "src/gun_ws_h.erl",
     ],
-    outs = [
-        "ebin/gun.beam",
-        "ebin/gun_app.beam",
-        "ebin/gun_data_h.beam",
-        "ebin/gun_http.beam",
-        "ebin/gun_http2.beam",
-        "ebin/gun_sse_h.beam",
-        "ebin/gun_sup.beam",
-        "ebin/gun_tcp.beam",
-        "ebin/gun_tls.beam",
-        "ebin/gun_ws.beam",
-        "ebin/gun_ws_h.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "gun",
     beam = [":behaviours"],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -75,36 +83,44 @@ filegroup(
 filegroup(
     name = "srcs",
     srcs = [
-        "src/gun.app.src",
         "src/gun.erl",
         "src/gun_app.erl",
+        "src/gun_conns_sup.erl",
         "src/gun_content_handler.erl",
+        "src/gun_cookies.erl",
+        "src/gun_cookies_list.erl",
         "src/gun_data_h.erl",
+        "src/gun_default_event_h.erl",
+        "src/gun_event.erl",
         "src/gun_http.erl",
         "src/gun_http2.erl",
+        "src/gun_pool.erl",
+        "src/gun_pool_events_h.erl",
+        "src/gun_pools_sup.erl",
+        "src/gun_protocols.erl",
+        "src/gun_public_suffix.erl",
+        "src/gun_raw.erl",
+        "src/gun_socks.erl",
         "src/gun_sse_h.erl",
         "src/gun_sup.erl",
         "src/gun_tcp.erl",
+        "src/gun_tcp_proxy.erl",
         "src/gun_tls.erl",
+        "src/gun_tls_proxy.erl",
+        "src/gun_tls_proxy_cb.erl",
+        "src/gun_tls_proxy_http2_connect.erl",
+        "src/gun_tunnel.erl",
         "src/gun_ws.erl",
         "src/gun_ws_h.erl",
+        "src/gun_ws_protocol.erl",
     ],
 )
 
-filegroup(
-    name = "private_hdrs",
-    srcs = [],
-)
+filegroup(name = "private_hdrs")
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -130,9 +146,15 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "gun",
     beam_files = [":beam_files"],
-    extra_apps = ["ssl"],
+    extra_apps = [
+        "ssl",
+        "public_key",
+    ],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = ["@cowlib//:erlang_app"],
 )
 
@@ -140,4 +162,11 @@ alias(
     name = "gun",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )

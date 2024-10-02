@@ -49,7 +49,12 @@ filegroup(
     ],
 )
 
-filegroup(name = "private_hdrs")
+filegroup(
+    name = "private_hdrs",
+    srcs = [
+        "src/redbug_dbg.hrl",
+    ],
+)
 
 filegroup(name = "public_hdrs")
 

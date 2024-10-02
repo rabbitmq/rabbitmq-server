@@ -29,24 +29,13 @@ erlang_bytecode(
         "src/systemd_sup.erl",
         "src/systemd_watchdog.erl",
     ],
-    outs = [
-        "ebin/systemd.beam",
-        "ebin/systemd_app.beam",
-        "ebin/systemd_journal_h.beam",
-        "ebin/systemd_kmsg_formatter.beam",
-        "ebin/systemd_protocol.beam",
-        "ebin/systemd_socket.beam",
-        "ebin/systemd_sup.beam",
-        "ebin/systemd_watchdog.beam",
-    ],
-    hdrs = [
-        "include/systemd.hrl",
-        "src/systemd_internal.hrl",
-    ],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "systemd",
-    beam = [],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
-    deps = ["@enough//:erlang_app"],
+    deps = [
+        "@enough//:erlang_app",
+    ],
 )
 
 filegroup(
@@ -71,18 +60,19 @@ filegroup(
 
 filegroup(
     name = "private_hdrs",
-    srcs = ["src/systemd_internal.hrl"],
+    srcs = [
+        "src/systemd_internal.hrl",
+    ],
 )
 
 filegroup(
     name = "public_hdrs",
-    srcs = ["include/systemd.hrl"],
+    srcs = [
+        "include/systemd.hrl",
+    ],
 )
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -111,6 +101,8 @@ erlang_app(
     hdrs = [":public_hdrs"],
     app_name = "systemd",
     beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = ["@enough//:erlang_app"],
 )
 
@@ -118,4 +110,11 @@ alias(
     name = "systemd",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )

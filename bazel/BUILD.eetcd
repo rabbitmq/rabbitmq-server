@@ -52,45 +52,11 @@ erlang_bytecode(
         "src/protos/kv_pb.erl",
         "src/protos/router_pb.erl",
     ],
-    outs = [
-        "ebin/auth_pb.beam",
-        "ebin/eetcd.beam",
-        "ebin/eetcd_app.beam",
-        "ebin/eetcd_auth.beam",
-        "ebin/eetcd_auth_gen.beam",
-        "ebin/eetcd_cluster.beam",
-        "ebin/eetcd_cluster_gen.beam",
-        "ebin/eetcd_compare.beam",
-        "ebin/eetcd_conn.beam",
-        "ebin/eetcd_conn_sup.beam",
-        "ebin/eetcd_data_coercion.beam",
-        "ebin/eetcd_election.beam",
-        "ebin/eetcd_election_gen.beam",
-        "ebin/eetcd_grpc.beam",
-        "ebin/eetcd_health_gen.beam",
-        "ebin/eetcd_kv.beam",
-        "ebin/eetcd_kv_gen.beam",
-        "ebin/eetcd_lease.beam",
-        "ebin/eetcd_lease_gen.beam",
-        "ebin/eetcd_lease_sup.beam",
-        "ebin/eetcd_lock.beam",
-        "ebin/eetcd_lock_gen.beam",
-        "ebin/eetcd_maintenance.beam",
-        "ebin/eetcd_maintenance_gen.beam",
-        "ebin/eetcd_op.beam",
-        "ebin/eetcd_stream.beam",
-        "ebin/eetcd_sup.beam",
-        "ebin/eetcd_watch.beam",
-        "ebin/eetcd_watch_gen.beam",
-        "ebin/gogo_pb.beam",
-        "ebin/health_pb.beam",
-        "ebin/kv_pb.beam",
-        "ebin/router_pb.beam",
-    ],
     hdrs = [
-        "include/eetcd.hrl",
+        ":public_and_private_hdrs",
     ],
     app_name = "eetcd",
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -151,7 +117,6 @@ filegroup(
 filegroup(
     name = "priv",
     srcs = [
-        "priv/protos",
         "priv/protos/auth.proto",
         "priv/protos/gogo.proto",
         "priv/protos/kv.proto",
@@ -188,6 +153,8 @@ erlang_app(
     hdrs = [":public_hdrs"],
     app_name = "eetcd",
     beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
     deps = ["@gun//:erlang_app"],
 )
 
@@ -195,4 +162,11 @@ alias(
     name = "eetcd",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
