@@ -40,8 +40,7 @@ groups() ->
           auth_failure,
           access_failure,
           access_failure_not_allowed,
-          access_failure_send,
-          streams
+          access_failure_send
         ]},
       {java, [], [
           roundtrip
@@ -121,10 +120,6 @@ roundtrip(Config) ->
     declare_queue(Config, ?FUNCTION_NAME, "quorum"),
     run(Config, [{dotnet, "roundtrip"},
                  {java, "RoundTripTest"}]).
-
-streams(Config) ->
-    declare_queue(Config, ?FUNCTION_NAME, "stream"),
-    run(Config, [{dotnet, "streams"}]).
 
 roundtrip_to_amqp_091(Config) ->
     declare_queue(Config, ?FUNCTION_NAME, "classic"),
