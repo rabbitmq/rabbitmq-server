@@ -7,6 +7,15 @@
 
 -module(rabbit_oauth2_schema).
 
+-define(AUTH_OAUTH2, "auth_oauth2").
+-define(SCOPE_ALIASES, "scope_aliases").
+-define(RESOURCE_SERVERS, "resource_servers").
+-define(OAUTH_PROVIDERS, "oauth_providers").
+-define(SIGNING_KEYS, "signing_keys").
+-define(AUTH_OAUTH2_SCOPE_ALIASES, ?AUTH_OAUTH2 ++ "." ++ ?SCOPE_ALIASES).
+-define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
+-define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
+-define(AUTH_OAUTH2_SIGNING_KEYS, ?AUTH_OAUTH2 ++ "." ++ ?SIGNING_KEYS).
 
 -export([
     translate_oauth_providers/1,
@@ -21,7 +30,8 @@ extract_value({_Name,V}) -> V.
 
 -spec translate_scope_aliases([{list(), binary()}]) -> map().
 translate_scope_aliases(Conf) ->   
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.scope_aliases", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix(
+        ?AUTH_OAUTH2_SCOPE_ALIASES, Conf),
     extract_scope_aliases_as_a_list_of_alias_scope_props(Settings).
     
 convert_space_separated_string_to_list_of_binaries(String) ->
@@ -32,7 +42,7 @@ extract_scope_aliases_as_a_list_of_alias_scope_props(Settings) ->
     ValueFun = fun extract_value/1,
 
     List0 = [{Index, {list_to_atom(Attr), V}}
-        || {["auth_oauth2", "scope_aliases", Index, Attr], V} <- Settings ],
+        || {[?AUTH_OAUTH2, ?SCOPE_ALIASES, Index, Attr], V} <- Settings ],
     List1 = maps:to_list(maps:groups_from_list(KeyFun, ValueFun, List0)),    
     maps:from_list([ 
         extract_scope_alias_mapping(Proplist) || {_, Proplist} <- List1]).
@@ -56,8 +66,8 @@ extract_scope_alias_mapping(Proplist) ->
 
 -spec translate_resource_servers([{list(), binary()}]) -> map().
 translate_resource_servers(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.resource_servers", 
-        Conf),
+    Settings = cuttlefish_variable:filter_by_prefix(
+        ?AUTH_OAUTH2_RESOURCE_SERVERS, Conf),
     Map = merge_list_of_maps([
         extract_resource_server_properties(Settings),
         extract_resource_server_preferred_username_claims(Settings)
@@ -68,14 +78,12 @@ translate_resource_servers(Conf) ->
             _ -> V
         end end, Map),
     ResourceServers = maps:values(Map0),
-    lists:foldl(fun(Elem,AccMap) -> 
-        maps:put(proplists:get_value(id, Elem), Elem, AccMap) end, #{},
-        ResourceServers).
+    lists:foldl(fun(Elem,AccMap)-> maps:put(proplists:get_value(id, Elem), 
+        Elem, AccMap) end, #{}, ResourceServers).
 
 -spec translate_oauth_providers([{list(), binary()}]) -> map().
 translate_oauth_providers(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers",
-         Conf),
+    Settings = cuttlefish_variable:filter_by_prefix(?AUTH_OAUTH2_OAUTH_PROVIDERS, Conf),
 
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),
@@ -88,8 +96,8 @@ translate_oauth_providers(Conf) ->
 
 -spec translate_signing_keys([{list(), binary()}]) -> map().
 translate_signing_keys(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", 
-        Conf),
+    Settings = cuttlefish_variable:filter_by_prefix(
+        ?AUTH_OAUTH2_SIGNING_KEYS, Conf),
     ListOfKidPath = lists:map(fun({Id, Path}) -> {
         list_to_binary(lists:last(Id)), Path} end, Settings),
     translate_list_of_signing_keys(ListOfKidPath).
@@ -152,16 +160,18 @@ validator_https_uri(Attr, Uri) when is_list(Uri) ->
     end.
 
 merge_list_of_maps(ListOfMaps) ->
-    lists:foldl(fun(Elem, AccIn) -> maps:merge_with(fun(_K,V1,V2) -> V1 ++ V2 end,
-        Elem, AccIn) end, #{}, ListOfMaps).
+    lists:foldl(fun(Elem, AccIn) -> maps:merge_with(
+        fun(_K,V1,V2) -> V1 ++ V2 end, Elem, AccIn) end, #{}, ListOfMaps).
 
 extract_oauth_providers_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [
-        {Name, mapOauthProviderProperty({list_to_atom(Key), list_to_binary(V)})}
-        || {["auth_oauth2", "oauth_providers", Name, Key], V} <- Settings],
+    OAuthProviders = [{Name, mapOauthProviderProperty(
+        {
+            list_to_atom(Key), 
+            list_to_binary(V)})
+        } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
 
@@ -170,7 +180,7 @@ extract_resource_server_properties(Settings) ->
     ValueFun = fun extract_value/1,
 
     OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
-        || {["auth_oauth2", "resource_servers", Name, Key], V} <- Settings ],
+        || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
 mapOauthProviderProperty({Key, Value}) ->
@@ -192,7 +202,7 @@ extract_oauth_providers_https(Settings) ->
     ExtractProviderNameFun = fun extract_key_as_binary/1,
 
     AttributesPerProvider = [{Name, mapHttpProperty({list_to_atom(Key), V})} ||
-        {["auth_oauth2", "oauth_providers", Name, "https", Key], V} <- Settings ],
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "https", Key], V} <- Settings ],
 
     maps:map(fun(_K,V)-> [{https, V}] end,
         maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, 
@@ -208,7 +218,7 @@ extract_oauth_providers_algorithm(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedAlgorithms = [{Name, {Index, list_to_binary(V)}} ||
-        {["auth_oauth2","oauth_providers", Name, "algorithms", Index], V} 
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "algorithms", Index], V} 
             <- Settings ],
     SortedAlgorithms = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
         IndexedAlgorithms),
@@ -220,7 +230,7 @@ extract_resource_server_preferred_username_claims(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedClaims = [{Name, {Index, list_to_binary(V)}} ||
-        {["auth_oauth2","resource_servers", Name, "preferred_username_claims", 
+        {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, "preferred_username_claims", 
             Index], V} <- Settings ],
     SortedClaims = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
         IndexedClaims),
@@ -241,7 +251,7 @@ extract_oauth_providers_signing_keys(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedSigningKeys = [{Name, {list_to_binary(Kid), list_to_binary(V)}} ||
-        {["auth_oauth2","oauth_providers", Name, "signing_keys", Kid], V} 
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "signing_keys", Kid], V} 
             <- Settings ],
     maps:map(fun(_K,V)-> [{signing_keys, translate_list_of_signing_keys(V)}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedSigningKeys)).
