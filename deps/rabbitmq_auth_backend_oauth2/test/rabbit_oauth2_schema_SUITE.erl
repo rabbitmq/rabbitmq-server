@@ -39,8 +39,8 @@ all() ->
         test_resource_servers_attributes,
         test_invalid_oauth_providers_endpoint_params,
         test_without_oauth_providers_with_endpoint_params,
-        test_scope_aliases
-
+        test_scope_aliases_configured_as_list_of_properties,
+        test_scope_aliases_configured_as_map
     ].
 
 
@@ -282,7 +282,7 @@ test_oauth_providers_signing_keys(Conf) ->
       <<"2">> := {pem, <<"I'm not a certificate">>}
     } = SigningKeys.
 
-test_scope_aliases(_) ->
+test_scope_aliases_configured_as_list_of_properties(_) ->
     CuttlefishConf = [
         {["auth_oauth2","scope_aliases","1","alias"],
             "admin"},
@@ -297,6 +297,18 @@ test_scope_aliases(_) ->
         <<"admin">> := [<<"rabbitmq.tag:administrator">>],
         <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
     } = translate_scope_aliases(CuttlefishConf).
+    
+test_scope_aliases_configured_as_map(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","scope_aliases","admin"], 
+            "rabbitmq.tag:administrator"},
+        {["auth_oauth2","scope_aliases","developer"], 
+            "rabbitmq.tag:management rabbitmq.read:*/*"}        
+    ],
+    #{
+        <<"admin">> := [<<"rabbitmq.tag:administrator">>],
+        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
+    } = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf).
     
 
 cert_filename(Conf) ->

@@ -32,12 +32,20 @@ extract_value({_Name,V}) -> V.
 translate_scope_aliases(Conf) ->   
     Settings = cuttlefish_variable:filter_by_prefix(
         ?AUTH_OAUTH2_SCOPE_ALIASES, Conf),
-    extract_scope_aliases_as_a_list_of_alias_scope_props(Settings).
+    maps:merge(extract_scope_alias_as_map(Settings), 
+        extract_scope_aliases_as_list_of_alias_scope_props(Settings)).
     
 convert_space_separated_string_to_list_of_binaries(String) ->
     [ list_to_binary(V) || V <- string:tokens(String, " ")].
 
-extract_scope_aliases_as_a_list_of_alias_scope_props(Settings) ->    
+extract_scope_alias_as_map(Settings) ->
+    maps:from_list([{
+        list_to_binary(Alias), 
+        convert_space_separated_string_to_list_of_binaries(Scope)
+        }
+        || {[?AUTH_OAUTH2, ?SCOPE_ALIASES, Alias], Scope} <- Settings ]).
+
+extract_scope_aliases_as_list_of_alias_scope_props(Settings) ->    
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
