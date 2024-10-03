@@ -440,17 +440,10 @@ check_node_compatibility_task1(NodeA, NodesA, NodeB, NodesB, NodeAAsVirigin)
         {ok, InventoryA0} ->
             InventoryA = virtually_reset_inventory(
                            InventoryA0, NodeAAsVirigin),
-            ?LOG_DEBUG(
-               "Feature flags: inventory of node `~ts`:~n~tp",
-               [NodeA, InventoryA],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            log_inventory(NodeA, InventoryA),
             case collect_inventory_on_nodes(NodesB) of
                 {ok, InventoryB} ->
-                    ?LOG_DEBUG(
-                       "Feature flags: inventory of node "
-                       "`~ts`:~n~tp",
-                       [NodeB, InventoryB],
-                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    log_inventory(NodeB, InventoryB),
                     case are_compatible(InventoryA, InventoryB) of
                         true ->
                             ?LOG_NOTICE(
@@ -484,6 +477,59 @@ check_node_compatibility_task1(NodeA, NodesA, NodeB, NodesB, NodeAAsVirigin)
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, {aborted_feature_flags_compat_check, Error}}
     end.
+
+log_inventory(
+  FromNode,
+  #{feature_flags := FeatureFlags, states_per_node := StatesPerNode}) ->
+    ?LOG_DEBUG(
+       begin
+           AllFeatureNames = lists:sort(maps:keys(FeatureFlags)),
+           Nodes = lists:sort(maps:keys(StatesPerNode)),
+           LongestFeatureName = lists:foldl(
+                                  fun(FeatureName, MaxLength) ->
+                                          Length = length(
+                                                     atom_to_list(
+                                                       FeatureName)),
+                                          if
+                                              Length > MaxLength -> Length;
+                                              true               -> MaxLength
+                                          end
+                                  end, 0, AllFeatureNames),
+           NodeInitialPrefix = lists:duplicate(LongestFeatureName + 1, $\s),
+           {Header,
+            HeaderTail} = lists:foldl(
+                            fun(Node, {String, Prefix}) ->
+                                    String1 = io_lib:format(
+                                                "~ts~ts  ,-- ~ts~n",
+                                                [String, Prefix, Node]),
+                                    NextPrefix = Prefix ++ "  |",
+                                    {String1, NextPrefix}
+                            end, {"", NodeInitialPrefix}, Nodes),
+           lists:flatten(
+             io_lib:format(
+               "Feature flags: inventory queried from node `~ts`:~n",
+               [FromNode]) ++
+             Header ++
+             HeaderTail ++
+             [io_lib:format("~n~*ts:", [LongestFeatureName, FeatureName]) ++
+              [io_lib:format(
+                 "  ~s",
+                 [begin
+                      State = maps:get(
+                                FeatureName,
+                                maps:get(Node, StatesPerNode),
+                                false),
+                      case State of
+                          true           -> "x";
+                          state_changing -> "~";
+                          false          -> " "
+                      end
+                  end])
+               || Node <- Nodes]
+              || FeatureName <- AllFeatureNames] ++
+             [])
+       end,
+       #{domain_ => ?RMQLOG_DOMAIN_FEAT_FLAGS}).
 
 -spec list_nodes_clustered_with(Node) -> Ret when
       Node :: node(),
