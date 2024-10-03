@@ -174,6 +174,7 @@ all_tests() ->
      per_message_ttl_expiration_too_high,
      consumer_priorities,
      cancel_consumer_gh_3729,
+     cancel_consumer_gh_12424,
      cancel_and_consume_with_same_tag,
      validate_messages_on_queue,
      amqpl_headers,
@@ -3600,6 +3601,37 @@ cancel_consumer_gh_3729(Config) ->
 
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
+cancel_consumer_gh_12424(Config) ->
+    QQ = ?config(queue_name, Config),
+
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    ExpectedDeclareRslt0 = #'queue.declare_ok'{queue = QQ, message_count = 0, consumer_count = 0},
+    DeclareRslt0 = declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+    ?assertMatch(ExpectedDeclareRslt0, DeclareRslt0),
+
+    ok = publish(Ch, QQ),
+
+    ok = subscribe(Ch, QQ, false),
+
+    DeliveryTag = receive
+                      {#'basic.deliver'{delivery_tag = DT}, _} ->
+                          DT
+                  after 5000 ->
+                            flush(100),
+                            ct:fail("basic.deliver timeout")
+                  end,
+
+    ok = cancel(Ch),
+
+    R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = false},
+    ok = amqp_channel:cast(Ch, R),
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+
+    ok.
+
+    %% Test the scenario where a message is published to a quorum queue
 cancel_and_consume_with_same_tag(Config) ->
     %% https://github.com/rabbitmq/rabbitmq-server/issues/5927
     QQ = ?config(queue_name, Config),
