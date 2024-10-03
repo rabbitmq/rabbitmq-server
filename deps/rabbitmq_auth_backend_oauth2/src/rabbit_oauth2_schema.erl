@@ -52,8 +52,8 @@ extract_scope_aliases_as_list_of_alias_scope_props(Settings) ->
     List0 = [{Index, {list_to_atom(Attr), V}}
         || {[?AUTH_OAUTH2, ?SCOPE_ALIASES, Index, Attr], V} <- Settings ],
     List1 = maps:to_list(maps:groups_from_list(KeyFun, ValueFun, List0)),    
-    maps:from_list([ 
-        extract_scope_alias_mapping(Proplist) || {_, Proplist} <- List1]).
+    List2 = [extract_scope_alias_mapping(Proplist) || {_, Proplist} <- List1],
+    maps:from_list([ V || V <- List2, V =/= {}]).
     
 extract_scope_alias_mapping(Proplist) ->
     Alias = 
@@ -67,8 +67,14 @@ extract_scope_alias_mapping(Proplist) ->
             S -> convert_space_separated_string_to_list_of_binaries(S)
         end,
     case {Alias, Scope} of
-        {{error, _} = Err0, _} -> Err0;
-        {_, {error, _} = Err1 } -> Err1;
+        {{error, _} = Err0, _} -> 
+            rabbit_log:error("Skipped wrong scope_aliases configuration: ~p", 
+                [Err0]),
+            {};
+        {_, {error, _} = Err1 } -> 
+            rabbit_log:error("Skipped wrong scope_aliases configuration: ~p", 
+                [Err1]),
+            {};
         _ = V -> V
     end.
 

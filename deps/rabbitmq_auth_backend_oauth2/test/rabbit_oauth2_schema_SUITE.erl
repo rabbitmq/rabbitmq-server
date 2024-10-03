@@ -40,7 +40,8 @@ all() ->
         test_invalid_oauth_providers_endpoint_params,
         test_without_oauth_providers_with_endpoint_params,
         test_scope_aliases_configured_as_list_of_properties,
-        test_scope_aliases_configured_as_map
+        test_scope_aliases_configured_as_map,
+        test_scope_aliases_configured_as_list_of_missing_properties
     ].
 
 
@@ -298,6 +299,20 @@ test_scope_aliases_configured_as_list_of_properties(_) ->
         <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
     } = translate_scope_aliases(CuttlefishConf).
     
+test_scope_aliases_configured_as_list_of_missing_properties(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","scope_aliases","1","alias"],
+            "admin"}
+    ],
+    #{} = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf),
+
+    CuttlefishConf2 = [
+        {["auth_oauth2","scope_aliases","1","scope"],
+            "rabbitmq.tag:management rabbitmq.read:*/*"}
+    ],
+    #{} = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf2).
+
+        
 test_scope_aliases_configured_as_map(_) ->
     CuttlefishConf = [
         {["auth_oauth2","scope_aliases","admin"], 
