@@ -823,12 +823,29 @@ refresh_after_app_load_task() ->
       Ret :: ok | {error, Reason},
       Reason :: term().
 
-enable_many(#{states_per_node := _} = Inventory, [FeatureName | Rest]) ->
+enable_many(#{states_per_node := _} = Inventory, FeatureNames) ->
+    %% We acquire a lock before making any change to the registry. This is not
+    %% used by the controller (because it is already using a globally
+    %% registered name to prevent concurrent runs). But this is used in
+    %% `rabbit_feature_flags:is_enabled()' to block while the state is
+    %% `state_changing'.
+    rabbit_ff_registry_factory:acquire_state_change_lock(),
+    Ret = enable_many_locked(Inventory, FeatureNames),
+    rabbit_ff_registry_factory:release_state_change_lock(),
+    Ret.
+
+-spec enable_many_locked(Inventory, FeatureNames) -> Ret when
+      Inventory :: rabbit_feature_flags:cluster_inventory(),
+      FeatureNames :: [rabbit_feature_flags:feature_name()],
+      Ret :: ok | {error, Reason},
+      Reason :: term().
+
+enable_many_locked(#{states_per_node := _} = Inventory, [FeatureName | Rest]) ->
     case enable_if_supported(Inventory, FeatureName) of
-        {ok, Inventory1} -> enable_many(Inventory1, Rest);
+        {ok, Inventory1} -> enable_many_locked(Inventory1, Rest);
         Error            -> Error
     end;
-enable_many(_Inventory, []) ->
+enable_many_locked(_Inventory, []) ->
     ok.
 
 -spec enable_if_supported(Inventory, FeatureName) -> Ret when
@@ -845,7 +862,7 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
                "Feature flags: `~ts`: supported; continuing",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            lock_registry_and_enable(Inventory, FeatureName);
+            enable_with_registry_locked(Inventory, FeatureName);
         false ->
             ?LOG_DEBUG(
                "Feature flags: `~ts`: unsupported; aborting",
@@ -853,23 +870,6 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {error, unsupported}
     end.
-
--spec lock_registry_and_enable(Inventory, FeatureName) -> Ret when
-      Inventory :: rabbit_feature_flags:cluster_inventory(),
-      FeatureName :: rabbit_feature_flags:feature_name(),
-      Ret :: {ok, Inventory} | {error, Reason},
-      Reason :: term().
-
-lock_registry_and_enable(#{states_per_node := _} = Inventory, FeatureName) ->
-    %% We acquire a lock before making any change to the registry. This is not
-    %% used by the controller (because it is already using a globally
-    %% registered name to prevent concurrent runs). But this is used in
-    %% `rabbit_feature_flags:is_enabled()' to block while the state is
-    %% `state_changing'.
-    rabbit_ff_registry_factory:acquire_state_change_lock(),
-    Ret = enable_with_registry_locked(Inventory, FeatureName),
-    rabbit_ff_registry_factory:release_state_change_lock(),
-    Ret.
 
 -spec enable_with_registry_locked(Inventory, FeatureName) -> Ret when
       Inventory :: rabbit_feature_flags:cluster_inventory(),
