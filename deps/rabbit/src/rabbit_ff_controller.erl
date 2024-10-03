@@ -888,12 +888,14 @@ enable_many(#{states_per_node := _} = Inventory, FeatureNames) ->
       Ret :: ok | {error, Reason},
       Reason :: term().
 
-enable_many_locked(#{states_per_node := _} = Inventory, [FeatureName | Rest]) ->
+enable_many_locked(
+  #{states_per_node := _} = Inventory, [FeatureName | Rest]) ->
     case enable_if_supported(Inventory, FeatureName) of
         {ok, Inventory1} -> enable_many_locked(Inventory1, Rest);
         Error            -> Error
     end;
-enable_many_locked(_Inventory, []) ->
+enable_many_locked(
+  _Inventory, []) ->
     ok.
 
 -spec enable_if_supported(Inventory, FeatureName) -> Ret when
