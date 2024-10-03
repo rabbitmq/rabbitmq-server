@@ -265,12 +265,24 @@ apply(Meta, #settle{msg_ids = MsgIds,
         _ ->
             {State, ok}
     end;
+apply(#{machine_version := 4} = Meta,
+      #discard{consumer_key = ConsumerKey,
+               msg_ids = MsgIds},
+      #?STATE{consumers = Consumers } = State0) ->
+    %% buggy version that would have not found the consumer if the ConsumerKey
+    %% was a consumer_id()
+    case find_consumer(ConsumerKey, Consumers) of
+        {ConsumerKey, #consumer{} = Con} ->
+            discard(Meta, MsgIds, ConsumerKey, Con, true, #{}, State0);
+        _ ->
+            {State0, ok}
+    end;
 apply(Meta, #discard{consumer_key = ConsumerKey,
                      msg_ids = MsgIds},
       #?STATE{consumers = Consumers } = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
-        {ConsumerKey, #consumer{} = Con} ->
-            discard(Meta, MsgIds, ConsumerKey, Con, true, #{}, State0);
+        {ActualConsumerKey, #consumer{} = Con} ->
+            discard(Meta, MsgIds, ActualConsumerKey, Con, true, #{}, State0);
         _ ->
             {State0, ok}
     end;
@@ -291,13 +303,14 @@ apply(Meta, #modify{consumer_key = ConsumerKey,
                     msg_ids = MsgIds},
       #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
-        {ConsumerKey, #consumer{checked_out = Checked}}
+        {ActualConsumerKey, #consumer{checked_out = Checked}}
           when Undel == false ->
-            return(Meta, ConsumerKey, MsgIds, DelFailed,
+            return(Meta, ActualConsumerKey, MsgIds, DelFailed,
                    Anns, Checked, [], State);
-        {ConsumerKey, #consumer{} = Con}
+        {ActualConsumerKey, #consumer{} = Con}
           when Undel == true ->
-            discard(Meta, MsgIds, ConsumerKey, Con, DelFailed, Anns, State);
+            discard(Meta, MsgIds, ActualConsumerKey,
+                    Con, DelFailed, Anns, State);
         _ ->
             {State, ok}
     end;
@@ -898,13 +911,14 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 4.
+version() -> 5.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
 which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
-which_module(4) -> ?MODULE.
+which_module(4) -> ?MODULE;
+which_module(5) -> ?MODULE.
 
 -define(AUX, aux_v3).
 
@@ -2520,7 +2534,7 @@ make_checkout({_, _} = ConsumerId, Spec0, Meta) ->
 make_settle(ConsumerKey, MsgIds) when is_list(MsgIds) ->
     #settle{consumer_key = ConsumerKey, msg_ids = MsgIds}.
 
--spec make_return(consumer_id(), [msg_id()]) -> protocol().
+-spec make_return(consumer_key(), [msg_id()]) -> protocol().
 make_return(ConsumerKey, MsgIds) ->
     #return{consumer_key = ConsumerKey, msg_ids = MsgIds}.
 
@@ -2528,7 +2542,7 @@ make_return(ConsumerKey, MsgIds) ->
 is_return(Command) ->
     is_record(Command, return).
 
--spec make_discard(consumer_id(), [msg_id()]) -> protocol().
+-spec make_discard(consumer_key(), [msg_id()]) -> protocol().
 make_discard(ConsumerKey, MsgIds) ->
     #discard{consumer_key = ConsumerKey, msg_ids = MsgIds}.
 
@@ -2701,7 +2715,10 @@ convert(Meta, 1, To, State) ->
 convert(Meta, 2, To, State) ->
     convert(Meta, 3, To, rabbit_fifo_v3:convert_v2_to_v3(State));
 convert(Meta, 3, To, State) ->
-    convert(Meta, 4, To, convert_v3_to_v4(Meta, State)).
+    convert(Meta, 4, To, convert_v3_to_v4(Meta, State));
+convert(Meta, 4, To, State) ->
+    %% no conversion needed, this version only includes a logic change
+    convert(Meta, 5, To, State).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             ra_indexes = Indexes,
