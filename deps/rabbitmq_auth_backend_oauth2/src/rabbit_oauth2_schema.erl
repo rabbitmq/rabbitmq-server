@@ -67,13 +67,13 @@ extract_scope_alias_mapping(Proplist) ->
             S -> convert_space_separated_string_to_list_of_binaries(S)
         end,
     case {Alias, Scope} of
-        {{error, _} = Err0, _} -> 
-            rabbit_log:error("Skipped wrong scope_aliases configuration: ~p", 
-                [Err0]),
+        {{error, _}, _} -> 
+            cuttlefish:warn(
+                "Skipped scope_aliases due to missing alias attribute"),
             {};
-        {_, {error, _} = Err1 } -> 
-            rabbit_log:error("Skipped wrong scope_aliases configuration: ~p", 
-                [Err1]),
+        {_, {error, _}} -> 
+            cuttlefish:warn(
+                "Skipped scope_aliases due to missing scope attribute"),
             {};
         _ = V -> V
     end.
@@ -172,9 +172,9 @@ translate_list_of_signing_keys(ListOfKidPath) ->
                 {ok, Bin} ->
                     string:trim(Bin, trailing, "\n");
                 _Error ->
-                    %% this throws and makes Cuttlefish treak the key as invalid
-                    cuttlefish:invalid("file does not exist or cannot be " ++
-                        "read by the node")
+                    cuttlefish:invalid(io_lib:format(
+                        "File ~p does not exist or cannot be read by the node",
+                        [Path]))
             end
         end,
     maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, 
@@ -193,7 +193,6 @@ validator_file_exists(Attr, Filename) ->
         {ok, _} ->
             Filename;
         _Error ->
-            %% this throws and makes Cuttlefish treak the key as invalid
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: file ~p does not exist or " ++
                 "cannot be read by the node", [Attr, Filename]))
@@ -217,8 +216,8 @@ validator_https_uri(Attr, Uri) when is_list(Uri) ->
         true -> Uri;
         false ->
             cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: uri ~p must be a valid https uri", 
-                    [Attr, Uri]))
+                "Invalid attribute (~p) value: uri ~p must be a valid " ++
+                "https uri", [Attr, Uri]))
     end.
 
 merge_list_of_maps(ListOfMaps) ->
