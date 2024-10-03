@@ -78,13 +78,60 @@ extract_scope_alias_mapping(Proplist) ->
         _ = V -> V
     end.
 
+extract_resource_server_scope_aliases_as_list_of_props(Settings) ->
+    KeyFun = fun extract_key_as_binary/1,
+    ValueFun = fun extract_value/1,
+
+    List0 = [
+        {
+            Name, 
+            {Index, {list_to_atom(Attr), V}}
+        } || 
+        {[
+            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES, 
+            Index, Attr
+         ], V
+        } <- Settings ],
+    Map0 = maps:groups_from_list(KeyFun, ValueFun, List0),
+     
+    Map4 = maps:map(fun (_, L) -> 
+        Map2 = maps:map(fun (_, L2) -> extract_scope_alias_mapping(L2) end, 
+            maps:groups_from_list(KeyFun, ValueFun, L)),
+        Map3 = maps:filter(fun (_,V) -> V =/= {} end, Map2),
+        [{scope_aliases, maps:from_list([ V || {_, V} <- maps:to_list(Map3)])}]
+        end, Map0),
+       
+    Map4.
+ 
+extract_resource_server_scope_aliases_as_map(Settings) ->
+    KeyFun = fun extract_key_as_binary/1,
+    ValueFun = fun extract_value/1,
+
+    List0 = [
+        {
+            Name, 
+            {
+                list_to_binary(Alias), 
+                convert_space_separated_string_to_list_of_binaries(Scope)
+            }         
+        } || 
+        {[
+            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES, 
+            Alias
+         ], Scope
+        } <- Settings ],
+    Map0 = maps:groups_from_list(KeyFun, ValueFun, List0),
+    maps:map(fun (_, L) -> [{scope_aliases, maps:from_list(L)}] end, Map0).    
+
 -spec translate_resource_servers([{list(), binary()}]) -> map().
 translate_resource_servers(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix(
         ?AUTH_OAUTH2_RESOURCE_SERVERS, Conf),
     Map = merge_list_of_maps([
         extract_resource_server_properties(Settings),
-        extract_resource_server_preferred_username_claims(Settings)
+        extract_resource_server_preferred_username_claims(Settings),
+        extract_resource_server_scope_aliases_as_list_of_props(Settings),
+        extract_resource_server_scope_aliases_as_map(Settings)
     ]),
     Map0 = maps:map(fun(K,V) ->
         case proplists:get_value(id, V) of
@@ -97,7 +144,8 @@ translate_resource_servers(Conf) ->
 
 -spec translate_oauth_providers([{list(), binary()}]) -> map().
 translate_oauth_providers(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix(?AUTH_OAUTH2_OAUTH_PROVIDERS, Conf),
+    Settings = cuttlefish_variable:filter_by_prefix(
+        ?AUTH_OAUTH2_OAUTH_PROVIDERS, Conf),
 
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),

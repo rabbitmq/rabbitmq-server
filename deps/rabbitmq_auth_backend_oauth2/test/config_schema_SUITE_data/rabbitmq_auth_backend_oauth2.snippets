@@ -236,5 +236,81 @@
             }}
         ]}
        ], []
+  },
+  {scope_aliases_3, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.resource_servers.a.scope_aliases.admin = rabbitmq.tag:administrator 
+       auth_oauth2.resource_servers.a.scope_aliases.developer = rabbitmq.tag:management rabbitmq.read:*/*
+       auth_oauth2.resource_servers.b.scope_aliases.admin_b = rabbitmq.tag:administrator 
+       auth_oauth2.resource_servers.b.scope_aliases.developer_b = rabbitmq.tag:management rabbitmq.read:*/*",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {resource_servers, #{
+                <<"a">> => [
+                    {scope_aliases, #{
+                      <<"admin">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                              ],
+                      <<"developer">> => [ 
+                              <<"rabbitmq.tag:management">>,
+                              <<"rabbitmq.read:*/*">>
+                              ]                              
+                    }},
+                    {id, <<"a">>}
+                ],
+                <<"b">> => [
+                    {scope_aliases, #{
+                      <<"admin_b">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                              ],
+                      <<"developer_b">> => [ 
+                              <<"rabbitmq.tag:management">>,
+                              <<"rabbitmq.read:*/*">>
+                              ]                              
+                    }},
+                    {id, <<"b">>}
+                ]
+              }
+            }            
+        ]}
+       ], []
+  },
+  {scope_aliases_4, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.resource_servers.b.scope_aliases.1.alias = admin_b
+       auth_oauth2.resource_servers.b.scope_aliases.1.scope = rabbitmq.tag:administrator 
+       auth_oauth2.resource_servers.a.scope_aliases.1.alias = admin
+       auth_oauth2.resource_servers.a.scope_aliases.1.scope = rabbitmq.tag:administrator 
+       auth_oauth2.resource_servers.a.scope_aliases.2.alias = developer
+       auth_oauth2.resource_servers.a.scope_aliases.2.scope = rabbitmq.tag:management rabbitmq.read:*/*",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {resource_servers, #{
+                <<"a">> => [
+                    {scope_aliases, #{
+                      <<"admin">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                              ],
+                      <<"developer">> => [ 
+                              <<"rabbitmq.tag:management">>,
+                              <<"rabbitmq.read:*/*">>
+                              ]                              
+                    }},
+                    {id, <<"a">>}
+                ],
+                <<"b">> => [
+                    {scope_aliases, #{
+                      <<"admin_b">> => [ 
+                              <<"rabbitmq.tag:administrator">>
+                        ]                              
+                    }},
+                    {id, <<"b">>}
+                ]
+              }
+            }            
+        ]}
+       ], []
   }
 ].
