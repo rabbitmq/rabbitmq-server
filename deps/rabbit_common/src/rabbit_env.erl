@@ -999,13 +999,15 @@ forced_feature_flags_on_init(Context) ->
     case Value of
         false ->
             %% get_prefixed_env_var() considers an empty string
-            %% is the same as an undefined environment variable.
-            update_context(Context,
-                           forced_feature_flags_on_init, undefined, default);
+            %% as an undefined environment variable.
+            update_context(
+              Context,
+              forced_feature_flags_on_init, undefined, default);
         _ ->
-            Flags = [list_to_atom(V) || V <- string:lexemes(Value, ",")],
-            update_context(Context,
-                           forced_feature_flags_on_init, Flags, environment)
+            FeatureNames = string:lexemes(Value, ","),
+            update_context(
+              Context,
+              forced_feature_flags_on_init, FeatureNames, environment)
     end.
 
 log_feature_flags_registry(Context) ->

@@ -675,48 +675,83 @@ enable_task(FeatureNames) ->
     end.
 
 enable_default_task() ->
-    FeatureNames = get_forced_feature_flag_names(),
-    case FeatureNames of
-        undefined ->
+    case get_forced_feature_flag_names() of
+        {ok, undefined} ->
             ?LOG_DEBUG(
               "Feature flags: starting an unclustered node for the first "
               "time: all stable feature flags will be enabled by default",
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {ok, Inventory} = collect_inventory_on_nodes([node()]),
-            #{feature_flags := FeatureFlags} = Inventory,
-            StableFeatureNames =
-            maps:fold(
-              fun(FeatureName, FeatureProps, Acc) ->
-                      Stability = rabbit_feature_flags:get_stability(
-                                    FeatureProps),
-                      case Stability of
-                          stable -> [FeatureName | Acc];
-                          _      -> Acc
-                      end
-              end, [], FeatureFlags),
+            StableFeatureNames = get_stable_feature_flags(Inventory),
             enable_many(Inventory, StableFeatureNames);
-        [] ->
+        {ok, []} ->
             ?LOG_DEBUG(
               "Feature flags: starting an unclustered node for the first "
               "time: all feature flags are forcibly left disabled from "
               "the $RABBITMQ_FEATURE_FLAGS environment variable",
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
-        _ ->
+        {ok, FeatureNames} when is_list(FeatureNames) ->
             ?LOG_DEBUG(
                "Feature flags: starting an unclustered node for the first "
                "time: only the following feature flags specified in the "
                "$RABBITMQ_FEATURE_FLAGS environment variable will be enabled: "
-               "~tp",
+               "~0tp",
                [FeatureNames],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             {ok, Inventory} = collect_inventory_on_nodes([node()]),
-            enable_many(Inventory, FeatureNames)
+            enable_many(Inventory, FeatureNames);
+        {ok, {rel, Plus, Minus}} ->
+            ?LOG_DEBUG(
+              "Feature flags: starting an unclustered node for the first "
+              "time: all stable feature flags will be enabled, after "
+              "applying changes from $RABBITMQ_FEATURE_FLAGS: adding ~0tp, "
+              "skipping ~0tp",
+              [Plus, Minus],
+              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            {ok, Inventory} = collect_inventory_on_nodes([node()]),
+            StableFeatureNames = get_stable_feature_flags(Inventory),
+            Unsupported = lists:filter(
+                            fun(FeatureName) ->
+                                    not is_known_and_supported(
+                                          Inventory, FeatureName)
+                            end, Minus),
+            case Unsupported of
+                [] ->
+                    FeatureNames = (StableFeatureNames -- Minus) ++ Plus,
+                    enable_many(Inventory, FeatureNames);
+                _ ->
+                    ?LOG_ERROR(
+                       "Feature flags: unsupported feature flags to skip in "
+                       "$RABBITMQ_FEATURE_FLAGS: ~0tp",
+                       [Unsupported],
+                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+                    {error, unsupported}
+            end;
+        {error, syntax_error_in_envvar} = Error ->
+            ?LOG_DEBUG(
+               "Feature flags: invalid mix of `feature_flag` and "
+               "`+/-feature_flag` in $RABBITMQ_FEATURE_FLAGS",
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+            Error
     end.
 
+get_stable_feature_flags(#{feature_flags := FeatureFlags}) ->
+    maps:fold(
+      fun(FeatureName, FeatureProps, Acc) ->
+              Stability = rabbit_feature_flags:get_stability(FeatureProps),
+              case Stability of
+                  stable -> [FeatureName | Acc];
+                  _      -> Acc
+              end
+      end, [], FeatureFlags).
+
 -spec get_forced_feature_flag_names() -> Ret when
-      Ret :: FeatureNames | undefined,
-      FeatureNames :: [rabbit_feature_flags:feature_name()].
+      Ret :: {ok, Abs | Rel | undefined} | {error, syntax_error_in_envvar},
+      Abs :: [rabbit_feature_flags:feature_name()],
+      Rel :: {rel,
+              [rabbit_feature_flags:feature_name()],
+              [rabbit_feature_flags:feature_name()]}.
 %% @doc Returns the (possibly empty) list of feature flags the user wants to
 %% enable out-of-the-box when starting a node for the first time.
 %%
@@ -737,43 +772,64 @@ enable_default_task() ->
 %% @private
 
 get_forced_feature_flag_names() ->
-    Ret = case get_forced_feature_flag_names_from_env() of
-              undefined -> get_forced_feature_flag_names_from_config();
-              List      -> List
-          end,
-    case Ret of
-        undefined ->
-            ok;
-        [] ->
-            ?LOG_INFO(
-               "Feature flags: automatic enablement of feature flags "
-               "disabled (i.e. none will be enabled automatically)",
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS});
-        _ ->
-            ?LOG_INFO(
-               "Feature flags: automatic enablement of feature flags "
-               "limited to the following list: ~tp",
-               [Ret],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
-    end,
-    Ret.
+    case get_forced_feature_flag_names_from_env() of
+        {ok, undefined}    -> get_forced_feature_flag_names_from_config();
+        {ok, _} = Ret      -> Ret;
+        {error, _} = Error -> Error
+    end.
 
 -spec get_forced_feature_flag_names_from_env() -> Ret when
-      Ret :: FeatureNames | undefined,
-      FeatureNames :: [rabbit_feature_flags:feature_name()].
+      Ret :: {ok, Abs | Rel | undefined} | {error, syntax_error_in_envvar},
+      Abs :: [rabbit_feature_flags:feature_name()],
+      Rel :: {rel,
+              [rabbit_feature_flags:feature_name()],
+              [rabbit_feature_flags:feature_name()]}.
 %% @private
 
 get_forced_feature_flag_names_from_env() ->
-    case rabbit_prelaunch:get_context() of
-        #{forced_feature_flags_on_init := ForcedFFs}
-          when is_list(ForcedFFs) ->
-            ForcedFFs;
-        _ ->
-            undefined
+    Value = case rabbit_prelaunch:get_context() of
+                #{forced_feature_flags_on_init := ForcedFFs} -> ForcedFFs;
+                _                                            -> undefined
+            end,
+    case Value of
+        undefined ->
+            {ok, Value};
+        [] ->
+            {ok, Value};
+        [[Op | _] | _] when Op =:= $+ orelse Op =:= $- ->
+            lists:foldr(
+              fun
+                  ([$+ | NameS], {ok, {rel, Plus, Minus}}) ->
+                      Name = list_to_atom(NameS),
+                      Plus1 = [Name | Plus],
+                      {ok, {rel, Plus1, Minus}};
+                  ([$- | NameS], {ok, {rel, Plus, Minus}}) ->
+                      Name = list_to_atom(NameS),
+                      Minus1 = [Name | Minus],
+                      {ok, {rel, Plus, Minus1}};
+                  (_, {error, _} = Error) ->
+                      Error;
+                  (_, _) ->
+                      {error, syntax_error_in_envvar}
+              end, {ok, {rel, [], []}}, Value);
+        _ when is_list(Value) ->
+            lists:foldr(
+              fun
+                  (Name, {ok, Abs}) when is_atom(Name) ->
+                      {ok, [Name | Abs]};
+                  ([C | _] = NameS, {ok, Abs})
+                    when C =/= $+ andalso C =/= $- ->
+                      Name = list_to_atom(NameS),
+                      {ok, [Name | Abs]};
+                  (_, {error, _} = Error) ->
+                      Error;
+                  (_, _) ->
+                      {error, syntax_error_in_envvar}
+              end, {ok, []}, Value)
     end.
 
 -spec get_forced_feature_flag_names_from_config() -> Ret when
-      Ret :: FeatureNames | undefined,
+      Ret :: {ok, FeatureNames | undefined},
       FeatureNames :: [rabbit_feature_flags:feature_name()].
 %% @private
 
@@ -781,15 +837,8 @@ get_forced_feature_flag_names_from_config() ->
     Value = application:get_env(
               rabbit, forced_feature_flags_on_init, undefined),
     case Value of
-        undefined ->
-            Value;
-        _ when is_list(Value) ->
-            case lists:all(fun is_atom/1, Value) of
-                true  -> Value;
-                false -> undefined
-            end;
-        _ ->
-            undefined
+        undefined             -> {ok, Value};
+        _ when is_list(Value) -> {ok, Value}
     end.
 
 -spec sync_cluster_task() -> Ret when
@@ -914,7 +963,7 @@ enable_if_supported(#{states_per_node := _} = Inventory, FeatureName) ->
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             enable_with_registry_locked(Inventory, FeatureName);
         false ->
-            ?LOG_DEBUG(
+            ?LOG_ERROR(
                "Feature flags: `~ts`: unsupported; aborting",
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
