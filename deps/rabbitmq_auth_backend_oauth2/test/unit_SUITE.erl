@@ -1105,8 +1105,8 @@ test_incorrect_kid(_) ->
     AltKid   = <<"other-token-key">>,
     Username = <<"username">>,
     Jwk      = ?UTIL_MOD:fixture_jwk(),
-    set_env(resource_server_id, 
-        <<"rabbitmq">>),
+    unset_env(key_config),
+    set_env(resource_server_id, <<"rabbitmq">>),
     Token = ?UTIL_MOD:sign_token_hs(
         ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, 
             AltKid, true),
@@ -1298,6 +1298,8 @@ normalize_token_scope_without_scope_claim(_) ->
 
 set_env(Par, Var) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Var).
+unset_env(Par) ->
+    application:unset_env(rabbitmq_auth_backend_oauth2, Par).
 
 assert_vhost_access_granted(AuthUser, VHost) ->
     assert_vhost_access_response(true, AuthUser, VHost).

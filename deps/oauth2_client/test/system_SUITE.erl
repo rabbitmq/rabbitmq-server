@@ -27,8 +27,8 @@ all() ->
 [
     {group, https_down},
     {group, https},
-    {group, with_all_oauth_provider_settings}
-   % {group, without_all_oauth_providers_settings}
+    {group, with_all_oauth_provider_settings},
+    {group, without_all_oauth_providers_settings}
 
 ].
 

@@ -27,7 +27,9 @@
 -import(rabbit_ct_broker_helpers, [    
     rpc/5
 ]).
--import(rabbit_mgmt_test_util, [amqp_port/1]).
+-import(rabbit_mgmt_test_util, [
+    amqp_port/1
+]).
 
 all() ->
     [
@@ -170,30 +172,21 @@ end_per_suite(Config) ->
       ] ++ rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(no_peer_verification, Config) ->
-<<<<<<< HEAD
     KeyConfig = set_config(?config(key_config, Config), [
-            {jwks_url, ?config(non_strict_jwks_url, Config)}, 
+            {jwks_url, ?config(non_strict_jwks_uri, Config)}, 
             {peer_verification, verify_none}
     ]),
-    ok = rpc_set_env(Config,key_config, KeyConfig),
+    ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
-=======
-    KeyConfig = rabbit_ct_helpers:set_config(?config(key_config, Config), [{jwks_uri, ?config(non_strict_jwks_uri, Config)}, {peer_verification, verify_none}]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env, [rabbitmq_auth_backend_oauth2, key_config, KeyConfig]),
-    rabbit_ct_helpers:set_config(Config, {key_config, KeyConfig});
->>>>>>> 2586207266 (Deprecate jwks_url but it is still supported)
-
 init_per_group(without_kid, Config) ->
     set_config(Config, [{include_kid, false}]);
-
 init_per_group(with_resource_servers_rabbitmq1_with_oauth_provider_A, Config) ->
     ResourceServersConfig0 = rpc_get_env(Config, resource_servers, #{}),
-    Resource0 = maps:get(<<"rabbitmq1">>, 
-        ResourceServersConfig0, [{id, <<"rabbitmq1">>}]),
+    Resource0 = maps:get(<<"rabbitmq1">>, ResourceServersConfig0, 
+        [{id, <<"rabbitmq1">>}]),
     ResourceServersConfig1 = maps:put(<<"rabbitmq1">>, 
         [{oauth_provider_id, <<"A">>} | Resource0], ResourceServersConfig0),
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
-
 init_per_group(with_oauth_providers_A_B_and_C, Config) ->
     OAuthProviders = #{
         <<"A">> => [
@@ -211,26 +204,22 @@ init_per_group(with_oauth_providers_A_B_and_C, Config) ->
     },
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders),
     Config;
-
 init_per_group(with_default_oauth_provider_B, Config) ->
     ok = rpc_set_env(Config, default_oauth_provider, <<"B">>);
-
 init_per_group(with_oauth_providers_A_with_default_key, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
     OAuthProviders1 = maps:put(<<"A">>, [
         {default_key, ?UTIL_MOD:token_key(?config(fixture_jwksA, Config))} 
         | OAuthProvider], OAuthProviders0),
-
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
-
 init_per_group(with_oauth_provider_A_with_jwks_with_one_signing_key, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
     OAuthProviders1 = maps:put(<<"A">>, [
-        {jwks_uri, strict_jwks_url(Config, "/jwksA")} | OAuthProvider],
-
+        {jwks_uri, strict_jwks_uri(Config, "/jwksA")} | OAuthProvider],
+        OAuthProviders0),
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
 init_per_group(with_resource_servers_rabbitmq2, Config) ->
@@ -239,7 +228,8 @@ init_per_group(with_resource_servers_rabbitmq2, Config) ->
         [{id, <<"rabbitmq2">>}]),
     ResourceServersConfig1 = maps:put(<<"rabbitmq2">>, Resource0, 
         ResourceServersConfig0),
-    ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
+    ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1),
+    Config;
 init_per_group(with_oauth_providers_B_with_default_key_static_key, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"B">>, OAuthProviders0, []),
@@ -247,7 +237,6 @@ init_per_group(with_oauth_providers_B_with_default_key_static_key, Config) ->
         {default_key, ?UTIL_MOD:token_key(?config(fixture_staticB, Config))} |
         proplists:delete(default_key, OAuthProvider)],
         OAuthProviders0),
-
     ok = rpc_set_env(Config,oauth_providers, OAuthProviders1),
     Config;
 init_per_group(with_oauth_provider_C_with_two_static_keys, Config) ->
@@ -264,7 +253,6 @@ init_per_group(with_oauth_provider_C_with_two_static_keys, Config) ->
 
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
-
 init_per_group(with_root_oauth_provider_with_two_static_keys_and_one_jwks_key, Config) ->
     KeyConfig = rpc_get_env(Config, key_config, []),
     Jwks1 = ?config(fixture_static_1, Config),
@@ -291,7 +279,6 @@ init_per_group(with_root_oauth_provider_with_default_jwks_key, Config) ->
         | KeyConfig],
     ok = rpc_set_env(Config, key_config, KeyConfig1),
     Config;
-
 init_per_group(with_oauth_provider_B_with_one_static_key_and_jwks_with_two_signing_keys, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"B">>, OAuthProviders0, []),
@@ -306,16 +293,13 @@ init_per_group(with_oauth_provider_B_with_one_static_key_and_jwks_with_two_signi
 
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
-
 init_per_group(with_resource_servers_rabbitmq3_with_oauth_provider_C, Config) ->
     ResourceServersConfig0 = rpc_get_env(Config, resource_servers, #{}),
     Resource0 = maps:get(<<"rabbitmq3">>, ResourceServersConfig0, [
         {id, <<"rabbitmq3">>},{oauth_provider_id, <<"C">>}]),
     ResourceServersConfig1 = maps:put(<<"rabbitmq3">>, Resource0, 
         ResourceServersConfig0),
-
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
-
 init_per_group(with_oauth_providers_C_with_default_key_static_key_1, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"C">>, OAuthProviders0, []),
@@ -323,10 +307,8 @@ init_per_group(with_oauth_providers_C_with_default_key_static_key_1, Config) ->
     OAuthProviders1 = maps:put(<<"C">>, [
         {default_key, ?UTIL_MOD:token_key(Jwks)} | OAuthProvider],
         OAuthProviders0),
-
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
-
 init_per_group(_Group, Config) ->
     ok = rpc_set_env(Config, resource_server_id, ?RESOURCE_SERVER_ID),
     Config.
@@ -461,7 +443,7 @@ start_jwks_server(Config0) ->
     %% Assume we don't have more than 100 ports allocated for tests
     PortBase = rabbit_ct_broker_helpers:get_node_config(Config0, 0, tcp_ports_base),
     JwksServerPort = PortBase + 100,
-    Config = rabbit_ct_helpers:set_config(Config0, [{jwksServerPort, JwksServerPort}]),
+    Config = set_config(Config0, [{jwksServerPort, JwksServerPort}]),
 
     %% Both URLs direct to the same JWKS server
     %% The NonStrictJwksUrl identity cannot be validated while StrictJwksUrl identity can be validated
@@ -479,7 +461,7 @@ start_jwks_server(Config0) ->
         {"/jwks1", [Jwk1, Jwk3]},
         {"/jwks2", [Jwk2]}
       ]),
-    KeyConfig = [{jwks_uri, StrictJwksUri},
+    KeyConfig = [{jwks_url, StrictJwksUri},
                  {peer_verification, verify_peer},
                  {cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])}],
     ok = rpc_set_env(Config, key_config, KeyConfig),

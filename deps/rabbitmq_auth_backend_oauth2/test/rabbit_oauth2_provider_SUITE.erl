@@ -110,7 +110,7 @@ init_per_group(oauth_provider_with_jwks_uri, Config) ->
     URL = case ?config(oauth_provider_id, Config) of
         root ->
             RootUrl = build_url_to_oauth_provider(<<"/keys">>),
-            set_env(key_config, [{jwks_uri, RootUrl}]),
+            set_env(jwks_uri, RootUrl),
             RootUrl;
         <<"A">> ->
             AUrl = build_url_to_oauth_provider(<<"/A/keys">>),
