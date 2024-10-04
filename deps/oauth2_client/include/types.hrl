@@ -5,8 +5,9 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
-%% The closest we have to a type import in Erlang
--type(option(T) :: T | 'undefined').
+%% Matches the option type in rabbit_types without introducing a dependency
+%% on that module and RabbitMQ core (rabbit_common)
+-type(option(T) :: T | 'none' | 'undefined').
 
 -type oauth_provider_id() :: root | binary().
 
@@ -47,9 +48,10 @@
 -record(successful_access_token_response, {
     access_token :: binary(),
     token_type :: binary(),
-    refresh_token :: option(binary()),    % A refresh token SHOULD NOT be included
-                                        % .. for client-credentials flow.
-                                        % https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
+    %% Note: a refresh token SHOULD NOT be included
+    %% ... for client-credentials flow.
+    %% See https://www.rfc-editor.org/rfc/rfc6749#section-4.4.3
+    refresh_token :: option(binary()),
     expires_in :: option(integer())
 }).
 
