@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(resource_server_SUITE).
+-module(rabbit_oauth2_resource_server_SUITE).
 
 -compile(export_all).
 -include_lib("common_test/include/ct.hrl").
@@ -19,7 +19,7 @@
 -define(OAUTH_PROVIDER_B,<<"B">>).
 
 -import(oauth2_client, [get_oauth_provider/2]).
--import(resource_server, [resolve_resource_server_from_audience/1]).
+-import(rabbit_oauth2_resource_server, [resolve_resource_server_from_audience/1]).
 
 
 all() -> [

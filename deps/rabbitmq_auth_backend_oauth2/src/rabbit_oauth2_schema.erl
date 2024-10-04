@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(oauth2_schema).
+-module(rabbit_oauth2_schema).
 
 
 -export([
@@ -20,7 +20,8 @@ extract_value({_Name,V}) -> V.
 
 -spec translate_resource_servers([{list(), binary()}]) -> map().
 translate_resource_servers(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.resource_servers", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.resource_servers", 
+        Conf),
     Map = merge_list_of_maps([
         extract_resource_server_properties(Settings),
         extract_resource_server_preferred_username_claims(Settings)
@@ -31,16 +32,19 @@ translate_resource_servers(Conf) ->
             _ -> V
         end end, Map),
     ResourceServers = maps:values(Map0),
-    lists:foldl(fun(Elem,AccMap)-> maps:put(proplists:get_value(id, Elem), Elem, AccMap) end, #{},
+    lists:foldl(fun(Elem,AccMap) -> 
+        maps:put(proplists:get_value(id, Elem), Elem, AccMap) end, #{},
         ResourceServers).
 
 -spec translate_oauth_providers([{list(), binary()}]) -> map().
 translate_oauth_providers(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.oauth_providers",
+         Conf),
 
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),
-        extract_oauth_providers_endpoint_params(discovery_endpoint_params, Settings),
+        extract_oauth_providers_endpoint_params(discovery_endpoint_params, 
+            Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
         extract_oauth_providers_signing_keys(Settings)
@@ -48,8 +52,10 @@ translate_oauth_providers(Conf) ->
 
 -spec translate_signing_keys([{list(), binary()}]) -> map().
 translate_signing_keys(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", Conf),
-    ListOfKidPath = lists:map(fun({Id, Path}) -> {list_to_binary(lists:last(Id)), Path} end, Settings),
+    Settings = cuttlefish_variable:filter_by_prefix("auth_oauth2.signing_keys", 
+        Conf),
+    ListOfKidPath = lists:map(fun({Id, Path}) -> {
+        list_to_binary(lists:last(Id)), Path} end, Settings),
     translate_list_of_signing_keys(ListOfKidPath).
 
 -spec translate_list_of_signing_keys([{list(), list()}]) -> map().
@@ -61,15 +67,20 @@ translate_list_of_signing_keys(ListOfKidPath) ->
                     string:trim(Bin, trailing, "\n");
                 _Error ->
                     %% this throws and makes Cuttlefish treak the key as invalid
-                    cuttlefish:invalid("file does not exist or cannot be read by the node")
+                    cuttlefish:invalid("file does not exist or cannot be " ++
+                        "read by the node")
             end
         end,
-    maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, maps:from_list(ListOfKidPath)).
+    maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, 
+        maps:from_list(ListOfKidPath)).
 
--spec translate_endpoint_params(list(), [{list(), binary()}]) -> [{binary(), binary()}].
+-spec translate_endpoint_params(list(), [{list(), binary()}]) -> 
+        [{binary(), binary()}].
 translate_endpoint_params(Variable, Conf) ->
-    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, Conf),
-    [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V} <- Params0].
+    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, 
+        Conf),
+    [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V}
+         <- Params0].
 
 validator_file_exists(Attr, Filename) ->
     case file:read_file(Filename) of
@@ -78,7 +89,8 @@ validator_file_exists(Attr, Filename) ->
         _Error ->
             %% this throws and makes Cuttlefish treak the key as invalid
             cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: file ~p does not exist or cannot be read by the node", [Attr, Filename]))
+                "Invalid attribute (~p) value: file ~p does not exist or " ++
+                "cannot be read by the node", [Attr, Filename]))
     end.
 
 validator_uri(Attr, Uri) when is_binary(Uri) ->
@@ -99,7 +111,8 @@ validator_https_uri(Attr, Uri) when is_list(Uri) ->
         true -> Uri;
         false ->
             cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: uri ~p must be a valid https uri", [Attr, Uri]))
+                "Invalid attribute (~p) value: uri ~p must be a valid https uri", 
+                    [Attr, Uri]))
     end.
 
 merge_list_of_maps(ListOfMaps) ->
@@ -110,7 +123,8 @@ extract_oauth_providers_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, mapOauthProviderProperty({list_to_atom(Key), list_to_binary(V)})}
+    OAuthProviders = [
+        {Name, mapOauthProviderProperty({list_to_atom(Key), list_to_binary(V)})}
         || {["auth_oauth2", "oauth_providers", Name, Key], V} <- Settings],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
@@ -133,7 +147,8 @@ mapOauthProviderProperty({Key, Value}) ->
         discovery_endpoint_path -> validator_uri(Key, Value);
         discovery_endpoint_params ->
             cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: should be a map of Key,Value pairs", [Key]));
+                "Invalid attribute (~p) value: should be a map of Key,Value pairs", 
+                    [Key]));
         _ -> Value
     end}.
 
@@ -144,7 +159,8 @@ extract_oauth_providers_https(Settings) ->
         {["auth_oauth2","oauth_providers", Name, "https", Key], V} <- Settings ],
 
     maps:map(fun(_K,V)-> [{https, V}] end,
-        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, AttributesPerProvider)).
+        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, 
+            AttributesPerProvider)).
 
 mapHttpProperty({Key, Value}) ->
     {Key, case Key of
@@ -156,8 +172,10 @@ extract_oauth_providers_algorithm(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedAlgorithms = [{Name, {Index, list_to_binary(V)}} ||
-        {["auth_oauth2","oauth_providers", Name, "algorithms", Index], V} <- Settings ],
-    SortedAlgorithms = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, IndexedAlgorithms),
+        {["auth_oauth2","oauth_providers", Name, "algorithms", Index], V} 
+            <- Settings ],
+    SortedAlgorithms = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
+        IndexedAlgorithms),
     Algorithms = [{Name, V} || {Name, {_I, V}} <- SortedAlgorithms],
     maps:map(fun(_K,V)-> [{algorithms, V}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, Algorithms)).
@@ -166,8 +184,10 @@ extract_resource_server_preferred_username_claims(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedClaims = [{Name, {Index, list_to_binary(V)}} ||
-        {["auth_oauth2","resource_servers", Name, "preferred_username_claims", Index], V} <- Settings ],
-    SortedClaims = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, IndexedClaims),
+        {["auth_oauth2","resource_servers", Name, "preferred_username_claims", 
+            Index], V} <- Settings ],
+    SortedClaims = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
+        IndexedClaims),
     Claims = [{Name, V} || {Name, {_I, V}} <- SortedClaims],
     maps:map(fun(_K,V)-> [{preferred_username_claims, V}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, Claims)).
@@ -185,6 +205,7 @@ extract_oauth_providers_signing_keys(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedSigningKeys = [{Name, {list_to_binary(Kid), list_to_binary(V)}} ||
-        {["auth_oauth2","oauth_providers", Name, "signing_keys", Kid], V} <- Settings ],
+        {["auth_oauth2","oauth_providers", Name, "signing_keys", Kid], V} 
+            <- Settings ],
     maps:map(fun(_K,V)-> [{signing_keys, translate_list_of_signing_keys(V)}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedSigningKeys)).

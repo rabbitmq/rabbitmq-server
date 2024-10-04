@@ -23,9 +23,9 @@
     format_ssl_options/1,
     format_oauth_provider_id/1,
     get_oauth_provider/2]).
--import(resource_server, [
+-import(rabbit_oauth2_resource_server, [
     resolve_resource_server_from_audience/1]).
--import(oauth_provider, [
+-import(rabbit_oauth2_provider, [
     add_signing_key/2, get_signing_key/2,
     get_internal_oauth_provider/1,
     replace_signing_keys/2]).

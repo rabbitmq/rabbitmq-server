@@ -28,8 +28,8 @@
     get_scope/1, set_scope/2,
     resolve_resource_server/1]).
 
--import(keycloak, [has_keycloak_scopes/1, extract_scopes_from_keycloak_format/1]).
--import(rar, [extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
+-import(rabbit_oauth2_keycloak, [has_keycloak_scopes/1, extract_scopes_from_keycloak_format/1]).
+-import(rabbit_oauth2_rar, [extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
 
 -import(rabbit_oauth2_scope, [filter_matching_scope_prefix_and_drop_it/2]).
 

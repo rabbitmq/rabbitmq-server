@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(oauth_provider_SUITE).
+-module(rabbit_oauth2_provider_SUITE).
 
 -compile(export_all).
 -include_lib("common_test/include/ct.hrl").
@@ -17,7 +17,7 @@
 -define(RABBITMQ_RESOURCE_TWO,<<"rabbitmq2">>).
 -define(AUTH_PORT, 8000).
 
--import(oauth_provider, [
+-import(rabbit_oauth2_provider, [
     get_internal_oauth_provider/0,get_internal_oauth_provider/1,
     add_signing_key/2, add_signing_key/3, replace_signing_keys/1,
     replace_signing_keys/2,
@@ -237,22 +237,27 @@ call_get_env(Config, Par, Def) ->
         [rabbitmq_auth_backend_oauth2, Par, Def]).
 
 call_add_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, add_signing_key, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+        add_signing_key, Args).
 
 call_get_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, get_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+        get_signing_keys, Args).
 
 call_get_signing_keys(Config) ->
     call_get_signing_keys(Config, []).
 
 call_get_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, get_signing_key, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+        get_signing_key, Args).
 
 call_add_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, add_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+        add_signing_keys, Args).
 
 call_replace_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, oauth_provider, replace_signing_keys, Args).
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+        replace_signing_keys, Args).
 
 %% ----- Test cases
 
@@ -474,15 +479,13 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth2_http_mock, Expected} ||
             #{request := #{path := Path}} = Expected <- Expectations ]}
         ]),
-    ct:log("start_https_oauth_server (port:~p) with expectation list : ~p -> dispatch: ~p", [Port, Expectations, Dispatch]),
     {ok, Pid} = cowboy:start_tls(
         mock_http_auth_listener,
         [{port, Port},
          {certfile, filename:join([CertsDir, "server", "cert.pem"])},
          {keyfile, filename:join([CertsDir, "server", "key.pem"])}
         ],
-        #{env => #{dispatch => Dispatch}}),
-    ct:log("Started on Port ~p and pid ~p", [ranch:get_port(mock_http_auth_listener), Pid]).
+        #{env => #{dispatch => Dispatch}}).
 
 build_url_to_oauth_provider(Path) ->
     uri_string:recompose(#{scheme => "https",

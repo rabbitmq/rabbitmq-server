@@ -6,7 +6,7 @@
 %%
 
 % Rich Authorization Request
--module(rar).
+-module(rabbit_oauth2_rar).
 
 -include("oauth2.hrl").
 -import(uaa_jwt, [get_scope/1, set_scope/2]).

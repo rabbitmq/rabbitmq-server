@@ -130,7 +130,7 @@
 {translation,
  "rabbitmq_auth_backend_oauth2.key_config.signing_keys",
  fun(Conf) ->
-    oauth2_schema:translate_signing_keys(Conf)
+    rabbit_oauth2_schema:translate_signing_keys(Conf)
  end}.
 
 {mapping,
@@ -170,7 +170,7 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.discovery_endpoint_params",
  fun(Conf) ->
-    oauth2_schema:translate_endpoint_params("discovery_endpoint_params", Conf)
+    rabbit_oauth2_schema:translate_endpoint_params("discovery_endpoint_params", Conf)
  end}.
 
 {mapping,
@@ -190,7 +190,7 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
  fun(Conf) ->
-    oauth2_schema:translate_oauth_providers(Conf)
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
  end}.
 
 {mapping,
@@ -327,7 +327,7 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
  fun(Conf) ->
-    oauth2_schema:translate_oauth_providers(Conf)
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
  end}.
 
 {mapping,
@@ -369,5 +369,5 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->
-    oauth2_schema:translate_resource_servers(Conf)
+    rabbit_oauth2_schema:translate_resource_servers(Conf)
  end}.
