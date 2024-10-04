@@ -744,7 +744,7 @@ get_stability(FeatureName) when is_atom(FeatureName) ->
         undefined    -> undefined;
         FeatureProps -> get_stability(FeatureProps)
     end;
-get_stability(FeatureProps) when  ?IS_FEATURE_FLAG(FeatureProps) ->
+get_stability(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
     maps:get(stability, FeatureProps, stable);
 get_stability(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
     Phase = rabbit_deprecated_features:get_phase(FeatureProps),

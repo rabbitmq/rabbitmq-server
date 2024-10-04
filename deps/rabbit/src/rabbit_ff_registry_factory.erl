@@ -443,37 +443,66 @@ do_initialize_registry(#{feature_flags := AllFeatureFlags,
                          written_to_disk := WrittenToDisk} = Inventory) ->
     %% We log the state of those feature flags.
     ?LOG_DEBUG(
-      lists:flatten(
-        "Feature flags: list of feature flags found:\n" ++
-        [io_lib:format(
-           "Feature flags:   [~ts] ~ts~n",
-           [case maps:get(FeatureName, FeatureStates, false) of
-                true           -> "x";
-                state_changing -> "~";
-                false          -> " "
-            end,
-            FeatureName])
-         || FeatureName <- lists:sort(maps:keys(AllFeatureFlags)),
-            ?IS_FEATURE_FLAG(maps:get(FeatureName, AllFeatureFlags))] ++
-        "Feature flags: list of deprecated features found:\n" ++
-        [io_lib:format(
-           "Feature flags:   [~ts] ~ts~n",
-           [case maps:get(FeatureName, FeatureStates, false) of
-                true           -> "x";
-                state_changing -> "~";
-                false          -> " "
-            end,
-            FeatureName])
-         || FeatureName <- lists:sort(maps:keys(AllFeatureFlags)),
-            ?IS_DEPRECATION(maps:get(FeatureName, AllFeatureFlags))] ++
-        [io_lib:format(
-           "Feature flags: scanned applications: ~tp~n"
-           "Feature flags: feature flag states written to disk: ~ts",
-           [ScannedApps,
-            case WrittenToDisk of
-                true  -> "yes";
-                false -> "no"
-            end])]),
+       begin
+           AllFeatureNames = lists:sort(maps:keys(AllFeatureFlags)),
+           {FeatureNames,
+            DeprFeatureNames} = lists:partition(
+                                  fun(FeatureName) ->
+                                          FeatureProps = maps:get(
+                                                           FeatureName,
+                                                           AllFeatureFlags),
+                                          ?IS_FEATURE_FLAG(FeatureProps)
+                                  end, AllFeatureNames),
+
+           IsRequired = fun(FeatureName) ->
+                                FeatureProps = maps:get(
+                                                 FeatureName,
+                                                 AllFeatureFlags),
+                                required =:=
+                                rabbit_feature_flags:get_stability(
+                                  FeatureProps)
+                        end,
+           {ReqFeatureNames,
+            NonReqFeatureNames} = lists:partition(IsRequired, FeatureNames),
+           {ReqDeprFeatureNames,
+            NonReqDeprFeatureNames} = lists:partition(
+                                        IsRequired, DeprFeatureNames),
+
+           lists:flatten(
+             "Feature flags: list of feature flags found:\n" ++
+             [io_lib:format(
+                "Feature flags:   [~ts] ~ts~n",
+                [case maps:get(FeatureName, FeatureStates, false) of
+                     true           -> "x";
+                     state_changing -> "~";
+                     false          -> " "
+                 end,
+                 FeatureName])
+              || FeatureName <- NonReqFeatureNames] ++
+             "Feature flags: list of deprecated features found:\n" ++
+             [io_lib:format(
+                "Feature flags:   [~ts] ~ts~n",
+                [case maps:get(FeatureName, FeatureStates, false) of
+                     true           -> "x";
+                     state_changing -> "~";
+                     false          -> " "
+                 end,
+                 FeatureName])
+              || FeatureName <- NonReqDeprFeatureNames] ++
+             [io_lib:format(
+                "Feature flags: required feature flags not listed above: ~b~n"
+                "Feature flags: removed deprecated features not listed "
+                "above: ~b~n"
+                "Feature flags: scanned applications: ~0tp~n"
+                "Feature flags: feature flag states written to disk: ~ts",
+                [length(ReqFeatureNames),
+                 length(ReqDeprFeatureNames),
+                 ScannedApps,
+                 case WrittenToDisk of
+                     true  -> "yes";
+                     false -> "no"
+                 end])])
+       end,
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}
      ),
 
