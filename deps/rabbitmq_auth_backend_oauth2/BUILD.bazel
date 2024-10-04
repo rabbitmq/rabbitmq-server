@@ -50,6 +50,7 @@ rabbitmq_app(
         "//deps/rabbit:erlang_app",
         "@base64url//:erlang_app",
         "@cowlib//:erlang_app",
+        "@cuttlefish//:erlang_app",
         "@jose//:erlang_app",
     ],
 )
@@ -93,7 +94,7 @@ eunit(
 
 broker_for_integration_suites(
     extra_plugins = [
-        "//deps/rabbitmq_mqtt:erlang_app",
+        "//deps/rabbitmq_web_mqtt:erlang_app",
     ],
 )
 
@@ -143,6 +144,14 @@ rabbitmq_suite(
     ],
 )
 
+rabbitmq_suite(
+    name = "rabbit_oauth2_schema_SUITE",
+    size = "medium",
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+    ],
+)
+
 rabbitmq_integration_suite(
     name = "system_SUITE",
     size = "medium",
@@ -151,6 +160,7 @@ rabbitmq_integration_suite(
     ],
     runtime_deps = [
         "//deps/oauth2_client:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
         "@emqtt//:erlang_app",
     ],
 )

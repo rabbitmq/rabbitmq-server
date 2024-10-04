@@ -87,6 +87,8 @@
 
 -module(rabbit_khepri).
 
+-feature(maybe_expr, enable).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
@@ -94,8 +96,12 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([setup/0,
          setup/1,
+         register_projections/0,
+         init/1,
          can_join_cluster/1,
          add_member/2,
          remove_member/1,
@@ -118,6 +124,7 @@
 
          get/1,
          get/2,
+         count/1, count/2,
          get_many/1,
          adv_get/1,
          adv_get_many/1,
@@ -143,6 +150,7 @@
 
          dir/0,
          info/0,
+         root_path/0,
 
          handle_async_ret/1,
 
@@ -164,10 +172,6 @@
          force_reset/0]).
 -export([cluster_status_from_khepri/0,
          cli_cluster_status/0]).
-
-%% Path functions
--export([if_has_data/1,
-         if_has_data_wildcard/0]).
 
 -export([force_shrink_member_to_current_member/0]).
 
@@ -256,24 +260,28 @@ setup(_) ->
     Timeout = application:get_env(rabbit, khepri_default_timeout, 30000),
     ok = application:set_env(
            [{khepri, [{default_timeout, Timeout},
-                      {default_store_id, ?STORE_ID}]}],
+                      {default_store_id, ?STORE_ID},
+                      {default_ra_system, ?RA_SYSTEM}]}],
            [{persistent, true}]),
     RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
                        friendly_name => ?RA_FRIENDLY_NAME},
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
-            wait_for_leader(),
-            wait_for_register_projections(),
-            ?LOG_DEBUG(
-               "Khepri-based " ?RA_FRIENDLY_NAME " ready",
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-            ok;
+            RetryTimeout = retry_timeout(),
+            case khepri_cluster:wait_for_leader(?STORE_ID, RetryTimeout) of
+                ok ->
+                    ?LOG_DEBUG(
+                       "Khepri-based " ?RA_FRIENDLY_NAME " ready",
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                    ok;
+                {error, timeout} ->
+                    exit(timeout_waiting_for_leader);
+                {error, _} = Error ->
+                    exit(Error)
+            end;
         {error, _} = Error ->
             exit(Error)
     end.
-
-wait_for_leader() ->
-    wait_for_leader(retry_timeout(), retry_limit()).
 
 retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
@@ -287,38 +295,60 @@ retry_limit() ->
         undefined -> 10
     end.
 
-wait_for_leader(_Timeout, 0) ->
-    exit(timeout_waiting_for_leader);
-wait_for_leader(Timeout, Retries) ->
-    rabbit_log:info("Waiting for Khepri leader for ~tp ms, ~tp retries left",
-                    [Timeout, Retries - 1]),
-    Options = #{timeout => Timeout,
-                favor => low_latency},
-    case khepri:exists(?STORE_ID, [], Options) of
-        Exists when is_boolean(Exists) ->
-            rabbit_log:info("Khepri leader elected"),
-            ok;
-        {error, timeout} -> %% Khepri >= 0.14.0
-            wait_for_leader(Timeout, Retries -1);
-        {error, {timeout, _ServerId}} -> %% Khepri < 0.14.0
-            wait_for_leader(Timeout, Retries -1);
-        {error, Reason} ->
-            throw(Reason)
+%% @private
+
+-spec init(IsVirgin) -> Ret when
+      IsVirgin :: boolean(),
+      Ret :: ok | timeout_error().
+
+init(IsVirgin) ->
+    case members() of
+        [] ->
+            timer:sleep(1000),
+            init(IsVirgin);
+        Members ->
+            ?LOG_NOTICE(
+               "Found the following metadata store members: ~p", [Members],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            maybe
+                ok ?= await_replication(),
+                ?LOG_DEBUG(
+                   "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
+                   "up to the Raft cluster leader", [],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                ok ?= case IsVirgin of
+                          true ->
+                              register_projections();
+                          false ->
+                              ok
+                      end,
+                %% Delete transient queues on init.
+                %% Note that we also do this in the
+                %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
+                %% deletion during init because the cluster may have been in a
+                %% minority when this node went down. We wait for a majority
+                %% while registering projections above though so this deletion
+                %% is likely to succeed.
+                rabbit_amqqueue:delete_transient_queues_on_node(node())
+            end
     end.
 
-wait_for_register_projections() ->
-    wait_for_register_projections(retry_timeout(), retry_limit()).
+await_replication() ->
+    await_replication(retry_timeout(), retry_limit()).
 
-wait_for_register_projections(_Timeout, 0) ->
-    exit(timeout_waiting_for_khepri_projections);
-wait_for_register_projections(Timeout, Retries) ->
-    rabbit_log:info("Waiting for Khepri projections for ~tp ms, ~tp retries left",
-                    [Timeout, Retries - 1]),
-    try
-        register_projections()
-    catch
-        throw : timeout ->
-            wait_for_register_projections(Timeout, Retries -1)
+await_replication(_Timeout, 0) ->
+    {error, timeout};
+await_replication(Timeout, Retries) ->
+    ?LOG_DEBUG(
+       "Khepri-based " ?RA_FRIENDLY_NAME " waiting to catch up on replication "
+       "to the Raft cluster leader. Waiting for ~tb ms, ~tb retries left",
+       [Timeout, Retries],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    case fence(Timeout) of
+        ok ->
+            ok;
+        {error, timeout} ->
+            await_replication(Timeout, Retries -1)
     end.
 
 %% @private
@@ -347,20 +377,42 @@ add_member(JoiningNode, JoinedNode) when is_atom(JoinedNode) ->
             JoiningNode, rabbit_khepri, do_join, [JoinedNode]),
     post_add_member(JoiningNode, JoinedNode, Ret);
 add_member(JoiningNode, [_ | _] = Cluster) ->
-    JoinedNode = pick_node_in_cluster(Cluster),
-    ?LOG_INFO(
-       "Khepri clustering: Attempt to add node ~p to cluster ~0p "
-       "through node ~p",
-       [JoiningNode, Cluster, JoinedNode],
-       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    %% Recurse with a single node taken in the `Cluster' list.
-    add_member(JoiningNode, JoinedNode).
+    case pick_node_in_cluster(Cluster) of
+        {ok, JoinedNode} ->
+            ?LOG_INFO(
+               "Khepri clustering: Attempt to add node ~p to cluster ~0p "
+               "through node ~p",
+               [JoiningNode, Cluster, JoinedNode],
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            %% Recurse with a single node taken in the `Cluster' list.
+            add_member(JoiningNode, JoinedNode);
+        {error, _} = Error ->
+            Error
+    end.
 
-pick_node_in_cluster([_ | _] = Cluster) when is_list(Cluster) ->
-    ThisNode = node(),
-    case lists:member(ThisNode, Cluster) of
-        true  -> ThisNode;
-        false -> hd(Cluster)
+pick_node_in_cluster([_ | _] = Cluster) ->
+    RunningNodes = lists:filter(
+                     fun(Node) ->
+                             try
+                                 erpc:call(
+                                   Node,
+                                   khepri_cluster, is_store_running,
+                                   [?STORE_ID])
+                             catch
+                                 _:_ ->
+                                     false
+                             end
+                     end, Cluster),
+    case RunningNodes of
+        [_ | _] ->
+            ThisNode = node(),
+            SelectedNode = case lists:member(ThisNode, RunningNodes) of
+                               true  -> ThisNode;
+                               false -> hd(RunningNodes)
+                           end,
+            {ok, SelectedNode};
+        [] ->
+            {error, {no_nodes_to_cluster_with, Cluster}}
     end.
 
 do_join(RemoteNode) when RemoteNode =/= node() ->
@@ -486,6 +538,7 @@ remove_reachable_member(NodeToRemove) ->
             NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
     case Ret of
         ok ->
+            rabbit_amqqueue:forget_all_durable(NodeToRemove),
             ?LOG_DEBUG(
                "Node ~s removed from Khepri cluster \"~s\"",
                [NodeToRemove, ?RA_CLUSTER_NAME],
@@ -507,6 +560,7 @@ remove_down_member(NodeToRemove) ->
     Ret = ra:remove_member(ServerRef, ServerId, Timeout),
     case Ret of
         {ok, _, _} ->
+            rabbit_amqqueue:forget_all_durable(NodeToRemove),
             ?LOG_DEBUG(
                "Node ~s removed from Khepri cluster \"~s\"",
                [NodeToRemove, ?RA_CLUSTER_NAME],
@@ -817,10 +871,7 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, {ok, Status}} ->
-            case rabbit_db_cluster:check_compatibility(Node) of
-                ok    -> {ok, Status};
-                Error -> Error
-            end
+            {ok, Status}
     end.
 
 remote_node_info(Node) ->
@@ -865,6 +916,15 @@ cluster_status_from_khepri() ->
             {error, khepri_not_running}
     end.
 
+-spec root_path() -> RootPath when
+      RootPath :: khepri_path:path().
+%% @doc Returns the path where RabbitMQ stores every metadata.
+%%
+%% This path must be prepended to all paths used by RabbitMQ subsystems.
+
+root_path() ->
+    ?KHEPRI_ROOT_PATH.
+
 %% -------------------------------------------------------------------
 %% "Proxy" functions to Khepri API.
 %% -------------------------------------------------------------------
@@ -892,50 +952,53 @@ cas(Path, Pattern, Data) ->
       ?STORE_ID, Path, Pattern, Data, ?DEFAULT_COMMAND_OPTIONS).
 
 fold(Path, Pred, Acc) ->
-    khepri:fold(?STORE_ID, Path, Pred, Acc, #{favor => low_latency}).
+    khepri:fold(?STORE_ID, Path, Pred, Acc).
 
 fold(Path, Pred, Acc, Options) ->
-    Options1 = Options#{favor => low_latency},
-    khepri:fold(?STORE_ID, Path, Pred, Acc, Options1).
+    khepri:fold(?STORE_ID, Path, Pred, Acc, Options).
 
 foreach(Path, Pred) ->
-    khepri:foreach(?STORE_ID, Path, Pred, #{favor => low_latency}).
+    khepri:foreach(?STORE_ID, Path, Pred).
 
 filter(Path, Pred) ->
-    khepri:filter(?STORE_ID, Path, Pred, #{favor => low_latency}).
+    khepri:filter(?STORE_ID, Path, Pred).
 
 get(Path) ->
-    khepri:get(?STORE_ID, Path, #{favor => low_latency}).
+    khepri:get(?STORE_ID, Path).
 
 get(Path, Options) ->
+    khepri:get(?STORE_ID, Path, Options).
+
+count(PathPattern) ->
+    khepri:count(?STORE_ID, PathPattern, #{favor => low_latency}).
+
+count(Path, Options) ->
     Options1 = Options#{favor => low_latency},
-    khepri:get(?STORE_ID, Path, Options1).
+    khepri:count(?STORE_ID, Path, Options1).
 
 get_many(PathPattern) ->
-    khepri:get_many(?STORE_ID, PathPattern, #{favor => low_latency}).
+    khepri:get_many(?STORE_ID, PathPattern).
 
 adv_get(Path) ->
-    khepri_adv:get(?STORE_ID, Path, #{favor => low_latency}).
+    khepri_adv:get(?STORE_ID, Path).
 
 adv_get_many(PathPattern) ->
-    khepri_adv:get_many(?STORE_ID, PathPattern, #{favor => low_latency}).
+    khepri_adv:get_many(?STORE_ID, PathPattern).
 
 match(Path) ->
     match(Path, #{}).
 
 match(Path, Options) ->
-    Options1 = Options#{favor => low_latency},
-    khepri:get_many(?STORE_ID, Path, Options1).
+    khepri:get_many(?STORE_ID, Path, Options).
 
-exists(Path) -> khepri:exists(?STORE_ID, Path, #{favor => low_latency}).
+exists(Path) -> khepri:exists(?STORE_ID, Path).
 
 list(Path) ->
     khepri:get_many(
-      ?STORE_ID, Path ++ [?KHEPRI_WILDCARD_STAR], #{favor => low_latency}).
+      ?STORE_ID, Path ++ [?KHEPRI_WILDCARD_STAR]).
 
 list_child_nodes(Path) ->
-    Options = #{props_to_return => [child_names],
-                favor => low_latency},
+    Options = #{props_to_return => [child_names]},
     case khepri_adv:get_many(?STORE_ID, Path, Options) of
         {ok, Result} ->
             case maps:values(Result) of
@@ -949,8 +1012,7 @@ list_child_nodes(Path) ->
     end.
 
 count_children(Path) ->
-    Options = #{props_to_return => [child_list_length],
-               favor => low_latency},
+    Options = #{props_to_return => [child_list_length]},
     case khepri_adv:get_many(?STORE_ID, Path, Options) of
         {ok, Map} ->
             lists:sum([L || #{child_list_length := L} <- maps:values(Map)]);
@@ -1001,18 +1063,9 @@ transaction(Fun) ->
 transaction(Fun, ReadWrite) ->
     transaction(Fun, ReadWrite, #{}).
 
-transaction(Fun, ReadWrite, Options0) ->
-    %% If the transaction is read-only, use the same default options we use
-    %% for most queries.
-    DefaultQueryOptions = case ReadWrite of
-                              ro ->
-                                  #{favor => low_latency};
-                              _ ->
-                                  #{}
-                          end,
-    Options1 = maps:merge(DefaultQueryOptions, Options0),
-    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options1),
-    case khepri:transaction(?STORE_ID, Fun, ReadWrite, Options) of
+transaction(Fun, ReadWrite, Options) ->
+    Options1 = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options),
+    case khepri:transaction(?STORE_ID, Fun, ReadWrite, Options1) of
         ok -> ok;
         {ok, Result} -> Result;
         {error, Reason} -> throw({error, Reason})
@@ -1027,6 +1080,9 @@ info() ->
 
 handle_async_ret(RaEvent) ->
     khepri:handle_async_ret(?STORE_ID, RaEvent).
+
+fence(Timeout) ->
+    khepri:fence(?STORE_ID, Timeout).
 
 %% -------------------------------------------------------------------
 %% collect_payloads().
@@ -1070,105 +1126,123 @@ collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
               Acc
       end, Acc0, Props).
 
-%% -------------------------------------------------------------------
-%% if_has_data_wildcard().
-%% -------------------------------------------------------------------
+-spec unregister_legacy_projections() -> Ret when
+      Ret :: ok | timeout_error().
+%% @doc Unregisters any projections which were registered in RabbitMQ 3.13.x
+%% versions.
+%%
+%% In 3.13.x until 3.13.8 we mistakenly registered these projections even if
+%% Khepri was not enabled. This function is used by the `khepri_db' enable
+%% callback to remove those projections before we register the ones necessary
+%% for 4.0.x.
+%%
+%% @private
 
--spec if_has_data_wildcard() -> Condition when
-      Condition :: khepri_condition:condition().
-
-if_has_data_wildcard() ->
-    if_has_data([?KHEPRI_WILDCARD_STAR_STAR]).
-
-%% -------------------------------------------------------------------
-%% if_has_data().
-%% -------------------------------------------------------------------
-
--spec if_has_data(Conditions) -> Condition when
-      Conditions :: [Condition],
-      Condition :: khepri_condition:condition().
-
-if_has_data(Conditions) ->
-    #if_all{conditions = Conditions ++ [#if_has_data{has_data = true}]}.
+unregister_legacy_projections() ->
+    %% Note that we don't use `all' since `khepri_mnesia_migration' also
+    %% creates a projection table which we don't want to unregister. Instead
+    %% we list all of the legacy projection names:
+    LegacyNames = [
+        rabbit_khepri_exchange,
+        rabbit_khepri_queue,
+        rabbit_khepri_vhost,
+        rabbit_khepri_users,
+        rabbit_khepri_global_rtparams,
+        rabbit_khepri_per_vhost_rtparams,
+        rabbit_khepri_user_permissions,
+        rabbit_khepri_bindings,
+        rabbit_khepri_index_route,
+        rabbit_khepri_topic_trie
+    ],
+    khepri:unregister_projections(?STORE_ID, LegacyNames).
 
 register_projections() ->
-    RegisterFuns = [fun register_rabbit_exchange_projection/0,
-                    fun register_rabbit_queue_projection/0,
-                    fun register_rabbit_vhost_projection/0,
-                    fun register_rabbit_users_projection/0,
-                    fun register_rabbit_runtime_parameters_projection/0,
-                    fun register_rabbit_user_permissions_projection/0,
-                    fun register_rabbit_bindings_projection/0,
-                    fun register_rabbit_index_route_projection/0,
-                    fun register_rabbit_topic_graph_projection/0],
-    [case RegisterFun() of
-         ok ->
-             ok;
-         %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3` would
-         %% return `{error, exists}` for projections which already exist.
-         {error, exists} ->
-             ok;
-         %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
-         {error, {khepri, projection_already_exists, _Info}} ->
-             ok;
-         {error, Error} ->
-             throw(Error)
-     end || RegisterFun <- RegisterFuns],
-    ok.
+    RegFuns = [fun register_rabbit_exchange_projection/0,
+               fun register_rabbit_queue_projection/0,
+               fun register_rabbit_vhost_projection/0,
+               fun register_rabbit_users_projection/0,
+               fun register_rabbit_global_runtime_parameters_projection/0,
+               fun register_rabbit_per_vhost_runtime_parameters_projection/0,
+               fun register_rabbit_user_permissions_projection/0,
+               fun register_rabbit_bindings_projection/0,
+               fun register_rabbit_index_route_projection/0,
+               fun register_rabbit_topic_graph_projection/0],
+    rabbit_misc:for_each_while_ok(
+      fun(RegisterFun) ->
+              case RegisterFun() of
+                  ok ->
+                      ok;
+                  %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3`
+                  %% would return `{error, exists}` for projections which
+                  %% already exist.
+                  {error, exists} ->
+                      ok;
+                  %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
+                  {error, {khepri, projection_already_exists, _Info}} ->
+                      ok;
+                  {error, _} = Error ->
+                      Error
+              end
+      end, RegFuns).
 
 register_rabbit_exchange_projection() ->
     Name = rabbit_khepri_exchange,
-    PathPattern = [rabbit_db_exchange,
-                   exchanges,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Name = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_exchange:khepri_exchange_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #exchange.name,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_queue_projection() ->
     Name = rabbit_khepri_queue,
-    PathPattern = [rabbit_db_queue,
-                   queues,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Name = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_queue:khepri_queue_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #amqqueue.name
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_vhost_projection() ->
     Name = rabbit_khepri_vhost,
-    PathPattern = [rabbit_db_vhost, _VHost = ?KHEPRI_WILDCARD_STAR],
+    PathPattern = rabbit_db_vhost:khepri_vhost_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #vhost.virtual_host
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_users_projection() ->
-    Name = rabbit_khepri_users,
-    PathPattern = [rabbit_db_user,
-                   users,
-                   _UserName = ?KHEPRI_WILDCARD_STAR],
+    Name = rabbit_khepri_user,
+    PathPattern = rabbit_db_user:khepri_user_path(
+                    _UserName = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #internal_user.username
     register_simple_projection(Name, PathPattern, KeyPos).
 
-register_rabbit_runtime_parameters_projection() ->
-    Name = rabbit_khepri_runtime_parameters,
-    PathPattern = [rabbit_db_rtparams,
-                   ?KHEPRI_WILDCARD_STAR_STAR],
+register_rabbit_global_runtime_parameters_projection() ->
+    Name = rabbit_khepri_global_rtparam,
+    PathPattern = rabbit_db_rtparams:khepri_global_rp_path(
+                    _Key = ?KHEPRI_WILDCARD_STAR_STAR),
+    KeyPos = #runtime_parameters.key,
+    register_simple_projection(Name, PathPattern, KeyPos).
+
+register_rabbit_per_vhost_runtime_parameters_projection() ->
+    Name = rabbit_khepri_per_vhost_rtparam,
+    PathPattern = rabbit_db_rtparams:khepri_vhost_rp_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR_STAR,
+                    _Component = ?KHEPRI_WILDCARD_STAR_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR_STAR),
     KeyPos = #runtime_parameters.key,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_rabbit_user_permissions_projection() ->
-    Name = rabbit_khepri_user_permissions,
-    PathPattern = [rabbit_db_user,
-                   users,
-                   _UserName = ?KHEPRI_WILDCARD_STAR,
-                   user_permissions,
-                   _VHost = ?KHEPRI_WILDCARD_STAR],
+    Name = rabbit_khepri_user_permission,
+    PathPattern = rabbit_db_user:khepri_user_permission_path(
+                    _UserName = ?KHEPRI_WILDCARD_STAR,
+                    _VHost = ?KHEPRI_WILDCARD_STAR),
     KeyPos = #user_permission.user_vhost,
     register_simple_projection(Name, PathPattern, KeyPos).
 
 register_simple_projection(Name, PathPattern, KeyPos) ->
     Options = #{keypos => KeyPos},
     Projection = khepri_projection:new(Name, copy, Options),
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_bindings_projection() ->
     MapFun = fun(_Path, Binding) ->
@@ -1177,20 +1251,24 @@ register_rabbit_bindings_projection() ->
     ProjectionFun = projection_fun_for_sets(MapFun),
     Options = #{keypos => #route.binding},
     Projection = khepri_projection:new(
-                   rabbit_khepri_bindings, ProjectionFun, Options),
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _ExchangeName = ?KHEPRI_WILDCARD_STAR,
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+                   rabbit_khepri_binding, ProjectionFun, Options),
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _ExchangeName = ?KHEPRI_WILDCARD_STAR,
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_index_route_projection() ->
     MapFun = fun(Path, _) ->
-                     [rabbit_db_binding, routes, VHost, ExchangeName, Kind,
-                      DstName, RoutingKey] = Path,
+                     {
+                      VHost,
+                      ExchangeName,
+                      Kind,
+                      DstName,
+                      RoutingKey
+                     } = rabbit_db_binding:khepri_route_path_to_args(Path),
                      Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
                      Destination = rabbit_misc:r(VHost, Kind, DstName),
                      SourceKey = {Exchange, RoutingKey},
@@ -1201,18 +1279,18 @@ register_rabbit_index_route_projection() ->
     Options = #{type => bag, keypos => #index_route.source_key},
     Projection = khepri_projection:new(
                    rabbit_khepri_index_route, ProjectionFun, Options),
-    DirectOrFanout = #if_data_matches{pattern = #{type => '$1'},
-                                      conditions = [{'andalso',
-                                                     {'=/=', '$1', headers},
-                                                     {'=/=', '$1', topic}}]},
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Exchange = DirectOrFanout,
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    DirectOrFanout = #if_data_matches{
+                        pattern = #exchange{type = '$1', _ = '_'},
+                        conditions = [{'andalso',
+                                       {'=/=', '$1', headers},
+                                       {'=/=', '$1', topic}}]},
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = DirectOrFanout,
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 %% Routing information is stored in the Khepri store as a `set'.
 %% In order to turn these bindings into records in an ETS `bag', we use a
@@ -1269,8 +1347,13 @@ register_rabbit_topic_graph_projection() ->
                 #{should_process_function => ShouldProcessFun}},
     ProjectionFun =
     fun(Table, Path, OldProps, NewProps) ->
-        [rabbit_db_binding, routes,
-         VHost, ExchangeName, _Kind, _DstName, RoutingKey] = Path,
+        {
+         VHost,
+         ExchangeName,
+         _Kind,
+         _DstName,
+         RoutingKey
+        } = rabbit_db_binding:khepri_route_path_to_args(Path),
         Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
         Words = rabbit_db_topic_exchange:split_topic_key_binary(RoutingKey),
         case {OldProps, NewProps} of
@@ -1301,14 +1384,14 @@ register_rabbit_topic_graph_projection() ->
         end
     end,
     Projection = khepri_projection:new(Name, ProjectionFun, Options),
-    PathPattern = [rabbit_db_binding,
-                   routes,
-                   _VHost = ?KHEPRI_WILDCARD_STAR,
-                   _Exchange = #if_data_matches{pattern = #{type => topic}},
-                   _Kind = ?KHEPRI_WILDCARD_STAR,
-                   _DstName = ?KHEPRI_WILDCARD_STAR,
-                   _RoutingKey = ?KHEPRI_WILDCARD_STAR],
-    khepri:register_projection(?RA_CLUSTER_NAME, PathPattern, Projection).
+    PathPattern = rabbit_db_binding:khepri_route_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Exchange = #if_data_matches{
+                                   pattern = #exchange{type = topic, _ = '_'}},
+                    _Kind = ?KHEPRI_WILDCARD_STAR,
+                    _DstName = ?KHEPRI_WILDCARD_STAR,
+                    _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 -spec follow_down_update(Table, Exchange, Words, UpdateFn) -> Ret when
       Table :: ets:tid(),
@@ -1486,9 +1569,19 @@ get_feature_state(Node) ->
 %% @private
 
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
-    case sync_cluster_membership_from_mnesia(FeatureName) of
-        ok    -> migrate_mnesia_tables(FeatureName);
-        Error -> Error
+    maybe
+        ok ?= sync_cluster_membership_from_mnesia(FeatureName),
+        ?LOG_INFO(
+           "Feature flag `~s`: unregistering legacy projections",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= unregister_legacy_projections(),
+        ?LOG_INFO(
+           "Feature flag `~s`: registering projections",
+           [FeatureName],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        ok ?= register_projections(),
+        migrate_mnesia_tables(FeatureName)
     end.
 
 %% @private

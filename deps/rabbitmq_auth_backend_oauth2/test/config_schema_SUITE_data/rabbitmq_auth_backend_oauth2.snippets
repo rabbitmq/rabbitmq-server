@@ -1,5 +1,5 @@
 [
-  {oauth2_pem_config2,
+  {root_resource_server,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -51,7 +51,7 @@
         ]}
         ],[]
   },
-  {oauth2_pem_config3,
+  {multiple_resource_servers,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -87,12 +87,12 @@
             {resource_servers,
               #{
                 <<"rabbitmq-operations">> => [
-                  {id, <<"rabbitmq-operations">>},
-                  {scope_prefix, <<"api://">>}
+                  {scope_prefix, <<"api://">>},
+                  {id, <<"rabbitmq-operations">>}
                 ],
                 <<"rabbitmq-customers">> => [
-                  {id, <<"rabbitmq-customers">>},
-                  {additional_scopes_key, <<"roles">>}
+                  {additional_scopes_key, <<"roles">>},
+                  {id, <<"rabbitmq-customers">>}
                 ]
               }
             },
@@ -117,7 +117,7 @@
         ]}
         ],[]
   },
-  {oauth2_pem_config4,
+  {multiple_oauth_providers,
        "auth_oauth2.resource_server_id = new_resource_server_id
         auth_oauth2.scope_prefix = new_resource_server_id.
         auth_oauth2.resource_server_type = new_resource_server_type
@@ -131,8 +131,13 @@
         auth_oauth2.oauth_providers.keycloak.jwks_uri = https://keycloak/keys
         auth_oauth2.oauth_providers.keycloak.authorization_endpoint = https://keycloak/authorize
         auth_oauth2.oauth_providers.keycloak.end_session_endpoint = https://keycloak/logout
-        auth_oauth2.oauth_providers.keycloak.https.cacertfile = /mnt/certs/ca_certificate.pem
-        auth_oauth2.oauth_providers.keycloak.https.verify = verify_none",
+        auth_oauth2.oauth_providers.keycloak.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+        auth_oauth2.oauth_providers.keycloak.https.verify = verify_none
+        auth_oauth2.oauth_providers.keycloak.https.depth = 2
+        auth_oauth2.oauth_providers.keycloak.default_key = token-key
+        auth_oauth2.oauth_providers.keycloak.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
+        auth_oauth2.oauth_providers.keycloak.algorithms.1 = HS256
+        auth_oauth2.oauth_providers.keycloak.algorithms.2 = RS256",
         [
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
@@ -143,24 +148,41 @@
             {verify_aud, true},
             {oauth_providers,
               #{
-                <<"uaa">> => [
-                  {issuer, <<"https://uaa">>}
-                ],
                 <<"keycloak">> => [
+                  {signing_keys,
+                    #{
+                        <<"id1">> => {pem, <<"I'm not a certificate">>}
+                    }
+                  },
                   {https, [
+                    {depth, 2},
                     {verify, verify_none},
-                    {cacertfile, "/mnt/certs/ca_certificate.pem"}
+                    {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"}
                   ]},
+                  {algorithms, [<<"HS256">>, <<"RS256">>]},
+                  {default_key, <<"token-key">>},
                   {end_session_endpoint, <<"https://keycloak/logout">>},
                   {authorization_endpoint, <<"https://keycloak/authorize">>},
-                  {token_endpoint, <<"https://keycloak/token">>},
-                  {jwks_uri, <<"https://keycloak/keys">>}
-                ]
+                  {jwks_uri, <<"https://keycloak/keys">>},
+                  {token_endpoint, <<"https://keycloak/token">>}
+                ],
+               <<"uaa">> => [
+                  {issuer, <<"https://uaa">>}
+               ]
 
               }
             }
         ]}
         ],[]
+  },
+  {empty_scope_prefix,
+       "auth_oauth2.resource_server_id = new_resource_server_id
+        auth_oauth2.scope_prefix = '' ",
+        [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {scope_prefix,<<>>}
+        ]}
+        ],[]
   }
-
 ].

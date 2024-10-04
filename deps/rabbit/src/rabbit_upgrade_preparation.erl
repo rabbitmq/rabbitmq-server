@@ -15,6 +15,7 @@
 %%
 
 -define(SAMPLING_INTERVAL, 200).
+-define(LOGGING_FREQUENCY, ?SAMPLING_INTERVAL * 100).
 
 await_online_quorum_plus_one(Timeout) ->
     Iterations = ceil(Timeout / ?SAMPLING_INTERVAL),
@@ -30,7 +31,11 @@ online_members(Component) ->
                                                   erlang, whereis, [Component])).
 
 endangered_critical_components() ->
-    CriticalComponents = [rabbit_stream_coordinator],
+    CriticalComponents = [rabbit_stream_coordinator] ++
+                            case rabbit_feature_flags:is_enabled(khepri_db) of
+                                true -> [rabbitmq_metadata];
+                                false -> []
+                            end,
     Nodes = rabbit_nodes:list_members(),
     lists:filter(fun (Component) ->
                          NumAlive = length(online_members(Component)),
@@ -57,6 +62,21 @@ do_await_safe_online_quorum(IterationsLeft) ->
     case EndangeredQueues =:= [] andalso endangered_critical_components() =:= [] of
         true -> true;
         false ->
+            case IterationsLeft rem ?LOGGING_FREQUENCY of
+                0 ->
+                    case length(EndangeredQueues) of
+                        0 -> ok;
+                        N -> rabbit_log:info("Waiting for ~p queues and streams to have quorum+1 replicas online. "
+                                             "You can list them with `rabbitmq-diagnostics check_if_node_is_quorum_critical`", [N])
+                    end,
+                    case endangered_critical_components() of
+                        [] -> ok;
+                        _ -> rabbit_log:info("Waiting for the following critical components to have quorum+1 replicas online: ~p.",
+                                             [endangered_critical_components()])
+                    end;
+                _ ->
+                    ok
+            end,
             timer:sleep(?SAMPLING_INTERVAL),
             do_await_safe_online_quorum(IterationsLeft - 1)
     end.
@@ -70,6 +90,6 @@ list_with_minimum_quorum_for_cli() ->
     [#{
            <<"readable_name">> => C,
            <<"name">> => C,
-           <<"virtual_host">> => "-",
+           <<"virtual_host">> => <<"(not applicable)">>,
            <<"type">> => process
       } || C <- endangered_critical_components()].

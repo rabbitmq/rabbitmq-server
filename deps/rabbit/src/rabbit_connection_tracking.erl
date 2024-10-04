@@ -151,8 +151,8 @@ unregister_tracked(ConnId = {Node, _Name}) when Node =:= node() ->
     case ets:lookup(?TRACKED_CONNECTION_TABLE, ConnId) of
         []     -> ok;
         [#tracked_connection{vhost = VHost, username = Username}] ->
-            ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username, -1),
-            ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, -1),
+            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username, -1),
+            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, -1),
             ets:delete(?TRACKED_CONNECTION_TABLE, ConnId)
     end.
 
@@ -428,6 +428,6 @@ close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->
     Node = node(Pid),
     rpc:call(Node, amqp_direct_connection, server_close, [Pid, 320, Message]);
 close_connection(#tracked_connection{pid = Pid}, Message) ->
-    % best effort, this will work for connections to the stream plugin
-    Node = node(Pid),
-    rpc:call(Node, gen_server, call, [Pid, {shutdown, Message}, infinity]).
+    %% Best effort will work for following plugins:
+    %% rabbitmq_stream, rabbitmq_mqtt, rabbitmq_web_mqtt
+    Pid ! {shutdown, Message}.

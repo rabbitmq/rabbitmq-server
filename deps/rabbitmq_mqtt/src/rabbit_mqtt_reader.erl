@@ -71,39 +71,34 @@ close_connection(Pid, Reason) ->
 init(Ref) ->
     process_flag(trap_exit, true),
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN ++ [mqtt]}),
-    ProxyProtocolEnabled = application:get_env(?APP_NAME, proxy_protocol, false),
-    case rabbit_networking:handshake(Ref, ProxyProtocolEnabled) of
+    {ok, Sock} = rabbit_networking:handshake(Ref,
+        application:get_env(?APP_NAME, proxy_protocol, false)),
+    RealSocket = rabbit_net:unwrap_socket(Sock),
+    case rabbit_net:connection_string(Sock, inbound) of
+        {ok, ConnStr} ->
+            ConnName = rabbit_data_coercion:to_binary(ConnStr),
+            ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
+            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
+            erlang:send_after(LoginTimeout, self(), login_timeout),
+            State0 = #state{socket = RealSocket,
+                            proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock),
+                            conn_name = ConnName,
+                            await_recv = false,
+                            connection_state = running,
+                            conserve = false,
+                            parse_state = rabbit_mqtt_packet:init_state()},
+            State1 = control_throttle(State0),
+            State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+            gen_server:enter_loop(?MODULE, [], State);
+        {error, Reason = enotconn} ->
+            ?LOG_INFO("MQTT could not get connection string: ~s", [Reason]),
+            rabbit_net:fast_close(RealSocket),
+            ignore;
         {error, Reason} ->
-            ?LOG_ERROR("MQTT could not establish connection: ~s", [Reason]),
-            {stop, Reason};
-        {ok, Sock} ->
-            RealSocket = rabbit_net:unwrap_socket(Sock),
-            case rabbit_net:connection_string(Sock, inbound) of
-                {ok, ConnStr} ->
-                    ConnName = rabbit_data_coercion:to_binary(ConnStr),
-                    ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
-                    _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-                    LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
-                    erlang:send_after(LoginTimeout, self(), login_timeout),
-                    State0 = #state{socket = RealSocket,
-                                    proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock),
-                                    conn_name = ConnName,
-                                    await_recv = false,
-                                    connection_state = running,
-                                    conserve = false,
-                                    parse_state = rabbit_mqtt_packet:init_state()},
-                    State1 = control_throttle(State0),
-                    State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
-                    gen_server:enter_loop(?MODULE, [], State);
-                {error, Reason = enotconn} ->
-                    ?LOG_INFO("MQTT could not get connection string: ~s", [Reason]),
-                    rabbit_net:fast_close(RealSocket),
-                    ignore;
-                {error, Reason} ->
-                    ?LOG_ERROR("MQTT could not get connection string: ~p", [Reason]),
-                    rabbit_net:fast_close(RealSocket),
-                    {stop, Reason}
-            end
+            ?LOG_ERROR("MQTT could not get connection string: ~p", [Reason]),
+            rabbit_net:fast_close(RealSocket),
+            {stop, Reason}
     end.
 
 handle_call({info, InfoItems}, _From, State) ->
@@ -120,16 +115,9 @@ handle_cast({duplicate_id, SendWill},
     rabbit_mqtt_processor:send_disconnect(?RC_SESSION_TAKEN_OVER, PState),
     {stop, {shutdown, duplicate_id}, {SendWill, State}};
 
-handle_cast(decommission_node,
-            State = #state{ proc_state = PState,
-                            conn_name  = ConnName }) ->
-    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts' as its node is about"
-                 " to be decommissioned",
-                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
-    {stop, {shutdown, decommission_node}, State};
-
 handle_cast({close_connection, Reason},
-            State = #state{conn_name = ConnName, proc_state = PState}) ->
+            State = #state{conn_name = ConnName,
+                           proc_state = PState}) ->
     ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts', reason: ~ts",
                  [ConnName, rabbit_mqtt_processor:info(client_id, PState), Reason]),
     case Reason of
@@ -217,6 +205,14 @@ handle_info({keepalive, Req}, State = #state{proc_state = PState,
             {stop, Reason, State}
     end;
 
+handle_info(credential_expired,
+            State = #state{conn_name = ConnName,
+                           proc_state = PState}) ->
+    ?LOG_WARNING("MQTT disconnecting client ~tp with client ID '~ts' because credential expired",
+                 [ConnName, rabbit_mqtt_processor:info(client_id, PState)]),
+    rabbit_mqtt_processor:send_disconnect(?RC_MAXIMUM_CONNECT_TIME, PState),
+    {stop, {shutdown, {disconnect, server_initiated}}, State};
+
 handle_info(login_timeout, State = #state{proc_state = connect_packet_unprocessed,
                                           conn_name = ConnName}) ->
     %% The connection is also closed if the CONNECT packet happens to
@@ -246,7 +242,7 @@ handle_info({'DOWN', _MRef, process, QPid, _Reason}, State) ->
     {noreply, State, ?HIBERNATE_AFTER};
 
 handle_info({shutdown, Explanation} = Reason, State = #state{conn_name = ConnName}) ->
-    %% rabbitmq_management plugin requests to close connection.
+    %% rabbitmq_management plugin or CLI command requests to close connection.
     ?LOG_INFO("MQTT closing connection ~tp: ~p", [ConnName, Explanation]),
     {stop, Reason, State};
 

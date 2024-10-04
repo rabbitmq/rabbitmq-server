@@ -25,7 +25,6 @@
          count/1,
          create_or_get/1,
          set/1,
-         set_many/1,
          delete/2,
          update/2,
          update_decorators/2,
@@ -41,7 +40,8 @@
          update_durable/2,
          get_durable/1,
          get_many_durable/1,
-         consistent_exists/1
+         consistent_exists/1,
+         clear_in_khepri/0
         ]).
 
 %% Used by on_node_up and on_node_down.
@@ -71,10 +71,7 @@
 %% For testing
 -export([clear/0]).
 
--export([
-         khepri_queue_path/1,
-         khepri_queues_path/0
-        ]).
+-export([khepri_queue_path/1, khepri_queue_path/2]).
 
 -dialyzer({nowarn_function, [foreach_transient/1,
                              foreach_transient_in_khepri/1]}).
@@ -377,7 +374,9 @@ list_for_count_in_khepri(VHostName) ->
 -spec delete(QName, Reason) -> Ret when
       QName :: rabbit_amqqueue:name(),
       Reason :: atom(),
-      Ret :: ok | Deletions :: rabbit_binding:deletions().
+      Ret :: ok |
+             Deletions :: rabbit_binding:deletions() |
+             rabbit_khepri:timeout_error().
 
 delete(QueueName, Reason) ->
     rabbit_khepri:handle_fallback(
@@ -703,10 +702,10 @@ update_durable_in_mnesia(UpdateFun, FilterFun) ->
     ok.
 
 update_durable_in_khepri(UpdateFun, FilterFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(true)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(true)}),
     %% The `FilterFun' or `UpdateFun' might attempt to do something
     %% incompatible with Khepri transactions (such as dynamic apply, sending
     %% a message, etc.), so this function cannot be written as a regular
@@ -831,7 +830,10 @@ get_all_by_pattern_in_mnesia(Pattern) ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, Pattern).
 
 get_all_by_pattern_in_khepri(Pattern) ->
-    rabbit_db:list_in_khepri(khepri_queues_path() ++ [rabbit_khepri:if_has_data([?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}])]).
+    Path = khepri_queue_path(
+             ?KHEPRI_WILDCARD_STAR,
+             #if_data_matches{pattern = Pattern}),
+    rabbit_db:list_in_khepri(Path).
 
 %% -------------------------------------------------------------------
 %% get_all_by_type_and_node().
@@ -866,7 +868,8 @@ get_all_by_type_and_node_in_mnesia(VHostName, Type, Node) ->
 
 get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
-    Qs = rabbit_db:list_in_khepri(khepri_queues_path() ++ [VHostName, rabbit_khepri:if_has_data([?KHEPRI_WILDCARD_STAR_STAR, #if_data_matches{pattern = Pattern}])]),
+    Path = khepri_queue_path(VHostName, #if_data_matches{pattern = Pattern}),
+    Qs = rabbit_db:list_in_khepri(Path),
     [Q || Q <- Qs, amqqueue:qnode(Q) == Node].
 
 %% -------------------------------------------------------------------
@@ -875,7 +878,10 @@ get_all_by_type_and_node_in_khepri(VHostName, Type, Node) ->
 
 -spec create_or_get(Queue) -> Ret when
       Queue :: amqqueue:amqqueue(),
-      Ret :: {created, Queue} | {existing, Queue} | {absent, Queue, nodedown}.
+      Ret :: {created, Queue} |
+             {existing, Queue} |
+             {absent, Queue, nodedown} |
+             rabbit_khepri:timeout_error().
 %% @doc Writes a queue record if it doesn't exist already or returns the existing one
 %%
 %% @returns the existing record if there is one in the database already, or the newly
@@ -924,8 +930,9 @@ create_or_get_in_khepri(Q) ->
 %% set().
 %% -------------------------------------------------------------------
 
--spec set(Queue) -> ok when
-      Queue :: amqqueue:amqqueue().
+-spec set(Queue) -> Ret when
+      Queue :: amqqueue:amqqueue(),
+      Ret :: ok | rabbit_khepri:timeout_error().
 %% @doc Writes a queue record. If the queue is durable, it writes both instances:
 %% durable and transient. For the durable one, it resets decorators.
 %% The transient one is left as it is.
@@ -959,52 +966,6 @@ set_in_khepri(Q) ->
     rabbit_khepri:put(Path, Q).
 
 %% -------------------------------------------------------------------
-%% set_many().
-%% -------------------------------------------------------------------
-
--spec set_many([Queue]) -> ok when
-      Queue :: amqqueue:amqqueue().
-%% @doc Writes a list of durable queue records.
-%%
-%% It is responsibility of the calling function to ensure all records are
-%% durable.
-%%
-%% @private
-
-set_many(Qs) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> set_many_in_mnesia(Qs) end,
-        khepri => fun() -> set_many_in_khepri(Qs) end
-       }).
-
-set_many_in_mnesia(Qs) ->
-    {atomic, ok} =
-        %% Just to be nested in forget_node_for_queue
-        mnesia:transaction(
-          fun() ->
-                  [begin
-                       true = amqqueue:is_durable(Q),
-                       ok = mnesia:write(?MNESIA_DURABLE_TABLE, Q, write)
-                   end || Q <- Qs],
-                  ok
-          end),
-    ok.
-
-set_many_in_khepri(Qs) ->
-    rabbit_khepri:transaction(
-      fun() ->
-              [begin
-                   true = amqqueue:is_durable(Q),
-                   Path = khepri_queue_path(amqqueue:get_name(Q)),
-                   case khepri_tx:put(Path, Q) of
-                       ok      -> ok;
-                       Error   -> khepri_tx:abort(Error)
-                   end
-               end || Q <- Qs]
-      end),
-    ok.
-
-%% -------------------------------------------------------------------
 %% delete_transient().
 %% -------------------------------------------------------------------
 
@@ -1012,7 +973,8 @@ set_many_in_khepri(Qs) ->
       Queue :: amqqueue:amqqueue(),
       FilterFun :: fun((Queue) -> boolean()),
       QName :: rabbit_amqqueue:name(),
-      Ret :: {[QName], [Deletions :: rabbit_binding:deletions()]}.
+      Ret :: {[QName], [Deletions :: rabbit_binding:deletions()]}
+             | rabbit_khepri:timeout_error().
 %% @doc Deletes all transient queues that match `FilterFun'.
 %%
 %% @private
@@ -1063,36 +1025,69 @@ partition_queues(T) ->
     [T].
 
 delete_transient_in_khepri(FilterFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(false)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(false)}),
     %% The `FilterFun' might try to determine if the queue's process is alive.
     %% This can cause a `calling_self' exception if we use the `FilterFun'
     %% within the function passed to `khepri:fold/5' since the Khepri server
     %% process might call itself. Instead we can fetch all of the transient
     %% queues with `get_many' and then filter and fold the results outside of
     %% Khepri's Ra server process.
-    case rabbit_khepri:get_many(PathPattern) of
-        {ok, Qs} ->
-            Items = maps:fold(
-                     fun(Path, Queue, Acc) when ?is_amqqueue(Queue) ->
-                             case FilterFun(Queue) of
-                                 true ->
-                                     QueueName = khepri_queue_path_to_name(
-                                                   Path),
-                                     case delete_in_khepri(QueueName, false) of
-                                         ok ->
-                                             Acc;
-                                         Deletions ->
-                                             [{QueueName, Deletions} | Acc]
-                                     end;
-                                 false ->
-                                     Acc
-                             end
-                     end, [], Qs),
-            {QueueNames, Deletions} = lists:unzip(Items),
-            {QueueNames, lists:flatten(Deletions)};
+    case rabbit_khepri:adv_get_many(PathPattern) of
+        {ok, Props} ->
+            Qs = maps:fold(
+                   fun(Path0, #{data := Q, payload_version := Vsn}, Acc)
+                       when ?is_amqqueue(Q) ->
+                           case FilterFun(Q) of
+                               true ->
+                                   Path = khepri_path:combine_with_conditions(
+                                            Path0,
+                                            [#if_payload_version{version = Vsn}]),
+                                   QName = amqqueue:get_name(Q),
+                                   [{Path, QName} | Acc];
+                               false ->
+                                   Acc
+                           end
+                   end, [], Props),
+            do_delete_transient_queues_in_khepri(Qs, FilterFun);
+        {error, _} = Error ->
+            Error
+    end.
+
+do_delete_transient_queues_in_khepri([], _FilterFun) ->
+    %% If there are no changes to make, avoid performing a transaction. When
+    %% Khepri is in a minority this avoids a long timeout waiting for the
+    %% transaction command to be processed. Otherwise it avoids appending a
+    %% somewhat large transaction command to Khepri's log.
+    {[], []};
+do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
+    Res = rabbit_khepri:transaction(
+            fun() ->
+                    rabbit_misc:fold_while_ok(
+                      fun({Path, QName}, Acc) ->
+                              %% Also see `delete_in_khepri/2'.
+                              case khepri_tx_adv:delete(Path) of
+                                  {ok, #{data := _}} ->
+                                      Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                                                    QName, false),
+                                      {ok, [{QName, Deletions} | Acc]};
+                                  {ok, _} ->
+                                      {ok, Acc};
+                                  {error, _} = Error ->
+                                      Error
+                              end
+                      end, [], Qs)
+            end),
+    case Res of
+        {ok, Items} ->
+            {QNames, Deletions} = lists:unzip(Items),
+            {QNames, lists:flatten(Deletions)};
+        {error, {khepri, mismatching_node, _}} ->
+            %% One of the queues changed while attempting to update all
+            %% queues. Retry the operation.
+            delete_transient_in_khepri(FilterFun);
         {error, _} = Error ->
             Error
     end.
@@ -1124,10 +1119,10 @@ foreach_transient_in_mnesia(UpdateFun) ->
       end).
 
 foreach_transient_in_khepri(UpdateFun) ->
-    PathPattern = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(false)}],
+    PathPattern = khepri_queue_path(
+                    ?KHEPRI_WILDCARD_STAR,
+                    #if_data_matches{
+                       pattern = amqqueue:pattern_match_on_durable(false)}),
     %% The `UpdateFun' might try to determine if the queue's process is alive.
     %% This can cause a `calling_self' exception if we use the `UpdateFun'
     %% within the function passed to `khepri:fold/5' since the Khepri server
@@ -1175,10 +1170,10 @@ foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
     ok.
 
 foreach_durable_in_khepri(UpdateFun, FilterFun) ->
-    Path = khepri_queues_path() ++
-        [?KHEPRI_WILDCARD_STAR,
-         #if_data_matches{
-            pattern = amqqueue:pattern_match_on_durable(true)}],
+    Path = khepri_queue_path(
+             ?KHEPRI_WILDCARD_STAR,
+             #if_data_matches{
+                pattern = amqqueue:pattern_match_on_durable(true)}),
     case rabbit_khepri:filter(Path, fun(_, #{data := Q}) ->
                                             FilterFun(Q)
                                     end) of
@@ -1294,7 +1289,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_queues_path(),
+    Path = khepri_queue_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok -> ok;
         Error -> throw(Error)
@@ -1361,11 +1356,8 @@ list_with_possible_retry_in_khepri(Fun) ->
 %% Khepri paths
 %% --------------------------------------------------------------
 
-khepri_queues_path() ->
-    [?MODULE, queues].
-
 khepri_queue_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, queues, VHost, Name].
+    khepri_queue_path(VHost, Name).
 
-khepri_queue_path_to_name([?MODULE, queues, VHost, Name]) ->
-    rabbit_misc:r(VHost, queue, Name).
+khepri_queue_path(VHost, Name) when ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [queues, Name].

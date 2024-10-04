@@ -107,7 +107,7 @@ uri_base_from(Config, Node) ->
 uri_base_from(Config, Node, Base) ->
     Port = mgmt_port(Config, Node),
     Prefix = get_uri_prefix(Config),
-    Uri = rabbit_mgmt_format:print("http://localhost:~w~ts/~ts", [Port, Prefix, Base]),
+    Uri = list_to_binary(lists:flatten(io_lib:format("http://localhost:~w~ts/~ts", [Port, Prefix, Base]))),
     binary_to_list(Uri).
 
 get_uri_prefix(Config) ->
@@ -250,9 +250,12 @@ assert_code(CodeExp, CodeAct, Type, Path, Body) ->
     end.
 
 decode(?OK, _Headers,  ResBody) ->
-    JSON = rabbit_data_coercion:to_binary(ResBody),
-    atomize_map_keys(rabbit_json:decode(JSON));
+    decode_body(ResBody);
 decode(_,    Headers, _ResBody) -> Headers.
+
+decode_body(ResBody) ->
+    JSON = rabbit_data_coercion:to_binary(ResBody),
+    atomize_map_keys(rabbit_json:decode(JSON)).
 
 atomize_map_keys(L) when is_list(L) ->
     [atomize_map_keys(I) || I <- L];
@@ -265,7 +268,10 @@ atomize_map_keys(I) ->
 
 %% @todo There wasn't a specific order before; now there is; maybe we shouldn't have one?
 assert_list(Exp, Act) ->
-    case length(Exp) == length(Act) of
+    %% allow actual map to include keys we do not assert on
+    %% but not the other way around: we may want to only assert on a subset
+    %% of keys
+    case length(Act) >= length(Exp) of
         true  -> ok;
         false -> error({expected, Exp, actual, Act})
     end,

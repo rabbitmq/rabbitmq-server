@@ -26,10 +26,7 @@ APP_DESCRIPTION = "RabbitMQ MQTT Adapter"
 APP_MODULE = "rabbit_mqtt"
 
 APP_ENV = """[
-	    {default_user, <<"guest">>},
-	    {default_pass, <<"guest">>},
 	    {ssl_cert_login,false},
-	    %% To satisfy an unfortunate expectation from popular MQTT clients.
 	    {allow_anonymous, true},
 	    {vhost, <<"/">>},
 	    {exchange, <<"amq.topic">>},
@@ -52,7 +49,8 @@ APP_ENV = """[
 	    {mailbox_soft_limit, 200},
 	    {max_packet_size_unauthenticated, 65536},
 	    %% 256 MB is upper limit defined by MQTT spec
-	    {max_packet_size_authenticated, 268435455},
+	    %% We set 16 MB as defined in deps/rabbit/Makefile max_message_size
+	    {max_packet_size_authenticated, 16777216},
 	    {topic_alias_maximum, 16}
 	  ]
 """
@@ -138,7 +136,7 @@ rabbitmq_integration_suite(
         "test/rabbit_auth_backend_mqtt_mock.beam",
         "test/util.beam",
     ],
-    shard_count = 14,
+    shard_count = 18,
     runtime_deps = [
         "@emqtt//:erlang_app",
         "@meck//:erlang_app",
@@ -228,13 +226,13 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "shared_SUITE",
+    name = "mqtt_shared_SUITE",
     size = "large",
     additional_beam = [
         ":test_util_beam",
         ":test_event_recorder_beam",
     ],
-    shard_count = 10,
+    shard_count = 5,
     runtime_deps = [
         "//deps/rabbitmq_management_agent:erlang_app",
         "@emqtt//:erlang_app",
@@ -249,7 +247,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_util_beam",
     ],
-    shard_count = 4,
+    shard_count = 2,
     runtime_deps = [
         "@emqtt//:erlang_app",
         "@gun//:erlang_app",

@@ -27,7 +27,7 @@ TimeoutStartSec=3600
 # You *may* wish to add the following to automatically restart RabbitMQ
 # in the event of a failure. systemd service restarts are not a
 # replacement for service monitoring. Please see
-# https://www.rabbitmq.com/monitoring.html
+# https://www.rabbitmq.com/docs/monitoring
 #
 # Restart=on-failure
 # RestartSec=10

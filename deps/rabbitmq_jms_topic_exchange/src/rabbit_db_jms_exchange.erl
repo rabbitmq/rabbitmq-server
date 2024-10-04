@@ -20,8 +20,8 @@
         ]).
 
 -export([
-         khepri_jms_topic_exchange_path/0,
-         khepri_jms_topic_exchange_path/1
+         khepri_jms_topic_exchange_path/1,
+         khepri_jms_topic_exchange_path/2
         ]).
 
 -rabbit_mnesia_tables_to_khepri_db(
@@ -233,7 +233,8 @@ remove_items(Dict, [Key | Keys]) -> remove_items(dict:erase(Key, Dict), Keys).
 %% -------------------------------------------------------------------
 
 khepri_jms_topic_exchange_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, jms_topic_exchange, VHost, Name].
+    khepri_jms_topic_exchange_path(VHost, Name).
 
-khepri_jms_topic_exchange_path() ->
-    [?MODULE, jms_topic_exchange].
+khepri_jms_topic_exchange_path(VHost, Name) ->
+    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, Name),
+    ExchangePath ++ [jms_topic].

@@ -15,11 +15,11 @@
   <properties>
     <paho.v5.version>[1.2.5,)</paho.v5.version>
     <paho.v3.version>[1.2.5,)</paho.v3.version>
-    <amqp-client.version>5.21.0</amqp-client.version>
-    <junit.version>5.10.3</junit.version>
+    <amqp-client.version>5.22.0</amqp-client.version>
+    <junit.version>5.11.1</junit.version>
     <assertj.version>3.26.3</assertj.version>
     <logback.version>1.2.13</logback.version>
-    <maven-surefire-plugin.version>3.3.1</maven-surefire-plugin.version>
+    <maven-surefire-plugin.version>3.5.0</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
     <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>

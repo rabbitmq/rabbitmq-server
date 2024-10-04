@@ -122,11 +122,11 @@ decode({described, Descriptor, {map, Fields} = Type}) ->
         #'v1_0.application_properties'{} ->
             #'v1_0.application_properties'{content = decode_map(Fields)};
         #'v1_0.delivery_annotations'{} ->
-            #'v1_0.delivery_annotations'{content = decode_map(Fields)};
+            #'v1_0.delivery_annotations'{content = decode_annotations(Fields)};
         #'v1_0.message_annotations'{} ->
-            #'v1_0.message_annotations'{content = decode_map(Fields)};
+            #'v1_0.message_annotations'{content = decode_annotations(Fields)};
         #'v1_0.footer'{} ->
-            #'v1_0.footer'{content = decode_map(Fields)};
+            #'v1_0.footer'{content = decode_annotations(Fields)};
         #'v1_0.amqp_value'{} ->
             #'v1_0.amqp_value'{content = Type};
         Else ->
@@ -148,6 +148,16 @@ decode(Other) ->
 
 decode_map(Fields) ->
     [{decode(K), decode(V)} || {K, V} <- Fields].
+
+%% "The annotations type is a map where the keys are restricted to be of type symbol
+%% or of type ulong. All ulong keys, and all symbolic keys except those beginning
+%% with "x-" are reserved." [3.2.10]
+%% Since we already parse annotations here and neither the client nor server uses
+%% reserved keys, we perform strict validation and crash if any reserved keys are used.
+decode_annotations(Fields) ->
+    lists:map(fun({{symbol, <<"x-", _/binary>>} = K, V}) ->
+                      {K, decode(V)}
+              end, Fields).
 
 -spec encode_described(list | map | binary | annotations | '*',
                        non_neg_integer(),
@@ -216,7 +226,7 @@ pprint(Other) -> Other.
 -include_lib("eunit/include/eunit.hrl").
 
 encode_decode_test_() ->
-    Data = [{{utf8, <<"k">>}, {binary, <<"v">>}}],
+    Data = [{{symbol, <<"x-my key">>}, {binary, <<"my value">>}}],
     Test = fun(M) -> [M] = decode_bin(iolist_to_binary(encode_bin(M))) end,
     [
      fun() -> Test(#'v1_0.application_properties'{content = Data}) end,

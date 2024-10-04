@@ -25,9 +25,9 @@
          node_listeners/1, node_client_listeners/1,
          register_connection/1, unregister_connection/1,
          register_non_amqp_connection/1, unregister_non_amqp_connection/1,
-         connections/0, non_amqp_connections/0, connection_info_keys/0,
-         connection_info/1, connection_info/2,
-         connection_info_all/0, connection_info_all/1,
+         connections/0, non_amqp_connections/0,
+         connection_info/2,
+         connection_info_all/1,
          emit_connection_info_all/4, emit_connection_info_local/3,
          close_connection/2, close_connections/2, close_all_connections/1,
          close_all_user_connections/2,
@@ -482,22 +482,10 @@ non_amqp_connections() ->
 local_non_amqp_connections() ->
   pg_local:get_members(rabbit_non_amqp_connections).
 
--spec connection_info_keys() -> rabbit_types:info_keys().
-
-connection_info_keys() -> rabbit_reader:info_keys().
-
--spec connection_info(rabbit_types:connection()) -> rabbit_types:infos().
-
-connection_info(Pid) -> rabbit_reader:info(Pid).
-
 -spec connection_info(rabbit_types:connection(), rabbit_types:info_keys()) ->
           rabbit_types:infos().
 
 connection_info(Pid, Items) -> rabbit_reader:info(Pid, Items).
-
--spec connection_info_all() -> [rabbit_types:infos()].
-
-connection_info_all() -> cmap(fun (Q) -> connection_info(Q) end).
 
 -spec connection_info_all(rabbit_types:info_keys()) ->
           [rabbit_types:infos()].
@@ -531,9 +519,8 @@ close_connections(Pids, Explanation) ->
 
 -spec close_all_user_connections(rabbit_types:username(), string()) -> 'ok'.
 close_all_user_connections(Username, Explanation) ->
-    Pids = [Pid || #tracked_connection{pid = Pid} <- rabbit_connection_tracking:list_of_user(Username)],
-    [close_connection(Pid, Explanation) || Pid <- Pids],
-    ok.
+    Tracked = rabbit_connection_tracking:list_of_user(Username),
+    rabbit_connection_tracking:close_connections(Tracked, Explanation, 0).
 
 %% Meant to be used by tests only
 -spec close_all_connections(string()) -> 'ok'.
@@ -560,7 +547,7 @@ failed_to_recv_proxy_header(Ref, Error) ->
     end,
     rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
-    _ = catch ranch:handshake(Ref),
+    _ = ranch:handshake(Ref),
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
@@ -572,22 +559,14 @@ handshake(Ref, ProxyProtocolEnabled) ->
                 {error, protocol_error, Error} ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
-                    case catch ranch:handshake(Ref) of
-                        {'EXIT', normal} ->
-                            {error, handshake_failed};
-                        {ok, Sock} ->
-                            ok = tune_buffer_size(Sock),
-                            {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
-                    end
+                    {ok, Sock} = ranch:handshake(Ref),
+                    ok = tune_buffer_size(Sock),
+                    {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
-            case catch ranch:handshake(Ref) of
-                {'EXIT', normal} ->
-                    {error, handshake_failed};
-                {ok, Sock} ->
-                    ok = tune_buffer_size(Sock),
-                    {ok, Sock}
-            end
+            {ok, Sock} = ranch:handshake(Ref),
+            ok = tune_buffer_size(Sock),
+            {ok, Sock}
     end.
 
 tune_buffer_size(Sock) ->

@@ -55,6 +55,7 @@ ALL_PLUGINS = [
     "//deps/rabbitmq_event_exchange:erlang_app",
     "//deps/rabbitmq_federation:erlang_app",
     "//deps/rabbitmq_federation_management:erlang_app",
+    "//deps/rabbitmq_federation_prometheus:erlang_app",
     "//deps/rabbitmq_jms_topic_exchange:erlang_app",
     "//deps/rabbitmq_management:erlang_app",
     "//deps/rabbitmq_mqtt:erlang_app",
@@ -68,6 +69,7 @@ ALL_PLUGINS = [
     "//deps/rabbitmq_sharding:erlang_app",
     "//deps/rabbitmq_shovel:erlang_app",
     "//deps/rabbitmq_shovel_management:erlang_app",
+    "//deps/rabbitmq_shovel_prometheus:erlang_app",
     "//deps/rabbitmq_stomp:erlang_app",
     "//deps/rabbitmq_stream:erlang_app",
     "//deps/rabbitmq_stream_management:erlang_app",
@@ -189,6 +191,7 @@ def rabbitmq_suite(
             "COVERDATA_TO_LCOV_APPS_DIRS": "deps:deps/rabbit/apps",
         }.items() + test_env.items()),
         deps = [":test_erlang_app"] + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
     return name
@@ -259,6 +262,7 @@ def rabbitmq_integration_suite(
             ":rabbitmq-for-tests-run",
         ] + tools,
         deps = assumed_deps + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
 
@@ -286,14 +290,15 @@ def rabbitmq_integration_suite(
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
-            "RABBITMQ_RUN_SECONDARY": "$(location @rabbitmq-server-generic-unix-3.13//:rabbitmq-run)",
+            "RABBITMQ_RUN_SECONDARY": "$(location @rabbitmq-server-generic-unix-4.0//:rabbitmq-run)",
             "LANG": "C.UTF-8",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
-            "@rabbitmq-server-generic-unix-3.13//:rabbitmq-run",
+            "@rabbitmq-server-generic-unix-4.0//:rabbitmq-run",
         ] + tools,
         deps = assumed_deps + deps + runtime_deps,
+        ct_run_extra_args = ["-kernel net_ticktime 5"],
         **kwargs
     )
 

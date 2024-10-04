@@ -1,0 +1,9 @@
+node_modules
+package-lock.json
+screens/*/*
+logs
+suites/logs/*
+suites/screens/*
+test/oauth/*/h2/*.trace.db
+test/oauth/*/h2/*.lock.db
+*/target/*

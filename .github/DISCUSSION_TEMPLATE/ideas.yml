@@ -1,0 +1,55 @@
+title: "[Suggestion] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before We Start
+
+        Please provide reasonably detailed responses to the question below to help the Core Team and maintainers
+        to understand how you run RabbitMQ and why you'd like to see the suggested changes.
+  - type: markdown
+    attributes:
+      value: |
+        ## Relevant Details
+  - type: dropdown
+    id: rabbitmq_series
+    attributes:
+      label: RabbitMQ series
+      options:
+        - 3.13.x
+        - 4.0.x
+        - 4.1.x
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system (distribution) used
+      description: What OS or distribution do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment_type
+    attributes:
+      label: How is RabbitMQ deployed?
+      options:
+        - Community Docker image
+        - Debian package
+        - RPM package
+        - Generic binary package
+        - Kubernetes Operator(s) from Team RabbitMQ
+        - Bitnami Helm chart
+        - Chocolatey package
+        - Windows installer
+        - Windows binary package
+        - RabbitMQ-as-a-Service from a public cloud provider
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What would you like to suggest for a future version of RabbitMQ?
+      description: Please take the time to explain how you use RabbitMQ and why this change is important
+    validations:
+      required: true

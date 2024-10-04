@@ -291,24 +291,21 @@ random_nth(Nodes) ->
 
 revive_local_quorum_queue_replicas() ->
     Queues = rabbit_amqqueue:list_local_followers(),
-    [begin
-        Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will trigger a leader election for local quorum queue ~ts",
-                         [rabbit_misc:rs(Name)]),
-        %% start local QQ replica (Ra server) of this queue
-        {Prefix, _Node} = amqqueue:get_pid(Q),
-        RaServer = {Prefix, node()},
-        rabbit_log:debug("Will start Ra server ~tp", [RaServer]),
-        case rabbit_quorum_queue:restart_server(RaServer) of
-            ok     ->
-                rabbit_log:debug("Successfully restarted Ra server ~tp", [RaServer]);
-            {error, {already_started, _Pid}} ->
-                rabbit_log:debug("Ra server ~tp is already running", [RaServer]);
-            {error, nodedown} ->
-                rabbit_log:error("Failed to restart Ra server ~tp: target node was reported as down")
-        end
-     end || Q <- Queues],
-    rabbit_log:info("Restart of local quorum queue replicas is complete").
+    %% NB: this function ignores the first argument so we can just pass the
+    %% empty binary as the vhost name.
+    {Recovered, Failed} = rabbit_quorum_queue:recover(<<>>, Queues),
+    rabbit_log:debug("Successfully revived ~b quorum queue replicas",
+                     [length(Recovered)]),
+    case length(Failed) of
+        0 ->
+            ok;
+        NumFailed ->
+            rabbit_log:error("Failed to revive ~b quorum queue replicas",
+                             [NumFailed])
+    end,
+
+    rabbit_log:info("Restart of local quorum queue replicas is complete"),
+    ok.
 
 %%
 %% Implementation

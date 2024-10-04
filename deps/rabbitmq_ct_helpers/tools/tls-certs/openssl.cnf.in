@@ -49,6 +49,7 @@ keyUsage = keyCertSign, cRLSign
 [ client_ca_extensions ]
 basicConstraints = CA:false
 keyUsage         = digitalSignature,keyEncipherment
+subjectAltName   = @client_alt_names
 
 [ server_ca_extensions ]
 basicConstraints = CA:false
@@ -59,3 +60,6 @@ subjectAltName   = @server_alt_names
 [ server_alt_names ]
 DNS.1 = @HOSTNAME@
 DNS.2 = localhost
+
+[ client_alt_names ]
+DNS.1 = rabbit_client_id

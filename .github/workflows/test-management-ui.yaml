@@ -1,0 +1,113 @@
+name: Test Management UI with Selenium
+on:
+  push:
+    branches:
+      - main
+      - v3.12.x
+      - v3.11.x
+      - bump-otp-for-oci
+      - bump-rbe-*
+      - bump-rules_erlang
+    paths:
+      - 'deps/**'
+      - 'scripts/**'
+      - .bazelrc
+      - .bazelversion
+      - BUILD.*
+      - '*.bzl'
+      - '*.bazel'
+      - 'selenium/**'
+      - .github/workflows/test-management-ui.yaml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  selenium:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - "26.2"
+        browser:
+        - chrome
+        include:
+        - erlang_version: "26.2"
+          elixir_version: 1.15.7
+    env:
+      SELENIUM_DIR: selenium
+      DOCKER_NETWORK: rabbitmq_net
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure OTP & Elixir
+      uses: erlef/setup-beam@v1.17
+      with:
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - name: Authenticate To Google Cloud
+      uses: google-github-actions/auth@v2.1.6
+      with:
+        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
+
+    - name: Configure Bazel
+      run: |
+        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
+        cat << EOF >> user.bazelrc
+          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
+          build --google_default_credentials
+
+          build --remote_download_toplevel
+        EOF
+        fi
+        cat << EOF >> user.bazelrc
+          build --color=yes
+        EOF
+
+    - name: Build & Load RabbitMQ OCI
+      run: |
+        bazelisk run packaging/docker-image:rabbitmq-amd64
+
+    - name: Configure Docker Network
+      run: |
+        docker network create ${DOCKER_NETWORK}
+
+    - name: Build Test Runner Image
+      run: |
+        cd ${SELENIUM_DIR}
+        docker build -t mocha-test --target test .
+
+    - name: Run short ui suite on a 3-node rabbitmq cluster
+      run: |
+        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
+            ADDON_PROFILES=cluster ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui
+        mkdir -p /tmp/short-suite
+        mv /tmp/selenium/* /tmp/short-suite
+        mkdir -p /tmp/short-suite/logs
+        mv ${SELENIUM_DIR}/logs/* /tmp/short-suite/logs
+        mkdir -p /tmp/short-suite/screens
+        mv ${SELENIUM_DIR}/screens/* /tmp/short-suite/screens
+
+    - name: Upload Test Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4.3.2
+      with:
+        name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
+        path: |
+          /tmp/full-suite
+          /tmp/short-suite
+
+  summary-selenium:
+    needs:
+    - selenium
+    runs-on: ubuntu-latest
+    steps:
+    - name: SUMMARY
+      run: |
+        echo "SUCCESS"

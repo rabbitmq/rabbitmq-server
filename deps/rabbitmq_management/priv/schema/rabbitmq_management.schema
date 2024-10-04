@@ -87,7 +87,7 @@ end}.
 {mapping, "management.ssl.cacertfile", "rabbitmq_management.ssl_config.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 {mapping, "management.ssl.password", "rabbitmq_management.ssl_config.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "management.ssl.verify", "rabbitmq_management.ssl_config.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -295,7 +295,7 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "management.listener.ssl_opts.password", "rabbitmq_management.listener.ssl_opts.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
 
 {mapping, "management.listener.ssl_opts.psk_identity", "rabbitmq_management.listener.ssl_opts.psk_identity",
     [{datatype, string}]}.

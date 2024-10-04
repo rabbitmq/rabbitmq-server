@@ -92,10 +92,16 @@
         <td><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
       <% } %>
-      <% if (!is_stream(queue)) { %>
+      <% if (is_classic(queue)) { %>
       <tr>
         <th>Consumer capacity <span class="help" id="queue-consumer-capacity"></th>
         <td><%= fmt_percent(queue.consumer_capacity) %></td>
+      </tr>
+      <% } %>
+      <% if(queue.hasOwnProperty('publishers')) { %>
+      <tr>
+        <th>Publishers</th>
+        <td><%= fmt_string(queue.publishers) %></td>
       </tr>
       <% } %>
       <% if (is_quorum(queue)) { %>
@@ -103,11 +109,21 @@
         <th>Open files</th>
         <td><%= fmt_table_short(queue.open_files) %></td>
       </tr>
+      <% if (queue.hasOwnProperty('delivery_limit')) { %>
+      <tr>
+        <th>Delivery limit <span class="help" id="queue-delivery-limit"></th>
+        <td><%= fmt_string(queue.delivery_limit) %></td>
+      </tr>
+      <% } %>
       <% } %>
       <% if (is_stream(queue)) { %>
       <tr>
         <th>Readers</th>
         <td><%= fmt_table_short(queue.readers) %></td>
+      </tr>
+      <tr>
+        <th>Segments</th>
+        <td><%= fmt_string(queue.segments) %></td>
       </tr>
       <% } %>
     </table>
@@ -116,10 +132,14 @@
       <tr>
         <td></td>
         <th class="horizontal">Total</th>
+        <% if (!is_stream(queue)) { %>
         <th class="horizontal">Ready</th>
         <th class="horizontal">Unacked</th>
+        <% } %>
         <% if (is_quorum(queue)) { %>
-        <th class="horizontal">In memory ready</th>
+        <th class="horizontal">High priority</th>
+        <th class="horizontal">Normal priority</th>
+        <th class="horizontal">Returned</th>
         <th class="horizontal">Dead-lettered
         <span class="help" id="queue-dead-lettered"></span>
         </th>
@@ -133,20 +153,32 @@
       <tr>
         <th>
           Messages
+          <% if (is_stream(queue)) { %>
+          <span class="help" id="queue-messages-stream"></span>
+          <% } else { %>
           <span class="help" id="queue-messages"></span>
+          <% } %>
         </th>
         <td class="r">
           <%= fmt_num_thousands(queue.messages) %>
         </td>
+        <% if (!is_stream(queue)) { %>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_ready) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_unacknowledged) %>
         </td>
+        <% } %>
         <% if (is_quorum(queue)) { %>
         <td class="r">
-          <%= fmt_num_thousands(queue.messages_ram) %>
+          <%= fmt_num_thousands(queue.messages_ready_high) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_normal) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_returned) %>
         </td>
         <td class="r">
           <%= fmt_num_thousands(queue.messages_dlx) %>
@@ -179,16 +211,22 @@
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
         </td>
-        <td class="r">
-          <%= fmt_bytes(queue.message_bytes_ram) %>
-        </td>
         <% } %>
         <% if (is_quorum(queue)) { %>
+        <td class="r">
+        </td>
+        <td class="r">
+        </td>
+        <td class="r">
+        </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_dlx) %>
         </td>
         <% } %>
         <% if (is_classic(queue)) { %>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ram) %>
+        </td>
         <td class="r">
           <%= fmt_bytes(queue.message_bytes_persistent) %>
         </td>

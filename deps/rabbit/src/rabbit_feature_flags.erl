@@ -2,11 +2,13 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2019-2024 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @author The RabbitMQ team
-%% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% @copyright 2019-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc.
+%% and/or its subsidiaries. All rights reserved.
 %%
 %% @doc
 %% This module offers a framework to declare capabilities a RabbitMQ node
@@ -103,7 +105,7 @@
          init/0,
          get_state/1,
          get_stability/1,
-         check_node_compatibility/1,
+         check_node_compatibility/1, check_node_compatibility/2,
          sync_feature_flags_with_cluster/2,
          refresh_feature_flags_after_app_load/0,
          enabled_feature_flags_list_file/0
@@ -1302,7 +1304,9 @@ does_node_support(Node, FeatureNames, Timeout) ->
             false
     end.
 
--spec check_node_compatibility(node()) -> ok | {error, any()}.
+-spec check_node_compatibility(RemoteNode) -> Ret when
+      RemoteNode :: node(),
+      Ret :: ok | {error, any()}.
 %% @doc
 %% Checks if a node is compatible with the local node.
 %%
@@ -1314,11 +1318,40 @@ does_node_support(Node, FeatureNames, Timeout) ->
 %%   local node</li>
 %% </ol>
 %%
-%% @param Node the name of the remote node to test.
+%% @param RemoteNode the name of the remote node to test.
 %% @returns `ok' if they are compatible, `{error, Reason}' if they are not.
 
-check_node_compatibility(Node) ->
-    rabbit_ff_controller:check_node_compatibility(Node).
+check_node_compatibility(RemoteNode) ->
+    check_node_compatibility(RemoteNode, false).
+
+-spec check_node_compatibility(RemoteNode, LocalNodeAsVirgin) -> Ret when
+      RemoteNode :: node(),
+      LocalNodeAsVirgin :: boolean(),
+      Ret :: ok | {error, any()}.
+%% @doc
+%% Checks if a node is compatible with the local node.
+%%
+%% To be compatible, the following two conditions must be met:
+%% <ol>
+%% <li>feature flags enabled on the local node must be supported by the
+%%   remote node</li>
+%% <li>feature flags enabled on the remote node must be supported by the
+%%   local node</li>
+%% </ol>
+%%
+%% Unlike {@link check_node_compatibility/1}, the local node's feature flags
+%% inventory is evaluated as if the node was virgin if `LocalNodeAsVirgin' is
+%% true. This is useful if the local node will be reset as part of joining a
+%% remote cluster for instance.
+%%
+%% @param RemoteNode the name of the remote node to test.
+%% @param LocalNodeAsVirgin flag to indicate if the local node should be
+%% evaluated as if it was virgin.
+%% @returns `ok' if they are compatible, `{error, Reason}' if they are not.
+
+check_node_compatibility(RemoteNode, LocalNodeAsVirgin) ->
+    rabbit_ff_controller:check_node_compatibility(
+      RemoteNode, LocalNodeAsVirgin).
 
 run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
     rabbit_ff_controller:rpc_call(Node, ?MODULE, Function, Args, Timeout).

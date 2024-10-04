@@ -170,7 +170,8 @@
     test_writer/1,
     user/1,
 
-    configured_metadata_store/1
+    configured_metadata_store/1,
+    await_metadata_store_consistent/2
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -392,7 +393,7 @@ wait_for_rabbitmq_nodes(Config, Starting, NodeConfigs, Clustered) ->
             NodeConfigs1 = [NC || {_, NC} <- NodeConfigs],
             Config1 = rabbit_ct_helpers:set_config(Config,
               {rmq_nodes, NodeConfigs1}),
-            stop_rabbitmq_nodes(Config1),
+            _ = stop_rabbitmq_nodes(Config1),
             Error;
         {Pid, I, NodeConfig} when NodeConfigs =:= [] ->
             wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
@@ -488,11 +489,15 @@ init_tcp_port_numbers(Config, NodeConfig, I) ->
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
 tcp_port_base_for_broker(Config, I, PortsCount) ->
+    tcp_port_base_for_broker0(Config, I, PortsCount).
+
+tcp_port_base_for_broker0(Config, I, PortsCount) ->
+    Base0 = persistent_term:get(rabbit_ct_tcp_port_base, ?TCP_PORTS_BASE),
     Base = case rabbit_ct_helpers:get_config(Config, tcp_ports_base) of
         undefined ->
-            ?TCP_PORTS_BASE;
+            Base0;
         {skip_n_nodes, N} ->
-            tcp_port_base_for_broker1(?TCP_PORTS_BASE, N, PortsCount);
+            tcp_port_base_for_broker1(Base0, N, PortsCount);
         B ->
             B
     end,
@@ -628,7 +633,14 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
-    CanUseSecondary = (I + 1) rem 2 =:= 0,
+    ForceUseSecondary = rabbit_ct_helpers:get_config(
+                          Config, force_secondary_umbrella, undefined),
+    CanUseSecondary = case ForceUseSecondary of
+                          undefined ->
+                              (I + 1) rem 2 =:= 0;
+                          Override when is_boolean(Override) ->
+                              Override
+                      end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false -> false;
                                _     -> CanUseSecondary
@@ -660,25 +672,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
             "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
     end,
-    %% Set the net_ticktime.
-    CurrentTicktime = case net_kernel:get_net_ticktime() of
-        {ongoing_change_to, T} -> T;
-        T                      -> T
-    end,
-    StartArgs1 = case rabbit_ct_helpers:get_config(Config, net_ticktime) of
-        undefined ->
-            case CurrentTicktime of
-                60 -> ok;
-                _  -> net_kernel:set_net_ticktime(60)
-            end,
-            StartArgs0;
-        Ticktime ->
-            case CurrentTicktime of
-                Ticktime -> ok;
-                _        -> net_kernel:set_net_ticktime(Ticktime)
-            end,
-            StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
-    end,
+    %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
+    %% A lower tick time helps trigger distribution failures faster.
+    StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
     ExtraArgs0 = [],
     ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
                      undefined ->
@@ -745,7 +741,6 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
       {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
-      "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
@@ -761,6 +756,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
                     _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+                    %% @todo Need to stop all nodes in the cluster, not just the one node.
                     {skip, "Failed to initialize RabbitMQ"}
             end;
         RunCmd ->
@@ -920,7 +916,7 @@ wait_for_node_handling(Procs, Fun, T0, Results) ->
 move_nonworking_nodedir_away(NodeConfig) ->
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
-    case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
+    ok = case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
         andalso ?OTP_RELEASE >= 23 of
         true ->
             file:del_dir_r(ConfigDir);
@@ -984,11 +980,35 @@ enable_khepri_metadata_store(Config, FFs0) ->
                         case enable_feature_flag(C, FF) of
                             ok ->
                                 C;
-                            Skip ->
+                            {skip, _} = Skip ->
                                 ct:pal("Enabling metadata store failed: ~p", [Skip]),
                                 Skip
                         end
                 end, Config, FFs).
+
+%% Waits until the metadata store replica on Node is up to date with the leader.
+await_metadata_store_consistent(Config, Node) ->
+    case configured_metadata_store(Config) of
+        mnesia ->
+            ok;
+        {khepri, _} ->
+            RaClusterName = rabbit_khepri:get_ra_cluster_name(),
+            Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
+            LastAppliedLeader = ra_last_applied(Leader),
+
+            NodeName = get_node_config(Config, Node, nodename),
+            ServerId = {RaClusterName, NodeName},
+            rabbit_ct_helpers:eventually(
+              ?_assert(
+                 begin
+                     LastApplied = ra_last_applied(ServerId),
+                     is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
+                 end))
+    end.
+
+ra_last_applied(ServerId) ->
+    #{last_applied := LastApplied} = ra:key_metrics(ServerId),
+    LastApplied.
 
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
@@ -1114,7 +1134,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
     ],
     Cmd = ["stop-node" | MakeVars],
-    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
             rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         RunCmd ->
@@ -1893,10 +1913,8 @@ restart_node(Config, Node) ->
 
 stop_node(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
-    case stop_rabbitmq_node(Config, NodeConfig) of
-        {skip, _} = Error -> Error;
-        _                 -> ok
-    end.
+    _ = stop_rabbitmq_node(Config, NodeConfig),
+    ok.
 
 stop_node_after(Config, Node, Sleep) ->
     timer:sleep(Sleep),
@@ -1919,7 +1937,7 @@ kill_node(Config, Node) ->
               _ ->
                   rabbit_misc:format("kill -9 ~ts", [Pid])
           end,
-    os:cmd(Cmd),
+    _ = os:cmd(Cmd),
     await_os_pid_death(Pid).
 
 kill_node_after(Config, Node, Sleep) ->
@@ -2210,7 +2228,7 @@ if_cover(F) ->
       os:getenv("COVERAGE")
      } of
         {false, false} -> ok;
-        _ -> F()
+        _ -> _ = F(), ok
     end.
 
 setup_meck(Config) ->

@@ -49,6 +49,7 @@
          failed_enable_feature_flag_with_post_enable/1,
          have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
          have_required_feature_flag_in_cluster_and_add_member_without_it/1,
+         have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled/1,
          error_during_migration_after_initial_success/1,
          controller_waits_for_own_task_to_finish_before_exiting/1,
          controller_waits_for_remote_task_to_finish_before_exiting/1
@@ -98,6 +99,7 @@ groups() ->
        failed_enable_feature_flag_with_post_enable,
        have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
        have_required_feature_flag_in_cluster_and_add_member_without_it,
+       have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled,
        error_during_migration_after_initial_success,
        controller_waits_for_own_task_to_finish_before_exiting,
        controller_waits_for_remote_task_to_finish_before_exiting
@@ -114,9 +116,7 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     logger:set_primary_config(level, debug),
-    rabbit_ct_helpers:run_steps(
-      Config,
-      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]).
+    rabbit_ct_helpers:run_steps(Config, []).
 
 end_per_suite(Config) ->
     Config.
@@ -169,7 +169,15 @@ start_slave_node(Parent, Config, Testcase, N) ->
     Name = list_to_atom(
              rabbit_misc:format("~ts-~b", [Testcase, N])),
     ct:pal("- Starting slave node `~ts@...`", [Name]),
-    {ok, Node} = slave:start(net_adm:localhost(), Name),
+    {ok, NodePid, Node} = peer:start(#{
+        name => Name,
+        connection => standard_io,
+        shutdown => close
+    }),
+    peer:call(NodePid, net_kernel, set_net_ticktime, [5]),
+
+    persistent_term:put({?MODULE, Node}, NodePid),
+
     ct:pal("- Slave node `~ts` started", [Node]),
 
     TestCodePath = filename:dirname(code:which(?MODULE)),
@@ -185,8 +193,16 @@ stop_slave_nodes(Config) ->
     rabbit_ct_helpers:delete_config(Config, nodes).
 
 stop_slave_node(Node) ->
-    ct:pal("- Stopping slave node `~ts`...", [Node]),
-    ok = slave:stop(Node).
+    case persistent_term:get({?MODULE, Node}, undefined) of
+        undefined ->
+            %% Node was already stopped (e.g. by the test case).
+            ok;
+        NodePid ->
+            persistent_term:erase({?MODULE, Node}),
+
+            ct:pal("- Stopping slave node `~ts`...", [Node]),
+            ok = peer:stop(NodePid)
+    end.
 
 connect_nodes([FirstNode | OtherNodes] = Nodes) ->
     lists:foreach(
@@ -1490,6 +1506,53 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
            end,
            [])
          || Node <- AllNodes],
+    ok.
+
+have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled(
+  Config) ->
+    [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       stability => stable}},
+    ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
+
+    ct:pal(
+      "Checking the feature flag is unsupported on the cluster but enabled on "
+      "the standalone node"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(ok, rabbit_feature_flags:enable(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           []),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertNot(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode, true)),
+                   ok
+           end, []),
     ok.
 
 error_during_migration_after_initial_success(Config) ->

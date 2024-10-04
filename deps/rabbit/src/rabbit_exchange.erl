@@ -14,7 +14,7 @@
          update_scratch/3, update_decorators/2, immutable/1,
          info_keys/0, info/1, info/2, info_all/1, info_all/2, info_all/4,
          route/2, route/3, delete/3, validate_binding/2, count/0,
-         ensure_deleted/3]).
+         ensure_deleted/3, delete_all/2]).
 -export([list_names/0]).
 -export([serialise_events/1]).
 -export([serial/1, peek_serial/1]).
@@ -470,13 +470,15 @@ delete(XName, IfUnused, Username) ->
         _ = rabbit_runtime_parameters:set(XName#resource.virtual_host,
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
-        Deletions = process_deletions(rabbit_db_exchange:delete(XName, IfUnused)),
-        case Deletions of
-            {error, _} ->
-                Deletions;
-            _ ->
-                rabbit_binding:notify_deletions(Deletions, Username),
-                ok
+        case rabbit_db_exchange:delete(XName, IfUnused) of
+            {deleted, #exchange{name = XName} = X, Bs, Deletions} ->
+                Deletions1 = rabbit_binding:add_deletion(
+                               XName, X, deleted, Bs, Deletions),
+                ok = rabbit_binding:process_deletions(Deletions1),
+                ok = rabbit_binding:notify_deletions(Deletions1, Username),
+                ok;
+            {error, _} = Err ->
+                Err
         end
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
@@ -484,12 +486,16 @@ delete(XName, IfUnused, Username) ->
                                         XName#resource.name, Username)
     end.
 
-process_deletions({error, _} = E) ->
-    E;
-process_deletions({deleted, #exchange{name = XName} = X, Bs, Deletions}) ->
-    rabbit_binding:process_deletions(
-      rabbit_binding:add_deletion(
-        XName, {X, deleted, Bs}, Deletions)).
+-spec delete_all(VHostName, ActingUser) -> Ret when
+      VHostName :: vhost:name(),
+      ActingUser :: rabbit_types:username(),
+      Ret :: ok.
+
+delete_all(VHostName, ActingUser) ->
+    {ok, Deletions} = rabbit_db_exchange:delete_all(VHostName),
+    ok = rabbit_binding:process_deletions(Deletions),
+    ok = rabbit_binding:notify_deletions(Deletions, ActingUser),
+    ok.
 
 -spec ensure_deleted(ExchangeName, IfUnused, Username) -> Ret when
       ExchangeName :: name(),

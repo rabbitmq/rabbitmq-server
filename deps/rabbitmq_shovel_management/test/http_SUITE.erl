@@ -8,6 +8,7 @@
 -module(http_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
@@ -27,6 +28,10 @@ groups() ->
     [
      {dynamic_shovels, [], [
                   start_and_list_a_dynamic_amqp10_shovel,
+                  start_and_get_a_dynamic_amqp10_shovel,
+                  start_and_get_a_dynamic_amqp091_shovel_with_publish_properties,
+                  start_and_get_a_dynamic_amqp091_shovel_with_missing_publish_properties,
+                  start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
                   create_and_delete_a_dynamic_shovel_that_fails_to_connect
                  ]},
@@ -124,25 +129,33 @@ start_inets(Config) ->
 %% -------------------------------------------------------------------
 
 start_and_list_a_dynamic_amqp10_shovel(Config) ->
-    Port = integer_to_binary(
-             rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
-
     remove_all_dynamic_shovels(Config, <<"/">>),
-    ID = {<<"/">>, <<"dynamic-amqp10-1">>},
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
     await_shovel_removed(Config, ID),
 
-    http_put(Config, "/parameters/shovel/%2f/dynamic-amqp10-1",
-                  #{value => #{'src-protocol' => <<"amqp10">>,
-                               'src-uri' => <<"amqp://localhost:", Port/binary>>,
-                               'src-address'  => <<"test">>,
-                               'dest-protocol' => <<"amqp10">>,
-                               'dest-uri' => <<"amqp://localhost:", Port/binary>>,
-                               'dest-address' => <<"test2">>,
-                               'dest-properties' => #{},
-                               'dest-application-properties' => #{},
-                               'dest-message-annotations' => #{}}}, ?CREATED),
-
+    declare_shovel(Config, Name),
     await_shovel_startup(Config, ID),
+    Shovels = list_shovels(Config),
+    ?assert(lists:any(
+        fun(M) ->
+            maps:get(name, M) =:= Name
+        end, Shovels)),
+    delete_shovel(Config, <<"dynamic-amqp10-await-startup-1">>),
+
+    ok.
+
+start_and_get_a_dynamic_amqp10_shovel(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_shovel(Config, Name),
+    await_shovel_startup(Config, ID),
+    Sh = get_shovel(Config, Name),
+    ?assertEqual(Name, maps:get(name, Sh)),
+    delete_shovel(Config, Name),
 
     ok.
 
@@ -156,6 +169,48 @@ start_and_list_a_dynamic_amqp10_shovel(Config) ->
 -define(Dynamic2Pattern, #{name  := <<"my-dynamic">>,
                            vhost := <<"v">>,
                            type  := <<"dynamic">>}).
+
+start_and_get_a_dynamic_amqp091_shovel_with_publish_properties(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_amqp091_shovel_with_publish_properties(Config, Name),
+    await_shovel_startup(Config, ID),
+    Sh = get_shovel(Config, Name),
+    ?assertEqual(Name, maps:get(name, Sh)),
+    delete_shovel(Config, Name),
+
+    ok.
+
+start_and_get_a_dynamic_amqp091_shovel_with_missing_publish_properties(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_amqp091_shovel(Config, Name),
+    await_shovel_startup(Config, ID),
+    Sh = get_shovel(Config, Name),
+    ?assertEqual(Name, maps:get(name, Sh)),
+    delete_shovel(Config, Name),
+
+    ok.
+
+start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_amqp091_shovel_with_publish_properties(Config, Name, #{}),
+    await_shovel_startup(Config, ID),
+    Sh = get_shovel(Config, Name),
+    ?assertEqual(Name, maps:get(name, Sh)),
+    delete_shovel(Config, Name),
+
+    ok.
 
 start_static_shovels(Config) ->
     http_put(Config, "/users/admin",
@@ -317,13 +372,88 @@ assert_item(ExpI, ActI) ->
     ExpI = maps:with(maps:keys(ExpI), ActI),
     ok.
 
+list_shovels(Config) ->
+    list_shovels(Config, "%2F").
+
+list_shovels(Config, VirtualHost) ->
+    Path = io_lib:format("/shovels/~s", [VirtualHost]),
+    http_get(Config, Path, ?OK).
+
+get_shovel(Config, Name) ->
+    get_shovel(Config, "%2F", Name).
+
+get_shovel(Config, VirtualHost, Name) ->
+    Path = io_lib:format("/shovels/vhost/~s/~s", [VirtualHost, Name]),
+    http_get(Config, Path, ?OK).
+
 delete_shovel(Config, Name) ->
-    Path = io_lib:format("/shovels/vhost/%2F/~s", [Name]),
+    delete_shovel(Config, "%2F", Name).
+
+delete_shovel(Config, VirtualHost, Name) ->
+    Path = io_lib:format("/shovels/vhost/~s/~s", [VirtualHost, Name]),
     http_delete(Config, Path, ?NO_CONTENT).
 
 remove_all_dynamic_shovels(Config, VHost) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,
         rabbit_runtime_parameters, clear_vhost, [VHost, <<"CT tests">>]).
+
+declare_shovel(Config, Name) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+        #{
+            value => #{
+                'src-protocol' => <<"amqp10">>,
+                'src-uri' => <<"amqp://localhost:", Port/binary>>,
+                'src-address'  => <<"test">>,
+                'dest-protocol' => <<"amqp10">>,
+                'dest-uri' => <<"amqp://localhost:", Port/binary>>,
+                'dest-address' => <<"test2">>,
+                'dest-properties' => #{},
+                'dest-application-properties' => #{},
+                'dest-message-annotations' => #{}
+            }
+        }, ?CREATED).
+
+declare_amqp091_shovel(Config, Name) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+        #{
+            value => #{
+                <<"src-protocol">> => <<"amqp091">>,
+                <<"src-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"src-queue">>  => <<"amqp091.src.test">>,
+                <<"src-delete-after">> => <<"never">>,
+                <<"dest-protocol">> => <<"amqp091">>,
+                <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-queue">> => <<"amqp091.dest.test">>
+            }
+        }, ?CREATED).
+
+declare_amqp091_shovel_with_publish_properties(Config, Name) ->
+    Props = #{
+        <<"delivery_mode">> => 2,
+        <<"app_id">> => <<"shovel_management:http_SUITE">>
+    },
+    declare_amqp091_shovel_with_publish_properties(Config, Name, Props).
+
+declare_amqp091_shovel_with_publish_properties(Config, Name, Props) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+        #{
+            value => #{
+                <<"src-protocol">> => <<"amqp091">>,
+                <<"src-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"src-queue">>  => <<"amqp091.src.test">>,
+                <<"src-delete-after">> => <<"never">>,
+                <<"dest-protocol">> => <<"amqp091">>,
+                <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-queue">> => <<"amqp091.dest.test">>,
+                <<"dest-publish-properties">> => Props
+            }
+        }, ?CREATED).
 
 await_shovel_startup(Config, Name) ->
     await_shovel_startup(Config, Name, 10_000).

@@ -26,7 +26,7 @@ exports_files(glob([
 ]) + ["INSTALL"])
 
 _APP_ENV = """[
-	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% See https://www.rabbitmq.com/docs/consumers#acknowledgement-timeout
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 	    {tcp_listeners, [5672]},
@@ -34,10 +34,8 @@ _APP_ENV = """[
 	    {ssl_listeners, []},
 	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
-	    {vm_memory_high_watermark, 0.4},
-	    {vm_memory_high_watermark_paging_ratio, 0.5},
+	    {vm_memory_high_watermark, 0.6},
 	    {vm_memory_calculation_strategy, rss},
-	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {backing_queue_module, rabbit_variable_queue},
 	    %% 0 ("no limit") would make a better default, but that
@@ -45,6 +43,8 @@ _APP_ENV = """[
 	    {frame_max, 131072},
 	    %% see rabbitmq-server#1593
 	    {channel_max, 2047},
+	    {session_max_per_connection, 64},
+	    {link_max_per_session, 256},
 	    {ranch_connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
@@ -58,8 +58,6 @@ _APP_ENV = """[
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-	    {amqp1_0_default_user, <<"guest">>},
-	    {amqp1_0_default_vhost, <<"/">>},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},
@@ -67,7 +65,9 @@ _APP_ENV = """[
 	    {collect_statistics_interval, 5000},
 	    {mnesia_table_loading_retry_timeout, 30000},
 	    {mnesia_table_loading_retry_limit, 10},
-	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+	    {anonymous_login_user, <<"guest">>},
+	    {anonymous_login_pass, <<"guest">>},
+	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']},
 	    {auth_backends, [rabbit_auth_backend_internal]},
 	    {delegate_count, 16},
 	    {trace_vhosts, []},
@@ -84,10 +84,7 @@ _APP_ENV = """[
 	                          {linger,        {true, 0}},
 	                          {exit_on_close, false}
 	                         ]},
-	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#227 and related tickets.
 	    %% msg_store_credit_disc_bound only takes effect when
 	    %% messages are persisted to the message store. If messages
@@ -106,10 +103,6 @@ _APP_ENV = """[
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
 
-	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
@@ -139,13 +132,10 @@ _APP_ENV = """[
         {credentials_obfuscation_fallback_secret, <<"nocookie">>},
         {dead_letter_worker_consumer_prefetch, 32},
         {dead_letter_worker_publisher_confirm_timeout, 180000},
-
-        %% EOL date for the current release series, if known/announced
-		{release_series_eol_date, none},
-
 		{vhost_process_reconciliation_run_interval, 30},
         %% for testing
-        {vhost_process_reconciliation_enabled, true}
+        {vhost_process_reconciliation_enabled, true},
+        {license_line, "Licensed under the MPL 2.0. Website: https://rabbitmq.com"}
 	  ]
 """
 
@@ -330,10 +320,10 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "clustering_events_SUITE",
+    size = "medium",
     additional_beam = [
         ":test_event_recorder_beam",
     ],
-    size = "medium",
 )
 
 rabbitmq_integration_suite(
@@ -470,18 +460,9 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "feature_flags_with_unpriveleged_user_SUITE",
-    size = "large",
-    additional_beam = [
-        ":feature_flags_SUITE_beam_files",
-    ],
-    flaky = True,
-    shard_count = 2,
-    # The enabling_* tests chmod files and then expect writes to be blocked.
-    # This probably doesn't work because we are root in the remote docker image.
-    tags = ["no-remote-exec"],
+    name = "msg_size_metrics_SUITE",
     runtime_deps = [
-        "//deps/rabbit/test/feature_flags_SUITE_data/my_plugin:erlang_app",
+        "//deps/rabbitmq_amqp_client:erlang_app",
     ],
 )
 
@@ -705,8 +686,12 @@ rabbitmq_suite(
 rabbitmq_suite(
     name = "rabbit_fifo_int_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_test_util_beam",
+    ],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "//deps/rabbitmq_ct_helpers:erlang_app",
         "@aten//:erlang_app",
         "@gen_batch_server//:erlang_app",
         "@meck//:erlang_app",
@@ -722,6 +707,7 @@ rabbitmq_suite(
     ],
     deps = [
         "//deps/rabbit_common:erlang_app",
+        "@meck//:erlang_app",
         "@proper//:erlang_app",
         "@ra//:erlang_app",
     ],
@@ -732,6 +718,15 @@ rabbitmq_suite(
     size = "small",
     deps = [
         "//deps/rabbit_common:erlang_app",
+    ],
+)
+
+rabbitmq_suite(
+    name = "rabbit_fifo_q_SUITE",
+    size = "small",
+    deps = [
+        "//deps/rabbit_common:erlang_app",
+        "@proper//:erlang_app",
     ],
 )
 
@@ -818,7 +813,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         ":test_queue_utils_beam",
     ],
-    shard_count = 19,
+    shard_count = 20,
     deps = [
         "@proper//:erlang_app",
     ],
@@ -984,6 +979,11 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "unit_log_management_SUITE",
     size = "medium",
+)
+
+rabbitmq_suite(
+    name = "unit_msg_size_metrics_SUITE",
+    size = "small",
 )
 
 rabbitmq_suite(
@@ -1157,7 +1157,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "metadata_store_clustering_SUITE",
     size = "large",
-    shard_count = 18,
+    shard_count = 19,
     sharding_method = "case",
 )
 
@@ -1192,6 +1192,14 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         ":test_clustering_utils_beam",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "cluster_upgrade_SUITE",
+    size = "medium",
+    additional_beam = [
+        ":test_queue_utils_beam",
     ],
 )
 
@@ -1349,6 +1357,7 @@ eunit(
         ":test_test_rabbit_event_handler_beam",
         ":test_clustering_utils_beam",
         ":test_event_recorder_beam",
+        ":test_rabbit_ct_hook_beam",
     ],
     target = ":test_erlang_app",
     test_env = {

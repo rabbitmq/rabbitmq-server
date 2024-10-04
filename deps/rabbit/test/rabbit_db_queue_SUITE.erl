@@ -40,9 +40,9 @@ all_tests() ->
      count,
      count_by_vhost,
      set,
-     set_many,
      delete,
      update,
+     update_decorators,
      exists,
      get_all_durable,
      get_all_durable_by_type,
@@ -282,23 +282,6 @@ set1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     passed.
 
-set_many(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, set_many1, [Config]).
-
-set_many1(_Config) ->
-    QName1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
-    QName2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
-    QName3 = rabbit_misc:r(?VHOST, queue, <<"test-queue3">>),
-    Q1 = new_queue(QName1, rabbit_classic_queue),
-    Q2 = new_queue(QName2, rabbit_classic_queue),
-    Q3 = new_queue(QName3, rabbit_classic_queue),
-    ?assertEqual(ok, rabbit_db_queue:set_many([])),
-    ?assertEqual(ok, rabbit_db_queue:set_many([Q1, Q2, Q3])),
-    ?assertEqual({ok, Q1}, rabbit_db_queue:get_durable(QName1)),
-    ?assertEqual({ok, Q2}, rabbit_db_queue:get_durable(QName2)),
-    ?assertEqual({ok, Q3}, rabbit_db_queue:get_durable(QName3)),
-    passed.
-
 delete(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete1, [Config]).
 
@@ -309,8 +292,8 @@ delete1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     %% TODO Can we handle the deletions outside of rabbit_db_queue? Probably not because
     %% they should be done in a single transaction, but what a horrid API to have!
-    Dict = rabbit_db_queue:delete(QName, normal),
-    ?assertEqual(0, dict:size(Dict)),
+    Deletions = rabbit_db_queue:delete(QName, normal),
+    ?assertEqual(rabbit_binding:new_deletions(), Deletions),
     ?assertEqual(ok, rabbit_db_queue:delete(QName, normal)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     passed.
@@ -341,7 +324,7 @@ update_decorators1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     ?assertEqual(undefined, amqqueue:get_decorators(Q)),
     %% Not really testing we set a decorator, but at least the field is being updated
-    ?assertEqual(ok, rabbit_db_queue:update_decorators(QName)),
+    ?assertEqual(ok, rabbit_db_queue:update_decorators(QName, [])),
     {ok, Q1} = rabbit_db_queue:get(QName),
     ?assertEqual([], amqqueue:get_decorators(Q1)),
     passed.

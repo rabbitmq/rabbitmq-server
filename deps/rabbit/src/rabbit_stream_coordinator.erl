@@ -189,8 +189,12 @@ delete_stream(Q, ActingUser)
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case process_command({delete_stream, StreamId, #{}}) of
         {ok, ok, _} ->
-            _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
-            {ok, {ok, 0}};
+            case rabbit_amqqueue:internal_delete(Q, ActingUser) of
+                ok ->
+                    {ok, {ok, 0}};
+                {error, timeout} = Err ->
+                    Err
+            end;
         Err ->
             Err
     end.
@@ -1231,7 +1235,7 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
                                 #{name := S} when S == StreamId ->
                                     rabbit_log:debug("~ts: initializing queue record for stream id  ~ts",
                                                      [?MODULE, StreamId]),
-                                    _ = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
+                                    ok = rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q)),
                                     ok;
                                 _ ->
                                     ok
@@ -1746,6 +1750,12 @@ eval_listener({P, member}, {ListNode, ListMPid0}, {Lsts0, Effs0},
                           {MemberPid, [{send_msg, P,
                                         {queue_event, QRef,
                                          {stream_local_member_change, MemberPid}},
+                                        cast} | Efs]};
+                     (_MNode, #member{state = {running, _, MemberPid},
+                                      role = {replica, _},
+                                      target = deleted}, {_, Efs}) ->
+                          {MemberPid, [{send_msg, P,
+                                        {queue_event, QRef, deleted_replica},
                                         cast} | Efs]};
                      (_N, _M, Acc) ->
                           %% not a replica, nothing to do

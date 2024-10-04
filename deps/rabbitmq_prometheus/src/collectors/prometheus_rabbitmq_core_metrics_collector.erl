@@ -489,6 +489,14 @@ label({RemoteAddress, Username, Protocol}) when is_binary(RemoteAddress), is_bin
                          V =/= <<>>
                  end, [{remote_address, RemoteAddress}, {username, Username},
                        {protocol, atom_to_binary(Protocol, utf8)}]);
+label({
+    #resource{kind=queue, virtual_host=VHost, name=QName},
+    #resource{kind=exchange, name=ExName}
+ }) ->
+    %% queue_exchange_metrics {queue_id, exchange_id}
+    <<"vhost=\"", (escape_label_value(VHost))/binary, "\",",
+      "exchange=\"", (escape_label_value(ExName))/binary, "\",",
+      "queue=\"", (escape_label_value(QName))/binary, "\"">>;
 label({I1, I2}) ->
     case {label(I1), label(I2)} of
         {<<>>, L} -> L;
@@ -640,6 +648,19 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
         _ ->
             [Result]
     end;
+get_data(ra_metrics = Table, true, _) ->
+    ets:foldl(
+      fun ({#resource{kind = queue}, _, _, _, _, _, _} = Row, Acc) ->
+              %% Metrics for QQ records use the queue resource as the table
+              %% key. The queue name and vhost will be rendered as tags.
+              [Row | Acc];
+          ({ClusterName, _, _, _, _, _, _} = Row, Acc) when is_atom(ClusterName) ->
+              %% Other Ra clusters like Khepri and the stream coordinator use
+              %% the cluster name as the metrics key. Transform this into a
+              %% value that can be rendered as a "raft_cluster" tag.
+              Row1 = setelement(1, Row, #{<<"raft_cluster">> => atom_to_binary(ClusterName, utf8)}),
+              [Row1 | Acc]
+      end, [], Table);
 get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
     ets:foldl(fun
         ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when

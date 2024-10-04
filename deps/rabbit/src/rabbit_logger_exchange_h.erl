@@ -44,8 +44,18 @@ log(#{meta := #{mfa := {?MODULE, _, _}}}, _) ->
     ok;
 log(LogEvent, Config) ->
     case rabbit_boot_state:get() of
-        ready -> do_log(LogEvent, Config);
-        _     -> ok
+        ready ->
+            try
+                do_log(LogEvent, Config)
+            catch
+                C:R:S ->
+                    %% don't let logging crash, because then OTP logger
+                    %% removes the logger_exchange handler, which in
+                    %% turn deletes the log exchange and its bindings
+                    erlang:display({?MODULE, crashed, {C, R, S}})
+            end,
+            ok;
+        _ -> ok
     end.
 
 do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
@@ -100,12 +110,18 @@ make_headers(_, _) ->
     [{<<"node">>, longstr, Node}].
 
 try_format_body(LogEvent, #{formatter := {Formatter, FormatterConfig}}) ->
-    Formatted = try_format_body(LogEvent, Formatter, FormatterConfig),
-    erlang:iolist_to_binary(Formatted).
+    try_format_body(LogEvent, Formatter, FormatterConfig).
 
 try_format_body(LogEvent, Formatter, FormatterConfig) ->
     try
-        Formatter:format(LogEvent, FormatterConfig)
+        Formatted = Formatter:format(LogEvent, FormatterConfig),
+        case unicode:characters_to_binary(Formatted) of
+            Binary when is_binary(Binary) ->
+                Binary;
+            Error ->
+                %% The formatter returned invalid or incomplete unicode
+                throw(Error)
+        end
     catch
         C:R:S ->
             case {?DEFAULT_FORMATTER, ?DEFAULT_FORMATTER_CONFIG} of

@@ -48,7 +48,19 @@
 %% The closest we have to a type import in Erlang
 -type option(T) :: rabbit_types:option(T).
 
+-type oauth_provider_id() :: root | binary().
+
+-record(openid_configuration, {
+  issuer :: option(uri_string:uri_string()),
+  token_endpoint :: option(uri_string:uri_string()),
+  authorization_endpoint :: option(uri_string:uri_string()),
+  end_session_endpoint :: option(uri_string:uri_string()),
+  jwks_uri :: option(uri_string:uri_string())
+  }).
+-type openid_configuration() :: #openid_configuration{}.
+
 -record(oauth_provider, {
+  id :: oauth_provider_id(),
   issuer :: option(uri_string:uri_string()),
   token_endpoint :: option(uri_string:uri_string()),
   authorization_endpoint :: option(uri_string:uri_string()),
@@ -58,7 +70,6 @@
   }).
 
 -type oauth_provider() :: #oauth_provider{}.
--type oauth_provider_id() :: binary().
 
 -record(access_token_request, {
   client_id :: string() | binary(),

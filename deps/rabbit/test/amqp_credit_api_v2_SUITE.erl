@@ -48,19 +48,12 @@ end_per_group(_Group, Config) ->
                                 rabbit_ct_client_helpers:teardown_steps() ++
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(TestCase, Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_supported(Config, TestCase) of
-        true ->
-            ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, TestCase)),
-            Config;
-        false ->
-            {skip, io_lib:format("feature flag ~s is unsupported", [TestCase])}
-    end.
-
-end_per_testcase(_TestCase, Config) ->
-    Config.
 
 credit_api_v2(Config) ->
+    %% Feature flag rabbitmq_4.0.0 enables credit API v2.
+    FeatureFlag = 'rabbitmq_4.0.0',
+    ?assertNot(rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, FeatureFlag)),
+
     CQ = <<"classic queue">>,
     QQ = <<"quorum queue">>,
     CQAddr = rabbitmq_amqp_address:queue(CQ),
@@ -104,7 +97,7 @@ credit_api_v2(Config) ->
     ok = amqp10_client:detach_link(QQSender),
 
     %% Consume with credit API v1
-    CQAttachArgs = #{handle => 300,
+    CQAttachArgs = #{handle => 100,
                      name => <<"cq receiver 1">>,
                      role => {receiver, #{address => CQAddr,
                                           durable => configuration}, self()},
@@ -112,7 +105,7 @@ credit_api_v2(Config) ->
                      rcv_settle_mode => first,
                      filter => #{}},
     {ok, CQReceiver1} = amqp10_client:attach_link(Session, CQAttachArgs),
-    QQAttachArgs = #{handle => 400,
+    QQAttachArgs = #{handle => 200,
                      name => <<"qq receiver 1">>,
                      role => {receiver, #{address => QQAddr,
                                           durable => configuration}, self()},
@@ -124,8 +117,7 @@ credit_api_v2(Config) ->
     ok = consume_and_accept(10, CQReceiver1),
     ok = consume_and_accept(10, QQReceiver1),
 
-    ?assertEqual(ok,
-                 rabbit_ct_broker_helpers:enable_feature_flag(Config, ?FUNCTION_NAME)),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:enable_feature_flag(Config, FeatureFlag)),
     flush(enabled_feature_flag),
 
     %% Consume with credit API v2

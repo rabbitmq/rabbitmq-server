@@ -26,17 +26,21 @@
 -export([product_info/0,
          product_name/0,
          product_version/0,
+         product_license_line/0,
          base_product_name/0,
          base_product_version/0,
          motd_file/0,
-         motd/0]).
+         motd/0,
+         pg_local_scope/1]).
 %% For CLI, testing and mgmt-agent.
 -export([set_log_level/1, log_locations/0, config_files/0]).
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0, recover/0, pg_local/0]).
+-export([maybe_insert_default_data/0, boot_delegate/0, recover/0,
+         pg_local_amqp_session/0,
+         pg_local_amqp_connection/0]).
 
 %% for tests
 -export([validate_msg_store_io_batch_size_and_credit_disc_bound/2]).
@@ -263,9 +267,15 @@
         {mfa,         {rabbit_vhosts, boot, []}},
         {requires,    notify_cluster}]}).
 
--rabbit_boot_step({pg_local,
-                   [{description, "local-only pg scope"},
-                    {mfa,         {rabbit, pg_local, []}},
+-rabbit_boot_step({pg_local_amqp_session,
+                   [{description, "local-only pg scope for AMQP sessions"},
+                    {mfa,         {rabbit, pg_local_amqp_session, []}},
+                    {requires,    kernel_ready},
+                    {enables,     core_initialized}]}).
+
+-rabbit_boot_step({pg_local_amqp_connection,
+                   [{description, "local-only pg scope for AMQP connections"},
+                    {mfa,         {rabbit, pg_local_amqp_connection, []}},
                     {requires,    kernel_ready},
                     {enables,     core_initialized}]}).
 
@@ -911,14 +921,14 @@ start(normal, []) ->
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
                     BaseName, BaseVersion,
-                    ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
+                    ?COPYRIGHT_MESSAGE, product_license_line()],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH});
             _ ->
                 ?LOG_INFO(
                    "~n Starting ~ts ~ts on Erlang ~ts [~ts]~n ~ts~n ~ts",
                    [product_name(), product_version(), rabbit_misc:otp_release(),
                     emu_flavor(),
-                    ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE],
+                    ?COPYRIGHT_MESSAGE, product_license_line()],
                    #{domain => ?RMQLOG_DOMAIN_PRELAUNCH})
         end,
         log_motd(),
@@ -1115,11 +1125,18 @@ boot_delegate() ->
 -spec recover() -> 'ok'.
 
 recover() ->
-    ok = rabbit_vhost:recover(),
-    ok.
+    ok = rabbit_vhost:recover().
 
-pg_local() ->
-    rabbit_sup:start_child(pg, [node()]).
+pg_local_amqp_session() ->
+    PgScope = pg_local_scope(amqp_session),
+    rabbit_sup:start_child(pg_amqp_session, pg, [PgScope]).
+
+pg_local_amqp_connection() ->
+    PgScope = pg_local_scope(amqp_connection),
+    rabbit_sup:start_child(pg_amqp_connection, pg, [PgScope]).
+
+pg_local_scope(Prefix) ->
+    list_to_atom(io_lib:format("~s_~s", [Prefix, node()])).
 
 -spec maybe_insert_default_data() -> 'ok'.
 
@@ -1322,7 +1339,7 @@ print_banner() ->
               "~n  Logs: ~ts" ++ LogFmt ++ "~n"
               "~n  Config file(s): ~ts" ++ CfgFmt ++ "~n"
               "~n  Starting broker...",
-              [Product, Version, ?COPYRIGHT_MESSAGE, ?INFORMATION_MESSAGE] ++
+              [Product, Version, ?COPYRIGHT_MESSAGE, product_license_line()] ++
               [rabbit_misc:otp_release(), emu_flavor(), crypto_version()] ++
               MOTDArgs ++
               LogLocations ++
@@ -1505,6 +1522,10 @@ product_name() ->
         #{product_name := ProductName}   -> ProductName;
         #{product_base_name := BaseName} -> BaseName
     end.
+
+-spec product_license_line() -> string().
+product_license_line() ->
+    application:get_env(rabbit, license_line, ?INFORMATION_MESSAGE).
 
 -spec product_version() -> string().
 

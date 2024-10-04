@@ -11,7 +11,7 @@
 -include("rabbit_amqp.hrl").
 
 %% client API
--export([start_link/3,
+-export([start_link/2,
          send_command/3,
          send_command/4,
          send_command_sync/3,
@@ -27,7 +27,6 @@
 
 -record(state, {
           sock :: rabbit_net:socket(),
-          max_frame_size :: unlimited | pos_integer(),
           reader :: rabbit_types:connection(),
           pending :: iolist(),
           %% This field is just an optimisation to minimize the cost of erlang:iolist_size/1
@@ -46,10 +45,10 @@
 %%% client API %%%
 %%%%%%%%%%%%%%%%%%
 
--spec start_link (rabbit_net:socket(), non_neg_integer(), pid()) ->
+-spec start_link (rabbit_net:socket(), pid()) ->
     rabbit_types:ok(pid()).
-start_link(Sock, MaxFrame, ReaderPid) ->
-    Args = {Sock, MaxFrame, ReaderPid},
+start_link(Sock, ReaderPid) ->
+    Args = {Sock, ReaderPid},
     Opts = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, Args, Opts).
 
@@ -75,7 +74,7 @@ send_command_sync(Writer, ChannelNum, Performative) ->
     Request = {send_command, ChannelNum, Performative},
     gen_server:call(Writer, Request, ?CALL_TIMEOUT).
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 -spec send_command_and_notify(pid(),
                               pid(),
                               rabbit_types:channel_number(),
@@ -96,9 +95,8 @@ internal_send_command(Sock, Performative, Protocol) ->
 %%% gen_server callbacks %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-init({Sock, MaxFrame, ReaderPid}) ->
+init({Sock, ReaderPid}) ->
     State = #state{sock = Sock,
-                   max_frame_size = MaxFrame,
                    reader = ReaderPid,
                    pending = [],
                    pending_size = 0,
@@ -113,7 +111,7 @@ handle_cast({send_command, SessionPid, ChannelNum, Performative, Payload}, State
     State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     State = credit_flow_ack(SessionPid, State1),
     no_reply(State);
-%% Delete below function clause when feature flag credit_api_v2 becomes required.
+%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
 handle_cast({send_command_and_notify, QueuePid, SessionPid, ChannelNum, Performative, Payload}, State0) ->
     State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     State = credit_flow_ack(SessionPid, State1),
@@ -133,7 +131,7 @@ handle_info({{'DOWN', session}, _MRef, process, SessionPid, _Reason},
     credit_flow:peer_down(SessionPid),
     State = State0#state{monitored_sessions = maps:remove(SessionPid, Sessions)},
     no_reply(State);
-%% Delete below function clause when feature flag credit_api_v2 becomes required.
+%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
 handle_info({'DOWN', _MRef, process, QueuePid, _Reason}, State) ->
     rabbit_amqqueue:notify_sent_queue_down(QueuePid),
     no_reply(State).
@@ -142,12 +140,10 @@ format_status(Status) ->
     maps:update_with(
       state,
       fun(#state{sock = Sock,
-                 max_frame_size = MaxFrame,
                  reader = Reader,
                  pending = Pending,
                  pending_size = PendingSize}) ->
               #{socket => Sock,
-                max_frame_size => MaxFrame,
                 reader => Reader,
                 %% Below 2 fields should always have the same value.
                 pending => iolist_size(Pending),
@@ -189,12 +185,11 @@ internal_send_command_async(Channel, Performative,
                             pending_size = PendingSize + iolist_size(Frame)}).
 
 internal_send_command_async(Channel, Performative, Payload,
-                            State = #state{max_frame_size = MaxFrame,
-                                           pending = Pending,
+                            State = #state{pending = Pending,
                                            pending_size = PendingSize}) ->
-    Frames = assemble_frame(Channel, Performative, Payload, MaxFrame),
-    maybe_flush(State#state{pending = [Frames | Pending],
-                            pending_size = PendingSize + iolist_size(Frames)}).
+    Frame = assemble_frame_with_payload(Channel, Performative, Payload),
+    maybe_flush(State#state{pending = [Frame | Pending],
+                            pending_size = PendingSize + iolist_size(Frame)}).
 
 assemble_frame(Channel, Performative) ->
     assemble_frame(Channel, Performative, amqp10_framing).
@@ -210,8 +205,7 @@ assemble_frame(Channel, Performative, rabbit_amqp_sasl) ->
     PerfBin = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, ?AMQP_SASL_FRAME_TYPE, PerfBin).
 
-%%TODO respect MaxFrame
-assemble_frame(Channel, Performative, Payload, _MaxFrame) ->
+assemble_frame_with_payload(Channel, Performative, Payload) ->
     ?TRACE("channel ~b <-~n ~tp~n followed by ~tb bytes of payload",
            [Channel, amqp10_framing:pprint(Performative), iolist_size(Payload)]),
     PerfIoData = amqp10_framing:encode_bin(Performative),

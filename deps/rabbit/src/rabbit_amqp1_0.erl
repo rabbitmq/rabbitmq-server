@@ -6,8 +6,6 @@
 %%
 -module(rabbit_amqp1_0).
 
--define(PROCESS_GROUP_NAME, rabbit_amqp10_connections).
-
 -export([list_local/0,
          register_connection/1]).
 
@@ -36,8 +34,11 @@ emit_connection_info_local(Items, Ref, AggregatorPid) ->
 
 -spec list_local() -> [pid()].
 list_local() ->
-    pg:get_local_members(node(), ?PROCESS_GROUP_NAME).
+    pg:which_groups(pg_scope()).
 
 -spec register_connection(pid()) -> ok.
 register_connection(Pid) ->
-    ok = pg:join(node(), ?PROCESS_GROUP_NAME, Pid).
+    ok = pg:join(pg_scope(), Pid, Pid).
+
+pg_scope() ->
+    rabbit:pg_local_scope(amqp_connection).

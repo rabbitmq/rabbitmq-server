@@ -46,7 +46,7 @@ could not authenticate to
 the target node successfully.
 
 To learn more, see the
-.Lk https://rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.Lk https://www.rabbitmq.com/docs/cli "RabbitMQ CLI Tools guide"
 .\" ------------------------------------------------------------------------------------------------
 .Sh OPTIONS
 .\" ------------------------------------------------------------------------------------------------
@@ -93,14 +93,14 @@ The default is
 .It Fl l , Fl -longnames
 Must be specified when the cluster is configured to use long (FQDN) node names.
 To learn more, see the
-.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide"
+.Lk https://www.rabbitmq.com/docs/clustering "RabbitMQ Clustering guide"
 .It Fl -erlang-cookie Ar cookie
 Shared secret to use to authenticate to the target node.
 Prefer using a local file or the
 .Ev RABBITMQ_ERLANG_COOKIE
 environment variable instead of specifying this option on the command line.
 To learn more, see the
-.Lk https://www.rabbitmq.com/cli.html "RabbitMQ CLI Tools guide"
+.Lk https://www.rabbitmq.com/docs/cli "RabbitMQ CLI Tools guide"
 .El
 .\" ------------------------------------------------------------------------------------------------
 .Sh COMMANDS
@@ -210,7 +210,7 @@ Stops the Erlang node on which RabbitMQ is running.
 To restart the node follow the instructions for
 .Qq Running the Server
 in the
-.Lk https://rabbitmq.com/download.html installation guide .
+.Lk https://www.rabbitmq.com/docs/download installation guide .
 .Pp
 If a
 .Ar pid_file
@@ -461,7 +461,7 @@ is part of, as a ram node:
 .Dl rabbitmqctl join_cluster hare@elena --ram
 .Pp
 To learn more, see the
-.Lk https://www.rabbitmq.com/clustering.html "RabbitMQ Clustering guide".
+.Lk https://www.rabbitmq.com/docs/clustering "RabbitMQ Clustering guide".
 .\" ------------------------------------------------------------------
 .\" ## User management
 .\" ------------------------------------------------------------------
@@ -1285,11 +1285,11 @@ queue, including stack, heap, and internal structures.
 .It Cm mirror_pids
 If the queue is mirrored, this lists the IDs of the mirrors (follower replicas).
 To learn more, see the
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
+.Lk https://www.rabbitmq.com/docs/3.13/ha "RabbitMQ Mirroring guide"
 .It Cm synchronised_mirror_pids
 If the queue is mirrored, this gives the IDs of the mirrors (follower replicas) which
 are in sync with the leader replica. To learn more, see the
-.Lk https://www.rabbitmq.com/ha.html "RabbitMQ Mirroring guide"
+.Lk https://www.rabbitmq.com/docs/3.13/ha "RabbitMQ Mirroring guide"
 .It Cm state
 The state of the queue.
 Normally
@@ -2457,4 +2457,4 @@ Reset the stats database for all nodes in the cluster.
 .\" ------------------------------------------------------------------------------------------------
 .Sh AUTHOR
 .\" ------------------------------------------------------------------------------------------------
-.An The RabbitMQ Team Aq Mt rabbitmq-core@groups.vmware.com
+.An The RabbitMQ Team Aq Mt contact-tanzu-data.pdl@broadcom.com

@@ -1,0 +1,202 @@
+title: "[Questions] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Before We Start
+
+        Please provide reasonably detailed responses to the question below to help others help you.
+
+        If you omit relevant information, those trying to reproduce what you are about to report will have to guess.
+        Guessing is a very time consuming, and therefore expensive, approach to troubleshooting distributed messaging infrastructure.
+  - type: checkboxes
+    attributes:
+      label: Community Support Policy
+      description:
+      options:
+        - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
+          required: true
+        - label: I agree to provide all relevant information (versions, logs, rabbitmq-diagnostics output, detailed reproduction steps)
+          required: true
+  - type: markdown
+    attributes:
+      value: |
+        ## Relevant Details
+  - type: dropdown
+    id: rabbitmq_version
+    attributes:
+      label: RabbitMQ version used
+      options:
+        - 4.0.2
+        - 3.13.7
+        - 3.13.6
+        - 3.12.x or older
+    validations:
+      required: true
+  - type: dropdown
+    id: erlang_version
+    attributes:
+      label: Erlang version used
+      options:
+        - 26.2.x
+        - 26.1.x
+        - 26.0.x
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system (distribution) used
+      description: What OS or distribution do you run RabbitMQ on?
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment_type
+    attributes:
+      label: How is RabbitMQ deployed?
+      options:
+        - Community Docker image
+        - Debian package
+        - RPM package
+        - Generic binary package
+        - Kubernetes Operator(s) from Team RabbitMQ
+        - Bitnami Helm chart
+        - Chocolatey package
+        - Windows installer
+        - Windows binary package
+        - RabbitMQ-as-a-Service from a public cloud provider
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics_status
+    attributes:
+      label: rabbitmq-diagnostics status output
+      value: |
+        See https://www.rabbitmq.com/docs/cli to learn how to use rabbitmq-diagnostics
+        <details>
+
+        ```
+        # PASTE OUTPUT HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: true
+  - type: textarea
+    id: rabbitmq_logs
+    attributes:
+      label: Logs from node 1 (with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: true
+  - type: textarea
+    id: logs_node_2
+    attributes:
+      label: Logs from node 2 (if applicable, with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: false
+  - type: textarea
+    id: logs_node_3
+    attributes:
+      label: Logs from node 3 (if applicable, with sensitive values edited out)
+      description: Relevant RabbitMQ logs with sensitive values edited out
+      value: |
+        See https://www.rabbitmq.com/docs/logging to learn how to collect logs
+        <details>
+
+        ```
+        # PASTE LOG HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: false
+  - type: textarea
+    id: rabbitmq_conf
+    attributes:
+      label: rabbitmq.conf
+      description: rabbitmq.conf contents
+      value: |
+        See https://www.rabbitmq.com/docs/configure#config-location to learn how to find rabbitmq.conf file location
+        <details>
+
+        ```
+        # PASTE rabbitmq.conf HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: true
+  - type: textarea
+    id: deployment_steps
+    attributes:
+      label: Steps to deploy RabbitMQ cluster
+      description: How would you explain how you deploy RabbitMQ to a new colleague?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Steps to reproduce the behavior in question
+      description: What specific steps need to be performed in order to reproduce this behavior? Why?
+    validations:
+      required: true
+  - type: textarea
+    id: advanced_config
+    attributes:
+      label: advanced.config
+      description: advanced.config contents (if applicable)
+      value: |
+        See https://www.rabbitmq.com/docs/configure#config-location to learn how to find advanced.config file location
+        <details>
+
+        ```
+        # PASTE advanced.config HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: false
+  - type: textarea
+    id: app_code
+    attributes:
+      label: Application code
+      description: Relevant messaging-related parts of application code
+      value: |
+        <details>
+
+        ```python
+        # PASTE CODE HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: false
+  - type: textarea
+    id: k8s_deployment
+    attributes:
+      label: Kubernetes deployment file
+      description: Kubernetes deployment YAML that demonstrates how RabbitMQ is deployed (if applicable)
+      value: |
+        <details>
+
+        ```yaml
+        # Relevant parts of K8S deployment that demonstrate how RabbitMQ is deployed
+        # PASTE YAML HERE, BETWEEN BACKTICKS
+        ```
+        </details>
+    validations:
+      required: false

@@ -108,7 +108,8 @@ var ALL_COLUMNS =
                         ['rate-redeliver', 'redelivered',        false],
                         ['rate-ack',       'ack',                true]]},
      'connections':
-     {'Overview': [['user',   'User name', true],
+     {'Overview': [['container_id', 'Container ID', true],
+                   ['user',   'User name', true],
                    ['state',  'State',     true]],
       'Details': [['ssl',            'TLS',      true],
                   ['ssl_info',       'TLS details',    false],
@@ -179,7 +180,7 @@ const QUEUE_EXTRA_CONTENT_REQUESTS = [];
 // All help ? popups
 var HELP = {
     'delivery-limit':
-      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration.',
+      'The number of allowed unsuccessful delivery attempts. Once a message has been delivered unsuccessfully more than this many times it will be dropped or dead-lettered, depending on the queue configuration. The default is always 20. A value of -1 or lower sets the limit to "unlimited".',
 
     'exchange-auto-delete':
       'If yes, the exchange will delete itself after at least one queue or exchange has been bound to this one, and then all queues or exchanges have been unbound.',
@@ -232,9 +233,6 @@ var HELP = {
     'queue-max-age':
       'Sets the data retention for stream queues in time units </br>(Y=Years, M=Months, D=Days, h=hours, m=minutes, s=seconds).<br/>E.g. "1h" configures the stream to only keep the last 1 hour of received messages.</br></br>(Sets the x-max-age argument.)',
 
-    'queue-version':
-      'Set the queue version. Defaults to version 1.<br/>Version 1 has a journal-based index that embeds small messages.<br/>Version 2 has a different index which improves memory usage and performance in many scenarios, as well as a per-queue store for messages that were previously embedded.<br/>(Sets the "x-queue-version" argument.)',
-
     'queue-overflow':
       'Sets the <a target="_blank" href="https://www.rabbitmq.com/maxlength.html#overflow-behaviour">queue overflow behaviour</a>. This determines what happens to messages when the maximum length of a queue is reached. Valid values are <code>drop-head</code>, <code>reject-publish</code> or <code>reject-publish-dlx</code>. The quorum queue type only supports <code>drop-head</code> and <code>reject-publish</code>.',
 
@@ -253,8 +251,14 @@ var HELP = {
     'queue-messages':
       '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
 
+    'queue-messages-stream':
+      '<p>Approximate message counts.</p><p>Note that streams store some entries that are not user messages such as offset tracking data which is included in this count. Thus this value will never be completely correct.</p>',
+
     'queue-dead-lettered':
       'Applies to messages dead-lettered with dead-letter-strategy <code>at-least-once</code>.',
+
+    'queue-delivery-limit':
+      'The number of times a message can be returned to this queue before it is dead-lettered (if configured) or dropped.',
 
     'queue-message-body-bytes':
       '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p><p>If a message is routed to multiple queues on publication, its body will be stored only once (in memory and on disk) and shared between queues. The value shown here does not take account of this effect.</p>',
@@ -442,10 +446,6 @@ var HELP = {
         <dd>Rate at which empty queues are hit in response to basic.get.</dd>\
         <dt>Return</dt>\
         <dd>Rate at which basic.return is sent to publishers for unroutable messages published with the \'mandatory\' flag set.</dd>\
-        <dt>Disk read</dt>\
-        <dd>Rate at which queues read messages from disk.</dd>\
-        <dt>Disk write</dt>\
-        <dd>Rate at which queues write messages to disk.</dd>\
       </dl>\
       <p>\
         Note that the last two items originate in queues rather than \
@@ -586,7 +586,10 @@ var HELP = {
         <dd>Rate at which queues are created. Declaring a queue that already exists counts for a "Declared" event, but not for a "Created" event. </dd>\
         <dt>Deleted</dt>\
         <dd>Rate at which queues are deleted.</dd>\
-     </dl> '
+     </dl> ',
+
+    'container-id':
+      'Name of the client application as sent from client to RabbitMQ in the "container-id" field of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.'
 
 };
 

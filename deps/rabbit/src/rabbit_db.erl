@@ -67,8 +67,8 @@ init() ->
     end,
 
     Ret = case rabbit_khepri:is_enabled() of
-              true  -> init_using_khepri();
-              false -> init_using_mnesia()
+              true  -> init_using_khepri(IsVirgin);
+              false -> init_using_mnesia(IsVirgin)
           end,
     case Ret of
         ok ->
@@ -91,7 +91,7 @@ pre_init(IsVirgin) ->
     OtherMembers = rabbit_nodes:nodes_excl_me(Members),
     rabbit_db_cluster:ensure_feature_flags_are_in_sync(OtherMembers, IsVirgin).
 
-init_using_mnesia() ->
+init_using_mnesia(_IsVirgin) ->
     ?LOG_DEBUG(
       "DB: initialize Mnesia",
       #{domain => ?RMQLOG_DOMAIN_DB}),
@@ -99,16 +99,11 @@ init_using_mnesia() ->
     ?assertEqual(rabbit:data_dir(), mnesia_dir()),
     rabbit_sup:start_child(mnesia_sync).
 
-init_using_khepri() ->
-    case rabbit_khepri:members() of
-        [] ->
-            timer:sleep(1000),
-            init_using_khepri();
-        Members ->
-            ?LOG_WARNING(
-               "Found the following metadata store members: ~p", [Members],
-               #{domain => ?RMQLOG_DOMAIN_DB})
-    end.
+init_using_khepri(IsVirgin) ->
+    ?LOG_DEBUG(
+      "DB: initialize Khepri",
+      #{domain => ?RMQLOG_DOMAIN_DB}),
+    rabbit_khepri:init(IsVirgin).
 
 init_finished() ->
     %% Used during initialisation by rabbit_logger_exchange_h.erl

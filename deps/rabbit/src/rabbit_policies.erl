@@ -165,7 +165,7 @@ validate_policy0(<<"overflow">>, Value) ->
     {error, "~tp is not a valid overflow value", [Value]};
 
 validate_policy0(<<"delivery-limit">>, Value)
-  when is_integer(Value), Value >= 0 ->
+  when is_integer(Value) ->
     ok;
 validate_policy0(<<"delivery-limit">>, Value) ->
     {error, "~tp is not a valid delivery limit", [Value]};
@@ -208,14 +208,35 @@ validate_policy0(<<"stream-filter-size-bytes">>, Value)
 validate_policy0(<<"stream-filter-size-bytes">>, Value) ->
     {error, "~tp is not a valid filter size. Valid range is 16-255", [Value]}.
 
-merge_policy_value(<<"message-ttl">>, Val, OpVal)      -> min(Val, OpVal);
-merge_policy_value(<<"max-length">>, Val, OpVal)       -> min(Val, OpVal);
-merge_policy_value(<<"max-length-bytes">>, Val, OpVal) -> min(Val, OpVal);
-merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) -> min(Val, OpVal);
-merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) -> min(Val, OpVal);
-merge_policy_value(<<"expires">>, Val, OpVal)          -> min(Val, OpVal);
-merge_policy_value(<<"delivery-limit">>, Val, OpVal)   -> min(Val, OpVal);
-merge_policy_value(<<"queue-version">>, _Val, OpVal)   -> OpVal;
-merge_policy_value(<<"overflow">>, _Val, OpVal)   -> OpVal;
-%% use operator policy value for booleans
-merge_policy_value(_Key, Val, OpVal) when is_boolean(Val) andalso is_boolean(OpVal) -> OpVal.
+merge_policy_value(<<"message-ttl">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"max-length">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"max-length-bytes">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"max-in-memory-length">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"max-in-memory-bytes">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"expires">>, Val, OpVal) ->
+    min(Val, OpVal);
+merge_policy_value(<<"delivery-limit">>, Val, OpVal) ->
+    case (is_integer(Val) andalso Val < 0) orelse
+         (is_integer(OpVal) andalso OpVal < 0) of
+        true ->
+            %% one of the policies define an unlimited delivery-limit (negative value)
+            %% choose the more conservative value
+            max(Val, OpVal);
+        false ->
+            %% else choose the lower value
+            min(Val, OpVal)
+    end;
+merge_policy_value(<<"queue-version">>, _Val, OpVal) ->
+    OpVal;
+merge_policy_value(<<"overflow">>, _Val, OpVal) ->
+    OpVal;
+merge_policy_value(_Key, Val, OpVal)
+  when is_boolean(Val) andalso
+       is_boolean(OpVal) ->
+    %% use operator policy value for booleans
+    OpVal.

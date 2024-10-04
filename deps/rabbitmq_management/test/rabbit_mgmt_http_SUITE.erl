@@ -21,6 +21,7 @@
          eventually/1]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
+                                decode_body/1,
                                 http_get/2, http_get/3, http_get/5,
                                 http_get_no_auth/3,
                                 http_get_no_decode/5,
@@ -198,6 +199,7 @@ all_tests() -> [
     user_limit_set_test,
     config_environment_test,
     disabled_qq_replica_opers_test,
+    qq_status_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test
 ].
@@ -1150,21 +1152,24 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}},
+                   arguments   => #{'x-queue-type' => <<"classic">>}
+                 },
                  #{name        => <<"foo">>,
                    vhost       => <<"downvhost">>,
                    state       => <<"stopped">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{}}], DownQueues),
+                   arguments   => #{'x-queue-type' => <<"classic">>}
+                 }], DownQueues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"downvhost">>,
                   state       => <<"stopped">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{}}, DownQueue),
+                  arguments   => #{'x-queue-type' => <<"classic">>}
+                }, DownQueue),
 
     http_put(Config, "/queues/badvhost/bar", Good, ?NOT_FOUND),
     http_put(Config, "/queues/%2F/bar",
@@ -1186,21 +1191,21 @@ queues_test(Config) ->
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{},
+                   arguments   => #{'x-queue-type' => <<"classic">>},
                    storage_version => 2},
                  #{name        => <<"foo">>,
                    vhost       => <<"/">>,
                    durable     => true,
                    auto_delete => false,
                    exclusive   => false,
-                   arguments   => #{},
+                   arguments   => #{'x-queue-type' => <<"classic">>},
                    storage_version => 2}], Queues),
     assert_item(#{name        => <<"foo">>,
                   vhost       => <<"/">>,
                   durable     => true,
                   auto_delete => false,
                   exclusive   => false,
-                  arguments   => #{},
+                  arguments   => #{'x-queue-type' => <<"classic">>},
                   storage_version => 2}, Queue),
 
     http_delete(Config, "/queues/%2F/foo", {group, '2xx'}),
@@ -2240,7 +2245,8 @@ exclusive_queue_test(Config) ->
                             durable     => false,
                             auto_delete => false,
                             exclusive   => true,
-                            arguments   => #{}}, Queue),
+                            arguments   => #{'x-queue-type' => <<"classic">>}
+                           }, Queue),
               true
       end),
     amqp_channel:close(Ch),
@@ -2807,7 +2813,7 @@ columns_test(Config) ->
     http_delete(Config, Path, [{group, '2xx'}, 404]),
     http_put(Config, Path, [{arguments, [{<<"x-message-ttl">>, TTL}]}],
              {group, '2xx'}),
-    Item = #{arguments => #{'x-message-ttl' => TTL}, name => <<"columns.test">>},
+    Item = #{arguments => #{'x-message-ttl' => TTL, 'x-queue-type' => <<"classic">>}, name => <<"columns.test">>},
 
     ?AWAIT(
        begin
@@ -3409,13 +3415,14 @@ vhost_limits_list_test(Config) ->
     lists:map(
         fun(#{vhost := VHost, value := Val}) ->
             Param = [ {atom_to_binary(K, utf8),V} || {K,V} <- maps:to_list(Val) ],
+            ct:pal("Setting limits of virtual host '~ts' to ~tp", [VHost, Param]),
             ok = rabbit_ct_broker_helpers:set_parameter(Config, 0, VHost, <<"vhost-limits">>, <<"limits">>, Param)
         end,
         Expected),
 
-    Expected = http_get(Config, "/vhost-limits", ?OK),
-    Limits1 = http_get(Config, "/vhost-limits/limit_test_vhost_1", ?OK),
-    Limits2 = http_get(Config, "/vhost-limits/limit_test_vhost_2", ?OK),
+    ?assertEqual(lists:usort(Expected), lists:usort(http_get(Config, "/vhost-limits", ?OK))),
+    ?assertEqual(Limits1, http_get(Config, "/vhost-limits/limit_test_vhost_1", ?OK)),
+    ?assertEqual(Limits2, http_get(Config, "/vhost-limits/limit_test_vhost_2", ?OK)),
 
     NoVhostUser = <<"no_vhost_user">>,
     rabbit_ct_broker_helpers:add_user(Config, NoVhostUser),
@@ -3865,6 +3872,28 @@ disabled_qq_replica_opers_test(Config) ->
     http_post(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/grow", Body, ?METHOD_NOT_ALLOWED),
     http_delete(Config, "/queues/quorum/replicas/on/" ++ Nodename ++ "/shrink", ?METHOD_NOT_ALLOWED),
     passed.
+
+qq_status_test(Config) ->
+    QQArgs = [{durable, true}, {arguments, [{'x-queue-type', 'quorum'}]}],
+    http_get(Config, "/queues/%2f/qq_status", ?NOT_FOUND),
+    http_put(Config, "/queues/%2f/qq_status", QQArgs, {group, '2xx'}),
+    [MapRes] = http_get(Config, "/queues/quorum/%2f/qq_status/status", ?OK),
+    Keys = ['Commit Index','Last Applied','Last Log Index',
+            'Last Written','Machine Version','Membership','Node Name',
+            'Raft State','Snapshot Index','Term'],
+    ?assertEqual(lists:sort(Keys), lists:sort(maps:keys(MapRes))),
+    http_delete(Config, "/queues/%2f/qq_status", {group, '2xx'}),
+
+
+    CQArgs = [{durable, true}],
+    http_get(Config, "/queues/%2F/cq_status", ?NOT_FOUND),
+    http_put(Config, "/queues/%2F/cq_status", CQArgs, {group, '2xx'}),
+    ResBody = http_get_no_decode(Config, "/queues/quorum/%2f/cq_status/status", "guest", "guest", 503),
+    ?assertEqual(#{reason => <<"classic_queue_not_supported">>,
+                   status => <<"failed">>}, decode_body(ResBody)),
+    http_delete(Config, "/queues/%2f/cq_status", {group, '2xx'}),
+    passed.
+
 
 list_deprecated_features_test(Config) ->
     Desc = "This is a deprecated feature",

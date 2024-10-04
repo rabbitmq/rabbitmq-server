@@ -28,6 +28,7 @@ groups() ->
                               declare_binding,
                               delete_binding,
                               declare_queue,
+                              delete_queue,
                               publish_to_exchange,
                               publish_and_consume_to_local_classic_queue,
                               consume_from_queue,
@@ -97,6 +98,16 @@ init_per_group(Group, Config0) when Group == client_operations;
             %% To be used in consume_from_queue
             #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue">>,
                                                                            arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+            %% To be used in consume_from_queue
+            #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue-delete-classic">>,
+                                                                           durable = true,
+                                                                           arguments = [{<<"x-queue-type">>, longstr, <<"classic">>}]}),
+            #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue-delete-stream">>,
+                                                                           durable = true,
+                                                                           arguments = [{<<"x-queue-type">>, longstr, <<"stream">>}]}),
+            #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue-delete-quorum">>,
+                                                                           durable = true,
+                                                                           arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]}),
             %% To be used in delete_binding
             #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = <<"amq.fanout">>,
                                                                            source = <<"amq.direct">>,
@@ -188,6 +199,22 @@ declare_queue(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'queue.declare'{queue = <<"test-queue-2">>})).
 
+delete_queue(Config) ->
+    [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, A),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch1, #'queue.delete'{queue = <<"test-queue-delete-classic">>})),
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, A),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch2, #'queue.delete'{queue = <<"test-queue-delete-stream">>})),
+    Conn3 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, A),
+    {ok, Ch3} = amqp_connection:open_channel(Conn3),
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
+                amqp_channel:call(Ch3, #'queue.delete'{queue = <<"test-queue-delete-quorum">>})),
+    ok.
+
 publish_to_exchange(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     {_, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, A),
@@ -218,7 +245,11 @@ update_vhost(Config) ->
                                               [<<"/">>, [carrots], <<"user">>])).
 
 delete_vhost(Config) ->
-    ?assertMatch({'EXIT', _}, rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>)).
+    ?assertError(
+       {erpc, timeout},
+       rabbit_ct_broker_helpers:rpc(
+         Config, 0,
+         rabbit_vhost, delete, [<<"vhost1">>, <<"acting-user">>], 1_000)).
 
 add_user(Config) ->
     ?assertMatch({error, timeout},

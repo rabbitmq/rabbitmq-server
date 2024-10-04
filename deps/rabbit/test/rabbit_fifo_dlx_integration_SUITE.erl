@@ -29,7 +29,7 @@
 -import(rabbit_ct_broker_helpers, [rpc/5,
                                    rpc/6]).
 -import(quorum_queue_SUITE, [publish/2,
-                             consume/3]).
+                             basic_get_tag/3]).
 
 -define(DEFAULT_WAIT, 1000).
 -define(DEFAULT_INTERVAL, 200).
@@ -95,8 +95,7 @@ init_per_group(Group, Config, NodesCount) ->
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [{rmq_nodes_count, NodesCount},
                                             {rmq_nodename_suffix, Group},
-                                            {tcp_ports_base},
-                                            {net_ticktime, 10}]),
+                                            {tcp_ports_base}]),
     Config2 =  rabbit_ct_helpers:run_steps(Config1,
                                            [fun merge_app_env/1 ] ++
                                            rabbit_ct_broker_helpers:setup_steps()),
@@ -207,7 +206,7 @@ rejected(Config) ->
     {Server, Ch, SourceQ, TargetQ} = declare_topology(Config, []),
     publish(Ch, SourceQ),
     wait_for_messages_ready([Server], ra_name(SourceQ), 1),
-    DelTag = consume(Ch, SourceQ, false),
+    DelTag = basic_get_tag(Ch, SourceQ, false),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DelTag,
                                         multiple     = false,
                                         requeue      = false}),
@@ -224,7 +223,7 @@ delivery_limit(Config) ->
     {Server, Ch, SourceQ, TargetQ} = declare_topology(Config, [{<<"x-delivery-limit">>, long, 0}]),
     publish(Ch, SourceQ),
     wait_for_messages_ready([Server], ra_name(SourceQ), 1),
-    DelTag = consume(Ch, SourceQ, false),
+    DelTag = basic_get_tag(Ch, SourceQ, false),
     amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DelTag,
                                         multiple     = false,
                                         requeue      = true}),

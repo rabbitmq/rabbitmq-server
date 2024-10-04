@@ -57,7 +57,7 @@ can_join(RemoteNode) ->
        "DB: checking if `~ts` can join cluster using remote node `~ts`",
        [node(), RemoteNode],
        #{domain => ?RMQLOG_DOMAIN_DB}),
-    case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
+    case rabbit_feature_flags:check_node_compatibility(RemoteNode, true) of
         ok ->
             case rabbit_khepri:is_enabled(RemoteNode) of
                 true  -> can_join_using_khepri(RemoteNode);
@@ -176,6 +176,15 @@ join(RemoteNode, NodeType)
                       false -> join_using_mnesia(ClusterNodes, NodeType)
                   end,
 
+            case Ret of
+                ok ->
+                    ok;
+                {error, _} ->
+                    %% We reset feature flags states again and make sure the
+                    %% recorded states on disk are deleted.
+                    rabbit_feature_flags:reset()
+            end,
+
             %% Restart RabbitMQ afterwards, if it was running before the join.
             %% Likewise for the Feature flags controller and Mnesia (if we
             %% still need it).
@@ -201,10 +210,6 @@ join(RemoteNode, NodeType)
                     rabbit_node_monitor:notify_joined_cluster(),
                     ok;
                 {error, _} = Error ->
-                    %% We reset feature flags states again and make sure the
-                    %% recorded states on disk are deleted.
-                    rabbit_feature_flags:reset(),
-
                     Error
             end;
         {ok, already_member} ->

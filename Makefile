@@ -24,8 +24,7 @@ ADDITIONAL_PLUGINS ?=
 DEPS = rabbit_common rabbit $(PLUGINS) $(ADDITIONAL_PLUGINS)
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+	      rabbit_common/mk/rabbitmq-run.mk
 
 DISABLE_DISTCLEAN = 1
 
@@ -60,6 +59,20 @@ include rabbitmq-components.mk
 # in stone now, because in this Makefile we will be using it
 # multiple times (including for release file names and whatnot).
 PROJECT_VERSION := $(PROJECT_VERSION)
+
+# Fetch/build community plugins.
+#
+# To include community plugins in commands, use
+# `make COMMUNITY_PLUGINS=1` or export the variable.
+# They are not included otherwise. Note that only
+# the top-level Makefile can do this.
+#
+# Note that the community plugins will be fetched using
+# SSH and therefore may be subject to GH authentication.
+
+ifdef COMMUNITY_PLUGINS
+DEPS += $(RABBITMQ_COMMUNITY)
+endif
 
 include erlang.mk
 include mk/github-actions.mk
@@ -594,6 +607,7 @@ TIER1_PLUGINS := \
 	   rabbitmq_event_exchange \
 	   rabbitmq_federation \
 	   rabbitmq_federation_management \
+	   rabbitmq_federation_prometheus \
 	   rabbitmq_jms_topic_exchange \
 	   rabbitmq_management \
 	   rabbitmq_management_agent \
@@ -610,6 +624,7 @@ TIER1_PLUGINS := \
 	   rabbitmq_sharding \
 	   rabbitmq_shovel \
 	   rabbitmq_shovel_management \
+	   rabbitmq_shovel_prometheus \
 	   rabbitmq_stomp \
 	   rabbitmq_stream \
 	   rabbitmq_stream_management \

@@ -26,9 +26,6 @@
 -export([table_lookup/2, set_table_value/4, amqp_table/1, to_amqp_table/1]).
 -export([r/3, r/2, r_arg/4, rs/1,
          queue_resource/2, exchange_resource/2]).
--export([enable_cover/0, report_cover/0]).
--export([enable_cover/1, report_cover/1]).
--export([start_cover/1]).
 -export([throw_on_error/2, with_exit_handler/2, is_abnormal_exit/1,
          filter_exit_map/2]).
 -export([ensure_ok/2]).
@@ -89,7 +86,7 @@
          maps_put_falsy/3
         ]).
 -export([remote_sup_child/2]).
--export([for_each_while_ok/2]).
+-export([for_each_while_ok/2, fold_while_ok/3]).
 
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
@@ -165,11 +162,6 @@
               {invalid_type, rabbit_framing:amqp_field_type()}) |
             rabbit_types:r(K) when is_subtype(K, atom()).
 -spec rs(rabbit_types:r(atom())) -> string().
--spec enable_cover() -> ok_or_error().
--spec start_cover([{string(), string()} | string()]) -> 'ok'.
--spec report_cover() -> 'ok'.
--spec enable_cover([file:filename() | atom()]) -> ok_or_error().
--spec report_cover([file:filename() | atom()]) -> 'ok'.
 -spec throw_on_error
         (atom(), thunk(rabbit_types:error(any()) | {ok, A} | A)) -> A.
 -spec with_exit_handler(thunk(A), thunk(A)) -> A.
@@ -448,59 +440,6 @@ queue_resource(VHostPath, Name) ->
     rabbit_types:r(exchange).
 exchange_resource(VHostPath, Name) ->
     r(VHostPath, exchange, Name).
-
-enable_cover() -> enable_cover(["."]).
-
-enable_cover(Dirs) ->
-    lists:foldl(fun (Dir, ok) ->
-                        case cover:compile_beam_directory(
-                               filename:join(lists:concat([Dir]),"ebin")) of
-                            {error, _} = Err -> Err;
-                            _                -> ok
-                        end;
-                    (_Dir, Err) ->
-                        Err
-                end, ok, Dirs).
-
-start_cover(NodesS) ->
-    {ok, _} = cover:start([rabbit_nodes_common:make(N) || N <- NodesS]),
-    ok.
-
-report_cover() -> report_cover(["."]).
-
-report_cover(Dirs) -> [report_cover1(lists:concat([Dir])) || Dir <- Dirs], ok.
-
-report_cover1(Root) ->
-    Dir = filename:join(Root, "cover"),
-    ok = filelib:ensure_dir(filename:join(Dir, "junk")),
-    lists:foreach(fun (F) -> file:delete(F) end,
-                  filelib:wildcard(filename:join(Dir, "*.html"))),
-    {ok, SummaryFile} = file:open(filename:join(Dir, "summary.txt"), [write]),
-    {CT, NCT} =
-        lists:foldl(
-          fun (M,{CovTot, NotCovTot}) ->
-                  {ok, {M, {Cov, NotCov}}} = cover:analyze(M, module),
-                  ok = report_coverage_percentage(SummaryFile,
-                                                  Cov, NotCov, M),
-                  {ok,_} = cover:analyze_to_file(
-                             M,
-                             filename:join(Dir, atom_to_list(M) ++ ".html"),
-                             [html]),
-                  {CovTot+Cov, NotCovTot+NotCov}
-          end,
-          {0, 0},
-          lists:sort(cover:modules())),
-    ok = report_coverage_percentage(SummaryFile, CT, NCT, 'TOTAL'),
-    ok = file:close(SummaryFile),
-    ok.
-
-report_coverage_percentage(File, Cov, NotCov, Mod) ->
-    io:fwrite(File, "~6.2f ~tp~n",
-              [if
-                   Cov+NotCov > 0 -> 100.0*Cov/(Cov+NotCov);
-                   true -> 100.0
-               end,
-               Mod]).
 
 %% @doc Halts the emulator returning the given status code to the os.
 %% On Windows this function will block indefinitely so as to give the io
@@ -1655,3 +1594,24 @@ for_each_while_ok(Fun, [Elem | Rest]) ->
     end;
 for_each_while_ok(_, []) ->
     ok.
+
+-spec fold_while_ok(FoldFun, Acc, List) -> Ret when
+      FoldFun :: fun((Element, Acc) -> {ok, Acc} | {error, ErrReason}),
+      Element :: any(),
+      List :: Element,
+      Ret :: {ok, Acc} | {error, ErrReason}.
+%% @doc Calls the given `FoldFun' on each element of the given `List' and the
+%% accumulator value, short-circuiting if the function returns `{error,_}'.
+%%
+%% @returns the first `{error,_}' returned by `FoldFun' or `{ok,Acc}' if
+%% `FoldFun' never returns an error tuple.
+
+fold_while_ok(Fun, Acc0, [Elem | Rest]) ->
+    case Fun(Elem, Acc0) of
+        {ok, Acc} ->
+            fold_while_ok(Fun, Acc, Rest);
+        {error, _} = Error ->
+            Error
+    end;
+fold_while_ok(_Fun, Acc, []) ->
+    {ok, Acc}.

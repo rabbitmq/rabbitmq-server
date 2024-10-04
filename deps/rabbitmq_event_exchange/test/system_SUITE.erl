@@ -21,6 +21,7 @@ all() ->
      authentication,
      audit_queue,
      audit_exchange,
+     audit_exchange_internal_parameter,
      audit_binding,
      audit_vhost,
      audit_vhost_deletion,
@@ -28,7 +29,6 @@ all() ->
      audit_connection,
      audit_direct_connection,
      audit_consumer,
-     audit_vhost_internal_parameter,
      audit_parameter,
      audit_policy,
      audit_vhost_limit,
@@ -272,13 +272,19 @@ audit_consumer(Config) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     ok.
 
-audit_vhost_internal_parameter(Config) ->
+audit_exchange_internal_parameter(Config) ->
     Ch = declare_event_queue(Config, <<"parameter.*">>),
-    User = <<"Bugs Bunny">>,
-    Vhost = <<"test-vhost">>,
 
-    rabbit_ct_broker_helpers:add_vhost(Config, 0, Vhost, User),
-    rabbit_ct_broker_helpers:delete_vhost(Config, 0, Vhost, User),
+    X = <<"exchange.audited-for-parameters">>,
+    #'exchange.declare_ok'{} =
+        amqp_channel:call(Ch, #'exchange.declare'{exchange = X,
+                                                  type = <<"topic">>}),
+    #'exchange.delete_ok'{} =
+        amqp_channel:call(Ch, #'exchange.delete'{exchange = X}),
+
+    User = proplists:get_value(rmq_username, Config),
+    %% Exchange deletion sets and clears a runtime parameter which acts as a
+    %% kind of lock:
     receive_user_in_event(<<"parameter.set">>, User),
     receive_user_in_event(<<"parameter.cleared">>, User),
 

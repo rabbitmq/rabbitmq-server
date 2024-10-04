@@ -105,9 +105,8 @@ init_per_multinode_group(_Group, Config, NodeCount) ->
     rabbit_ct_broker_helpers:setup_steps() ++
     rabbit_ct_client_helpers:setup_steps()).
 
-end_per_group(Group, Config) when Group == tests;
-                                  Group == khepri_migration ->
-    % The broker is managed by {init,end}_per_testcase().
+end_per_group(Group, Config) when Group == tests ->
+    % The broker is managed by sub-groups.
     Config;
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_steps(Config,

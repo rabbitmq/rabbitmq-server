@@ -103,8 +103,7 @@ stop_amqp10_client_app(Config) ->
 %% -------------------------------------------------------------------
 
 init_per_group(rabbitmq, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0,
-                                          {sasl, {plain, <<"guest">>, <<"guest">>}}),
+    Config = rabbit_ct_helpers:set_config(Config0, {sasl, anon}),
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                               [{rabbit,
                                                 [{max_message_size, 134217728}]}]),
@@ -115,7 +114,7 @@ init_per_group(rabbitmq_strict, Config0) ->
                                           {sasl, {plain, <<"guest">>, <<"guest">>}}),
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                               [{rabbit,
-                                                [{amqp1_0_default_user, none},
+                                                [{anonymous_login_user, none},
                                                  {max_message_size, 134217728}]}]),
     rabbit_ct_helpers:run_steps(Config1, rabbit_ct_broker_helpers:setup_steps());
 
@@ -349,8 +348,8 @@ roundtrip(OpenConf, Body) ->
     Msg0 = amqp10_msg:new(<<"my-tag">>, Body, true),
     Msg1 = amqp10_msg:set_application_properties(#{"a_key" => "a_value"}, Msg0),
     Msg2 = amqp10_msg:set_properties(Props, Msg1),
-    Msg = amqp10_msg:set_message_annotations(#{<<"x-key">> => "x-value",
-                                               <<"x_key">> => "x_value"}, Msg2),
+    Msg = amqp10_msg:set_message_annotations(#{<<"x-key 1">> => "value 1",
+                                               <<"x-key 2">> => "value 2"}, Msg2),
     ok = amqp10_client:send_msg(Sender, Msg),
     ok = amqp10_client:detach_link(Sender),
     await_link(Sender, {detached, normal}, link_detach_timeout),
@@ -365,8 +364,8 @@ roundtrip(OpenConf, Body) ->
     % ct:pal(?LOW_IMPORTANCE, "roundtrip message Out: ~tp~nIn: ~tp~n", [OutMsg, Msg]),
     ?assertMatch(Props, amqp10_msg:properties(OutMsg)),
     ?assertEqual(#{<<"a_key">> => <<"a_value">>}, amqp10_msg:application_properties(OutMsg)),
-    ?assertMatch(#{<<"x-key">> := <<"x-value">>,
-                   <<"x_key">> := <<"x_value">>}, amqp10_msg:message_annotations(OutMsg)),
+    ?assertMatch(#{<<"x-key 1">> := <<"value 1">>,
+                   <<"x-key 2">> := <<"value 2">>}, amqp10_msg:message_annotations(OutMsg)),
     ?assertEqual([Body], amqp10_msg:body(OutMsg)),
     ok.
 
@@ -720,14 +719,14 @@ insufficient_credit(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = false,
                                              name = Name}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
@@ -760,14 +759,14 @@ multi_transfer_without_delivery_id(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = true,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
                                              name = Name}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
@@ -776,7 +775,7 @@ multi_transfer_without_delivery_id(Config) ->
                               ]}
                  end,
 
-    LinkCreditStep = fun({1 = Ch, #'v1_0.flow'{}, <<>>}) ->
+    LinkCreditStep = fun({0 = Ch, #'v1_0.flow'{}, <<>>}) ->
                              {Ch, {multi, [[#'v1_0.transfer'{handle = {uint, 99},
                                                              delivery_id = {uint, 12},
                                                              more = true},

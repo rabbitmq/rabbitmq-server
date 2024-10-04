@@ -12,10 +12,13 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([create/1,
          update/2,
          get/1,
          get_all/0,
+         count_all/0,
          with_fun_in_mnesia_tx/2,
          with_fun_in_khepri_tx/2,
          get_user_permissions/2,
@@ -28,11 +31,11 @@
          set_topic_permissions/1,
          clear_topic_permissions/3,
          clear_matching_topic_permissions/3,
+         clear_in_khepri/0,
          delete/1,
          clear_all_permissions_for_vhost/1]).
 
--export([khepri_users_path/0,
-         khepri_user_path/1,
+-export([khepri_user_path/1,
          khepri_user_permission_path/2,
          khepri_topic_permission_path/3]).
 
@@ -72,8 +75,8 @@
 -define(MNESIA_TABLE, rabbit_user).
 -define(PERM_MNESIA_TABLE, rabbit_user_permission).
 -define(TOPIC_PERM_MNESIA_TABLE, rabbit_topic_permission).
--define(KHEPRI_USERS_PROJECTION, rabbit_khepri_users).
--define(KHEPRI_PERMISSIONS_PROJECTION, rabbit_khepri_user_permissions).
+-define(KHEPRI_USERS_PROJECTION, rabbit_khepri_user).
+-define(KHEPRI_PERMISSIONS_PROJECTION, rabbit_khepri_user_permission).
 
 %% -------------------------------------------------------------------
 %% create().
@@ -218,11 +221,38 @@ get_all_in_mnesia() ->
       internal_user:pattern_match_all()).
 
 get_all_in_khepri() ->
-    Path = khepri_users_path(),
-    case rabbit_khepri:list(Path) of
+    Path = khepri_user_path(?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:get_many(Path) of
         {ok, Users} -> maps:values(Users);
         _           -> []
     end.
+
+%% -------------------------------------------------------------------
+%% count_all().
+%% -------------------------------------------------------------------
+
+-spec count_all() -> {ok, Count} | {error, any()} when
+      Count :: non_neg_integer().
+%% @doc Returns all user records.
+%%
+%% @returns the count of internal user records.
+%%
+%% @private
+
+count_all() ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> count_all_in_mnesia() end,
+        khepri => fun() -> count_all_in_khepri() end}).
+
+count_all_in_mnesia() ->
+    List = mnesia:dirty_match_object(
+             ?MNESIA_TABLE,
+             internal_user:pattern_match_all()),
+    {ok, length(List)}.
+
+count_all_in_khepri() ->
+    Path = khepri_user_path(?KHEPRI_WILDCARD_STAR),
+    rabbit_khepri:count(Path).
 
 %% -------------------------------------------------------------------
 %% with_fun_in_*().
@@ -461,13 +491,12 @@ set_user_permissions_in_khepri(Username, VHostName, UserPermission) ->
           end)), rw).
 
 set_user_permissions_in_khepri_tx(Username, VHostName, UserPermission) ->
+    %% TODO: Check user presence in a transaction.
     Path = khepri_user_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(
             Path, UserPermission, Extra),
@@ -611,7 +640,7 @@ clear_all_permissions_for_vhost_in_khepri(VHostName) ->
                             TopicProps,
                             rabbit_khepri:collect_payloads(UserProps)),
               {ok, Deletions}
-      end, rw).
+      end, rw, #{timeout => infinity}).
 
 %% -------------------------------------------------------------------
 %% get_topic_permissions().
@@ -849,14 +878,13 @@ set_topic_permissions_in_khepri(Username, VHostName, TopicPermission) ->
 set_topic_permissions_in_khepri_tx(Username, VHostName, TopicPermission) ->
     #topic_permission{topic_permission_key =
                           #topic_permission_key{exchange = ExchangeName}} = TopicPermission,
+    %% TODO: Check user presence in a transaction.
     Path = khepri_topic_permission_path(
-             #if_all{conditions =
-                         [Username,
-                          #if_node_exists{exists = true}]},
+             Username,
              VHostName,
              ExchangeName),
     Extra = #{keep_while =>
-                  #{rabbit_db_vhost:khepri_vhost_path(VHostName) =>
+                  #{rabbit_db_user:khepri_user_path(Username) =>
                         #if_node_exists{exists = true}}},
     Ret = khepri_tx:put(Path, TopicPermission, Extra),
     case Ret of
@@ -1054,7 +1082,7 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    Path = khepri_users_path(),
+    Path = khepri_user_path(?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:delete(Path) of
         ok    -> ok;
         Error -> throw(Error)
@@ -1064,11 +1092,16 @@ clear_in_khepri() ->
 %% Paths
 %% --------------------------------------------------------------
 
-khepri_users_path()        -> [?MODULE, users].
-khepri_user_path(Username) -> [?MODULE, users, Username].
+khepri_user_path(Username)
+  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
+    ?KHEPRI_ROOT_PATH ++ [users, Username].
 
-khepri_user_permission_path(Username, VHostName) ->
-    [?MODULE, users, Username, user_permissions, VHostName].
+khepri_user_permission_path(Username, VHostName)
+  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
+    (rabbit_db_vhost:khepri_vhost_path(VHostName) ++
+     [user_permissions, Username]).
 
-khepri_topic_permission_path(Username, VHostName, Exchange) ->
-    [?MODULE, users, Username, topic_permissions, VHostName, Exchange].
+khepri_topic_permission_path(Username, VHostName, Exchange)
+  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
+    (rabbit_db_exchange:khepri_exchange_path(VHostName, Exchange) ++
+     [user_permissions, Username]).

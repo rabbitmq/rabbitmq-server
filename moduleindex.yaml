@@ -185,6 +185,9 @@ emqtt:
 - emqtt_ws
 enough:
 - enough
+eunit_formatters:
+- binomial_heap
+- eunit_progress
 gen_batch_server:
 - gen_batch_server
 getopt:
@@ -553,6 +556,7 @@ rabbit:
 - rabbit_amqqueue_sup_sup
 - rabbit_auth_backend_internal
 - rabbit_auth_mechanism_amqplain
+- rabbit_auth_mechanism_anonymous
 - rabbit_auth_mechanism_cr_demo
 - rabbit_auth_mechanism_plain
 - rabbit_autoheal
@@ -644,8 +648,10 @@ rabbit:
 - rabbit_fifo_dlx_sup
 - rabbit_fifo_dlx_worker
 - rabbit_fifo_index
+- rabbit_fifo_q
 - rabbit_fifo_v0
 - rabbit_fifo_v1
+- rabbit_fifo_v3
 - rabbit_file
 - rabbit_global_counters
 - rabbit_guid
@@ -664,6 +670,7 @@ rabbit:
 - rabbit_metrics
 - rabbit_mirror_queue_misc
 - rabbit_mnesia
+- rabbit_msg_size_metrics
 - rabbit_msg_store
 - rabbit_msg_store_gc
 - rabbit_networking
@@ -829,6 +836,7 @@ rabbitmq_auth_backend_oauth2:
 - rabbit_auth_backend_oauth2
 - rabbit_auth_backend_oauth2_app
 - rabbit_oauth2_config
+- rabbit_oauth2_schema
 - rabbit_oauth2_scope
 - uaa_jwks
 - uaa_jwt
@@ -890,6 +898,10 @@ rabbitmq_federation:
 - rabbit_log_federation
 rabbitmq_federation_management:
 - rabbit_federation_mgmt
+rabbitmq_federation_prometheus:
+- rabbit_federation_prometheus_app
+- rabbit_federation_prometheus_collector
+- rabbit_federation_prometheus_sup
 rabbitmq_jms_topic_exchange:
 - rabbit_db_jms_exchange
 - rabbit_db_jms_exchange_m2k_converter
@@ -978,6 +990,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_quorum_queue_replicas_delete_member
 - rabbit_mgmt_wm_quorum_queue_replicas_grow
 - rabbit_mgmt_wm_quorum_queue_replicas_shrink
+- rabbit_mgmt_wm_quorum_queue_status
 - rabbit_mgmt_wm_rebalance_queues
 - rabbit_mgmt_wm_redirect
 - rabbit_mgmt_wm_reset
@@ -1084,8 +1097,8 @@ rabbitmq_prometheus:
 - prometheus_rabbitmq_alarm_metrics_collector
 - prometheus_rabbitmq_core_metrics_collector
 - prometheus_rabbitmq_dynamic_collector
-- prometheus_rabbitmq_federation_collector
 - prometheus_rabbitmq_global_metrics_collector
+- prometheus_rabbitmq_message_size_metrics_collector
 - rabbit_prometheus_app
 - rabbit_prometheus_dispatcher
 - rabbit_prometheus_handler
@@ -1122,8 +1135,13 @@ rabbitmq_shovel:
 - rabbit_shovel_worker
 - rabbit_shovel_worker_sup
 rabbitmq_shovel_management:
-- rabbit_shovel_mgmt
+- rabbit_shovel_mgmt_shovel
+- rabbit_shovel_mgmt_shovels
 - rabbit_shovel_mgmt_util
+rabbitmq_shovel_prometheus:
+- rabbit_shovel_prometheus_app
+- rabbit_shovel_prometheus_collector
+- rabbit_shovel_prometheus_sup
 rabbitmq_stomp:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.ListStompConnectionsCommand
 - rabbit_stomp

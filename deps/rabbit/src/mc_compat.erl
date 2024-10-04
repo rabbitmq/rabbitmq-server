@@ -54,7 +54,9 @@ get_annotation(?ANN_ROUTING_KEYS, #basic_message{routing_keys = RKeys}) ->
 get_annotation(?ANN_EXCHANGE, #basic_message{exchange_name = Ex}) ->
     Ex#resource.name;
 get_annotation(id, #basic_message{id = Id}) ->
-    Id.
+    Id;
+get_annotation(_Key, #basic_message{}) ->
+    undefined.
 
 set_annotation(id, Value, #basic_message{} = Msg) ->
     Msg#basic_message{id = Value};
@@ -92,7 +94,11 @@ set_annotation(?ANN_TIMESTAMP, Millis,
                #basic_message{content = #content{properties = B} = C0} = Msg) ->
     C = C0#content{properties = B#'P_basic'{timestamp = Millis div 1000},
                    properties_bin = none},
-    Msg#basic_message{content = C}.
+    Msg#basic_message{content = C};
+set_annotation(delivery_count, _Value, #basic_message{} = Msg) ->
+    %% Ignore AMQP 1.0 specific delivery-count.
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/12398
+    Msg.
 
 is_persistent(#basic_message{content = Content}) ->
     get_property(durable, Content).

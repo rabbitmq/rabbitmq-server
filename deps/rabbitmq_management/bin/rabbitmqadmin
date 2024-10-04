@@ -134,7 +134,7 @@ DECLARABLE = {
                    'optional':  {'destination_type': 'queue',
                                  'routing_key': '', 'arguments': {}}},
     'vhost':      {'mandatory': ['name'],
-                   'optional':  {'tracing': None}},
+                   'optional':  {'tracing': None, 'default_queue_type': None}},
     'user':       {'mandatory': ['name', ['password', 'password_hash'], 'tags'],
                    'optional':  {'hashing_algorithm': None}},
     'permission': {'mandatory': ['vhost', 'user', 'configure', 'write', 'read'],

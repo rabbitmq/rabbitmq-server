@@ -132,12 +132,14 @@
 boot_step() ->
     [begin
          %% Protocol counters
-         init([{protocol, Proto}]),
+         Protocol = {protocol, Proto},
+         init([Protocol]),
+         rabbit_msg_size_metrics:init(Proto),
 
          %% Protocol & Queue Type counters
-         init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
-         init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]),
-         init([{protocol, Proto}, {queue_type, rabbit_stream_queue}])
+         init([Protocol, {queue_type, rabbit_classic_queue}]),
+         init([Protocol, {queue_type, rabbit_quorum_queue}]),
+         init([Protocol, {queue_type, rabbit_stream_queue}])
      end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
@@ -247,13 +249,13 @@ publisher_created(Protocol) ->
     counters:add(fetch(Protocol), ?PUBLISHERS, 1).
 
 publisher_deleted(Protocol) ->
-    counters:add(fetch(Protocol), ?PUBLISHERS, -1).
+    counters:sub(fetch(Protocol), ?PUBLISHERS, 1).
 
 consumer_created(Protocol) ->
     counters:add(fetch(Protocol), ?CONSUMERS, 1).
 
 consumer_deleted(Protocol) ->
-    counters:add(fetch(Protocol), ?CONSUMERS, -1).
+    counters:sub(fetch(Protocol), ?CONSUMERS, 1).
 
 messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
     Index = case Reason of

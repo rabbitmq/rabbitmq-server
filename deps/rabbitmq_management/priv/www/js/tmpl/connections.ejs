@@ -26,6 +26,9 @@
 <% if (nodes_interesting) { %>
     <th><%= fmt_sort('Node',           'node') %></th>
 <% } %>
+<% if (show_column('connections',      'container_id')) { %>
+    <th>Container ID <span class="help" id="container-id"></span></th>
+<% } %>
 <% if (show_column('connections',      'user')) { %>
     <th><%= fmt_sort('User name',      'user') %></th>
 <% } %>
@@ -84,13 +87,22 @@
 <% if(connection.client_properties) { %>
     <td>
       <%= link_conn(connection.name) %>
-      <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
+      <% if (connection.client_properties.connection_name) { %>
+            <sub><%= fmt_string(short_conn(connection.client_properties.connection_name)) %></sub>
+      <% } %>
     </td>
 <% } else { %>
     <td><%= link_conn(connection.name) %></td>
 <% } %>
 <% if (nodes_interesting) { %>
     <td><%= fmt_node(connection.node) %></td>
+<% } %>
+<% if (show_column('connections', 'container_id')) { %>
+    <td class="c">
+    <% if (connection.container_id) { %>
+      <%= fmt_string(connection.container_id) %>
+    <% } %>
+    </td>
 <% } %>
 <% if (show_column('connections', 'user')) { %>
     <td class="c"><%= fmt_string(connection.user) %></td>

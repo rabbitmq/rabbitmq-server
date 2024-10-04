@@ -14,10 +14,8 @@ define PROJECT_ENV
 	    {ssl_listeners, []},
 	    {num_ssl_acceptors, 10},
 	    {ssl_options, []},
-	    {vm_memory_high_watermark, 0.4},
-	    {vm_memory_high_watermark_paging_ratio, 0.5},
+	    {vm_memory_high_watermark, 0.6},
 	    {vm_memory_calculation_strategy, rss},
-	    {memory_monitor_interval, 2500},
 	    {disk_free_limit, 50000000}, %% 50MB
 	    {backing_queue_module, rabbit_variable_queue},
 	    %% 0 ("no limit") would make a better default, but that
@@ -25,6 +23,8 @@ define PROJECT_ENV
 	    {frame_max, 131072},
 	    %% see rabbitmq-server#1593
 	    {channel_max, 2047},
+	    {session_max_per_connection, 64},
+	    {link_max_per_session, 256},
 	    {ranch_connection_max, infinity},
 	    {heartbeat, 60},
 	    {msg_store_file_size_limit, 16777216},
@@ -38,8 +38,6 @@ define PROJECT_ENV
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-	    {amqp1_0_default_user, <<"guest">>},
-	    {amqp1_0_default_vhost, <<"/">>},
 	    {loopback_users, [<<"guest">>]},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {server_properties, []},
@@ -47,7 +45,12 @@ define PROJECT_ENV
 	    {collect_statistics_interval, 5000},
 	    {mnesia_table_loading_retry_timeout, 30000},
 	    {mnesia_table_loading_retry_limit, 10},
-	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+	    %% The identity to act as for anonymous logins.
+	    {anonymous_login_user, <<"guest">>},
+	    {anonymous_login_pass, <<"guest">>},
+	    %% "The server mechanisms are ordered in decreasing level of preference."
+	    %% AMQP §5.3.3.1
+	    {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']},
 	    {auth_backends, [rabbit_auth_backend_internal]},
 	    {delegate_count, 16},
 	    {trace_vhosts, []},
@@ -64,10 +67,7 @@ define PROJECT_ENV
 	                          {linger,        {true, 0}},
 	                          {exit_on_close, false}
 	                         ]},
-	    {halt_on_upgrade_failure, true},
 	    {ssl_apps, [asn1, crypto, public_key, ssl]},
-	    %% classic queue storage implementation version
-	    {classic_queue_default_version, 2},
 	    %% see rabbitmq-server#227 and related tickets.
 	    %% msg_store_credit_disc_bound only takes effect when
 	    %% messages are persisted to the message store. If messages
@@ -85,14 +85,10 @@ define PROJECT_ENV
 	    %% see rabbitmq-server#248
 	    %% and rabbitmq-server#667
 	    {channel_operation_timeout, 15000},
-	    %% See https://www.rabbitmq.com/consumers.html#acknowledgement-timeout
+	    %% See https://www.rabbitmq.com/docs/consumers#acknowledgement-timeout
 	    %% 30 minutes
 	    {consumer_timeout, 1800000},
 
-	    %% see rabbitmq-server#486
-	    {autocluster,
-              [{peer_discovery_backend, rabbit_peer_discovery_classic_config}]
-            },
 	    %% used by rabbit_peer_discovery_classic_config
 	    {cluster_nodes, {[], disc}},
 
@@ -122,11 +118,10 @@ define PROJECT_ENV
 		{credentials_obfuscation_fallback_secret, <<"nocookie">>},
       	{dead_letter_worker_consumer_prefetch, 32},
       	{dead_letter_worker_publisher_confirm_timeout, 180000},
-		%% EOL date for the current release series, if known/announced
-		{release_series_eol_date, none},
 		{vhost_process_reconciliation_run_interval, 30},
 		%% for testing
-		{vhost_process_reconciliation_enabled, true}
+		{vhost_process_reconciliation_enabled, true},
+		{license_line, "Licensed under the MPL 2.0. Website: https://rabbitmq.com"}
 	  ]
 endef
 
@@ -139,8 +134,6 @@ TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers meck proper amqp_clie
 PLT_APPS += mnesia runtime_tools
 
 dep_syslog = git https://github.com/schlagert/syslog 4.0.0
-dep_osiris = git https://github.com/rabbitmq/osiris v1.8.2
-dep_systemd = hex 0.6.1
 
 define usage_xml_to_erl
 $(subst __,_,$(patsubst $(DOCS_DIR)/rabbitmq%.1.xml, src/rabbit_%_usage.erl, $(subst -,_,$(1))))
@@ -151,12 +144,8 @@ MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
-DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-test.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk \
-	      rabbit_common/mk/rabbitmq-dist.mk \
-	      rabbit_common/mk/rabbitmq-run.mk \
-	      rabbit_common/mk/rabbitmq-test.mk \
-	      rabbit_common/mk/rabbitmq-tools.mk
+DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
@@ -219,8 +208,114 @@ SLOW_CT_SUITES := backing_queue \
 		  vhost
 FAST_CT_SUITES := $(filter-out $(sort $(SLOW_CT_SUITES)),$(CT_SUITES))
 
-ct-fast: CT_SUITES = $(FAST_CT_SUITES)
-ct-slow: CT_SUITES = $(SLOW_CT_SUITES)
+ct-fast:
+	$(MAKE) ct CT_SUITES='$(FAST_CT_SUITES)'
+
+ct-slow:
+	$(MAKE) ct CT_SUITES='$(SLOW_CT_SUITES)'
+
+CT_OPTS += -ct_hooks rabbit_ct_hook []
+
+# Parallel CT.
+#
+# @todo We must ensure that the CT_OPTS also apply to ct-master
+# @todo We should probably refactor ct_master.erl to have node init in a separate .erl
+
+define ct_master.erl
+	StartOpts = #{
+		host => "localhost",
+		connection => standard_io,
+		args => ["-hidden"]
+	},
+	{ok, Pid1, _} = peer:start(StartOpts#{name => "rabbit_shard1"}),
+	{ok, Pid2, _} = peer:start(StartOpts#{name => "rabbit_shard2"}),
+	{ok, Pid3, _} = peer:start(StartOpts#{name => "rabbit_shard3"}),
+	{ok, Pid4, _} = peer:start(StartOpts#{name => "rabbit_shard4"}),
+	peer:call(Pid1, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid2, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid3, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid4, net_kernel, set_net_ticktime, [5]),
+	peer:call(Pid1, persistent_term, put, [rabbit_ct_tcp_port_base, 23000]),
+	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
+	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
+	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
+	ct_master:run("$1"),
+	peer:stop(Pid4),
+	peer:stop(Pid3),
+	peer:stop(Pid2),
+	peer:stop(Pid1),
+	halt()
+endef
+
+PARALLEL_CT_SET_1_A = amqp_client unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
+PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_credit_api_v2 amqp_system signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
+PARALLEL_CT_SET_1_C = amqp_proxy_protocol amqpl_consumer_ack amqpl_direct_reply_to backing_queue bindings rabbit_db_maintenance rabbit_db_msup rabbit_db_policy rabbit_db_queue rabbit_db_topic_exchange rabbit_direct_reply_to_prop cluster_limit cluster_minority term_to_binary_compat_prop topic_permission transactions unicode unit_access_control
+PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channel_operation_timeout classic_queue classic_queue_prop config_schema peer_discovery_dns peer_discovery_tmp_hidden_node per_node_limit per_user_connection_channel_limit
+
+PARALLEL_CT_SET_2_A = cluster confirms_rejects consumer_timeout rabbit_access_control rabbit_confirms rabbit_core_metrics_gc rabbit_cuttlefish rabbit_db_binding rabbit_db_exchange
+PARALLEL_CT_SET_2_B = clustering_recovery crashing_queues deprecated_features direct_exchange_routing_v2 disconnect_detected_during_alarm exchanges unit_gen_server2
+PARALLEL_CT_SET_2_C = disk_monitor dynamic_qq unit_disk_monitor unit_file_handle_cache unit_log_management unit_operator_policy
+PARALLEL_CT_SET_2_D = queue_length_limits queue_parallel quorum_queue_member_reconciliation rabbit_fifo rabbit_fifo_dlx rabbit_stream_coordinator
+
+PARALLEL_CT_SET_3_A = definition_import per_user_connection_channel_limit_partitions per_vhost_connection_limit_partitions policy priority_queue_recovery rabbit_fifo_prop rabbit_fifo_v0 rabbit_stream_sac_coordinator unit_credit_flow unit_queue_consumers unit_queue_location unit_quorum_queue
+PARALLEL_CT_SET_3_B = cluster_upgrade list_consumers_sanity_check list_queues_online_and_offline logging lqueue maintenance_mode rabbit_fifo_q
+PARALLEL_CT_SET_3_C = cli_forget_cluster_node feature_flags_v2 mc_unit message_containers_deaths_v2 message_size_limit metadata_store_migration
+PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor msg_store peer_discovery_classic_config proxy_protocol runtime_parameters unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor
+
+PARALLEL_CT_SET_4_A = clustering_events rabbit_local_random_exchange rabbit_message_interceptor rabbitmq_4_0_deprecations unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue
+PARALLEL_CT_SET_4_B = per_user_connection_tracking per_vhost_connection_limit rabbit_fifo_dlx_integration rabbit_fifo_int
+PARALLEL_CT_SET_4_C = msg_size_metrics unit_msg_size_metrics per_vhost_msg_store per_vhost_queue_limit priority_queue upgrade_preparation vhost
+PARALLEL_CT_SET_4_D = per_user_connection_channel_tracking product_info publisher_confirms_parallel queue_type rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown routing
+
+PARALLEL_CT_SET_1 = $(sort $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT_SET_1_C) $(PARALLEL_CT_SET_1_D))
+PARALLEL_CT_SET_2 = $(sort $(PARALLEL_CT_SET_2_A) $(PARALLEL_CT_SET_2_B) $(PARALLEL_CT_SET_2_C) $(PARALLEL_CT_SET_2_D))
+PARALLEL_CT_SET_3 = $(sort $(PARALLEL_CT_SET_3_A) $(PARALLEL_CT_SET_3_B) $(PARALLEL_CT_SET_3_C) $(PARALLEL_CT_SET_3_D))
+PARALLEL_CT_SET_4 = $(sort $(PARALLEL_CT_SET_4_A) $(PARALLEL_CT_SET_4_B) $(PARALLEL_CT_SET_4_C) $(PARALLEL_CT_SET_4_D))
+
+SEQUENTIAL_CT_SUITES = clustering_management dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue
+PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1) $(PARALLEL_CT_SET_2) $(PARALLEL_CT_SET_3) $(PARALLEL_CT_SET_4)
+
+ifneq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
+$(error Some test suites in CT_SUITES but not configured for CI: $(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)))
+endif
+
+define tpl_parallel_ct_test_spec
+{logdir, "$(CT_LOGS_DIR)"}.
+{logdir, master, "$(CT_LOGS_DIR)"}.
+{create_priv_dir, all_nodes, auto_per_run}.
+
+{node, shard1, 'rabbit_shard1@localhost'}.
+{node, shard2, 'rabbit_shard2@localhost'}.
+{node, shard3, 'rabbit_shard3@localhost'}.
+{node, shard4, 'rabbit_shard4@localhost'}.
+
+{define, 'Set1', [$(call comma_list,$(addsuffix _SUITE,$1))]}.
+{define, 'Set2', [$(call comma_list,$(addsuffix _SUITE,$2))]}.
+{define, 'Set3', [$(call comma_list,$(addsuffix _SUITE,$3))]}.
+{define, 'Set4', [$(call comma_list,$(addsuffix _SUITE,$4))]}.
+
+{suites, shard1, "test/", 'Set1'}.
+{suites, shard2, "test/", 'Set2'}.
+{suites, shard3, "test/", 'Set3'}.
+{suites, shard4, "test/", 'Set4'}.
+endef
+
+define parallel_ct_set_target
+tpl_parallel_ct_test_spec_set_$1 = $$(call tpl_parallel_ct_test_spec,$(PARALLEL_CT_SET_$(1)_A),$(PARALLEL_CT_SET_$(1)_B),$(PARALLEL_CT_SET_$(1)_C),$(PARALLEL_CT_SET_$(1)_D))
+
+parallel-ct-set-$(1): test-build
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
+	$(verbose) $$(call core_render,tpl_parallel_ct_test_spec_set_$(1),ct.set-$(1).spec)
+	$$(call erlang,$$(call ct_master.erl,ct.set-$(1).spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
+endef
+
+$(foreach set,1 2 3 4,$(eval $(call parallel_ct_set_target,$(set))))
+
+# @todo Generate ct.test.spec from Makefile variables instead of hardcoded for ct-master
+
+parallel-ct: test-build
+	$(verbose) mkdir -p $(CT_LOGS_DIR)
+	$(call erlang,$(call ct_master.erl,ct.test.spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
 
 # --------------------------------------------------------------------
 # Compilation.
@@ -280,6 +375,7 @@ web-manpages: $(WEB_MANPAGES) $(MD_MANPAGES)
 	    gsub(/class="D1"/, "class=\"D1 lang-bash\"", line); \
 	    gsub(/class="Bd Bd-indent"/, "class=\"Bd Bd-indent lang-bash\"", line); \
 	    gsub(/&#[xX]201[cCdD];/, "\\&quot;", line); \
+	    gsub(/\.html/, "", line); \
 	    print line; \
 	  } } \
 	  ' > "$@"

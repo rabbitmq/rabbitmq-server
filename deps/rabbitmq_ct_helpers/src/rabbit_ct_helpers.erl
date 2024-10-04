@@ -155,10 +155,10 @@ redirect_logger_to_ct_logs(Config) ->
     ct:pal(
       ?LOW_IMPORTANCE,
       "Configuring logger to send logs to common_test logs"),
-    logger:set_handler_config(cth_log_redirect, level, debug),
+    ok = logger:set_handler_config(cth_log_redirect, level, debug),
 
     %% Let's use the same format as RabbitMQ itself.
-    logger:set_handler_config(
+    ok = logger:set_handler_config(
       cth_log_redirect, formatter,
       rabbit_prelaunch_early_logging:default_file_formatter(#{})),
 
@@ -170,7 +170,7 @@ redirect_logger_to_ct_logs(Config) ->
            cth_log_redirect_any_domains, cth_log_redirect_any_domains,
            LogCfg),
 
-    logger:remove_handler(default),
+    ok = logger:remove_handler(default),
 
     ct:pal(
       ?LOW_IMPORTANCE,
@@ -686,7 +686,6 @@ load_elixir(Config) ->
         ElixirLibDir ->
             ct:pal(?LOW_IMPORTANCE, "Elixir lib dir: ~ts~n", [ElixirLibDir]),
             true = code:add_pathz(ElixirLibDir),
-            application:load(elixir),
             {ok, _} = application:ensure_all_started(elixir),
             Config
     end.
@@ -947,7 +946,7 @@ port_receive_loop(Port, Stdout, Options, Until, DumpTimer) ->
             end,
   receive
       {Port, {exit_status, X}} ->
-          timer:cancel(DumpTimer),
+          _ = timer:cancel(DumpTimer),
           DropStdout = lists:member(drop_stdout, Options) orelse
               Stdout =:= "",
           if

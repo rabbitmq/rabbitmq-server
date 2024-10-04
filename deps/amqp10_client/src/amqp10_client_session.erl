@@ -69,9 +69,6 @@
 %% "The remotely chosen handle is referred to as the input handle." [2.6.2]
 -type input_handle() :: link_handle().
 
--type snd_settle_mode() :: unsettled | settled | mixed.
--type rcv_settle_mode() :: first | second.
-
 -type terminus_durability() :: none | configuration | unsettled_state.
 
 -type target_def() :: #{address => link_address(),
@@ -964,7 +961,8 @@ rcv_settle_mode(_) -> undefined.
 % TODO: work out if we can assume accepted
 translate_delivery_state(undefined) -> undefined;
 translate_delivery_state(#'v1_0.accepted'{}) -> accepted;
-translate_delivery_state(#'v1_0.rejected'{}) -> rejected;
+translate_delivery_state(#'v1_0.rejected'{error = undefined}) -> rejected;
+translate_delivery_state(#'v1_0.rejected'{error = Error}) -> {rejected, Error};
 translate_delivery_state(#'v1_0.modified'{}) -> modified;
 translate_delivery_state(#'v1_0.released'{}) -> released;
 translate_delivery_state(#'v1_0.received'{}) -> received;
@@ -1171,15 +1169,12 @@ make_link_ref(Role, Session, Handle) ->
     #link_ref{role = Role, session = Session, link_handle = Handle}.
 
 translate_message_annotations(MA)
-  when is_map(MA) andalso
-       map_size(MA) > 0 ->
-    Content = maps:fold(fun (K, V, Acc) ->
-                                [{sym(K), wrap_map_value(V)} | Acc]
-                        end, [], MA),
-    #'v1_0.message_annotations'{content = Content};
+  when map_size(MA) > 0 ->
+    {map, maps:fold(fun(K, V, Acc) ->
+                            [{sym(K), wrap_map_value(V)} | Acc]
+                    end, [], MA)};
 translate_message_annotations(_MA) ->
     undefined.
-
 
 wrap_map_value(true) ->
     {boolean, true};

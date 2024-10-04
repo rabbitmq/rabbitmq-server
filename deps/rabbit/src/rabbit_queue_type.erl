@@ -114,8 +114,9 @@
 
 -opaque state() :: #?STATE{}.
 
-%% Delete atom 'credit_api_v1' when feature flag credit_api_v2 becomes required.
--type consume_mode() :: {simple_prefetch, non_neg_integer()} | {credited, Initial :: delivery_count() | credit_api_v1}.
+%% Delete atom 'credit_api_v1' when feature flag rabbitmq_4.0.0 becomes required.
+-type consume_mode() :: {simple_prefetch, Prefetch :: non_neg_integer()} |
+                        {credited, Initial :: delivery_count() | credit_api_v1}.
 -type consume_spec() :: #{no_ack := boolean(),
                           channel_pid := pid(),
                           limiter_pid => pid() | none,
@@ -135,7 +136,13 @@
 -type delivery_options() :: #{correlation => correlation(),
                               atom() => term()}.
 
--type settle_op() :: 'complete' | 'requeue' | 'discard'.
+-type settle_op() :: complete |
+                     requeue |
+                     discard |
+                     {modify,
+                      DeliveryFailed :: boolean(),
+                      UndeliverableHere :: boolean(),
+                      Annotations :: mc:annotations()}.
 
 -export_type([state/0,
               consume_mode/0,
@@ -189,7 +196,8 @@
 -callback is_stateful() -> boolean().
 
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue()) -> {ok, queue_state()} | {error, Reason :: term()}.
+-callback init(amqqueue:amqqueue()) ->
+    {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
 %% update the queue type state from amqqrecord
@@ -225,7 +233,7 @@
     {queue_state(), actions()} |
     {'protocol_error', Type :: atom(), Reason :: string(), Args :: term()}.
 
-%% Delete this callback when feature flag credit_api_v2 becomes required.
+%% Delete this callback when feature flag rabbitmq_4.0.0 becomes required.
 -callback credit_v1(queue_name(), rabbit_types:ctag(), credit(), Drain :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
@@ -292,13 +300,22 @@ short_alias_of(<<"rabbit_quorum_queue">>) ->
     <<"quorum">>;
 short_alias_of(rabbit_quorum_queue) ->
     <<"quorum">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"quorum">>}) ->
+    <<"quorum">>;
 short_alias_of(<<"rabbit_classic_queue">>) ->
     <<"classic">>;
 short_alias_of(rabbit_classic_queue) ->
     <<"classic">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"classic">>}) ->
+    <<"classic">>;
 short_alias_of(<<"rabbit_stream_queue">>) ->
     <<"stream">>;
 short_alias_of(rabbit_stream_queue) ->
+    <<"stream">>;
+%% AMQP 1.0 management client
+short_alias_of({utf8, <<"stream">>}) ->
     <<"stream">>;
 short_alias_of(_Other) ->
     undefined.
@@ -366,6 +383,7 @@ declare(Q0, Node) ->
              boolean(), rabbit_types:username()) ->
     rabbit_types:ok(non_neg_integer()) |
     rabbit_types:error(in_use | not_empty) |
+    rabbit_types:error(timeout) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, IfUnused, IfEmpty, ActingUser) ->
     Mod = amqqueue:get_type(Q),
@@ -707,7 +725,7 @@ settle(#resource{kind = queue} = QRef, Op, CTag, MsgIds, Ctxs) ->
             end
     end.
 
-%% Delete this function when feature flag credit_api_v2 becomes required.
+%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
 -spec credit_v1(queue_name(), rabbit_types:ctag(), credit(), boolean(), state()) ->
     {ok, state(), actions()}.
 credit_v1(QName, CTag, LinkCreditSnd, Drain, Ctxs) ->

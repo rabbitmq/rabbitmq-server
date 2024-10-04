@@ -7,7 +7,10 @@
 
 -module(rabbit_db_maintenance).
 
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-include("include/khepri.hrl").
 
 -export([
          table_definitions/0,
@@ -17,8 +20,7 @@
         ]).
 
 -export([
-         khepri_maintenance_path/1,
-         khepri_maintenance_path/0
+         khepri_maintenance_path/1
         ]).
 
 -define(TABLE, rabbit_node_maintenance_states).
@@ -155,11 +157,7 @@ get_consistent_in_mnesia(Node) ->
 
 get_consistent_in_khepri(Node) ->
     Path = khepri_maintenance_path(Node),
-    %% FIXME: Ra consistent queries are fragile in the sense that the query
-    %% function may run on a remote node and the function reference or MFA may
-    %% not be valid on that node. That's why we force a local query for now.
-    %Options = #{favor => consistent},
-    Options = #{favor => local},
+    Options = #{favor => consistency},
     case rabbit_khepri:get(Path, Options) of
         {ok, #node_maintenance_state{status = Status}} ->
             Status;
@@ -171,8 +169,5 @@ get_consistent_in_khepri(Node) ->
 %% Khepri paths
 %% -------------------------------------------------------------------
 
-khepri_maintenance_path() ->
-    [?MODULE, maintenance].
-
-khepri_maintenance_path(Node) ->
-    [?MODULE, maintenance, Node].
+khepri_maintenance_path(Node) when ?IS_KHEPRI_PATH_CONDITION(Node) ->
+    ?KHEPRI_ROOT_PATH ++ [node_maintenance, Node].

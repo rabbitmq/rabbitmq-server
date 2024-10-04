@@ -12,6 +12,8 @@ defmodule JsonStreamTest do
   test "format_output map with atom keys is converted to JSON object" do
     assert @formatter.format_output(%{a: :apple, b: :beer}, %{}) ==
              "{\"a\":\"apple\",\"b\":\"beer\"}"
+        or @formatter.format_output(%{a: :apple, b: :beer}, %{}) ==
+             "{\"b\":\"beer\",\"a\":\"apple\"}"
   end
 
   test "format_output map with binary keys is converted to JSON object" do

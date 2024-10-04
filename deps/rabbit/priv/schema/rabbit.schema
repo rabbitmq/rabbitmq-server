@@ -122,13 +122,13 @@ end}.
 %%
 
 %% Original key for definition loading from a JSON file or directory of files. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "load_definitions", "rabbit.load_definitions",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
 
 %% Newer syntax for definition loading from a JSON file or directory of files. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "definitions.local.path", "rabbit.definitions.local_path",
     [{datatype, string},
      {validators, ["file_accessible"]}]}.
@@ -161,7 +161,7 @@ end}.
     {datatype, {enum, [sha, sha224, sha256, sha384, sha512]}}]}.
 
 %% Load definitions from a remote URL over HTTPS. See
-%% https://www.rabbitmq.com/management.html#load-definitions
+%% https://www.rabbitmq.com/docs/management#load-definitions
 {mapping, "definitions.https.url", "rabbit.definitions.url",
     [{datatype, string}]}.
 
@@ -229,7 +229,12 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "definitions.tls.password", "rabbit.definitions.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
+
+{translation, "rabbit.definitions.ssl_options.password",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_string("definitions.tls.password", Conf)
+end}.
 
 {mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
     [{datatype, {enum, [true, false]}}]}.
@@ -290,7 +295,7 @@ fun(Conf) ->
 end}.
 
 %% TLS options.
-%% See https://www.rabbitmq.com/ssl.html for full documentation.
+%% See https://www.rabbitmq.com/docs/ssl for full documentation.
 %%
 %% {ssl_options, [{cacertfile,           "/path/to/testca/cacert.pem"},
 %%                {certfile,             "/path/to/server/cert.pem"},
@@ -395,7 +400,12 @@ end}.
     [{datatype, {enum, [true, false]}}]}.
 
 {mapping, "ssl_options.password", "rabbit.ssl_options.password",
-    [{datatype, string}]}.
+    [{datatype, [tagged_binary, binary]}]}.
+
+{translation, "rabbit.ssl_options.password",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_binary("ssl_options.password", Conf)
+end}.
 
 {mapping, "ssl_options.psk_identity", "rabbit.ssl_options.psk_identity",
     [{datatype, string}]}.
@@ -434,22 +444,22 @@ end}.
 %% ===========================================================================
 
 %% Choose the available SASL mechanism(s) to expose.
-%% The two default (built in) mechanisms are 'PLAIN' and
-%% 'AMQPLAIN'. Additional mechanisms can be added via
-%% plugins.
+%% The three default (built in) mechanisms are 'PLAIN', 'AMQPLAIN' and 'ANONYMOUS'.
+%% Additional mechanisms can be added via plugins.
 %%
-%% See https://www.rabbitmq.com/authentication.html for more details.
+%% See https://www.rabbitmq.com/docs/access-control for more details.
 %%
-%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN']},
+%% {auth_mechanisms, ['PLAIN', 'AMQPLAIN', 'ANONYMOUS']},
 
 {mapping, "auth_mechanisms.$name", "rabbit.auth_mechanisms", [
     {datatype, atom}]}.
 
 {translation, "rabbit.auth_mechanisms",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
-    [ V || {_, V} <- Settings ]
-end}.
+ fun(Conf) ->
+         Settings = cuttlefish_variable:filter_by_prefix("auth_mechanisms", Conf),
+         Sorted = lists:keysort(1, Settings),
+         [V || {_, V} <- Sorted]
+ end}.
 
 
 %% Select an authentication backend to use. RabbitMQ provides an
@@ -629,7 +639,7 @@ end}.
 
 %% On first start RabbitMQ will create a vhost and a user. These
 %% config items control what gets created. See
-%% https://www.rabbitmq.com/access-control.html for further
+%% https://www.rabbitmq.com/docs/access-control for further
 %% information about vhosts and access control.
 %%
 %% {default_vhost,       <<"/">>},
@@ -656,12 +666,12 @@ fun(Conf) ->
 end}.
 
 {mapping, "default_pass", "rabbit.default_pass", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {translation, "rabbit.default_pass",
 fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("default_pass", Conf))
+    rabbit_cuttlefish:optionally_tagged_binary("default_pass", Conf)
 end}.
 
 {mapping, "default_permissions.configure", "rabbit.default_permissions", [
@@ -696,7 +706,7 @@ end}.
 ]}.
 
 {mapping, "default_users.$name.password", "rabbit.default_users", [
-    {datatype, string}
+    {datatype, [tagged_binary, binary]}
 ]}.
 
 {mapping, "default_users.$name.configure", "rabbit.default_users", [
@@ -724,6 +734,22 @@ end}.
         Props -> Props
     end
 end}.
+
+%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will use this identity.
+%% Setting this to a username will allow (anonymous) clients to connect and act as this
+%% given user. For production environments, set this value to 'none'.
+{mapping, "anonymous_login_user", "rabbit.anonymous_login_user",
+    [{datatype, [{enum, [none]}, binary]}]}.
+
+{mapping, "anonymous_login_pass", "rabbit.anonymous_login_pass", [
+    {datatype, [tagged_binary, binary]}
+]}.
+
+{translation, "rabbit.anonymous_login_pass",
+fun(Conf) ->
+    rabbit_cuttlefish:optionally_tagged_binary("anonymous_login_pass", Conf)
+end}.
+
 
 %%
 %% Default Policies
@@ -845,7 +871,7 @@ end}.
 %% Tags for default user
 %%
 %% For more details about tags, see the documentation for the
-%% Management Plugin at https://www.rabbitmq.com/management.html.
+%% Management Plugin at https://www.rabbitmq.com/docs/management.
 %%
 %% {default_user_tags, [administrator]},
 
@@ -921,6 +947,20 @@ end}.
   end
  end
 }.
+
+%% Sets the maximum number of AMQP 1.0 sessions that can be simultaneously
+%% active on an AMQP 1.0 connection.
+%%
+%% {session_max_per_connection, 1},
+{mapping, "session_max_per_connection", "rabbit.session_max_per_connection",
+ [{datatype, integer}, {validators, ["positive_16_bit_unsigned_integer"]}]}.
+
+%% Sets the maximum number of AMQP 1.0 links that can be simultaneously
+%% active on an AMQP 1.0 session.
+%%
+%% {link_max_per_session, 10},
+{mapping, "link_max_per_session", "rabbit.link_max_per_session",
+ [{datatype, integer}, {validators, ["positive_32_bit_unsigned_integer"]}]}.
 
 %% Set the max permissible number of client connections per node.
 %% `infinity` means "no limit".
@@ -1073,11 +1113,11 @@ end}.
 %% Resource Limits & Flow Control
 %% ==============================
 %%
-%% See https://www.rabbitmq.com/memory.html for full details.
+%% See https://www.rabbitmq.com/docs/memory for full details.
 
 %% Memory-based Flow Control threshold.
 %%
-%% {vm_memory_high_watermark, 0.4},
+%% {vm_memory_high_watermark, 0.6},
 
 %% Alternatively, we can set a limit (in bytes) of RAM used by the node.
 %%
@@ -1123,6 +1163,8 @@ fun(Conf) ->
     end
 end}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
+%%
 %% Fraction of the high watermark limit at which queues start to
 %% page message out to disc in order to free up memory.
 %%
@@ -1134,6 +1176,8 @@ end}.
           "rabbit.vm_memory_high_watermark_paging_ratio",
           [{datatype, float}, {validators, ["less_than_1"]}]}.
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
+%%
 %% Interval (in milliseconds) at which we perform the check of the memory
 %% levels against the watermarks.
 %%
@@ -1203,7 +1247,7 @@ end}.
 %%
 
 %% How to respond to cluster partitions.
-%% See https://www.rabbitmq.com/partitions.html for further details.
+%% See https://www.rabbitmq.com/docs/partitions for further details.
 %%
 %% {cluster_partition_handling, ignore},
 
@@ -1326,28 +1370,6 @@ fun(Conf) ->
     end
 end}.
 
-%% Cluster formation: Randomized startup delay
-%%
-%% DEPRECATED: This is a no-op. Old configs are still allowed, but a warning will be printed.
-
-{mapping, "cluster_formation.randomized_startup_delay_range.min", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
-{mapping, "cluster_formation.randomized_startup_delay_range.max", "rabbit.cluster_formation.randomized_startup_delay_range", []}.
-
-{translation, "rabbit.cluster_formation.randomized_startup_delay_range",
-fun(Conf) ->
-    Min = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.min", Conf, undefined),
-    Max = cuttlefish:conf_get("cluster_formation.randomized_startup_delay_range.max", Conf, undefined),
-
-    case {Min, Max} of
-      {undefined, undefined} ->
-        ok;
-      _ ->
-        cuttlefish:warn("cluster_formation.randomized_startup_delay_range.min and "
-                               "cluster_formation.randomized_startup_delay_range.max are deprecated")
-    end,
-    cuttlefish:unset()
-end}.
-
 %% Cluster formation: lock acquisition retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
 %%
 %% Currently used in classic, k8s, and aws peer discovery backends.
@@ -1398,7 +1420,7 @@ end}.
 %%
 %% Make clustering happen *automatically* at startup - only applied
 %% to nodes that have just been reset or started for the first time.
-%% See https://www.rabbitmq.com/clustering.html#auto-config for
+%% See https://www.rabbitmq.com/docs/clustering#auto-config for
 %% further details.
 %%
 %% {cluster_nodes, {['rabbit@my.host.com'], disc}},
@@ -1547,7 +1569,7 @@ end}.
     ]}.
 
 %% Size in bytes below which to embed messages in the queue index. See
-%% https://www.rabbitmq.com/persistence-conf.html
+%% https://www.rabbitmq.com/docs/persistence-conf
 %%
 %% {queue_index_embed_msgs_below, 4096}
 
@@ -2421,7 +2443,7 @@ end}.
 
 {mapping, "raft.segment_max_entries", "ra.segment_max_entries", [
   {datatype, integer},
-  {validators, ["non_zero_positive_integer", "non_zero_positive_16_bit_integer"]}
+  {validators, ["non_zero_positive_integer", "positive_16_bit_unsigned_integer"]}
 ]}.
 
 {translation, "ra.segment_max_entries",
@@ -2550,6 +2572,7 @@ end}.
 %% Backing queue version
 %%
 
+%% DEPRECATED. Not used since RabbitMQ 4.0
 {mapping, "classic_queue.default_version", "rabbit.classic_queue_default_version", [
   {datatype, integer},
   {validators, ["non_zero_positive_integer"]}
@@ -2639,32 +2662,6 @@ end}.
     end
 }.
 
-% ===============================
-% AMQP 1.0
-% ===============================
-
-%% Connections that skip SASL layer or use SASL mechanism ANONYMOUS will connect as this account.
-%% Setting this to a username will allow clients to connect without authenticating.
-%% For production environments, set this value to 'none'.
-{mapping, "amqp1_0.default_user", "rabbit.amqp1_0_default_user",
-    [{datatype, [{enum, [none]}, string]}]}.
-
-{mapping, "amqp1_0.default_vhost", "rabbit.amqp1_0_default_vhost",
-    [{datatype, string}]}.
-
-{translation, "rabbit.amqp1_0_default_user",
-fun(Conf) ->
-        case cuttlefish:conf_get("amqp1_0.default_user", Conf) of
-            none -> none;
-            User -> list_to_binary(User)
-        end
-end}.
-
-{translation , "rabbit.amqp1_0_default_vhost",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("amqp1_0.default_vhost", Conf))
-end}.
-
 {mapping, "stream.replication.port_range.min", "osiris.port_range", [
     {datatype, [integer]},
     {validators, ["non_zero_positive_integer"]}
@@ -2753,10 +2750,15 @@ fun(Int) when is_integer(Int) ->
     Int >= 1
 end}.
 
-{validator, "non_zero_positive_16_bit_integer", "number should be between 1 and 65535",
-fun(Int) when is_integer(Int) ->
-    (Int >= 1) and (Int =< 65535)
-end}.
+{validator, "positive_16_bit_unsigned_integer", "number should be between 1 and 65535",
+ fun(Int) when is_integer(Int) ->
+         (Int >= 1) and (Int =< 16#ff_ff)
+ end}.
+
+{validator, "positive_32_bit_unsigned_integer", "number should be between 1 and 4294967295",
+ fun(Int) when is_integer(Int) ->
+         (Int >= 1) and (Int =< 16#ff_ff_ff_ff)
+ end}.
 
 {validator, "valid_regex", "string must be a valid regular expression",
  fun("")     -> false;

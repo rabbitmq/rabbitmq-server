@@ -22,7 +22,8 @@ name: Test
 on:
   push:
     branches:
-      - main
+#!      - main
+      - v4.0.x
       - v3.13.x
       - v3.12.x
       - v3.11.x
@@ -41,7 +42,7 @@ on:
       - '*.bzl'
       - '*.bazel'
       - .github/workflows/test.yaml
-  pull_request:
+#!  pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -72,7 +73,7 @@ jobs:
       run: |
         echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
     - name: AUTHENTICATE TO GOOGLE CLOUD
-      uses: google-github-actions/auth@v2.1.3
+      uses: google-github-actions/auth@v2.1.6
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
     - name: REPO CACHE

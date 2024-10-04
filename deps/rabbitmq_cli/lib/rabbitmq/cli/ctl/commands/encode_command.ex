@@ -77,6 +77,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
               {:ok, result}
             catch
               _, _ ->
+                IO.inspect(__STACKTRACE__)
                 {:error, "Error during cipher operation"}
             end
         end
@@ -99,6 +100,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
           {:ok, result}
         catch
           _, _ ->
+            IO.inspect(__STACKTRACE__)
             {:error, "Error during cipher operation"}
         end
     end
@@ -115,6 +117,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
       {:ok, result}
     catch
       _, _ ->
+        IO.inspect(__STACKTRACE__)
         {:error, "Error during cipher operation"}
     end
   end
@@ -122,7 +125,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Erlang
 
   def banner(_, _) do
-    "Encrypting value ..."
+    "Encrypting value to be used in advanced.config..."
   end
 
   def usage,
@@ -130,7 +133,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def usage_additional() do
     [
-      ["<value>", "config value to encode"],
+      ["<value>", "value to encode, to be used in advanced.config"],
       ["<passphrase>", "passphrase to use with the config value encryption key"],
       ["--cipher <cipher>", "cipher suite to use"],
       ["--hash <hash>", "hashing function to use"],
@@ -146,7 +149,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Encrypts a sensitive configuration value"
+  def description(), do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
 
   #
   # Implementation

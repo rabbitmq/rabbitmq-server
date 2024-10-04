@@ -10,6 +10,7 @@
 -behaviour(mnesia_to_khepri_converter).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("khepri/include/khepri.hrl").
 -include_lib("khepri_mnesia_migration/src/kmm_logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -44,7 +45,7 @@ init_copy_to_khepri(_StoreId, _MigrationId, Tables) ->
 %% @private
 
 copy_to_khepri(rabbit_route = Table,
-               #route{binding = #binding{source = XName} = Binding},
+               #route{binding = #binding{} = Binding},
                State) ->
     ?LOG_DEBUG(
        "Mnesia->Khepri data copy: [~0p] key: ~0p",
@@ -54,18 +55,12 @@ copy_to_khepri(rabbit_route = Table,
     rabbit_db_m2k_converter:with_correlation_id(
       fun(CorrId) ->
               Extra = #{async => CorrId},
-              XPath = rabbit_db_binding:khepri_route_exchange_path(XName),
               ?LOG_DEBUG(
                  "Mnesia->Khepri data copy: [~0p] path: ~0p corr: ~0p",
                  [Table, Path, CorrId],
                  #{domain => ?KMM_M2K_TABLE_COPY_LOG_DOMAIN}),
               rabbit_khepri:transaction(
                 fun() ->
-                        %% Store the exchange's type in the exchange name
-                        %% branch of the tree.
-                        [#exchange{type = XType}] =
-                            rabbit_db_exchange:get_in_khepri_tx(XName),
-                        ok = khepri_tx:put(XPath, #{type => XType}),
                         %% Add the binding to the set at the binding's
                         %% path.
                         Set = case khepri_tx:get(Path) of
@@ -111,8 +106,4 @@ delete_from_khepri(rabbit_route = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_route) ->
-    Path = rabbit_db_binding:khepri_routes_path(),
-    case rabbit_khepri:delete(Path) of
-        ok -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_db_binding:clear_in_khepri().

@@ -65,8 +65,8 @@ join_url(BaseUrl, CertPath)  ->
     string:strip(rabbit_data_coercion:to_list(CertPath), left, $/).
 
 init(Config) ->
-    inets:start(httpc, [{profile, ?PROFILE}]),
-    _ = application:ensure_all_started(ssl),
+    _ = inets:start(httpc, [{profile, ?PROFILE}]),
+    {ok, _} = application:ensure_all_started(ssl),
     Options = proplists:get_value(proxy_options, Config, []),
     httpc:set_options(Options, ?PROFILE).
 

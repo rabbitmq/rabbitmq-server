@@ -1,0 +1,114 @@
+name: Run tests (make)
+on:
+  workflow_call:
+    inputs:
+      erlang_version:
+        required: true
+        type: string
+      elixir_version:
+        required: true
+        type: string
+      metadata_store:
+        required: true
+        type: string
+jobs:
+  test-rabbit:
+    name: Test rabbit
+    strategy:
+      fail-fast: false
+      matrix:
+        make_target:
+          - parallel-ct-set-1
+          - parallel-ct-set-2
+          - parallel-ct-set-3
+          - parallel-ct-set-4
+          - ct-clustering_management
+          - eunit ct-dead_lettering
+          - ct-feature_flags
+          - ct-metadata_store_clustering
+          - ct-quorum_queue
+          - ct-rabbit_stream_queue
+    uses: ./.github/workflows/test-make-target.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: ${{ matrix.make_target }}
+      plugin: rabbit
+
+  test-rabbitmq-mqtt:
+    name: Test rabbitmq_mqtt
+    uses: ./.github/workflows/test-make-target.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: parallel-ct-set-1
+      plugin: rabbitmq_mqtt
+
+  # The integration_SUITE requires secrets and
+  # is therefore run from a separate workflow.
+  test-rabbitmq-peer-discovery-aws:
+    name: Test rabbitmq_peer_discovery_aws (partially)
+    uses: ./.github/workflows/test-make-target.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: ct-config_schema ct-unit
+      plugin: rabbitmq_peer_discovery_aws
+
+  test-plugin:
+    name: Test plugins
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin:
+          - amqp10_client
+          - amqp10_common
+          - amqp_client
+          - oauth2_client
+          - rabbit_common
+          - rabbitmq_amqp_client
+          - rabbitmq_auth_backend_cache
+          - rabbitmq_auth_backend_http
+          - rabbitmq_auth_backend_ldap
+          - rabbitmq_auth_backend_oauth2
+          - rabbitmq_auth_mechanism_ssl
+          - rabbitmq_aws
+          - rabbitmq_cli
+          - rabbitmq_consistent_hash_exchange
+          - rabbitmq_event_exchange
+          - rabbitmq_federation
+          - rabbitmq_federation_management
+          - rabbitmq_federation_prometheus
+          - rabbitmq_jms_topic_exchange
+          - rabbitmq_management
+          - rabbitmq_management_agent
+          - rabbitmq_peer_discovery_common
+          - rabbitmq_peer_discovery_consul
+          - rabbitmq_peer_discovery_etcd
+          - rabbitmq_peer_discovery_k8s
+          - rabbitmq_prelaunch
+          - rabbitmq_prometheus
+          - rabbitmq_recent_history_exchange
+          - rabbitmq_sharding
+          - rabbitmq_shovel
+          - rabbitmq_shovel_management
+          - rabbitmq_shovel_prometheus
+          - rabbitmq_stomp
+          - rabbitmq_stream
+          - rabbitmq_stream_common
+          - rabbitmq_stream_management
+          - rabbitmq_tracing
+          - rabbitmq_trust_store
+          - rabbitmq_web_dispatch
+          - rabbitmq_web_mqtt
+          - rabbitmq_web_stomp
+    uses: ./.github/workflows/test-make-target.yaml
+    with:
+      erlang_version: ${{ inputs.erlang_version }}
+      elixir_version: ${{ inputs.elixir_version }}
+      metadata_store: ${{ inputs.metadata_store }}
+      make_target: tests
+      plugin: ${{ matrix.plugin }}

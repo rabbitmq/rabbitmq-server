@@ -106,9 +106,7 @@ open_connection(ConnectionConfig0) ->
         notify_when_opened => NotifyWhenOpened,
         notify_when_closed => NotifyWhenClosed
     },
-    Sasl = maps:get(sasl, ConnectionConfig1),
-    ConnectionConfig2 = ConnectionConfig1#{sasl => amqp10_client_connection:encrypt_sasl(Sasl)},
-    ConnectionConfig = merge_default_tls_options(ConnectionConfig2),
+    ConnectionConfig = merge_default_tls_options(ConnectionConfig1),
     amqp10_client_connection:open(ConnectionConfig).
 
 %% @doc Closes a connection.
@@ -431,8 +429,8 @@ parse_result(Map) ->
                    throw(plain_sasl_missing_userinfo);
                _ ->
                    case UserInfo of
-                       [] -> none;
-                       undefined -> none;
+                       [] -> anon;
+                       undefined -> anon;
                        U -> parse_usertoken(U)
                    end
            end,
@@ -458,11 +456,6 @@ parse_result(Map) ->
             Ret0#{tls_opts => {secure_port, TlsOpts}}
     end.
 
-
-parse_usertoken(undefined) ->
-    none;
-parse_usertoken("") ->
-    none;
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
     {plain,
@@ -534,7 +527,7 @@ parse_uri_test_() ->
     [?_assertEqual({ok, #{address => "my_host",
                           port => 9876,
                           hostname => <<"my_host">>,
-                          sasl => none}}, parse_uri("amqp://my_host:9876")),
+                          sasl => anon}}, parse_uri("amqp://my_host:9876")),
      %% port defaults
      ?_assertMatch({ok, #{port := 5671}}, parse_uri("amqps://my_host")),
      ?_assertMatch({ok, #{port := 5672}}, parse_uri("amqp://my_host")),

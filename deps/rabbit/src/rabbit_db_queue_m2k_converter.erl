@@ -95,12 +95,6 @@ delete_from_khepri(rabbit_queue = Table, Key, State) ->
       Table :: atom().
 
 clear_data_in_khepri(rabbit_queue) ->
-    khepri_delete(rabbit_db_queue:khepri_queues_path());
+    rabbit_db_queue:clear_in_khepri();
 clear_data_in_khepri(rabbit_durable_queue) ->
-    khepri_delete(rabbit_db_queue:khepri_queues_path()).
-
-khepri_delete(Path) ->
-    case rabbit_khepri:delete(Path) of
-        ok -> ok;
-        Error -> throw(Error)
-    end.
+    rabbit_db_queue:clear_in_khepri().

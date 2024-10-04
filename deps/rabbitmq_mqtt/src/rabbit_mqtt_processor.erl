@@ -42,6 +42,12 @@
 -define(QUEUE_TTL_KEY, <<"x-expires">>).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
 
+-ifdef(TEST).
+-define(SILENT_CLOSE_DELAY, 10).
+-else.
+-define(SILENT_CLOSE_DELAY, 3_000).
+-endif.
+
 -type send_fun() :: fun((iodata()) -> ok).
 -type session_expiry_interval() :: non_neg_integer() | infinity.
 -type subscriptions() :: #{topic_filter() => #mqtt_subscription_opts{}}.
@@ -176,9 +182,9 @@ process_connect(
     Result0 =
     maybe
         ok ?= check_extended_auth(ConnectProps),
-        {ok, ClientId} ?= ensure_client_id(ClientId0, CleanStart, ProtoVer),
-        {ok, {Username1, Password}} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
-
+        {ok, ClientId1} ?= extract_client_id_from_certificate(ClientId0, Socket),
+        {ok, ClientId} ?= ensure_client_id(ClientId1, CleanStart, ProtoVer),
+        {ok, Username1, Password} ?= check_credentials(Username0, Password0, SslLoginName, PeerIp),
         {VHostPickedUsing, {VHost, Username2}} = get_vhost(Username1, SslLoginName, Port),
         ?LOG_DEBUG("MQTT connection ~s picked vhost using ~s", [ConnName0, VHostPickedUsing]),
         ok ?= check_vhost_exists(VHost, Username2, PeerIp),
@@ -189,6 +195,7 @@ process_connect(
         ok ?= check_user_connection_limit(Username),
         {ok, AuthzCtx} ?= check_vhost_access(VHost, User, ClientId, PeerIp),
         ok ?= check_user_loopback(Username, PeerIp),
+        ok ?= ensure_credential_expiry_timer(User, PeerIp),
         rabbit_core_metrics:auth_attempt_succeeded(PeerIp, Username, mqtt),
         ok = register_client_id(VHost, ClientId, CleanStart, WillProps),
         {ok, WillMsg} ?= make_will_msg(Packet),
@@ -384,6 +391,7 @@ process_request(?PUBLISH,
         {ok, Topic, Props, State1} ->
             EffectiveQos = maybe_downgrade_qos(Qos),
             rabbit_global_counters:messages_received(ProtoVer, 1),
+            rabbit_msg_size_metrics:observe(ProtoVer, iolist_size(Payload)),
             State = maybe_increment_publisher(State1),
             Msg = #mqtt_msg{retain = Retain,
                             qos = EffectiveQos,
@@ -619,20 +627,40 @@ check_extended_auth(_) ->
 
 check_credentials(Username, Password, SslLoginName, PeerIp) ->
     case creds(Username, Password, SslLoginName) of
+        {ok, _, _} = Ok ->
+            Ok;
         nocreds ->
-            auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no credentials provided"),
+            auth_attempt_failed(PeerIp, <<>>),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {undefined, Pass}} when is_binary(Pass) ->
-            auth_attempt_failed(PeerIp, <<>>),
             ?LOG_ERROR("MQTT login failed: no username is provided"),
+            auth_attempt_failed(PeerIp, <<>>),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
         {invalid_creds, {User, _Pass}} when is_binary(User) ->
-            auth_attempt_failed(PeerIp, User),
             ?LOG_ERROR("MQTT login failed for user '~s': no password provided", [User]),
-            {error, ?RC_BAD_USER_NAME_OR_PASSWORD};
-        {UserBin, PassBin} ->
-            {ok, {UserBin, PassBin}}
+            auth_attempt_failed(PeerIp, User),
+            {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
+    end.
+
+%% Extract client_id from the certificate provided it was configured to do so and
+%% it is possible to extract it else returns the client_id passed as parameter
+-spec extract_client_id_from_certificate(client_id(), rabbit_net:socket()) -> {ok, client_id()} | {error, reason_code()}.
+extract_client_id_from_certificate(Client0, Socket) ->
+    case extract_ssl_cert_client_id_settings() of
+        none -> {ok, Client0};
+        SslClientIdSettings ->
+            case ssl_client_id(Socket, SslClientIdSettings) of
+                none ->
+                    {ok, Client0};
+                Client0 ->
+                    {ok, Client0};
+                Other ->
+                    ?LOG_ERROR(
+                        "MQTT login failed: client_id in the certificate (~tp) does not match the client-provided ID (~p)",
+                        [Other, Client0]),
+                    {error, ?RC_CLIENT_IDENTIFIER_NOT_VALID}
+            end
     end.
 
 -spec ensure_client_id(client_id(), boolean(), protocol_version()) ->
@@ -742,7 +770,9 @@ handle_clean_start(_, QoS, State = #state{cfg = #cfg{clean_start = true}}) ->
                 ok ->
                     {ok, SessPresent, State};
                 {error, access_refused} ->
-                    {error, ?RC_NOT_AUTHORIZED}
+                    {error, ?RC_NOT_AUTHORIZED};
+                {error, _Reason} ->
+                    {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
             end
     end;
 handle_clean_start(SessPresent, QoS,
@@ -964,7 +994,8 @@ clear_will_msg(#state{cfg = #cfg{vhost = Vhost,
     QName = #resource{virtual_host = Vhost, kind = queue, name = QNameBin},
     case delete_queue(QName, State) of
         ok -> ok;
-        {error, access_refused} -> {error, ?RC_NOT_AUTHORIZED}
+        {error, access_refused} -> {error, ?RC_NOT_AUTHORIZED};
+        {error, _Reason} -> {error, ?RC_IMPLEMENTATION_SPECIFIC_ERROR}
     end.
 
 make_will_msg(#mqtt_packet_connect{will_flag = false}) ->
@@ -997,8 +1028,8 @@ check_vhost_exists(VHost, Username, PeerIp) ->
         true  ->
             ok;
         false ->
-            auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: virtual host '~s' does not exist", [VHost]),
+            auth_attempt_failed(PeerIp, Username),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
@@ -1022,25 +1053,18 @@ check_vhost_alive(VHost) ->
     end.
 
 check_user_login(VHost, Username, Password, ClientId, PeerIp, ConnName) ->
-    AuthProps = case Password of
-                    none ->
-                        %% SSL user name provided.
-                        %% Authenticating using username only.
-                        [];
-                    _ ->
-                        [{password, Password},
-                         {vhost, VHost},
-                         {client_id, ClientId}]
-                end,
+    AuthProps = [{vhost, VHost},
+                  {client_id, ClientId},
+                  {password, Password}],
     case rabbit_access_control:check_user_login(Username, AuthProps) of
         {ok, User = #user{username = Username1}} ->
             notify_auth_result(user_authentication_success, Username1, ConnName),
             {ok, User};
         {refused, Username, Msg, Args} ->
-            auth_attempt_failed(PeerIp, Username),
             ?LOG_ERROR("MQTT connection failed: access refused for user '~s':" ++ Msg,
                        [Username | Args]),
             notify_auth_result(user_authentication_failure, Username, ConnName),
+            auth_attempt_failed(PeerIp, Username),
             {error, ?RC_BAD_USER_NAME_OR_PASSWORD}
     end.
 
@@ -1069,9 +1093,9 @@ check_vhost_access(VHost, User = #user{username = Username}, ClientId, PeerIp) -
         ok ->
             {ok, AuthzCtx}
     catch exit:#amqp_error{name = not_allowed} ->
-              auth_attempt_failed(PeerIp, Username),
               ?LOG_ERROR("MQTT connection failed: access refused for user '~s' to vhost '~s'",
                          [Username, VHost]),
+              auth_attempt_failed(PeerIp, Username),
               {error, ?RC_NOT_AUTHORIZED}
     end.
 
@@ -1080,10 +1104,31 @@ check_user_loopback(Username, PeerIp) ->
         ok ->
             ok;
         not_allowed ->
+            ?LOG_WARNING("MQTT login failed: user '~s' can only connect via localhost",
+                         [Username]),
             auth_attempt_failed(PeerIp, Username),
-            ?LOG_WARNING(
-              "MQTT login failed: user '~s' can only connect via localhost", [Username]),
             {error, ?RC_NOT_AUTHORIZED}
+    end.
+
+
+ensure_credential_expiry_timer(User = #user{username = Username}, PeerIp) ->
+    case rabbit_access_control:expiry_timestamp(User) of
+        never ->
+            ok;
+        Ts when is_integer(Ts) ->
+            Time = (Ts - os:system_time(second)) * 1000,
+            ?LOG_DEBUG("Credential expires in ~b ms frow now "
+                       "(absolute timestamp = ~b seconds since epoch)",
+                       [Time, Ts]),
+            case Time > 0 of
+                true ->
+                    _TimerRef = erlang:send_after(Time, self(), credential_expired),
+                    ok;
+                false ->
+                    ?LOG_WARNING("Credential expired ~b ms ago", [abs(Time)]),
+                    auth_attempt_failed(PeerIp, Username),
+                    {error, ?RC_NOT_AUTHORIZED}
+            end
     end.
 
 get_vhost(UserBin, none, Port) ->
@@ -1173,34 +1218,43 @@ get_vhost_from_port_mapping(Port, Mapping) ->
     Res.
 
 creds(User, Pass, SSLLoginName) ->
-    DefaultUser   = rabbit_mqtt_util:env(default_user),
-    DefaultPass   = rabbit_mqtt_util:env(default_pass),
-    {ok, Anon}    = application:get_env(?APP_NAME, allow_anonymous),
-    {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
-    HaveDefaultCreds = Anon =:= true andalso
-        is_binary(DefaultUser) andalso
-        is_binary(DefaultPass),
-
     CredentialsProvided = User =/= undefined orelse Pass =/= undefined,
-    CorrectCredentials = is_binary(User) andalso is_binary(Pass) andalso Pass =/= <<>>,
+    ValidCredentials = is_binary(User) andalso is_binary(Pass) andalso Pass =/= <<>>,
+    {ok, TLSAuth} = application:get_env(?APP_NAME, ssl_cert_login),
     SSLLoginProvided = TLSAuth =:= true andalso SSLLoginName =/= none,
 
-    case {CredentialsProvided, CorrectCredentials, SSLLoginProvided, HaveDefaultCreds} of
-        %% Username and password take priority
-        {true, true, _, _}          -> {User, Pass};
-        %% Either username or password is provided
-        {true, false, _, _}         -> {invalid_creds, {User, Pass}};
-        %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
-        %% Authenticating using username only.
-        {false, false, true, _}     -> {SSLLoginName, none};
-        %% Anonymous connection uses default credentials
-        {false, false, false, true} -> {DefaultUser, DefaultPass};
-        _                           -> nocreds
+    case {CredentialsProvided, ValidCredentials, SSLLoginProvided} of
+        {true, true, _} ->
+            %% Username and password take priority
+            {ok, User, Pass};
+        {true, false, _} ->
+            %% Either username or password is provided
+            {invalid_creds, {User, Pass}};
+        {false, false, true} ->
+            %% rabbitmq_mqtt.ssl_cert_login is true. SSL user name provided.
+            %% Authenticating using username only.
+            {ok, SSLLoginName, none};
+        {false, false, false} ->
+            {ok, AllowAnon} = application:get_env(?APP_NAME, allow_anonymous),
+            case AllowAnon of
+                true ->
+                    case rabbit_auth_mechanism_anonymous:credentials() of
+                        {ok, _, _} = Ok ->
+                            Ok;
+                        error ->
+                            nocreds
+                    end;
+                false ->
+                    nocreds
+            end;
+        _ ->
+            nocreds
     end.
 
 -spec auth_attempt_failed(inet:ip_address(), binary()) -> ok.
 auth_attempt_failed(PeerIp, Username) ->
-    rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt).
+    rabbit_core_metrics:auth_attempt_failed(PeerIp, Username, mqtt),
+    timer:sleep(?SILENT_CLOSE_DELAY).
 
 maybe_downgrade_qos(?QOS_0) -> ?QOS_0;
 maybe_downgrade_qos(?QOS_1) -> ?QOS_1;
@@ -1273,8 +1327,10 @@ ensure_queue(QoS, State) ->
             case delete_queue(QName, State) of
                 ok ->
                     create_queue(QoS, State);
-                {error, access_refused} = E ->
-                    E
+                {error, _} = Err ->
+                    Err;
+                {protocol_error, _, _, _} = Err ->
+                    {error, Err}
             end;
         {error, not_found} ->
             create_queue(QoS, State)
@@ -1779,7 +1835,10 @@ maybe_delete_mqtt_qos0_queue(_) ->
     ok.
 
 -spec delete_queue(rabbit_amqqueue:name(), state()) ->
-    ok | {error, access_refused}.
+    ok |
+    {error, access_refused} |
+    {error, timeout} |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete_queue(QName,
              #state{auth_state = #auth_state{
                                     user = User = #user{username = Username},
@@ -1791,8 +1850,12 @@ delete_queue(QName,
       fun (Q) ->
               case check_resource_access(User, QName, configure, AuthzCtx) of
                   ok ->
-                      {ok, _N} = rabbit_queue_type:delete(Q, false, false, Username),
-                      ok;
+                      case rabbit_queue_type:delete(Q, false, false, Username) of
+                          {ok, _} ->
+                              ok;
+                          Err ->
+                              Err
+                      end;
                   Err ->
                       Err
               end
@@ -2247,6 +2310,37 @@ info(Other, _) -> throw({bad_argument, Other}).
 ssl_login_name(Sock) ->
     case rabbit_net:peercert(Sock) of
         {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(C) of
+                                    unsafe    -> none;
+                                    not_found -> none;
+                                    Name      -> Name
+                                end;
+        {error, no_peercert} -> none;
+        nossl                -> none
+    end.
+
+-spec extract_ssl_cert_client_id_settings() -> none | rabbit_ssl:ssl_cert_login_type().
+extract_ssl_cert_client_id_settings() ->
+    case application:get_env(?APP_NAME, ssl_cert_client_id_from) of
+        {ok, Mode} ->
+            case Mode of
+                subject_alternative_name -> extract_client_id_san_type(Mode);
+                _ -> {Mode, undefined, undefined}
+            end;
+        undefined -> none
+    end.
+
+extract_client_id_san_type(Mode) ->
+    {Mode,
+        application:get_env(?APP_NAME, ssl_cert_client_id_san_type, dns),
+        application:get_env(?APP_NAME, ssl_cert_client_id_san_index, 0)
+    }.
+
+
+-spec ssl_client_id(rabbit_net:socket(), rabbit_ssl:ssl_cert_login_type()) ->
+    none | binary().
+ssl_client_id(Sock, SslClientIdSettings) ->
+    case rabbit_net:peercert(Sock) of
+        {ok, C}              -> case rabbit_ssl:peer_cert_auth_name(SslClientIdSettings, C) of
                                     unsafe    -> none;
                                     not_found -> none;
                                     Name      -> Name

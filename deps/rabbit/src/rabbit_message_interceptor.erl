@@ -27,9 +27,9 @@ intercept(Msg, set_header_routing_node, Overwrite) ->
     Node = atom_to_binary(node()),
     set_annotation(Msg, ?HEADER_ROUTING_NODE, Node, Overwrite);
 intercept(Msg0, set_header_timestamp, Overwrite) ->
-    Millis = os:system_time(millisecond),
-    Msg = set_annotation(Msg0, ?HEADER_TIMESTAMP, Millis, Overwrite),
-    set_timestamp(Msg, Millis, Overwrite).
+    Ts = mc:get_annotation(?ANN_RECEIVED_AT_TIMESTAMP, Msg0),
+    Msg = set_annotation(Msg0, ?HEADER_TIMESTAMP, Ts, Overwrite),
+    set_timestamp(Msg, Ts, Overwrite).
 
 -spec set_annotation(mc:state(), mc:ann_key(), mc:ann_value(), boolean()) -> mc:state().
 set_annotation(Msg, Key, Value, Overwrite) ->

@@ -10,6 +10,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/khepri.hrl").
+
 -export([
          get_all/0,
          get_all/1,
@@ -24,6 +26,7 @@
          peek_serial/1,
          next_serial/1,
          delete/2,
+         delete_all/1,
          delete_serial/1,
          recover/1,
          match/1,
@@ -41,17 +44,16 @@
          get_in_khepri_tx/1,
          update_in_mnesia_tx/2,
          update_in_khepri_tx/2,
-         path/1
+         clear_exchanges_in_khepri/0,
+         clear_exchange_serials_in_khepri/0
          ]).
 
 %% For testing
 -export([clear/0]).
 
 -export([
-         khepri_exchange_path/1,
-         khepri_exchange_serial_path/1,
-         khepri_exchanges_path/0,
-         khepri_exchange_serials_path/0
+         khepri_exchange_path/1, khepri_exchange_path/2,
+         khepri_exchange_serial_path/1, khepri_exchange_serial_path/2
         ]).
 
 -define(MNESIA_TABLE, rabbit_exchange).
@@ -81,7 +83,8 @@ get_all_in_mnesia() ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, #exchange{_ = '_'}).
 
 get_all_in_khepri() ->
-    rabbit_db:list_in_khepri(khepri_exchanges_path() ++ [rabbit_khepri:if_has_data_wildcard()]).
+    Path = khepri_exchange_path(?KHEPRI_WILDCARD_STAR, #if_has_data{}),
+    rabbit_db:list_in_khepri(Path).
 
 -spec get_all(VHostName) -> [Exchange] when
       VHostName :: vhost:name(),
@@ -103,7 +106,8 @@ get_all_in_mnesia(VHost) ->
     rabbit_db:list_in_mnesia(?MNESIA_TABLE, Match).
 
 get_all_in_khepri(VHost) ->
-    rabbit_db:list_in_khepri(khepri_exchanges_path() ++ [VHost, rabbit_khepri:if_has_data_wildcard()]).
+    Path = khepri_exchange_path(VHost, #if_has_data{}),
+    rabbit_db:list_in_khepri(Path).
 
 %% -------------------------------------------------------------------
 %% get_all_durable().
@@ -127,7 +131,7 @@ get_all_durable_in_mnesia() ->
     rabbit_db:list_in_mnesia(rabbit_durable_exchange, #exchange{_ = '_'}).
 
 get_all_durable_in_khepri() ->
-    rabbit_db:list_in_khepri(khepri_exchanges_path() ++ [rabbit_khepri:if_has_data_wildcard()]).
+    get_all_in_khepri().
 
 %% -------------------------------------------------------------------
 %% list().
@@ -151,11 +155,13 @@ list_in_mnesia() ->
     mnesia:dirty_all_keys(?MNESIA_TABLE).
 
 list_in_khepri() ->
-    case rabbit_khepri:match(khepri_exchanges_path() ++
-                                 [rabbit_khepri:if_has_data_wildcard()]) of
-        {ok, Map} ->
-            maps:fold(fun(_K, X, Acc) -> [X#exchange.name | Acc] end, [], Map);
-        _ ->
+    try
+        ets:foldr(
+          fun(#exchange{name = Name}, Acc) ->
+                  [Name | Acc]
+          end, [], ?KHEPRI_PROJECTION)
+    catch
+        error:badarg ->
             []
     end.
 
@@ -200,7 +206,8 @@ get_in_khepri(Name) ->
       Ret :: [Exchange :: rabbit_types:exchange()].
 
 get_in_khepri_tx(Name) ->
-    case khepri_tx:get(khepri_exchange_path(Name)) of
+    Path = khepri_exchange_path(Name),
+    case khepri_tx:get(Path) of
         {ok, X} -> [X];
         _ -> []
     end.
@@ -259,7 +266,11 @@ count_in_mnesia() ->
     mnesia:table_info(?MNESIA_TABLE, size).
 
 count_in_khepri() ->
-    rabbit_khepri:count_children(khepri_exchanges_path() ++ [?KHEPRI_WILDCARD_STAR]).
+    Path = khepri_exchange_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:count(Path) of
+        {ok, Count} -> Count;
+        _           -> 0
+    end.
 
 %% -------------------------------------------------------------------
 %% update().
@@ -562,7 +573,7 @@ next_serial_in_khepri_tx(#exchange{name = XName}) ->
       IfUnused :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {deleted, Exchange, [Binding], Deletions} |
              {error, not_found} |
              {error, in_use} |
@@ -613,7 +624,7 @@ unconditional_delete_in_mnesia(X, OnlyDurable) ->
       RemoveBindingsForSource :: boolean(),
       Exchange :: rabbit_types:exchange(),
       Binding :: rabbit_types:binding(),
-      Deletions :: dict:dict(),
+      Deletions :: rabbit_binding:deletions(),
       Ret :: {error, not_found} | {error, in_use} | {deleted, Exchange, [Binding], Deletions}.
 delete_in_mnesia(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = mnesia:delete({?MNESIA_TABLE, XName}),
@@ -646,6 +657,69 @@ unconditional_delete_in_khepri(X, OnlyDurable) ->
 delete_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
     ok = khepri_tx:delete(khepri_exchange_path(XName)),
     rabbit_db_binding:delete_all_for_exchange_in_khepri(X, OnlyDurable, RemoveBindingsForSource).
+
+%% -------------------------------------------------------------------
+%% delete_all().
+%% -------------------------------------------------------------------
+
+-spec delete_all(VHostName) -> Ret when
+      VHostName :: vhost:name(),
+      Deletions :: rabbit_binding:deletions(),
+      Ret :: {ok, Deletions}.
+%% @doc Deletes all exchanges for a given vhost.
+%%
+%% @returns an `{ok, Deletions}' tuple containing the {@link
+%% rabbit_binding:deletions()} caused by deleting the exchanges under the given
+%% vhost.
+%%
+%% @private
+
+delete_all(VHostName) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> delete_all_in_mnesia(VHostName) end,
+        khepri => fun() -> delete_all_in_khepri(VHostName) end
+       }).
+
+delete_all_in_mnesia(VHostName) ->
+    rabbit_mnesia:execute_mnesia_transaction(
+      fun() ->
+              delete_all_in_mnesia_tx(VHostName)
+      end).
+
+delete_all_in_mnesia_tx(VHostName) ->
+    Match = #exchange{name = rabbit_misc:r(VHostName, exchange), _ = '_'},
+    Xs = mnesia:match_object(?MNESIA_TABLE, Match, write),
+    Deletions =
+    lists:foldl(
+      fun(X, Acc) ->
+              {deleted, #exchange{name = XName}, Bindings, XDeletions} =
+              unconditional_delete_in_mnesia( X, false),
+              XDeletions1 = rabbit_binding:add_deletion(
+                              XName, X, deleted, Bindings, XDeletions),
+              rabbit_binding:combine_deletions(Acc, XDeletions1)
+      end, rabbit_binding:new_deletions(), Xs),
+    {ok, Deletions}.
+
+delete_all_in_khepri(VHostName) ->
+    rabbit_khepri:transaction(
+      fun() ->
+              delete_all_in_khepri_tx(VHostName)
+      end, rw, #{timeout => infinity}).
+
+delete_all_in_khepri_tx(VHostName) ->
+    Pattern = khepri_exchange_path(VHostName, ?KHEPRI_WILDCARD_STAR),
+    {ok, NodeProps} = khepri_tx_adv:delete_many(Pattern),
+    Deletions =
+    maps:fold(
+      fun(_Path, #{data := X}, Deletions) ->
+              {deleted, #exchange{name = XName}, Bindings, XDeletions} =
+                rabbit_db_binding:delete_all_for_exchange_in_khepri(
+                  X, false, true),
+              Deletions1 = rabbit_binding:add_deletion(
+                             XName, X, deleted, Bindings, XDeletions),
+              rabbit_binding:combine_deletions(Deletions, Deletions1)
+      end, rabbit_binding:new_deletions(), NodeProps),
+    {ok, Deletions}.
 
 %% -------------------------------------------------------------------
 %% delete_serial().
@@ -717,8 +791,8 @@ recover_in_khepri(VHost) ->
     %% cannot be skipped and stopping the node is not an option -
     %% the next boot most likely would behave the same way.
     %% Any other request stays with the default timeout, currently 30s.
-    Exchanges0 = rabbit_db:list_in_khepri(khepri_exchanges_path() ++ [VHost, rabbit_khepri:if_has_data_wildcard()],
-                                #{timeout => infinity}),
+    Path = khepri_exchange_path(VHost, #if_has_data{}),
+    Exchanges0 = rabbit_db:list_in_khepri(Path, #{timeout => infinity}),
     Exchanges = [rabbit_exchange_decorator:set(X) || X <- Exchanges0],
 
     rabbit_khepri:transaction(
@@ -763,7 +837,8 @@ match_in_mnesia(Pattern) ->
 
 match_in_khepri(Pattern0) ->
     Pattern = #if_data_matches{pattern = Pattern0},
-    rabbit_db:list_in_khepri(khepri_exchanges_path() ++ [?KHEPRI_WILDCARD_STAR, Pattern]).
+    Path = khepri_exchange_path(?KHEPRI_WILDCARD_STAR, Pattern),
+    rabbit_db:list_in_khepri(Path).
 
 %% -------------------------------------------------------------------
 %% exists().
@@ -812,8 +887,17 @@ clear_in_mnesia() ->
     ok.
 
 clear_in_khepri() ->
-    khepri_delete(khepri_exchanges_path()),
-    khepri_delete(khepri_exchange_serials_path()).
+    clear_exchanges_in_khepri(),
+    clear_exchange_serials_in_khepri().
+
+clear_exchanges_in_khepri() ->
+    Path = khepri_exchange_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    khepri_delete(Path).
+
+clear_exchange_serials_in_khepri() ->
+    Path = khepri_exchange_serial_path(
+             ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    khepri_delete(Path).
 
 khepri_delete(Path) ->
     case rabbit_khepri:delete(Path) of
@@ -873,25 +957,14 @@ maybe_auto_delete_in_khepri(XName, OnlyDurable) ->
 %% Khepri paths
 %% -------------------------------------------------------------------
 
-khepri_exchanges_path() ->
-    [?MODULE, exchanges].
-
 khepri_exchange_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, exchanges, VHost, Name].
+    khepri_exchange_path(VHost, Name).
 
-khepri_exchange_serials_path() ->
-    [?MODULE, exchange_serials].
+khepri_exchange_path(VHost, Name) when ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [exchanges, Name].
 
-khepri_exchange_serial_path(#resource{virtual_host = VHost, name = Name}) ->
-    [?MODULE, exchange_serials, VHost, Name].
+khepri_exchange_serial_path(#resource{} = Resource) ->
+    khepri_exchange_path(Resource) ++ [serial].
 
-%% -------------------------------------------------------------------
-%% path().
-%% -------------------------------------------------------------------
-
--spec path(ExchangeName) -> Path when
-      ExchangeName :: rabbit_exchange:name(),
-      Path :: khepri_path:path().
-
-path(Name) ->
-    khepri_exchange_path(Name).
+khepri_exchange_serial_path(VHost, Name) ->
+    khepri_exchange_path(VHost, Name) ++ [serial].
