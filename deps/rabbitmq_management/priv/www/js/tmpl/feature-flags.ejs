@@ -30,9 +30,14 @@
     <%
        for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
-	 if (feature_flag.stability == "experimental") {
-	   continue;
-	 }
+         if (feature_flag.stability == "required") {
+           /* Hide required feature flags. There is nothing the user can do
+            * about them and they just add noise to the UI. */
+           continue;
+         }
+         if (feature_flag.stability == "experimental") {
+           continue;
+         }
          var state_color = "grey";
          if (feature_flag.state == "enabled") {
            state_color = "green";
@@ -103,9 +108,9 @@ These flags can be enabled in production deployments after an appropriate amount
     <%
        for (var i = 0; i < feature_flags.length; i++) {
          var feature_flag = feature_flags[i];
-	 if (feature_flag.stability != "experimental") {
-	   continue;
-	 }
+         if (feature_flag.stability != "experimental") {
+           continue;
+         }
          var state_color = "grey";
          if (feature_flag.state == "enabled") {
            state_color = "green";
@@ -119,14 +124,14 @@ These flags can be enabled in production deployments after an appropriate amount
          <td><%= fmt_string(feature_flag.name) %></td>
          <td class="c">
            <% if (feature_flag.state == "disabled") { %>
-	      <div>
+              <div>
               <input id="<%= feature_flag.name %>" type="checkbox" class="riskCheckbox" onclick="this.parentNode.querySelector('.enable-feature-flag input[type=submit]').disabled = !this.checked;">
               <label for="<%= feature_flag.name %>">I understand that once enabled, this feature flag cannot be disabled</label><br>
-	      <br>
+              <br>
               <form action="#/feature-flags-enable" method="put" style="display: inline-block" class="enable-feature-flag">
               <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
               <input type="submit" value="Enable" class="c" disabled="disabled"/>
-	      </div>
+              </div>
            </form>
            <% } else { %>
            <abbr class="status-<%= fmt_string(state_color) %>"
