@@ -1425,25 +1425,18 @@ policy_repair(Config) ->
 
     % Wait for the queue to be available again. 
     lists:foreach(fun(Srv) ->
-        GetPidUntil = fun GetPidUntil() ->
-            case
-                rabbit_ct_broker_helpers:rpc(
-                    Config,
-                    Srv,
-                    erlang,
-                    whereis,
-                    [RaName])
-            of
-                undefined ->
-                    timer:sleep(500),
-                    GetPidUntil(); 
-                Pid when is_pid(Pid) -> 
-                    ok
-            end
+        rabbit_ct_helpers:await_condition(
+            fun () ->
+                is_pid( 
+                    rabbit_ct_broker_helpers:rpc(
+                        Config,
+                        Srv,
+                        erlang,
+                        whereis,
+                        [RaName]))
+            end)
         end,
-        GetPidUntil()
-    end,
-    Servers),
+        Servers),
     
     % Wait for the policy to apply
     ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
