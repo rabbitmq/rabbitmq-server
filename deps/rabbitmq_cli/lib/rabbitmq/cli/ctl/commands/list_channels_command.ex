@@ -16,7 +16,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListChannelsCommand do
   @info_keys ~w(pid connection name number user vhost transactional
                 confirm consumer_count messages_unacknowledged
                 messages_uncommitted acks_uncommitted messages_unconfirmed
-                prefetch_count global_prefetch_count)a
+                prefetch_count)a
 
   def info_keys(), do: @info_keys
 
