@@ -304,15 +304,12 @@ var HELP = {
       </dl>',
 
     'channel-prefetch':
-      'Channel prefetch counts. \
+      'Channel prefetch count.\
        <p> \
-         Each channel can have two prefetch counts: A per-consumer count, which \
-         will limit each new consumer created on the channel, and a global \
-         count, which is shared between all consumers on the channel.\
+         Each channel can have a prefetch count. The prefetch is the number of messages that will be held \
+         by the client. Setting a value of 0 will result in an unlimited prefetch. \
        </p> \
-       <p> \
-         This column shows one, the other, or both limits if they are set. \
-       </p>',
+       ',
 
     'file-descriptors':
       '<p>File descriptor count and limit, as reported by the operating \

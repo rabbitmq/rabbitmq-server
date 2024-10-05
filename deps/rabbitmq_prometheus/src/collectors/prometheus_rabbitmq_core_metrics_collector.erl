@@ -170,7 +170,7 @@
         {2, undefined, channel_messages_uncommitted, gauge, "Messages received in a transaction but not yet committed", messages_uncommitted},
         {2, undefined, channel_acks_uncommitted, gauge, "Message acknowledgements in a transaction not yet committed", acks_uncommitted},
         {2, undefined, consumer_prefetch, gauge, "Limit of unacknowledged messages for each consumer", prefetch_count},
-        {2, undefined, channel_prefetch, gauge, "Total limit of unacknowledged messages for all consumers on a channel", global_prefetch_count}
+        {2, undefined, channel_prefetch, gauge, "Deprecated and will be removed in a future version", global_prefetch_count}
     ]},
 
     {channel_exchange_metrics, [
