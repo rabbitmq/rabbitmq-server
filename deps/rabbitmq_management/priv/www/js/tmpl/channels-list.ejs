@@ -157,9 +157,6 @@
       <% if (channel.prefetch_count != 0) { %>
         <%= channel.prefetch_count %><br/>
       <% } %>
-      <% if (channel.global_prefetch_count != 0) { %>
-        <%= channel.global_prefetch_count %> (global)
-      <% } %>
     </td>
 <% } %>
 <% if (show_column('channels', 'msgs-unacked')) { %>
