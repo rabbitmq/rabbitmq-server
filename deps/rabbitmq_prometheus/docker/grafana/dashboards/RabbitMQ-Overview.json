@@ -9,13 +9,13 @@
       "pluginName": "Prometheus"
     }
   ],
-  "__elements": [],
+  "__elements": {},
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "8.3.4"
+      "version": "11.2.2"
     },
     {
       "type": "datasource",
@@ -46,7 +46,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": "-- Grafana --",
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -66,7 +69,6 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1659711638455,
   "links": [
     {
       "icon": "doc",
@@ -124,13 +126,13 @@
         "overrides": []
       },
       "id": 64,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -138,11 +140,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_queue_messages_ready * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
@@ -206,13 +214,13 @@
         "y": 0
       },
       "id": 62,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -220,11 +228,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_received_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -287,13 +301,13 @@
         "y": 0
       },
       "id": 66,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -301,11 +315,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_global_publishers * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -367,13 +387,13 @@
         "y": 0
       },
       "id": 37,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -381,11 +401,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_connections * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -448,13 +474,13 @@
         "y": 0
       },
       "id": 40,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -462,11 +488,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_queues * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -528,13 +560,13 @@
         "y": 3
       },
       "id": 65,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -542,11 +574,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_queue_messages_unacked * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
@@ -609,13 +647,13 @@
         "y": 3
       },
       "id": 63,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -623,11 +661,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_redelivered_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_get_auto_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\nsum(rate(rabbitmq_global_messages_delivered_get_manual_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "hide": false,
@@ -690,13 +734,13 @@
         "y": 3
       },
       "id": 41,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -704,11 +748,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_consumers * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -770,13 +820,13 @@
         "y": 3
       },
       "id": 38,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -784,11 +834,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_channels * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -850,13 +906,13 @@
         "y": 3
       },
       "id": 67,
-      "links": [],
       "maxDataPoints": 100,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -864,11 +920,17 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_build_info * on(instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -894,10 +956,23 @@
       },
       "id": 4,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "NODES",
       "type": "row"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -905,7 +980,10 @@
           },
           "custom": {
             "align": "auto",
-            "displayMode": "auto"
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
@@ -1191,9 +1269,10 @@
         "y": 7
       },
       "id": 69,
-      "links": [],
       "options": {
+        "cellHeight": "sm",
         "footer": {
+          "countRows": false,
           "fields": "",
           "reducer": [
             "sum"
@@ -1202,7 +1281,7 @@
         },
         "showHeader": true
       },
-      "pluginVersion": "8.3.4",
+      "pluginVersion": "11.2.2",
       "targets": [
         {
           "datasource": {
@@ -1241,9 +1320,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1252,6 +1335,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1450,7 +1534,6 @@
         "y": 11
       },
       "id": 7,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -1458,16 +1541,22 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "none"
         }
       },
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "(rabbitmq_resident_memory_limit_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_resident_memory_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -1491,9 +1580,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1502,6 +1595,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1700,7 +1794,6 @@
         "y": 11
       },
       "id": 8,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -1708,16 +1801,22 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "none"
         }
       },
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "rabbitmq_disk_space_available_bytes * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
@@ -1741,9 +1840,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -1752,6 +1855,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -1949,7 +2053,6 @@
         "y": 11
       },
       "id": 2,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -1957,16 +2060,22 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "none"
         }
       },
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "(rabbitmq_process_max_fds * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_fds * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -1990,9 +2099,13 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
@@ -2001,6 +2114,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -2198,7 +2312,6 @@
         "y": 15
       },
       "id": 5,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -2206,16 +2319,22 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
-          "mode": "multi"
+          "mode": "multi",
+          "sort": "none"
         }
       },
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "(rabbitmq_process_max_tcp_sockets * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) -\n(rabbitmq_process_open_tcp_sockets * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
           "format": "time_series",
           "instant": false,
@@ -2241,6 +2360,15 @@
       },
       "id": 27,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "QUEUED MESSAGES",
       "type": "row"
     },
@@ -2291,8 +2419,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2462,7 +2589,6 @@
         "y": 20
       },
       "id": 9,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -2470,8 +2596,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -2480,6 +2607,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_queue_messages_ready * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -2538,8 +2669,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2709,7 +2839,6 @@
         "y": 20
       },
       "id": 19,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -2717,8 +2846,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -2727,6 +2857,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rabbitmq_queue_messages_unacked * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -2752,6 +2886,15 @@
       },
       "id": 11,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "INCOMING MESSAGES",
       "type": "row"
     },
@@ -2802,8 +2945,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2973,7 +3115,6 @@
         "y": 26
       },
       "id": 13,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -2981,8 +3122,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -2991,6 +3133,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_received_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3049,8 +3195,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3220,7 +3365,6 @@
         "y": 26
       },
       "id": 18,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -3228,8 +3372,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -3238,6 +3383,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_confirmed_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3296,8 +3445,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3467,7 +3615,6 @@
         "y": 31
       },
       "id": 61,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -3475,8 +3622,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -3485,6 +3633,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_routed_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3543,8 +3695,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3714,7 +3865,6 @@
         "y": 31
       },
       "id": 12,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -3722,8 +3872,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -3732,6 +3883,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_received_confirm_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"} - \nrate(rabbitmq_global_messages_confirmed_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}\n) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3789,8 +3944,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "red",
@@ -3825,7 +3979,6 @@
         "y": 36
       },
       "id": 34,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -3833,8 +3986,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -3843,6 +3997,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_unroutable_dropped_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3900,8 +4058,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "red",
@@ -3936,7 +4093,6 @@
         "y": 36
       },
       "id": 16,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -3944,8 +4100,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -3954,6 +4111,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_unroutable_returned_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -3979,6 +4140,15 @@
       },
       "id": 29,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "OUTGOING MESSAGES",
       "type": "row"
     },
@@ -4029,8 +4199,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -4200,7 +4369,6 @@
         "y": 42
       },
       "id": 14,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -4208,8 +4376,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -4218,6 +4387,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(\n  (rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n  (rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -4275,8 +4448,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -4450,7 +4622,6 @@
         "y": 42
       },
       "id": 15,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -4458,8 +4629,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -4468,6 +4640,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_redelivered_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -4526,8 +4702,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -4697,7 +4872,6 @@
         "y": 47
       },
       "id": 20,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -4705,8 +4879,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -4715,6 +4890,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_delivered_consume_manual_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -4773,8 +4952,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -4944,7 +5122,6 @@
         "y": 47
       },
       "id": 21,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -4952,8 +5129,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -4962,6 +5140,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_delivered_consume_auto_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -5020,8 +5202,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -5191,7 +5372,6 @@
         "y": 52
       },
       "id": 22,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -5199,8 +5379,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -5209,6 +5390,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_acknowledged_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -5266,8 +5451,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "red",
@@ -5302,7 +5486,6 @@
         "y": 52
       },
       "id": 24,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -5310,8 +5493,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -5320,6 +5504,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_delivered_get_auto_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -5377,8 +5565,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "red",
@@ -5413,7 +5600,6 @@
         "y": 57
       },
       "id": 25,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -5421,8 +5607,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -5431,6 +5618,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_get_empty_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -5488,8 +5679,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "red",
@@ -5524,7 +5714,6 @@
         "y": 57
       },
       "id": 23,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -5532,8 +5721,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -5542,6 +5732,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_global_messages_delivered_get_manual_ack_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -5567,6 +5761,15 @@
       },
       "id": 53,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "QUEUES",
       "type": "row"
     },
@@ -5616,8 +5819,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -5787,7 +5989,6 @@
         "y": 63
       },
       "id": 57,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -5795,8 +5996,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -5805,6 +6007,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "rabbitmq_queues * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
@@ -5863,8 +6069,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -6038,7 +6243,6 @@
         "y": 63
       },
       "id": 58,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -6046,8 +6250,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -6056,6 +6261,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_queues_declared_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -6113,8 +6322,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -6288,7 +6496,6 @@
         "y": 63
       },
       "id": 60,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -6296,8 +6503,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -6306,6 +6514,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_queues_created_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -6363,8 +6575,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -6538,7 +6749,6 @@
         "y": 63
       },
       "id": 59,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -6546,8 +6756,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -6556,6 +6767,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_queues_deleted_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -6581,6 +6796,15 @@
       },
       "id": 51,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "CHANNELS",
       "type": "row"
     },
@@ -6630,8 +6854,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -6801,7 +7024,6 @@
         "y": 69
       },
       "id": 54,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -6809,8 +7031,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -6819,6 +7042,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "rabbitmq_channels * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
@@ -6876,8 +7103,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -7051,7 +7277,6 @@
         "y": 69
       },
       "id": 55,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -7059,8 +7284,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -7069,6 +7295,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_channels_opened_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -7126,8 +7356,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -7301,7 +7530,6 @@
         "y": 69
       },
       "id": 56,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -7309,8 +7537,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -7319,6 +7548,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_channels_closed_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -7344,6 +7577,15 @@
       },
       "id": 46,
       "panels": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "refId": "A"
+        }
+      ],
       "title": "CONNECTIONS",
       "type": "row"
     },
@@ -7393,8 +7635,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -7564,7 +7805,6 @@
         "y": 75
       },
       "id": 47,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -7572,8 +7812,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -7582,6 +7823,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "rabbitmq_connections * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "instant": false,
@@ -7639,8 +7884,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -7814,7 +8058,6 @@
         "y": 75
       },
       "id": 48,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -7822,8 +8065,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -7832,6 +8076,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_connections_opened_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -7890,8 +8138,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "transparent",
-                "value": null
+                "color": "transparent"
               },
               {
                 "color": "orange",
@@ -8065,7 +8312,6 @@
         "y": 75
       },
       "id": 49,
-      "links": [],
       "options": {
         "legend": {
           "calcs": [
@@ -8073,8 +8319,9 @@
             "max",
             "min"
           ],
-          "displayMode": "hidden",
-          "placement": "bottom"
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
         },
         "tooltip": {
           "mode": "multi"
@@ -8083,6 +8330,10 @@
       "pluginVersion": "8.3.4",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "expr": "sum(rate(rabbitmq_connections_closed_total[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) by(rabbitmq_node)",
           "format": "time_series",
           "instant": false,
@@ -8096,19 +8347,14 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 34,
-  "style": "dark",
+  "schemaVersion": 39,
   "tags": [
     "rabbitmq-prometheus"
   ],
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "default",
-          "value": "default"
-        },
+        "current": {},
         "datasource": "PBFA97CFB590B2093",
         "hide": 2,
         "includeAll": false,
@@ -8203,6 +8449,6 @@
   "timezone": "",
   "title": "RabbitMQ-Overview",
   "uid": "Kn5xm-gZk",
-  "version": 20220805,
+  "version": 1,
   "weekStart": ""
 }
