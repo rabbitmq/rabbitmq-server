@@ -926,7 +926,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
       exclusive_consume := ExclusiveConsume,
       args := Args,
       ok_msg := OkMsg,
-      acting_user :=  ActingUser} = Spec,
+      acting_user := ActingUser} = Spec,
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
     QName = amqqueue:get_name(Q),

@@ -737,15 +737,13 @@ translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
 
 translate_filters(Filters)
-  when is_map(Filters) andalso
-       map_size(Filters) == 0 ->
+  when map_size(Filters) =:= 0 ->
     undefined;
-translate_filters(Filters)
-  when is_map(Filters) ->
+translate_filters(Filters) ->
     {map,
      maps:fold(
        fun
-          (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+           (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
                %% special case conversion
                Key = sym(K),
                [{Key, {described, Key, translate_legacy_amqp_headers_binding(V)}} | Acc];

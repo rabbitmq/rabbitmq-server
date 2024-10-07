@@ -518,16 +518,16 @@ handle_connection_frame(
     ok = rabbit_event:notify(connection_created, Infos),
     ok = rabbit_amqp1_0:register_connection(self()),
     Caps = [%% https://docs.oasis-open.org/amqp/linkpair/v1.0/cs01/linkpair-v1.0-cs01.html#_Toc51331306
-            {symbol, <<"LINK_PAIR_V1_0">>},
+            <<"LINK_PAIR_V1_0">>,
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-anonymous-relay
-            {symbol, <<"ANONYMOUS-RELAY">>}],
+            <<"ANONYMOUS-RELAY">>],
     Open = #'v1_0.open'{
               channel_max = {ushort, EffectiveChannelMax},
               max_frame_size = {uint, IncomingMaxFrameSize},
               %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold" [2.4.5]
               idle_time_out = {uint, ReceiveTimeoutMillis div 2},
               container_id = {utf8, rabbit_nodes:cluster_name()},
-              offered_capabilities = {array, symbol, Caps},
+              offered_capabilities = rabbit_amqp_util:capabilities(Caps),
               properties = server_properties()},
     ok = send_on_channel0(Sock, Open),
     State;

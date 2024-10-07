@@ -21,7 +21,7 @@
 
 -define(MESSAGE_ANNOTATIONS_GUESS_SIZE, 100).
 
--define(SIMPLE_VALUE(V),
+-define(IS_SIMPLE_VALUE(V),
         is_binary(V) orelse
         is_number(V) orelse
         is_boolean(V)).
@@ -145,16 +145,32 @@ property(Prop, #v1{bare_and_footer = Bin,
     Props = amqp10_framing:decode(PropsDescribed),
     property0(Prop, Props).
 
-property0(correlation_id, #'v1_0.properties'{correlation_id = Corr}) ->
-    Corr;
-property0(message_id, #'v1_0.properties'{message_id = MsgId}) ->
-    MsgId;
-property0(user_id, #'v1_0.properties'{user_id = UserId}) ->
-    UserId;
-property0(subject, #'v1_0.properties'{subject = Subject}) ->
-    Subject;
-property0(to, #'v1_0.properties'{to = To}) ->
-    To;
+property0(message_id, #'v1_0.properties'{message_id = Val}) ->
+    Val;
+property0(user_id, #'v1_0.properties'{user_id = Val}) ->
+    Val;
+property0(to, #'v1_0.properties'{to = Val}) ->
+    Val;
+property0(subject, #'v1_0.properties'{subject = Val}) ->
+    Val;
+property0(reply_to, #'v1_0.properties'{reply_to = Val}) ->
+    Val;
+property0(correlation_id, #'v1_0.properties'{correlation_id = Val}) ->
+    Val;
+property0(content_type, #'v1_0.properties'{content_type = Val}) ->
+    Val;
+property0(content_encoding, #'v1_0.properties'{content_encoding = Val}) ->
+    Val;
+property0(absolute_expiry_time, #'v1_0.properties'{absolute_expiry_time = Val}) ->
+    Val;
+property0(creation_time, #'v1_0.properties'{creation_time = Val}) ->
+    Val;
+property0(group_id, #'v1_0.properties'{group_id = Val}) ->
+    Val;
+property0(group_sequence, #'v1_0.properties'{group_sequence = Val}) ->
+    Val;
+property0(reply_to_group_id, #'v1_0.properties'{reply_to_group_id = Val}) ->
+    Val;
 property0(_Prop, #'v1_0.properties'{}) ->
     undefined.
 
@@ -454,7 +470,7 @@ message_annotations_as_simple_map(#v1{message_annotations = Content}) ->
 message_annotations_as_simple_map0(Content) ->
     %% the section record format really is terrible
     lists:filtermap(fun({{symbol, K}, {_T, V}})
-                          when ?SIMPLE_VALUE(V) ->
+                          when ?IS_SIMPLE_VALUE(V) ->
                             {true, {K, V}};
                        (_) ->
                             false
@@ -480,7 +496,7 @@ application_properties_as_simple_map(
 application_properties_as_simple_map0(Content, L) ->
     %% the section record format really is terrible
     lists:foldl(fun({{utf8, K}, {_T, V}}, Acc)
-                      when ?SIMPLE_VALUE(V) ->
+                      when ?IS_SIMPLE_VALUE(V) ->
                         [{K, V} | Acc];
                    ({{utf8, K}, V}, Acc)
                      when V =:= undefined orelse is_boolean(V) ->
