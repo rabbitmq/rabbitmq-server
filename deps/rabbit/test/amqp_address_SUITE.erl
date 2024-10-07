@@ -18,6 +18,9 @@
         [rpc/4]).
 -import(rabbit_ct_helpers,
         [eventually/1]).
+-import(amqp_utils,
+        [flush/1,
+         wait_for_credit/1]).
 
 all() ->
     [
@@ -651,17 +654,6 @@ connection_config(Config) ->
       container_id => <<"my container">>,
       sasl => {plain, <<"guest">>, <<"guest">>}}.
 
-% before we can send messages we have to wait for credit from the server
-wait_for_credit(Sender) ->
-    receive
-        {amqp10_event, {link, Sender, credited}} ->
-            flush(?FUNCTION_NAME),
-            ok
-    after 5000 ->
-              flush(?FUNCTION_NAME),
-              ct:fail(?FUNCTION_NAME)
-    end.
-
 wait_for_settled(State, Tag) ->
     receive
         {amqp10_disposition, {State, Tag}} ->
@@ -670,12 +662,4 @@ wait_for_settled(State, Tag) ->
               Reason = {?FUNCTION_NAME, State, Tag},
               flush(Reason),
               ct:fail(Reason)
-    end.
-
-flush(Prefix) ->
-    receive Msg ->
-                ct:pal("~tp flushed: ~p~n", [Prefix, Msg]),
-                flush(Prefix)
-    after 1 ->
-              ok
     end.

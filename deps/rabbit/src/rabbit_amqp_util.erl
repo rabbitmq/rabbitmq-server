@@ -8,7 +8,8 @@
 -module(rabbit_amqp_util).
 -include("rabbit_amqp.hrl").
 
--export([protocol_error/3]).
+-export([protocol_error/3,
+         capabilities/1]).
 
 -spec protocol_error(term(), io:format(), [term()]) ->
     no_return().
@@ -17,3 +18,11 @@ protocol_error(Condition, Msg, Args) ->
     Reason = #'v1_0.error'{condition = Condition,
                            description = {utf8, Description}},
     exit(Reason).
+
+-spec capabilities([binary()]) ->
+    undefined | {array, symbol, [{symbol, binary()}]}.
+capabilities([]) ->
+    undefined;
+capabilities(Capabilities) ->
+    Caps = [{symbol, C} || C <- Capabilities],
+    {array, symbol, Caps}.

@@ -1207,9 +1207,20 @@ rabbitmq_integration_suite(
     name = "amqp_client_SUITE",
     size = "large",
     additional_beam = [
+        ":test_amqp_utils_beam",
         ":test_event_recorder_beam",
     ],
     shard_count = 3,
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+    name = "amqp_filtex_SUITE",
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
     runtime_deps = [
         "//deps/rabbitmq_amqp_client:erlang_app",
     ],
@@ -1235,6 +1246,7 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "amqp_auth_SUITE",
     additional_beam = [
+        ":test_amqp_utils_beam",
         ":test_event_recorder_beam",
     ],
     shard_count = 2,
@@ -1246,6 +1258,9 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "amqp_address_SUITE",
     shard_count = 2,
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
     runtime_deps = [
         "//deps/rabbitmq_amqp_client:erlang_app",
     ],
@@ -1358,6 +1373,7 @@ eunit(
         ":test_clustering_utils_beam",
         ":test_event_recorder_beam",
         ":test_rabbit_ct_hook_beam",
+        ":test_amqp_utils_beam",
     ],
     target = ":test_erlang_app",
     test_env = {

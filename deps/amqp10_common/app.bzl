@@ -72,7 +72,7 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
-        srcs = ["include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+        srcs = ["include/amqp10_filtex.hrl", "include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
     )
     filegroup(
         name = "private_hdrs",
