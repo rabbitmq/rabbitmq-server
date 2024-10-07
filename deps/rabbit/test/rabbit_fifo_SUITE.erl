@@ -42,12 +42,12 @@ groups() ->
     ].
 
 init_per_group(tests, Config) ->
-    [{machine_version, 4} | Config];
+    [{machine_version, 5} | Config];
 init_per_group(machine_version_conversion, Config) ->
     Config.
 
 init_per_testcase(_Testcase, Config) ->
-    FF = ?config(machine_version, Config) == 4,
+    FF = ?config(machine_version, Config) == 5,
     ok = meck:new(rabbit_feature_flags, [passthrough]),
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> FF end),
     Config.
@@ -802,6 +802,19 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
     ?assertEqual(undefined, mc:get_annotation(acquired_count, McOut)),
     ?assertEqual(1, mc:get_annotation(delivery_count, McOut)),
 
+    ok.
+
+discard_after_cancel_test(Config) ->
+    Cid = {?FUNCTION_NAME_B, self()},
+    {State0, _} = enq(Config, 1, 1, first, test_init(test)),
+    {State1, #{key := _CKey,
+               next_msg_id := MsgId}, _Effects1} =
+        checkout(Config, ?LINE, Cid, 10, State0),
+    {State2, _, _} = apply(meta(Config, ?LINE),
+                           rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
+    {State, _, _} = apply(meta(Config, ?LINE),
+                          rabbit_fifo:make_discard(Cid, [MsgId]), State2),
+    ct:pal("State ~p", [State]),
     ok.
 
 enqueued_msg_with_delivery_count_test(Config) ->
@@ -2786,44 +2799,8 @@ modify_test(Config) ->
 
     ok.
 
-ttb_test(Config) ->
-    S0 = init(#{name => ?FUNCTION_NAME,
-                queue_resource =>
-                    rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)}),
-
-
-    S1 = do_n(5_000_000,
-           fun (N, Acc) ->
-                   I = (5_000_000 - N),
-                   element(1, enq(Config, I, I, ?FUNCTION_NAME_B, Acc))
-           end, S0),
-
-
-
-    {T1, _Res} = timer:tc(fun () ->
-                               do_n(100, fun (_, S) ->
-                                               term_to_binary(S),
-                                               S1 end, S1)
-                       end),
-    ct:pal("T1 took ~bus", [T1]),
-
-
-    {T2, _} = timer:tc(fun () ->
-                               do_n(100, fun (_, S) -> term_to_iovec(S), S1 end, S1)
-                       end),
-    ct:pal("T2 took ~bus", [T2]),
-
-    ok.
-
 %% Utility
 %%
-
-do_n(0, _, A) ->
-    A;
-do_n(N, Fun, A0) ->
-    A = Fun(N, A0),
-    do_n(N-1, Fun, A).
-
 
 init(Conf) -> rabbit_fifo:init(Conf).
 make_register_enqueuer(Pid) -> rabbit_fifo:make_register_enqueuer(Pid).
