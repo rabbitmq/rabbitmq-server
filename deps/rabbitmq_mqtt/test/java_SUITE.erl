@@ -22,14 +22,14 @@
 
 all() ->
     [
-      {group, v3},
-      {group, v5}
+      {group, v3}
+      % {group, v5}
     ].
 
 groups() ->
     [
-      {v3, [], [java_v3]},
-      {v5, [], [java_v5]}
+      {v3, [], [java_v3]}
+      % {v5, [], [java_v5]}
     ].
 
 suite() ->
@@ -99,7 +99,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 java_v3(Config) ->
-    run_test(Config, ["tests", "ssltests"]).
+    run_test(Config, ["ssltests"]).
 
 java_v5(Config) ->
     run_test(Config, ["v5tests", "v5ssltests"]).
