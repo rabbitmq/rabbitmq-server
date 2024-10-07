@@ -311,8 +311,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "systemd",
     build_file = "@rabbitmq-server//bazel:BUILD.systemd",
-    sha256 = "8ec5ed610a5507071cdb7423e663e2452a747a624bb8a58582acd9491ccad233",
-    version = "0.6.1",
+    sha256 = "5062b911800c1ab05157c7bf9a9fbe23dd24c58891c87fd12d2e3ed8fc1708b8",
+    version = "0.6.2",
 )
 
 use_repo(
