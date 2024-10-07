@@ -284,8 +284,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "redbug",
     build_file = "@rabbitmq-server//bazel:BUILD.redbug",
-    sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
-    version = "2.0.7",
+    sha256 = "55d6d59697481ca4cc5ad54749aa6d78299aa8a8096027e7ae1f59db9dc94c78",
+    version = "2.1.0",
 )
 
 erlang_package.hex_package(
