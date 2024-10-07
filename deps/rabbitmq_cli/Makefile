@@ -5,7 +5,7 @@ DEPS = csv json observer_cli stdout_formatter
 TEST_DEPS = amqp amqp_client temp x509 rabbit
 
 dep_amqp = hex 3.3.0
-dep_csv = hex 3.2.0
+dep_csv = hex 3.2.1
 dep_json = hex 1.4.1
 dep_temp = hex 0.4.7
 dep_x509 = hex 0.8.8

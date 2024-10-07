@@ -140,8 +140,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "csv",
     build_file = "@rabbitmq-server//bazel:BUILD.csv",
-    sha256 = "f5ee7299a55ff84fbe623d9aea7218b800d19ecccb2b3eac2bcb327d644365ea",
-    version = "3.2.0",
+    sha256 = "8f55a0524923ae49e97ff2642122a2ce7c61e159e7fe1184670b2ce847aee6c8",
+    version = "3.2.1",
 )
 
 erlang_package.hex_package(
