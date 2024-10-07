@@ -22,14 +22,9 @@ erlang_bytecode(
         "src/thoas_decode.erl",
         "src/thoas_encode.erl",
     ],
-    outs = [
-        "ebin/thoas.beam",
-        "ebin/thoas_decode.beam",
-        "ebin/thoas_encode.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "thoas",
-    beam = [],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -48,20 +43,11 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "private_hdrs",
-    srcs = [],
-)
+filegroup(name = "private_hdrs")
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -87,12 +73,22 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "thoas",
     beam_files = [":beam_files"],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
 alias(
     name = "thoas",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
