@@ -1,10 +1,10 @@
 name: Peer Discovery AWS Integration Test
 on:
-  push:
-    paths-ignore:
-      - '.github/workflows/secondary-umbrella.yaml'
-      - '.github/workflows/update-elixir-patches.yaml'
-      - '.github/workflows/update-otp-patches.yaml'
+  # push:
+  #   paths-ignore:
+  #     - '.github/workflows/secondary-umbrella.yaml'
+  #     - '.github/workflows/update-elixir-patches.yaml'
+  #     - '.github/workflows/update-otp-patches.yaml'
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
