@@ -247,8 +247,6 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     %%      return an error (and RabbitMQ start will abort). RabbitMQ won't be
     %%      able to work, especially if the feature flag needed some
     %%      migration, because the corresponding code was removed.
-    NewNode =
-    not rabbit_feature_flags:does_enabled_feature_flags_list_file_exist(),
     FeatureStates0 = case RegistryInitialized of
                          true ->
                              maps:merge(
@@ -261,20 +259,11 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     maps:map(
       fun
           (FeatureName, FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
-              Stability = rabbit_feature_flags:get_stability(FeatureProps),
               State = case FeatureStates0 of
                           #{FeatureName := FeatureState} -> FeatureState;
                           _                              -> false
                       end,
-              case Stability of
-                  required when NewNode ->
-                      %% This is the very first time the node starts, we
-                      %% already mark the required feature flag as enabled.
-                      ?assertNotEqual(state_changing, State),
-                      true;
-                  _ ->
-                      State
-              end;
+              State;
           (FeatureName, FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
               case FeatureStates0 of
                   #{FeatureName := FeatureState} ->

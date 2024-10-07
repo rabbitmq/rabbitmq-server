@@ -1480,15 +1480,8 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
     ok = run_on_node(
            NewNode,
            fun() ->
-                   ?assertMatch(
-                      {error,
-                       {exception,
-                        {assertNotEqual,
-                         [{module, rabbit_ff_registry_factory},
-                          {line, _},
-                          {expression, "State"},
-                          {value, state_changing}]},
-                        _}},
+                   ?assertEqual(
+                      ok,
                       rabbit_feature_flags:sync_feature_flags_with_cluster(
                         Nodes, false)),
                    ok
@@ -1500,7 +1493,7 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
            Node,
            fun() ->
                    ?assertEqual(
-                      Node =/= NewNode,
+                      true,
                       rabbit_feature_flags:is_enabled(FeatureName)),
                    ok
            end,
