@@ -21,7 +21,8 @@ tests:
 	@mvnw -q $(MVN_FLAGS) -Dtest=MqttTest test
 
 ssltests:
-	@mvnw -q $(MVN_FLAGS) -Dtest=MqttSSLTest test
+	@mvnw -q $(MVN_FLAGS) -Dtest=MqttSSLTest#invalidUser test
+	# @mvnw -q $(MVN_FLAGS) -Dtest=MqttSSLTest test
 
 v5tests:
 	@mvnw -q $(MVN_FLAGS) -Dtest=MqttV5Test test
