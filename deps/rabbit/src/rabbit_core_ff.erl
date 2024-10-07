@@ -10,14 +10,16 @@
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
    {quorum_queue,
     #{desc          => "Support queues of type `quorum`",
       doc_url       => "https://www.rabbitmq.com/docs/quorum-queues",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
@@ -25,6 +27,7 @@
     #{desc          => "Support queues of type `stream`",
       doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
+      require_level => hard,
       depends_on    => [quorum_queue]
      }}).
 
@@ -32,25 +35,29 @@
    {implicit_default_bindings,
     #{desc          => "Default bindings are now implicit, instead of "
                        "being stored in the database",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
    {virtual_host_metadata,
     #{desc          => "Virtual host metadata (description, tags, etc)",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
    {maintenance_mode_status,
     #{desc          => "Maintenance mode status",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
-    {user_limits,
-     #{desc          => "Configure connection and channel limits for a user",
-       stability     => required
+   {user_limits,
+    #{desc          => "Configure connection and channel limits for a user",
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
@@ -58,33 +65,38 @@
     #{desc          => "Single active consumer for streams",
       doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_queue]
      }}).
 
 -rabbit_feature_flag(
-    {feature_flags_v2,
-     #{desc          => "Feature flags subsystem V2",
-       stability     => required
+   {feature_flags_v2,
+    #{desc          => "Feature flags subsystem V2",
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
    {direct_exchange_routing_v2,
-    #{desc       => "v2 direct exchange routing implementation",
-      stability  => required,
-      depends_on => [feature_flags_v2, implicit_default_bindings]
+    #{desc          => "v2 direct exchange routing implementation",
+      stability     => required,
+      require_level => hard,
+      depends_on    => [feature_flags_v2, implicit_default_bindings]
      }}).
 
 -rabbit_feature_flag(
    {listener_records_in_ets,
-    #{desc       => "Store listener records in ETS instead of Mnesia",
-      stability  => required,
-      depends_on => [feature_flags_v2]
+    #{desc          => "Store listener records in ETS instead of Mnesia",
+      stability     => required,
+      require_level => hard,
+      depends_on    => [feature_flags_v2]
      }}).
 
 -rabbit_feature_flag(
    {tracking_records_in_ets,
     #{desc          => "Store tracking records in ETS instead of Mnesia",
       stability     => required,
+      require_level => hard,
       depends_on    => [feature_flags_v2]
      }}).
 
@@ -94,6 +106,7 @@
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
       %%TODO remove compatibility code
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_queue]
      }}).
 
@@ -102,6 +115,7 @@
     #{desc          => "Support for restarting streams with optional preferred next leader argument."
       "Used to implement stream leader rebalancing",
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_queue]
      }}).
 
@@ -110,6 +124,7 @@
     #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/7743",
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_single_active_consumer]
      }}).
 
@@ -117,6 +132,7 @@
    {stream_filtering,
     #{desc          => "Support for stream filtering.",
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_queue]
      }}).
 
@@ -124,6 +140,7 @@
    {message_containers,
     #{desc          => "Message containers.",
       stability     => required,
+      require_level => hard,
       depends_on    => [feature_flags_v2]
      }}).
 
@@ -154,6 +171,7 @@
     #{desc          => "A new internal command that is used to update streams as "
                         "part of a policy.",
       stability     => required,
+      require_level => hard,
       depends_on    => [stream_queue]
      }}).
 

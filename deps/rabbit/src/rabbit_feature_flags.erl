@@ -105,6 +105,7 @@
          init/0,
          get_state/1,
          get_stability/1,
+         get_require_level/1,
          check_node_compatibility/1, check_node_compatibility/2,
          sync_feature_flags_with_cluster/2,
          refresh_feature_flags_after_app_load/0,
@@ -147,6 +148,7 @@
 -type feature_props() :: #{desc => string(),
                            doc_url => string(),
                            stability => stability(),
+                           require_level => require_level(),
                            depends_on => [feature_name()],
                            callbacks =>
                            #{callback_name() => callback_fun_name()}}.
@@ -183,6 +185,7 @@
                                     desc => string(),
                                     doc_url => string(),
                                     stability => stability(),
+                                    require_level => require_level(),
                                     depends_on => [feature_name()],
                                     callbacks =>
                                     #{callback_name() => callback_fun_name()},
@@ -206,6 +209,15 @@
 %%
 %% Experimental feature flags are not enabled by default on a fresh RabbitMQ
 %% node. They must be enabled by the user.
+
+-type require_level() :: hard | soft.
+%% The level of requirement of a feature flag.
+%%
+%% A hard required feature flags must be enabled before a RabbitMQ node is
+%% upgraded to a version where it is required.
+%%
+%% A soft required feature flag will be automatically enabled when a RabbitMQ
+%% node is upgraded to a version where it is required.
 
 -type callback_fun_name() :: {Module :: module(), Function :: atom()}.
 %% The name of the module and function to call when changing the state of
@@ -755,6 +767,48 @@ get_stability(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
         permitted_by_default -> experimental
     end.
 
+-spec get_require_level
+(FeatureName) -> RequireLevel | undefined when
+      FeatureName :: feature_name(),
+      RequireLevel :: require_level() | none;
+(FeatureProps) -> RequireLevel when
+      FeatureProps ::
+      feature_props_extended() |
+      rabbit_deprecated_features:feature_props_extended(),
+      RequireLevel :: require_level() | none.
+%% @doc
+%% Returns the requirement level of a feature flag.
+%%
+%% The possible requirement levels are:
+%% <ul>
+%% <li>`hard': the feature flag must be enabled before the RabbitMQ node is
+%%   upgraded to a version where it is hard required.</li>
+%% <li>`soft': the feature flag will be automatically enabled wher a RabbitMQ
+%%   node is upgraded to a version where it is soft required.</li>
+%% <li>`none': the feature flag is not required.</li>
+%% </ul>
+%%
+%% @param FeatureName The name of the feature flag to check.
+%% @param FeatureProps A feature flag properties map.
+%% @returns `hard', `soft' or `none', or `undefined' if the given feature flag
+%% name doesn't correspond to a known feature flag.
+
+get_require_level(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
+        undefined    -> undefined;
+        FeatureProps -> get_require_level(FeatureProps)
+    end;
+get_require_level(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        required  -> maps:get(require_level, FeatureProps, soft);
+        _         -> none
+    end;
+get_require_level(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        required -> hard;
+        _        -> none
+    end.
+
 %% -------------------------------------------------------------------
 %% Feature flags registry.
 %% -------------------------------------------------------------------
@@ -913,6 +967,7 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                 ValidProps = [desc,
                               doc_url,
                               stability,
+                              require_level,
                               depends_on,
                               callbacks],
                 ?assertEqual([], maps:keys(FeatureProps) -- ValidProps),
@@ -1363,7 +1418,7 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
 sync_feature_flags_with_cluster([] = _Nodes, true = _NodeIsVirgin) ->
     rabbit_ff_controller:enable_default();
 sync_feature_flags_with_cluster([] = _Nodes, false = _NodeIsVirgin) ->
-    ok;
+    rabbit_ff_controller:enable_required();
 sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
     %% We don't use `rabbit_nodes:filter_running()' here because the given
     %% `Nodes' list may contain nodes which are not members yet (the cluster
