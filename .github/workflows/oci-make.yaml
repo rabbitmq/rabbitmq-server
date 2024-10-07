@@ -38,7 +38,7 @@ jobs:
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         run: |
-          make package-generic-unix PROJECT_VERSION=4.0.0
+          make package-generic-unix PROJECT_VERSION=4.1.0-alpha.1
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v4.3.1
