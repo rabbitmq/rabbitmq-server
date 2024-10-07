@@ -30,6 +30,12 @@
        }}
    }).
 
+-rabbit_deprecated_feature(
+   {amqp_filter_set_bug,
+    #{deprecation_phase => permitted_by_default,
+      doc_url => "https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set"
+     }}).
+
 %% This is the link credit that we grant to sending clients.
 %% We are free to choose whatever we want, sending clients must obey.
 %% Default soft limits / credits in deps/rabbit/Makefile are:
@@ -3049,6 +3055,14 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
   when is_boolean(Match) ->
     Arg = {<<"x-stream-match-unfiltered">>, bool, Match},
     {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, Acc)
+  when element(1, Value) =/= described ->
+    case rabbit_deprecated_features:is_permitted(amqp_filter_set_bug) of
+        true ->
+            parse_filters({Symbol, {described, Symbol, Value}}, Acc);
+        false ->
+            Acc
+    end;
 parse_filters(Filter = {{symbol, _Key}, Value},
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case rabbit_amqp_filtex:validate(Value) of
