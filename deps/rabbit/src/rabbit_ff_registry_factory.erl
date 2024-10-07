@@ -261,26 +261,27 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     maps:map(
       fun
           (FeatureName, FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
-              Stability = rabbit_feature_flags:get_stability(FeatureProps),
+              RequireLevel = (
+                rabbit_feature_flags:get_require_level(FeatureProps)),
               ProvidedBy = maps:get(provided_by, FeatureProps),
               State = case FeatureStates0 of
                           #{FeatureName := FeatureState} -> FeatureState;
                           _                              -> false
                       end,
-              case Stability of
-                  required when State =:= true ->
+              case RequireLevel of
+                  hard when State =:= true ->
                       %% The required feature flag is already enabled, we keep
                       %% it this way.
                       State;
-                  required when NewNode ->
+                  hard when NewNode ->
                       %% This is the very first time the node starts, we
                       %% already mark the required feature flag as enabled.
                       ?assertNotEqual(state_changing, State),
                       true;
-                  required when ProvidedBy =/= rabbit ->
+                  hard when ProvidedBy =/= rabbit ->
                       ?assertNotEqual(state_changing, State),
                       true;
-                  required ->
+                  hard ->
                       %% This is not a new node and the required feature flag
                       %% is disabled. This is an error and RabbitMQ must be
                       %% downgraded to enable the feature flag.
