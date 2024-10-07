@@ -179,6 +179,45 @@ module Test =
             assertEqual rtd.Properties.CorrelationId  corr
             ()
 
+    let streams uri =
+        use c = connectAnon uri
+        let name = "streams-test"
+        let address = "/queues/streams"
+        let sender = SenderLink(c.Session, name + "-sender" , address)
+        //for body in sampleTypes do
+        let body = "hi"B :> obj
+
+        let corr = "correlation"
+        new Message(body,
+                    Properties = new Properties(CorrelationId = corr))
+        |> sender.Send
+        //TODO wait for settlement
+        let specs = [box("first");
+                     box("last");
+                     box("10m");
+                     box(0)]
+        for spec in specs do
+            printfn "testing streams spec %A" spec
+            let filterSet = Map()
+            filterSet.Add(Symbol "rabbitmq:stream-offset-spec", spec)
+            let source = Source(Address = address,
+                                FilterSet = filterSet)
+            let attach = Attach(Source = source)
+            let attached = new OnAttached (fun _ _ -> ())
+            let receiver = ReceiverLink(c.Session, Guid.NewGuid().ToString(), attach, attached)
+            receiver.SetCredit(100, true)
+            let rtd = receiver.Receive()
+            assertNotNull rtd
+            assertEqual 3 rtd.MessageAnnotations.Map.Count
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-stream-offset"))
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-exchange"))
+            assertTrue (rtd.MessageAnnotations.Map.ContainsKey(Symbol "x-routing-key"))
+
+            assertEqual body rtd.Body
+            assertEqual rtd.Properties.CorrelationId  corr
+            receiver.Close()
+        ()
+
     open RabbitMQ.Client
 
     let roundtrip_to_amqp_091 uri =
@@ -513,6 +552,9 @@ let main argv =
         0
     | [AsLower "invalid_routes"; uri] ->
         invalidRoutes uri
+        0
+    | [AsLower "streams"; uri] ->
+        streams uri
         0
     | [AsLower "no_routes_is_released"; uri] ->
         no_routes_is_released uri
