@@ -126,8 +126,13 @@ dep_prometheus = hex 4.11.0
 dep_ra = hex 2.13.5
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.3
+<<<<<<< HEAD
 dep_redbug = hex 2.0.7
 dep_thoas = hex 1.2.1
+=======
+dep_redbug = hex 2.1.0
+dep_thoas = hex 1.0.0
+>>>>>>> c348501db2 (Dependency Redbug updated from 2.0.7 to 2.1.0)
 dep_observer_cli = hex 1.7.5
 dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
 dep_stdout_formatter = hex 0.2.4
