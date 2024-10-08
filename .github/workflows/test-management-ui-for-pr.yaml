@@ -59,7 +59,7 @@ jobs:
     - name: Run full ui suites on a standalone rabbitmq server
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
-        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq-$IMAGE_TAG ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui       
+        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui       
         mkdir -p /tmp/full-suite
         mv /tmp/selenium/* /tmp/full-suite
         mkdir -p /tmp/full-suite/logs
