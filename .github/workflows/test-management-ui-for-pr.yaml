@@ -42,23 +42,10 @@ jobs:
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
 
-    - name: Configure Bazel
-      run: |
-        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
-        cat << EOF >> user.bazelrc
-          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
-          build --google_default_credentials
-
-          build --remote_download_toplevel
-        EOF
-        fi
-        cat << EOF >> user.bazelrc
-          build --color=yes
-        EOF
-
     - name: Build & Load RabbitMQ OCI
       run: |
-        bazelisk run packaging/docker-image:rabbitmq-amd64
+         make package-generic-unix
+         make docker-image
 
     - name: Configure Docker Network
       run: |
@@ -71,8 +58,9 @@ jobs:
 
     - name: Run full ui suites on a standalone rabbitmq server
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
-            ${SELENIUM_DIR}/run-suites.sh
+        IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
+        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
+          ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui       
         mkdir -p /tmp/full-suite
         mv /tmp/selenium/* /tmp/full-suite
         mkdir -p /tmp/full-suite/logs

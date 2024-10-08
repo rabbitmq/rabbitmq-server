@@ -46,15 +46,9 @@ function auth_settings_apply_defaults(authSettings) {
         }
         if (!resource_server.oauth_response_type) {
           resource_server.oauth_response_type = authSettings.oauth_response_type
-          if (!resource_server.oauth_response_type) {
-            resource_server.oauth_response_type = "code"
-          }
         }
         if (!resource_server.oauth_scopes) {
           resource_server.oauth_scopes = authSettings.oauth_scopes
-          if (!resource_server.oauth_scopes) {
-            resource_server.oauth_scopes = "openid profile"
-          }
         }
         if (!resource_server.oauth_client_id) {
           resource_server.oauth_client_id = authSettings.oauth_client_id
@@ -78,6 +72,14 @@ function auth_settings_apply_defaults(authSettings) {
         if (!resource_server.oauth_metadata_url) {
           resource_server.oauth_metadata_url = authSettings.metadata_url
         }
+        if (!resource_server.oauth_authorization_endpoint_params) {
+          resource_server.oauth_authorization_endpoint_params =
+            authSettings.oauth_authorization_endpoint_params
+        }
+        if (!resource_server.oauth_token_endpoint_params) {
+          resource_server.oauth_token_endpoint_params =
+            authSettings.oauth_token_endpoint_params
+        }
         resource_server.id = resource_server_id
         authSettings.resource_servers.push(resource_server)
     }
@@ -98,21 +100,21 @@ function get_oauth_settings() {
 export function oauth_initialize_if_required(state = "index") {
   let oauth = oauth_initialize(get_oauth_settings())
   if (!oauth.enabled) return oauth;
-  switch (state) { 
-    case 'login-callback': 
-      oauth_completeLogin(); break; 
-    case 'logout-callback': 
-      oauth_completeLogout(); break; 
-    default: 
+  switch (state) {
+    case 'login-callback':
+      oauth_completeLogin(); break;
+    case 'logout-callback':
+      oauth_completeLogout(); break;
+    default:
       oauth = oauth_initiate(oauth);
   }
-  return oauth; 
+  return oauth;
 }
 
 export function oauth_initiate(oauth) {
   if (oauth.enabled) {
     if (!oauth.sp_initiated) {
-        oauth.logged_in = has_auth_credentials();        
+        oauth.logged_in = has_auth_credentials();
     } else {
       oauth_is_logged_in().then( status => {
         if (status.loggedIn && !has_auth_credentials()) {
@@ -122,7 +124,7 @@ export function oauth_initiate(oauth) {
           if (!status.loggedIn) {
             clear_auth();
           } else {
-            oauth.logged_in = true;            
+            oauth.logged_in = true;
             oauth.expiryDate = new Date(status.user.expires_at * 1000);  // it is epoch in seconds
             let current = new Date();
             _management_logger.debug('token expires in ', (oauth.expiryDate-current)/1000,
@@ -139,40 +141,41 @@ export function oauth_initiate(oauth) {
   }
   return oauth;
 }
+export function oidc_settings_from(resource_server) {
+  let oidcSettings = {
+    userStore: new oidc.WebStorageStateStore({ store: window.localStorage }),
+    authority: resource_server.oauth_provider_url,
+    metadataUrl: resource_server.oauth_metadata_url,
+    client_id: resource_server.oauth_client_id,
+    response_type: resource_server.oauth_response_type,
+    scope: resource_server.oauth_scopes,
+    redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
+    post_logout_redirect_uri: rabbit_base_uri() + "/",
+    automaticSilentRenew: true,
+    revokeAccessTokenOnSignout: true
+  }
+  if (resource_server.end_session_endpoint != "") {
+    oidcSettings.metadataSeed = {
+      end_session_endpoint: resource_server.end_session_endpoint
+    }
+  }
+  if (resource_server.oauth_client_secret != "") {
+    oidcSettings.client_secret = resource_server.oauth_client_secret
+  }
+  if (resource_server.oauth_authorization_endpoint_params) {
+    oidcSettings.extraQueryParams = resource_server.oauth_authorization_endpoint_params
+  }
+  if (resource_server.oauth_token_endpoint_params) {
+    oidcSettings.extraTokenParams = resource_server.oauth_token_endpoint_params
+  }
+  return oidcSettings
+}
+
 function oauth_initialize_user_manager(resource_server) {
-    let oidcSettings = {
-        userStore: new oidc.WebStorageStateStore({ store: window.localStorage }),
-        authority: resource_server.oauth_provider_url,
-        client_id: resource_server.oauth_client_id,
-        response_type: resource_server.oauth_response_type,
-        scope: resource_server.oauth_scopes,
-        resource: resource_server.id,
-        redirect_uri: rabbit_base_uri() + "/js/oidc-oauth/login-callback.html",
-        post_logout_redirect_uri: rabbit_base_uri() + "/",
-
-        automaticSilentRenew: true,
-        revokeAccessTokenOnSignout: true,
-        extraQueryParams: {
-          audience: resource_server.id, // required by oauth0
-        },
-    };
-    if (resource_server.end_session_endpoint != "") {
-      oidcSettings.metadataSeed = {
-        end_session_endpoint: resource_server.end_session_endpoint
-      }
-    }
-    if (resource_server.oauth_client_secret != "") {
-      oidcSettings.client_secret = resource_server.oauth_client_secret;
-    }
-    if (resource_server.oauth_metadata_url != "") {
-      oidcSettings.metadataUrl = resource_server.oauth_metadata_url;
-    }
-
     oidc.Log.setLevel(oidc.Log.DEBUG);
     oidc.Log.setLogger(console);
 
-    mgr = new oidc.UserManager(oidcSettings);
-//    oauth.readiness_url = mgr.settings.metadataUrl;
+    mgr = new oidc.UserManager(oidc_settings_from(resource_server))
 
     _management_logger = new oidc.Logger("Management");
 
@@ -216,20 +219,6 @@ export function oauth_initialize(authSettings) {
     }
 
     return oauth;
-}
-
-function log() {
-    message = ""
-    Array.prototype.forEach.call(arguments, function(msg) {
-        if (msg instanceof Error) {
-            msg = "Error: " + msg.message;
-        }
-        else if (typeof msg !== "string") {
-            msg = JSON.stringify(msg, null, 2);
-        }
-        message += msg
-    });
-    _management_logger.info(message)
 }
 
 function oauth_is_logged_in() {

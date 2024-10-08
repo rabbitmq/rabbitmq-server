@@ -13,6 +13,7 @@ generate_env_file() {
   mkdir -p $parentdir
   echo "#!/usr/bin/env bash" > $ENV_FILE
   echo "set -u" >> $ENV_FILE
+  echo "export SELENIUM=${SCRIPT}/.." >> $ENV_FILE
 
   declare -a FILE_ARRAY
   for f in $($SCRIPT/find-template-files $FIND_PATH "env")

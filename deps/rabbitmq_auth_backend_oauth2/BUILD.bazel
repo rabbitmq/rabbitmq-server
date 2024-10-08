@@ -113,13 +113,17 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
-    name = "rabbit_oauth2_config_SUITE",
+    name = "rabbit_oauth2_provider_SUITE",
     additional_beam = [
         "test/oauth2_http_mock.beam",
     ],
     runtime_deps = [
         "@cowboy//:erlang_app",
     ],
+)
+
+rabbitmq_integration_suite(
+    name = "rabbit_oauth2_resource_server_SUITE"
 )
 
 rabbitmq_integration_suite(

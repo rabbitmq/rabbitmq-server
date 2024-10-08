@@ -2,12 +2,5 @@
 
 test/config_schema_SUITE_data/schema/
 
-selenium/node_modules
-selenium/package-lock.json
-selenium/screens/*/*
-selenium/logs
-selenium/suites/logs/*
-selenium/suites/screens/*
-selenium/test/oauth/*/h2/*.trace.db
-selenium/test/oauth/*/h2/*.lock.db
-selenium/*/target/*
+test/js/node_modules
+test/js/package-lock.json

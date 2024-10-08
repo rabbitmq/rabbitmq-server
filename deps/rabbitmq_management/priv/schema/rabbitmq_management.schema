@@ -472,6 +472,26 @@ end}.
 {mapping, "management.oauth_response_type", "rabbitmq_management.oauth_response_type",
     [{datatype, string}]}.
 
+%% Configure OAuth2 authorization_endpoint additional request parameters
+{mapping, "management.oauth_authorization_endpoint_params.$name",
+    "rabbitmq_management.oauth_authorization_endpoint_params",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.oauth_authorization_endpoint_params",
+ fun(Conf) ->
+    rabbit_mgmt_schema:translate_endpoint_params("oauth_authorization_endpoint_params", Conf)
+ end}.
+
+%% Configure OAuth2 token_endpoint additional request parameters
+{mapping, "management.oauth_token_endpoint_params.$name",
+    "rabbitmq_management.oauth_token_endpoint_params",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_management.oauth_token_endpoint_params",
+ fun(Conf) ->
+    rabbit_mgmt_schema:translate_endpoint_params("oauth_token_endpoint_params", Conf)
+ end}.
+
 %% The scopes RabbitMq should claim during the authorization flow. Defaults to "openid profile"
 {mapping, "management.oauth_scopes", "rabbitmq_management.oauth_scopes",
       [{datatype, string}]}.
@@ -487,7 +507,6 @@ end}.
 %% Other type is idp_initiated meaning users must come with a token
 {mapping, "management.oauth_initiated_logon_type", "rabbitmq_management.oauth_initiated_logon_type",
     [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
-
 
 {mapping,
   "management.oauth_resource_servers.$name.id",
@@ -514,8 +533,6 @@ end}.
   [{datatype, string}]
 }.
 
-
-
 {mapping,
   "management.oauth_resource_servers.$name.oauth_client_id",
   "rabbitmq_management.oauth_resource_servers",
@@ -534,7 +551,6 @@ end}.
   [{datatype, string}]
 }.
 
-
 {mapping,
   "management.oauth_resource_servers.$name.oauth_scopes",
   "rabbitmq_management.oauth_resource_servers",
@@ -552,36 +568,17 @@ end}.
     "rabbitmq_management.oauth_resource_servers",
   [{datatype, {enum, [sp_initiated, idp_initiated]}}]}.
 
+{mapping, "management.oauth_resource_servers.$name.oauth_authorization_endpoint_params.$name",
+    "rabbitmq_management.oauth_resource_servers",
+    [{datatype, string}]}.
+
+{mapping, "management.oauth_resource_servers.$name.oauth_token_endpoint_params.$name",
+    "rabbitmq_management.oauth_resource_servers",
+    [{datatype, string}]}.
+
 {translation, "rabbitmq_management.oauth_resource_servers",
  fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("management.oauth_resource_servers", Conf),
-    ResourceServers  = [{Name, {list_to_atom(Key), V}} || {["management","oauth_resource_servers", Name, Key], V} <- Settings ],
-    KeyFun = fun({Name,_}) -> list_to_binary(Name) end,
-    ValueFun = fun({_,V}) -> V end,
-    NewGroup = maps:groups_from_list(KeyFun, ValueFun, ResourceServers),
-    ListOrSingleFun = fun(K, List) ->
-      case K of
-        key_config -> proplists:get_all_values(K, List);
-        _ ->
-          case proplists:lookup_all(K, List) of
-            [One] -> proplists:get_value(K, List);
-            [One|_] = V -> V
-          end
-      end
-    end,
-    GroupKeyConfigFun = fun(K, List) ->
-        ListKeys = proplists:get_keys(List),
-        [ {K,ListOrSingleFun(K,List)} || K <- ListKeys ]
-     end,
-    NewGroupTwo = maps:map(GroupKeyConfigFun, NewGroup),
-    IndexByIdOrElseNameFun = fun(K, V, NewMap) ->
-      case proplists:get_value(id, V) of
-        undefined -> maps:put(K, V, NewMap);
-        ID when is_binary(ID) -> maps:put(ID, V, NewMap);
-        ID -> maps:put(list_to_binary(ID), V, NewMap)
-      end
-    end,
-    maps:fold(IndexByIdOrElseNameFun,#{}, NewGroupTwo)
+     rabbit_mgmt_schema:translate_oauth_resource_servers(Conf)
  end}.
 
 %% ===========================================================================

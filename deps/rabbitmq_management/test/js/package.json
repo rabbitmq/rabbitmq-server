@@ -1,0 +1,35 @@
+{
+  "type":"module",
+  "dependencies": {
+  
+    
+  "json": "^11.0.0",
+  
+    
+  "mocha": "^10.7.3"
+  
+  },
+  
+  "scripts": {
+  
+    
+  "test": "mocha --recursive --trace-warnings  --require @babel/register"
+  
+  },
+  
+  "devDependencies": {
+  
+    
+  "@babel/cli": "^7.25.6",
+  
+    
+  "@babel/core": "^7.25.2",
+  
+    
+  "@babel/preset-env": "^7.25.4",
+  
+    
+  "@babel/register": "^7.24.6"
+  
+  }
+}

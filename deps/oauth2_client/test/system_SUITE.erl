@@ -11,6 +11,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -include_lib("oauth2_client.hrl").
+-import(oauth2_client, [
+    build_openid_discovery_endpoint/3]).
 
 -compile(export_all).
 
@@ -31,6 +33,7 @@ all() ->
 
 groups() ->
 [
+
     {with_all_oauth_provider_settings, [], [
         {group, verify_get_oauth_provider}
     ]},
@@ -147,7 +150,6 @@ init_per_group(_, Config) ->
 get_http_oauth_server_expectations(TestCase, Config) ->
     case ?config(TestCase, Config) of
         undefined ->
-            ct:log("get_openid_configuration_http_expectation :  ~p", [get_openid_configuration_http_expectation(TestCase)]),
             [   {token_endpoint, build_http_mock_behaviour(build_http_access_token_request(),
                     build_http_200_access_token_response())},
                 {get_openid_configuration, get_openid_configuration_http_expectation(TestCase)}
@@ -244,7 +246,6 @@ init_per_testcase(TestCase, Config) ->
 
     case ?config(group, Config) of
         https ->
-            ct:log("Start https with expectations ~p", [ListOfExpectations]),
             start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
                 ListOfExpectations);
         _ ->
@@ -277,11 +278,17 @@ end_per_group(with_default_oauth_provider, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+build_openid_discovery_endpoint(Issuer) ->
+    build_openid_discovery_endpoint(Issuer, undefined, undefined).
+
+build_openid_discovery_endpoint(Issuer, Path) ->
+    build_openid_discovery_endpoint(Issuer, Path, undefined).
+
 get_openid_configuration(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, ActualOpenId} = oauth2_client:get_openid_configuration(
-        build_issuer("https"),
+        build_openid_discovery_endpoint(build_issuer("https")),
         SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, ActualOpenId).
@@ -303,7 +310,7 @@ get_openid_configuration_returns_partial_payload(Config) ->
 
     SslOptions = [{ssl, ExpectedOAuthProvider0#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_issuer("https"),
+        build_openid_discovery_endpoint(build_issuer("https")),
         SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
@@ -312,7 +319,7 @@ get_openid_configuration_using_path(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_issuer("https", ?ISSUER_PATH),
+        build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH)),
         SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId,Actual).
@@ -320,18 +327,16 @@ get_openid_configuration_using_path_and_custom_endpoint(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_issuer("https", ?ISSUER_PATH),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT,
-        SslOptions),
+        build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 get_openid_configuration_using_custom_endpoint(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
     SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_issuer("https"),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT,
-        SslOptions),
+        build_openid_discovery_endpoint(build_issuer("https"),
+        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 
@@ -393,6 +398,23 @@ grants_access_token(Config) ->
         token_type = TokenType} } =
             oauth2_client:get_access_token(?config(oauth_provider, Config),
                 build_access_token_request(Parameters)),
+    ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
+    ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
+
+grants_access_token_optional_parameters(Config) ->
+    #{request := #{parameters := Parameters},
+        response := [ {code, 200}, {content_type, _CT}, {payload, JsonPayload}] }
+        = lookup_expectation(token_endpoint, Config),
+
+    AccessTokenRequest0 = build_access_token_request(Parameters),
+    AccessTokenRequest = AccessTokenRequest0#access_token_request{
+        scope = "some-scope",
+        extra_parameters = [{"param1", "value1"}]
+    },
+    {ok, #successful_access_token_response{access_token = AccessToken,
+        token_type = TokenType} } =
+            oauth2_client:get_access_token(?config(oauth_provider, Config),
+                AccessTokenRequest),
     ?assertEqual(proplists:get_value(token_type, JsonPayload), TokenType),
     ?assertEqual(proplists:get_value(access_token, JsonPayload), AccessToken).
 
@@ -465,7 +487,6 @@ verify_get_oauth_provider_returns_default_oauth_provider(DefaultOAuthProviderId)
     {ok, OAuthProvider2} =
         oauth2_client:get_oauth_provider(DefaultOAuthProviderId,
             [issuer, token_endpoint, jwks_uri]),
-    ct:log("verify_get_oauth_provider_returns_default_oauth_provider ~p vs ~p", [OAuthProvider1, OAuthProvider2]),
     ?assertEqual(OAuthProvider1, OAuthProvider2).
 
 get_oauth_provider(Config) ->
@@ -546,6 +567,7 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
 
 
 %%% HELPERS
+
 build_issuer(Scheme) ->
     build_issuer(Scheme, "").
 build_issuer(Scheme, Path) ->
@@ -618,8 +640,6 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}}
             = Expected <- Expectations ]}
     ]),
-    ct:log("start_https_oauth_server with expectation list : ~p -> dispatch: ~p",
-        [Expectations, Dispatch]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -630,8 +650,6 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
-    ct:log("start_https_oauth_server with expectation : ~p  -> dispatch: ~p",
-        [Expected, Dispatch]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},

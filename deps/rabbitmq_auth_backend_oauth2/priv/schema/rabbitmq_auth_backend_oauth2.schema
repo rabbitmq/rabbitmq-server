@@ -159,6 +159,41 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
+ "auth_oauth2.discovery_endpoint_path",
+ "rabbitmq_auth_backend_oauth2.discovery_endpoint_path",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.discovery_endpoint_params.$param",
+ "rabbitmq_auth_backend_oauth2.discovery_endpoint_params",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.discovery_endpoint_params",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_endpoint_params("discovery_endpoint_params", Conf)
+ end}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery_endpoint_params.$param",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery_endpoint_path",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
+ end}.
+
+{mapping,
  "auth_oauth2.https.peer_verification",
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
  [{datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -301,6 +336,7 @@
   [{datatype, string}]
 }.
 
+
 {mapping,
   "auth_oauth2.resource_servers.$name.scope_prefix",
   "rabbitmq_auth_backend_oauth2.resource_servers",
@@ -333,5 +369,5 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->
-    rabbit_oauth2_schema:translate_resource_servers(Conf)    
+    rabbit_oauth2_schema:translate_resource_servers(Conf)
  end}.

@@ -621,15 +621,23 @@
    management.oauth_client_id = rabbitmq_client_code
    management.oauth_client_secret = rabbitmq_client_secret
    management.oauth_scopes = openid profile rabbitmq.*
+   management.oauth_authorization_endpoint_params.param1 = value1
+   management.oauth_token_endpoint_params.param2 = value2
    management.oauth_initiated_logon_type = idp_initiated",
   [
    {rabbitmq_management, [
+                          {oauth_authorization_endpoint_params, [
+                            {<<"param1">>, <<"value1">>}
+                          ]},
                           {oauth_enabled, true},
                           {oauth_provider_url, "http://localhost:8080"},
                           {oauth_client_id, "rabbitmq_client_code"},
                           {oauth_client_secret, "rabbitmq_client_secret"},
                           {oauth_scopes, "openid profile rabbitmq.*"},
-                          {oauth_initiated_logon_type, idp_initiated}
+                          {oauth_initiated_logon_type, idp_initiated},
+                          {oauth_token_endpoint_params, [
+                            {<<"param2">>, <<"value2">>}
+                          ]}
                          ]}
   ], [rabbitmq_management]
  },
@@ -640,7 +648,9 @@
    management.oauth_resource_servers.1.label = One
    management.oauth_resource_servers.1.oauth_client_id = one
    management.oauth_resource_servers.1.oauth_scopes = openid profile rabbitmq.*
+   management.oauth_resource_servers.1.oauth_token_endpoint_params.param2 = value2
    management.oauth_resource_servers.2.oauth_provider_url = http://two
+   management.oauth_resource_servers.2.oauth_authorization_endpoint_params.param1 = value1
    management.oauth_resource_servers.2.id = resource-two
    management.oauth_resource_servers.2.oauth_client_id = two
    management.oauth_resource_servers.3.oauth_initiated_logon_type = idp_initiated
@@ -650,21 +660,28 @@
                           {oauth_enabled, true},
                           {oauth_resource_servers,
                             #{
-                              <<"resource-one">> => [
-                                {oauth_scopes, "openid profile rabbitmq.*"},
-                                {oauth_client_id, "one"},
-                                {id, "resource-one"},
-                                {label, "One"},
-                                {oauth_provider_url, "http://one:8080"}
+                             <<"3">> => [
+                               {oauth_provider_url, <<"http://three">>},
+                               {oauth_initiated_logon_type, idp_initiated},
+                               {id, <<"3">>}
+                             ],
+                             <<"resource-one">> => [
+                                {oauth_token_endpoint_params, [
+                                   {<<"param2">>, <<"value2">>}
+                                ]},
+                                {oauth_scopes, <<"openid profile rabbitmq.*">>},
+                                {oauth_client_id, <<"one">>},
+                                {label, <<"One">>},
+                                {id, <<"resource-one">>},
+                                {oauth_provider_url, <<"http://one:8080">>}
                               ],
                               <<"resource-two">> => [
-                                {oauth_client_id, "two"},
-                                {id, "resource-two"},
-                                {oauth_provider_url, "http://two"}
-                              ],
-                              <<"3">> => [
-                                {oauth_initiated_logon_type, idp_initiated},
-                                {oauth_provider_url, "http://three"}
+                                {oauth_authorization_endpoint_params, [
+                                   {<<"param1">>, <<"value1">>}
+                                ]},
+                                {oauth_client_id, <<"two">>},
+                                {id, <<"resource-two">>},
+                                {oauth_provider_url, <<"http://two">>}
                               ]
                             }
                           }
