@@ -231,8 +231,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "thoas",
     build_file = "@rabbitmq-server//bazel:BUILD.thoas",
-    sha256 = "fc763185b932ecb32a554fb735ee03c3b6b1b31366077a2427d2a97f3bd26735",
-    version = "1.0.0",
+    sha256 = "e38697edffd6e91bd12cea41b155115282630075c2a727e7a6b2947f5408b86a",
+    version = "1.2.1",
 )
 
 erlang_package.hex_package(
