@@ -11,7 +11,9 @@ def all_beam_files(name = "all_beam_files"):
         name = "other_beam",
         testonly = True,
         srcs = [
+            "src/ct_master_fork.erl",
             "src/cth_log_redirect_any_domains.erl",
+            "src/cth_parallel_ct_detect_failure.erl",
             "src/rabbit_control_helper.erl",
             "src/rabbit_ct_broker_helpers.erl",
             "src/rabbit_ct_config_schema.erl",
@@ -37,7 +39,9 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_other_beam",
         testonly = True,
         srcs = [
+            "src/ct_master_fork.erl",
             "src/cth_log_redirect_any_domains.erl",
+            "src/cth_parallel_ct_detect_failure.erl",
             "src/rabbit_control_helper.erl",
             "src/rabbit_ct_broker_helpers.erl",
             "src/rabbit_ct_config_schema.erl",
@@ -99,7 +103,9 @@ def all_srcs(name = "all_srcs"):
         name = "srcs",
         testonly = True,
         srcs = [
+            "src/ct_master_fork.erl",
             "src/cth_log_redirect_any_domains.erl",
+            "src/cth_parallel_ct_detect_failure.erl",
             "src/rabbit_control_helper.erl",
             "src/rabbit_ct_broker_helpers.erl",
             "src/rabbit_ct_config_schema.erl",
