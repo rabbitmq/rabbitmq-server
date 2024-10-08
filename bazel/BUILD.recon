@@ -25,17 +25,9 @@ erlang_bytecode(
         "src/recon_rec.erl",
         "src/recon_trace.erl",
     ],
-    outs = [
-        "ebin/recon.beam",
-        "ebin/recon_alloc.beam",
-        "ebin/recon_lib.beam",
-        "ebin/recon_map.beam",
-        "ebin/recon_rec.beam",
-        "ebin/recon_trace.beam",
-    ],
-    hdrs = [],
+    hdrs = [":public_and_private_hdrs"],
     app_name = "recon",
-    beam = [],
+    dest = "ebin",
     erlc_opts = "//:erlc_opts",
 )
 
@@ -57,20 +49,11 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "private_hdrs",
-    srcs = [],
-)
+filegroup(name = "private_hdrs")
 
-filegroup(
-    name = "public_hdrs",
-    srcs = [],
-)
+filegroup(name = "public_hdrs")
 
-filegroup(
-    name = "priv",
-    srcs = [],
-)
+filegroup(name = "priv")
 
 filegroup(
     name = "licenses",
@@ -96,12 +79,23 @@ filegroup(
 erlang_app(
     name = "erlang_app",
     srcs = [":all_srcs"],
+    hdrs = [":public_hdrs"],
     app_name = "recon",
     beam_files = [":beam_files"],
+    extra_apps = ["syntax_tools"],
+    license_files = [":license_files"],
+    priv = [":priv"],
 )
 
 alias(
     name = "recon",
     actual = ":erlang_app",
     visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "license_files",
+    srcs = [
+        "LICENSE",
+    ],
 )
