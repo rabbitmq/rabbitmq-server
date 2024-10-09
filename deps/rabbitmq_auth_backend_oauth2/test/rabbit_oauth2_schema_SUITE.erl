@@ -103,8 +103,9 @@ test_with_one_oauth_provider(_) ->
         {["auth_oauth2","oauth_providers","keycloak","issuer"],
             "https://rabbit"}
     ],
-    #{<<"keycloak">> := [{issuer, <<"https://rabbit">>}]
-    } = rabbit_oauth2_schema:translate_oauth_providers(Conf).
+    #{<<"keycloak">> := [
+        {issuer, "https://rabbit"}]
+    } = translate_oauth_providers(Conf).
 
 test_with_one_resource_server(_) ->
     Conf = [
@@ -122,7 +123,7 @@ test_with_many_oauth_providers(_) ->
         {["auth_oauth2","oauth_providers","uaa","discovery_endpoint_path"],
             "/some-path"}
     ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>}
+    #{<<"keycloak">> := [{issuer, "https://keycloak"}
                         ],
       <<"uaa">> := [{issuer, "https://uaa"},
                     {discovery_endpoint_path, "/some-path"}
@@ -274,7 +275,7 @@ test_oauth_providers_signing_keys(Conf) ->
         {["auth_oauth2","oauth_providers","keycloak","signing_keys","1"], 
             cert_filename(Conf)}
     ],
-    #{<<"keycloak">> := [{issuer, <<"https://keycloak">>},
+    #{<<"keycloak">> := [{issuer, "https://keycloak"},
                          {signing_keys, SigningKeys}
                          ]
     } = sort_settings(translate_oauth_providers(CuttlefishConf)),
