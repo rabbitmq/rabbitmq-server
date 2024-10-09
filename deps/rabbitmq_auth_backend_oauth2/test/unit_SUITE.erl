@@ -73,16 +73,10 @@ groups() ->
 init_per_suite(Config) ->
     application:load(rabbitmq_auth_backend_oauth2),
     Env = application:get_all_env(rabbitmq_auth_backend_oauth2),
-    Config1 = rabbit_ct_helpers:set_config(Config, {env, Env}),
-    rabbit_ct_helpers:run_setup_steps(Config1, []).
+    lists:foreach(fun({K, _V}) -> unset_env(K) end, Env),
+    rabbit_ct_helpers:run_setup_steps(Config, []).
 
 end_per_suite(Config) ->
-    Env = ?config(env, Config),
-    lists:foreach(
-        fun({K, V}) ->
-            set_env(K, V)
-        end,
-        Env),
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(with_rabbitmq_node, Config) ->
