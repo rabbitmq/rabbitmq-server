@@ -777,8 +777,9 @@ or:
         <code>password_hash</code> must be generated using the algorithm described
         <a href="https://rabbitmq.com/passwords.html#computing-password-hash">here</a>.
         You may also specify the hash function being used by adding the <code>hashing_algorithm</code>
-        key to the body. Currently recognised algorithms are <code>rabbit_password_hashing_sha256</code>,
-        <code>rabbit_password_hashing_sha512</code>, and <code>rabbit_password_hashing_md5</code>.
+        key to the body. Currently recognised algorithms are <code>rabbit_password_hashing_pbkdf2_hmac_sha512_v1</code>,
+	<code>rabbit_password_hashing_sha256</code>, <code>rabbit_password_hashing_sha512</code>,
+	and <code>rabbit_password_hashing_md5</code>.
         </td>
       </tr>
       <tr>
