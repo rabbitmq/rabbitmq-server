@@ -124,7 +124,7 @@ get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
                             case update_jwks_signing_keys(OAuthProvider) of
                                 ok ->
                                     get_jwk(KeyId, InternalOAuthProvider, false);
-                                {error, no_jwks_url} ->
+                                {error, no_jwks_uri} ->
                                     {error, key_not_found};
                                 {error, _} = Err ->
                                     Err

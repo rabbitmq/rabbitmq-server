@@ -163,6 +163,13 @@
  "rabbitmq_auth_backend_oauth2.token_endpoint",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
+%% DEPRECATES auth_oauth2.jwks_url
+{mapping,
+ "auth_oauth2.jwks_uri",
+ "rabbitmq_auth_backend_oauth2.jwks_uri",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+%% DEPRECATED
 {mapping,
  "auth_oauth2.jwks_url",
  "rabbitmq_auth_backend_oauth2.key_config.jwks_url",

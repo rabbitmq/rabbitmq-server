@@ -11,6 +11,7 @@
         auth_oauth2.default_key = id1
         auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
         auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
+        auth_oauth2.jwks_uri = https://my-jwt-issuer/jwks.json
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
         auth_oauth2.issuer = https://my-jwt-issuer
         auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
@@ -36,6 +37,7 @@
             {discovery_endpoint_params, [
                 {<<"param1">>, <<"value1">>}
             ]},
+            {jwks_uri, "https://my-jwt-issuer/jwks.json"},
             {key_config, [
               {default_key, <<"id1">>},
               {signing_keys,
@@ -69,6 +71,7 @@
         auth_oauth2.default_key = id1
         auth_oauth2.signing_keys.id1 = test/config_schema_SUITE_data/certs/key.pem
         auth_oauth2.signing_keys.id2 = test/config_schema_SUITE_data/certs/cert.pem
+        auth_oauth2.jwks_uri = https://my-jwt-issuer/jwks.json
         auth_oauth2.jwks_url = https://my-jwt-issuer/jwks.json
         auth_oauth2.https.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
         auth_oauth2.https.peer_verification = verify_none
@@ -90,6 +93,7 @@
             {extra_scopes_source, <<"my_custom_scope_key">>},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
             {verify_aud, true},
+            {jwks_uri, "https://my-jwt-issuer/jwks.json"},
             {resource_servers,
               #{
                 <<"rabbitmq-operations">> => [

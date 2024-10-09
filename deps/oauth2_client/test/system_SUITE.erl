@@ -12,7 +12,8 @@
 
 -include_lib("oauth2_client.hrl").
 -import(oauth2_client, [
-    build_openid_discovery_endpoint/3]).
+    build_openid_discovery_endpoint/3
+]).
 
 -compile(export_all).
 
@@ -35,10 +36,12 @@ groups() ->
 [
 
     {with_all_oauth_provider_settings, [], [
-        {group, verify_get_oauth_provider}
+        {group, verify_get_oauth_provider},
+        jwks_uri_takes_precedence_over_jwks_url,
+        jwks_url_is_used_in_absense_of_jwks_uri
     ]},
     {without_all_oauth_providers_settings, [], [
-        {group, verify_get_oauth_provider}
+        {group, verify_get_oauth_provider}        
     ]},
     {verify_openid_configuration, [], [
         get_openid_configuration,
@@ -57,7 +60,7 @@ groups() ->
         expiration_time_in_token
     ]},
     {verify_get_oauth_provider, [], [
-        get_oauth_provider,
+        get_oauth_provider,        
         {with_default_oauth_provider, [], [
             get_oauth_provider
         ]},
@@ -78,10 +81,16 @@ groups() ->
 
 init_per_suite(Config) ->
     [
-        {denies_access_token, [ {token_endpoint, denies_access_token_expectation()} ]},
-        {auth_server_error, [ {token_endpoint, auth_server_error_when_access_token_request_expectation()} ]},
-        {non_json_payload, [ {token_endpoint, non_json_payload_when_access_token_request_expectation()} ]},
-        {grants_refresh_token, [ {token_endpoint, grants_refresh_token_expectation()} ]}
+        {jwks_url, build_jwks_uri("https", "/certs4url")},
+        {jwks_uri, build_jwks_uri("https")},
+        {denies_access_token, [ 
+            {token_endpoint, denies_access_token_expectation()} ]},
+        {auth_server_error, [ 
+            {token_endpoint, auth_server_error_when_access_token_request_expectation()} ]},
+        {non_json_payload, [ 
+            {token_endpoint, non_json_payload_when_access_token_request_expectation()} ]},
+        {grants_refresh_token, [ 
+            {token_endpoint, grants_refresh_token_expectation()} ]}
       | Config].
 
 end_per_suite(Config) ->
@@ -95,7 +104,7 @@ init_per_group(https, Config) ->
     CertsDir = ?config(rmq_certsdir, Config0),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
-    [{group, https},
+    [{group, https},        
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -198,21 +207,38 @@ configure_all_oauth_provider_settings(Config) ->
         OAuthProvider#oauth_provider.end_session_endpoint),
     application:set_env(rabbitmq_auth_backend_oauth2, authorization_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint),
-    KeyConfig = [ { jwks_url, OAuthProvider#oauth_provider.jwks_uri } ] ++
+    KeyConfig0 = 
         case OAuthProvider#oauth_provider.ssl_options of
             undefined ->
                 [];
             _ ->
                 [ {peer_verification, proplists:get_value(verify,
                     OAuthProvider#oauth_provider.ssl_options) },
-                  {cacertfile, proplists:get_value(cacertfile,
+                    {cacertfile, proplists:get_value(cacertfile,
                         OAuthProvider#oauth_provider.ssl_options) }
                 ]
+        end,
+    KeyConfig = 
+        case ?config(jwks_uri_type_of_config, Config) of 
+            undefined ->
+                application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
+                    OAuthProvider#oauth_provider.jwks_uri),
+                KeyConfig0;
+            only_jwks_uri -> 
+                application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
+                    OAuthProvider#oauth_provider.jwks_uri),
+                KeyConfig0; 
+            only_jwks_url -> 
+                [ { jwks_url, ?config(jwks_url, Config) } | KeyConfig0 ];
+            both -> 
+                application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
+                    OAuthProvider#oauth_provider.jwks_uri),
+                [ { jwks_url, ?config(jwks_url, Config) } | KeyConfig0 ]
         end,
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, KeyConfig).
 
 configure_minimum_oauth_provider_settings(Config) ->
-    OAuthProvider = ?config(oauth_provider_with_issuer, Config),
+    OAuthProvider = ?config(oauth_provider, Config),
     OAuthProviders = #{ ?config(oauth_provider_id, Config) =>
         oauth_provider_to_proplist(OAuthProvider) },
     application:set_env(rabbitmq_auth_backend_oauth2, oauth_providers,
@@ -232,8 +258,17 @@ configure_minimum_oauth_provider_settings(Config) ->
         end,
     application:set_env(rabbitmq_auth_backend_oauth2, key_config, KeyConfig).
 
-init_per_testcase(TestCase, Config) ->
+init_per_testcase(TestCase, Config0) ->
     application:set_env(rabbitmq_auth_backend_oauth2, use_global_locks, false),
+
+    Config = [case TestCase of 
+        jwks_url_is_used_in_absense_of_jwks_uri -> 
+            {jwks_uri_type_of_config, only_jwks_url};
+        jwks_uri_takes_precedence_over_jwks_url -> 
+            {jwks_uri_type_of_config, both};
+        _ -> 
+            {jwks_uri_type_of_config, only_jwks_uri}
+        end | Config0],
 
     case ?config(with_all_oauth_provider_settings, Config) of
         false -> configure_minimum_oauth_provider_settings(Config);
@@ -248,6 +283,9 @@ init_per_testcase(TestCase, Config) ->
         https ->
             start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
                 ListOfExpectations);
+        without_all_oauth_providers_settings ->
+            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
+                ListOfExpectations);    
         _ ->
             do_nothing
     end,
@@ -256,12 +294,15 @@ init_per_testcase(TestCase, Config) ->
 end_per_testcase(_, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, oauth_providers),
     application:unset_env(rabbitmq_auth_backend_oauth2, issuer),
+    application:unset_env(rabbitmq_auth_backend_oauth2, jwks_uri),
     application:unset_env(rabbitmq_auth_backend_oauth2, token_endpoint),
     application:unset_env(rabbitmq_auth_backend_oauth2, authorization_endpoint),
     application:unset_env(rabbitmq_auth_backend_oauth2, end_session_endpoint),
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
     case ?config(group, Config) of
         https ->
+            stop_https_auth_server();
+        without_all_oauth_providers_settings ->
             stop_https_auth_server();
         _ ->
             do_nothing
@@ -466,16 +507,15 @@ ssl_connection_error(Config) ->
     {error, {failed_connect, _} } = oauth2_client:get_access_token(
         ?config(oauth_provider_with_wrong_ca, Config), build_access_token_request(Parameters)).
 
-verify_get_oauth_provider_returns_oauth_provider_from_key_config() ->
+verify_get_oauth_provider_returns_root_oauth_provider() ->
     {ok, #oauth_provider{id = Id,
                         issuer = Issuer,
                         token_endpoint = TokenEndPoint,
                         jwks_uri = Jwks_uri}} =
         oauth2_client:get_oauth_provider([issuer, token_endpoint, jwks_uri]),
-    ExpectedIssuer = application:get_env(rabbitmq_auth_backend_oauth2, issuer, undefined),
-    ExpectedTokenEndPoint = application:get_env(rabbitmq_auth_backend_oauth2, token_endpoint, undefined),
-    ExpectedJwks_uri = proplists:get_value(jwks_url,
-        application:get_env(rabbitmq_auth_backend_oauth2, key_config, [])),
+    ExpectedIssuer = get_env(issuer),
+    ExpectedTokenEndPoint = get_env(token_endpoint),
+    ExpectedJwks_uri = get_env(jwks_uri),
     ?assertEqual(root, Id),
     ?assertEqual(ExpectedIssuer, Issuer),
     ?assertEqual(ExpectedTokenEndPoint, TokenEndPoint),
@@ -492,9 +532,9 @@ verify_get_oauth_provider_returns_default_oauth_provider(DefaultOAuthProviderId)
 get_oauth_provider(Config) ->
     case ?config(with_all_oauth_provider_settings, Config) of
         true ->
-            case application:get_env(rabbitmq_auth_backend_oauth2, default_oauth_provider, undefined) of
+            case get_env(default_oauth_provider) of
                 undefined ->
-                    verify_get_oauth_provider_returns_oauth_provider_from_key_config();
+                    verify_get_oauth_provider_returns_root_oauth_provider();
                 DefaultOAuthProviderId ->
                     verify_get_oauth_provider_returns_default_oauth_provider(DefaultOAuthProviderId)
             end;
@@ -525,8 +565,7 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
                     [issuer, token_endpoint, jwks_uri, authorization_endpoint,
                         end_session_endpoint]),
 
-            OAuthProviders = application:get_env(rabbitmq_auth_backend_oauth2,
-                oauth_providers, #{}),
+            OAuthProviders = get_env(oauth_providers, #{}),
             ExpectedProvider = maps:get(Id, OAuthProviders, []),
             ?assertEqual(proplists:get_value(issuer, ExpectedProvider),
                 Issuer),
@@ -564,6 +603,17 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
                 Jwks_uri)
     end.
 
+jwks_url_is_used_in_absense_of_jwks_uri(Config) ->
+    {ok, #oauth_provider{
+        jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),                
+    ?assertEqual(
+        proplists:get_value(jwks_url, get_env(key_config, []), undefined), 
+        Jwks_uri).
+
+jwks_uri_takes_precedence_over_jwks_url(Config) ->
+    {ok, #oauth_provider{
+        jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
+    ?assertEqual(get_env(jwks_uri), Jwks_uri).
 
 
 %%% HELPERS
@@ -584,10 +634,13 @@ build_token_endpoint_uri(Scheme) ->
                          path => "/token"}).
 
 build_jwks_uri(Scheme) ->
+    build_jwks_uri(Scheme, "/certs").
+
+build_jwks_uri(Scheme, Path) ->
     uri_string:recompose(#{scheme => Scheme,
                          host => "localhost",
                          port => rabbit_data_coercion:to_integer(?AUTH_PORT),
-                         path => "/certs"}).
+                         path => Path}).
 
 build_access_token_request(Request) ->
     #access_token_request {
@@ -623,11 +676,11 @@ oauth_provider_to_proplist(#oauth_provider{
         authorization_endpoint = AuthorizationEndpoint,
         ssl_options = SslOptions,
         jwks_uri = Jwks_uri}) ->
-    [ { issuer, Issuer},
+    [   {issuer, Issuer},
         {token_endpoint, TokenEndpoint},
         {end_session_endpoint, EndSessionEndpoint},
         {authorization_endpoint, AuthorizationEndpoint},
-        { https,
+        {https,
             case SslOptions of
                 undefined -> [];
                 Value -> Value
@@ -676,6 +729,11 @@ token(ExpiresIn) ->
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(AccessToken, Jwk),
     EncodedToken.
 
+
+get_env(Par) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
+get_env(Par, Default) ->
+    application:get_env(rabbitmq_auth_backend_oauth2, Par, Default).
 
 
 build_http_mock_behaviour(Request, Response) ->

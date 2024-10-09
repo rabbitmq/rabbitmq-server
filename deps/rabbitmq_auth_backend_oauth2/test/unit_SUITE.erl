@@ -73,16 +73,10 @@ groups() ->
 init_per_suite(Config) ->
     application:load(rabbitmq_auth_backend_oauth2),
     Env = application:get_all_env(rabbitmq_auth_backend_oauth2),
-    Config1 = rabbit_ct_helpers:set_config(Config, {env, Env}),
-    rabbit_ct_helpers:run_setup_steps(Config1, []).
+    lists:foreach(fun({K, _V}) -> unset_env(K) end, Env),
+    rabbit_ct_helpers:run_setup_steps(Config, []).
 
 end_per_suite(Config) ->
-    Env = ?config(env, Config),
-    lists:foreach(
-        fun({K, V}) ->
-            set_env(K, V)
-        end,
-        Env),
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(with_rabbitmq_node, Config) ->
@@ -1105,8 +1099,8 @@ test_incorrect_kid(_) ->
     AltKid   = <<"other-token-key">>,
     Username = <<"username">>,
     Jwk      = ?UTIL_MOD:fixture_jwk(),
-    set_env(resource_server_id, 
-        <<"rabbitmq">>),
+    unset_env(key_config),
+    set_env(resource_server_id, <<"rabbitmq">>),
     Token = ?UTIL_MOD:sign_token_hs(
         ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, 
             AltKid, true),
@@ -1298,6 +1292,8 @@ normalize_token_scope_without_scope_claim(_) ->
 
 set_env(Par, Var) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Var).
+unset_env(Par) ->
+    application:unset_env(rabbitmq_auth_backend_oauth2, Par).
 
 assert_vhost_access_granted(AuthUser, VHost) ->
     assert_vhost_access_response(true, AuthUser, VHost).
