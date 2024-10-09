@@ -73,6 +73,26 @@
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
 
+{mapping,
+ "auth_oauth2.scope_aliases.$alias",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.scope_aliases.$index.alias",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.scope_aliases.$index.scope",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_scope_aliases(Conf)
+ end}.
 
 %% Configure the plugin to skip validation of the aud field
 %%
@@ -354,6 +374,21 @@
   "rabbitmq_auth_backend_oauth2.resource_servers",
   [{datatype, string}]
 }.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.scope_aliases.$alias",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.scope_aliases.$index.alias",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.scope_aliases.$index.scope",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
 
 {mapping,
   "auth_oauth2.resource_servers.$name.oauth_provider_id",

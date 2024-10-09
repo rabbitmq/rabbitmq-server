@@ -15,7 +15,8 @@
 -import(rabbit_oauth2_schema, [
     translate_endpoint_params/2, 
     translate_oauth_providers/1,
-    translate_resource_servers/1
+    translate_resource_servers/1,
+    translate_scope_aliases/1
 ]).
 
 all() ->
@@ -37,8 +38,10 @@ all() ->
         test_with_many_resource_servers,
         test_resource_servers_attributes,
         test_invalid_oauth_providers_endpoint_params,
-        test_without_oauth_providers_with_endpoint_params
-
+        test_without_oauth_providers_with_endpoint_params,
+        test_scope_aliases_configured_as_list_of_properties,
+        test_scope_aliases_configured_as_map,
+        test_scope_aliases_configured_as_list_of_missing_properties
     ].
 
 
@@ -97,9 +100,11 @@ test_without_oauth_providers_with_endpoint_params(_) ->
 
 test_with_one_oauth_provider(_) ->
     Conf = [
-        {["auth_oauth2","oauth_providers","keycloak","issuer"],"https://rabbit"}
+        {["auth_oauth2","oauth_providers","keycloak","issuer"],
+            "https://rabbit"}
     ],
-    #{<<"keycloak">> := [{issuer, "https://rabbit"}]
+    #{<<"keycloak">> := [
+        {issuer, "https://rabbit"}]
     } = translate_oauth_providers(Conf).
 
 test_with_one_resource_server(_) ->
@@ -128,8 +133,10 @@ test_with_many_oauth_providers(_) ->
 
 test_with_many_resource_servers(_) ->
     Conf = [
-        {["auth_oauth2","resource_servers","rabbitmq1","id"], "rabbitmq1"},
-        {["auth_oauth2","resource_servers","rabbitmq2","id"], "rabbitmq2"}
+        {["auth_oauth2","resource_servers","rabbitmq1","id"],
+            "rabbitmq1"},
+        {["auth_oauth2","resource_servers","rabbitmq2","id"],
+            "rabbitmq2"}
     ],
     #{<<"rabbitmq1">> := [{id, <<"rabbitmq1">>}
                         ],
@@ -276,6 +283,49 @@ test_oauth_providers_signing_keys(Conf) ->
     #{<<"1">> := {pem, <<"I'm not a certificate">>},
       <<"2">> := {pem, <<"I'm not a certificate">>}
     } = SigningKeys.
+
+test_scope_aliases_configured_as_list_of_properties(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","scope_aliases","1","alias"],
+            "admin"},
+        {["auth_oauth2","scope_aliases","1","scope"], 
+            "rabbitmq.tag:administrator"},
+        {["auth_oauth2","scope_aliases","2","alias"],
+            "developer"},
+        {["auth_oauth2","scope_aliases","2","scope"], 
+            "rabbitmq.tag:management rabbitmq.read:*/*"}        
+    ],
+    #{
+        <<"admin">> := [<<"rabbitmq.tag:administrator">>],
+        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
+    } = translate_scope_aliases(CuttlefishConf).
+    
+test_scope_aliases_configured_as_list_of_missing_properties(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","scope_aliases","1","alias"],
+            "admin"}
+    ],
+    #{} = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf),
+
+    CuttlefishConf2 = [
+        {["auth_oauth2","scope_aliases","1","scope"],
+            "rabbitmq.tag:management rabbitmq.read:*/*"}
+    ],
+    #{} = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf2).
+
+        
+test_scope_aliases_configured_as_map(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","scope_aliases","admin"], 
+            "rabbitmq.tag:administrator"},
+        {["auth_oauth2","scope_aliases","developer"], 
+            "rabbitmq.tag:management rabbitmq.read:*/*"}        
+    ],
+    #{
+        <<"admin">> := [<<"rabbitmq.tag:administrator">>],
+        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
+    } = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf).
+    
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").
