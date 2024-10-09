@@ -29,6 +29,8 @@
 -export([
          delete_for_destination_in_mnesia/2,
          delete_for_destination_in_khepri/2,
+         handle_deletions_in_khepri/1,
+         handle_deletions_in_khepri_tx/1,
          delete_all_for_exchange_in_mnesia/3,
          delete_all_for_exchange_in_khepri/3,
          delete_transient_for_destination_in_mnesia/1,
@@ -335,14 +337,13 @@ delete_in_khepri(#binding{source = SrcName,
                    case {lookup_resource_in_khepri_tx(SrcName),
                          lookup_resource_in_khepri_tx(DstName)} of
                        {[Src], [Dst]} ->
-                           case exists_in_khepri(Path, Binding) of
+                           case exists_in_khepri_tx(Path, Binding) of
                                false ->
                                    ok;
                                true ->
                                    case ChecksFun(Src, Dst) of
                                        ok ->
-                                           ok = delete_in_khepri(Binding),
-                                           maybe_auto_delete_exchange_in_khepri(Binding#binding.source, [Binding], rabbit_binding:new_deletions(), false);
+                                           ok = delete_in_khepri_tx(Binding);
                                        {error, _} = Err ->
                                            Err
                                    end
@@ -361,7 +362,7 @@ delete_in_khepri(#binding{source = SrcName,
             {ok, Deletions}
     end.
 
-exists_in_khepri(Path, Binding) ->
+exists_in_khepri_tx(Path, Binding) ->
     case khepri_tx:get(Path) of
         {ok, Set} ->
             sets:is_element(Binding, Set);
@@ -369,7 +370,7 @@ exists_in_khepri(Path, Binding) ->
             false
     end.
 
-delete_in_khepri(Binding) ->
+delete_in_khepri_tx(Binding) ->
     Path = khepri_route_path(Binding),
     case khepri_tx:get(Path) of
         {ok, Set0} ->
@@ -382,20 +383,6 @@ delete_in_khepri(Binding) ->
             end;
         _ ->
             ok
-    end.
-
-maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions, OnlyDurable) ->
-    case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName, OnlyDurable) of
-        {not_deleted, undefined} ->
-            Deletions;
-        {not_deleted, X} ->
-            rabbit_binding:add_deletion(
-              XName, X, not_deleted, Bindings, Deletions);
-        {deleted, X, Deletions1} ->
-            Deletions2 = rabbit_binding:combine_deletions(
-                           Deletions, Deletions1),
-            rabbit_binding:add_deletion(
-              XName, X, deleted, Bindings, Deletions2)
     end.
 
 %% -------------------------------------------------------------------
@@ -889,19 +876,90 @@ delete_for_destination_in_mnesia(DstName, OnlyDurable, Fun) ->
       OnlyDurable :: boolean(),
       Deletions :: rabbit_binding:deletions().
 
-delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}, OnlyDurable) ->
+delete_for_destination_in_khepri(
+  #resource{virtual_host = VHost, kind = Kind, name = Name}, _OnlyDurable) ->
     Pattern = khepri_route_path(
                 VHost,
                 _SrcName = ?KHEPRI_WILDCARD_STAR,
                 Kind,
                 Name,
                 _RoutingKey = ?KHEPRI_WILDCARD_STAR),
-    {ok, BindingsMap} = khepri_tx_adv:delete_many(Pattern),
-    Bindings = maps:fold(fun(_, #{data := Set}, Acc) ->
-                                 sets:to_list(Set) ++ Acc
-                         end, [], BindingsMap),
-    rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
-                                       lists:keysort(#binding.source, Bindings), OnlyDurable).
+    {ok, Props} = khepri_tx_adv:delete_many(Pattern),
+    handle_deletions_in_khepri_tx(Props).
+
+%% -------------------------------------------------------------------
+%% handle_deletions_in_khepri().
+%% -------------------------------------------------------------------
+
+-spec handle_deletions_in_khepri(NodePropsMap) -> Deletions when
+      NodePropsMap :: khepri_adv:node_props_map(),
+      Deletions :: rabbit_binding:deletions().
+
+handle_deletions_in_khepri(Props) when is_map(Props) ->
+    handle_deletions_in_khepri(Props, fun rabbit_exchange:lookup/1).
+
+handle_deletions_in_khepri_tx(Props) when is_map(Props) ->
+    FindX = fun(XName) ->
+                    Path = rabbit_db_exchange:khepri_exchange_path(XName),
+                    khepri_tx:get(Path)
+            end,
+    handle_deletions_in_khepri(Props, FindX).
+
+handle_deletions_in_khepri(Props, FindX)
+  when is_map(Props) andalso is_function(FindX, 1) ->
+    %% First collect the deletions into an intermediary map with the type:
+    %% ```
+    %% #{XName :: rabbit_exchange:name() =>
+    %%   {WasDeleted :: deleted | not_deleted,
+    %%    MaybeX :: rabbit_types:exchange() | undefined,
+    %%    Bindings :: sets:set()}}
+    %% '''
+    %% Then form the `rabbit_binding:deletions()', looking up any exchanges
+    %% that were not deleted. `MaybeX' is an exchange iff the exchange was
+    %% deleted.
+
+    Deletions1 = maps:fold(
+                   fun (?KHEPRI_EXCHANGE_PATH(VHost, SrcName),
+                        #{data := X}, Acc) ->
+                           %% An auto-delete exchange was deleted because it no
+                           %% longer had any bindings.
+                           SrcName1 = rabbit_misc:r(VHost, exchange, SrcName),
+                           maps:update_with(
+                             SrcName1,
+                             fun({_WasDeleted, _MaybeX, Bindings}) ->
+                                     {deleted, X, Bindings}
+                             end, {deleted, X, sets:new([{version, 2}])}, Acc);
+                       (?KHEPRI_ROUTE_PATH(
+                          VHost, SrcName, _Kind, _DstName, _RoutingKey),
+                        #{data := Bindings}, Acc) ->
+                           %% Bindings were deleted for an exchange which may
+                           %% or may not have been deleted.
+                           SrcName1 = rabbit_misc:r(VHost, exchange, SrcName),
+                           maps:update_with(
+                             SrcName1,
+                             fun({WasDeleted, MaybeX, Bindings0}) ->
+                                     Bindings1 = sets:union(Bindings0, Bindings),
+                                     {WasDeleted, MaybeX, Bindings1}
+                             end, {not_deleted, undefined, Bindings}, Acc);
+                       (_Path, _Props, Acc) ->
+                           Acc
+                   end, #{}, Props),
+    FindX1 = fun (XName, undefined) ->
+                     FindX(XName);
+                 (_XName, X) ->
+                     {ok, X}
+             end,
+    maps:fold(
+      fun(XName, {WasDeleted, MaybeX, Bindings}, Deletions) ->
+              case FindX1(XName, MaybeX) of
+                  {ok, X} ->
+                      Bindings1 = sets:to_list(Bindings),
+                      rabbit_binding:add_deletion(
+                        XName, X, WasDeleted, Bindings1, Deletions);
+                  _ ->
+                      Deletions
+              end
+      end, rabbit_binding:new_deletions(), Deletions1).
 
 %% -------------------------------------------------------------------
 %% delete_transient_for_destination_in_mnesia().

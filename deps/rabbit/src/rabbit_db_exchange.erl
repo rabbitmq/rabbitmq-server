@@ -35,7 +35,6 @@
 
 %% Used by other rabbit_db_* modules
 -export([
-         maybe_auto_delete_in_khepri/2,
          maybe_auto_delete_in_mnesia/2,
          next_serial_in_mnesia_tx/1,
          next_serial_in_khepri_tx/1,
@@ -927,30 +926,6 @@ maybe_auto_delete_in_mnesia(XName, OnlyDurable) ->
                 {error, in_use}             -> {not_deleted, X};
                 {deleted, X, [], Deletions} -> {deleted, X, Deletions}
             end
-    end.
-
-%% -------------------------------------------------------------------
-%% maybe_auto_delete_in_khepri().
-%% -------------------------------------------------------------------
-
--spec maybe_auto_delete_in_khepri(ExchangeName, boolean()) -> Ret when
-      ExchangeName :: rabbit_exchange:name(),
-      Exchange :: rabbit_types:exchange(),
-      Deletions :: rabbit_binding:deletions(),
-      Ret ::  {'not_deleted', 'undefined' | Exchange} |
-              {'deleted', Exchange, Deletions}.
-
-maybe_auto_delete_in_khepri(XName, OnlyDurable) ->
-    case khepri_tx:get(khepri_exchange_path(XName)) of
-        {ok, #exchange{auto_delete = false} = X} ->
-            {not_deleted, X};
-        {ok, #exchange{auto_delete = true} = X} ->
-            case conditional_delete_in_khepri(X, OnlyDurable) of
-                {error, in_use}             -> {not_deleted, X};
-                {deleted, X, [], Deletions} -> {deleted, X, Deletions}
-            end;
-        {error, _} ->
-            {not_deleted, undefined}
     end.
 
 %% -------------------------------------------------------------------

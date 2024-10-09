@@ -403,21 +403,13 @@ delete_in_mnesia(QueueName, Reason) ->
       end).
 
 delete_in_khepri(QueueName) ->
-    delete_in_khepri(QueueName, false).
-
-delete_in_khepri(QueueName, OnlyDurable) ->
-    rabbit_khepri:transaction(
-      fun () ->
-              Path = khepri_queue_path(QueueName),
-              case khepri_tx_adv:delete(Path) of
-                  {ok, #{data := _}} ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, _} ->
-                      ok
-              end
-      end, rw).
+    Path = khepri_queue_path(QueueName),
+    case rabbit_khepri:adv_delete(Path) of
+        {ok, Props} ->
+            rabbit_db_binding:handle_deletions_in_khepri(Props);
+        {error, _} = Err ->
+            Err
+    end.
 
 %% -------------------------------------------------------------------
 %% internal_delete().
@@ -435,7 +427,7 @@ internal_delete(QueueName, OnlyDurable, Reason) ->
     %% HA queues are removed it can be removed.
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) end,
-        khepri => fun() -> delete_in_khepri(QueueName, OnlyDurable) end
+        khepri => fun() -> delete_in_khepri(QueueName) end
        }).
 
 internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
@@ -1069,14 +1061,11 @@ do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
             fun() ->
                     rabbit_misc:fold_while_ok(
                       fun({Path, QName}, Acc) ->
-                              %% Also see `delete_in_khepri/2'.
+                              %% Also see `delete_in_khepri/1'.
                               case khepri_tx_adv:delete(Path) of
-                                  {ok, #{data := _}} ->
-                                      Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
-                                                    QName, false),
+                                  {ok, NodePropsMap} ->
+                                      Deletions = rabbit_db_binding:handle_deletions_in_khepri_tx(NodePropsMap),
                                       {ok, [{QName, Deletions} | Acc]};
-                                  {ok, _} ->
-                                      {ok, Acc};
                                   {error, _} = Error ->
                                       Error
                               end
