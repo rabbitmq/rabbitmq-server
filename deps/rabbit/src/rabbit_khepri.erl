@@ -140,6 +140,7 @@
          clear_payload/1,
          delete/1, delete/2,
          delete_or_fail/1,
+         adv_delete/1, adv_delete/2,
          adv_delete_many/1,
 
          transaction/1,
@@ -1040,6 +1041,13 @@ delete_or_fail(Path) ->
         Error ->
             Error
     end.
+
+adv_delete(Path) ->
+    adv_delete(Path, #{}).
+
+adv_delete(Path, Options0) ->
+    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
+    khepri_adv:delete(?STORE_ID, Path, Options).
 
 adv_delete_many(Path) ->
     khepri_adv:delete_many(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS).
