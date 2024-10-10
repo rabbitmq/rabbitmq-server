@@ -535,7 +535,6 @@ init_master2(Parent,NodeOptsList,LogDirs) ->
     Parent ! {self(),Result}.
 
 master_loop(#state{node_ctrl_pids=[],
-		   logdirs=LogDirs,
 		   results=Finished}) ->
     Str =
 	lists:map(fun({Node,Result}) ->
@@ -544,8 +543,7 @@ master_loop(#state{node_ctrl_pids=[],
 		  end,lists:reverse(Finished)),
     log(all,"TEST RESULTS","~ts", [Str]),
     log(all,"Info","Updating log files",[]),
-    refresh_logs(LogDirs,[]),
-    
+
     ct_master_event_fork:stop(),
     ct_master_logs_fork:stop(),
     ok;
@@ -740,34 +738,6 @@ master_progress(NodeCtrlPids,Results) ->
 				 {Node,ongoing}
 			 end,NodeCtrlPids).    
     
-%% refresh those dirs where more than one node has written logs
-refresh_logs([D|Dirs],Refreshed) ->
-    case lists:member(D,Dirs) of
-	true ->
-	    case lists:keymember(D,1,Refreshed) of
-		true ->
-		    refresh_logs(Dirs,Refreshed);
-		false ->
-		    {ok,Cwd} = file:get_cwd(),
-		    case catch ct_run:refresh_logs(D, unknown) of
-			{'EXIT',Reason} ->
-			    ok = file:set_cwd(Cwd),
-			    refresh_logs(Dirs,[{D,{error,Reason}}|Refreshed]);
-			Result -> 
-			    refresh_logs(Dirs,[{D,Result}|Refreshed])
-		    end
-	    end;
-	false ->
-	    refresh_logs(Dirs,Refreshed)
-    end;
-refresh_logs([],Refreshed) ->
-    Str =
-	lists:map(fun({D,Result}) ->
-			  io_lib:format("Refreshing logs in ~tp... ~tp",
-					[D,Result])
-		  end,Refreshed),
-    log(all,"Info","~ts", [Str]).
-
 %%%-----------------------------------------------------------------
 %%% NODE CONTROLLER, runs and controls tests on a test node.
 %%%-----------------------------------------------------------------
