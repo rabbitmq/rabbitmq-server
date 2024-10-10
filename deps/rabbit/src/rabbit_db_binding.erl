@@ -28,11 +28,10 @@
 %% Exported to be used by various rabbit_db_* modules
 -export([
          delete_for_destination_in_mnesia/2,
-         delete_for_destination_in_khepri/2,
          handle_deletions_in_khepri/1,
          handle_deletions_in_khepri_tx/1,
          delete_all_for_exchange_in_mnesia/3,
-         delete_all_for_exchange_in_khepri/3,
+         delete_all_for_exchange_in_khepri/2,
          delete_transient_for_destination_in_mnesia/1,
          has_for_source_in_mnesia/1,
          has_for_source_in_khepri/1,
@@ -809,20 +808,19 @@ delete_for_source_in_mnesia(SrcName, ShouldIndexTable) ->
 %% delete_all_for_exchange_in_khepri().
 %% -------------------------------------------------------------------
 
--spec delete_all_for_exchange_in_khepri(Exchange, OnlyDurable, RemoveBindingsForSource)
+-spec delete_all_for_exchange_in_khepri(Exchange, RemoveBindingsForSource)
                                        -> Ret when
       Exchange :: rabbit_types:exchange(),
-      OnlyDurable :: boolean(),
       RemoveBindingsForSource :: boolean(),
       Binding :: rabbit_types:binding(),
       Ret :: {deleted, Exchange, [Binding], rabbit_binding:deletions()}.
 
-delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, OnlyDurable, RemoveBindingsForSource) ->
+delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, RemoveBindingsForSource) ->
     Bindings = case RemoveBindingsForSource of
                    true  -> delete_for_source_in_khepri(XName);
                    false -> []
                end,
-    {deleted, X, Bindings, delete_for_destination_in_khepri(XName, OnlyDurable)}.
+    {deleted, X, Bindings, delete_for_destination_in_khepri(XName)}.
 
 delete_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
     Path = khepri_route_path(
@@ -871,13 +869,12 @@ delete_for_destination_in_mnesia(DstName, OnlyDurable, Fun) ->
 %% delete_for_destination_in_khepri().
 %% -------------------------------------------------------------------
 
--spec delete_for_destination_in_khepri(Dst, OnlyDurable) -> Deletions when
+-spec delete_for_destination_in_khepri(Dst) -> Deletions when
       Dst :: rabbit_types:binding_destination(),
-      OnlyDurable :: boolean(),
       Deletions :: rabbit_binding:deletions().
 
 delete_for_destination_in_khepri(
-  #resource{virtual_host = VHost, kind = Kind, name = Name}, _OnlyDurable) ->
+  #resource{virtual_host = VHost, kind = Kind, name = Name}) ->
     Pattern = khepri_route_path(
                 VHost,
                 _SrcName = ?KHEPRI_WILDCARD_STAR,
