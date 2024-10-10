@@ -8,6 +8,7 @@
 -module(rabbit_ssl_options).
 
 -export([fix/1]).
+-export([fix_client/1]).
 
 
 -define(BAD_SSL_PROTOCOL_VERSIONS, [
@@ -21,6 +22,27 @@ fix(Config) ->
     fix_verify_fun(
       fix_ssl_protocol_versions(
         hibernate_after(Config))).
+
+-spec fix_client(rabbit_types:infos()) -> rabbit_types:infos().
+fix_client(Config) ->
+    fix_cacerts(
+        fix(Config)).
+
+fix_cacerts(SslOptsConfig) ->
+    CACerts = proplists:get_value(cacerts, SslOptsConfig, undefined),
+    CACertfile = proplists:get_value(cacertfile, SslOptsConfig, undefined),
+    case {CACerts, CACertfile} of
+        {undefined, undefined} ->
+            try public_key:cacerts_get() of
+                CaCerts ->
+                    [{cacerts, CaCerts} | SslOptsConfig]
+            catch
+                _ -> 
+                    SslOptsConfig
+            end;
+        _CaCerts ->
+            SslOptsConfig
+    end.
 
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
