@@ -217,8 +217,9 @@ queue_on_other_node(Config) ->
     consume(Chan2, <<"some-queue">>),
 
     force_stats(Config),
-    Res = http_get(Config, "/queues/%2F/some-queue"),
+    ?awaitMatch([_], maps:get(consumer_details, http_get(Config, "/queues/%2F/some-queue")), 60000),
 
+    Res = http_get(Config, "/queues/%2F/some-queue"),
     % assert some basic data is present
     [Cons] = maps:get(consumer_details, Res),
     #{} = maps:get(channel_details, Cons), % channel details proplist must not be empty
