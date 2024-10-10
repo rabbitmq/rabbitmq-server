@@ -130,8 +130,12 @@ init(Parent,LogDir,Nodes) ->
 	    end
     end,
 
+    {ok,Cwd} = file:get_cwd(),
+    ok = file:set_cwd(LogDir),
     _ = make_all_runs_index(LogDir),
     CtLogFd = open_ct_master_log(RunDirAbs),
+    ok = file:set_cwd(Cwd),
+
     NodeStr = 
 	lists:flatten(lists:map(fun(N) ->
 					atom_to_list(N) ++ " "
@@ -183,7 +187,10 @@ loop(State) ->
 	    lists:foreach(Fun,List),
 	    loop(State);
 	{make_all_runs_index,From} ->
+        {ok,Cwd} = file:get_cwd(),
+        ok = file:set_cwd(State#state.logdir),
 	    _ = make_all_runs_index(State#state.logdir),
+        ok = file:set_cwd(Cwd),
 	    return(From,State#state.logdir),
 	    loop(State);	
 	{{nodedir,Node,RunDir},From} ->
@@ -191,7 +198,10 @@ loop(State) ->
 	    return(From,ok),
 	    loop(State);	
 	stop ->
+        {ok,Cwd} = file:get_cwd(),
+        ok = file:set_cwd(State#state.logdir),
 	    _ = make_all_runs_index(State#state.logdir),
+        ok = file:set_cwd(Cwd),
 	    io:format(State#state.log_fd,
 		      int_header()++int_footer(),
 		      [log_timestamp(?now),"Finished!"]),
