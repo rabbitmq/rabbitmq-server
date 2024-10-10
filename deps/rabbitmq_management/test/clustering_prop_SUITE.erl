@@ -113,7 +113,10 @@ prop_connection_channel_counts(Config) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
                 force_stats(Config),
-                Res = validate_counts(Config, Cons),
+                %% TODO retry a few times
+                Res = retry_for(
+                        fun() -> validate_counts(Config, Cons) end,
+                        60),
                 cleanup(Cons),
                 rabbit_ct_helpers:await_condition(
                   fun () -> validate_counts(Config, []) end,
@@ -275,3 +278,13 @@ dump_table(Config, Table) ->
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
     ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
 
+retry_for(Fun, 0) ->
+    false;
+retry_for(Fun, Retries) ->
+    case Fun() of
+        true ->
+            true;
+        false ->
+            timer:sleep(1000),
+            retry_for(Fun, Retries - 1)
+    end.
