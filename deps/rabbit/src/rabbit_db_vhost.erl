@@ -533,4 +533,4 @@ clear_in_khepri() ->
 %% --------------------------------------------------------------
 
 khepri_vhost_path(VHost) when ?IS_KHEPRI_PATH_CONDITION(VHost) ->
-    ?KHEPRI_ROOT_PATH ++ [vhosts, VHost].
+    ?KHEPRI_VHOST_PATH(VHost).

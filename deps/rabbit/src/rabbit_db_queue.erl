@@ -13,6 +13,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
+-include("include/rabbit_khepri.hrl").
+
 -export([
          get/1,
          get_many/1,
@@ -1359,5 +1361,7 @@ list_with_possible_retry_in_khepri(Fun) ->
 khepri_queue_path(#resource{virtual_host = VHost, name = Name}) ->
     khepri_queue_path(VHost, Name).
 
-khepri_queue_path(VHost, Name) when ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    rabbit_db_vhost:khepri_vhost_path(VHost) ++ [queues, Name].
+khepri_queue_path(VHost, Name)
+  when ?IS_KHEPRI_PATH_CONDITION(VHost) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Name) ->
+    ?KHEPRI_QUEUE_PATH(VHost, Name).

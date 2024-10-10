@@ -170,4 +170,4 @@ get_consistent_in_khepri(Node) ->
 %% -------------------------------------------------------------------
 
 khepri_maintenance_path(Node) when ?IS_KHEPRI_PATH_CONDITION(Node) ->
-    ?KHEPRI_ROOT_PATH ++ [node_maintenance, Node].
+    ?KHEPRI_MAINTENANCE_PATH(Node).

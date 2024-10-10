@@ -1094,14 +1094,15 @@ clear_in_khepri() ->
 
 khepri_user_path(Username)
   when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    ?KHEPRI_ROOT_PATH ++ [users, Username].
+    ?KHEPRI_USER_PATH(Username).
 
 khepri_user_permission_path(Username, VHostName)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    (rabbit_db_vhost:khepri_vhost_path(VHostName) ++
-     [user_permissions, Username]).
+  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
+       ?IS_KHEPRI_PATH_CONDITION(VHostName) ->
+    ?KHEPRI_USER_PERMISSION_PATH(VHostName, Username).
 
 khepri_topic_permission_path(Username, VHostName, Exchange)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    (rabbit_db_exchange:khepri_exchange_path(VHostName, Exchange) ++
-     [user_permissions, Username]).
+  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
+       ?IS_KHEPRI_PATH_CONDITION(VHostName) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Exchange) ->
+    ?KHEPRI_TOPIC_PERMISSION_PATH(VHostName, Exchange, Username).

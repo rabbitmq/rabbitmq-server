@@ -10,6 +10,8 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("include/rabbit_khepri.hrl").
+
 -export([exists/1,
          create/2,
          delete/2,
@@ -1021,8 +1023,7 @@ khepri_route_path(VHost, SrcName, Kind, DstName, RoutingKey)
   when ?IS_KHEPRI_PATH_CONDITION(Kind) andalso
        ?IS_KHEPRI_PATH_CONDITION(DstName) andalso
        ?IS_KHEPRI_PATH_CONDITION(RoutingKey) ->
-    ExchangePath = rabbit_db_exchange:khepri_exchange_path(VHost, SrcName),
-    ExchangePath ++ [bindings, Kind, DstName, RoutingKey].
+    ?KHEPRI_ROUTE_PATH(VHost, SrcName, Kind, DstName, RoutingKey).
 
 khepri_route_path_to_args(Path) ->
     Pattern = khepri_route_path(
