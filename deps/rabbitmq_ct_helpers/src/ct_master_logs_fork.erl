@@ -422,7 +422,7 @@ footer() ->
      "Copyright &copy; ", year(),
      " <a href=\"http://www.erlang.org\">Open Telecom Platform</a>",
      xhtml("<br>\n", "<br />\n"),
-     "Updated: <!--date-->", current_time(), "<--!/date-->",
+     "Updated: <!--date-->", current_time(), "<!--/date-->",
      xhtml("<br>\n", "<br />\n"),
      xhtml("</font></p>\n", "</div>\n"),
      "</center>\n"
