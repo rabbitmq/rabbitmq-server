@@ -23,7 +23,7 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
-		<kotlin.version>2.0.20</kotlin.version>
+		<kotlin.version>2.0.21</kotlin.version>
 		<junit-jupiter.version>5.10.0</junit-jupiter.version>
 	</properties>
 
