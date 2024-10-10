@@ -81,6 +81,8 @@
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
 
+-import(rabbit_stream_utils, [check_write_permitted/2]).
+
 %% client API
 -export([start_link/4,
          info/2,
@@ -1657,6 +1659,26 @@ handle_frame_post_auth(Transport,
     {Connection1, State1};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
+                                          resource_alarm = false} = C,
+                       State,
+                       {request, CorrelationId,
+                        {declare_publisher, _PublisherId, WriterRef, S}})
+                      when is_binary(WriterRef), byte_size(WriterRef) > 255 ->
+  {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
+                      ok ->
+                        {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
+                      error ->
+                        {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
+                    end,
+  response(Transport,
+           C,
+           declare_publisher,
+           CorrelationId,
+           Code),
+  rabbit_global_counters:increase_protocol_counter(stream, Counter, 1),
+  {C, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{user = User,
                                           publishers = Publishers0,
                                           publisher_to_ids = RefIds0,
                                           resource_alarm = false} =
@@ -1664,7 +1686,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {declare_publisher, PublisherId, WriterRef, Stream}}) ->
-    case rabbit_stream_utils:check_write_permitted(stream_r(Stream,
+    case check_write_permitted(stream_r(Stream,
                                                             Connection0),
                                                    User)
     of
@@ -3102,7 +3124,7 @@ evaluate_state_after_secret_update(Transport,
     {_, Conn1} = ensure_token_expiry_timer(User, Conn0),
     PublisherStreams =
     lists:foldl(fun(#publisher{stream = Str}, Acc) ->
-                        case rabbit_stream_utils:check_write_permitted(stream_r(Str, Conn0), User) of
+                        case check_write_permitted(stream_r(Str, Conn0), User) of
                             ok ->
                                 Acc;
                             _ ->
