@@ -696,6 +696,7 @@ rabbit:
 - rabbit_prelaunch_logging
 - rabbit_priority_queue
 - rabbit_process
+- rabbit_process_flag
 - rabbit_queue_consumers
 - rabbit_queue_decorator
 - rabbit_queue_index

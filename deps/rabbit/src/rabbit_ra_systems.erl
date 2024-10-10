@@ -24,6 +24,9 @@
 -define(COORD_WAL_MAX_SIZE_B, 64_000_000).
 -define(QUORUM_AER_MAX_RPC_SIZE, 16).
 -define(QUORUM_DEFAULT_WAL_MAX_ENTRIES, 500_000).
+%% the default min bin vheap value in OTP 26
+-define(MIN_BIN_VHEAP_SIZE_DEFAULT, 46422).
+-define(MIN_BIN_VHEAP_SIZE_MULT, 64).
 
 -spec setup() -> ok | no_return().
 
@@ -107,7 +110,6 @@ ensure_ra_system_started(RaSystem) ->
     end.
 
 -spec get_config(ra_system_name()) -> ra_system:config().
-
 get_config(quorum_queues = RaSystem) ->
     DefaultConfig = get_default_config(),
     Checksums = application:get_env(rabbit, quorum_compute_checksums, true),
@@ -124,7 +126,16 @@ get_config(quorum_queues = RaSystem) ->
     AERBatchSize = application:get_env(rabbit, quorum_max_append_entries_rpc_batch_size,
                                        ?QUORUM_AER_MAX_RPC_SIZE),
     CompressMemTables = application:get_env(rabbit, quorum_compress_mem_tables, true),
+    MinBinVheapSize = case code_version:get_otp_version() of
+                          OtpMaj when OtpMaj >= 27 ->
+                              ?MIN_BIN_VHEAP_SIZE_DEFAULT * ?MIN_BIN_VHEAP_SIZE_MULT;
+                          _ ->
+                              ?MIN_BIN_VHEAP_SIZE_DEFAULT
+                      end,
+
     DefaultConfig#{name => RaSystem,
+                   wal_min_bin_vheap_size => MinBinVheapSize,
+                   server_min_bin_vheap_size => MinBinVheapSize,
                    default_max_append_entries_rpc_batch_size => AERBatchSize,
                    wal_compute_checksums => WalChecksums,
                    wal_max_entries => WalMaxEntries,

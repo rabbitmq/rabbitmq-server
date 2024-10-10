@@ -116,6 +116,7 @@ get_forms(Code) ->
             throw({no_abstract_code, Reason})
     end.
 
+-spec get_otp_version() -> non_neg_integer().
 get_otp_version() ->
     Version = erlang:system_info(otp_release),
     case re:run(Version, "^[0-9][0-9]", [{capture, first, list}]) of
