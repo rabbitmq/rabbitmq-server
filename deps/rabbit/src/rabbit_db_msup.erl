@@ -10,7 +10,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include("mirrored_supervisor.hrl").
 
--include("include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
 -export([
          create_tables/0,
