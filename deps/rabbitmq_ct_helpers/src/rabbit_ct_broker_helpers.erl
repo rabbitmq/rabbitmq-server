@@ -275,7 +275,7 @@ run_make_dist(Config) ->
             end;
         _ ->
             global:del_lock(LockId, [node()]),
-            ct:pal(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
+            ct:log(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
             Config
     end.
 
@@ -819,7 +819,7 @@ query_node(Config, NodeConfig) ->
                    %% 3.7.x node. If this is the case, we can ignore
                    %% this and leave the `enabled_plugins_file` config
                    %% variable unset.
-                   ct:pal("NO RABBITMQ_FEATURE_FLAGS_FILE"),
+                   ct:log("NO RABBITMQ_FEATURE_FLAGS_FILE"),
                    Vars0
            end,
     cover_add_node(Nodename),
@@ -883,7 +883,7 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
                          T1 = erlang:monotonic_time(),
                          Ret = Fun(NodeConfig),
                          T2 = erlang:monotonic_time(),
-                         ct:pal(
+                         ct:log(
                            ?LOW_IMPORTANCE,
                            "Time to run ~tp for node ~ts: ~b us",
                           [Fun,
@@ -901,7 +901,7 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
 
 wait_for_node_handling([], Fun, T0, Results) ->
     T3 = erlang:monotonic_time(),
-    ct:pal(
+    ct:log(
       ?LOW_IMPORTANCE,
       "Time to run ~tp for all nodes: ~b us",
       [Fun, erlang:convert_time_unit(T3 - T0, native, microsecond)]),
@@ -956,7 +956,7 @@ configured_metadata_store(Config) ->
     end.
 
 configure_metadata_store(Config) ->
-    ct:pal("Configuring metadata store..."),
+    ct:log("Configuring metadata store..."),
     case configured_metadata_store(Config) of
         {khepri, FFs0} ->
             case enable_khepri_metadata_store(Config, FFs0) of
@@ -967,12 +967,12 @@ configure_metadata_store(Config) ->
                     Config1
             end;
         mnesia ->
-            ct:pal("Enabling Mnesia metadata store"),
+            ct:log("Enabling Mnesia metadata store"),
             Config
     end.
 
 enable_khepri_metadata_store(Config, FFs0) ->
-    ct:pal("Enabling Khepri metadata store"),
+    ct:log("Enabling Khepri metadata store"),
     FFs = [khepri_db | FFs0],
     lists:foldl(fun(_FF, {skip, _Reason} = Skip) ->
                         Skip;
@@ -1143,7 +1143,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     NodeConfig.
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
-    ct:pal(
+    ct:log(
       "Looking up any crash reports in the nodes' log files. If we find "
       "some, they will appear below:"),
     CrashesCount = lists:foldl(
@@ -1152,7 +1152,11 @@ find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
                                        NodeConfig, IgnoredCrashes),
                              Total + Count
                      end, 0, NodeConfigs),
-    ct:pal("Found ~b crash report(s)", [CrashesCount]),
+    LogFn = case CrashesCount of
+        0 -> log;
+        _ -> pal
+    end,
+    ct:LogFn("Found ~b crash report(s)", [CrashesCount]),
     ?assertEqual(0, CrashesCount).
 
 count_crashes_in_logs(NodeConfig, IgnoredCrashes) ->

@@ -446,7 +446,7 @@ init_master(Parent,NodeOptsList,EvHandlers,MasterLogDir,LogDirs,
     end,
 
     %% start master logger
-    {MLPid,_} = ct_master_logs:start(MasterLogDir,
+    {MLPid,_} = ct_master_logs_fork:start(MasterLogDir,
 				     [N || {N,_} <- NodeOptsList]),
     log(all,"Master Logger process started","~w",[MLPid]),
 
@@ -456,13 +456,13 @@ init_master(Parent,NodeOptsList,EvHandlers,MasterLogDir,LogDirs,
 	    SpecsStr = lists:map(fun(Name) ->
 					 Name ++ " "
 				 end,Specs), 
-	    ct_master_logs:log("Test Specification file(s)","~ts",
+	    ct_master_logs_fork:log("Test Specification file(s)","~ts",
 			       [lists:flatten(SpecsStr)])
     end,
 
     %% start master event manager and add default handler
     {ok, _}  = start_ct_master_event(),
-    ct_master_event:add_handler(),
+    ct_master_event_fork:add_handler(),
     %% add user handlers for master event manager
     Add = fun({H,Args}) ->
 		  log(all,"Adding Event Handler","~w",[H]),
@@ -484,7 +484,7 @@ init_master(Parent,NodeOptsList,EvHandlers,MasterLogDir,LogDirs,
     init_master1(Parent,NodeOptsList,InitOptions,LogDirs).
 
 start_ct_master_event() ->
-    case ct_master_event:start_link() of
+    case ct_master_event_fork:start_link() of
         {error, {already_started, Pid}} ->
             {ok, Pid};
         Else ->
@@ -510,8 +510,8 @@ init_master1(Parent,NodeOptsList,InitOptions,LogDirs) ->
 		    init_master1(Parent,NodeOptsList,InitOptions1,LogDirs);
 		_ ->
 		    log(html,"Aborting Tests","",[]),
-		    ct_master_event:stop(),
-		    ct_master_logs:stop(),
+		    ct_master_event_fork:stop(),
+		    ct_master_logs_fork:stop(),
 		    exit(aborted)
 	    end
     end.
@@ -535,7 +535,6 @@ init_master2(Parent,NodeOptsList,LogDirs) ->
     Parent ! {self(),Result}.
 
 master_loop(#state{node_ctrl_pids=[],
-		   logdirs=LogDirs,
 		   results=Finished}) ->
     Str =
 	lists:map(fun({Node,Result}) ->
@@ -544,10 +543,9 @@ master_loop(#state{node_ctrl_pids=[],
 		  end,lists:reverse(Finished)),
     log(all,"TEST RESULTS","~ts", [Str]),
     log(all,"Info","Updating log files",[]),
-    refresh_logs(LogDirs,[]),
-    
-    ct_master_event:stop(),
-    ct_master_logs:stop(),
+
+    ct_master_event_fork:stop(),
+    ct_master_logs_fork:stop(),
     ok;
 
 master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
@@ -658,7 +656,7 @@ master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
 				    blocked=Blocked1});
 
 	{cast,Event} when is_record(Event,event) ->
-	    ct_master_event:notify(Event),
+	    ct_master_event_fork:notify(Event),
 	    master_loop(State)
 
     end.
@@ -740,34 +738,6 @@ master_progress(NodeCtrlPids,Results) ->
 				 {Node,ongoing}
 			 end,NodeCtrlPids).    
     
-%% refresh those dirs where more than one node has written logs
-refresh_logs([D|Dirs],Refreshed) ->
-    case lists:member(D,Dirs) of
-	true ->
-	    case lists:keymember(D,1,Refreshed) of
-		true ->
-		    refresh_logs(Dirs,Refreshed);
-		false ->
-		    {ok,Cwd} = file:get_cwd(),
-		    case catch ct_run:refresh_logs(D, unknown) of
-			{'EXIT',Reason} ->
-			    ok = file:set_cwd(Cwd),
-			    refresh_logs(Dirs,[{D,{error,Reason}}|Refreshed]);
-			Result -> 
-			    refresh_logs(Dirs,[{D,Result}|Refreshed])
-		    end
-	    end;
-	false ->
-	    refresh_logs(Dirs,Refreshed)
-    end;
-refresh_logs([],Refreshed) ->
-    Str =
-	lists:map(fun({D,Result}) ->
-			  io_lib:format("Refreshing logs in ~tp... ~tp",
-					[D,Result])
-		  end,Refreshed),
-    log(all,"Info","~ts", [Str]).
-
 %%%-----------------------------------------------------------------
 %%% NODE CONTROLLER, runs and controls tests on a test node.
 %%%-----------------------------------------------------------------
@@ -851,7 +821,7 @@ log(To,Heading,Str,Args) ->
 	    ok
     end,
     if To == all ; To == html ->
-	    ct_master_logs:log(Heading,Str,Args);
+	    ct_master_logs_fork:log(Heading,Str,Args);
        true ->
 	    ok
     end.    
