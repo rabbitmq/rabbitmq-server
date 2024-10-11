@@ -48,14 +48,12 @@
                         replicas => [binary()],
                         leader => binary()}.
 
--type queue_properties() :: #{name := binary(),
-                              durable => boolean(),
+-type queue_properties() :: #{durable => boolean(),
                               exclusive => boolean(),
                               auto_delete => boolean(),
                               arguments => arguments()}.
 
--type exchange_properties() :: #{name := binary(),
-                                 type => binary(),
+-type exchange_properties() :: #{type => binary(),
                                  durable => boolean(),
                                  auto_delete => boolean(),
                                  internal => boolean(),
