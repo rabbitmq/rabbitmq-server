@@ -3463,6 +3463,9 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
+store_offset(Reference, _, _, C) when is_binary(Reference), byte_size(Reference) > ?MAX_REFERENCE_SIZE ->
+  rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
+  C;
 store_offset(Reference, Stream, Offset, Connection0) ->
     case lookup_leader(Stream, Connection0) of
         {error, Error} ->
