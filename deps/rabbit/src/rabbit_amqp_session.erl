@@ -391,7 +391,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
          outgoing_window = ?UINT(RemoteOutgoingWindow),
          handle_max = ClientHandleMax}}) ->
     process_flag(trap_exit, true),
-    process_flag(message_queue_data, off_heap),
+    rabbit_process_flag:adjust_for_message_handling_proc(),
 
     ok = pg:join(pg_scope(), self(), self()),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
