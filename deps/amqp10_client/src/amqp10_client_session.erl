@@ -1178,14 +1178,16 @@ wrap_map_value(true) ->
     {boolean, true};
 wrap_map_value(false) ->
     {boolean, false};
-wrap_map_value(V) when is_integer(V) ->
-    {uint, V};
+wrap_map_value(V) when is_integer(V) andalso V >= 0 ->
+    uint(V);
 wrap_map_value(V) when is_binary(V) ->
     utf8(V);
 wrap_map_value(V) when is_list(V) ->
     utf8(list_to_binary(V));
 wrap_map_value(V) when is_atom(V) ->
-    utf8(atom_to_list(V)).
+    utf8(atom_to_list(V));
+wrap_map_value(TaggedValue) when is_atom(element(1, TaggedValue)) ->
+    TaggedValue.
 
 utf8(V) -> amqp10_client_types:utf8(V).
 

@@ -44,7 +44,7 @@
 -type str() :: atom() | string() | binary().
 -type internal_ann_key() :: atom().
 -type x_ann_key() :: binary(). %% should begin with x- or ideally x-opt-
--type x_ann_value() :: str() | integer() | float() | [x_ann_value()].
+-type x_ann_value() :: str() | integer() | float() | TaggedValue :: tuple() | [x_ann_value()].
 -type protocol() :: module().
 -type annotations() :: #{internal_ann_key() => term(),
                          x_ann_key() => x_ann_value()}.

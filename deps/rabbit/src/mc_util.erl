@@ -52,9 +52,8 @@ infer_type(V) when is_integer(V) ->
     {long, V};
 infer_type(V) when is_boolean(V) ->
     {boolean, V};
-infer_type({T, _} = V) when is_atom(T) ->
-    %% looks like a pre-tagged type
-    V.
+infer_type(TaggedValue) when is_atom(element(1, TaggedValue)) ->
+    TaggedValue.
 
 utf8_string_is_ascii(UTF8String) ->
     utf8_scan(UTF8String, fun(Char) -> Char >= 0 andalso Char < 128 end).
