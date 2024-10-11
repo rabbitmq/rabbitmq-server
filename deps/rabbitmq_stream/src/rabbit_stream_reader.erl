@@ -80,8 +80,10 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
+-define(MAX_REFERENCE_SIZE, 255).
 
--import(rabbit_stream_utils, [check_write_permitted/2]).
+-import(rabbit_stream_utils, [check_write_permitted/2,
+                              check_read_permitted/3]).
 
 %% client API
 -export([start_link/4,
@@ -1663,7 +1665,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {declare_publisher, _PublisherId, WriterRef, S}})
-                      when is_binary(WriterRef), byte_size(WriterRef) > 255 ->
+                      when is_binary(WriterRef), byte_size(WriterRef) > ?MAX_REFERENCE_SIZE ->
   {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
                       ok ->
                         {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
@@ -1917,6 +1919,19 @@ handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
                         {subscribe,
                          _, _, _, _, _}} = Request) ->
     handle_frame_post_auth(Transport, {ok, Connection}, State, Request);
+handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, State,
+                       {request, CorrelationId,
+                        {subscribe, _, S, _, _, #{ <<"name">> := N}}})
+                      when is_binary(N), byte_size(N) > ?MAX_REFERENCE_SIZE ->
+  {Code, Counter} = case check_read_permitted(stream_r(S, C), User,#{}) of
+                      ok ->
+                        {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
+                      error ->
+                        {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
+                    end,
+  response(Transport, C, subscribe, CorrelationId, Code),
+  rabbit_global_counters:increase_protocol_counter(stream, Counter, 1),
+  {C, State};
 handle_frame_post_auth(Transport,
                        {ok, #stream_connection{
                                name = ConnName,

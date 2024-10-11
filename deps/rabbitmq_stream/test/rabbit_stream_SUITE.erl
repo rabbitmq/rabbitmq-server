@@ -65,7 +65,8 @@ groups() ->
        authentication_error_should_close_with_delay,
        unauthorized_vhost_access_should_close_with_delay,
        sasl_anonymous,
-       test_publisher_with_too_long_reference_errors
+       test_publisher_with_too_long_reference_errors,
+       test_consumer_with_too_long_reference_errors
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -973,6 +974,38 @@ test_publisher_with_too_long_reference_errors(Config) ->
      {Cmd, C} = receive_commands(T, S, C),
      ?assertMatch({response, 1, {declare_publisher, ExpectedResponseCode}}, Cmd)
    end || {PubId, Ref, ExpectedResponseCode} <- Tests],
+
+  test_delete_stream(T, S, Stream, C),
+  test_close(T, S, C),
+  ok.
+
+test_consumer_with_too_long_reference_errors(Config) ->
+  FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+  T = gen_tcp,
+  Port = get_port(T, Config),
+  Opts = get_opts(T),
+  {ok, S} = T:connect("localhost", Port, Opts),
+  C = rabbit_stream_core:init(0),
+  ConnectionName = FunctionName,
+  test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C),
+  test_authenticate(T, S, C),
+
+  Stream = FunctionName,
+  test_create_stream(T, S, Stream, C),
+
+  MaxSize = 255,
+  ReferenceOK = iolist_to_binary(lists:duplicate(MaxSize, <<"a">>)),
+  ReferenceKO = iolist_to_binary(lists:duplicate(MaxSize + 1, <<"a">>)),
+
+  Tests = [{1, ReferenceOK, ?RESPONSE_CODE_OK},
+           {2, ReferenceKO, ?RESPONSE_CODE_PRECONDITION_FAILED}],
+
+  [begin
+     F = request({subscribe, SubId, Stream, first, 1, #{<<"name">> => Ref}}),
+     ok = T:send(S, F),
+     {Cmd, C} = receive_commands(T, S, C),
+     ?assertMatch({response, 1, {subscribe, ExpectedResponseCode}}, Cmd)
+   end || {SubId, Ref, ExpectedResponseCode} <- Tests],
 
   test_delete_stream(T, S, Stream, C),
   test_close(T, S, C),
