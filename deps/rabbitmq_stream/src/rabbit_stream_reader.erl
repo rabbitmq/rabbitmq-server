@@ -80,6 +80,10 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
+-define(MAX_REFERENCE_SIZE, 255).
+
+-import(rabbit_stream_utils, [check_write_permitted/2,
+                              check_read_permitted/3]).
 
 %% client API
 -export([start_link/4,
@@ -1657,6 +1661,26 @@ handle_frame_post_auth(Transport,
     {Connection1, State1};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
+                                          resource_alarm = false} = C,
+                       State,
+                       {request, CorrelationId,
+                        {declare_publisher, _PublisherId, WriterRef, S}})
+                      when is_binary(WriterRef), byte_size(WriterRef) > ?MAX_REFERENCE_SIZE ->
+  {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
+                      ok ->
+                        {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
+                      error ->
+                        {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
+                    end,
+  response(Transport,
+           C,
+           declare_publisher,
+           CorrelationId,
+           Code),
+  rabbit_global_counters:increase_protocol_counter(stream, Counter, 1),
+  {C, State};
+handle_frame_post_auth(Transport,
+                       #stream_connection{user = User,
                                           publishers = Publishers0,
                                           publisher_to_ids = RefIds0,
                                           resource_alarm = false} =
@@ -1664,7 +1688,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {declare_publisher, PublisherId, WriterRef, Stream}}) ->
-    case rabbit_stream_utils:check_write_permitted(stream_r(Stream,
+    case check_write_permitted(stream_r(Stream,
                                                             Connection0),
                                                    User)
     of
@@ -1895,6 +1919,19 @@ handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
                         {subscribe,
                          _, _, _, _, _}} = Request) ->
     handle_frame_post_auth(Transport, {ok, Connection}, State, Request);
+handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, State,
+                       {request, CorrelationId,
+                        {subscribe, _, S, _, _, #{ <<"name">> := N}}})
+                      when is_binary(N), byte_size(N) > ?MAX_REFERENCE_SIZE ->
+  {Code, Counter} = case check_read_permitted(stream_r(S, C), User,#{}) of
+                      ok ->
+                        {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
+                      error ->
+                        {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
+                    end,
+  response(Transport, C, subscribe, CorrelationId, Code),
+  rabbit_global_counters:increase_protocol_counter(stream, Counter, 1),
+  {C, State};
 handle_frame_post_auth(Transport,
                        {ok, #stream_connection{
                                name = ConnName,
@@ -3102,7 +3139,7 @@ evaluate_state_after_secret_update(Transport,
     {_, Conn1} = ensure_token_expiry_timer(User, Conn0),
     PublisherStreams =
     lists:foldl(fun(#publisher{stream = Str}, Acc) ->
-                        case rabbit_stream_utils:check_write_permitted(stream_r(Str, Conn0), User) of
+                        case check_write_permitted(stream_r(Str, Conn0), User) of
                             ok ->
                                 Acc;
                             _ ->
@@ -3426,6 +3463,9 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
+store_offset(Reference, _, _, C) when is_binary(Reference), byte_size(Reference) > ?MAX_REFERENCE_SIZE ->
+  rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
+  C;
 store_offset(Reference, Stream, Offset, Connection0) ->
     case lookup_leader(Stream, Connection0) of
         {error, Error} ->
