@@ -775,7 +775,7 @@ modified_dead_letter_history(Config) ->
             #{<<"x-opt-history-list">> => {list, [{int, -99} | L1]},
               <<"x-opt-history-map">> => {map, [{{symbol, <<"k2">>}, {symbol, <<"v2">>}} | L2]},
               <<"x-opt-history-array">> => {array, utf8, [{utf8, <<"a2">>} | L0]},
-              <<"x-other">> => 99}}),
+              <<"x-other">> => -99}}),
 
     {ok, Msg3} = amqp10_client:get_msg(Receiver1),
     ?assertEqual([<<"m">>], amqp10_msg:body(Msg3)),
@@ -786,7 +786,7 @@ modified_dead_letter_history(Config) ->
                    <<"x-opt-history-list">> := [{int, -99}, {utf8, <<"l1">>}],
                    <<"x-opt-history-map">> := [{{symbol, <<"k2">>}, {symbol, <<"v2">>}},
                                                {{symbol, <<"k1">>}, {byte, -1}}],
-                   <<"x-other">> := 99}, amqp10_msg:message_annotations(Msg3)),
+                   <<"x-other">> := -99}, amqp10_msg:message_annotations(Msg3)),
     ok = amqp10_client:accept_msg(Receiver1, Msg3),
 
     ok = detach_link_sync(Receiver1),

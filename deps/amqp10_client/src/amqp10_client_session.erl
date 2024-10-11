@@ -1180,8 +1180,13 @@ wrap_map_value(true) ->
     {boolean, true};
 wrap_map_value(false) ->
     {boolean, false};
-wrap_map_value(V) when is_integer(V) andalso V >= 0 ->
-    uint(V);
+wrap_map_value(V) when is_integer(V) ->
+    case V < 0 of
+        true ->
+            {int, V};
+        false ->
+            uint(V)
+    end;
 wrap_map_value(V) when is_binary(V) ->
     utf8(V);
 wrap_map_value(V) when is_list(V) ->
