@@ -1921,7 +1921,7 @@ settle_op_from_outcome(#'v1_0.modified'{delivery_failed = DelFailed,
                    Anns1 = lists:map(
                              %% "all symbolic keys except those beginning with "x-" are reserved." [3.2.10]
                              fun({{symbol, <<"x-", _/binary>> = K}, V}) ->
-                                     {K, unwrap(V)}
+                                     {K, unwrap_simple_type(V)}
                              end, KVList),
                    maps:from_list(Anns1)
            end,
@@ -3603,7 +3603,14 @@ format_status(
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
 
-unwrap({_Tag, V}) ->
+
+unwrap_simple_type(V = {list, _}) ->
     V;
-unwrap(V) ->
+unwrap_simple_type(V = {map, _}) ->
+    V;
+unwrap_simple_type(V = {array, _, _}) ->
+    V;
+unwrap_simple_type({_SimpleType, V}) ->
+    V;
+unwrap_simple_type(V) ->
     V.
