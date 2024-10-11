@@ -170,7 +170,7 @@ put_filtering_options_into_process_dictionary(Request) ->
     end,
     case parse_metric_families(Families) of
         Fs when is_list(Fs) ->
-            put(prometheus_mf_filter, Fs);
+            put(prometheus_mf_filter, sets:from_list(Fs, [{version, 2}]));
         _ -> ok
     end,
     ok.
