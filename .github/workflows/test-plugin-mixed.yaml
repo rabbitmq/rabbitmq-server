@@ -98,11 +98,10 @@ jobs:
       run: |
         sudo apt-get update && \
         sudo apt-get install -y \
-          apparmor-utils \
           ldap-utils \
           slapd
 
-        sudo aa-complain `which slapd`
+        sudo service apparmor stop
 
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
