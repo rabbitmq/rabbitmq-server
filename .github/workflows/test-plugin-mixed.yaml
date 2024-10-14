@@ -98,7 +98,8 @@ jobs:
           ldap-utils \
           slapd
 
-        sudo service apparmor stop
+        systemctl is-active --quiet apparmor.service && systemctl stop apparmor.service
+        systemctl disable apparmor.service
 
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local

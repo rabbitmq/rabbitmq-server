@@ -55,7 +55,8 @@ jobs:
           ldap-utils \
           slapd
 
-        sudo service apparmor stop
+        systemctl is-active --quiet apparmor.service && systemctl stop apparmor.service
+        systemctl disable apparmor.service
 
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_cli'
