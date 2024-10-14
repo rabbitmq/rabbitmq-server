@@ -586,7 +586,7 @@ master_loop(#state{node_ctrl_pids=[],
 	lists:map(fun({Node,Result}) ->
 			  io_lib:format("~-40.40.*ts~tp\n",
 					[$_,atom_to_list(Node),Result])
-		  end,lists:reverse(Finished)),
+		  end,lists:sort(Finished)),
     log(all,"TEST RESULTS","~ts", [Str]),
     log(all,"Info","Updating log files",[]),
 
