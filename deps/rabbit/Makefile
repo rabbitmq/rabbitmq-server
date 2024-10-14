@@ -299,6 +299,9 @@ define tpl_parallel_ct_test_spec
 {node, shard3, 'rabbit_shard3@localhost'}.
 {node, shard4, 'rabbit_shard4@localhost'}.
 
+{auto_compile, false}.
+{ct_hooks, [cth_parallel_ct_detect_failure]}.
+
 {define, 'Set1', [$(call comma_list,$(addsuffix _SUITE,$1))]}.
 {define, 'Set2', [$(call comma_list,$(addsuffix _SUITE,$2))]}.
 {define, 'Set3', [$(call comma_list,$(addsuffix _SUITE,$3))]}.
