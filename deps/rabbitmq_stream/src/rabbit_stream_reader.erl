@@ -80,7 +80,7 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
--define(MAX_REFERENCE_SIZE, 255).
+-define(IS_INVALID_REF(Ref), is_binary(Ref) andalso byte_size(Ref) > 255).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
                               check_read_permitted/3]).
@@ -1665,7 +1665,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {declare_publisher, _PublisherId, WriterRef, S}})
-                      when is_binary(WriterRef), byte_size(WriterRef) > ?MAX_REFERENCE_SIZE ->
+                      when ?IS_INVALID_REF(WriterRef) ->
   {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
                       ok ->
                         {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
@@ -1922,7 +1922,7 @@ handle_frame_post_auth(Transport, #stream_connection{} = Connection, State,
 handle_frame_post_auth(Transport, {ok, #stream_connection{user = User} = C}, State,
                        {request, CorrelationId,
                         {subscribe, _, S, _, _, #{ <<"name">> := N}}})
-                      when is_binary(N), byte_size(N) > ?MAX_REFERENCE_SIZE ->
+                      when ?IS_INVALID_REF(N) ->
   {Code, Counter} = case check_read_permitted(stream_r(S, C), User,#{}) of
                       ok ->
                         {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
@@ -3463,7 +3463,7 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
-store_offset(Reference, _, _, C) when is_binary(Reference), byte_size(Reference) > ?MAX_REFERENCE_SIZE ->
+store_offset(Reference, _, _, C) when ?IS_INVALID_REF(Reference) ->
   rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
   C;
 store_offset(Reference, Stream, Offset, Connection0) ->
