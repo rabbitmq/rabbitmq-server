@@ -101,11 +101,11 @@ jobs:
       run: |
         sudo apt-get update && \
         sudo apt-get install -y \
-          apparmor-utils \
           ldap-utils \
           slapd
 
-        sudo aa-complain `which slapd`
+        systemctl is-active --quiet apparmor.service && systemctl stop apparmor.service
+        systemctl disable apparmor.service
 
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
