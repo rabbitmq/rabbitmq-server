@@ -177,23 +177,14 @@ run([TS|TestSpecs],AllowUserTerms,InclNodes,ExclNodes) when is_list(TS),
 	Tests ->
 	    RunResult =
 		lists:map(
-		  fun({Specs,TSRec=#testspec{logdir=AllLogDirs,
-					      config=StdCfgFiles,
-					      userconfig=UserCfgFiles,
-					      include=AllIncludes,
-					      init=AllInitOpts,
-					      event_handler=AllEvHs}}) ->
-			  AllCfgFiles =
-			      {StdCfgFiles,UserCfgFiles},
+		  fun({Specs,TSRec=#testspec{}}) ->
 			  RunSkipPerNode =
 			      ct_testspec:prepare_tests(TSRec),
 			  RunSkipPerNode2 =
 			      exclude_nodes(ExclNodes,RunSkipPerNode),
 			  TSList = if is_integer(hd(TS)) -> [TS];
 				      true -> TS end,
-			  {Specs,run_all(RunSkipPerNode2,AllLogDirs,
-					 AllCfgFiles,AllEvHs,
-					 AllIncludes,[],[],AllInitOpts,TSList)}
+			  {Specs,run_all(RunSkipPerNode2,TSRec,[],[],TSList)}
 		  end, Tests),
 	    RunResult ++ run(TestSpecs,AllowUserTerms,InclNodes,ExclNodes)
     end;
@@ -258,19 +249,11 @@ run_on_node([TS|TestSpecs],AllowUserTerms,Node) when is_list(TS),is_atom(Node) -
 	Tests ->
 	    RunResult =
 		lists:map(
-		  fun({Specs,TSRec=#testspec{logdir=AllLogDirs,
-					     config=StdCfgFiles,
-					     init=AllInitOpts,
-					     include=AllIncludes,
-					     userconfig=UserCfgFiles,
-					     event_handler=AllEvHs}}) ->
-			  AllCfgFiles = {StdCfgFiles,UserCfgFiles},
+		  fun({Specs,TSRec=#testspec{}}) ->
 			  {Run,Skip} = ct_testspec:prepare_tests(TSRec,Node),
 			  TSList = if is_integer(hd(TS)) -> [TS];
 				      true -> TS end,			  
-			  {Specs,run_all([{Node,Run,Skip}],AllLogDirs,
-					 AllCfgFiles,AllEvHs,
-					 AllIncludes, [],[],AllInitOpts,TSList)}
+			  {Specs,run_all([{Node,Run,Skip}],TSRec,[],[],TSList)}
 		  end, Tests),
 	    RunResult ++ run_on_node(TestSpecs,AllowUserTerms,Node)
     end;
@@ -291,54 +274,117 @@ run_on_node(TestSpecs,Node) ->
 
 
 
-run_all([{Node,Run,Skip}|Rest],AllLogDirs,
-	{AllStdCfgFiles, AllUserCfgFiles}=AllCfgFiles,
-	AllEvHs,AllIncludes,NodeOpts,LogDirs,InitOptions,Specs) ->
-    LogDir =
-	lists:foldl(fun({N,Dir},_Found) when N == Node ->
-			    Dir;
-		       ({_N,_Dir},Found) ->
-			    Found;
-		       (Dir,".") ->
-			    Dir;
-		       (_Dir,Found) ->
-			    Found
-		    end,".",AllLogDirs),
-
-    StdCfgFiles =
-	lists:foldr(fun({N,F},Fs) when N == Node -> [F|Fs];
-		       ({_N,_F},Fs) -> Fs;
-		       (F,Fs) -> [F|Fs]
-		    end,[],AllStdCfgFiles),
-    UserCfgFiles =
+run_all([{Node,Run,Skip}|Rest],TSRec=#testspec{label = Labels,
+%			    profile = Profiles,
+			    logdir = LogDirs,
+			    logopts = LogOptsList,
+			    basic_html = BHs,
+			    esc_chars = EscChs,
+			    stylesheet = SSs,
+			    verbosity = VLvls,
+			    silent_connections = SilentConnsList,
+			    cover = CoverFs,
+			    cover_stop = CoverStops,
+			    config = Cfgs,
+			    userconfig = UsrCfgs,
+			    event_handler = EvHs,
+			    ct_hooks = CTHooks,
+                %% Not available in OTP-26. We don't use it so leave commented for now.
+%                            ct_hooks_order = CTHooksOrder0,
+			    enable_builtin_hooks = EnableBuiltinHooks0,
+			    auto_compile = ACs,
+			    abort_if_missing_suites = AiMSs,
+			    include = Incl,
+			    multiply_timetraps = MTs,
+			    scale_timetraps = STs,
+			    create_priv_dir = PDs},
+    NodeOpts,LogDirsRun,Specs) ->
+    %% We mirror ct_run:get_data_for_node to retrieve data from #testspec,
+    %% but set the default values where appropriate.
+    Label = proplists:get_value(Node, Labels),
+%    Profile = proplists:get_value(Node, Profiles),
+    LogDir = case proplists:get_value(Node, LogDirs) of
+		 undefined -> ".";
+		 Dir -> Dir
+	     end,
+    LogOpts = case proplists:get_value(Node, LogOptsList) of
+		  undefined -> [];
+		  LOs -> LOs
+	      end,
+    BasicHtml = proplists:get_value(Node, BHs, false),
+    EscChars = proplists:get_value(Node, EscChs, true),
+    Stylesheet = proplists:get_value(Node, SSs),
+    Verbosity = case proplists:get_value(Node, VLvls) of
+		    undefined -> [];
+		    Lvls -> Lvls
+		end,
+    SilentConns = case proplists:get_value(Node, SilentConnsList) of
+		      undefined -> [];
+		      SCs -> SCs
+		  end,
+    Cover = proplists:get_value(Node, CoverFs),
+    CoverStop = proplists:get_value(Node, CoverStops, true),
+    MT = proplists:get_value(Node, MTs, 1),
+    ST = proplists:get_value(Node, STs, false),
+    CreatePrivDir = proplists:get_value(Node, PDs, auto_per_run),
+    %% For these two values we can't exactly mirror get_data_for_node.
+    ConfigFiles =
+   lists:foldr(fun({N,F},Fs) when N == Node -> [F|Fs];
+              ({_N,_F},Fs) -> Fs;
+              (F,Fs) -> [F|Fs]
+           end,[],Cfgs),
+    UsrConfigFiles =
          lists:foldr(fun({N,F},Fs) when N == Node -> [{userconfig, F}|Fs];
-		       ({_N,_F},Fs) -> Fs;
-		       (F,Fs) -> [{userconfig, F}|Fs]
-		    end,[],AllUserCfgFiles),
-    
-    Includes = lists:foldr(fun({N,I},Acc) when N =:= Node ->
-				   [I|Acc];
-			      ({_,_},Acc) ->
-				   Acc;
-			      (I,Acc) ->
-				   [I | Acc]
-			   end, [], AllIncludes),
-    EvHs =
-	lists:foldr(fun({N,H,A},Hs) when N == Node -> [{H,A}|Hs];
-		       ({_N,_H,_A},Hs) -> Hs;
-		       ({H,A},Hs) -> [{H,A}|Hs]
-		    end,[],AllEvHs),
-
-    NO = {Node,[{prepared_tests,{Run,Skip},Specs},
-        {ct_hooks, [cth_parallel_ct_detect_failure]},
-		{logdir,LogDir},
-		{include, Includes},
-		{config,StdCfgFiles},
-		{event_handler,EvHs}] ++ UserCfgFiles},
-    run_all(Rest,AllLogDirs,AllCfgFiles,AllEvHs,AllIncludes,
-	    [NO|NodeOpts],[LogDir|LogDirs],InitOptions,Specs);
-run_all([],AllLogDirs,_,AllEvHs,_AllIncludes,
-	NodeOpts,LogDirs,InitOptions,Specs) ->
+              ({_N,_F},Fs) -> Fs;
+              (F,Fs) -> [{userconfig, F}|Fs]
+           end,[],UsrCfgs),
+    EvHandlers =  [{H,A} || {N,H,A} <- EvHs, N==Node],
+    FiltCTHooks = [Hook || {N,Hook} <- CTHooks, N==Node],
+%    CTHooksOrder = case CTHooksOrder0 of
+%        undefined -> test;
+%        _ -> CTHooksOrder0
+%    end,
+    EnableBuiltinHooks = case EnableBuiltinHooks0 of
+        undefined -> true;
+        _ -> EnableBuiltinHooks0
+    end,
+    AutoCompile = proplists:get_value(Node, ACs, true),
+    AbortIfMissing = proplists:get_value(Node, AiMSs, false),
+    Include =  [I || {N,I} <- Incl, N==Node],
+    %% We then build the ct:run_test/1 options list.
+    RunTestOpts0 =
+        [{label, Label} || Label =/= undefined] ++
+        [{stylesheet, Stylesheet} || Stylesheet =/= undefined] ++
+        [{cover, Cover} || Cover =/= undefined] ++
+        UsrConfigFiles,
+    RunTestOpts = [
+%	  {profile, Profile},
+	  {logdir, LogDir},
+	  {logopts, LogOpts},
+	  {basic_html, BasicHtml},
+	  {esc_chars, EscChars},
+	  {verbosity, Verbosity},
+	  {silent_connections, SilentConns},
+	  {cover_stop, CoverStop},
+	  {config, ConfigFiles},
+	  {event_handler, EvHandlers},
+	  {ct_hooks, FiltCTHooks},
+%      {ct_hooks_order, CTHooksOrder},
+	  {enable_builtin_hooks, EnableBuiltinHooks},
+	  {auto_compile, AutoCompile},
+	  {abort_if_missing_suites, AbortIfMissing},
+	  {include, Include},
+	  {multiply_timetraps, MT},
+	  {scale_timetraps, ST},
+	  {create_priv_dir, CreatePrivDir}
+    |RunTestOpts0],
+    NO = {Node,[{prepared_tests,{Run,Skip},Specs}|RunTestOpts]},
+    run_all(Rest,TSRec,[NO|NodeOpts],[LogDir|LogDirsRun],Specs);
+run_all([],#testspec{
+        logdir=AllLogDirs,
+        init=InitOptions,
+        event_handler=AllEvHs},
+	NodeOpts,LogDirsRun,Specs) ->
     Handlers = [{H,A} || {Master,H,A} <- AllEvHs, Master == master],
     MasterLogDir = case lists:keysearch(master,1,AllLogDirs) of
 		       {value,{_,Dir}} -> Dir;
@@ -346,7 +392,7 @@ run_all([],AllLogDirs,_,AllEvHs,_AllIncludes,
 		   end,
     log(tty,"Master Logdir","~ts",[MasterLogDir]),
     start_master(lists:reverse(NodeOpts),Handlers,MasterLogDir,
-		 LogDirs,InitOptions,Specs),
+		 LogDirsRun,InitOptions,Specs),
     ok.
     
 
