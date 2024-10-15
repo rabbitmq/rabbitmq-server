@@ -22,7 +22,9 @@
 %%%
 %%% This module implements an event handler that the CT Master
 %%% uses to handle status and progress notifications sent to the
-%%% master node during test runs. This module may be used as a 
+%%% master node during test runs. It also keeps track of the
+%%% details of failures which are used by the CT Master to print
+%%% a summary at the end of its run. This module may be used as a
 %%% template for other event handlers that can be plugged in to 
 %%% handle logging and reporting on the master node.
 -module(ct_master_event_fork).
@@ -32,7 +34,7 @@
 
 %% API
 -export([start_link/0, add_handler/0, add_handler/1, stop/0]).
--export([notify/1, sync_notify/1]).
+-export([notify/1, sync_notify/1, get_results/0]).
 
 %% gen_event callbacks
 -export([init/1, handle_event/2, handle_call/2, 
@@ -42,7 +44,7 @@
 -include_lib("common_test/src/ct_util.hrl").
 
 
--record(state, {}).
+-record(state, {auto_skipped=[], failed=[]}).
 
 %%====================================================================
 %% gen_event callbacks
@@ -108,6 +110,13 @@ notify(Event) ->
 sync_notify(Event) ->
     gen_event:sync_notify(?CT_MEVMGR_REF,Event).
 
+%%--------------------------------------------------------------------
+%% Function: sync_notify(Event) -> Results
+%% Description: Get the results for auto-skipped and failed test cases.
+%%--------------------------------------------------------------------
+get_results() ->
+    gen_event:call(?CT_MEVMGR_REF,?MODULE,get_results).
+
 %%====================================================================
 %% gen_event callbacks
 %%====================================================================
@@ -135,10 +144,10 @@ handle_event(#event{name=start_logging,node=Node,data=RunDir},State) ->
     ct_master_logs_fork:nodedir(Node,RunDir),
     {ok,State};
 
-handle_event(#event{name=Name,node=Node,data=Data},State) ->
+handle_event(Event=#event{name=Name,node=Node,data=Data},State) ->
     print("~n=== ~w ===~n", [?MODULE]),
     print("~tw on ~w: ~tp~n", [Name,Node,Data]),
-    {ok,State}.
+    {ok,maybe_store_event(Event,State)}.
 
 %%--------------------------------------------------------------------
 %% Function: 
@@ -150,6 +159,11 @@ handle_event(#event{name=Name,node=Node,data=Data},State) ->
 %% gen_event:call/3,4, this function is called for the specified event 
 %% handler to handle the request.
 %%--------------------------------------------------------------------
+handle_call(get_results,State=#state{auto_skipped=AutoSkipped,failed=Failed}) ->
+    {ok,#{
+        auto_skipped => lists:sort(AutoSkipped),
+        failed => lists:sort(Failed)
+    },State};
 handle_call(flush,State) ->
     case process_info(self(),message_queue_len) of
 	{message_queue_len,0} ->
@@ -194,3 +208,10 @@ code_change(_OldVsn,State,_Extra) ->
 print(_Str,_Args) ->
 %    io:format(_Str,_Args),
     ok.
+
+maybe_store_event(#event{name=tc_done,node=Node,data={Suite,FuncOrGroup,{auto_skipped,Reason}}},State=#state{auto_skipped=Acc}) ->
+    State#state{auto_skipped=[{Node,Suite,FuncOrGroup,Reason}|Acc]};
+maybe_store_event(#event{name=tc_done,node=Node,data={Suite,FuncOrGroup,{failed,Reason}}},State=#state{failed=Acc}) ->
+    State#state{failed=[{Node,Suite,FuncOrGroup,Reason}|Acc]};
+maybe_store_event(_Event,State) ->
+    State.
