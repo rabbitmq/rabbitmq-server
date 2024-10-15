@@ -119,9 +119,16 @@ validate0(Descriptor, KVList0) when
     KVList = lists:map(fun({{utf8, Key}, {utf8, String}}) ->
                                {Key, parse_string_modifier_prefix(String)};
                           ({{utf8, Key}, TaggedVal}) ->
-                               {Key, unwrap(TaggedVal)}
+                               {Key, unwrap(TaggedVal)};
+                          (_) ->
+                               invalid_filter
                        end, KVList0),
-    {ok, {application_properties, KVList}};
+    case lists:member(invalid_filter, KVList) of
+        false ->
+            {ok, {application_properties, KVList}};
+        true ->
+            error
+    end;
 validate0(_, _) ->
     error.
 

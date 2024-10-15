@@ -32,7 +32,8 @@
 
 all() ->
     [
-     {group, cluster_size_1}
+     {group, cluster_size_1},
+     {group, filter_validation}
     ].
 
 groups() ->
@@ -44,6 +45,10 @@ groups() ->
        multiple_sections,
        filter_few_messages_from_many,
        string_modifier
+      ]},
+     {filter_validation, [shuffle],
+      [
+       invalid_application_property_filter
       ]}
     ].
 
@@ -578,6 +583,20 @@ string_modifier(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
+
+invalid_application_property_filter(_Config) ->
+            %% the only expression is invalid
+            ?assertEqual(error,
+                         rabbit_amqp_filtex:validate(
+                           {described,{symbol,?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER},
+                                      {map,[{{symbol,<<"subject">>},{utf8,<<"var">>}}]}})),
+
+            %% one expressions is valid but another one is not
+            ?assertEqual(error,
+                         rabbit_amqp_filtex:validate(
+                           {described,{symbol,?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER},
+                                      {map,[{{utf8, <<"valid">>}, {symbol, <<"no match">>}},
+                                            {{symbol,<<"subject">>}, {utf8,<<"var">>}}]}})).
 
 %% -------------------------------------------------------------------
 %% Helpers
