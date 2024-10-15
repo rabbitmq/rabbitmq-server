@@ -868,9 +868,10 @@ rabbitmq_consistent_hash_exchange:
 rabbitmq_ct_client_helpers:
 - rabbit_ct_client_helpers
 rabbitmq_ct_helpers:
+- ct_master_event_fork
 - ct_master_fork
+- ct_master_logs_fork
 - cth_log_redirect_any_domains
-- cth_parallel_ct_detect_failure
 - rabbit_control_helper
 - rabbit_ct_broker_helpers
 - rabbit_ct_config_schema
