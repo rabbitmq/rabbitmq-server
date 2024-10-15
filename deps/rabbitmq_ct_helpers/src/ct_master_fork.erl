@@ -392,8 +392,7 @@ run_all([],#testspec{
 		   end,
     log(tty,"Master Logdir","~ts",[MasterLogDir]),
     start_master(lists:reverse(NodeOpts),Handlers,MasterLogDir,
-		 LogDirsRun,InitOptions,Specs),
-    ok.
+		 LogDirsRun,InitOptions,Specs).
     
 
 %-doc """
@@ -581,18 +580,19 @@ init_master2(Parent,NodeOptsList,LogDirs) ->
     Parent ! {self(),Result}.
 
 master_loop(#state{node_ctrl_pids=[],
-		   results=Finished}) ->
+		   results=Finished0}) ->
+    Finished = lists:sort(Finished0),
     Str =
 	lists:map(fun({Node,Result}) ->
 			  io_lib:format("~-40.40.*ts~tp\n",
 					[$_,atom_to_list(Node),Result])
-		  end,lists:sort(Finished)),
+		  end,Finished),
     log(all,"TEST RESULTS","~ts", [Str]),
     log(all,"Info","Updating log files",[]),
 
     ct_master_event_fork:stop(),
     ct_master_logs_fork:stop(),
-    ok;
+    {ok, Finished};
 
 master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
 			 results=Results,

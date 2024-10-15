@@ -239,22 +239,16 @@ define ct_master.erl
 	peer:call(Pid2, persistent_term, put, [rabbit_ct_tcp_port_base, 25000]),
 	peer:call(Pid3, persistent_term, put, [rabbit_ct_tcp_port_base, 27000]),
 	peer:call(Pid4, persistent_term, put, [rabbit_ct_tcp_port_base, 29000]),
-	ct_master_fork:run("$1"),
-	Fail1 = peer:call(Pid1, cth_parallel_ct_detect_failure, has_failures, []),
-	Fail2 = peer:call(Pid2, cth_parallel_ct_detect_failure, has_failures, []),
-	Fail3 = peer:call(Pid3, cth_parallel_ct_detect_failure, has_failures, []),
-	Fail4 = peer:call(Pid4, cth_parallel_ct_detect_failure, has_failures, []),
+	[{[_], {ok, Results}}] = ct_master_fork:run("$1"),
 	peer:stop(Pid4),
 	peer:stop(Pid3),
 	peer:stop(Pid2),
 	peer:stop(Pid1),
-	if
-		Fail1 -> halt(1);
-		Fail2 -> halt(2);
-		Fail3 -> halt(3);
-		Fail4 -> halt(4);
-		true -> halt(0)
-	end
+	lists:foldl(fun
+		({_, {_, 0, {_, 0}}}, Err) -> Err + 1;
+		(What, Peer) -> halt(Peer)
+	end, 1, Results),
+	halt(0)
 endef
 
 PARALLEL_CT_SET_1_A = amqp_client unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
@@ -293,14 +287,12 @@ define tpl_parallel_ct_test_spec
 {logdir, "$(CT_LOGS_DIR)"}.
 {logdir, master, "$(CT_LOGS_DIR)"}.
 {create_priv_dir, all_nodes, auto_per_run}.
+{auto_compile, false}.
 
 {node, shard1, 'rabbit_shard1@localhost'}.
 {node, shard2, 'rabbit_shard2@localhost'}.
 {node, shard3, 'rabbit_shard3@localhost'}.
 {node, shard4, 'rabbit_shard4@localhost'}.
-
-{auto_compile, false}.
-{ct_hooks, [cth_parallel_ct_detect_failure]}.
 
 {define, 'Set1', [$(call comma_list,$(addsuffix _SUITE,$1))]}.
 {define, 'Set2', [$(call comma_list,$(addsuffix _SUITE,$2))]}.
