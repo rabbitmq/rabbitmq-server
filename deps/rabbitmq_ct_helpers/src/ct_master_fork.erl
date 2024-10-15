@@ -590,6 +590,9 @@ master_loop(#state{node_ctrl_pids=[],
     log(all,"TEST RESULTS","~ts", [Str]),
     log(all,"Info","Updating log files",[]),
 
+    %% Print the failed and auto skipped tests.
+    master_print_summary(),
+
     ct_master_event_fork:stop(),
     ct_master_logs_fork:stop(),
     {ok, Finished};
@@ -707,6 +710,26 @@ master_loop(State=#state{node_ctrl_pids=NodeCtrlPids,
 
     end.
 
+master_print_summary() ->
+    #{
+        auto_skipped := AutoSkipped,
+        failed := Failed
+    } = ct_master_event_fork:get_results(),
+    master_print_summary_for("Auto skipped test cases", AutoSkipped),
+    master_print_summary_for("Failed test cases", Failed),
+    ok.
+
+master_print_summary_for(Title,List) ->
+    _ = case List of
+        [] -> ok;
+        _ ->
+            Chars = [
+                io_lib:format("Node: ~w~nCase: ~w:~w~nReason: ~p~n~n",
+                    [Node, Suite, FuncOrGroup, Reason])
+            || {Node, Suite, FuncOrGroup, Reason} <- List],
+            log(all,Title,Chars,[])
+    end,
+    ok.
 
 update_queue(take,Node,From,Lock={Op,Resource},Locks,Blocked) ->
     %% Locks: [{{Operation,Resource},Node},...]
