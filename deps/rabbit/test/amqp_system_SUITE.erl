@@ -91,7 +91,6 @@ end_per_testcase(Testcase, Config) ->
 build_dotnet_test_project(Config) ->
     TestProjectDir = filename:join(
                        [?config(data_dir, Config), "fsharp-tests"]),
-    true = os:putenv("DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "1"),
     Ret = rabbit_ct_helpers:exec(["dotnet", "restore"],
                                  [{cd, TestProjectDir}]),
     case Ret of
