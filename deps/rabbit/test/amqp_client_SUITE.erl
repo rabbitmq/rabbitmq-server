@@ -144,7 +144,8 @@ groups() ->
        tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
        session_max_per_connection,
-       link_max_per_session
+       link_max_per_session,
+       reserved_annotation
       ]},
 
      {cluster_size_3, [shuffle],
@@ -5893,6 +5894,32 @@ link_max_per_session(Config) ->
 
     flush(test_succeeded),
     ok = rpc(Config, application, set_env, [App, Par, Default]).
+
+reserved_annotation(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+    TargetAddr = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(
+                     Session, <<"sender">>, TargetAddr, settled),
+    ok = wait_for_credit(Sender),
+
+    Msg = amqp10_msg:set_message_annotations(
+            #{<<"reserved-key">> => 1},
+            amqp10_msg:new(<<"tag">>, <<"payload">>, true)),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    receive
+        {amqp10_event,
+         {session, Session,
+          {ended,
+           #'v1_0.error'{description = {utf8, Description}}}}} ->
+            ?assertMatch(
+               <<"{reserved_annotation_key,{symbol,<<\"reserved-key\">>}}", _/binary>>,
+               Description)
+    after 5000 -> flush(missing_ended),
+                  ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
 
 %% internal
 %%

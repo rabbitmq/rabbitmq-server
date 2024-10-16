@@ -153,10 +153,12 @@ decode_map(Fields) ->
 %% or of type ulong. All ulong keys, and all symbolic keys except those beginning
 %% with "x-" are reserved." [3.2.10]
 %% Since we already parse annotations here and neither the client nor server uses
-%% reserved keys, we perform strict validation and crash if any reserved keys are used.
+%% reserved keys, we perform strict validation and throw if any reserved keys are used.
 decode_annotations(Fields) ->
     lists:map(fun({{symbol, <<"x-", _/binary>>} = K, V}) ->
-                      {K, decode(V)}
+                      {K, decode(V)};
+                 ({ReservedKey, _V}) ->
+                      throw({reserved_annotation_key, ReservedKey})
               end, Fields).
 
 -spec encode_described(list | map | binary | annotations | '*',

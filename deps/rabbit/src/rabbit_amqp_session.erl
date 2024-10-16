@@ -508,12 +508,16 @@ handle_cast({frame_body, FrameBody},
             noreply(State);
         {stop, _, _} = Stop ->
             Stop
-    catch exit:#'v1_0.error'{} = Error ->
-              log_error_and_close_session(Error, State0);
-          exit:normal ->
+    catch exit:normal ->
               {stop, normal, State0};
+          exit:#'v1_0.error'{} = Error ->
+              log_error_and_close_session(Error, State0);
           _:Reason:Stacktrace ->
-              {stop, {Reason, Stacktrace}, State0}
+              Description = unicode:characters_to_binary(
+                              lists:flatten(io_lib:format("~tp~n~tp", [Reason, Stacktrace]))),
+              Err = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                  description = {utf8, Description}},
+              log_error_and_close_session(Err, State0)
     end;
 handle_cast({queue_event, _, _} = QEvent, State0) ->
     try handle_queue_event(QEvent, State0) of
