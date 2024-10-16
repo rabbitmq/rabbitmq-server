@@ -1160,7 +1160,7 @@ cluster_state(Name) ->
 
 key_metrics_rpc(ServerId) ->
     Metrics = ra:key_metrics(ServerId),
-    Metrics#{machine_version := rabbit_fifo:version()}.
+    Metrics#{machine_version => rabbit_fifo:version()}.
 
 -spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
     [[{binary(), term()}]] | {error, term()}.
