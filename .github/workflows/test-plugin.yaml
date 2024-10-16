@@ -90,20 +90,20 @@ jobs:
         cat << EOF >> user.bazelrc
           build --strategy=TestRunner=local
         EOF
-    # - name: deps/rabbitmq_auth_backend_ldap SETUP
-    #   if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
-    #   run: |
-    #     sudo apt-get update && \
-    #     sudo apt-get install -y \
-    #       ldap-utils \
-    #       slapd
+    - name: deps/rabbitmq_auth_backend_ldap SETUP
+      if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
+      run: |
+        sudo apt-get update && \
+        sudo apt-get install -y \
+          ldap-utils \
+          slapd
 
-    #     sudo systemctl is-active --quiet apparmor.service && sudo systemctl stop apparmor.service
-    #     sudo systemctl disable apparmor.service
+        sudo systemctl is-active --quiet apparmor.service && sudo systemctl stop apparmor.service
+        sudo systemctl disable apparmor.service
 
-    #     cat << EOF >> user.bazelrc
-    #       build --strategy=TestRunner=local
-    #     EOF
+        cat << EOF >> user.bazelrc
+          build --strategy=TestRunner=local
+        EOF
     - name: deps/rabbitmq_mqtt SETUP
       if: inputs.plugin == 'rabbitmq_mqtt'
       run: |
