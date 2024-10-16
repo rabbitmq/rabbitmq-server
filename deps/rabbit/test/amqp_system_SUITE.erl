@@ -98,19 +98,19 @@ build_dotnet_test_project(Config) ->
             rabbit_ct_helpers:set_config(
               Config, {dotnet_test_project_dir, TestProjectDir});
         _ ->
-            {skip, "Failed to fetch .NET Core test project dependencies"}
+            ct:fail({"'dotnet restore' failed", Ret})
     end.
 
 build_maven_test_project(Config) ->
     TestProjectDir = filename:join([?config(data_dir, Config), "java-tests"]),
     Ret = rabbit_ct_helpers:exec([TestProjectDir ++ "/mvnw", "test-compile"],
-      [{cd, TestProjectDir}]),
+                                 [{cd, TestProjectDir}]),
     case Ret of
         {ok, _} ->
             rabbit_ct_helpers:set_config(Config,
-              {maven_test_project_dir, TestProjectDir});
+                                         {maven_test_project_dir, TestProjectDir});
         _ ->
-            {skip, "Failed to build Maven test project"}
+            ct:fail({"'mvnw test-compile' failed", Ret})
     end.
 
 %% -------------------------------------------------------------------
