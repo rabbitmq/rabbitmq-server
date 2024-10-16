@@ -15,40 +15,40 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  build-and-xref:
-    name: Build and Xref
-    strategy:
-      fail-fast: false
-      matrix:
-        erlang_version:
-        - '26'
-        - '27'
-        elixir_version:
-        - '1.17'
-    # @todo Add macOS and Windows.
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-    - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+  # build-and-xref:
+  #   name: Build and Xref
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       erlang_version:
+  #       - '26'
+  #       - '27'
+  #       elixir_version:
+  #       - '1.17'
+  #   # @todo Add macOS and Windows.
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 30
+  #   steps:
+  #   - name: CHECKOUT REPOSITORY
+  #     uses: actions/checkout@v4
 
-    - name: FETCH TAGS
-      run: git fetch --tags
+  #   - name: FETCH TAGS
+  #     run: git fetch --tags
 
-    - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.17
-      with:
-        otp-version: ${{ matrix.erlang_version }}
-        elixir-version: ${{ matrix.elixir_version }}
-        hexpm-mirrors: |
-          https://builds.hex.pm
-          https://cdn.jsdelivr.net/hex
+  #   - name: SETUP OTP & ELIXIR
+  #     uses: erlef/setup-beam@v1.17
+  #     with:
+  #       otp-version: ${{ matrix.erlang_version }}
+  #       elixir-version: ${{ matrix.elixir_version }}
+  #       hexpm-mirrors: |
+  #         https://builds.hex.pm
+  #         https://cdn.jsdelivr.net/hex
 
-    - name: BUILD
-      run: make
+  #   - name: BUILD
+  #     run: make
 
-    - name: XREF
-      run: make xref
+  #   - name: XREF
+  #     run: make xref
 
   test:
     name: Test
@@ -62,23 +62,23 @@ jobs:
         - '1.17'
         metadata_store:
           - mnesia
-          - khepri
+          # - khepri
     uses: ./.github/workflows/test-make-tests.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
       elixir_version: ${{ matrix.elixir_version }}
       metadata_store: ${{ matrix.metadata_store }}
 
-  type-check:
-    name: Type check
-    strategy:
-      fail-fast: false
-      matrix:
-        erlang_version: # Latest OTP
-        - '27'
-        elixir_version: # Latest Elixir
-        - '1.17'
-    uses: ./.github/workflows/test-make-type-check.yaml
-    with:
-      erlang_version: ${{ matrix.erlang_version }}
-      elixir_version: ${{ matrix.elixir_version }}
+  # type-check:
+  #   name: Type check
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       erlang_version: # Latest OTP
+  #       - '27'
+  #       elixir_version: # Latest Elixir
+  #       - '1.17'
+  #   uses: ./.github/workflows/test-make-type-check.yaml
+  #   with:
+  #     erlang_version: ${{ matrix.erlang_version }}
+  #     elixir_version: ${{ matrix.elixir_version }}

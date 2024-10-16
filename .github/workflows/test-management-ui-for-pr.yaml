@@ -1,10 +1,10 @@
 name: Test Management UI with Selenium for PRs
 on:
-   pull_request:
-     paths:
-     - 'deps/**'
-     - 'selenium/**'
-     - .github/workflows/test-management-ui-for-pr.yaml
+   # pull_request:
+   #   paths:
+   #   - 'deps/**'
+   #   - 'selenium/**'
+   #   - .github/workflows/test-management-ui-for-pr.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true

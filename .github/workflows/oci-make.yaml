@@ -1,12 +1,12 @@
 # https://github.com/marketplace/actions/build-and-push-docker-images
 name: OCI (make)
 on:
-  push:
-    paths-ignore:
-      - '.github/workflows/secondary-umbrella.yaml'
-      - '.github/workflows/update-elixir-patches.yaml'
-      - '.github/workflows/update-otp-patches.yaml'
-  workflow_dispatch:
+  # push:
+  #   paths-ignore:
+  #     - '.github/workflows/secondary-umbrella.yaml'
+  #     - '.github/workflows/update-elixir-patches.yaml'
+  #     - '.github/workflows/update-otp-patches.yaml'
+  # workflow_dispatch:
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
 concurrency:

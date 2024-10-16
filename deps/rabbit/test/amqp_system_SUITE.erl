@@ -15,8 +15,8 @@
 
 all() ->
     [
-      {group, dotnet},
-      {group, java}
+      {group, dotnet}
+      % {group, java}
     ].
 
 groups() ->

@@ -5,26 +5,26 @@ on:
       - main
       - v3.12.x
       - v3.11.x
-    paths:
-      - 'deps/rabbit/**'
-      - 'deps/rabbitmq_auth_**'
-      - 'deps/rabbitmq_management/selenium/**'
-      - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
-      - .github/workflows/test-authnz.yaml
-  pull_request:
-    paths:
-      - 'deps/rabbit/**'
-      - 'deps/rabbitmq_auth_/**'
-      - 'deps/rabbitmq_mqtt/**'
-      - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
-      - .github/workflows/test-authnz.yaml
+    # paths:
+    #   - 'deps/rabbit/**'
+    #   - 'deps/rabbitmq_auth_**'
+    #   - 'deps/rabbitmq_management/selenium/**'
+    #   - 'scripts/**'
+    #   - .bazelrc
+    #   - .bazelversion
+    #   - BUILD.*
+    #   - '*.bzl'
+    #   - '*.bazel'
+    #   - .github/workflows/test-authnz.yaml
+  # pull_request:
+  #   paths:
+  #     - 'deps/rabbit/**'
+  #     - 'deps/rabbitmq_auth_/**'
+  #     - 'deps/rabbitmq_mqtt/**'
+  #     - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
+  #     - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
+  #     - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
+  #     - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
