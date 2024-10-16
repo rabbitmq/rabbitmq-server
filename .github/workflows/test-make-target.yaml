@@ -45,7 +45,7 @@ jobs:
       uses: actions/setup-dotnet@v4
       if: inputs.plugin == 'rabbit'
       with:
-        dotnet-version: '3.1.x'
+        dotnet-version: '8.0'
 
     - name: SETUP SLAPD (rabbitmq_auth_backend_ldap)
       if: inputs.plugin == 'rabbitmq_auth_backend_ldap'
