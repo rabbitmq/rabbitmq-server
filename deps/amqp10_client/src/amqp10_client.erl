@@ -144,6 +144,8 @@ begin_session_sync(Connection, Timeout) when is_pid(Connection) ->
             receive
                 {amqp10_event, {session, Session, begun}} ->
                     {ok, Session};
+                {amqp10_event, {session, Session, {begun, #'v1_0.begin'{}}}} ->
+                    {ok, Session};
                 {amqp10_event, {session, Session, {ended, Err}}} ->
                     {error, Err}
             after Timeout -> session_timeout
@@ -185,6 +187,8 @@ attach_sender_link_sync(Session, Name, Target, SettleMode, Durability) ->
                                    Durability),
     receive
         {amqp10_event, {link, Ref, attached}} ->
+            {ok, Ref};
+        {amqp10_event, {link, Ref, {attached, #'v1_0.attach'{}}}} ->
             {ok, Ref};
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
