@@ -156,7 +156,8 @@ groups() ->
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
        session_max_per_connection,
        link_max_per_session,
-       reserved_annotation
+       reserved_annotation,
+       open_properties_queue_prefix
       ]},
 
      {cluster_size_3, [shuffle],
@@ -4760,7 +4761,7 @@ dead_letter_headers_exchange(Config) ->
                 #{arguments => #{<<"x-dead-letter-exchange">> => {utf8, <<"amq.headers">>},
                                  <<"x-message-ttl">> => {ulong, 0}}}),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
-    ok =  rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.headers">>, <<>>,
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.headers">>, <<>>,
                                           #{<<"my key">> => {uint, 5},
                                             <<"x-my key">> => {uint, 6},
                                             <<"x-match">> => {utf8, <<"all-with-x">>}}),
@@ -5941,6 +5942,45 @@ reserved_annotation(Config) ->
                   ct:fail({missing_event, ?LINE})
     end,
     ok = close_connection_sync(Connection).
+
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/12531.
+%% We pretend here to be unaware of RabbitMQ's target and source address format.
+%% We learn the address format from the properties field in the open frame.
+open_properties_queue_prefix(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    QueuePrefix = receive {amqp10_event, {connection, Connection,
+                                          {opened, #'v1_0.open'{properties = {map, KVList}}}}} ->
+                              {_, {utf8, QPref}} = proplists:lookup({symbol, <<"queue-prefix">>}, KVList),
+                              QPref
+                  after 5000 -> ct:fail({missing_event, ?LINE})
+                  end,
+
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+
+    Address = <<QueuePrefix/binary, QName/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, unsettled),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, unsettled),
+    wait_for_credit(Sender),
+
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag">>, <<"msg">>)),
+    ok = wait_for_accepted(<<"tag">>),
+
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"msg">>], amqp10_msg:body(Msg)),
+    ok = amqp10_client:accept_msg(Receiver, Msg),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 %% internal
 %%

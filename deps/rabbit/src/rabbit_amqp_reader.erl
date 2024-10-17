@@ -136,7 +136,15 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
 server_properties() ->
     Props0 = rabbit_reader:server_properties(amqp_1_0),
     Props1 = [{{symbol, K}, {utf8, V}} || {K, longstr, V} <- Props0],
-    Props = [{{symbol, <<"node">>}, {utf8, atom_to_binary(node())}} | Props1],
+    Props = [
+             {{symbol, <<"node">>}, {utf8, atom_to_binary(node())}},
+             %% queue-prefix is not part of the AMQP spec.
+             %% However, we include this property because it is also returned by
+             %% ActiveMQ and Solace and understood by some client libs,
+             %% e.g. ActiveMQ NMS.AMQP and Qpid JMS.
+             %% https://github.com/rabbitmq/rabbitmq-server/issues/12531
+             {{symbol, <<"queue-prefix">>}, {utf8, <<"/queues/">>}}
+            ] ++ Props1,
     {map, Props}.
 
 %%--------------------------------------------------------------------------
