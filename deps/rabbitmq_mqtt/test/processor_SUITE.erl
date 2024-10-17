@@ -45,9 +45,13 @@ end_per_testcase(_, Config) -> Config.
 ignore_colons(B) -> application:set_env(rabbitmq_mqtt, ignore_colons_in_username, B).
 
 ignores_colons_in_username_if_option_set(_Config) ->
-    ignore_colons(true),
-    ?assertEqual({rabbit_mqtt_util:env(vhost), <<"a:b:c">>},
-                  rabbit_mqtt_processor:get_vhost_username(<<"a:b:c">>)).
+    clear_vhost_global_parameters(),
+     ignore_colons(true),
+    ?assertEqual(undefined,
+                  rabbit_mqtt_processor:get_vhost_username(<<"a:b:c">>)),
+    ?assertEqual({plugin_configuration_or_default_vhost,
+                  {rabbit_mqtt_util:env(vhost), <<"a:b:c">>}},
+                  rabbit_mqtt_processor:get_vhost(<<"a:b:c">>, none, 1883)).
 
 interprets_colons_in_username_if_option_not_set(_Config) ->
    ignore_colons(false),
