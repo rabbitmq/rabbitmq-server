@@ -1363,7 +1363,7 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
 sync_feature_flags_with_cluster([] = _Nodes, true = _NodeIsVirgin) ->
     rabbit_ff_controller:enable_default();
 sync_feature_flags_with_cluster([] = _Nodes, false = _NodeIsVirgin) ->
-    ok;
+    rabbit_ff_controller:enable_required();
 sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
     %% We don't use `rabbit_nodes:filter_running()' here because the given
     %% `Nodes' list may contain nodes which are not members yet (the cluster
