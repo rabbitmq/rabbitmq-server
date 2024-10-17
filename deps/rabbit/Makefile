@@ -279,8 +279,18 @@ PARALLEL_CT_SET_4 = $(sort $(PARALLEL_CT_SET_4_A) $(PARALLEL_CT_SET_4_B) $(PARAL
 SEQUENTIAL_CT_SUITES = clustering_management dead_lettering feature_flags metadata_store_clustering quorum_queue rabbit_stream_queue
 PARALLEL_CT_SUITES = $(PARALLEL_CT_SET_1) $(PARALLEL_CT_SET_2) $(PARALLEL_CT_SET_3) $(PARALLEL_CT_SET_4)
 
-ifneq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
-$(error Some test suites in CT_SUITES but not configured for CI: $(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)))
+ifeq ($(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES)),)
+parallel-ct-sanity-check:
+	$(verbose) :
+else
+parallel-ct-sanity-check:
+	$(verbose) printf "%s\n" \
+		"In order for new test suites to be run in CI, the test suites" \
+		"must be added to one of the PARALLEL_CT_SET_<N>_<M> variables." \
+		"" \
+		"The following test suites are missing:" \
+		"$(filter-out $(SEQUENTIAL_CT_SUITES) $(PARALLEL_CT_SUITES),$(CT_SUITES))"
+	$(verbose) exit 1
 endif
 
 define tpl_parallel_ct_test_spec
