@@ -97,6 +97,8 @@ await_attached(Ref) ->
     receive
         {amqp10_event, {link, Ref, attached}} ->
             ok;
+        {amqp10_event, {link, Ref, {attached, #'v1_0.attach'{}}}} ->
+            ok;
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?TIMEOUT ->
@@ -128,6 +130,8 @@ detach(Ref) ->
 await_detached(Ref) ->
     receive
         {amqp10_event, {link, Ref, {detached, normal}}} ->
+            ok;
+        {amqp10_event, {link, Ref, {detached, #'v1_0.detach'{}}}} ->
             ok;
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
