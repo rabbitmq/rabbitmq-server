@@ -44,6 +44,12 @@ jobs:
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
 
+    - name: SANITY CHECK (rabbit)
+      run: make -C deps/rabbit parallel-ct-sanity-check
+
+    - name: SANITY CHECK (rabbitmq_mqtt)
+      run: make -C deps/rabbitmq_mqtt parallel-ct-sanity-check
+
     - name: BUILD
       run: make
 
