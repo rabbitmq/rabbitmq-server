@@ -30,7 +30,7 @@ all() ->
 
 groups() ->
     [
-     {rabbitmq, [], shared()},
+     {rabbitmq, [], shared() ++ [notify_with_performative]},
      {activemq, [], shared()},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
@@ -458,6 +458,52 @@ transfer_id_vs_delivery_id(Config) ->
     ?assertEqual(serial_number:add(amqp10_msg:delivery_id(RcvMsg1), 1),
                  amqp10_msg:delivery_id(RcvMsg2)).
 
+notify_with_performative(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+
+    OpenConf = #{?FUNCTION_NAME => true,
+                 address => Hostname,
+                 port => Port,
+                 sasl => anon},
+
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    receive {amqp10_event, {connection, Connection, {opened, #'v1_0.open'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Session1} = amqp10_client:begin_session(Connection),
+    receive {amqp10_event, {session, Session1, {begun, #'v1_0.begin'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender1} = amqp10_client:attach_sender_link(Session1, <<"sender 1">>, <<"/exchanges/amq.fanout">>),
+    receive {amqp10_event, {link, Sender1, {attached, #'v1_0.attach'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Sender1),
+    receive {amqp10_event, {link, Sender1, {detached, #'v1_0.detach'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:end_session(Session1),
+    receive {amqp10_event, {session, Session1, {ended, #'v1_0.end'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Test that the amqp10_client:*_sync functions work.
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender2} = amqp10_client:attach_sender_link_sync(Session2, <<"sender 2">>, <<"/exchanges/amq.fanout">>),
+    ok = amqp10_client:detach_link(Sender2),
+    ok = amqp10_client:end_session(Session2),
+    flush(),
+
+    ok = amqp10_client:close_connection(Connection),
+    receive {amqp10_event, {connection, Connection, {closed, #'v1_0.close'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end.
+
 % a message is sent before the link attach is guaranteed to
 % have completed and link credit granted
 % also queue a link detached immediately after transfer
@@ -832,8 +878,10 @@ incoming_heartbeat(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
-                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>},
-                                          idle_time_out = {uint, 0}}]}
+                       {Ch, [#'v1_0.open'{
+                                container_id = {utf8, <<"mock">>},
+                                %% The server doesn't expect any heartbeats from us (client).
+                                idle_time_out = {uint, 0}}]}
                end,
 
     CloseStep = fun({0 = Ch, #'v1_0.close'{error = _TODO}, _Pay}) ->
@@ -847,19 +895,24 @@ incoming_heartbeat(Config) ->
     MockRef = monitor(process, MockPid),
     ok = mock_server:set_steps(Mock, Steps),
     CConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config),
-              idle_time_out => 1000, notify => self()},
+              %% If the server does not send any traffic to us (client), we will expect
+              %% our client to close the connection after 1 second because
+              %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold."
+              idle_time_out => 500,
+              notify => self()},
     {ok, Connection} = amqp10_client:open_connection(CConf),
+    %% We expect our client to initiate closing the connection
+    %% and the server to reply with a close frame.
     receive
         {amqp10_event,
          {connection, Connection0,
-          {closed, {resource_limit_exceeded, <<"remote idle-time-out">>}}}}
+          {closed, _}}}
           when Connection0 =:= Connection ->
             ok
     after 5000 ->
               exit(incoming_heartbeat_assert)
     end,
     demonitor(MockRef).
-
 
 %%% HELPERS
 %%%
