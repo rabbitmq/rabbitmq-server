@@ -253,6 +253,8 @@ queue_with_multiple_consumers(Config) ->
     end,
 
     force_stats(Config),
+    ?awaitMatch(#{consumer_details := [_, _|_]},
+        http_get(Config, "/queues/%2F/multi-consumer-queue1"), 60000),
 
     Res = http_get(Config, "/queues/%2F/multi-consumer-queue1"),
     http_delete(Config, "/queues/%2F/multi-consumer-queue1", ?NO_CONTENT),
@@ -519,6 +521,8 @@ consumers(Config) ->
     consume(Chan2, <<"some-queue">>),
 
     force_stats(Config),
+    ?awaitMatch([_, _|_], http_get(Config, "/consumers"), 60000),
+
     Res = http_get(Config, "/consumers"),
 
     % assert there are two non-empty consumer records
