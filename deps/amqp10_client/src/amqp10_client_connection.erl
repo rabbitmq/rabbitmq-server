@@ -63,6 +63,7 @@
       notify => pid() | none, % the pid to send connection events to
       notify_when_opened => pid() | none,
       notify_when_closed => pid() | none,
+      notify_with_performative => boolean(),
       %% incoming maximum frame size set by our client application
       max_frame_size => pos_integer(), % TODO: constrain to large than 512
       %% outgoing maximum frame size set by AMQP peer in OPEN performative
@@ -253,7 +254,7 @@ hdr_sent({call, From}, begin_session,
     {keep_state, State1}.
 
 open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
-                                 idle_time_out = Timeout},
+                                 idle_time_out = Timeout} = Open,
           #state{pending_session_reqs = PendingSessionReqs,
                  config = Config} = State0) ->
     State = case Timeout of
@@ -278,7 +279,7 @@ open_sent(_EvtType, #'v1_0.open'{max_frame_size = MaybeMaxFrameSize,
                        _ = gen_statem:reply(From, Ret),
                        S2
                end, State1, PendingSessionReqs),
-    ok = notify_opened(Config),
+    ok = notify_opened(Config, Open),
     {next_state, opened, State2#state{pending_session_reqs = []}};
 open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
@@ -292,19 +293,18 @@ opened(_EvtType, heartbeat, State = #state{idle_time_out = T}) ->
     ok = send_heartbeat(State),
     {ok, Tmr} = start_heartbeat_timer(T),
     {keep_state, State#state{heartbeat_timer = Tmr}};
-opened(_EvtType, {close, Reason}, State = #state{config = Config}) ->
+opened(_EvtType, {close, Reason}, State) ->
     %% We send the first close frame and wait for the reply.
     %% TODO: stop all sessions writing
     %% We could still accept incoming frames (See: 2.4.6)
-    ok = notify_closed(Config, Reason),
     case send_close(State, Reason) of
         ok              -> {next_state, close_sent, State};
         {error, closed} -> {stop, normal, State};
         Error           -> {stop, Error, State}
     end;
-opened(_EvtType, #'v1_0.close'{error = Error}, State = #state{config = Config}) ->
+opened(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
     %% We receive the first close frame, reply and terminate.
-    ok = notify_closed(Config, translate_err(Error)),
+    ok = notify_closed(Config, Close),
     _ = send_close(State, none),
     {stop, normal, State};
 opened({call, From}, begin_session, State) ->
@@ -329,7 +329,8 @@ close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _},
            #state{reader = ReaderPid} = State) ->
     %% if the reader exits we probably wont receive a close frame
     {stop, normal, State};
-close_sent(_EvtType, #'v1_0.close'{}, State) ->
+close_sent(_EvtType, #'v1_0.close'{} = Close, State = #state{config = Config}) ->
+    ok = notify_closed(Config, Close),
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
     {stop, normal, State}.
@@ -489,25 +490,45 @@ socket_shutdown({tcp, Socket}, How) ->
 socket_shutdown({ssl, Socket}, How) ->
     ssl:shutdown(Socket, How).
 
-notify_opened(#{notify_when_opened := none}) ->
+notify_opened(#{notify_when_opened := none}, _) ->
     ok;
-notify_opened(#{notify_when_opened := Pid}) when is_pid(Pid) ->
-    Pid ! amqp10_event(opened),
-    ok;
-notify_opened(#{notify := Pid}) when is_pid(Pid) ->
-    Pid ! amqp10_event(opened),
-    ok;
-notify_opened(_) ->
+notify_opened(#{notify_when_opened := Pid} = Config, Perf)
+  when is_pid(Pid) ->
+    notify_opened0(Config, Pid, Perf);
+notify_opened(#{notify := Pid} = Config, Perf)
+  when is_pid(Pid) ->
+    notify_opened0(Config, Pid, Perf);
+notify_opened(_, _) ->
+    ok.
+
+notify_opened0(Config, Pid, Perf) ->
+    Evt = case Config of
+              #{notify_with_performative := true} ->
+                  {opened, Perf};
+              _ ->
+                  opened
+          end,
+    Pid ! amqp10_event(Evt),
     ok.
 
 notify_closed(#{notify_when_closed := none}, _Reason) ->
     ok;
 notify_closed(#{notify := none}, _Reason) ->
     ok;
-notify_closed(#{notify_when_closed := Pid}, Reason) when is_pid(Pid) ->
-    Pid ! amqp10_event({closed, Reason}),
+notify_closed(#{notify_when_closed := Pid} = Config, Reason)
+  when is_pid(Pid) ->
+    notify_closed0(Config, Pid, Reason);
+notify_closed(#{notify := Pid} = Config, Reason)
+  when is_pid(Pid) ->
+    notify_closed0(Config, Pid, Reason).
+
+notify_closed0(#{notify_with_performative := true}, Pid, Perf = #'v1_0.close'{}) ->
+    Pid ! amqp10_event({closed, Perf}),
     ok;
-notify_closed(#{notify := Pid}, Reason) when is_pid(Pid) ->
+notify_closed0(_, Pid,  #'v1_0.close'{error = Error}) ->
+    Pid ! amqp10_event({closed, translate_err(Error)}),
+    ok;
+notify_closed0(_, Pid, Reason) ->
     Pid ! amqp10_event({closed, Reason}),
     ok.
 

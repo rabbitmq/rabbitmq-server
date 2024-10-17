@@ -30,7 +30,7 @@ all() ->
 
 groups() ->
     [
-     {rabbitmq, [], shared()},
+     {rabbitmq, [], shared() ++ [notify_with_performative]},
      {activemq, [], shared()},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
@@ -457,6 +457,52 @@ transfer_id_vs_delivery_id(Config) ->
     %% Therefore, delivery-id should have been increased by just 1.
     ?assertEqual(serial_number:add(amqp10_msg:delivery_id(RcvMsg1), 1),
                  amqp10_msg:delivery_id(RcvMsg2)).
+
+notify_with_performative(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+
+    OpenConf = #{?FUNCTION_NAME => true,
+                 address => Hostname,
+                 port => Port,
+                 sasl => anon},
+
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    receive {amqp10_event, {connection, Connection, {opened, #'v1_0.open'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Session1} = amqp10_client:begin_session(Connection),
+    receive {amqp10_event, {session, Session1, {begun, #'v1_0.begin'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender1} = amqp10_client:attach_sender_link(Session1, <<"sender 1">>, <<"/exchanges/amq.fanout">>),
+    receive {amqp10_event, {link, Sender1, {attached, #'v1_0.attach'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Sender1),
+    receive {amqp10_event, {link, Sender1, {detached, #'v1_0.detach'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:end_session(Session1),
+    receive {amqp10_event, {session, Session1, {ended, #'v1_0.end'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Test that the amqp10_client:*_sync functions work.
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender2} = amqp10_client:attach_sender_link_sync(Session2, <<"sender 2">>, <<"/exchanges/amq.fanout">>),
+    ok = amqp10_client:detach_link(Sender2),
+    ok = amqp10_client:end_session(Session2),
+    flush(),
+
+    ok = amqp10_client:close_connection(Connection),
+    receive {amqp10_event, {connection, Connection, {closed, #'v1_0.close'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end.
 
 % a message is sent before the link attach is guaranteed to
 % have completed and link credit granted
