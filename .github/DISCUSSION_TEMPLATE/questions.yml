@@ -200,3 +200,10 @@ body:
         </details>
     validations:
       required: false
+  - type: textarea
+    id: question
+    attributes:
+      label: What problem are you trying to solve?
+      description: and why?
+    validations:
+      required: true

@@ -6,7 +6,7 @@ body:
         ## Before We Start
 
         This category exists for free form questions where deployment details are less relevant, e.g. application and topology
-        advice kind of questions. Please provide a reasonably detailed description of how you use RabbitMQ.
+        design kind of questions. Please provide a reasonably detailed description of what you are trying to do with RabbitMQ.
   - type: checkboxes
     attributes:
       label: Community Support Policy
