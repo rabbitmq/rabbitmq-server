@@ -77,5 +77,5 @@ jobs:
         name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
         path: |
           logs/
-          !logs/**/log_private
+#          !logs/**/log_private
         if-no-files-found: ignore
