@@ -519,6 +519,8 @@ consumers(Config) ->
     consume(Chan2, <<"some-queue">>),
 
     force_stats(Config),
+    ?awaitMatch([_, _|_], http_get(Config, "/consumers"), 60000),
+
     Res = http_get(Config, "/consumers"),
 
     % assert there are two non-empty consumer records
