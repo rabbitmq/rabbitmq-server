@@ -91,6 +91,8 @@ base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
 
 all() ->
     [
+          {group, non_parallel_tests},
+          {group, with_idle_timeout}
     ].
 
 groups() ->
