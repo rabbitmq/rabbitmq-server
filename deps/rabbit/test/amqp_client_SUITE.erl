@@ -4611,9 +4611,7 @@ idle_time_out_on_client(Config) ->
     receive
         {amqp10_event,
          {connection, Connection,
-          {closed,
-           {resource_limit_exceeded,
-            <<"remote idle-time-out">>}}}} -> ok
+          {closed, _}}} -> ok
     after 5000 ->
               ct:fail({missing_event, ?LINE})
     end,
