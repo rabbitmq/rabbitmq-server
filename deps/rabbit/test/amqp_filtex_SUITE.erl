@@ -11,6 +11,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp10_common/include/amqp10_filtex.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -compile([nowarn_export_all,
           export_all]).
@@ -21,6 +22,7 @@
         [eventually/1]).
 -import(amqp_utils,
         [init/1,
+         connection_config/1,
          flush/1,
          wait_for_credit/1,
          wait_for_accepts/1,
@@ -85,7 +87,12 @@ end_per_testcase(Testcase, Config) ->
 properties_section(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(Stream),
-    {Connection, Session, LinkPair} = init(Config),
+
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(
                   LinkPair,
                   Stream,
@@ -189,6 +196,14 @@ properties_section(Config) ->
     {ok, Receiver4} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 4">>, Address,
                         unsettled, configuration, Filter4),
+    receive {amqp10_event,
+             {link, Receiver4,
+              {attached, #'v1_0.attach'{
+                            source = #'v1_0.source'{filter = {map, ActualFilter}}}}}} ->
+                ?assertMatch([{{symbol,<<"rabbitmq:stream-offset-spec">>}, _}],
+                             ActualFilter)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
     {ok, R4M1} = amqp10_client:get_msg(Receiver4),
     {ok, R4M2} = amqp10_client:get_msg(Receiver4),
     {ok, R4M3} = amqp10_client:get_msg(Receiver4),
@@ -208,7 +223,11 @@ properties_section(Config) ->
 application_properties_section(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(Stream),
-    {Connection, Session, LinkPair} = init(Config),
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(
                   LinkPair,
                   Stream,
@@ -264,6 +283,20 @@ application_properties_section(Config) ->
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, Address,
                         settled, configuration, Filter1),
+    receive {amqp10_event,
+             {link, Receiver1,
+              {attached, #'v1_0.attach'{
+                            source = #'v1_0.source'{filter = {map, ActualFilter1}}}}}} ->
+                ?assertMatch(
+                   {described, _Type, {map, [
+                                             {{utf8, <<"k1">>}, {int, -2}},
+                                             {{utf8, <<"k5">>}, {symbol, <<"hey">>}},
+                                             {{utf8, <<"k4">>}, true},
+                                             {{utf8, <<"k3">>}, false}
+                                            ]}},
+                   proplists:get_value({symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER}, ActualFilter1))
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
     ok = amqp10_client:flow_link_credit(Receiver1, 10, never),
     receive {amqp10_msg, Receiver1, R1M1} ->
                 ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1))
@@ -305,6 +338,38 @@ application_properties_section(Config) ->
     ?assertEqual([<<"m2">>], amqp10_msg:body(R3M2)),
     ?assertEqual([<<"m4">>], amqp10_msg:body(R3M3)),
     ok = detach_link_sync(Receiver3),
+
+    %% Wrong type should fail validation in the server.
+    %% RabbitMQ should exclude this filter in its reply attach frame because
+    %% "the sending endpoint [RabbitMQ] sets the filter actually in place".
+    %% Hence, no filter expression is actually in place and we should receive all messages.
+    AppPropsFilter4 = [{{symbol, <<"k2">>}, {uint, 10}}],
+    Filter4 = #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter4}},
+    {ok, Receiver4} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 4">>, Address,
+                        unsettled, configuration, Filter4),
+    receive {amqp10_event,
+             {link, Receiver4,
+              {attached, #'v1_0.attach'{
+                            source = #'v1_0.source'{filter = {map, ActualFilter4}}}}}} ->
+                ?assertMatch([{{symbol,<<"rabbitmq:stream-offset-spec">>}, _}],
+                             ActualFilter4)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, R4M1} = amqp10_client:get_msg(Receiver4),
+    {ok, R4M2} = amqp10_client:get_msg(Receiver4),
+    {ok, R4M3} = amqp10_client:get_msg(Receiver4),
+    {ok, R4M4} = amqp10_client:get_msg(Receiver4),
+    ok = amqp10_client:accept_msg(Receiver4, R4M1),
+    ok = amqp10_client:accept_msg(Receiver4, R4M2),
+    ok = amqp10_client:accept_msg(Receiver4, R4M3),
+    ok = amqp10_client:accept_msg(Receiver4, R4M4),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R4M1)),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R4M2)),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R4M3)),
+    ?assertEqual([<<"m4">>], amqp10_msg:body(R4M4)),
+    ok = detach_link_sync(Receiver4),
 
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, Stream),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
