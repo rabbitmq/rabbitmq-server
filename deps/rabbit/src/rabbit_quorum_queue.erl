@@ -153,7 +153,7 @@
       "target-group-size controls the targeted number of "
       "member nodes for the queue. If set, RabbitMQ will try to "
       "grow the queue members to the target size. "
-      "See module rabbit_queue_member_eval."},
+      "See module rabbit_quorum_queue_periodic_membership_reconciliation."},
      {mfa, {rabbit_registry, register,
             [policy_validator, <<"target-group-size">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
