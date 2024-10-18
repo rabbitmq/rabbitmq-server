@@ -361,10 +361,6 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
             ConnNameEx = dynamic_connection_name(Name),
             log_connection_exception(ConnNameEx, ConnectedAt, Ex)
     after
-        %% We don't call gen_tcp:close/1 here since it waits for
-        %% pending output to be sent, which results in unnecessary
-        %% delays.
-        rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
         rabbit_core_metrics:connection_closed(self()),
         ClientProperties = case get(client_properties) of
@@ -383,7 +379,12 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
            ConnectionUserProvidedName ->
                [{user_provided_name, ConnectionUserProvidedName} | EventProperties]
         end,
-        rabbit_event:notify(connection_closed, EventProperties1)
+        rabbit_event:notify(connection_closed, EventProperties1),
+
+        %% We don't call gen_tcp:close/1 here since it waits for
+        %% pending output to be sent, which results in unnecessary
+        %% delays.
+        rabbit_net:fast_close(RealSocket)
     end,
     done.
 
@@ -1252,7 +1253,6 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     ok = rabbit_access_control:check_vhost_access(User, VHost, {socket, Sock}, #{}),
     ok = is_vhost_alive(VHost, User),
     NewConnection = Connection#connection{vhost = VHost},
-    ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
 
     Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
     BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
@@ -1276,6 +1276,9 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     rabbit_log_connection:info(
       "connection ~ts: user '~ts' authenticated and granted access to vhost '~ts'",
       [dynamic_connection_name(ConnName), Username, VHost]),
+
+    ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
+
     State1;
 handle_method0(#'connection.close'{}, State) when ?IS_RUNNING(State) ->
     lists:foreach(fun rabbit_channel:shutdown/1, all_channels()),
