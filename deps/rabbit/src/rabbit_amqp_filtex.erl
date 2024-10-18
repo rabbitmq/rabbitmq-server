@@ -112,16 +112,11 @@ validate0(Descriptor, KVList) when
        Descriptor =:= {ulong, ?DESCRIPTOR_CODE_PROPERTIES_FILTER}) andalso
       KVList =/= [] ->
     validate_props(KVList, []);
-validate0(Descriptor, KVList0) when
+validate0(Descriptor, KVList) when
       (Descriptor =:= {symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER} orelse
        Descriptor =:= {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES_FILTER}) andalso
-      KVList0 =/= [] ->
-    KVList = lists:map(fun({{utf8, Key}, {utf8, String}}) ->
-                               {Key, parse_string_modifier_prefix(String)};
-                          ({{utf8, Key}, TaggedVal}) ->
-                               {Key, unwrap(TaggedVal)}
-                       end, KVList0),
-    {ok, {application_properties, KVList}};
+      KVList =/= [] ->
+    validate_app_props(KVList, []);
 validate0(_, _) ->
     error.
 
@@ -175,6 +170,15 @@ parse_message_id({binary, Val}) ->
 parse_message_id({utf8, Val}) ->
     {ok, parse_string_modifier_prefix(Val)};
 parse_message_id(_) ->
+    error.
+
+validate_app_props([], Acc) ->
+    {ok, {application_properties, lists:reverse(Acc)}};
+validate_app_props([{{utf8, Key}, {utf8, String}} | Rest], Acc) ->
+    validate_app_props(Rest, [{Key, parse_string_modifier_prefix(String)} | Acc]);
+validate_app_props([{{utf8, Key}, TaggedVal} | Rest], Acc) ->
+    validate_app_props(Rest, [{Key, unwrap(TaggedVal)} | Acc]);
+validate_app_props(_, _) ->
     error.
 
 %% [filtex-v1.0-wd09 4.1.1]

@@ -7,6 +7,8 @@
 
 -module(amqp_utils).
 
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
+
 -export([init/1, init/2,
          connection_config/1, connection_config/2,
          flush/1,
@@ -101,6 +103,9 @@ detach_link_sync(Link) ->
 wait_for_link_detach(Link) ->
     receive
         {amqp10_event, {link, Link, {detached, normal}}} ->
+            flush(?FUNCTION_NAME),
+            ok;
+        {amqp10_event, {link, Link, {detached, #'v1_0.detach'{}}}} ->
             flush(?FUNCTION_NAME),
             ok
     after 5000 ->
