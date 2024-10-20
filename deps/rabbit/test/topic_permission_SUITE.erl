@@ -8,6 +8,7 @@
 -module(topic_permission_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile([export_all, nowarn_export_all]).
@@ -21,6 +22,7 @@ groups() ->
     [
      {sequential_tests, [],
       [
+       amqp_x_cc_annotation,
        amqpl_cc_headers,
        amqpl_bcc_headers,
        topic_permission_database_access,
@@ -29,6 +31,7 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -55,6 +58,91 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+amqp_x_cc_annotation(Config) ->
+    ok = set_topic_permissions(Config, "^a", ".*"),
+
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    {Connection, Session1, LinkPair} = amqp_utils:init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.topic">>, <<"a.1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.topic">>, <<"a.2">>, #{}),
+
+    {ok, Sender1} = amqp10_client:attach_sender_link(
+                      Session1,
+                      <<"sender 1">>,
+                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"a.1">>)),
+    ok = amqp_utils:wait_for_credit(Sender1),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session1, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session1, <<"receiver 2">>, rabbitmq_amqp_address:queue(QName2), settled),
+    %% We have permissions to send to both topics.
+    %% Therefore, m1 should be sent to both queues.
+    ok = amqp10_client:send_msg(Sender1, amqp10_msg:set_message_annotations(
+                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"a.2">>}]}},
+                                           amqp10_msg:new(<<"t1">>, <<"m1">>, true))),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg2)),
+    ok = amqp_utils:detach_link_sync(Sender1),
+    ok = amqp_utils:detach_link_sync(Receiver1),
+    ok = amqp_utils:detach_link_sync(Receiver2),
+
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender2} = amqp10_client:attach_sender_link(
+                      Session2,
+                      <<"sender 2">>,
+                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"x.1">>)),
+    ok = amqp_utils:wait_for_credit(Sender2),
+    ok = amqp10_client:send_msg(Sender2, amqp10_msg:set_message_annotations(
+                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"a.2">>}]}},
+                                           amqp10_msg:new(<<"t2">>, <<"m2">>, true))),
+    receive
+        {amqp10_event,
+         {session, Session2,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, Description1}}}}} ->
+            ?assertEqual(
+               <<"write access to topic 'x.1' in exchange 'amq.topic' in vhost '/' refused for user 'guest'">>,
+               Description1)
+    after 5000 -> amqp_utils:flush(missing_ended),
+                  ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Session3} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender3} = amqp10_client:attach_sender_link(
+                      Session3,
+                      <<"sender 3">>,
+                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"a.1">>)),
+    ok = amqp_utils:wait_for_credit(Sender3),
+    ok = amqp10_client:send_msg(Sender3, amqp10_msg:set_message_annotations(
+                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"x.2">>}]}},
+                                           amqp10_msg:new(<<"t3">>, <<"m3">>, true))),
+    receive
+        {amqp10_event,
+         {session, Session3,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, Description2}}}}} ->
+            ?assertEqual(
+               <<"write access to topic 'x.2' in exchange 'amq.topic' in vhost '/' refused for user 'guest'">>,
+               Description2)
+    after 5000 -> amqp_utils:flush(missing_ended),
+                  ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = amqp_utils:end_session_sync(Session1),
+    ok = amqp10_client:close_connection(Connection),
+    ok = clear_topic_permissions(Config).
 
 amqpl_cc_headers(Config) ->
     amqpl_headers(<<"CC">>, Config).
