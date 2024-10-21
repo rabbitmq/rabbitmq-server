@@ -205,7 +205,7 @@ do_http_req(Path0, Query) ->
 ssl_options() ->
     case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts0} when is_list(Opts0) ->
-            Opts1 = [{ssl, rabbit_networking:fix_ssl_options(Opts0)}],            
+            Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],            
             case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
                 {ok, wildcard} ->
                     rabbit_log:debug("Enabling wildcard-aware hostname verification for HTTP client connections"),
