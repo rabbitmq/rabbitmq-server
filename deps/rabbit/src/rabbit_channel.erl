@@ -912,8 +912,13 @@ check_write_permitted(Resource, User, Context) ->
 check_read_permitted(Resource, User, Context) ->
     check_resource_access(User, Resource, read, Context).
 
-check_write_permitted_on_topic(Resource, User, RoutingKey, AuthzContext) ->
-    check_topic_authorisation(Resource, User, RoutingKey, AuthzContext, write).
+check_write_permitted_on_topics(#exchange{type = topic} = Resource, User, Mc, AuthzContext) ->
+    lists:foreach(
+      fun(RoutingKey) ->
+              check_topic_authorisation(Resource, User, RoutingKey, AuthzContext, write)
+      end, mc:routing_keys(Mc));
+check_write_permitted_on_topics(_, _, _, _) ->
+    ok.
 
 check_read_permitted_on_topic(Resource, User, RoutingKey, AuthzContext) ->
     check_topic_authorisation(Resource, User, RoutingKey, AuthzContext, read).
@@ -1182,7 +1187,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_write_permitted(ExchangeName, User, AuthzContext),
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     check_internal_exchange(Exchange),
-    check_write_permitted_on_topic(Exchange, User, RoutingKey, AuthzContext),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
     DecodedContent = #content {properties = Props} =
@@ -1208,6 +1212,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
         {error, Reason}  ->
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
+            check_write_permitted_on_topics(Exchange, User, Message0, AuthzContext),
             Message = rabbit_message_interceptor:intercept(Message0),
             check_user_id_header(Message, User),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
