@@ -304,10 +304,9 @@ target_per_message_exchange_routing_key(Config) ->
     Tag1 = Body1 = <<1>>,
     Tag2 = Body2 = <<2>>,
 
-    %% Although mc_amqp:essential_properties/1 parses these annotations, they should be ignored.
+    %% Although mc_amqp:essential_properties/1 parses the x-exchange annotation, it should be ignored.
     Msg1 = amqp10_msg:set_message_annotations(
-             #{<<"x-exchange">> => <<"ignored">>,
-               <<"x-routing-key">> => <<"ignored">>},
+             #{<<"x-exchange">> => <<"ignored">>},
              amqp10_msg:set_properties(#{to => To1}, amqp10_msg:new(Tag1, Body1))),
     Msg2 = amqp10_msg:set_properties(#{to => To2}, amqp10_msg:new(Tag2, Body2)),
     ok = amqp10_client:send_msg(Sender, Msg1),

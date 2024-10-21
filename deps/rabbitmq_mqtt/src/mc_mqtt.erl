@@ -14,6 +14,7 @@
          init/1,
          size/1,
          x_header/2,
+         x_headers/1,
          property/2,
          routing_headers/2,
          convert_to/3,
@@ -389,6 +390,11 @@ x_header(Key, #mqtt_msg{props = #{'User-Property' := UserProp}}) ->
     end;
 x_header(_Key, #mqtt_msg{}) ->
     undefined.
+
+x_headers(#mqtt_msg{props = #{'User-Property' := UserProp}}) ->
+    #{Key => {utf8, Val} || {<<"x-", _/binary>> = Key, Val} <- UserProp};
+x_headers(#mqtt_msg{}) ->
+    #{}.
 
 property(correlation_id, #mqtt_msg{props = #{'Correlation-Data' := Corr}}) ->
     case mc_util:urn_string_to_uuid(Corr) of

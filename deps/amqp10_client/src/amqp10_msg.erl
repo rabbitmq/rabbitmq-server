@@ -436,7 +436,9 @@ wrap_ap_value(V) when is_integer(V) ->
     end;
 wrap_ap_value(V) when is_number(V) ->
     %% AMQP double and Erlang float are both 64-bit.
-    {double, V}.
+    {double, V};
+wrap_ap_value(TaggedValue) when is_tuple(TaggedValue) ->
+    TaggedValue.
 
 %% LOCAL
 header_value(durable, undefined) -> false;

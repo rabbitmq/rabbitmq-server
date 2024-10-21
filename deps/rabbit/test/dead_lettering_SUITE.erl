@@ -1860,6 +1860,10 @@ stream(Config) ->
     {timestamp, T2} = rabbit_misc:table_lookup(Death2, <<"time">>),
     ?assert(T1 < T2),
 
+    ?assertEqual({array, [{longstr, <<"cc 1">>},
+                          {longstr, <<"cc 2">>}]},
+                 rabbit_misc:table_lookup(Headers, <<"CC">>)),
+
     ok = rabbit_ct_client_helpers:close_channel(Ch0),
     ok = rabbit_ct_client_helpers:close_channel(Ch1).
 

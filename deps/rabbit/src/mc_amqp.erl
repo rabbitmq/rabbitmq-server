@@ -8,6 +8,7 @@
          init/1,
          size/1,
          x_header/2,
+         x_headers/1,
          property/2,
          routing_headers/2,
          convert_to/3,
@@ -124,6 +125,9 @@ size(#v1{message_annotations = MA,
 
 x_header(Key, Msg) ->
     message_annotation(Key, Msg, undefined).
+
+x_headers(Msg) ->
+    #{K => V || {{_T, K}, V} <- message_annotations(Msg)}.
 
 property(_Prop, #msg_body_encoded{properties = undefined}) ->
     undefined;
@@ -618,41 +622,16 @@ encode_deaths(Deaths) ->
               {map, Map}
       end, Deaths).
 
-essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
+essential_properties(Msg) ->
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
-    Anns0 = #{?ANN_DURABLE => Durable},
-    Anns = maps_put_truthy(
-             ?ANN_PRIORITY, Priority,
-             maps_put_truthy(
-               ?ANN_TIMESTAMP, Timestamp,
-               maps_put_truthy(
-                 ttl, Ttl,
-                 Anns0))),
-    case MA of
-        [] ->
-            Anns;
-        _ ->
-            lists:foldl(
-              fun ({{symbol, <<"x-routing-key">>},
-                    {utf8, Key}}, Acc) ->
-                      maps:update_with(?ANN_ROUTING_KEYS,
-                                       fun(L) -> [Key | L] end,
-                                       [Key],
-                                       Acc);
-                  ({{symbol, <<"x-cc">>},
-                    {list, CCs0}}, Acc) ->
-                      CCs = [CC || {_T, CC} <- CCs0],
-                      maps:update_with(?ANN_ROUTING_KEYS,
-                                       fun(L) -> L ++ CCs end,
-                                       CCs,
-                                       Acc);
-                  ({{symbol, <<"x-exchange">>},
-                    {utf8, Exchange}}, Acc) ->
-                      Acc#{?ANN_EXCHANGE => Exchange};
-                  (_, Acc) ->
-                      Acc
-              end, Anns, MA)
-    end.
+    Anns = #{?ANN_DURABLE => Durable},
+    maps_put_truthy(
+      ?ANN_PRIORITY, Priority,
+      maps_put_truthy(
+        ?ANN_TIMESTAMP, Timestamp,
+        maps_put_truthy(
+          ttl, Ttl,
+          Anns))).

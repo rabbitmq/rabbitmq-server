@@ -156,7 +156,12 @@ groups() ->
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
        session_max_per_connection,
        link_max_per_session,
-       reserved_annotation
+       reserved_annotation,
+       x_cc_annotation_exchange,
+       x_cc_annotation_exchange_routing_key_empty,
+       x_cc_annotation_queue,
+       x_cc_annotation_null,
+       bad_x_cc_annotation_exchange
       ]},
 
      {cluster_size_3, [shuffle],
@@ -5941,6 +5946,221 @@ reserved_annotation(Config) ->
                   ct:fail({missing_event, ?LINE})
     end,
     ok = close_connection_sync(Connection).
+
+%% Test that x-cc routing keys work together with target address
+%% /exchanges/:exchange/:routing-key
+x_cc_annotation_exchange(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key 1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"key 2">>, #{}),
+    Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"key 1">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {array, utf8, [{utf8, <<"key 2">>}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, rabbitmq_amqp_address:queue(QName2), settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address
+%% /exchanges/:exchange
+x_cc_annotation_exchange_routing_key_empty(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key 1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"key 2">>, #{}),
+    AddressEmptyRoutingKey = rabbitmq_amqp_address:exchange(<<"amq.direct">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, AddressEmptyRoutingKey),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {array, utf8, [{utf8, <<"key 1">>},
+                                                                         {utf8, <<"key 2">>}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, rabbitmq_amqp_address:queue(QName2), settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address
+%% /queues/:queue
+x_cc_annotation_queue(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    Address1 = rabbitmq_amqp_address:queue(QName1),
+    Address2 = rabbitmq_amqp_address:queue(QName2),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address1),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {array, utf8, [{utf8, QName2}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, Address1, settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, Address2, settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address 'null'
+x_cc_annotation_null(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    QAddress1 = rabbitmq_amqp_address:queue(QName1),
+    QAddress2 = rabbitmq_amqp_address:queue(QName2),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key-1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"🗝️-2"/utf8>>, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, QAddress1, settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, QAddress2, settled),
+
+    Msg1 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {array, utf8, [{utf8, <<"key-1">>},
+                                            {utf8, <<"key-3">>}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"🗝️-2"/utf8>>)},
+               amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = wait_for_accepted(<<"t1">>),
+    {ok, R1M1} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M1} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1)),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R2M1)),
+
+    Msg2 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {array, utf8, [{utf8, <<"🗝️-2"/utf8>>},
+                                            {utf8, <<"key-1">>}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>)},
+               amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = wait_for_accepted(<<"t2">>),
+    {ok, R1M2} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R1M2)),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R2M2)),
+
+    Msg3 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {array, utf8, [{utf8, QName1}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:queue(QName2)},
+               amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(Sender, Msg3),
+    ok = wait_for_accepted(<<"t3">>),
+    {ok, R1M3} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M3} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R1M3)),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R2M3)),
+
+    Msg4 = amqp10_msg:set_message_annotations(
+             %% We send a symbol array instead of utf8 array.
+             #{<<"x-cc">> => {array, symbol, [{symbol, QName1}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:queue(QName2)},
+               amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(Sender, Msg4),
+    %% "If the source of the link supports the rejected outcome, and the message has not
+    %% already been settled by the sender, then the routing node MUST reject the message.
+    %% In this case the error field of rejected MUST contain the error which would have been communicated
+    %% in the detach which would have be sent if a link to the same address had been attempted."
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
+    receive {amqp10_disposition, {{rejected, Error}, <<"t4">>}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation:", _/binary>>}},
+                   Error)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+bad_x_cc_annotation_exchange(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+
+    Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"key-1">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_message_annotations(
+             %% We send a list instead of an array.
+             #{<<"x-cc">> => {list, [{utf8, <<"🗝️-2"/utf8>>}]}},
+             amqp10_msg:new(<<"tag">>, <<"msg">>))),
+    ok = wait_for_settlement(<<"tag">>, released),
+    receive {amqp10_event, {link, Sender, {detached, Error}}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation: "
+                                             "{list,[{utf8,<<\"🗝️-2"/utf8, _Rest/binary>>}},
+                   Error)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 %% internal
 %%
