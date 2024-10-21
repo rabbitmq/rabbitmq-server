@@ -1,8 +1,8 @@
 .PHONY: dist test-dist do-dist cli-scripts cli-escripts clean-dist
 
-DIST_DIR = plugins
-CLI_SCRIPTS_DIR = sbin
-CLI_ESCRIPTS_DIR = escript
+DIST_DIR ?= $(CURDIR)/plugins
+CLI_SCRIPTS_DIR ?= $(CURDIR)/sbin
+CLI_ESCRIPTS_DIR ?= $(CURDIR)/escript
 MIX = echo y | mix
 
 # Set $(DIST_AS_EZS) to a non-empty value to enable the packaging of

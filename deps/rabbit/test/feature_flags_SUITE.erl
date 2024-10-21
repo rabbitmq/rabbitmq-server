@@ -126,6 +126,7 @@ init_per_group(registry, Config) ->
     logger:set_primary_config(level, debug),
     rabbit_ct_helpers:run_steps(Config, []);
 init_per_group(feature_flags_v2, Config) ->
+    %% @todo Remove this entirely as that FF became required in 3.12.
     %% `feature_flags_v2' is now required and won't work in mixed-version
     %% clusters if the other version doesn't support it.
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -267,6 +268,7 @@ init_per_testcase(Testcase, Config) ->
             Config2 = rabbit_ct_helpers:set_config(
                         Config1,
                         [{rmq_nodename_suffix, Testcase},
+                         {secondary_enabled_plugins, "my_plugin"},
                          {tcp_ports_base, {skip_n_nodes,
                                            TestNumber * ClusterSize}},
                          {net_ticktime, 5}
