@@ -433,6 +433,7 @@ start_rabbitmq_node(Master, Config, NodeConfig, I) ->
             %% It's unlikely we'll ever succeed to start RabbitMQ.
             Master ! {self(), Error},
             unlink(Master);
+        %% @todo This might not work right now in at least some cases...
         {skip, _} ->
             %% Try again with another TCP port numbers base.
             NodeConfig4 = move_nonworking_nodedir_away(NodeConfig3),
@@ -506,6 +507,7 @@ tcp_port_base_for_broker0(Config, I, PortsCount) ->
 tcp_port_base_for_broker1(Base, I, PortsCount) ->
     Base + I * PortsCount * ?NODE_START_ATTEMPTS.
 
+%% @todo Refactor to simplify this...
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
@@ -626,21 +628,52 @@ write_config_file(Config, NodeConfig, _I) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
+-define(REQUIRED_FEATURE_FLAGS, [
+    %% Required in 3.11:
+    "virtual_host_metadata,"
+    "quorum_queue,"
+    "implicit_default_bindings,"
+    "maintenance_mode_status,"
+    "user_limits,"
+    %% Required in 3.12:
+    "stream_queue,"
+    "classic_queue_type_delivery_support,"
+    "tracking_records_in_ets,"
+    "stream_single_active_consumer,"
+    "listener_records_in_ets,"
+    "feature_flags_v2,"
+    "direct_exchange_routing_v2,"
+    "classic_mirrored_queue_version," %% @todo Missing in FF docs!!
+    %% Required in 3.12 in rabbitmq_management_agent:
+%    "drop_unroutable_metric,"
+%    "empty_basic_get_metric,"
+    %% Required in 4.0:
+    "stream_sac_coordinator_unblock_group,"
+    "restart_streams,"
+    "stream_update_config_command,"
+    "stream_filtering,"
+    "message_containers" %% @todo Update FF docs!! It *is* required.
+]).
+
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
     WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins),
+      broker_with_plugins), %% @todo This is probably not used.
     WithPlugins = case is_list(WithPlugins0) of
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
     ForceUseSecondary = rabbit_ct_helpers:get_config(
-                          Config, force_secondary_umbrella, undefined),
+                          Config, force_secondary, undefined),
     CanUseSecondary = case ForceUseSecondary of
                           undefined ->
                               (I + 1) rem 2 =:= 0;
                           Override when is_boolean(Override) ->
                               Override
                       end,
+    UseSecondaryDist = case ?config(secondary_dist, Config) of
+                               false -> false;
+                               _     -> CanUseSecondary
+                           end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false -> false;
                                _     -> CanUseSecondary
@@ -686,8 +719,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
                                  Config, start_rmq_with_plugins_disabled),
     ExtraArgs2 = case StartWithPluginsDisabled of
-                     true -> ["LEAVE_PLUGINS_DISABLED=yes" | ExtraArgs1];
-                     _    -> ExtraArgs1
+                     true ->
+                        ["LEAVE_PLUGINS_DISABLED=1" | ExtraArgs1];
+                     _ ->
+                        ExtraArgs1
                  end,
     KeepPidFile = rabbit_ct_helpers:get_config(
                     Config, keep_pid_file_on_exit),
@@ -731,7 +766,30 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_PLUGINS=~ts/rabbitmq-plugins", [SecScriptsDir]}
                          | ExtraArgs4];
                     false ->
-                        ExtraArgs4
+                        case UseSecondaryDist of
+                            true ->
+                                SecondaryDist = ?config(secondary_dist, Config),
+                                SecondaryEnabledPlugins = case {
+                                    StartWithPluginsDisabled,
+                                    ?config(secondary_enabled_plugins, Config),
+                                    filename:basename(SrcDir)
+                                } of
+                                    {true, _, _} -> "";
+                                    {_, undefined, "rabbit"} -> "";
+                                    {_, undefined, SrcPlugin} -> SrcPlugin;
+                                    {_, SecondaryEnabledPlugins0, _} -> SecondaryEnabledPlugins0
+                                end,
+                                [{"DIST_DIR=~ts/plugins", [SecondaryDist]},
+                                 {"CLI_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
+                                 {"CLI_ESCRIPTS_DIR=~ts/escript", [SecondaryDist]},
+                                 {"RABBITMQ_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
+                                 {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]},
+                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugins]},
+                                 {"RABBITMQ_FEATURE_FLAGS=~ts", [?REQUIRED_FEATURE_FLAGS]}
+                                | ExtraArgs4];
+                            false ->
+                                ExtraArgs4
+                        end
                 end,
     MakeVars = [
       {"RABBITMQ_NODENAME=~ts", [Nodename]},
@@ -1285,6 +1343,10 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
     CanUseSecondary = (I + 1) rem 2 =:= 0,
     BazelRunSecCmd = rabbit_ct_helpers:get_config(
                        Config, rabbitmq_run_secondary_cmd),
+    UseSecondaryDist = case ?config(secondary_dist, Config) of
+                               false -> false;
+                               _     -> CanUseSecondary
+                           end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false ->
                                    case BazelRunSecCmd of
@@ -1327,7 +1389,14 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                                      "rabbitmqctl"])
                           end;
                       false ->
-                          ?config(rabbitmqctl_cmd, Config)
+                          case UseSecondaryDist of
+                              true ->
+                                  SecondaryDist = ?config(secondary_dist, Config),
+                                  rabbit_misc:format(
+                                    "~ts/sbin/rabbitmqctl", [SecondaryDist]);
+                              false ->
+                                  ?config(rabbitmqctl_cmd, Config)
+                          end
                   end,
 
     NodeConfig = get_node_config(Config, Node),
