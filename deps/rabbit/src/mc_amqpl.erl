@@ -11,6 +11,7 @@
          init/1,
          size/1,
          x_header/2,
+         x_headers/1,
          routing_headers/2,
          convert_to/3,
          convert_from/3,
@@ -272,6 +273,23 @@ x_header(Key, #content{properties = #'P_basic'{headers = Headers}}) ->
 x_header(Key, #content{properties = none} = Content0) ->
     Content = rabbit_binary_parser:ensure_content_decoded(Content0),
     x_header(Key, Content).
+
+x_headers(#content{properties = #'P_basic'{headers = undefined}}) ->
+    #{};
+x_headers(#content{properties = #'P_basic'{headers = Headers}}) ->
+    L = lists:filtermap(
+          fun({Name, Type, Val}) ->
+                  case mc_util:is_x_header(Name) of
+                      true ->
+                          {true, {Name, from_091(Type, Val)}};
+                      false ->
+                          false
+                  end
+          end, Headers),
+    maps:from_list(L);
+x_headers(#content{properties = none} = Content0) ->
+    Content = rabbit_binary_parser:ensure_content_decoded(Content0),
+    x_headers(Content).
 
 property(Prop, Content) ->
     mc_util:infer_type(mc_compat:get_property(Prop, Content)).
@@ -690,10 +708,23 @@ from_091(binary, V) -> {binary, V};
 from_091(timestamp, V) -> {timestamp, V * 1000};
 from_091(byte, V) -> {byte, V};
 from_091(void, _V) -> null;
-from_091(array, L) ->
-    {list, [from_091(T, V) || {T, V} <- L]};
 from_091(table, L) ->
-    {map, [{wrap(symbol, K), from_091(T, V)} || {K, T, V} <- L]}.
+    {map, [{wrap(symbol, K), from_091(T, V)} || {K, T, V} <- L]};
+from_091(array, []) ->
+    {list, []};
+from_091(array, L0 = [{T0, _} | _]) ->
+    {L = [{T1, _} | _], {Monomorphic, _}} =
+    lists:mapfoldl(fun({T, V}, {Mono0, PrevType}) ->
+                           Mono = case Mono0 of
+                                      false -> false;
+                                      true -> T =:= PrevType
+                                  end,
+                           {from_091(T, V), {Mono, T}}
+                   end, {true, T0}, L0),
+    case Monomorphic of
+        true -> {array, T1, L};
+        false -> {list, L}
+    end.
 
 map_add(_T, _Key, _Type, undefined, Acc) ->
     Acc;
@@ -706,7 +737,6 @@ supported_header_value_type(table) ->
     false;
 supported_header_value_type(_) ->
     true.
-
 
 amqp10_map_get(_K, []) ->
     undefined;
@@ -857,3 +887,24 @@ amqp10_section_header(Header, Headers) ->
 
 amqp_encoded_binary(Section) ->
     iolist_to_binary(amqp10_framing:encode_bin(Section)).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+from_091_array_test() ->
+    {list, []} = from_091(array, []),
+    {array, utf8, [{utf8, <<"e1">>}]} = from_091(array, [{longstr, <<"e1">>}]),
+    {array, utf8, [{utf8, <<"e1">>},
+                   {utf8, <<"e2">>}]} = from_091(array, [{longstr, <<"e1">>},
+                                                         {longstr, <<"e2">>}]),
+    {list, [{utf8, <<"e1">>},
+            {binary, <<"e2">>}]} = from_091(array, [{longstr, <<"e1">>},
+                                                    {binary, <<"e2">>}]),
+    {list, [{utf8, <<"e1">>},
+            {binary, <<"e2">>},
+            {utf8, <<"e3">>},
+            {utf8, <<"e4">>}]} = from_091(array, [{longstr, <<"e1">>},
+                                                  {binary, <<"e2">>},
+                                                  {longstr, <<"e3">>},
+                                                  {longstr, <<"e4">>}]).
+-endif.

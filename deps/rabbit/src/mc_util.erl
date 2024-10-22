@@ -61,7 +61,7 @@ utf8_string_is_ascii(UTF8String) ->
 amqp_map_get(Key, {map, List}, Default) ->
     amqp_map_get(Key, List, Default);
 amqp_map_get(Key, List, Default) when is_list(List) ->
-    case lists:search(fun ({{_, K}, _}) -> K == Key end, List) of
+    case lists:search(fun ({{_, K}, _}) -> K =:= Key end, List) of
         {value, {_K, V}} ->
             V;
         false ->

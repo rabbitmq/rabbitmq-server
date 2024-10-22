@@ -1272,17 +1272,36 @@ parse_uncompressed_subbatch(
 
 entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName}, Name, LocalPid, Filter) ->
     Mc0 = mc:init(mc_amqp, Entry, #{}),
-    %% If exchange or routing_keys annotation isn't present the entry most likely came
+    %% If exchange or routing keys annotation isn't present the entry most likely came
     %% from the rabbitmq-stream plugin so we'll choose defaults that simulate use
     %% of the direct exchange.
-    Mc1 = case mc:exchange(Mc0) of
-              undefined -> mc:set_annotation(?ANN_EXCHANGE, <<>>, Mc0);
-              _ -> Mc0
-          end,
-    Mc2 = case mc:routing_keys(Mc1) of
-              [] -> mc:set_annotation(?ANN_ROUTING_KEYS, [QName], Mc1);
-              _ -> Mc1
-          end,
+    XHeaders = mc:x_headers(Mc0),
+    Exchange = case XHeaders of
+                   #{<<"x-exchange">> := {utf8, X}} ->
+                       X;
+                   _ ->
+                       <<>>
+               end,
+    RKeys0 = case XHeaders of
+                 #{<<"x-cc">> := {array, utf8, CCs}} ->
+                     [CC || {utf8, CC} <- CCs];
+                 _ ->
+                     []
+             end,
+    RKeys1 = case XHeaders of
+                 #{<<"x-routing-key">> := {utf8, RK}} ->
+                     [RK | RKeys0];
+                 _ ->
+                     RKeys0
+             end,
+    RKeys = case RKeys1 of
+                [] ->
+                    [QName];
+                _ ->
+                    RKeys1
+            end,
+    Mc1 = mc:set_annotation(?ANN_EXCHANGE, Exchange, Mc0),
+    Mc2 = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
     Mc = mc:set_annotation(<<"x-stream-offset">>, Offset, Mc2),
     case rabbit_amqp_filtex:filter(Filter, Mc) of
         true ->
