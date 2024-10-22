@@ -208,7 +208,7 @@ ensure_secondary_dist(Config) ->
                P         -> P
            end,
     %% Hard fail if the path is invalid.
-    case Path =/= false andalso filelib:is_dir(Path) of
+    case Path =:= false orelse filelib:is_dir(Path) of
         true -> ok;
         false -> error(secondary_dist_path_invalid)
     end,
