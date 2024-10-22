@@ -207,6 +207,7 @@ ensure_secondary_dist(Config) ->
                undefined -> os:getenv("SECONDARY_DIST");
                P         -> P
            end,
+    %% @tod Hard fail if file doesn't exist.
     case Path =/= false andalso filelib:is_dir(Path) of
         true  -> set_config(Config, {secondary_dist, Path});
         false -> set_config(Config, {secondary_dist, false})
