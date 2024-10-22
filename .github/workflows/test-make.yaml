@@ -77,7 +77,7 @@ jobs:
       mixed_clusters: false
 
   test-mixed-clusters:
-    name: Test
+    name: Test mixed clusters
     strategy:
       fail-fast: false
       matrix:
