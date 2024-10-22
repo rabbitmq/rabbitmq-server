@@ -104,7 +104,7 @@ jobs:
 
     - name: RUN TESTS
       run: |
-        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=rabbitmq-server-4.0.2/
+        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=rabbitmq_server-4.0.2/
 
     - name: UPLOAD TEST LOGS
       if: always()
