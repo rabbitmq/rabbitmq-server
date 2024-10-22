@@ -207,11 +207,12 @@ ensure_secondary_dist(Config) ->
                undefined -> os:getenv("SECONDARY_DIST");
                P         -> P
            end,
-    %% @tod Hard fail if file doesn't exist.
+    %% Hard fail if the path is invalid.
     case Path =/= false andalso filelib:is_dir(Path) of
-        true  -> set_config(Config, {secondary_dist, Path});
-        false -> set_config(Config, {secondary_dist, false})
-    end.
+        true -> ok;
+        false -> error(secondary_dist_path_invalid)
+    end,
+    set_config(Config, {secondary_dist, Path}).
 
 ensure_secondary_umbrella(Config) ->
     Path = case get_config(Config, secondary_umbrella) of
