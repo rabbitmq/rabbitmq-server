@@ -754,9 +754,14 @@ to_091(Key, false) -> {Key, bool, false};
 to_091(Key, undefined) -> {Key, void, undefined};
 to_091(Key, null) -> {Key, void, undefined};
 to_091(Key, {list, L}) ->
-    {Key, array, [to_091(V) || V <- L]};
+    to_091_array(Key, L);
 to_091(Key, {map, M}) ->
-    {Key, table, [to_091(unwrap(K), V) || {K, V} <- M]}.
+    {Key, table, [to_091(unwrap(K), V) || {K, V} <- M]};
+to_091(Key, {array, _T, L}) ->
+    to_091_array(Key, L).
+
+to_091_array(Key, L) ->
+    {Key, array, [to_091(V) || V <- L]}.
 
 to_091({utf8, V}) -> {longstr, V};
 to_091({symbol, V}) -> {longstr, V};
