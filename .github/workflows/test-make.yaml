@@ -56,7 +56,26 @@ jobs:
 #    - name: XREF
 #      run: make xref
 
-  mixed-test:
+#  test:
+#    name: Test
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        erlang_version:
+#        - '26'
+##        - '27'
+#        elixir_version:
+#        - '1.17'
+#        metadata_store:
+#          - mnesia
+#          - khepri
+#    uses: ./.github/workflows/test-make-tests.yaml
+#    with:
+#      erlang_version: ${{ matrix.erlang_version }}
+#      elixir_version: ${{ matrix.elixir_version }}
+#      metadata_store: ${{ matrix.metadata_store }}
+
+  test-mixed:
     name: Mixed version testing
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +114,7 @@ jobs:
         file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar.xz"
         target: ./
 
-    - run: echo "${{ steps.secondary_dist.outputs.version }}"
+#    - run: echo "${{ steps.secondary_dist.outputs.version }}"
 
     - name: Verify package
       run: gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
@@ -103,11 +122,13 @@ jobs:
     - name: Extract package generic unix
       run: tar xf rabbitmq-server-generic-unix-*.tar.xz
 
-    - run: ls -la
+#    - run: ls -la
+
+    - run: echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
 
     - name: RUN TESTS
       run: |
-        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`
+        make -C deps/rabbit ct-cluster_upgrade
 
     - name: UPLOAD TEST LOGS
       if: always()
@@ -119,25 +140,6 @@ jobs:
 #          !logs/**/log_private
         if-no-files-found: ignore
 
-#  test:
-#    name: Test
-#    strategy:
-#      fail-fast: false
-#      matrix:
-#        erlang_version:
-#        - '26'
-##        - '27'
-#        elixir_version:
-#        - '1.17'
-#        metadata_store:
-#          - mnesia
-#          - khepri
-#    uses: ./.github/workflows/test-make-tests.yaml
-#    with:
-#      erlang_version: ${{ matrix.erlang_version }}
-#      elixir_version: ${{ matrix.elixir_version }}
-#      metadata_store: ${{ matrix.metadata_store }}
-#
 #  type-check:
 #    name: Type check
 #    strategy:
