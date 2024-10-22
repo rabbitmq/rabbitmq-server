@@ -95,7 +95,7 @@ jobs:
         file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar.xz"
         target: ./
 
-    - run: echo ${{ steps.ghr.output.version }}
+    - run: echo ${{ steps.ghr.outputs.version }}
 
     - name: Verify package
       run: gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
