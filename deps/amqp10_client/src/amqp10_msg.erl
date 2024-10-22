@@ -433,16 +433,12 @@ wrap_ap_value(V) when is_integer(V) ->
     case V < 0 of
         true -> {int, V};
         false -> {uint, V}
-<<<<<<< HEAD
-    end.
-=======
     end;
 wrap_ap_value(V) when is_number(V) ->
     %% AMQP double and Erlang float are both 64-bit.
     {double, V};
 wrap_ap_value(TaggedValue) when is_tuple(TaggedValue) ->
     TaggedValue.
->>>>>>> 814d44dd82 (Convert array from AMQP 1.0 to AMQP 0.9.1)
 
 %% LOCAL
 header_value(durable, undefined) -> false;
