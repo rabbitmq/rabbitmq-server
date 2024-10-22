@@ -107,7 +107,7 @@ jobs:
 
     - name: RUN TESTS
       run: |
-        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`/
+        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`
 
     - name: UPLOAD TEST LOGS
       if: always()
