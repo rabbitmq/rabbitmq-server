@@ -12,7 +12,8 @@ on:
         required: true
         type: string
       mixed_clusters:
-        required: true
+        required: false
+        default: false
         type: boolean
       make_target:
         required: true
