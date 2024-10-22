@@ -97,17 +97,14 @@ jobs:
         # restricted to the build jobs to avoid duplication in output.
         disable_problem_matchers: true
 
-    - name: Download release signing keys
+    - name: MIXED VERSIONS - FETCH SIGNING KEYS
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         repo: rabbitmq/signing-keys
         file: rabbitmq-release-signing-key.asc
 
-    - name: Import release signing keys
-      run: gpg --import rabbitmq-release-signing-key.asc
-
-    - name: Download package generic unix
-      id: secondary_dist
+    - name: MIXED VERSIONS - FETCH PREVIOUS VERSION
+      id: fetch_secondary_dist
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         regex: true
@@ -116,15 +113,15 @@ jobs:
 
 #    - run: echo "${{ steps.secondary_dist.outputs.version }}"
 
-    - name: Verify package
-      run: gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
+    - name: MIXED VERSIONS - SETUP SECONDARY_DIST
+      run: |
+        gpg --import rabbitmq-release-signing-key.asc
+        gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
+        tar xf rabbitmq-server-generic-unix-*.tar.xz
 
-    - name: Extract package generic unix
-      run: tar xf rabbitmq-server-generic-unix-*.tar.xz
+        echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.fetch_secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
 
 #    - run: ls -la
-
-    - run: echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
 
     - name: RUN TESTS
       run: |
