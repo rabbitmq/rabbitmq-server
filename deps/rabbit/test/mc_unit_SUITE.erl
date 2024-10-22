@@ -532,7 +532,8 @@ amqp_amqpl(_Config) ->
     MAC = [
            {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
            thead2('x-list', list, [utf8(<<"l">>)]),
-           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
+           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}]),
+           {{symbol, <<"x-array">>}, {array, utf8, [{utf8, <<"a">>}]}}
           ],
     M =  #'v1_0.message_annotations'{content = MAC},
     P = #'v1_0.properties'{content_type = {symbol, <<"ctype">>},
@@ -598,6 +599,7 @@ amqp_amqpl(_Config) ->
     ?assertMatch({_, longstr, <<"apple">>}, header(<<"x-stream-filter">>, HL)),
     ?assertMatch({_ ,array, [{longstr,<<"l">>}]}, header(<<"x-list">>, HL)),
     ?assertMatch({_, table, [{<<"k">>,longstr,<<"v">>}]}, header(<<"x-map">>, HL)),
+    ?assertMatch({_, array, [{longstr, <<"a">>}]}, header(<<"x-array">>, HL)),
 
     ?assertMatch({_, long, 5}, header(<<"long">>, HL)),
     ?assertMatch({_, long, 5}, header(<<"ulong">>, HL)),

@@ -402,8 +402,8 @@ set_delivery_annotations(
     Anns1 = #'v1_0.delivery_annotations'{content = maps:to_list(Anns)},
     Msg#amqp10_msg{delivery_annotations = Anns1}.
 
--spec set_message_annotations(#{binary() => binary() | integer() | string()},
-                                 amqp10_msg()) -> amqp10_msg().
+-spec set_message_annotations(#{binary() => binary() | number() | string() | tuple()},
+                              amqp10_msg()) -> amqp10_msg().
 set_message_annotations(Props,
                          #amqp10_msg{message_annotations = undefined} =
                          Msg) ->
@@ -433,7 +433,16 @@ wrap_ap_value(V) when is_integer(V) ->
     case V < 0 of
         true -> {int, V};
         false -> {uint, V}
+<<<<<<< HEAD
     end.
+=======
+    end;
+wrap_ap_value(V) when is_number(V) ->
+    %% AMQP double and Erlang float are both 64-bit.
+    {double, V};
+wrap_ap_value(TaggedValue) when is_tuple(TaggedValue) ->
+    TaggedValue.
+>>>>>>> 814d44dd82 (Convert array from AMQP 1.0 to AMQP 0.9.1)
 
 %% LOCAL
 header_value(durable, undefined) -> false;
