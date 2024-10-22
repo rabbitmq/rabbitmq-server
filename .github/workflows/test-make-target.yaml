@@ -103,7 +103,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
+        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }}${{ inputs.mixed_clusters && ' mixed' || '')
         path: |
           logs/
 #          !logs/**/log_private
