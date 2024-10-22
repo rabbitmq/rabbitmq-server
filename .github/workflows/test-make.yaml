@@ -88,14 +88,14 @@ jobs:
       run: gpg --import rabbitmq-release-signing-key.asc
 
     - name: Download package generic unix
-      id: ghr
+      id: secondary_dist
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         regex: true
         file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar.xz"
         target: ./
 
-    - run: echo ${{ steps.ghr.outputs.version }}
+    - run: echo "${{ steps.secondary_dist.outputs.version }}"
 
     - name: Verify package
       run: gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
@@ -107,7 +107,7 @@ jobs:
 
     - name: RUN TESTS
       run: |
-        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-*/
+        make -C deps/rabbit ct-cluster_upgrade SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.secondary_dist.outputs.version }} | sed s/v//`/
 
     - name: UPLOAD TEST LOGS
       if: always()
