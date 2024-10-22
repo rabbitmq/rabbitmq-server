@@ -1328,6 +1328,13 @@ amqp_amqpl(QType, Config) ->
                                message_format = {uint, 0}},
               Body1,
               Footer])),
+    %% Send with an array value in message annotations.
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_message_annotations(
+             #{<<"x-array">> => {array, utf8, [{utf8, <<"e1">>},
+                                               {utf8, <<"e2">>}]}},
+             amqp10_msg:new(<<>>, Body1, true))),
 
     ok = amqp10_client:detach_link(Sender),
     flush(detached),
@@ -1405,6 +1412,13 @@ amqp_amqpl(QType, Config) ->
                 %% RabbitMQ converts the entire AMQP encoded body including the footer
                 %% to AMQP legacy payload.
                 ?assertEqual([Body1, Footer], amqp10_framing:decode_bin(Payload10))
+    after 5000 -> ct:fail({missing_deliver, ?LINE})
+    end,
+    receive {_, #amqp_msg{payload = Payload11,
+                          props = #'P_basic'{headers = Headers11}}} ->
+                ?assertEqual([Body1], amqp10_framing:decode_bin(Payload11)),
+                ?assertEqual({array, [{longstr, <<"e1">>}, {longstr, <<"e2">>}]},
+                             rabbit_misc:table_lookup(Headers11, <<"x-array">>))
     after 5000 -> ct:fail({missing_deliver, ?LINE})
     end,
 
