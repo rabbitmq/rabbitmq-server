@@ -15,69 +15,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-#  build-and-xref:
-#    name: Build and Xref
-#    strategy:
-#      fail-fast: false
-#      matrix:
-#        erlang_version:
-#        - '26'
-#        - '27'
-#        elixir_version:
-#        - '1.17'
-#    # @todo Add macOS and Windows.
-#    runs-on: ubuntu-latest
-#    timeout-minutes: 30
-#    steps:
-#    - name: CHECKOUT REPOSITORY
-#      uses: actions/checkout@v4
-#
-#    - name: FETCH TAGS
-#      run: git fetch --tags
-#
-#    - name: SETUP OTP & ELIXIR
-#      uses: erlef/setup-beam@v1.17
-#      with:
-#        otp-version: ${{ matrix.erlang_version }}
-#        elixir-version: ${{ matrix.elixir_version }}
-#        hexpm-mirrors: |
-#          https://builds.hex.pm
-#          https://cdn.jsdelivr.net/hex
-#
-#    - name: SANITY CHECK (rabbit)
-#      run: make -C deps/rabbit parallel-ct-sanity-check
-#
-#    - name: SANITY CHECK (rabbitmq_mqtt)
-#      run: make -C deps/rabbitmq_mqtt parallel-ct-sanity-check
-#
-#    - name: BUILD
-#      run: make
-#
-#    - name: XREF
-#      run: make xref
-
-#  test:
-#    name: Test
-#    strategy:
-#      fail-fast: false
-#      matrix:
-#        erlang_version:
-#        - '26'
-##        - '27'
-#        elixir_version:
-#        - '1.17'
-#        metadata_store:
-#          - mnesia
-#          - khepri
-#    uses: ./.github/workflows/test-make-tests.yaml
-#    with:
-#      erlang_version: ${{ matrix.erlang_version }}
-#      elixir_version: ${{ matrix.elixir_version }}
-#      metadata_store: ${{ matrix.metadata_store }}
-
-  test-mixed:
-    name: Mixed version testing
+  build-and-xref:
+    name: Build and Xref
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - '26'
+        - '27'
+        elixir_version:
+        - '1.17'
+    # @todo Add macOS and Windows.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -88,65 +38,74 @@ jobs:
     - name: SETUP OTP & ELIXIR
       uses: erlef/setup-beam@v1.17
       with:
-        otp-version: '27'
-        elixir-version: '1.17'
+        otp-version: ${{ matrix.erlang_version }}
+        elixir-version: ${{ matrix.elixir_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
-        # This currently only applies to Elixir; and can be safely
-        # restricted to the build jobs to avoid duplication in output.
-        disable_problem_matchers: true
 
-    - name: MIXED VERSIONS - FETCH SIGNING KEYS
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        repo: rabbitmq/signing-keys
-        file: rabbitmq-release-signing-key.asc
+    - name: SANITY CHECK (rabbit)
+      run: make -C deps/rabbit parallel-ct-sanity-check
 
-    - name: MIXED VERSIONS - FETCH PREVIOUS VERSION
-      id: fetch_secondary_dist
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        regex: true
-        file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar.xz"
-        target: ./
+    - name: SANITY CHECK (rabbitmq_mqtt)
+      run: make -C deps/rabbitmq_mqtt parallel-ct-sanity-check
 
-#    - run: echo "${{ steps.secondary_dist.outputs.version }}"
+    - name: BUILD
+      run: make
 
-    - name: MIXED VERSIONS - SETUP SECONDARY_DIST
-      run: |
-        gpg --import rabbitmq-release-signing-key.asc
-        gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
-        tar xf rabbitmq-server-generic-unix-*.tar.xz
+    - name: XREF
+      run: make xref
 
-        echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.fetch_secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
-
-#    - run: ls -la
-
-    - name: RUN TESTS
-      run: |
-        make -C deps/rabbit ct-cluster_upgrade
-
-    - name: UPLOAD TEST LOGS
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: CT logs mixed
-        path: |
-          logs/
-#          !logs/**/log_private
-        if-no-files-found: ignore
-
-#  type-check:
-#    name: Type check
-#    strategy:
-#      fail-fast: false
-#      matrix:
-#        erlang_version: # Latest OTP
+  test:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - '26'
 #        - '27'
-#        elixir_version: # Latest Elixir
-#        - '1.17'
-#    uses: ./.github/workflows/test-make-type-check.yaml
-#    with:
-#      erlang_version: ${{ matrix.erlang_version }}
-#      elixir_version: ${{ matrix.elixir_version }}
+        elixir_version:
+        - '1.17'
+        metadata_store:
+          - mnesia
+          - khepri
+    uses: ./.github/workflows/test-make-tests.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
+      metadata_store: ${{ matrix.metadata_store }}
+      mixed_clusters: false
+
+  test-mixed-clusters:
+    name: Test
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version:
+        - '26'
+#        - '27'
+        elixir_version:
+        - '1.17'
+        metadata_store:
+          - mnesia
+#          - khepri
+    uses: ./.github/workflows/test-make-tests.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
+      metadata_store: ${{ matrix.metadata_store }}
+      mixed_clusters: true
+
+  type-check:
+    name: Type check
+    strategy:
+      fail-fast: false
+      matrix:
+        erlang_version: # Latest OTP
+        - '27'
+        elixir_version: # Latest Elixir
+        - '1.17'
+    uses: ./.github/workflows/test-make-type-check.yaml
+    with:
+      erlang_version: ${{ matrix.erlang_version }}
+      elixir_version: ${{ matrix.elixir_version }}
