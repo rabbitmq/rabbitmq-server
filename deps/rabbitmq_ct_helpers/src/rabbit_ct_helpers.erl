@@ -78,6 +78,7 @@ run_setup_steps(Config, ExtraSteps) ->
             [
                 fun init_skip_as_error_flag/1,
                 fun guess_tested_erlang_app_name/1,
+                fun ensure_secondary_dist/1,
                 fun ensure_secondary_umbrella/1,
                 fun ensure_current_srcdir/1,
                 fun ensure_rabbitmq_ct_helpers_srcdir/1,
@@ -199,6 +200,16 @@ guess_tested_erlang_app_name(Config) ->
             AppName0 = filename:basename(Filename, ".plt"),
             AppName = string:strip(AppName0, left, $.),
             set_config(Config, {tested_erlang_app, list_to_atom(AppName)})
+    end.
+
+ensure_secondary_dist(Config) ->
+    Path = case get_config(Config, secondary_dist) of
+               undefined -> os:getenv("SECONDARY_DIST");
+               P         -> P
+           end,
+    case Path =/= false andalso filelib:is_dir(Path) of
+        true  -> set_config(Config, {secondary_dist, Path});
+        false -> set_config(Config, {secondary_dist, false})
     end.
 
 ensure_secondary_umbrella(Config) ->
@@ -1060,11 +1071,13 @@ convert_to_unicode_binary(Arg) when is_binary(Arg) ->
     Arg.
 
 is_mixed_versions() ->
-    os:getenv("SECONDARY_UMBRELLA") =/= false
+    os:getenv("SECONDARY_DIST") =/= false
+        orelse os:getenv("SECONDARY_UMBRELLA") =/= false
         orelse os:getenv("RABBITMQ_RUN_SECONDARY") =/= false.
 
 is_mixed_versions(Config) ->
-    get_config(Config, secondary_umbrella, false) =/= false
+    get_config(Config, secondary_dist, false) =/= false
+        orelse get_config(Config, secondary_umbrella, false) =/= false
         orelse get_config(Config, rabbitmq_run_secondary_cmd, false) =/= false.
 
 %% -------------------------------------------------------------------
