@@ -411,6 +411,24 @@ jobs:
       repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
       plugin: rabbitmq_auth_backend_http
     secrets: inherit
+  test-rabbitmq_auth_backend_ldap:
+    needs:
+    - check-workflow
+    - test-rabbit-0
+    - test-rabbit-1
+    - test-rabbit-2
+    - test-rabbit-3
+    - test-rabbit-4
+    - test-rabbit-5
+    - test-rabbit-6
+    - test-rabbit-7
+    - test-rabbit-8
+    - test-rabbit-9
+    uses: ./.github/workflows/test-plugin.yaml
+    with:
+      repo_cache_key: ${{ needs.check-workflow.outputs.repo_cache_key }}
+      plugin: rabbitmq_auth_backend_ldap
+    secrets: inherit
   test-rabbitmq_auth_backend_oauth2:
     needs:
     - check-workflow
@@ -1074,6 +1092,7 @@ jobs:
     - test-rabbitmq_amqp1_0
     - test-rabbitmq_auth_backend_cache
     - test-rabbitmq_auth_backend_http
+    - test-rabbitmq_auth_backend_ldap
     - test-rabbitmq_auth_backend_oauth2
     - test-rabbitmq_auth_mechanism_ssl
     - test-rabbitmq_aws
