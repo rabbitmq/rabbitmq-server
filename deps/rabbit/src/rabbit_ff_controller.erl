@@ -38,6 +38,7 @@
 -export([is_supported/1, is_supported/2,
          enable/1,
          enable_default/0,
+         enable_required/0,
          check_node_compatibility/2,
          sync_cluster/1,
          refresh_after_app_load/0,
@@ -132,6 +133,24 @@ enable_default() ->
             %% changes are blocked.
             {ok, Pid} = start_link(),
             Ret = gen_statem:call(Pid, enable_default),
+            gen_statem:stop(Pid),
+            Ret
+    end.
+
+enable_required() ->
+    ?LOG_DEBUG(
+       "Feature flags: enable required feature flags",
+       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
+    case erlang:whereis(?LOCAL_NAME) of
+        Pid when is_pid(Pid) ->
+            %% The function is called while `rabbit' is running.
+            gen_statem:call(?LOCAL_NAME, enable_required);
+        undefined ->
+            %% The function is called while `rabbit' is stopped. We need to
+            %% start a one-off controller, again to make sure concurrent
+            %% changes are blocked.
+            {ok, Pid} = start_link(),
+            Ret = gen_statem:call(Pid, enable_required),
             gen_statem:stop(Pid),
             Ret
     end.
@@ -304,6 +323,8 @@ proceed_with_task({enable, FeatureNames}) ->
     enable_task(FeatureNames);
 proceed_with_task(enable_default) ->
     enable_default_task();
+proceed_with_task(enable_required) ->
+    enable_required_task();
 proceed_with_task({sync_cluster, Nodes}) ->
     sync_cluster_task(Nodes);
 proceed_with_task(refresh_after_app_load) ->
@@ -841,6 +862,24 @@ get_forced_feature_flag_names_from_config() ->
         _ when is_list(Value) -> {ok, Value}
     end.
 
+-spec enable_required_task() -> Ret when
+      Ret :: ok | {error, Reason},
+      Reason :: term().
+
+enable_required_task() ->
+    {ok, Inventory} = collect_inventory_on_nodes([node()]),
+    RequiredFeatureNames = list_required_feature_flags(Inventory),
+    case RequiredFeatureNames of
+        [] ->
+            ok;
+        _ ->
+            ?LOG_DEBUG(
+               "Feature flags: enabling required feature flags: ~0p",
+               [RequiredFeatureNames],
+               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+    end,
+    enable_many(Inventory, RequiredFeatureNames).
+
 -spec sync_cluster_task() -> Ret when
       Ret :: ok | {error, Reason},
       Reason :: term().
@@ -855,23 +894,6 @@ sync_cluster_task() ->
       Reason :: term().
 
 sync_cluster_task(Nodes) ->
-    %% We assume that a feature flag can only be enabled, not disabled.
-    %% Therefore this synchronization searches for feature flags enabled on
-    %% some nodes but not all, and make sure they are enabled everywhere.
-    %%
-    %% This happens when a node joins a cluster and that node has a different
-    %% set of enabled feature flags.
-    %%
-    %% FIXME: `enable_task()' requires that all nodes in the cluster run to
-    %% enable anything. Should we require the same here? On one hand, this
-    %% would make sure a feature flag isn't enabled while there is a network
-    %% partition. On the other hand, this would require that all nodes are
-    %% running before we can expand the cluster...
-    ?LOG_DEBUG(
-       "Feature flags: synchronizing feature flags on nodes: ~tp",
-       [Nodes],
-       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-
     case collect_inventory_on_nodes(Nodes) of
         {ok, Inventory} ->
             CantEnable = list_deprecated_features_that_cant_be_denied(
@@ -880,7 +902,27 @@ sync_cluster_task(Nodes) ->
                 [] ->
                     FeatureNames = list_feature_flags_enabled_somewhere(
                                      Inventory, false),
-                    enable_many(Inventory, FeatureNames);
+
+                    %% In addition to feature flags enabled somewhere, we also
+                    %% ensure required feature flags are enabled accross the
+                    %% board.
+                    RequiredFeatureNames = list_required_feature_flags(
+                                             Inventory),
+                    case RequiredFeatureNames of
+                        [] ->
+                            ok;
+                        _ ->
+                            ?LOG_DEBUG(
+                               "Feature flags: enabling required feature "
+                               "flags as part of cluster sync: ~0p",
+                               [RequiredFeatureNames],
+                               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS})
+                    end,
+
+                    FeatureNamesToEnable = lists:usort(
+                                             FeatureNames ++
+                                             RequiredFeatureNames),
+                    enable_many(Inventory, FeatureNamesToEnable);
                 _ ->
                     ?LOG_ERROR(
                        "Feature flags: the following deprecated features "
@@ -998,7 +1040,7 @@ enable_with_registry_locked(
                [FeatureName],
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
-            case check_required_and_enable(Inventory, FeatureName) of
+            case update_feature_state_and_enable(Inventory, FeatureName) of
                 {ok, _Inventory} = Ok ->
                     ?LOG_NOTICE(
                        "Feature flags: `~ts` enabled",
@@ -1012,91 +1054,6 @@ enable_with_registry_locked(
                        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
                     Error
             end
-    end.
-
--spec check_required_and_enable(Inventory, FeatureName) -> Ret when
-      Inventory :: rabbit_feature_flags:cluster_inventory(),
-      FeatureName :: rabbit_feature_flags:feature_name(),
-      Ret :: {ok, Inventory} | {error, Reason},
-      Reason :: term().
-
-check_required_and_enable(
-  #{feature_flags := FeatureFlags,
-    states_per_node := _} = Inventory,
-  FeatureName) ->
-    %% Required feature flags vs. virgin nodes.
-    FeatureProps = maps:get(FeatureName, FeatureFlags),
-    Stability = rabbit_feature_flags:get_stability(FeatureProps),
-    ProvidedBy = maps:get(provided_by, FeatureProps),
-    NodesWhereDisabled = list_nodes_where_feature_flag_is_disabled(
-                           Inventory, FeatureName),
-
-    MarkDirectly = case Stability of
-                       required when ProvidedBy =:= rabbit ->
-                           ?LOG_DEBUG(
-                              "Feature flags: `~s`: the feature flag is "
-                              "required on some nodes; list virgin nodes "
-                              "to determine if the feature flag can simply "
-                              "be marked as enabled",
-                              [FeatureName],
-                              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-                           VirginNodesWhereDisabled =
-                           lists:filter(
-                             fun(Node) ->
-                                     case rabbit_db:is_virgin_node(Node) of
-                                         IsVirgin when is_boolean(IsVirgin) ->
-                                             IsVirgin;
-                                         undefined ->
-                                             false
-                                     end
-                             end, NodesWhereDisabled),
-                           VirginNodesWhereDisabled =:= NodesWhereDisabled;
-                       required when ProvidedBy =/= rabbit ->
-                           %% A plugin can be enabled/disabled at runtime and
-                           %% between restarts. Thus we have no way to
-                           %% distinguish a newly enabled plugin from a plugin
-                           %% which was enabled in the past.
-                           %%
-                           %% Therefore, we always mark required feature flags
-                           %% from plugins directly as enabled. However, the
-                           %% plugin is responsible for checking that its
-                           %% possibly existing data is as it expects it or
-                           %% perform any cleanup/conversion!
-                           ?LOG_DEBUG(
-                              "Feature flags: `~s`: the feature flag is "
-                              "required on some nodes; it comes from a "
-                              "plugin which can be enabled at runtime, "
-                              "so it can be marked as enabled",
-                              [FeatureName],
-                              #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-                           true;
-                       _ ->
-                           false
-                   end,
-
-    case MarkDirectly of
-        false ->
-            case Stability of
-                required ->
-                    ?LOG_DEBUG(
-                       "Feature flags: `~s`: some nodes where the feature "
-                       "flag is disabled are not virgin, we need to perform "
-                       "a regular sync",
-                       [FeatureName],
-                       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS});
-                _ ->
-                    ok
-            end,
-            update_feature_state_and_enable(Inventory, FeatureName);
-        true ->
-            ?LOG_DEBUG(
-               "Feature flags: `~s`: all nodes where the feature flag is "
-               "disabled are virgin, we can directly mark it as enabled "
-               "there",
-               [FeatureName],
-               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
-            mark_as_enabled_on_nodes(
-              NodesWhereDisabled, Inventory, FeatureName, true)
     end.
 
 -spec update_feature_state_and_enable(Inventory, FeatureName) -> Ret when
@@ -1444,6 +1401,26 @@ list_feature_flags_enabled_somewhere(
                                end, Acc1, FeatureStates)
                      end, #{}, StatesPerNode),
     lists:sort(maps:keys(MergedStates)).
+
+list_required_feature_flags(
+  #{feature_flags := FeatureFlags, states_per_node := StatesPerNode}) ->
+    FeatureStates = maps:get(node(), StatesPerNode),
+    RequiredFeatureNames = maps:fold(
+                             fun(FeatureName, FeatureProps, Acc) ->
+                                     Stability = (
+                                       rabbit_feature_flags:get_stability(
+                                         FeatureProps)),
+                                     IsEnabled = maps:get(
+                                                   FeatureName, FeatureStates,
+                                                   false),
+                                     case Stability of
+                                         required when IsEnabled =:= false ->
+                                             [FeatureName | Acc];
+                                         _ ->
+                                             Acc
+                                     end
+                             end, [], FeatureFlags),
+    lists:sort(RequiredFeatureNames).
 
 -spec list_deprecated_features_that_cant_be_denied(Inventory) ->
     Ret when
