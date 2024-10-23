@@ -628,7 +628,7 @@ write_config_file(Config, NodeConfig, _I) ->
 
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
     WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins),
+      broker_with_plugins), %% @todo This is probably not used.
     WithPlugins = case is_list(WithPlugins0) of
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
@@ -693,12 +693,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                      true ->
                         ["LEAVE_PLUGINS_DISABLED=1" | ExtraArgs1];
                      _ ->
-                      case filename:basename(SrcDir) of
-                          "rabbit" ->
-                              ["LEAVE_PLUGINS_DISABLED=1" | ExtraArgs1];
-                          SrcPlugin ->
-                              [{"RABBITMQ_ENABLED_PLUGINS=~ts", [SrcPlugin]} | ExtraArgs1]
-                      end
+                        ExtraArgs1
                  end,
     KeepPidFile = rabbit_ct_helpers:get_config(
                     Config, keep_pid_file_on_exit),
@@ -745,11 +740,16 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                         case UseSecondaryDist of
                             true ->
                                 SecondaryDist = ?config(secondary_dist, Config),
+                                SecondaryEnabledPlugin = case filename:basename(SrcDir) of
+                                    "rabbit" -> "";
+                                    SrcPlugin -> SrcPlugin
+                                end,
                                 [{"DIST_DIR=~ts/plugins", [SecondaryDist]},
                                  {"CLI_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
                                  {"CLI_ESCRIPTS_DIR=~ts/escript", [SecondaryDist]},
                                  {"RABBITMQ_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
-                                 {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]}
+                                 {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]},
+                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugin]}
                                 | ExtraArgs4];
                             false ->
                                 ExtraArgs4
