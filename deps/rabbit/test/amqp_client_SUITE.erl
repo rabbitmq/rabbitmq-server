@@ -4449,7 +4449,7 @@ trace(Q, QType, Config) ->
     ok = wait_for_credit(Sender),
     Msg0 = amqp10_msg:new(<<"tag 1">>, Payload, true),
     Msg = amqp10_msg:set_message_annotations(
-            #{<<"x-cc">> => {array, utf8, [{utf8, <<"my CC key">>}]}},
+            #{<<"x-cc">> => {list, [{utf8, <<"my CC key">>}]}},
             amqp10_msg:set_properties(#{correlation_id => CorrelationId}, Msg0)),
     ok = amqp10_client:send_msg(Sender, Msg),
     {ok, _} = amqp10_client:get_msg(Receiver),
@@ -5993,7 +5993,7 @@ x_cc_annotation_exchange(Config) ->
 
     Payload = <<"my message">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
-                                          #{<<"x-cc">> => {array, utf8, [{utf8, <<"key 2">>}]}},
+                                          #{<<"x-cc">> => {list, [{utf8, <<"key 2">>}]}},
                                           amqp10_msg:new(<<"tag">>, Payload))),
     ok = wait_for_accepted(<<"tag">>),
     ok = amqp10_client:detach_link(Sender),
@@ -6028,8 +6028,8 @@ x_cc_annotation_exchange_routing_key_empty(Config) ->
 
     Payload = <<"my message">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
-                                          #{<<"x-cc">> => {array, utf8, [{utf8, <<"key 1">>},
-                                                                         {utf8, <<"key 2">>}]}},
+                                          #{<<"x-cc">> => {list, [{utf8, <<"key 1">>},
+                                                                  {utf8, <<"key 2">>}]}},
                                           amqp10_msg:new(<<"tag">>, Payload))),
     ok = wait_for_accepted(<<"tag">>),
     ok = amqp10_client:detach_link(Sender),
@@ -6063,7 +6063,7 @@ x_cc_annotation_queue(Config) ->
 
     Payload = <<"my message">>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
-                                          #{<<"x-cc">> => {array, utf8, [{utf8, QName2}]}},
+                                          #{<<"x-cc">> => {list, [{utf8, QName2}]}},
                                           amqp10_msg:new(<<"tag">>, Payload))),
     ok = wait_for_accepted(<<"tag">>),
     ok = amqp10_client:detach_link(Sender),
@@ -6097,8 +6097,8 @@ x_cc_annotation_null(Config) ->
     {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, QAddress2, settled),
 
     Msg1 = amqp10_msg:set_message_annotations(
-             #{<<"x-cc">> => {array, utf8, [{utf8, <<"key-1">>},
-                                            {utf8, <<"key-3">>}]}},
+             #{<<"x-cc">> => {list, [{utf8, <<"key-1">>},
+                                     {utf8, <<"key-3">>}]}},
              amqp10_msg:set_properties(
                #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"🗝️-2"/utf8>>)},
                amqp10_msg:new(<<"t1">>, <<"m1">>))),
@@ -6110,8 +6110,8 @@ x_cc_annotation_null(Config) ->
     ?assertEqual([<<"m1">>], amqp10_msg:body(R2M1)),
 
     Msg2 = amqp10_msg:set_message_annotations(
-             #{<<"x-cc">> => {array, utf8, [{utf8, <<"🗝️-2"/utf8>>},
-                                            {utf8, <<"key-1">>}]}},
+             #{<<"x-cc">> => {list, [{utf8, <<"🗝️-2"/utf8>>},
+                                     {utf8, <<"key-1">>}]}},
              amqp10_msg:set_properties(
                #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>)},
                amqp10_msg:new(<<"t2">>, <<"m2">>))),
@@ -6123,7 +6123,7 @@ x_cc_annotation_null(Config) ->
     ?assertEqual([<<"m2">>], amqp10_msg:body(R2M2)),
 
     Msg3 = amqp10_msg:set_message_annotations(
-             #{<<"x-cc">> => {array, utf8, [{utf8, QName1}]}},
+             #{<<"x-cc">> => {list, [{utf8, QName1}]}},
              amqp10_msg:set_properties(
                #{to => rabbitmq_amqp_address:queue(QName2)},
                amqp10_msg:new(<<"t3">>, <<"m3">>))),
@@ -6135,8 +6135,8 @@ x_cc_annotation_null(Config) ->
     ?assertEqual([<<"m3">>], amqp10_msg:body(R2M3)),
 
     Msg4 = amqp10_msg:set_message_annotations(
-             %% We send a symbol array instead of utf8 array.
-             #{<<"x-cc">> => {array, symbol, [{symbol, QName1}]}},
+             %% We send a symbol instead of utf8..
+             #{<<"x-cc">> => {list, [{symbol, QName1}]}},
              amqp10_msg:set_properties(
                #{to => rabbitmq_amqp_address:queue(QName2)},
                amqp10_msg:new(<<"t4">>, <<"m4">>))),
@@ -6169,23 +6169,41 @@ bad_x_cc_annotation_exchange(Config) ->
     {ok, Session} = amqp10_client:begin_session(Connection),
 
     Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"key-1">>),
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
-    ok = wait_for_credit(Sender),
-
+    {ok, Sender1} = amqp10_client:attach_sender_link(Session, <<"sender 1">>, Address),
+    ok = wait_for_credit(Sender1),
     ok = amqp10_client:send_msg(
-           Sender,
+           Sender1,
            amqp10_msg:set_message_annotations(
-             %% We send a list instead of an array.
-             #{<<"x-cc">> => {list, [{utf8, <<"🗝️-2"/utf8>>}]}},
-             amqp10_msg:new(<<"tag">>, <<"msg">>))),
-    ok = wait_for_settlement(<<"tag">>, released),
-    receive {amqp10_event, {link, Sender, {detached, Error}}} ->
+             %% We send an array instead of a list.
+             #{<<"x-cc">> => {array, utf8, [{utf8, <<"🗝️-2"/utf8>>}]}},
+             amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = wait_for_settlement(<<"t1">>, released),
+    receive {amqp10_event, {link, Sender1, {detached, Error1}}} ->
                 ?assertMatch(
                    #'v1_0.error'{
                       condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
                       description = {utf8, <<"bad value for 'x-cc' message-annotation: "
-                                             "{list,[{utf8,<<\"🗝️-2"/utf8, _Rest/binary>>}},
-                   Error)
+                                             "{array,utf8,[{utf8,<<\"🗝️-2"/utf8, _Rest/binary>>}},
+                   Error1)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender2} = amqp10_client:attach_sender_link(Session, <<"sender 2">>, Address),
+    ok = wait_for_credit(Sender2),
+    ok = amqp10_client:send_msg(
+           Sender2,
+           amqp10_msg:set_message_annotations(
+             %% We include a non-utf8 type in the list.
+             #{<<"x-cc">> => {list, [{symbol, <<"key-3">>}]}},
+             amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = wait_for_settlement(<<"t2">>, released),
+    receive {amqp10_event, {link, Sender2, {detached, Error2}}} ->
+                ?assertEqual(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation: "
+                                             "{list,[{symbol,<<\"key-3\">>}]}">>}},
+                   Error2)
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
 

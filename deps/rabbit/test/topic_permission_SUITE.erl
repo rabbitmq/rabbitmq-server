@@ -82,7 +82,7 @@ amqp_x_cc_annotation(Config) ->
     %% We have permissions to send to both topics.
     %% Therefore, m1 should be sent to both queues.
     ok = amqp10_client:send_msg(Sender1, amqp10_msg:set_message_annotations(
-                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"a.2">>}]}},
+                                           #{<<"x-cc">> => {list, [{utf8, <<"a.2">>}]}},
                                            amqp10_msg:new(<<"t1">>, <<"m1">>, true))),
     {ok, Msg1} = amqp10_client:get_msg(Receiver1),
     {ok, Msg2} = amqp10_client:get_msg(Receiver2),
@@ -99,7 +99,7 @@ amqp_x_cc_annotation(Config) ->
                       rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"x.1">>)),
     ok = amqp_utils:wait_for_credit(Sender2),
     ok = amqp10_client:send_msg(Sender2, amqp10_msg:set_message_annotations(
-                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"a.2">>}]}},
+                                           #{<<"x-cc">> => {list, [{utf8, <<"a.2">>}]}},
                                            amqp10_msg:new(<<"t2">>, <<"m2">>, true))),
     receive
         {amqp10_event,
@@ -122,7 +122,7 @@ amqp_x_cc_annotation(Config) ->
                       rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"a.1">>)),
     ok = amqp_utils:wait_for_credit(Sender3),
     ok = amqp10_client:send_msg(Sender3, amqp10_msg:set_message_annotations(
-                                           #{<<"x-cc">> => {array, utf8, [{utf8, <<"x.2">>}]}},
+                                           #{<<"x-cc">> => {list, [{utf8, <<"x.2">>}]}},
                                            amqp10_msg:new(<<"t3">>, <<"m3">>, true))),
     receive
         {amqp10_event,

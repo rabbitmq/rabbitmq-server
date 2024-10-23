@@ -1283,7 +1283,7 @@ entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName}, Name, LocalPi
                        <<>>
                end,
     RKeys0 = case XHeaders of
-                 #{<<"x-cc">> := {array, utf8, CCs}} ->
+                 #{<<"x-cc">> := {list, CCs}} ->
                      [CC || {utf8, CC} <- CCs];
                  _ ->
                      []

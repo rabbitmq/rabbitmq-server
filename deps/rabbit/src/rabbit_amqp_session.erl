@@ -2495,20 +2495,26 @@ lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
             RKeys = [RKey],
             Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
             {ok, X, RKeys, Mc, PermCache};
-        {array, utf8, CCs0} ->
-            CCs = lists:map(fun({utf8, CC}) -> CC end, CCs0),
-            RKeys = [RKey | CCs],
-            Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
-            {ok, X, RKeys, Mc, PermCache};
+        {list, CCs0} = L ->
+            try lists:map(fun({utf8, CC}) -> CC end, CCs0) of
+                CCs ->
+                    RKeys = [RKey | CCs],
+                    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
+                    {ok, X, RKeys, Mc, PermCache}
+            catch error:function_clause ->
+                      {error, {anonymous_terminus, AnonTerm}, bad_x_cc(L)}
+            end;
         BadValue ->
-            Desc = unicode:characters_to_binary(
-                     lists:flatten(
-                       io_lib:format(
-                         "bad value for 'x-cc' message-annotation: ~tp", [BadValue]))),
-            {error, {anonymous_terminus, AnonTerm},
-             #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                           description = {utf8, Desc}}}
+            {error, {anonymous_terminus, AnonTerm}, bad_x_cc(BadValue)}
     end.
+
+bad_x_cc(Value) ->
+    Desc = unicode:characters_to_binary(
+             lists:flatten(
+               io_lib:format(
+                 "bad value for 'x-cc' message-annotation: ~tp", [Value]))),
+    #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  description = {utf8, Desc}}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),

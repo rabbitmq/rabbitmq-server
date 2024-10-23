@@ -189,11 +189,14 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
     Content = #content{properties = Props,
                        payload_fragments_rev = Payload},
     Msg = mc:init(mc_amqpl, Content, annotations()),
-    ?assertMatch({array, map,
-                  [{map, [{{symbol, <<"type">>}, {utf8, <<"apple">>}},
-                          {{symbol, <<"count">>}, {long, 99}}]},
-                   {map, [{{symbol, <<"type">>}, {utf8, <<"orange">>}},
-                          {{symbol, <<"count">>}, {long, 45}}]}]},
+    ?assertMatch({list,
+                  [{map,
+                    [{{symbol, <<"type">>}, {utf8, <<"apple">>}},
+                     {{symbol, <<"count">>}, {long, 99}}]},
+                   {map,
+                    [{{symbol, <<"type">>}, {utf8, <<"orange">>}},
+                     {{symbol, <<"count">>}, {long, 45}}]}
+                  ]},
                  mc:x_header(<<"x-fruit">>, Msg)).
 
 amqpl_death_v1_records(_Config) ->
@@ -447,8 +450,8 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     Msg10 = mc:init(mc_amqp, Sections, #{}),
     ?assertMatch(#{<<"x-exchange">> := {utf8, <<"exch">>},
                    <<"x-routing-key">> := {utf8, <<"apple">>},
-                   <<"x-cc">> := {array, utf8, [{utf8, <<"q1">>},
-                                                {utf8, <<"q2">>}]}},
+                   <<"x-cc">> := {list, [{utf8, <<"q1">>},
+                                         {utf8, <<"q2">>}]}},
                  mc:x_headers(Msg10)),
 
     %% Here, we simulate what rabbit_stream_queue does:
