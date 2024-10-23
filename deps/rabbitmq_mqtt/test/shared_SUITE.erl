@@ -1145,6 +1145,7 @@ rabbit_mqtt_qos0_queue_kill_node(Config) ->
     %% Re-connect to a live node with same MQTT client ID.
     Sub1 = connect(SubscriberId, Config, 1, []),
     {ok, _, [0]} = emqtt:subscribe(Sub1, Topic2, qos0),
+    ok = await_metadata_store_consistent(Config, 2),
     ok = emqtt:publish(Pub, Topic2, <<"m1">>, qos0),
     ok = expect_publishes(Sub1, Topic2, [<<"m1">>]),
     %% Since we started a new clean session, previous subscription should have been deleted.
