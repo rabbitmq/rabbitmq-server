@@ -34,7 +34,8 @@ groups() ->
           parse_amqp10,
           parse_amqp10_minimal,
           validate_amqp10,
-          validate_amqp10_with_a_map
+          validate_amqp10_with_a_map,
+          validate_amqp10_with_wrong_capabilities_type
         ]}
     ].
 
@@ -230,6 +231,7 @@ parse_amqp10(_Config) ->
          {<<"src-address">>, <<"a-src-queue">>},
          {<<"src-delete-after">>, <<"never">>},
          {<<"src-prefetch-count">>, 30},
+         {<<"src-capabilities">>, []},
 
          {<<"dest-protocol">>, <<"amqp10">>},
          {<<"dest-uri">>, <<"amqp://remotehost:5672">>},
@@ -240,7 +242,8 @@ parse_amqp10(_Config) ->
                                                <<"app-prop-value">>}]},
          {<<"dest-message-annotations">>, [{<<"some-message-ann">>,
                                             <<"message-ann-value">>}]},
-         {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]}
+         {<<"dest-properties">>, [{<<"user_id">>, <<"some-user">>}]},
+         {<<"dest-capabilities">>, [<<"one">>, <<"two">>]}
         ],
     ObfuscatedParams = rabbit_shovel_parameters:obfuscate_uris_in_definition(Params),
     ?assertMatch(
@@ -250,7 +253,8 @@ parse_amqp10(_Config) ->
                           uris := ["amqp://localhost:5672"],
                           delete_after := never,
                           prefetch_count := 30,
-                          source_address := <<"a-src-queue">>
+                          source_address := <<"a-src-queue">>,
+                          receiver_capabilities := []
                           },
               dest := #{module := rabbit_amqp10_shovel,
                         uris := ["amqp://remotehost:5672"],
@@ -261,7 +265,8 @@ parse_amqp10(_Config) ->
                                                     <<"app-prop-value">>},
                         properties := #{user_id := <<"some-user">>},
                         add_timestamp_header := true,
-                        add_forward_headers := true
+                        add_forward_headers := true,
+                        sender_capabilities := [<<"one">>, <<"two">>]
                        }
              }},
         rabbit_shovel_parameters:parse({"vhost", "my_shovel"}, "my-cluster",
@@ -327,6 +332,34 @@ validate_amqp10(_Config) ->
         [] = validate_ok(Res),
         ok.
 
+validate_amqp10_with_wrong_capabilities_type(_Config) ->
+     Params =
+        #{
+         <<"ack-mode">> => <<"on-publish">>,
+         <<"reconnect-delay">> => 1001,
+
+         <<"src-protocol">> => <<"amqp10">>,
+         <<"src-uri">> => <<"amqp://localhost:5672">>,
+         <<"src-address">> => <<"a-src-queue">>,
+         <<"src-delete-after">> => <<"never">>,
+         <<"src-prefetch-count">> => 30,
+         <<"src-capabilities">> => <<"one">>,
+
+         <<"dest-protocol">> => <<"amqp10">>,
+         <<"dest-uri">> => <<"amqp://remotehost:5672">>,
+         <<"dest-address">> => <<"a-dest-queue">>,
+         <<"dest-add-forward-headers">> => true,
+         <<"dest-add-timestamp-header">> => true,
+         <<"dest-application-properties">> => [{<<"some-app-prop">>,
+                                                <<"app-prop-value">>}],
+         <<"dest-message-annotations">> => [{<<"some-message-ann">>, <<"message-ann-value">>}],
+         <<"dest-properties">> => #{<<"user_id">> => <<"some-user">>}
+        },
+    Res = rabbit_shovel_parameters:validate("my-vhost", <<"shovel">>,
+                                                "my-shovel", Params, none),                                                   
+    {error, _, [<<"src-capabilities">>, <<"one">>]} = find_first_error(Res).        
+    
+
 validate_amqp10_with_a_map(_Config) ->
     Params =
         #{
@@ -352,8 +385,7 @@ validate_amqp10_with_a_map(_Config) ->
 
         Res = rabbit_shovel_parameters:validate("my-vhost", <<"shovel">>,
                                                 "my-shovel", Params, none),
-        [] = validate_ok(Res),
-        ok.
+        validate_ok(Res).
 
 validate_ok([ok | T]) ->
     validate_ok(T);
@@ -362,3 +394,10 @@ validate_ok([[_|_] = L | T]) ->
 validate_ok([]) -> [];
 validate_ok(X) ->
     exit({not_ok, X}).
+find_first_error([]) ->
+    undefined;
+find_first_error([V | T]) ->
+    case V of 
+        {error, _, _} = E -> E;
+        _ -> find_first_error(T)
+    end.

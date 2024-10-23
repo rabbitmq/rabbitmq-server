@@ -133,7 +133,8 @@ amqp10_src_validation(_Def, User) ->
      {<<"src-uri">>, validate_uri_fun(User), mandatory},
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+     {<<"src-delete-after">>, fun validate_delete_after/2, optional},
+     {<<"src-capabilities">>, fun validate_link_capabilities/2, optional}
     ].
 
 amqp091_src_validation(_Def, User) ->
@@ -168,7 +169,8 @@ amqp10_dest_validation(_Def, User) ->
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
      {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
      % TODO: restrict to allowed fields
-     {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
+     {<<"dest-properties">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-capabilities">>, fun validate_link_capabilities/2, optional}
     ].
 
 amqp091_dest_validation(_Def, User) ->
@@ -201,6 +203,17 @@ validate_uri(Name, Term, User) ->
     case rabbit_parameter_validation:list(Name, Term) of
         ok -> case [V || URI <- Term,
                          V <- [validate_uri(Name, URI, User)],
+                         element(1, V) =:= error] of
+                  []      -> ok;
+                  [E | _] -> E
+              end;
+        E  -> E
+    end.
+
+validate_link_capabilities(Capabilities, Term) ->
+    case rabbit_parameter_validation:list(Capabilities, Term) of
+        ok -> case [V || C <- Capabilities,
+                         V <- [rabbit_parameter_validation:binary(C, Term)],
                          element(1, V) =:= error] of
                   []      -> ok;
                   [E | _] -> E
