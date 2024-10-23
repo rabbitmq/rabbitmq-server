@@ -2688,6 +2688,20 @@ fun(Conf) ->
     end
 end}.
 
+{mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
+    {datatype, [binary]}
+]}.
+
+{translation, "rabbit.cluster_tags",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_tags", Conf, undefined) of
+        none -> [];
+        _ ->
+            Settings = cuttlefish_variable:filter_by_prefix("cluster_tags", Conf),
+            [ {list_to_binary(K), V} || {[_, K], V} <- Settings]
+    end
+end}.
+
 % ===============================
 % Validators
 % ===============================
