@@ -314,11 +314,13 @@ parse_amqp10_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
     MessageAnns =
         rabbit_data_coercion:to_proplist(
             pget(<<"dest-message-annotations">>, Def, [])),
+    SenderCapabilities = pget(<<"dest-capabilities">>, Def),        
     #{module => rabbit_amqp10_shovel,
       uris => Uris,
       target_address => Address,
       message_annotations => maps:from_list(MessageAnns),
       application_properties => maps:from_list(AppProperties ++ SourceHeaders),
+      sender_capabilities => SenderCapabilities,
       properties => maps:from_list(
                       lists:map(fun({K, V}) ->
                                         {rabbit_data_coercion:to_atom(K), V}
@@ -416,12 +418,14 @@ parse_amqp10_source(Def) ->
     Address = pget(<<"src-address">>, Def),
     DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
     PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
+    ReceiverCapabilities = pget(<<"src-capabilities">>, Def),
     Headers = [],
     {#{module => rabbit_amqp10_shovel,
        uris => Uris,
        source_address => Address,
        delete_after => opt_b2a(DeleteAfter),
        prefetch_count => PrefetchCount,
+       receiver_capabilities => ReceiverCapabilities,
        consumer_args => []}, Headers}.
 
 parse_amqp091_source(Def) ->
