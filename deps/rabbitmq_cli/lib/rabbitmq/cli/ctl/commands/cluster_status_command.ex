@@ -33,7 +33,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout} = opts) do
-    status =
+    status0 =
       case :rabbit_misc.rpc_call(node_name, :rabbit_db_cluster, :cli_cluster_status, []) do
         {:badrpc, {:EXIT, {:undef, _}}} ->
           :rabbit_misc.rpc_call(node_name, :rabbit_mnesia, :status, [])
@@ -45,11 +45,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
           status
       end
 
-    case status do
+    case status0 do
       {:badrpc, _} = err ->
         err
 
-      status ->
+      status0 ->
+        tags = cluster_tags(node_name, timeout)
+        status = status0 ++ [{:cluster_tags, tags}]
         case :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :list_running, []) do
           {:badrpc, _} = err ->
             err
@@ -122,7 +124,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   def output(result, %{node: node_name}) when is_list(result) do
     m = result_map(result)
-
     total_cores = Enum.reduce(m[:cpu_cores], 0, fn {_, val}, acc -> acc + val end)
 
     cluster_name_section = [
@@ -130,6 +131,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       "Cluster name: #{m[:cluster_name]}",
       "Total CPU cores available cluster-wide: #{total_cores}"
     ]
+
+    cluster_tag_section =
+      [
+        "\n#{bright("Cluster Tags")}\n"
+      ] ++
+      case m[:cluster_tags] do
+        [] -> ["(none)"]
+        tags -> cluster_tag_lines(tags)
+      end
 
     disk_nodes_section =
       [
@@ -210,6 +220,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
     lines =
       cluster_name_section ++
+        cluster_tag_section ++
         disk_nodes_section ++
         ram_nodes_section ++
         running_nodes_section ++
@@ -260,6 +271,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     #           {rabbit@warp10,[{resource_limit,memory,rabbit@warp10}]}]}]
     %{
       cluster_name: Keyword.get(result, :cluster_name),
+      cluster_tags: result |> Keyword.get(:cluster_tags, []),
       disk_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:disc, []),
       ram_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:ram, []),
       running_nodes: result |> Keyword.get(:running_nodes, []) |> Enum.map(&to_string/1),
@@ -383,6 +395,18 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
     {node, result}
   end
 
+  defp cluster_tags(node, timeout) do
+    case :rabbit_misc.rpc_call(
+          node,
+          :application,
+          :get_env,
+          [:rabbit, :cluster_tags],
+          timeout) do
+      {:ok, tags} -> tags
+      _ -> []
+    end
+  end
+
   defp node_lines(nodes) do
     Enum.map(nodes, &to_string/1) |> Enum.sort()
   end
@@ -412,5 +436,11 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   defp maintenance_lines(mapping) do
     Enum.map(mapping, fn {node, status} -> "Node: #{node}, status: #{status}" end)
+  end
+
+  defp cluster_tag_lines(mapping) do
+    Enum.map(mapping, fn {key, value} ->
+      "#{key}: #{value}"
+    end)
   end
 end
