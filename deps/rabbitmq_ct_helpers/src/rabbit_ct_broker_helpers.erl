@@ -626,6 +626,33 @@ write_config_file(Config, NodeConfig, _I) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
+-define(REQUIRED_FEATURE_FLAGS, [
+    %% Required in 3.11:
+    "virtual_host_metadata,"
+    "quorum_queue,"
+    "implicit_default_bindings,"
+    "maintenance_mode_status,"
+    "user_limits,"
+    %% Required in 3.12:
+    "stream_queue,"
+    "classic_queue_type_delivery_support,"
+    "tracking_records_in_ets,"
+    "stream_single_active_consumer,"
+    "listener_records_in_ets,"
+    "feature_flags_v2,"
+    "direct_exchange_routing_v2,"
+    "classic_mirrored_queue_version," %% @todo Missing in FF docs!!
+    %% Required in 3.12 in rabbitmq_management_agent:
+    "drop_unroutable_metric,"
+    "empty_basic_get_metric,"
+    %% Required in 4.0:
+    "stream_sac_coordinator_unblock_group,"
+    "restart_streams,"
+    "stream_update_config_command,"
+    "stream_filtering,"
+    "message_containers" %% @todo Update FF docs!! It *is* required.
+]).
+
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
     WithPlugins0 = rabbit_ct_helpers:get_config(Config,
       broker_with_plugins), %% @todo This is probably not used.
@@ -749,7 +776,8 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                                  {"CLI_ESCRIPTS_DIR=~ts/escript", [SecondaryDist]},
                                  {"RABBITMQ_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
                                  {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]},
-                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugin]}
+                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugin]},
+                                 {"RABBITMQ_FEATURE_FLAGS=~ts", [?REQUIRED_FEATURE_FLAGS]}
                                 | ExtraArgs4];
                             false ->
                                 ExtraArgs4
