@@ -14,7 +14,7 @@ env:
   REGISTRY_IMAGE: pivotalrabbitmq/ibm-mqadvanced-server-dev
   IBM_MQ_REPOSITORY: ibm-messaging/mq-container
   IBM_MQ_BRANCH_NAME: 9.4.0
-  IMAGE_TAG: 9.4.0-amd64
+  IMAGE_TAG: 9.4.0.5-amd64
 jobs:
   docker:
     runs-on: ubuntu-latest
