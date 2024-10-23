@@ -5,7 +5,7 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 set -u
 
 IMAGE=pivotalrabbitmq/ibm-mqadvanced-server-dev
-IMAGE_TAG=9.4.0-amd64
+IMAGE_TAG=9.4.0.5-amd64
 
 kill_container_if_exist() {
   if docker stop $1 &> /dev/null; then
