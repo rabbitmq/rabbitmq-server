@@ -143,7 +143,7 @@ reconciliate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
                              OldResult) ->
     Result =
         maybe
-            {ok, Members, {_, LeaderNode}} = ra:members(amqqueue:get_pid(Q), 500),
+            {ok, Members, {_, LeaderNode}} ?= ra:members(amqqueue:get_pid(Q), 500),
             %% Check if Leader is indeed this node
             LeaderNode ?= node(),
             %% And that this not is not in maintenance mode
