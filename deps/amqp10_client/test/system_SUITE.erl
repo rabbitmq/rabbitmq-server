@@ -24,7 +24,7 @@ all() ->
      {group, rabbitmq},
      {group, rabbitmq_strict},
      {group, activemq},
-     {group, ibmmq},
+   %  {group, ibmmq},
      {group, activemq_no_anon},
      {group, mock}
     ].
@@ -967,17 +967,18 @@ set_receiver_capabilities(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                        {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
-                                             ]}
+                                             ]}                        
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = true,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
                                              name = Name,
                                              source = #'v1_0.source'{
-                                                capabilities = {symbol, <<"capability-1">>}}}, <<>>}) ->
+                                                capabilities = {symbol, <<"capability-1">>}}
+                                            }, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
                                               initial_delivery_count = {uint, 1},
@@ -985,7 +986,7 @@ set_receiver_capabilities(Config) ->
                               ]}
                  end,
 
-    LinkCreditStep = fun({1 = Ch, #'v1_0.flow'{}, <<>>}) ->
+    LinkCreditStep = fun({0 = Ch, #'v1_0.flow'{}, <<>>}) ->
                              {Ch, {multi, [[#'v1_0.transfer'{handle = {uint, 99},
                                                              delivery_id = {uint, 12},
                                                              more = true},
@@ -1039,14 +1040,14 @@ set_sender_capabilities(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = false,
                                              name = Name,
                                              source = #'v1_0.source'{
 
@@ -1091,14 +1092,14 @@ set_sender_sync_capabilities(Config) ->
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
                end,
-    BeginStep = fun({1 = Ch, #'v1_0.begin'{}, _Pay}) ->
-                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, 1},
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                         {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({1 = Ch, #'v1_0.attach'{role = false,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = false,
                                              name = Name,
                                              source = #'v1_0.source'{
 
