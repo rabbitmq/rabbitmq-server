@@ -303,12 +303,15 @@ init_per_testcase(T, Config)
   when T =:= detach_requeues_one_session_quorum_queue orelse
        T =:= single_active_consumer_quorum_queue orelse
        T =:= detach_requeues_two_connections_quorum_queue ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        {skip, _} ->
-            {skip, "Feature flag rabbitmq_4.0.0 enables the consumer removal API"}
-    end;
+    %% Feature flag rabbitmq_4.0.0 enables the consumer removal API.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    rabbit_ct_helpers:testcase_started(Config, T);
+init_per_testcase(T, Config)
+  when T =:= leader_transfer_quorum_queue_credit_single orelse
+       T =:= leader_transfer_quorum_queue_credit_batches ->
+    %% These test cases flake with feature flag 'rabbitmq_4.0.0' disabled.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    rabbit_ct_helpers:testcase_started(Config, T);
 init_per_testcase(T = immutable_bare_message, Config) ->
     case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
@@ -333,26 +336,6 @@ init_per_testcase(T = dead_letter_reject, Config) ->
             {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
              "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
     end;
-init_per_testcase(T, Config)
-  when  T =:= leader_transfer_quorum_queue_credit_single orelse
-        T =:= leader_transfer_quorum_queue_credit_batches orelse
-        T =:= leader_transfer_stream_credit_single orelse
-        T =:= leader_transfer_stream_credit_batches orelse
-        T =:= leader_transfer_quorum_queue_send orelse
-        T =:= leader_transfer_stream_send ->
-    case rpc(Config, rabbit_feature_flags, is_supported, ['rabbitmq_4.0.0']) of
-        true ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        false ->
-            {skip, "This test requires the AMQP management extension of RabbitMQ 4.0"}
-    end;
-init_per_testcase(T, Config)
-  when T =:= classic_queue_on_new_node orelse
-       T =:= quorum_queue_on_new_node ->
-    %% If node 1 runs 4.x, this is the new no-op plugin.
-    %% If node 1 runs 3.x, this is the old real plugin.
-    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 1, rabbitmq_amqp1_0),
-    rabbit_ct_helpers:testcase_started(Config, T);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -3543,14 +3526,11 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            async_notify(unsettled, <<"classic">>, Config);
-        {skip, _} ->
-            {skip, "Skipping as this test will flake. Link flow control in classic "
-             "queues with credit API v1 is known to be broken: "
-             "https://github.com/rabbitmq/rabbitmq-server/issues/2597"}
-    end.
+    %% This test flakes with feature flag 'rabbitmq_4.0.0' disabled.
+    %% Link flow control in classic queues with credit API v1 is known to be broken:
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/2597
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    async_notify(unsettled, <<"classic">>, Config).
 
 async_notify_unsettled_quorum_queue(Config) ->
     async_notify(unsettled, <<"quorum">>, Config).
@@ -3852,7 +3832,6 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
     ok = end_session_sync(Session1),
     ok = close_connection_sync(Connection1),
 
-    %% Consume from a follower.
     OpnConf = connection_config(0, Config),
     {ok, Connection0} = amqp10_client:open_connection(OpnConf),
     {ok, Session0} = amqp10_client:begin_session_sync(Connection0),
@@ -3866,6 +3845,7 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
     ok = wait_for_accepts(NumMsgs),
     ok = detach_link_sync(Sender),
 
+    %% Consume from a follower.
     ok = wait_for_local_member(QType, QName, Config),
     Filter = consume_from_first(QType),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
