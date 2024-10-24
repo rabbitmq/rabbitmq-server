@@ -1,0 +1,104 @@
+#!/bin/bash
+
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+set -u
+
+IMAGE=pivotalrabbitmq/ibm-mqadvanced-server-dev
+IMAGE_TAG=9.4.0.5-amd64
+
+kill_container_if_exist() {
+  if docker stop $1 &> /dev/null; then
+     docker rm $1 &> /dev/null
+  fi
+}
+
+ensure_docker_image_exists() {
+  TAG=`docker images --filter reference=$IMAGE | grep $IMAGE_TAG`
+  if [ -z ${TAG+x} ]
+  then
+    echo "Docker image ${IMAGE}:${IMAGE_TAG} does not exist"
+    exit 1
+  else
+    echo "Docker image ${IMAGE}:${IMAGE_TAG} ready"
+  fi
+}
+
+wait_for_message() {
+  attemps_left=10
+  while ! docker logs $1 2>&1 | grep -q "$2";
+  do
+      sleep 5
+      print "Waiting 5sec for $1 to start ($attemps_left attempts left )..."
+      ((attemps_left--))
+      if [[ "$attemps_left" -lt 1 ]]; then
+        print "Timed out waiting"
+        save_container_log $1
+        exit 1
+      fi
+  done
+}
+declare -i PADDING_LEVEL=0
+
+print() {
+  tabbing=""
+  if [[  $PADDING_LEVEL -gt 0 ]]; then
+    for i in $(seq $PADDING_LEVEL); do
+        tabbing="$tabbing\t"
+    done
+  fi
+  echo -e "$tabbing$1"
+}
+
+invoke_start(){
+  kill_container_if_exist ibmmq
+  ensure_docker_image_exists
+
+  docker run --name ibmmq \
+    --env LICENSE=accept \
+    --env MQ_QMGR_NAME=QM1 \
+    --env MQ_APP_PASSWORD=passw0rd \
+    --env MQ_ADMIN_PASSWORD=passw0rd \
+    --env LICENSE=accept \
+    --publish 1414:1414 \
+    --publish 9443:9443 \
+    --publish 5672:5672 \
+    --detach \
+    $IMAGE:$IMAGE_TAG
+  wait_for_message ibmmq "The listener 'SYSTEM.LISTENER.TCP.1' has started."
+  wait_for_message ibmmq "Successfully loaded default keystore"
+
+  docker exec ibmmq bash -c 'echo "SET CHLAUTH(SYSTEM.DEF.AMQP) TYPE(ADDRESSMAP) ADDRESS(*) MCAUSER(app)" | /opt/mqm/bin/runmqsc QM1'
+  docker exec ibmmq bash -c 'echo "STOP SERVICE(SYSTEM.AMQP.SERVICE)" | /opt/mqm/bin/runmqsc QM1'
+  docker exec ibmmq bash -c 'echo "START SERVICE(SYSTEM.AMQP.SERVICE)" | /opt/mqm/bin/runmqsc QM1'
+  docker exec ibmmq bash -c 'echo "START CHANNEL(SYSTEM.DEF.AMQP)" | /opt/mqm/bin/runmqsc QM1'
+  wait_for_message ibmmq "The Server 'SYSTEM.AMQP.SERVICE' has started"
+  sleep 10
+  print "Waited 10 seconds for container to start"
+}
+capture_logs() {
+    print "Capturing ibmmq logs to $1"
+    docker logs ibmmq > $1
+}
+invoke_stop(){
+  kill_container_if_exist ibmmq
+}
+
+case "$1" in
+  version)
+    echo "IBM MQ ${IMAGE}:${IMAGE_TAG}"
+    ;;
+  build)
+    build_docker_image
+    ;;
+  logs)
+    capture_logs "$2"
+    ;;
+  start)
+    invoke_start
+    ;;
+  stop)
+    invoke_stop
+    exit $?
+    ;;
+esac

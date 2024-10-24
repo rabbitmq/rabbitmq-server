@@ -117,13 +117,14 @@ rabbitmq_integration_suite(
     size = "medium",
     additional_beam = [
         "test/activemq_ct_helpers.beam",
+        "test/ibmmq_ct_helpers.beam",
         "test/mock_server.beam",
     ],
     data = [
-        "@activemq//:exec_dir",
+        "@activemq//:exec_dir",        
     ],
     test_env = {
-        "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq",
+        "ACTIVEMQ": "$TEST_SRCDIR/$TEST_WORKSPACE/external/activemq/bin/activemq"
     },
     deps = TEST_DEPS,
 )
@@ -140,6 +141,7 @@ eunit(
     name = "eunit",
     compiled_suites = [
         ":test_activemq_ct_helpers_beam",
+        ":test_ibmmq_ct_helpers_beam",
         ":test_mock_server_beam",
     ],
     target = ":test_erlang_app",
