@@ -413,7 +413,7 @@ module Test =
 
     let invalidRoutes uri =
 
-        for dest, cond in
+        for addr, cond in
             ["/exchanges/missing", "amqp:not-found"
              "/fruit/orange", "amqp:invalid-field"] do
             use ac = connectAnon uri
@@ -428,11 +428,11 @@ module Test =
             let attached = new OnAttached (fun _ _ -> trySet mre)
 
             let sender = new SenderLink(ac.Session, "test-sender",
-                                        Target(Address = dest), attached);
+                                        Target(Address = addr), attached);
             mre.WaitOne() |> ignore
 
             try
-                let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
+                let receiver = ReceiverLink(ac.Session, "test-receiver", addr)
                 receiver.Close()
             with
             | :? Amqp.AmqpException as ae ->
@@ -454,11 +454,11 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/queues/test"
+            let target = "/queues/test"
             ac.Session.add_Closed (
                 new ClosedCallback (fun _ err -> printfn "session err %A" err.Condition
                 ))
-            let sender = new SenderLink(ac.Session, "test-sender", dest)
+            let sender = new SenderLink(ac.Session, "test-sender", target)
             sender.Send(new Message "hi", TimeSpan.FromSeconds 15.)
             failwith "expected exception not received"
         with
@@ -471,8 +471,8 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/queues/test"
-            let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
+            let src = "/queues/test"
+            let receiver = ReceiverLink(ac.Session, "test-receiver", src)
             receiver.Close()
             failwith "expected exception not received"
         with
@@ -485,8 +485,8 @@ module Test =
             let u = Uri uri
             let uri = sprintf "amqp://access_failure_not_allowed:boo@%s:%i" u.Host u.Port
             use ac = connect uri
-            let dest = "/queues/test"
-            let receiver = ReceiverLink(ac.Session, "test-receiver", dest)
+            let src = "/queues/test"
+            let receiver = ReceiverLink(ac.Session, "test-receiver", src)
             receiver.Close()
             failwith "expected exception not received"
         with
