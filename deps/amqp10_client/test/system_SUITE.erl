@@ -25,6 +25,7 @@ all() ->
      {group, rabbitmq_strict},
      {group, activemq},
      {group, activemq_no_anon},
+     {group, ibmmq},
      {group, mock}
     ].
 
@@ -44,6 +45,11 @@ groups() ->
        open_connection_plain_sasl,
        open_connection_plain_sasl_parse_uri,
        open_connection_plain_sasl_failure
+      ]},
+      {ibmmq, [], [
+        open_close_connection
+        %basic_roundtrip_with_sender_and_receiver_capabilities
+        %basic_roundtrip_with_non_binary_capability
       ]},
       {azure, [],
       [
@@ -129,6 +135,12 @@ init_per_group(activemq_no_anon, Config0) ->
                Config0, {sasl, {plain, <<"user">>, <<"password">>}}),
     rabbit_ct_helpers:run_steps(Config,
                                 activemq_ct_helpers:setup_steps("activemq_no_anon.xml"));
+init_per_group(ibmmq, Config) ->
+    ct:log("Found arch: ~p", [erlang:system_info(system_architecture)]),
+    case string:find(erlang:system_info(system_architecture), "x86_64") of
+        nomatch  -> {skip, no_arm64_docker_image_for_ibmmq};
+        _ ->  rabbit_ct_helpers:run_steps(Config, ibmmq_ct_helpers:setup_steps())
+    end;
 init_per_group(azure, Config) ->
     rabbit_ct_helpers:set_config(Config,
                                         [
@@ -150,6 +162,8 @@ end_per_group(activemq, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
 end_per_group(activemq_no_anon, Config) ->
     rabbit_ct_helpers:run_steps(Config, activemq_ct_helpers:teardown_steps());
+end_per_group(ibmmq, Config) ->
+    rabbit_ct_helpers:run_steps(Config, ibmmq_ct_helpers:teardown_steps());
 end_per_group(_, Config) ->
     Config.
 
@@ -331,11 +345,16 @@ roundtrip_large_messages(Config) ->
     ok = roundtrip(OpenConf, Data64Mb).
 
 roundtrip(OpenConf) ->
-    roundtrip(OpenConf, <<"banana">>).
+    roundtrip(OpenConf, <<"banana">>, [], []).
 
 roundtrip(OpenConf, Body) ->
+    roundtrip(OpenConf, Body, [], []).
+
+roundtrip(OpenConf, Body, Args, DoNotAssertMessageProperties) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
+%    SenderCapabilities = proplists:get_value(sender_capabilities, Args, <<>>),
+   
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
     await_link(Sender, credited, link_credit_timeout),
@@ -423,6 +442,20 @@ filtered_roundtrip(OpenConf, Body) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
+    application:start(sasl),
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
+    roundtrip(OpenConf, [
+            {body, <<"banana">>},
+            {destination, <<"DEV.QUEUE.3">>},
+            {sender_capabilities, <<"queue">>},
+            {receiver_capabilities, <<"queue">>},
+            {message_annotations, #{}}
+        ], [creation_time]),
+    timer:sleep(20000).
 
 %% Assert that implementations respect the difference between transfer-id and delivery-id.
 transfer_id_vs_delivery_id(Config) ->
