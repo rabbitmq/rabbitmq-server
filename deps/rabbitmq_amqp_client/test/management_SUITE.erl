@@ -810,25 +810,30 @@ queue_topology(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
 
     Init2 = {_, LinkPair2} = init(Config, 2),
-    {ok, QQInfo2} = rabbitmq_amqp_client:get_queue(LinkPair2, QQName),
-    {ok, SQInfo2} = rabbitmq_amqp_client:get_queue(LinkPair2, SQName),
+    eventually(
+      ?_assert(
+         begin
+             {ok, QQInfo2} = rabbitmq_amqp_client:get_queue(LinkPair2, QQName),
+             {ok, SQInfo2} = rabbitmq_amqp_client:get_queue(LinkPair2, SQName),
 
-    case maps:get(leader, QQInfo2) of
-        N1 -> ok;
-        N2 -> ok;
-        Other0 -> ct:fail({?LINE, Other0})
-    end,
-    case maps:get(leader, SQInfo2) of
-        N1 -> ok;
-        N2 -> ok;
-        Other1 -> ct:fail({?LINE, Other1})
-    end,
-
-    %% Replicas should include both online and offline replicas.
-    {ok, QQReplicas2} = maps:find(replicas, QQInfo2),
-    ?assertEqual(Nodes, lists:usort(QQReplicas2)),
-    {ok, SQReplicas2} = maps:find(replicas, SQInfo2),
-    ?assertEqual(Nodes, lists:usort(SQReplicas2)),
+             {ok, QQReplicas2} = maps:find(replicas, QQInfo2),
+             {ok, SQReplicas2} = maps:find(replicas, SQInfo2),
+             QQReplicas = lists:usort(QQReplicas2),
+             SQReplicas = lists:usort(SQReplicas2),
+             QQLeader = maps:get(leader, QQInfo2),
+             SQLeader = maps:get(leader, SQInfo2),
+             ct:pal("quorum queue replicas: ~p~n"
+                    "quorum queue leader: ~s~n"
+                    "stream replicas: ~p~n"
+                    "stream leader: ~s",
+                    [QQReplicas, QQLeader, SQReplicas, SQLeader]),
+             %% Replicas should always include both online and offline replicas.
+             QQReplicas =:= Nodes andalso
+             SQReplicas =:= Nodes andalso
+             (QQLeader =:= N1 orelse QQLeader =:= N2) andalso
+             (SQLeader =:= N1 orelse SQLeader =:= N2)
+         end
+        ), 1000, 5),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair2, CQName),
