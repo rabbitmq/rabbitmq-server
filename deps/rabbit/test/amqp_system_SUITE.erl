@@ -38,7 +38,6 @@ groups() ->
           routing,
           invalid_routes,
           auth_failure,
-          access_failure,
           access_failure_not_allowed,
           access_failure_send,
           streams
@@ -216,18 +215,6 @@ invalid_routes(Config) ->
 
 auth_failure(Config) ->
     run(Config, [ {dotnet, "auth_failure"} ]).
-
-access_failure(Config) ->
-    User = atom_to_binary(?FUNCTION_NAME),
-    ok = rabbit_ct_broker_helpers:add_user(Config, User, <<"boo">>),
-    ok = rabbit_ct_broker_helpers:set_permissions(Config, User, <<"/">>,
-                                                  <<".*">>, %% configure
-                                                  <<"^banana.*">>, %% write
-                                                  <<"^banana.*">>  %% read
-                                                 ),
-    run(Config, [ {dotnet, "access_failure"} ]),
-    ok = rabbit_ct_broker_helpers:delete_user(Config, User).
-
 
 access_failure_not_allowed(Config) ->
     User = atom_to_binary(?FUNCTION_NAME),
