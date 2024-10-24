@@ -42,7 +42,9 @@ all_tests() ->
      amqp_amqpl_message_id_binary,
      amqp_amqpl_unsupported_values_not_converted,
      amqp_to_amqpl_data_body,
-     amqp_amqpl_amqp_bodies
+     amqp_amqpl_amqp_bodies,
+     amqp_x_headers,
+     amqpl_x_headers
     ].
 
 %%%===================================================================
@@ -195,10 +197,7 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
                     [{{symbol, <<"type">>}, {utf8, <<"orange">>}},
                      {{symbol, <<"count">>}, {long, 45}}]}
                   ]},
-                 mc:x_header(<<"x-fruit">>, Msg)),
-
-
-    ok.
+                 mc:x_header(<<"x-fruit">>, Msg)).
 
 amqpl_death_v1_records(_Config) ->
     ok = amqpl_death_records(#{?FF_MC_DEATHS_V2 => false}).
@@ -364,8 +363,9 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Msg10Pre = mc:convert(mc_amqp, Msg),
     Payload = iolist_to_binary(mc:protocol_state(Msg10Pre)),
     Msg10 = mc:init(mc_amqp, Payload, #{}),
-    ?assertEqual(<<"exch">>, mc:exchange(Msg10)),
-    ?assertEqual([<<"apple">>], mc:routing_keys(Msg10)),
+    ?assertMatch(#{<<"x-exchange">> := {utf8, <<"exch">>},
+                   <<"x-routing-key">> := {utf8, <<"apple">>}},
+                 mc:x_headers(Msg10)),
     ?assertEqual(98, mc:priority(Msg10)),
     ?assertEqual(true, mc:is_persistent(Msg10)),
     ?assertEqual(99000, mc:timestamp(Msg10)),
@@ -422,8 +422,6 @@ amqpl_amqp_bin_amqpl(_Config) ->
 
     MsgL2 = mc:convert(mc_amqpl, Msg10),
 
-    ?assertEqual(<<"exch">>, mc:exchange(MsgL2)),
-    ?assertEqual([<<"apple">>], mc:routing_keys(MsgL2)),
     ?assertEqual(98, mc:priority(MsgL2)),
     ?assertEqual(true, mc:is_persistent(MsgL2)),
     ?assertEqual(99000, mc:timestamp(MsgL2)),
@@ -450,9 +448,17 @@ amqpl_cc_amqp_bin_amqpl(_Config) ->
     Msg10Pre = mc:convert(mc_amqp, Msg),
     Sections = iolist_to_binary(mc:protocol_state(Msg10Pre)),
     Msg10 = mc:init(mc_amqp, Sections, #{}),
-    ?assertEqual(RoutingKeys, mc:routing_keys(Msg10)),
+    ?assertMatch(#{<<"x-exchange">> := {utf8, <<"exch">>},
+                   <<"x-routing-key">> := {utf8, <<"apple">>},
+                   <<"x-cc">> := {list, [{utf8, <<"q1">>},
+                                         {utf8, <<"q2">>}]}},
+                 mc:x_headers(Msg10)),
 
-    MsgL2 = mc:convert(mc_amqpl, Msg10),
+    %% Here, we simulate what rabbit_stream_queue does:
+    Msg10b = mc:set_annotation(?ANN_EXCHANGE, <<"exch">>, Msg10),
+    Msg10c = mc:set_annotation(?ANN_ROUTING_KEYS, [<<"apple">>, <<"q1">>, <<"q2">>], Msg10b),
+
+    MsgL2 = mc:convert(mc_amqpl, Msg10c),
     ?assertEqual(RoutingKeys, mc:routing_keys(MsgL2)),
     ?assertMatch(#content{properties = #'P_basic'{headers = Headers}},
                  mc:protocol_state(MsgL2)).
@@ -750,6 +756,52 @@ amqp_amqpl_amqp_bodies(_Config) ->
          ?assertEqual(ExpectedBodySections, BodySections)
      end || Body <- Bodies],
     ok.
+
+amqp_x_headers(_Config) ->
+    MAC = [
+           {{symbol, <<"x-stream-filter">>}, {utf8, <<"apple">>}},
+           thead2('x-list', list, [utf8(<<"l">>)]),
+           thead2('x-map', map, [{utf8(<<"k">>), utf8(<<"v">>)}])
+          ],
+    M =  #'v1_0.message_annotations'{content = MAC},
+    AC = [thead(long, 5)],
+    A =  #'v1_0.application_properties'{content = AC},
+    D =  #'v1_0.data'{content = <<"data">>},
+
+    Payload = serialize_sections([M, A, D]),
+    Msg0 = mc:init(mc_amqp, Payload, annotations()),
+    Msg1 = mc:set_annotation(<<"x-1">>, {byte, -2}, Msg0),
+    ?assertEqual(#{<<"x-1">> => {byte, -2},
+                   <<"x-list">> => {list,[{utf8,<<"l">>}]},
+                   <<"x-map">> => {map,[{{utf8,<<"k">>},{utf8,<<"v">>}}]},
+                   <<"x-stream-filter">> => {utf8,<<"apple">>}},
+                 mc:x_headers(Msg1)).
+
+amqpl_x_headers(_Config) ->
+    Props = #'P_basic'{headers = [{<<"a-string">>, longstr, <<"a string">>},
+                                  {<<"x-1">>, binary, <<"v1">>},
+                                  {<<"x-stream-filter">>, longstr, <<"apple">>}]},
+    Payload = [<<"data">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+
+    Msg0 = mc:init(mc_amqpl, Content, annotations()),
+    Msg1 = mc:set_annotation(delivery_count, 1, Msg0),
+    Msg = mc:set_annotation(<<"x-delivery-count">>, 2, Msg1),
+    ?assertEqual(#{<<"x-1">> => {binary, <<"v1">>},
+                   <<"x-stream-filter">> => {utf8,<<"apple">>},
+                   <<"x-delivery-count">> => {long, 2}},
+                 mc:x_headers(Msg)),
+
+    XName = <<"exch">>,
+    RoutingKey = <<"apple">>,
+    {ok, BasicMsg0} = rabbit_basic:message_no_id(XName, RoutingKey, Content),
+    BasicMsg1 = mc:set_annotation(delivery_count, 1, BasicMsg0),
+    BasicMsg = mc:set_annotation(<<"x-delivery-count">>, 2, BasicMsg1),
+    ?assertEqual(#{<<"x-1">> => {binary, <<"v1">>},
+                   <<"x-stream-filter">> => {utf8,<<"apple">>},
+                   <<"x-delivery-count">> => {long, 2}},
+                 mc:x_headers(BasicMsg)).
 
 %% Utility
 
