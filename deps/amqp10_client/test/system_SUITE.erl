@@ -345,7 +345,7 @@ roundtrip_large_messages(Config) ->
     ok = roundtrip(OpenConf, Data64Mb).
 
 roundtrip(OpenConf) ->
-    roundtrip(OpenConf, <<"banana">>, [], []).
+    roundtrip(OpenConf, <<"banana">>).
 
 roundtrip(OpenConf, Body) ->
     roundtrip(OpenConf, Body, [], []).
@@ -353,10 +353,20 @@ roundtrip(OpenConf, Body) ->
 roundtrip(OpenConf, Body, Args, DoNotAssertMessageProperties) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
-%    SenderCapabilities = proplists:get_value(sender_capabilities, Args, <<>>),
-   
-    {ok, Sender} = amqp10_client:attach_sender_link(
-                     Session, <<"banana-sender">>, <<"test1">>, settled, unsettled_state),
+    Destination = proplists:get_value(destination, Args, <<"test1">>),
+    SenderCapabilities = proplists:get_value(sender_capabilities, Args, undefined),
+    ReceiverCapabilities = proplists:get_value(receiver_capabilities, Args, undefined),
+
+    SenderAttachArgs = #{name => <<"banana-sender">>,
+                         role => {sender, #{address => Destination,
+                                            durable => unsettled_state,
+                                            capabilities => SenderCapabilities}},
+                         snd_settle_mode => settled,
+                         rcv_settle_mode => first,
+                         filter => #{},
+                         properties => #{}
+                         },
+    {ok, Sender} = amqp10_client:attach_link(Session, SenderAttachArgs),
     await_link(Sender, credited, link_credit_timeout),
 
     Now = os:system_time(millisecond),
@@ -376,8 +386,17 @@ roundtrip(OpenConf, Body, Args, DoNotAssertMessageProperties) ->
     await_link(Sender, {detached, normal}, link_detach_timeout),
 
     {error, link_not_found} = amqp10_client:detach_link(Sender),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"banana-receiver">>, <<"test1">>, settled, unsettled_state),
+
+    ReceiverAttachArgs = #{name => <<"banana-receiver">>,
+                         role => {receiver, #{address => Destination,
+                                            durable => unsettled_state,
+                                            capabilities => ReceiverCapabilities}, self()},
+                         snd_settle_mode => settled,
+                         rcv_settle_mode => first,
+                         filter => #{},
+                         properties => #{}
+                         },
+    {ok, Receiver} = amqp10_client:attach_link(Session, ReceiverAttachArgs),
     {ok, OutMsg} = amqp10_client:get_msg(Receiver, 4 * 60_000),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
@@ -448,8 +467,7 @@ basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
-    roundtrip(OpenConf, [
-            {body, <<"banana">>},
+    roundtrip(OpenConf, <<"banana">>, [
             {destination, <<"DEV.QUEUE.3">>},
             {sender_capabilities, <<"queue">>},
             {receiver_capabilities, <<"queue">>},
@@ -952,7 +970,7 @@ incoming_heartbeat(Config) ->
 set_sender_capabilities(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
-    
+
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
                        {Ch, [#'v1_0.open'{
                                 container_id = {utf8, <<"mock">>},
@@ -1016,7 +1034,7 @@ set_receiver_capabilities(Config) ->
                                              next_outgoing_id = {uint, 1},
                                              incoming_window = {uint, 1000},
                                              outgoing_window = {uint, 1000}}
-                                             ]}                        
+                                             ]}
                 end,
     AttachStep = fun({0 = Ch, #'v1_0.attach'{role = true,
                                              name = Name,
