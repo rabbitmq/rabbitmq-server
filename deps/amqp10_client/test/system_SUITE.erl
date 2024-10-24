@@ -350,7 +350,7 @@ roundtrip(OpenConf) ->
 roundtrip(OpenConf, Body) ->
     roundtrip(OpenConf, Body, [], []).
 
-roundtrip(OpenConf, Body, Args, DoNotAssertMessageProperties) ->
+roundtrip(OpenConf, Body, Args, _DoNotAssertMessageProperties) ->
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     {ok, Session} = amqp10_client:begin_session(Connection),
     Destination = proplists:get_value(destination, Args, <<"test1">>),
@@ -389,8 +389,7 @@ roundtrip(OpenConf, Body, Args, DoNotAssertMessageProperties) ->
 
     ReceiverAttachArgs = #{name => <<"banana-receiver">>,
                          role => {receiver, #{address => Destination,
-                                            durable => unsettled_state,
-                                            capabilities => ReceiverCapabilities}, self()},
+                                            durable => unsettled_state}, self()},
                          snd_settle_mode => settled,
                          rcv_settle_mode => first,
                          filter => #{},
@@ -466,7 +465,12 @@ basic_roundtrip_with_sender_and_receiver_capabilities(Config) ->
     application:start(sasl),
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpenConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config)},
+    %% an address list
+    OpenConf = #{addresses => [Hostname],
+                port => Port,
+                notify => self(),
+                container_id => <<"open_close_connection_container">>,
+                sasl => ?config(sasl, Config)},
     roundtrip(OpenConf, <<"banana">>, [
             {destination, <<"DEV.QUEUE.3">>},
             {sender_capabilities, <<"queue">>},
