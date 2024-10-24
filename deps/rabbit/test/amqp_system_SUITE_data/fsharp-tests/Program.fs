@@ -466,20 +466,6 @@ module Test =
             printfn "Exception %A" ex
             ()
 
-    let accessFailure uri =
-        try
-            let u = Uri uri
-            let uri = sprintf "amqp://access_failure:boo@%s:%i" u.Host u.Port
-            use ac = connect uri
-            let src = "/queues/test"
-            let receiver = ReceiverLink(ac.Session, "test-receiver", src)
-            receiver.Close()
-            failwith "expected exception not received"
-        with
-        | :? Amqp.AmqpException as ex ->
-            printfn "Exception %A" ex
-            ()
-
     let accessFailureNotAllowed uri =
         try
             let u = Uri uri
@@ -504,9 +490,6 @@ let main argv =
     match List.ofArray argv with
     | [AsLower "auth_failure"; uri] ->
         authFailure uri
-        0
-    | [AsLower "access_failure"; uri] ->
-        accessFailure uri
         0
     | [AsLower "access_failure_not_allowed"; uri] ->
         accessFailureNotAllowed uri
