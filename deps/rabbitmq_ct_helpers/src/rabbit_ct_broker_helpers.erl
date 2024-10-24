@@ -643,8 +643,8 @@ write_config_file(Config, NodeConfig, _I) ->
     "direct_exchange_routing_v2,"
     "classic_mirrored_queue_version," %% @todo Missing in FF docs!!
     %% Required in 3.12 in rabbitmq_management_agent:
-    "drop_unroutable_metric,"
-    "empty_basic_get_metric,"
+%    "drop_unroutable_metric,"
+%    "empty_basic_get_metric,"
     %% Required in 4.0:
     "stream_sac_coordinator_unblock_group,"
     "restart_streams,"
