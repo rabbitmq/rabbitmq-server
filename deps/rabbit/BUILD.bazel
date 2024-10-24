@@ -862,6 +862,12 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "topic_permission_SUITE",
     size = "medium",
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
 )
 
 rabbitmq_integration_suite(

@@ -177,15 +177,11 @@ end_per_group(Group, Config) ->
 init_per_testcase(T, Config)
   when T =:= dead_letter_reject_expire_expire orelse
        T =:= stream ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
-        ok ->
-            init_per_testcase0(T, Config);
-        {skip, _} = Skip ->
-            %% With feature flag message_containers_deaths_v2 disabled, test case:
-            %% * dead_letter_reject_expire_expire is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11159
-            %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
-            Skip
-    end;
+    %% With feature flag message_containers_deaths_v2 disabled, test case:
+    %% * dead_letter_reject_expire_expire is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11159
+    %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2),
+    init_per_testcase0(T, Config);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
@@ -1859,6 +1855,10 @@ stream(Config) ->
     ?assertEqual(undefined, rabbit_misc:table_lookup(Death2, <<"original-expiration">>)),
     {timestamp, T2} = rabbit_misc:table_lookup(Death2, <<"time">>),
     ?assert(T1 < T2),
+
+    ?assertEqual({array, [{longstr, <<"cc 1">>},
+                          {longstr, <<"cc 2">>}]},
+                 rabbit_misc:table_lookup(Headers, <<"CC">>)),
 
     ok = rabbit_ct_client_helpers:close_channel(Ch0),
     ok = rabbit_ct_client_helpers:close_channel(Ch1).

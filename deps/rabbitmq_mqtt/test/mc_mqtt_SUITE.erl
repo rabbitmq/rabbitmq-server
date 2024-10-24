@@ -61,6 +61,10 @@ roundtrip_amqp(_Config) ->
     PayloadSize = 10,
     ExpectedSize = {MetaDataSize, PayloadSize},
     ?assertEqual(ExpectedSize, mc:size(Mc0)),
+    ?assertEqual(#{<<"x-key-1">> => {utf8, <<"val-1">>},
+                   <<"x-key-2">> => {utf8, <<"val-2">>},
+                   <<"x-key-3">> => {utf8, <<"val-3">>}},
+                 mc:x_headers(Mc0)),
 
     Env = #{},
     ?assertEqual(Msg, mc_mqtt:convert_to(mc_mqtt, Msg, Env)),
@@ -310,6 +314,7 @@ mqtt_amqpl_alt(_Config) ->
                        },
     Anns = #{?ANN_ROUTING_KEYS => [rabbit_mqtt_util:mqtt_to_amqp(Msg#mqtt_msg.topic)]},
     Mc = mc:init(mc_mqtt, Msg, Anns),
+    ?assertEqual(#{}, mc:x_headers(Mc)),
     MsgL = mc:convert(mc_amqpl, Mc),
 
     #content{properties = #'P_basic'{headers = HL} = Props} =

@@ -154,6 +154,7 @@
           %% The routing key is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
           %% "to" field (address v2) or "subject" field (address v1).
+          %% (A publisher can set additional routing keys via the x-cc message annotation.)
           routing_key :: rabbit_types:routing_key() | to | subject,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
@@ -2369,11 +2370,11 @@ incoming_link_transfer(
 
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
-        {ok, X, RoutingKey, Mc1, PermCache} ->
+        {ok, X, RoutingKeys, Mc1, PermCache} ->
             Mc2 = rabbit_message_interceptor:intercept(Mc1),
             check_user_id(Mc2, User),
-            TopicPermCache = check_write_permitted_on_topic(
-                               X, User, RoutingKey, TopicPermCache0),
+            TopicPermCache = check_write_permitted_on_topics(
+                               X, User, RoutingKeys, TopicPermCache0),
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
@@ -2408,14 +2409,14 @@ incoming_link_transfer(
                                    "delivery_tag=~p, delivery_id=~p, reason=~p",
                                    [DeliveryTag, DeliveryId, Reason])
             end;
-        {error, #'v1_0.error'{} = Err} ->
+        {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
             Disposition = case Settled of
                               true -> [];
                               false -> [released(DeliveryId)]
                           end,
             Detach = [detach(HandleInt, Link0, Err)],
             {error, Disposition ++ Detach};
-        {error, anonymous_terminus, #'v1_0.error'{} = Err} ->
+        {error, {anonymous_terminus, true}, #'v1_0.error'{} = Err} ->
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
             case Settled of
                 true ->
@@ -2440,13 +2441,13 @@ incoming_link_transfer(
     end.
 
 lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, PermCache) ->
-    lookup_routing_key(X, LinkRKey, Mc, PermCache);
+    lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
 lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
     case rabbit_exchange:lookup(XName) of
         {ok, X} ->
-            lookup_routing_key(X, LinkRKey, Mc, PermCache);
+            lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
         {error, not_found} ->
-            {error, error_not_found(XName)}
+            {error, {anonymous_terminus, false}, error_not_found(XName)}
     end;
 lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
     case mc:property(to, Mc) of
@@ -2458,25 +2459,26 @@ lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
                     case rabbit_exchange:lookup(XName) of
                         {ok, X} ->
                             check_internal_exchange(X),
-                            lookup_routing_key(X, RKey, Mc, PermCache);
+                            lookup_routing_key(X, RKey, Mc, true, PermCache);
                         {error, not_found} ->
-                            {error, anonymous_terminus, error_not_found(XName)}
+                            {error, {anonymous_terminus, true}, error_not_found(XName)}
                     end;
                 {error, bad_address} ->
-                    {error, anonymous_terminus,
+                    {error, {anonymous_terminus, true},
                      #'v1_0.error'{
                         condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                         description = {utf8, <<"bad 'to' address string: ", String/binary>>}}}
             end;
         undefined ->
-            {error, anonymous_terminus,
+            {error, {anonymous_terminus, true},
              #'v1_0.error'{
                 condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                 description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}
     end.
 
 lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
-                   RKey0, Mc0, PermCache) ->
+                   RKey0, Mc0, AnonTerm, PermCache) ->
+    Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
     RKey = case RKey0 of
                subject ->
                    case mc:property(subject, Mc0) of
@@ -2488,9 +2490,31 @@ lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
                _ when is_binary(RKey0) ->
                    RKey0
            end,
-    Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
-    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc1),
-    {ok, X, RKey, Mc, PermCache}.
+    case mc:x_header(<<"x-cc">>, Mc0) of
+        undefined ->
+            RKeys = [RKey],
+            Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
+            {ok, X, RKeys, Mc, PermCache};
+        {list, CCs0} = L ->
+            try lists:map(fun({utf8, CC}) -> CC end, CCs0) of
+                CCs ->
+                    RKeys = [RKey | CCs],
+                    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
+                    {ok, X, RKeys, Mc, PermCache}
+            catch error:function_clause ->
+                      {error, {anonymous_terminus, AnonTerm}, bad_x_cc(L)}
+            end;
+        BadValue ->
+            {error, {anonymous_terminus, AnonTerm}, bad_x_cc(BadValue)}
+    end.
+
+bad_x_cc(Value) ->
+    Desc = unicode:characters_to_binary(
+             lists:flatten(
+               io_lib:format(
+                 "bad value for 'x-cc' message-annotation: ~tp", [Value]))),
+    #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  description = {utf8, Desc}}.
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
@@ -3445,14 +3469,20 @@ check_resource_access(Resource, Perm, User, Cache) ->
             end
     end.
 
--spec check_write_permitted_on_topic(
+-spec check_write_permitted_on_topics(
         rabbit_types:exchange(),
         rabbit_types:user(),
-        rabbit_types:routing_key(),
+        [rabbit_types:routing_key(),...],
         topic_permission_cache()) ->
     topic_permission_cache().
-check_write_permitted_on_topic(Resource, User, RoutingKey, TopicPermCache) ->
-    check_topic_authorisation(Resource, User, RoutingKey, write, TopicPermCache).
+check_write_permitted_on_topics(#exchange{type = topic} = Resource,
+                                User, RoutingKeys, TopicPermCache) ->
+    lists:foldl(
+      fun(RoutingKey, Cache) ->
+              check_topic_authorisation(Resource, User, RoutingKey, write, Cache)
+      end, TopicPermCache, RoutingKeys);
+check_write_permitted_on_topics(_, _, _, TopicPermCache) ->
+    TopicPermCache.
 
 -spec check_read_permitted_on_topic(
         rabbit_types:exchange(),
