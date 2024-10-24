@@ -11,6 +11,10 @@ on:
       metadata_store:
         required: true
         type: string
+      mixed_clusters:
+        required: false
+        default: false
+        type: boolean
       make_target:
         required: true
         type: string
@@ -40,6 +44,31 @@ jobs:
         # This currently only applies to Elixir; and can be safely
         # restricted to the build jobs to avoid duplication in output.
         disable_problem_matchers: true
+
+    - name: MIXED CLUSTERS - FETCH SIGNING KEYS
+      uses: dsaltares/fetch-gh-release-asset@master
+      if: inputs.mixed_clusters
+      with:
+        repo: rabbitmq/signing-keys
+        file: rabbitmq-release-signing-key.asc
+
+    - name: MIXED CLUSTERS - FETCH PREVIOUS VERSION
+      id: fetch_secondary_dist
+      uses: dsaltares/fetch-gh-release-asset@master
+      if: inputs.mixed_clusters
+      with:
+        regex: true
+        file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar.xz"
+        target: ./
+
+    - name: MIXED CLUSTERS - SETUP SECONDARY_DIST
+      if: inputs.mixed_clusters
+      run: |
+        gpg --import rabbitmq-release-signing-key.asc
+        gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
+        tar xf rabbitmq-server-generic-unix-*.tar.xz
+
+        echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.fetch_secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
 
     - name: SETUP DOTNET (rabbit)
       uses: actions/setup-dotnet@v4
@@ -74,7 +103,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }})
+        name: CT logs (${{ inputs.plugin }} ${{ inputs.make_target }} OTP-${{ inputs.erlang_version }} ${{ inputs.metadata_store }}${{ inputs.mixed_clusters && ' mixed' || '' }})
         path: |
           logs/
 #          !logs/**/log_private

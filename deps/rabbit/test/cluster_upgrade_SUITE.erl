@@ -55,7 +55,7 @@ init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Testcase},
         {rmq_nodes_count, 3},
-        {force_secondary_umbrella, true}
+        {force_secondary, true}
       ]),
     Config2 = rabbit_ct_helpers:run_steps(Config1,
                 rabbit_ct_broker_helpers:setup_steps() ++
@@ -139,7 +139,7 @@ upgrade_cluster(Config) ->
      || N <- Cluster],
     ct:pal(?LOW_IMPORTANCE, "Restarting cluster ~p", [Cluster]),
     Config1 = rabbit_ct_helpers:set_config(
-                Config, {force_secondary_umbrella, false}),
+                Config, {force_secondary, false}),
     [ok = rabbit_ct_broker_helpers:async_start_node(Config1, N)
      || N <- Cluster],
     [ok = rabbit_ct_broker_helpers:wait_for_async_start_node(N)
