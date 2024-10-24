@@ -70,11 +70,16 @@
 -type input_handle() :: link_handle().
 
 -type terminus_durability() :: none | configuration | unsettled_state.
+-type terminus_capabilities() :: undefined | binary() | [binary(),...].
 
 -type target_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()
+                        }.
 -type source_def() :: #{address => link_address(),
-                        durable => terminus_durability()}.
+                        durable => terminus_durability(),
+                        capabilities => terminus_capabilities()
+                        }.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
 
@@ -706,9 +711,17 @@ make_source(#{role := {sender, _}}) ->
 make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
     TranslatedFilter = translate_filters(Filter),
-    #'v1_0.source'{address = {utf8, Address},
-                   durable = {uint, Durable},
-                   filter = TranslatedFilter}.
+    try translate_terminus_capabilities(maps:get(capabilities, Source, undefined)) of 
+        Capabilities -> 
+             #'v1_0.source'{address = {utf8, Address},
+                            durable = {uint, Durable},
+                            filter = TranslatedFilter,
+                            capabilities = Capabilities}
+    catch         
+        throw:Err -> 
+                logger:warning("make_source failed due to ~p", [Err]),
+                {error, Err}        
+    end.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
@@ -718,8 +731,16 @@ make_target(#{role := {sender, #{address := Address} = Target}}) ->
                      true -> {utf8, Address};
                      false -> Address
                  end,
-    #'v1_0.target'{address = TargetAddr,
-                   durable = {uint, Durable}}.
+    try translate_terminus_capabilities(maps:get(capabilities, Target, undefined)) of 
+        Capabilities ->            
+            #'v1_0.target'{address = TargetAddr,
+                           durable = {uint, Durable},
+                           capabilities = Capabilities}
+    catch 
+        throw:Err -> 
+                    logger:warning("make_target failed due to ~p", [Err]),
+                    {error, Err}
+    end.
 
 max_message_size(#{max_message_size := Size})
   when is_integer(Size) andalso
@@ -973,6 +994,13 @@ translate_delivery_state({modified,
                      message_annotations = MA};
 translate_delivery_state(released) -> #'v1_0.released'{};
 translate_delivery_state(received) -> #'v1_0.received'{}.
+
+translate_terminus_capabilities(Capabilities) when is_binary(Capabilities) ->
+    {symbol, Capabilities};
+translate_terminus_capabilities(CapabilitiesList) when is_list(CapabilitiesList) ->
+    {array, symbol, [{symbol, V} || V <- CapabilitiesList, is_binary(V)]};
+translate_terminus_capabilities(_) ->
+    undefined.
 
 translate_role(receiver) -> true.
 
