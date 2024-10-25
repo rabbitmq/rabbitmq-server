@@ -88,7 +88,7 @@ jobs:
         - '1.17'
         metadata_store:
           - mnesia
-#          - khepri
+          - khepri
     uses: ./.github/workflows/test-make-tests.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
