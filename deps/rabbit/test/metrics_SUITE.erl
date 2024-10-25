@@ -208,9 +208,11 @@ connection_metric_count(Config, Ops) ->
                      fun(Cfg) ->
                              rabbit_ct_client_helpers:close_connection(Cfg)
                      end},
-                   [ connection_created,
-                     connection_metrics,
-                     connection_coarse_metrics ]).
+                    %% connection_metrics are asynchronous,
+                    %% emitted on a timer. These have been removed
+                    %% from here as they're already tested on another
+                    %% testcases
+                    [ connection_created ]).
 
 channel_metric_count(Config, Ops) ->
     Conn =  rabbit_ct_client_helpers:open_unmanaged_connection(Config),
