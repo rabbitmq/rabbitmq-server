@@ -27,7 +27,7 @@
         if (vhosts[i].cluster_state[vhost_status_node] != 'running') {
 %>
 <p class="warning">
-  Virtual host <b><%= vhosts[i].name %></b> experienced an error on node <b><%= vhost_status_node %></b> and may be inaccessible
+  Virtual host <b><%= fmt_string(vhosts[i].name) %></b> experienced an error on node <b><%= fmt_string(vhost_status_node) %></b> and may be inaccessible
 </p>
 <% }}} %>
 </div>
