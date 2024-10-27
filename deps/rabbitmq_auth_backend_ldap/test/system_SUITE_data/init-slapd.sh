@@ -3,25 +3,45 @@
 
 set -ex
 
-slapd_data_dir=$1
-tcp_port=$2
+readonly slapd_data_dir="$1"
+readonly tcp_port="$2"
 
-pidfile="$slapd_data_dir/slapd.pid"
-uri="ldap://localhost:$tcp_port"
+readonly pidfile="$slapd_data_dir/slapd.pid"
+readonly uri="ldap://localhost:$tcp_port"
 
-binddn="cn=config"
-passwd=secret
+readonly binddn="cn=config"
+readonly passwd=secret
 
 case "$(uname -s)" in
     Linux)
-        slapd=/usr/sbin/slapd
-        modulepath=/usr/lib/ldap
-        schema_dir=/etc/ldap/schema
+        if [ -x /usr/bin/slapd ]
+        then
+            readonly slapd=/usr/bin/slapd
+        elif [ -x /usr/sbin/slapd ]
+        then
+            readonly slapd=/usr/sbin/slapd
+        fi
+
+        if [ -d /usr/lib/openldap ]
+        then
+            readonly modulepath=/usr/lib/openldap
+        elif [ -d /usr/lib/ldap ]
+        then
+            readonly modulepath=/usr/lib/ldap
+        fi
+
+        if [ -d /etc/openldap/schema ]
+        then
+            readonly schema_dir=/etc/openldap/schema
+        elif [ -d /etc/ldap/schema ]
+        then
+            readonly schema_dir=/etc/ldap/schema
+        fi
         ;;
     FreeBSD)
-        slapd=/usr/local/libexec/slapd
-        modulepath=/usr/local/libexec/openldap
-        schema_dir=/usr/local/etc/openldap/schema
+        readonly slapd=/usr/local/libexec/slapd
+        readonly modulepath=/usr/local/libexec/openldap
+        readonly schema_dir=/usr/local/etc/openldap/schema
         ;;
     *)
         exit 1
@@ -35,7 +55,7 @@ esac
 rm -rf "$slapd_data_dir"
 mkdir -p "$slapd_data_dir"
 
-conf_file=$slapd_data_dir/slapd.conf
+readonly conf_file="$slapd_data_dir/slapd.conf"
 cat <<EOF > "$conf_file"
 include         $schema_dir/core.schema
 include         $schema_dir/cosine.schema
@@ -52,7 +72,7 @@ EOF
 
 cat "$conf_file"
 
-conf_dir=$slapd_data_dir/slapd.d
+readonly conf_dir="$slapd_data_dir/slapd.d"
 mkdir -p "$conf_dir"
 
 # Start slapd(8).
@@ -61,10 +81,12 @@ mkdir -p "$conf_dir"
     -F "$conf_dir" \
     -h "$uri"
 
-auth="-x -D $binddn -w $passwd"
+readonly auth="-x -D $binddn -w $passwd"
 
 # We wait for the server to start.
+# shellcheck disable=SC2034
 for seconds in 1 2 3 4 5 6 7 8 9 10; do
+    # shellcheck disable=SC2086
     ldapsearch $auth -H "$uri" -LLL -b cn=config dn && break;
     sleep 1
 done
@@ -73,26 +95,33 @@ done
 # Load the example LDIFs for the testsuite.
 # --------------------------------------------------------------------
 
-script_dir=$(cd "$(dirname "$0")" && pwd)
-example_ldif_dir="$script_dir/../../example"
-example_data_dir="$slapd_data_dir/example"
+tmp="$(cd "$(dirname "$0")" && pwd)"
+readonly script_dir="$tmp"
+readonly example_ldif_dir="$script_dir/../../example"
+readonly example_data_dir="$slapd_data_dir/example"
 mkdir -p "$example_data_dir"
 
 # We update the hard-coded database directory with the one we computed
 # here, so the data is located inside the test directory.
+# shellcheck disable=SC2086
 sed -E -e "s,^olcDbDirectory:.*,olcDbDirectory: $example_data_dir," \
     < "$example_ldif_dir/global.ldif" | \
     ldapadd $auth -H "$uri"
 
 # We remove the module path from the example LDIF as it was already
 # configured.
+# shellcheck disable=SC2086
 sed -E -e "s,^olcModulePath:.*,olcModulePath: $modulepath," \
     < "$example_ldif_dir/memberof_init.ldif" | \
     ldapadd $auth -H "$uri"
 
+# shellcheck disable=SC2086
 ldapmodify $auth -H "$uri" -f "$example_ldif_dir/refint_1.ldif"
+
+# shellcheck disable=SC2086
 ldapadd $auth -H "$uri" -f "$example_ldif_dir/refint_2.ldif"
 
+# shellcheck disable=SC2086
 ldapsearch $auth -H "$uri" -LLL -b cn=config dn
 
-echo SLAPD_PID=$(cat "$pidfile")
+echo SLAPD_PID="$(cat "$pidfile")"
