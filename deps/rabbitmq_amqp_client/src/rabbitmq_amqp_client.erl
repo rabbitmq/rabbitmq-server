@@ -28,7 +28,9 @@
         declare_exchange/3,
         bind_exchange/5,
         unbind_exchange/5,
-        delete_exchange/2
+        delete_exchange/2,
+
+        set_token/2
        ].
 
 -define(TIMEOUT, 20_000).
@@ -372,6 +374,23 @@ delete_exchange(LinkPair, ExchangeName) ->
     Props = #{subject => <<"DELETE">>,
               to => <<"/exchanges/", XNameQuoted/binary>>},
     case request(LinkPair, Props, null) of
+        {ok, Resp} ->
+            case is_success(Resp) of
+                true -> ok;
+                false -> {error, Resp}
+            end;
+        Err ->
+            Err
+    end.
+
+%% Renew OAuth 2.0 token.
+-spec set_token(link_pair(), binary()) ->
+    ok | {error, term()}.
+set_token(LinkPair, Token) ->
+    Props = #{subject => <<"PUT">>,
+              to => <<"/auth/tokens">>},
+    Body = {binary, Token},
+    case request(LinkPair, Props, Body) of
         {ok, Resp} ->
             case is_success(Resp) of
                 true -> ok;

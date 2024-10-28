@@ -381,7 +381,19 @@ handle_http_req(<<"GET">>,
     Bindings0 = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     Bindings = [B || B = #binding{key = K} <- Bindings0, K =:= Key],
     RespPayload = encode_bindings(Bindings),
-    {<<"200">>, RespPayload, PermCaches}.
+    {<<"200">>, RespPayload, PermCaches};
+
+handle_http_req(<<"PUT">>,
+                [<<"auth">>, <<"tokens">>],
+                _Query,
+                ReqPayload,
+                _Vhost,
+                _User,
+                ConnPid,
+                PermCaches) ->
+    {binary, Token} = ReqPayload,
+    ok = rabbit_amqp_reader:set_credential(ConnPid, Token),
+    {<<"204">>, null, PermCaches}.
 
 decode_queue({map, KVList}) ->
     M = lists:foldl(

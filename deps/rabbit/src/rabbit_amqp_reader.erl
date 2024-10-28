@@ -13,7 +13,8 @@
 
 -export([init/1,
          info/2,
-         mainloop/2]).
+         mainloop/2,
+         set_credential/2]).
 
 -export([system_continue/3,
          system_terminate/4,
@@ -53,6 +54,7 @@
          channel_max :: non_neg_integer(),
          auth_mechanism :: sasl_init_unprocessed | {binary(), module()},
          auth_state :: term(),
+         credential_timer :: undefined | reference(),
          properties :: undefined | {map, list(tuple())}
         }).
 
@@ -138,6 +140,11 @@ server_properties() ->
     Props1 = [{{symbol, K}, {utf8, V}} || {K, longstr, V} <- Props0],
     Props = [{{symbol, <<"node">>}, {utf8, atom_to_binary(node())}} | Props1],
     {map, Props}.
+
+-spec set_credential(pid(), binary()) -> ok.
+set_credential(Pid, Credential) ->
+    Pid ! {set_credential, Credential},
+    ok.
 
 %%--------------------------------------------------------------------------
 
@@ -243,6 +250,8 @@ handle_other({'$gen_cast', {force_event_refresh, _Ref}}, State) ->
     State;
 handle_other(terminate_connection, _State) ->
     stop;
+handle_other({set_credential, Cred}, State) ->
+    set_credential0(Cred, State);
 handle_other(credential_expired, State) ->
     Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "credential expired", []),
     handle_exception(State, 0, Error);
@@ -416,15 +425,17 @@ handle_connection_frame(
                                   },
       helper_sup = HelperSupPid,
       sock = Sock} = State0) ->
-    logger:update_process_metadata(#{amqp_container => ContainerId}),
     Vhost = vhost(Hostname),
+    logger:update_process_metadata(#{amqp_container => ContainerId,
+                                     vhost => Vhost,
+                                     user => Username}),
     ok = check_user_loopback(State0),
     ok = check_vhost_exists(Vhost, State0),
     ok = check_vhost_alive(Vhost),
     ok = rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}),
     ok = check_vhost_connection_limit(Vhost, Username),
     ok = check_user_connection_limit(Username),
-    ok = ensure_credential_expiry_timer(User),
+    Timer = maybe_start_credential_expiry_timer(User),
     rabbit_core_metrics:auth_attempt_succeeded(<<>>, Username, amqp10),
     notify_auth(user_authentication_success, Username, State0),
     rabbit_log_connection:info(
@@ -499,7 +510,8 @@ handle_connection_frame(
                                       outgoing_max_frame_size = OutgoingMaxFrameSize,
                                       channel_max = EffectiveChannelMax,
                                       properties = Properties,
-                                      timeout = ReceiveTimeoutMillis},
+                                      timeout = ReceiveTimeoutMillis,
+                                      credential_timer = Timer},
                        heartbeater = Heartbeater},
     State = start_writer(State1),
     HostnameVal = case Hostname of
@@ -871,39 +883,57 @@ check_user_connection_limit(Username) ->
     end.
 
 
-%% TODO Provide a means for the client to refresh the credential.
-%% This could be either via:
-%% 1. SASL (if multiple authentications are allowed on the same AMQP 1.0 connection), see
-%%    https://datatracker.ietf.org/doc/html/rfc4422#section-3.8 , or
-%% 2. Claims Based Security (CBS) extension, see https://docs.oasis-open.org/amqp/amqp-cbs/v1.0/csd01/amqp-cbs-v1.0-csd01.html
-%%    and https://github.com/rabbitmq/rabbitmq-server/issues/9259
-%% 3. Simpler variation of 2. where a token is put to a special /token node.
-%%
-%% If the user does not refresh their credential on time (the only implementation currently),
-%% close the entire connection as we must assume that vhost access could have been revoked.
-%%
-%% If the user refreshes their credential on time (to be implemented), the AMQP reader should
-%% 1. rabbit_access_control:check_vhost_access/4
-%% 2. send a message to all its sessions which should then erase the permission caches and
-%% re-check all link permissions (i.e. whether reading / writing to exchanges / queues is still allowed).
-%% 3. cancel the current timer, and set a new timer
-%% similary as done for Stream connections, see https://github.com/rabbitmq/rabbitmq-server/issues/10292
-ensure_credential_expiry_timer(User) ->
+set_credential0(Cred,
+                State = #v1{connection = #v1_connection{
+                                            user = User0,
+                                            vhost = Vhost,
+                                            credential_timer = OldTimer} = Conn,
+                            tracked_channels = Chans,
+                            sock = Sock}) ->
+    rabbit_log:info("updating credential", []),
+    case rabbit_access_control:update_state(User0, Cred) of
+        {ok, User} ->
+            try rabbit_access_control:check_vhost_access(User, Vhost, {socket, Sock}, #{}) of
+                ok ->
+                    maps:foreach(fun(_ChanNum, Pid) ->
+                                         rabbit_amqp_session:reset_authz(Pid, User)
+                                 end, Chans),
+                    case OldTimer of
+                        undefined -> ok;
+                        Ref -> ok = erlang:cancel_timer(Ref, [{info, false}])
+                    end,
+                    NewTimer = maybe_start_credential_expiry_timer(User),
+                    State#v1{connection = Conn#v1_connection{
+                                            user = User,
+                                            credential_timer = NewTimer}}
+            catch _:Reason ->
+                      Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                                          "access to vhost ~s failed for new credential: ~p",
+                                          [Vhost, Reason]),
+                      handle_exception(State, 0, Error)
+            end;
+        Err ->
+            Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                                "credential update failed: ~p",
+                                [Err]),
+            handle_exception(State, 0, Error)
+    end.
+
+maybe_start_credential_expiry_timer(User) ->
     case rabbit_access_control:expiry_timestamp(User) of
         never ->
-            ok;
+            undefined;
         Ts when is_integer(Ts) ->
             Time = (Ts - os:system_time(second)) * 1000,
             rabbit_log:debug(
-              "Credential expires in ~b ms frow now (absolute timestamp = ~b seconds since epoch)",
+              "credential expires in ~b ms frow now (absolute timestamp = ~b seconds since epoch)",
               [Time, Ts]),
             case Time > 0 of
                 true ->
-                    _TimerRef = erlang:send_after(Time, self(), credential_expired),
-                    ok;
+                    erlang:send_after(Time, self(), credential_expired);
                 false ->
                     protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                                   "Credential expired ~b ms ago", [abs(Time)])
+                                   "credential expired ~b ms ago", [abs(Time)])
             end
     end.
 
