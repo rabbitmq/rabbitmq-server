@@ -249,7 +249,7 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
     end.
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
-    {'ok', rabbit_types:auth_user()} |
+    {'ok', rabbit_types:user()} |
     {'refused', string()} |
     {'error', any()}.
 
