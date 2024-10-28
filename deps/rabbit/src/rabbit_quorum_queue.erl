@@ -344,10 +344,8 @@ gather_policy_config(Q, IsQueueDeclaration) ->
     #{dead_letter_handler => DeadLetterHandler,
       max_length => MaxLength,
       max_bytes => MaxBytes,
-      single_active_consumer_on => single_active_consumer_on(Q),
       delivery_limit => DeliveryLimit,
       overflow_strategy => Overflow,
-      created => erlang:system_time(millisecond),
       expires => Expires,
       msg_ttl => MsgTTL
      }.
