@@ -160,7 +160,7 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     with_ch(Config,
       fun (Ch) ->
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>)
       end, upstream_downstream(Config)).
 
 multiple_upstreams_pattern(Config) ->
@@ -200,9 +200,9 @@ multiple_downstreams(Config) ->
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT)
-      end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream2">>, <<"fed2.downstream">>, ?EXPECT_FEDERATION_TIMEOUT)
+      end, upstream_downstream(Config) ++ [q(<<"fed2.downstream">>, Args)]).
 
 message_flow(Config) ->
     %% TODO: specifc source / target here
@@ -236,11 +236,11 @@ dynamic_reconfiguration(Config) ->
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
 
               %% Test that clearing connections works
               clear_upstream(Config, 0, <<"localhost">>),
-              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
+              expect_no_federation(Ch, <<"upstream">>, <<"fed1.downstream">>),
 
               %% Test that reading them and changing them works
               set_upstream(Config, 0,
@@ -249,7 +249,7 @@ dynamic_reconfiguration(Config) ->
               URI = rabbit_ct_broker_helpers:node_uri(Config, 0, [use_ipaddr]),
               set_upstream(Config, 0, <<"localhost">>, URI),
               set_upstream(Config, 0, <<"localhost">>, URI),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>)
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>)
       end, upstream_downstream(Config)).
 
 federate_unfederate(Config) ->
@@ -257,37 +257,38 @@ federate_unfederate(Config) ->
     with_ch(Config,
       fun (Ch) ->
               timer:sleep(?INITIAL_WAIT),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
-              expect_federation(Ch, <<"upstream">>, <<"fed.downstream2">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream">>, <<"fed1.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
+              expect_federation(Ch, <<"upstream2">>, <<"fed2.downstream">>, ?EXPECT_FEDERATION_TIMEOUT),
 
               %% clear the policy
               rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"fed">>),
 
-              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream">>),
-              expect_no_federation(Ch, <<"upstream">>, <<"fed.downstream2">>),
+              expect_no_federation(Ch, <<"upstream">>, <<"fed1.downstream">>),
+              expect_no_federation(Ch, <<"upstream2">>, <<"fed2.downstream">>),
 
               rabbit_ct_broker_helpers:set_policy(Config, 0,
-                <<"fed">>, <<"^fed\.">>, <<"all">>, [
+                <<"fed">>, <<"^fed1\.">>, <<"all">>, [
                 {<<"federation-upstream-set">>, <<"upstream">>}])
-      end, upstream_downstream(Config) ++ [q(<<"fed.downstream2">>, Args)]).
+      end, upstream_downstream(Config) ++ [q(<<"fed2.downstream">>, Args)]).
 
 dynamic_plugin_stop_start(Config) ->
-    DownQ2 = <<"fed.downstream2">>,
+    DownQ2 = <<"fed2.downstream">>,
     Args = ?config(target_queue_args, Config),
     with_ch(Config,
       fun (Ch) ->
           timer:sleep(?INITIAL_WAIT),
-          UpQ = <<"upstream">>,
-          DownQ1 = <<"fed.downstream">>,
-          expect_federation(Ch, UpQ, DownQ1, ?EXPECT_FEDERATION_TIMEOUT),
-          expect_federation(Ch, UpQ, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
+          UpQ1 = <<"upstream">>,
+          UpQ2 = <<"upstream2">>,
+          DownQ1 = <<"fed1.downstream">>,
+          expect_federation(Ch, UpQ1, DownQ1, ?EXPECT_FEDERATION_TIMEOUT),
+          expect_federation(Ch, UpQ2, DownQ2, ?EXPECT_FEDERATION_TIMEOUT),
 
           %% Disable the plugin, the link disappears
           ct:pal("Stopping rabbitmq_federation"),
           ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, "rabbitmq_federation"),
 
-          expect_no_federation(Ch, UpQ, DownQ1),
-          expect_no_federation(Ch, UpQ, DownQ2),
+          expect_no_federation(Ch, UpQ1, DownQ1),
+          expect_no_federation(Ch, UpQ2, DownQ2),
 
           maybe_declare_queue(Config, Ch, q(DownQ1, Args)),
           maybe_declare_queue(Config, Ch, q(DownQ2, Args)),
@@ -305,12 +306,13 @@ dynamic_plugin_stop_start(Config) ->
                         Entry || Entry <- Status,
                         proplists:get_value(queue, Entry) =:= DownQ1 orelse
                         proplists:get_value(queue, Entry) =:= DownQ2,
-                        proplists:get_value(upstream_queue, Entry) =:= UpQ,
+                        proplists:get_value(upstream_queue, Entry) =:= UpQ1 orelse
+                                     proplists:get_value(upstream_queue, Entry) =:= UpQ2,
                         proplists:get_value(status, Entry) =:= running
                     ],
                     length(L) =:= 2
             end),
-          expect_federation(Ch, UpQ, DownQ1, 120000)
+          expect_federation(Ch, UpQ1, DownQ1, 120000)
       end, upstream_downstream(Config) ++ [q(DownQ2, Args)]).
 
 restart_upstream(Config) ->
@@ -392,4 +394,4 @@ upstream_downstream() ->
 upstream_downstream(Config) ->
     SourceArgs = ?config(source_queue_args, Config),
     TargetArgs = ?config(target_queue_args, Config),
-    [q(<<"upstream">>, SourceArgs), q(<<"fed.downstream">>, TargetArgs)].
+    [q(<<"upstream">>, SourceArgs), q(<<"fed1.downstream">>, TargetArgs)].
