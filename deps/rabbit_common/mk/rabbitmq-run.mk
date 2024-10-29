@@ -305,7 +305,7 @@ REDIRECT_STDIO = > $(RABBITMQ_LOG_BASE)/startup_log \
 		 2> $(RABBITMQ_LOG_BASE)/startup_err
 endif
 
-RMQCTL_WAIT_TIMEOUT ?= 60
+RMQCTL_WAIT_TIMEOUT ?= 60000
 
 start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
@@ -422,7 +422,7 @@ restart-cluster:
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
-		  " & \
+		  "; \
 	done; \
 	wait
 
