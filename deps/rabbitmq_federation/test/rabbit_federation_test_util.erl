@@ -96,12 +96,17 @@ setup_federation_with_upstream_params(Config, ExtraParams) ->
 
     rabbit_ct_broker_helpers:rpc(
       Config, 0, rabbit_policy, set,
-      [<<"/">>, <<"fed">>, <<"^fed\.">>, [{<<"federation-upstream-set">>, <<"upstream">>}],
+      [<<"/">>, <<"fed">>, <<"^fed1\.">>, [{<<"federation-upstream-set">>, <<"upstream">>}],
        0, <<"all">>, <<"acting-user">>]),
 
     rabbit_ct_broker_helpers:rpc(
       Config, 0, rabbit_policy, set,
-      [<<"/">>, <<"fed12">>, <<"^fed12\.">>, [{<<"federation-upstream-set">>, <<"upstream12">>}],
+      [<<"/">>, <<"fed2">>, <<"^fed2\.">>, [{<<"federation-upstream-set">>, <<"upstream2">>}],
+       0, <<"all">>, <<"acting-user">>]),
+
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, rabbit_policy, set,
+      [<<"/">>, <<"fed12">>, <<"^fed3\.">>, [{<<"federation-upstream-set">>, <<"upstream12">>}],
        2, <<"all">>, <<"acting-user">>]),
 
     rabbit_ct_broker_helpers:set_policy(Config, 0,
@@ -144,10 +149,10 @@ setup_down_federation(Config) ->
         {<<"queue">>, <<"upstream">>}]]),
     rabbit_ct_broker_helpers:set_policy(
       Config, 0,
-      <<"fed">>, <<"^fed\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
+      <<"fed">>, <<"^fed1\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
     rabbit_ct_broker_helpers:set_policy(
       Config, 0,
-      <<"fed">>, <<"^fed\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
+      <<"fed">>, <<"^fed1\.">>, <<"all">>, [{<<"federation-upstream-set">>, <<"upstream">>}]),
     Config.
 
 wait_for_federation(Retries, Fun) ->
