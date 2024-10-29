@@ -2331,8 +2331,8 @@ extract_ssl_cert_client_id_settings() ->
 
 extract_client_id_san_type(Mode) ->
     {Mode,
-        application:get_env(?APP_NAME, ssl_cert_client_id_san_type, dns),
-        application:get_env(?APP_NAME, ssl_cert_client_id_san_index, 0)
+        application:get_env(?APP_NAME, ssl_cert_login_san_type, dns),
+        application:get_env(?APP_NAME, ssl_cert_login_san_index, 0)
     }.
 
 
