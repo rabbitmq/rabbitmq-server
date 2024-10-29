@@ -225,7 +225,7 @@ standing_by(
   when EventContent =/= notify_when_done ->
     ?LOG_DEBUG(
        "Feature flags: registering controller globally before "
-       "proceeding with task: ~tp",
+       "proceeding with task: ~0tp",
        [EventContent],
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
 
