@@ -205,7 +205,7 @@ mqtt_config(ssl_user_with_client_id_in_cert_san_dns) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, false}, 
                      {ssl_cert_client_id_from, subject_alternative_name},
-                     {ssl_cert_client_id_san_type, dns}]};
+                     {ssl_cert_login_san_type, dns}]};
 mqtt_config(ssl_user_with_client_id_in_cert_dn) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, false}, 
