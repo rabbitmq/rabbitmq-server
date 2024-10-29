@@ -305,7 +305,7 @@ REDIRECT_STDIO = > $(RABBITMQ_LOG_BASE)/startup_log \
 		 2> $(RABBITMQ_LOG_BASE)/startup_err
 endif
 
-RMQCTL_WAIT_TIMEOUT ?= 60
+RMQCTL_WAIT_TIMEOUT ?= 60000
 
 start-background-node: node-tmpdir $(DIST_TARGET)
 	$(BASIC_SCRIPT_ENV_SETTINGS) \
