@@ -435,7 +435,7 @@ restart-cluster:
 		  -rabbitmq_web_stomp_examples listener [{port,$$((61633 + $$n - 1))}] \
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
-		  " & \
+		  "; \
 	done; \
 	wait
 
