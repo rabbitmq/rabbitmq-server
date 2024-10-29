@@ -88,7 +88,7 @@ run(Config) ->
               ok = ?CMD:run([Id], Opts)
       end,
       [rabbit_federation_test_util:q(<<"upstream">>),
-       rabbit_federation_test_util:q(<<"fed.downstream">>)]).
+       rabbit_federation_test_util:q(<<"fed1.downstream">>)]).
 
 run_not_found(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
