@@ -11,6 +11,7 @@
 
 -behaviour(gen_server).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 -include("rabbit_amqp.hrl").
@@ -601,8 +602,8 @@ log_error_and_close_session(
                                    writer_pid = WriterPid,
                                    channel_num = Ch}}) ->
     End = #'v1_0.end'{error = Error},
-    rabbit_log:warning("Closing session for connection ~p: ~tp",
-                       [ReaderPid, Error]),
+    ?LOG_WARNING("Closing session for connection ~p: ~tp",
+                 [ReaderPid, Error]),
     ok = rabbit_amqp_writer:send_command_sync(WriterPid, Ch, End),
     {stop, {shutdown, Error}, State}.
 
@@ -889,8 +890,8 @@ destroy_outgoing_link(_, _, _, Acc) ->
     Acc.
 
 detach(Handle, Link, Error = #'v1_0.error'{}) ->
-    rabbit_log:warning("Detaching link handle ~b due to error: ~tp",
-                       [Handle, Error]),
+    ?LOG_WARNING("Detaching link handle ~b due to error: ~tp",
+                 [Handle, Error]),
     publisher_or_consumer_deleted(Link),
     #'v1_0.detach'{handle = ?UINT(Handle),
                    closed = true,
@@ -981,8 +982,8 @@ handle_frame(#'v1_0.flow'{handle = Handle} = Flow,
                                 %% "If set to a handle that is not currently associated with
                                 %% an attached link, the recipient MUST respond by ending the
                                 %% session with an unattached-handle session error." [2.7.4]
-                                rabbit_log:warning(
-                                  "Received Flow frame for unknown link handle: ~tp", [Flow]),
+                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tp",
+                                             [Flow]),
                                 protocol_error(
                                   ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                                   "Unattached link handle: ~b", [HandleInt])
@@ -2161,9 +2162,9 @@ handle_deliver(ConsumerTag, AckRequired,
                         outgoing_links = OutgoingLinks};
         _ ->
             %% TODO handle missing link -- why does the queue think it's there?
-            rabbit_log:warning(
-              "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
-              [Handle, ConsumerTag, QName]),
+            ?LOG_WARNING(
+               "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
+               [Handle, ConsumerTag, QName]),
             State
     end.
 
@@ -3008,7 +3009,7 @@ credit_reply_timeout(QType, QName) ->
     Fmt = "Timed out waiting for credit reply from ~s ~s. "
     "Hint: Enable feature flag rabbitmq_4.0.0",
     Args = [QType, rabbit_misc:rs(QName)],
-    rabbit_log:error(Fmt, Args),
+    ?LOG_ERROR(Fmt, Args),
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
 
 default(undefined, Default) -> Default;
@@ -3547,7 +3548,7 @@ recheck_authz(#state{incoming_links = IncomingLinks,
                      permission_cache = Cache0,
                      cfg = #cfg{user = User}
                     } = State) ->
-    rabbit_log:debug("rechecking link authorizations", []),
+    ?LOG_DEBUG("rechecking link authorizations", []),
     Cache1 = maps:fold(
                fun(_Handle, #incoming_link{exchange = X}, Cache) ->
                        case X of
