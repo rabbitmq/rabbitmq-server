@@ -46,7 +46,8 @@ merge_app_env(Config) ->
     rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics, fine},
-                                              {collect_statistics_interval, 500}
+                                              {collect_statistics_interval, 500},
+                                              {core_metrics_gc_interval, 5000}
                                              ]}).
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -293,9 +294,12 @@ connection(Config) ->
     [_] = read_table_rpc(Config, connection_coarse_metrics),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     force_metric_gc(Config),
-    [] = read_table_rpc(Config, connection_created),
-    [] = read_table_rpc(Config, connection_metrics),
-    [] = read_table_rpc(Config, connection_coarse_metrics),
+    ?awaitMatch([], read_table_rpc(Config, connection_created),
+                30000),
+    ?awaitMatch([], read_table_rpc(Config, connection_metrics),
+                30000),
+    ?awaitMatch([], read_table_rpc(Config, connection_coarse_metrics),
+                30000),
     ok.
 
 channel(Config) ->
