@@ -63,3 +63,6 @@ DNS.2 = localhost
 
 [ client_alt_names ]
 DNS.1 = rabbit_client_id
+DNS.2 = rabbit_client_id_ext
+email.1 = rabbit_client@localhost
+URI.1 = rabbit_client_id_uri

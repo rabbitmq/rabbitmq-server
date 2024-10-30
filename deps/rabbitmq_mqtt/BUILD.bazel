@@ -135,7 +135,7 @@ rabbitmq_integration_suite(
         "test/rabbit_auth_backend_mqtt_mock.beam",
         "test/util.beam",
     ],
-    shard_count = 18,
+    shard_count = 22,
     runtime_deps = [
         "@emqtt//:erlang_app",
         "@meck//:erlang_app",

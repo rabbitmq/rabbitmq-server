@@ -72,6 +72,12 @@ sub_groups() ->
        [client_id_from_cert_san_dns,
         invalid_client_id_from_cert_san_dns
        ]},
+     {ssl_user_with_client_id_in_cert_san_dns_1, [], 
+       [client_id_from_cert_san_dns_1        
+       ]},
+     {ssl_user_with_client_id_in_cert_san_email, [], 
+       [client_id_from_cert_san_email     
+       ]},            
      {ssl_user_with_client_id_in_cert_dn, [], 
        [client_id_from_cert_dn
        ]},  
@@ -205,7 +211,18 @@ mqtt_config(ssl_user_with_client_id_in_cert_san_dns) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, false}, 
                      {ssl_cert_client_id_from, subject_alternative_name},
-                     {ssl_cert_client_id_san_type, dns}]};
+                     {ssl_cert_login_san_type, dns}]};
+mqtt_config(ssl_user_with_client_id_in_cert_san_dns_1) ->
+    {rabbitmq_mqtt, [{ssl_cert_login,  true},
+                     {allow_anonymous, false}, 
+                     {ssl_cert_client_id_from, subject_alternative_name},
+                     {ssl_cert_login_san_type, dns},
+                     {ssl_cert_login_san_index, 1}]}; 
+mqtt_config(ssl_user_with_client_id_in_cert_san_email) ->
+    {rabbitmq_mqtt, [{ssl_cert_login,  true},
+                     {allow_anonymous, false}, 
+                     {ssl_cert_client_id_from, subject_alternative_name},
+                     {ssl_cert_login_san_type, email}]};                                       
 mqtt_config(ssl_user_with_client_id_in_cert_dn) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, false}, 
@@ -216,6 +233,8 @@ mqtt_config(_) ->
 
 auth_config(T) when T == client_id_propagation; 
                     T == ssl_user_with_client_id_in_cert_san_dns;
+                    T == ssl_user_with_client_id_in_cert_san_dns_1;
+                    T == ssl_user_with_client_id_in_cert_san_email;
                     T == ssl_user_with_client_id_in_cert_dn ->
     {rabbit, [
             {auth_backends, [rabbit_auth_backend_mqtt_mock]}
@@ -316,6 +335,8 @@ init_per_testcase(T, Config)
   when T =:= client_id_propagation;
        T =:= invalid_client_id_from_cert_san_dns;
        T =:= client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_san_dns_1;
+       T =:= client_id_from_cert_san_email;
        T =:= client_id_from_cert_dn ->
     SetupProcess = setup_rabbit_auth_backend_mqtt_mock(Config),
     rabbit_ct_helpers:set_config(Config, {mock_setup_process, SetupProcess});
@@ -444,6 +465,8 @@ end_per_testcase(T, Config)
    when T =:= client_id_propagation;
        T =:= invalid_client_id_from_cert_san_dns;
        T =:= client_id_from_cert_san_dns;
+       T =:= client_id_from_cert_san_dns_1;
+       T =:= client_id_from_cert_san_email;
        T =:= client_id_from_cert_dn ->
     SetupProcess = ?config(mock_setup_process, Config),
     SetupProcess ! stop;
@@ -500,7 +523,31 @@ user_credentials_auth(Config) ->
         Config).
 
 client_id_from_cert_san_dns(Config) ->    
-    ExpectedClientId = <<"rabbit_client_id">>, % Found in the client's certificate as SAN type CLIENT_ID 
+    ExpectedClientId = <<"rabbit_client_id">>, % Found in the client's certificate as SAN type DNS 
+    MqttClientId = ExpectedClientId,
+    {ok, C} = connect_ssl(MqttClientId, Config),
+    {ok, _} = emqtt:connect(C),
+    [{authentication, AuthProps}] = rpc(Config, 0,
+                                        rabbit_auth_backend_mqtt_mock,
+                                        get,
+                                        [authentication]),
+    ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
+    ok = emqtt:disconnect(C).
+
+client_id_from_cert_san_dns_1(Config) ->    
+    ExpectedClientId = <<"rabbit_client_id_ext">>, % Found in the client's certificate as SAN type DNS
+    MqttClientId = ExpectedClientId,
+    {ok, C} = connect_ssl(MqttClientId, Config),
+    {ok, _} = emqtt:connect(C),
+    [{authentication, AuthProps}] = rpc(Config, 0,
+                                        rabbit_auth_backend_mqtt_mock,
+                                        get,
+                                        [authentication]),
+    ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
+    ok = emqtt:disconnect(C).
+
+client_id_from_cert_san_email(Config) ->    
+    ExpectedClientId = <<"rabbit_client@localhost">>, % Found in the client's certificate as SAN type email
     MqttClientId = ExpectedClientId,
     {ok, C} = connect_ssl(MqttClientId, Config),
     {ok, _} = emqtt:connect(C),
