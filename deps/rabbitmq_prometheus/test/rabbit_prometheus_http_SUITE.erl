@@ -248,7 +248,7 @@ init_per_group(special_chars, Config0) ->
                {connection, VHostConn},
                {channel, VHostCh}
                |Config1],
-    init_per_group(special_chars, Config2, []);
+    Config2;
 
 init_per_group(authentication, Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
