@@ -106,6 +106,7 @@
          get_state/1,
          get_stability/1,
          get_require_level/1,
+         get_experiment_level/1,
          check_node_compatibility/1, check_node_compatibility/2,
          sync_feature_flags_with_cluster/2,
          refresh_feature_flags_after_app_load/0,
@@ -149,6 +150,7 @@
                            doc_url => string(),
                            stability => stability(),
                            require_level => require_level(),
+                           experiment_level => experiment_level(),
                            depends_on => [feature_name()],
                            callbacks =>
                            #{callback_name() => callback_fun_name()}}.
@@ -186,6 +188,7 @@
                                     doc_url => string(),
                                     stability => stability(),
                                     require_level => require_level(),
+                                    experiment_level => experiment_level(),
                                     depends_on => [feature_name()],
                                     callbacks =>
                                     #{callback_name() => callback_fun_name()},
@@ -218,6 +221,24 @@
 %%
 %% A soft required feature flag will be automatically enabled when a RabbitMQ
 %% node is upgraded to a version where it is required.
+
+-type experiment_level() :: unsupported | supported.
+%% The level of support of an experimental feature flag.
+%%
+%% At first, an experimental feature flag is offered to give a chance to users
+%% to try it and give feedback as part of the design and development of the
+%% feature. At this stage, it is unsupported: it must not be enabled in a
+%% production environment and upgrade to a later version of RabbitMQ while
+%% this experimental feature flag is enabled is not supported.
+%%
+%% Then, the experimental feature flag becomes supported. At this point, it is
+%% stable enough that upgrading is guarantied and help will be provided.
+%% However it is not mature enough to be marked as stable (which would make it
+%% enabled by default in a new deployment or when running `rabbitmqctl
+%% enable_feature_flag all'.
+%%
+%% The next step is to change its stability to `stable'. Once done, the
+%% `experiment_level()' field is irrelevant.
 
 -type callback_fun_name() :: {Module :: module(), Function :: atom()}.
 %% The name of the module and function to call when changing the state of
@@ -809,6 +830,45 @@ get_require_level(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
         _        -> none
     end.
 
+-spec get_experiment_level
+(FeatureName) -> ExperimentLevel | undefined when
+      FeatureName :: feature_name(),
+      ExperimentLevel :: experiment_level() | none;
+(FeatureProps) -> ExperimentLevel when
+      FeatureProps ::
+      feature_props_extended() |
+      rabbit_deprecated_features:feature_props_extended(),
+      ExperimentLevel :: experiment_level() | none.
+%% @doc
+%% Returns the experimental level of an experimental feature flag.
+%%
+%% The possible experiment levels are:
+%% <ul>
+%% <li>`unsupported': the experimental feature flag must not be enabled in
+%%   production and upgrades with it enabled is unsupported.</li>
+%% <li>`supported': the experimental feature flag is not yet stable enough but
+%%   upgrades are guarantied to be possible. This is returned too if the
+%%   feature flag is stable or required.</li>
+%% </ul>
+%%
+%% @param FeatureName The name of the feature flag to check.
+%% @param FeatureProps A feature flag properties map.
+%% @returns `unsupported', `supported', or `undefined' if the given feature
+%% flag name doesn't correspond to a known feature flag.
+
+get_experiment_level(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
+        undefined    -> undefined;
+        FeatureProps -> get_experiment_level(FeatureProps)
+    end;
+get_experiment_level(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        experimental -> maps:get(experiment_level, FeatureProps, unsupported);
+        _            -> supported
+    end;
+get_experiment_level(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+    supported.
+
 %% -------------------------------------------------------------------
 %% Feature flags registry.
 %% -------------------------------------------------------------------
@@ -968,6 +1028,7 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                               doc_url,
                               stability,
                               require_level,
+                              experiment_level,
                               depends_on,
                               callbacks],
                 ?assertEqual([], maps:keys(FeatureProps) -- ValidProps),
@@ -979,6 +1040,17 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                 ?assert(Stability =:= stable orelse
                         Stability =:= experimental orelse
                         Stability =:= required),
+                ?assert(Stability =:= experimental orelse
+                        not maps:is_key(experiment_level, FeatureProps)),
+                ?assert(Stability =:= required orelse
+                        not maps:is_key(require_level, FeatureProps)),
+                RequireLevel = maps:get(require_level, FeatureProps, soft),
+                ?assert(RequireLevel =:= hard orelse RequireLevel =:= soft),
+                ExperimentLevel = maps:get(
+                                    experiment_level, FeatureProps,
+                                    unsupported),
+                ?assert(ExperimentLevel =:= unsupported orelse
+                        ExperimentLevel =:= supported),
                 ?assertNot(maps:is_key(migration_fun, FeatureProps)),
                 ?assertNot(maps:is_key(warning, FeatureProps)),
                 case FeatureProps of
