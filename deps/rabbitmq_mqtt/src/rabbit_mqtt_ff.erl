@@ -16,13 +16,15 @@
 -rabbit_feature_flag(
    {?QUEUE_TYPE_QOS_0,
     #{desc          => "Support pseudo queue type for MQTT QoS 0 subscribers omitting a queue process",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 -rabbit_feature_flag(
    {delete_ra_cluster_mqtt_node,
     #{desc          => "Delete Ra cluster 'mqtt_node' since MQTT client IDs are tracked locally",
-      stability     => required
+      stability     => required,
+      require_level => hard
      }}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -38,6 +40,7 @@
    {mqtt_v5,
     #{desc       => "Support MQTT 5.0",
       stability  => required,
+      require_level => hard,
       depends_on => [
                      %% MQTT 5.0 feature Will Delay Interval depends on client ID tracking in pg local.
                      delete_ra_cluster_mqtt_node,

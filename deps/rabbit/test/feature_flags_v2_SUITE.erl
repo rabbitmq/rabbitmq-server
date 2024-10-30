@@ -47,8 +47,9 @@
          enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2/1,
          enable_feature_flag_with_post_enable/1,
          failed_enable_feature_flag_with_post_enable/1,
-         have_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
-         have_required_feature_flag_in_cluster_and_add_member_without_it/1,
+         have_soft_required_feature_flag_in_cluster_and_add_member_with_it_disabled/1,
+         have_soft_required_feature_flag_in_cluster_and_add_member_without_it/1,
+         have_hard_required_feature_flag_in_cluster_and_add_member_without_it/1,
          have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled/1,
          error_during_migration_after_initial_success/1,
          controller_waits_for_own_task_to_finish_before_exiting/1,
@@ -97,8 +98,9 @@ groups() ->
        enable_feature_flag_in_cluster_and_remove_member_concurrently_mfv2,
        enable_feature_flag_with_post_enable,
        failed_enable_feature_flag_with_post_enable,
-       have_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
-       have_required_feature_flag_in_cluster_and_add_member_without_it,
+       have_soft_required_feature_flag_in_cluster_and_add_member_with_it_disabled,
+       have_soft_required_feature_flag_in_cluster_and_add_member_without_it,
+       have_hard_required_feature_flag_in_cluster_and_add_member_without_it,
        have_unknown_feature_flag_in_cluster_and_add_member_with_it_enabled,
        error_during_migration_after_initial_success,
        controller_waits_for_own_task_to_finish_before_exiting,
@@ -1327,7 +1329,7 @@ failed_enable_feature_flag_with_post_enable(Config) ->
 
     ok.
 
-have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
+have_soft_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
   Config) ->
     AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
     connect_nodes(Nodes),
@@ -1410,7 +1412,7 @@ have_required_feature_flag_in_cluster_and_add_member_with_it_disabled(
          || Node <- AllNodes],
     ok.
 
-have_required_feature_flag_in_cluster_and_add_member_without_it(
+have_soft_required_feature_flag_in_cluster_and_add_member_without_it(
   Config) ->
     AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
     connect_nodes(Nodes),
@@ -1424,6 +1426,98 @@ have_required_feature_flag_in_cluster_and_add_member_without_it(
     RequiredFeatureFlags = #{FeatureName =>
                              #{provided_by => rabbit,
                                stability => required}},
+    ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
+    ?assertEqual(ok, inject_on_nodes(Nodes, RequiredFeatureFlags)),
+
+    ct:pal(
+      "Checking the feature flag is supported and enabled on existing the "
+      "cluster only"),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assertNot(rabbit_feature_flags:is_enabled(FeatureName)),
+
+                   DBDir = rabbit_db:dir(),
+                   ok = filelib:ensure_path(DBDir),
+                   SomeFile = filename:join(DBDir, "some-file.db"),
+                   ok = file:write_file(SomeFile, <<>>),
+                   ?assertNot(rabbit_db:is_virgin_node()),
+                   ok
+           end,
+           []),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assert(rabbit_feature_flags:is_supported(FeatureName)),
+                   ?assert(rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- Nodes],
+
+    %% Check compatibility between NewNodes and Nodes.
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:check_node_compatibility(
+                        FirstNode)),
+                   ok
+           end, []),
+
+    %% Add node to cluster and synchronize feature flags.
+    connect_nodes(AllNodes),
+    override_running_nodes(AllNodes),
+    ct:pal(
+      "Synchronizing feature flags in the expanded cluster~n"
+      "~n"
+      "NOTE: Error messages about crashed migration functions can be "
+      "ignored for feature~n"
+      "      flags other than `~ts`~n"
+      "      because they assume they run inside RabbitMQ.",
+      [FeatureName]),
+    ok = run_on_node(
+           NewNode,
+           fun() ->
+                   ?assertEqual(
+                      ok,
+                      rabbit_feature_flags:sync_feature_flags_with_cluster(
+                        Nodes, false)),
+                   ok
+           end, []),
+
+    ct:pal("Checking the feature flag state is unchanged"),
+    _ = [ok =
+         run_on_node(
+           Node,
+           fun() ->
+                   ?assertEqual(
+                      true,
+                      rabbit_feature_flags:is_enabled(FeatureName)),
+                   ok
+           end,
+           [])
+         || Node <- AllNodes],
+    ok.
+
+have_hard_required_feature_flag_in_cluster_and_add_member_without_it(
+  Config) ->
+    AllNodes = [NewNode | [FirstNode | _] = Nodes] = ?config(nodes, Config),
+    connect_nodes(Nodes),
+    override_running_nodes([NewNode]),
+    override_running_nodes(Nodes),
+
+    FeatureName = ?FUNCTION_NAME,
+    FeatureFlags = #{FeatureName =>
+                     #{provided_by => rabbit,
+                       stability => stable}},
+    RequiredFeatureFlags = #{FeatureName =>
+                             #{provided_by => rabbit,
+                               stability => required,
+                               require_level => hard}},
     ?assertEqual(ok, inject_on_nodes([NewNode], FeatureFlags)),
     ?assertEqual(ok, inject_on_nodes(Nodes, RequiredFeatureFlags)),
 
