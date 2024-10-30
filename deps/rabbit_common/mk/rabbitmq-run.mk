@@ -423,6 +423,7 @@ restart-cluster:
 		  -rabbitmq_prometheus tcp_config [{port,$$((15692 + $$n - 1))}] \
 		  -rabbitmq_stream tcp_listeners [$$((5552 + $$n - 1))] \
 		  "; \
+		  $(RABBITMQCTL) -n "$$nodename" await_online_nodes $(NODES) || exit 1; \
 	done; \
 	wait
 
