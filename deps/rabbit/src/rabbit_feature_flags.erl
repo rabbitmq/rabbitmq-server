@@ -348,6 +348,8 @@
               feature_state/0,
               feature_states/0,
               stability/0,
+              require_level/0,
+              experiment_level/0,
               callback_fun_name/0,
               callbacks/0,
               callback_name/0,
