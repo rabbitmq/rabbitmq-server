@@ -11,6 +11,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_client_helpers, [close_connection/1, close_channel/1,
@@ -46,8 +47,7 @@ groups() ->
                        more_than_one_resource_server_id_not_allowed_in_one_token,
                        mqtt_expired_token,
                        mqtt_expirable_token,
-                       web_mqtt_expirable_token,
-                       amqp_expirable_token
+                       web_mqtt_expirable_token
                       ]},
 
      {token_refresh, [], [
@@ -73,7 +73,14 @@ groups() ->
                       ]},
      {rich_authorization_requests, [], [
          test_successful_connection_with_rich_authorization_request_token
-     ]}
+     ]},
+     {amqp, [shuffle],
+      [
+       amqp_token_expire,
+       amqp_token_refresh_expire,
+       amqp_token_refresh_vhost_permission,
+       amqp_token_refresh_revoked_permissions
+      ]}
     ].
 
 %%
@@ -100,7 +107,9 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, rabbit_ct_broker_helpers:teardown_steps()).
 
-
+init_per_group(amqp, Config) ->
+    {ok, _} = application:ensure_all_started(rabbitmq_amqp_client),
+    Config;
 init_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
@@ -109,6 +118,8 @@ init_per_group(_Group, Config) ->
                   [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
     Config.
 
+end_per_group(amqp, Config) ->
+    Config;
 end_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
@@ -500,29 +511,20 @@ mqtt_expirable_token0(Port, AdditionalOpts, Connect, Config) ->
     after Millis * 2 -> ct:fail("missing DISCONNECT packet from server")
     end.
 
-amqp_expirable_token(Config) ->
-    {ok, _} = application:ensure_all_started(rabbitmq_amqp_client),
-
-    Seconds = 4,
+%% Test that RabbitMQ closes the AMQP 1.0 connection when the token expires.
+amqp_token_expire(Config) ->
+    Seconds = 3,
     Millis = Seconds * 1000,
     {_Algo, Token} = generate_expirable_token(Config,
-                                              [<<"rabbitmq.configure:*/*">>,
-                                               <<"rabbitmq.write:*/*">>,
-                                               <<"rabbitmq.read:*/*">>],
+                                              [<<"rabbitmq.configure:%2F/*">>,
+                                               <<"rabbitmq.write:%2F/*">>,
+                                               <<"rabbitmq.read:%2F/*">>],
                                               Seconds),
 
-    %% Send and receive a message via AMQP 1.0.
+    %% Send and receive a message.
+    {Connection, Session, LinkPair} = amqp_init(Token, Config),
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    OpnConf = #{address => Host,
-                port => Port,
-                container_id => <<"my container">>,
-                sasl => {plain, <<"">>, Token}},
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"my sender">>, Address),
     receive {amqp10_event, {link, Sender, credited}} -> ok
@@ -535,7 +537,7 @@ amqp_expirable_token(Config) ->
     {ok, Msg} = amqp10_client:get_msg(Receiver),
     ?assertEqual([Body], amqp10_msg:body(Msg)),
 
-    %% In 4 seconds from now, we expect that RabbitMQ disconnects us because our token expired.
+    %% In 3 seconds from now, we expect that RabbitMQ disconnects us because our token expired.
     receive {amqp10_event,
              {connection, Connection,
               {closed, {unauthorized_access, <<"credential expired">>}}}} ->
@@ -543,6 +545,224 @@ amqp_expirable_token(Config) ->
     after Millis * 2 ->
               ct:fail("server did not close our connection")
     end.
+
+%% First, test the success case that an OAuth 2.0 token can be renewed via AMQP 1.0.
+%% Second, test that the new token expires.
+amqp_token_refresh_expire(Config) ->
+    Seconds = 3,
+    Millis = Seconds * 1000,
+    Scopes = [<<"rabbitmq.configure:%2F/*">>,
+              <<"rabbitmq.write:%2F/*">>,
+              <<"rabbitmq.read:%2F/*">>],
+    {_, Token1} = generate_expirable_token(Config, Scopes, Seconds),
+
+    %% Send and receive a message.
+    {Connection, Session, LinkPair} = amqp_init(Token1, Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"my sender">>, Address),
+    receive {amqp10_event, {link, Sender, credited}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>, true)),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"my receiver">>, Address),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(Msg1)),
+
+    %% Renew token before the old one expires.
+    {_, Token2} = generate_expirable_token(Config, Scopes, Seconds * 2),
+    ok = rabbitmq_amqp_client:set_token(LinkPair, Token2),
+
+    %% Wait until old token would have expired.
+    timer:sleep(Millis + 500),
+
+    %% We should still be able to send and receive a message thanks to the new token.
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t2">>, <<"m2">>, true)),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(Msg2)),
+
+    %% In 2.5 seconds from now, we expect that RabbitMQ
+    %% disconnects us because the new token should expire.
+    receive {amqp10_event,
+             {connection, Connection,
+              {closed, {unauthorized_access, <<"credential expired">>}}}} ->
+                ok
+    after Millis * 2 ->
+              ct:fail("server did not close our connection")
+    end.
+
+%% Test that RabbitMQ closes the AMQP 1.0 connection if the client
+%% submits a new token without any permission to the vhost.
+amqp_token_refresh_vhost_permission(Config) ->
+    {_, Token1} = generate_valid_token(Config),
+    {Connection, _Session, LinkPair} = amqp_init(Token1, Config),
+
+    {_, Token2} = generate_valid_token(Config,
+                                       [<<"rabbitmq.configure:wrongvhost/*">>,
+                                        <<"rabbitmq.write:wrongvhost/*">>,
+                                        <<"rabbitmq.read:wrongvhost/*">>]),
+    ok = rabbitmq_amqp_client:set_token(LinkPair, Token2),
+    receive {amqp10_event,
+             {connection, Connection,
+              {closed, {unauthorized_access, Reason}}}} ->
+                ?assertMatch(<<"access to vhost / failed for new credential:", _/binary>>,
+                             Reason)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end.
+
+%% Test that RabbitMQ closes AMQP 1.0 sessions if the client
+%% submits a new token with reduced permissions.
+amqp_token_refresh_revoked_permissions(Config) ->
+    {_, Token1} = generate_expirable_token(Config,
+                                           [<<"rabbitmq.configure:%2F/*/*">>,
+                                            <<"rabbitmq.write:%2F/*/*">>,
+                                            <<"rabbitmq.read:%2F/*/*">>],
+                                           30),
+    {Connection, Session1, LinkPair} = amqp_init(Token1, Config),
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Session3} = amqp10_client:begin_session_sync(Connection),
+    {ok, Session4} = amqp10_client:begin_session_sync(Connection),
+    {ok, Session5} = amqp10_client:begin_session_sync(Connection),
+    {ok, Session6} = amqp10_client:begin_session_sync(Connection),
+
+    {ok, Sender2} = amqp10_client:attach_sender_link_sync(
+                      Session2, <<"sender 2">>,
+                      rabbitmq_amqp_address:exchange(<<"amq.fanout">>)),
+    receive {amqp10_event, {link, Sender2, credited}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    QName = <<"q1">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.topic">>, <<"#">>, #{}),
+    {ok, Receiver3} = amqp10_client:attach_receiver_link(
+                        Session3, <<"receiver 3">>, rabbitmq_amqp_address:queue(QName)),
+    receive {amqp10_event, {link, Receiver3, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender4} = amqp10_client:attach_sender_link_sync(Session4, <<"sender 4">>, null),
+    receive {amqp10_event, {link, Sender4, credited}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:send_msg(
+           Sender4,
+           amqp10_msg:set_properties(
+             #{to => rabbitmq_amqp_address:queue(QName)},
+             amqp10_msg:new(<<"t4">>, <<"m4a">>))),
+    receive {amqp10_disposition, {accepted, <<"t4">>}} -> ok
+    after 5000 -> ct:fail({settled_timeout, <<"t4">>})
+    end,
+
+    {ok, Sender5} = amqp10_client:attach_sender_link_sync(Session5, <<"sender 5">>, null),
+    receive {amqp10_event, {link, Sender5, credited}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:send_msg(
+           Sender5,
+           amqp10_msg:set_properties(
+             #{to => rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"topic-1">>)},
+             amqp10_msg:new(<<"t5">>, <<"m5a">>))),
+    receive {amqp10_disposition, {accepted, <<"t5">>}} -> ok
+    after 5000 -> ct:fail({settled_timeout, <<"t5">>})
+    end,
+
+    XName = <<"e1">>,
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, #{type => <<"fanout">>}),
+    {ok, Sender6} = amqp10_client:attach_sender_link_sync(
+                      Session6, <<"sender 6">>,
+                      rabbitmq_amqp_address:exchange(XName)),
+    receive {amqp10_event, {link, Sender6, credited}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Revoke the previous granted permissions on the default vhost.
+    {_, Token2} = generate_expirable_token(
+                    Config,
+                    [
+                     %% Set configure access on q1 and e1 so that we can delete this queue and exchange later.
+                     <<"rabbitmq.configure:%2F/*1/nope">>,
+                     %% Set write access on amq.topic so that we can test the revoked topic permission.
+                     <<"rabbitmq.write:%2F/amq.topic/nope">>,
+                     <<"rabbitmq.read:%2F/nope/nope">>],
+                    30),
+    flush(<<"setting token...">>),
+    ok = rabbitmq_amqp_client:set_token(LinkPair, Token2),
+
+    %% We expect RabbitMQ to close Session2 because we are no longer allowed to write to exchange amq.fanout.
+    receive
+        {amqp10_event,
+         {session, Session2,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, <<"write access to exchange 'amq.fanout' in vhost '/' refused", _/binary>>}}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% We expect RabbitMQ to close Session3 because we are no longer allowed to read from queue q1.
+    %% This complies with the user expectation in
+    %% https://github.com/rabbitmq/rabbitmq-server/discussions/11364
+    receive
+        {amqp10_event,
+         {session, Session3,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, <<"read access to queue 'q1' in vhost '/' refused", _/binary>>}}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:send_msg(
+           Sender4,
+           amqp10_msg:set_properties(
+             #{to => rabbitmq_amqp_address:queue(QName)},
+             amqp10_msg:new(<<"t4">>, <<"m4b">>))),
+    %% We expect RabbitMQ to close Session4 because we are no longer allowed to write to the default exchange.
+    receive
+        {amqp10_event,
+         {session, Session4,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, <<"write access to exchange 'amq.default' in vhost '/' refused", _/binary>>}}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:send_msg(
+           Sender5,
+           amqp10_msg:set_properties(
+             #{to => rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"topic-1">>)},
+             amqp10_msg:new(<<"t5">>, <<"m5b">>))),
+    %% We expect RabbitMQ to close Session5 because we are no longer allowed to write to topic topic-1.
+    receive
+        {amqp10_event,
+         {session, Session5,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, <<"write access to topic 'topic-1' in exchange"
+                                     " 'amq.topic' in vhost '/' refused", _/binary>>}}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% We expect RabbitMQ to close Session6 because we are no longer allowed to write to exchange e1.
+    receive
+        {amqp10_event,
+         {session, Session6,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+              description = {utf8, <<"write access to exchange 'e1' in vhost '/' refused", _/binary>>}}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ?assertMatch({ok, #{message_count := 2}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
+    ok = amqp10_client:end_session(Session1),
+    ok = amqp10_client:close_connection(Connection).
 
 test_successful_connection_with_complex_claim_as_a_map(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
@@ -765,3 +985,30 @@ test_failed_connection_with_non_existent_scope_alias_in_scope_field(Config) ->
 more_than_one_resource_server_id_not_allowed_in_one_token(Config) ->
     {_Algo, Token} = generate_valid_token(Config, <<"rmq.configure:*/*">>, [<<"prod">>, <<"dev">>]),
     {error, _} = open_unmanaged_connection(Config, 0, <<"username">>, Token).
+
+amqp_init(Token, Config) ->
+    OpnConf = amqp_connection_config(Token, Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Connection, opened}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
+    {Connection, Session, LinkPair}.
+
+amqp_connection_config(Token, Config) ->
+    Host = proplists:get_value(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    #{address => Host,
+      port => Port,
+      container_id => <<"my container">>,
+      sasl => {plain, <<>>, Token}}.
+
+flush(Prefix) ->
+    receive
+        Msg ->
+            ct:pal("~p flushed: ~p~n", [Prefix, Msg]),
+            flush(Prefix)
+    after 1 ->
+              ok
+    end.

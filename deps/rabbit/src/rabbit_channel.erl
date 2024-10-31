@@ -470,7 +470,7 @@ force_event_refresh(Ref) ->
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
 
--spec update_user_state(pid(), rabbit_types:auth_user()) -> 'ok' | {error, channel_terminated}.
+-spec update_user_state(pid(), rabbit_types:user()) -> 'ok' | {error, channel_terminated}.
 
 update_user_state(Pid, UserState) when is_pid(Pid) ->
     case erlang:is_process_alive(Pid) of

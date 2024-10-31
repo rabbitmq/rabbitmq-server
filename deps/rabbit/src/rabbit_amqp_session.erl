@@ -11,6 +11,7 @@
 
 -behaviour(gen_server).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 -include("rabbit_amqp.hrl").
@@ -90,7 +91,8 @@
          list_local/0,
          conserve_resources/3,
          check_resource_access/4,
-         check_read_permitted_on_topic/4
+         check_read_permitted_on_topic/4,
+         reset_authz/2
         ]).
 
 -export([init/1,
@@ -393,6 +395,10 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
          handle_max = ClientHandleMax}}) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
+    logger:update_process_metadata(#{channel_number => ChannelNum,
+                                     connection => ConnName,
+                                     vhost => Vhost,
+                                     user => User#user.username}),
 
     ok = pg:join(pg_scope(), self(), self()),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
@@ -479,6 +485,10 @@ list_local() ->
                          rabbit_alarm:resource_alert()) -> ok.
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     gen_server:cast(Pid, {conserve_resources, Source, Conserve}).
+
+-spec reset_authz(pid(), rabbit_types:user()) -> ok.
+reset_authz(Pid, User) ->
+    gen_server:cast(Pid, {reset_authz, User}).
 
 handle_call(Msg, _From, State) ->
     Reply = {error, {not_understood, Msg}},
@@ -574,15 +584,26 @@ handle_cast({conserve_resources, Alarm, Conserve},
     noreply(State);
 handle_cast(refresh_config, #state{cfg = #cfg{vhost = Vhost} = Cfg} = State0) ->
     State = State0#state{cfg = Cfg#cfg{trace_state = rabbit_trace:init(Vhost)}},
-    noreply(State).
+    noreply(State);
+handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
+    State1 = State0#state{
+               permission_cache = [],
+               topic_permission_cache = [],
+               cfg = Cfg#cfg{user = User}},
+    try recheck_authz(State1) of
+        State ->
+            noreply(State)
+    catch exit:#'v1_0.error'{} = Error ->
+              log_error_and_close_session(Error, State1)
+    end.
 
 log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
                                    writer_pid = WriterPid,
                                    channel_num = Ch}}) ->
     End = #'v1_0.end'{error = Error},
-    rabbit_log:warning("Closing session for connection ~p: ~tp",
-                       [ReaderPid, Error]),
+    ?LOG_WARNING("Closing session for connection ~p: ~tp",
+                 [ReaderPid, Error]),
     ok = rabbit_amqp_writer:send_command_sync(WriterPid, Ch, End),
     {stop, {shutdown, Error}, State}.
 
@@ -869,8 +890,8 @@ destroy_outgoing_link(_, _, _, Acc) ->
     Acc.
 
 detach(Handle, Link, Error = #'v1_0.error'{}) ->
-    rabbit_log:warning("Detaching link handle ~b due to error: ~tp",
-                       [Handle, Error]),
+    ?LOG_WARNING("Detaching link handle ~b due to error: ~tp",
+                 [Handle, Error]),
     publisher_or_consumer_deleted(Link),
     #'v1_0.detach'{handle = ?UINT(Handle),
                    closed = true,
@@ -961,8 +982,8 @@ handle_frame(#'v1_0.flow'{handle = Handle} = Flow,
                                 %% "If set to a handle that is not currently associated with
                                 %% an attached link, the recipient MUST respond by ending the
                                 %% session with an unattached-handle session error." [2.7.4]
-                                rabbit_log:warning(
-                                  "Received Flow frame for unknown link handle: ~tp", [Flow]),
+                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tp",
+                                             [Flow]),
                                 protocol_error(
                                   ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                                   "Unattached link handle: ~b", [HandleInt])
@@ -2141,9 +2162,9 @@ handle_deliver(ConsumerTag, AckRequired,
                         outgoing_links = OutgoingLinks};
         _ ->
             %% TODO handle missing link -- why does the queue think it's there?
-            rabbit_log:warning(
-              "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
-              [Handle, ConsumerTag, QName]),
+            ?LOG_WARNING(
+               "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
+               [Handle, ConsumerTag, QName]),
             State
     end.
 
@@ -2988,7 +3009,7 @@ credit_reply_timeout(QType, QName) ->
     Fmt = "Timed out waiting for credit reply from ~s ~s. "
     "Hint: Enable feature flag rabbitmq_4.0.0",
     Args = [QType, rabbit_misc:rs(QName)],
-    rabbit_log:error(Fmt, Args),
+    ?LOG_ERROR(Fmt, Args),
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
 
 default(undefined, Default) -> Default;
@@ -3521,6 +3542,29 @@ check_topic_authorisation(#exchange{type = topic,
     end;
 check_topic_authorisation(_, _, _, _, Cache) ->
     Cache.
+
+recheck_authz(#state{incoming_links = IncomingLinks,
+                     outgoing_links = OutgoingLinks,
+                     permission_cache = Cache0,
+                     cfg = #cfg{user = User}
+                    } = State) ->
+    ?LOG_DEBUG("rechecking link authorizations", []),
+    Cache1 = maps:fold(
+               fun(_Handle, #incoming_link{exchange = X}, Cache) ->
+                       case X of
+                           #exchange{name = XName} ->
+                               check_resource_access(XName, write, User, Cache);
+                           #resource{} = XName ->
+                               check_resource_access(XName, write, User, Cache);
+                           to ->
+                               Cache
+                       end
+               end, Cache0, IncomingLinks),
+    Cache2 = maps:fold(
+               fun(_Handle, #outgoing_link{queue_name = QName}, Cache) ->
+                       check_resource_access(QName, read, User, Cache)
+               end, Cache1, OutgoingLinks),
+    State#state{permission_cache = Cache2}.
 
 check_user_id(Mc, User) ->
     case rabbit_access_control:check_user_id(Mc, User) of
