@@ -303,6 +303,23 @@ function reset_timer() {
     }
 }
 
+function pause_auto_refresh() {
+    if (typeof globalThis.rmq_webui_auto_refresh_paused == 'undefined')
+        globalThis.rmq_webui_auto_refresh_paused = 0;
+
+    globalThis.rmq_webui_auto_refresh_paused++;
+    if (timer != null) {
+        clearInterval(timer);
+    }
+}
+
+function resume_auto_refresh() {
+    globalThis.rmq_webui_auto_refresh_paused--;
+    if (globalThis.rmq_webui_auto_refresh_paused == 0) {
+        reset_timer();
+    }
+}
+
 function update_manual(div, query) {
     var path;
     var template;
