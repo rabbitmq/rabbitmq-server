@@ -95,7 +95,8 @@ groups() ->
                                             single_active_consumer_priority,
                                             force_shrink_member_to_current_member,
                                             force_all_queues_shrink_member_to_current_member,
-                                            force_vhost_queues_shrink_member_to_current_member
+                                            force_vhost_queues_shrink_member_to_current_member,
+                                            gh_12635
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -1301,6 +1302,67 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
         #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs, VHost <- VHosts].
+
+gh_12635(Config) ->
+    % https://github.com/rabbitmq/rabbitmq-server/issues/12635
+    [Server0, _Server1, Server2] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% stop member to simulate slow or down member
+    ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
+
+    publish_confirm(Ch0, QQ),
+    publish_confirm(Ch0, QQ),
+
+    %% force a checkpoint on leader
+    ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, force_checkpoint]),
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+              undefined =/= maps:get(latest_checkpoint_index, Log)
+      end),
+
+    %% publish 1 more message
+    publish_confirm(Ch0, QQ),
+
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    %% subscribe then cancel, this will assign the messages against the consumer
+    %% but as the member is down they will not be delivered
+    qos(Ch2, 100, false),
+    subscribe(Ch2, QQ, false),
+    rabbit_ct_client_helpers:close_channel(Ch2),
+    flush(100),
+    %% purge
+    #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
+
+    rabbit_ct_helpers:await_condition(
+      fun () ->
+              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+              undefined =/= maps:get(snapshot_index, Log)
+      end),
+    %% restart the down member
+    ok = rpc:call(Server2, ra, restart_server, [quorum_queues, {RaName, Server2}]),
+    Pid2 = rpc:call(Server2, erlang, whereis, [RaName]),
+    ?assert(is_pid(Pid2)),
+    Ref = erlang:monitor(process, Pid2),
+    receive
+        {'DOWN',Ref, process,_, _} ->
+            ct:fail("unexpected DOWN")
+    after 500 ->
+              ok
+    end,
+    flush(1),
+    ok.
 
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
