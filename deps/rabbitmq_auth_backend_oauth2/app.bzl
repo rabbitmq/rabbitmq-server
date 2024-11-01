@@ -184,7 +184,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/system_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app"],
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
     )
     erlang_bytecode(
         name = "test_jwks_http_app_beam",
