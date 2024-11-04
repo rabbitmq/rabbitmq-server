@@ -98,13 +98,15 @@ single_link_then_second_added(Config) ->
     with_ch(
       Config,
       fun (Ch) ->
-              timer:sleep(3000),
-              [_L1] = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                   rabbit_federation_status, status, []),
+              rabbit_ct_helpers:eventually(
+                ?_assertMatch([_L1],
+                              rabbit_ct_broker_helpers:rpc(
+                                Config, 0, rabbit_federation_status, status, [])),
+                1000, 60),
               rabbit_ct_helpers:eventually(?_assertEqual([?ONE_RUNNING_METRIC],
                                                          get_metrics(Config)),
-                                           500,
-                                           5),
+                                           1000,
+                                           30),
               maybe_declare_queue(Config, Ch, q(<<"fed.downstream2">>, [{<<"x-queue-type">>, longstr, <<"classic">>}])),
               %% here we race against queue.declare... most of the times there is going to be
               %% new status=starting metric. In this case we wait a bit more for running=2.
@@ -116,14 +118,14 @@ single_link_then_second_added(Config) ->
                   [?ONE_RUNNING_METRIC] ->
                       rabbit_ct_helpers:eventually(?_assertEqual([?TWO_RUNNING_METRIC],
                                                                  get_metrics(Config)),
-                                                   500,
-                                                   5);
+                                                   1000,
+                                                   30);
                   [?ONE_RUNNING_ONE_STARTING_METRIC] ->
                       rabbit_ct_helpers:eventually(?_assertEqual([?TWO_RUNNING_METRIC],
                                                                  get_metrics(Config)),
-                                                   500,
-                                                   5)
-                      
+                                                   1000,
+                                                   30)
+
               end,
 
               delete_all(Ch, [q(<<"fed.downstream2">>, [{<<"x-queue-type">>, longstr, <<"classic">>}])])
@@ -133,12 +135,15 @@ two_links_from_the_start(Config) ->
     with_ch(
       Config,
       fun (_Ch) ->
-              timer:sleep(3000),
-              [_L1 | _L2] = rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                         rabbit_federation_status, status, []),
-              MFs = get_metrics(Config),
-              [?TWO_RUNNING_METRIC] = MFs
-
+              rabbit_ct_helpers:eventually(
+                ?_assertMatch([_L1 | _L2],
+                              rabbit_ct_broker_helpers:rpc(
+                                Config, 0, rabbit_federation_status, status, [])),
+                1000, 60),
+              rabbit_ct_helpers:eventually(?_assertEqual([?TWO_RUNNING_METRIC],
+                                                         get_metrics(Config)),
+                                           1000,
+                                           30)
       end, upstream_downstream() ++ [q(<<"fed.downstream2">>, [{<<"x-queue-type">>, longstr, <<"classic">>}])]).
 
 %% -------------------------------------------------------------------
