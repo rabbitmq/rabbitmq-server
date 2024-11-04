@@ -6,7 +6,7 @@ on:
       - "main"
     paths:
       - "deps/**"
-
+      - ".github/workflows/**"
 jobs:
   trigger_alpha_build:
     runs-on: ubuntu-latest
