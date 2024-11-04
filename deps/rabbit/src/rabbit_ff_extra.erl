@@ -174,6 +174,8 @@ info(FeatureFlags, Options) ->
                      {State, Color} = case State0 of
                                           enabled ->
                                               {"Enabled", Green};
+                                          state_changing ->
+                                              {"(Changing)", Yellow};
                                           disabled ->
                                               {"Disabled", Yellow};
                                           unavailable ->

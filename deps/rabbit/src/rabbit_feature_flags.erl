@@ -719,13 +719,17 @@ info() ->
 info(Options) when is_map(Options) ->
     rabbit_ff_extra:info(Options).
 
--spec get_state(feature_name()) -> enabled | disabled | unavailable.
+-spec get_state(feature_name()) -> enabled |
+                                   state_changing |
+                                   disabled |
+                                   unavailable.
 %% @doc
 %% Returns the state of a feature flag.
 %%
 %% The possible states are:
 %% <ul>
 %% <li>`enabled': the feature flag is enabled.</li>
+%% <li>`state_changing': the feature flag is being enabled.</li>
 %% <li>`disabled': the feature flag is supported by all nodes in the
 %%   cluster but currently disabled.</li>
 %% <li>`unavailable': the feature flag is unsupported by at least one
@@ -733,16 +737,20 @@ info(Options) when is_map(Options) ->
 %% </ul>
 %%
 %% @param FeatureName The name of the feature flag to check.
-%% @returns `enabled', `disabled' or `unavailable'.
+%% @returns `enabled', `state_changing', `disabled' or `unavailable'.
 
 get_state(FeatureName) when is_atom(FeatureName) ->
-    IsEnabled = is_enabled(FeatureName),
+    IsEnabled = is_enabled(FeatureName, non_blocking),
     case IsEnabled of
-        true  -> enabled;
-        false -> case is_supported(FeatureName) of
-                     true  -> disabled;
-                     false -> unavailable
-                 end
+        true  ->
+            enabled;
+        state_changing ->
+            state_changing;
+        false ->
+            case is_supported(FeatureName) of
+                true  -> disabled;
+                false -> unavailable
+            end
     end.
 
 -spec get_stability
