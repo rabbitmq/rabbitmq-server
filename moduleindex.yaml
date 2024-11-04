@@ -948,6 +948,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_cluster_name
 - rabbit_mgmt_wm_connection
 - rabbit_mgmt_wm_connection_channels
+- rabbit_mgmt_wm_connection_sessions
 - rabbit_mgmt_wm_connection_user_name
 - rabbit_mgmt_wm_connections
 - rabbit_mgmt_wm_connections_vhost
