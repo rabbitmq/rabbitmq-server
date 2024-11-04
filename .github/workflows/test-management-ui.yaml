@@ -3,13 +3,14 @@ on:
   push:
     branches:
       - main
-      - v3.12.x
-      - v3.11.x
+      - v4.0.x
       - bump-otp-for-oci
       - bump-rbe-*
       - bump-rules_erlang
     paths:
-      - 'deps/**'
+      - 'deps/rabbitmq_management/src/**'
+      - 'deps/rabbitmq_management/priv/**'
+      - 'deps/rabbitmq_web_dispatch/src/**'
       - 'scripts/**'
       - .bazelrc
       - .bazelversion
@@ -34,7 +35,7 @@ jobs:
         - chrome
         include:
         - erlang_version: "26.2"
-          elixir_version: 1.15.7
+          elixir_version: 1.17.3
     env:
       SELENIUM_DIR: selenium
       DOCKER_NETWORK: rabbitmq_net
