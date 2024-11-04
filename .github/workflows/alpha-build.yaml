@@ -11,8 +11,8 @@ jobs:
   trigger_alpha_build:
     runs-on: ubuntu-latest
     steps:
-      - name: Set a short commit SHA
-        run: echo "SHORT_SHA=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
+      - name: Compute prerelease identifier from commit SHA
+        run: echo "PRERELEASE_IDENTIFIER=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
       - name: Trigger an alpha build in rabbitmq/server-packages
         run: |
           curl -L \
@@ -21,4 +21,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.RABBITMQCI_BOT_TOKEN }}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/rabbitmq/server-packages/dispatches \
-            -d '{"event_type": "new_4.1.x_alpha", "client_payload": {"prerelease": true, "prerelease_kind": "alpha", "prerelease_identifier": "${{ env.SHORT_SHA }}", "base_version": "4.1.0"}}'
+            -d '{"event_type": "new_4.1.x_alpha", "client_payload": {"prerelease": true, "prerelease_kind": "alpha", "prerelease_identifier": "${{ env.PRERELEASE_IDENTIFIER }}", "base_version": "4.1.0"}}'
