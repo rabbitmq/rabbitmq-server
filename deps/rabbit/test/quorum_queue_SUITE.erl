@@ -96,6 +96,7 @@ groups() ->
                                             force_shrink_member_to_current_member,
                                             force_all_queues_shrink_member_to_current_member,
                                             force_vhost_queues_shrink_member_to_current_member,
+                                            policy_repair,
                                             gh_12635
                                            ]
                        ++ all_tests()},
@@ -1303,20 +1304,175 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs, VHost <- VHosts].
 
+
+% Tests that, if the process of a QQ is dead in the moment of declaring a policy
+% that affects such queue, when the process is made available again, the policy
+% will eventually get applied. (https://github.com/rabbitmq/rabbitmq-server/issues/7863)
+policy_repair(Config) ->
+    [Server0, _Server1, _Server2] = Servers =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    ExpectedMaxLength1 = 10,
+    Priority1 = 1,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0, 
+        rabbit_policy, 
+        set, 
+        [
+            <<"/">>, 
+            <<QQ/binary, "_1">>,
+            QQ, 
+            [{<<"max-length">>, ExpectedMaxLength1}, {<<"overflow">>, <<"reject-publish">>}], 
+            Priority1, 
+            <<"quorum_queues">>, 
+            <<"acting-user">>
+        ]),
+
+    % Wait for the policy to apply
+    QueryFun = fun rabbit_fifo:overview/1,
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength1}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
+
+    % Check the policy has been applied
+    %   Insert MaxLength1 + some messages but after consuming all messages only 
+    %   MaxLength1 are retrieved.
+    %   Checking twice to ensure consistency
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
+    % +1 because QQs let one pass
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1), 
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ),
+
+    % Set higher priority policy, allowing more messages
+    ExpectedMaxLength2 = 20,
+    Priority2 = 2,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0, 
+        rabbit_policy, 
+        set, 
+        [
+            <<"/">>, 
+            <<QQ/binary, "_2">>,
+            QQ, 
+            [{<<"max-length">>, ExpectedMaxLength2}, {<<"overflow">>, <<"reject-publish">>}], 
+            Priority2,
+            <<"quorum_queues">>, 
+            <<"acting-user">>
+        ]),
+
+    % Wait for the policy to apply
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength2}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
+
+    % Check the policy has been applied
+    %   Insert MaxLength2 + some messages but after consuming all messages only 
+    %   MaxLength2 are retrieved.
+    %   Checking twice to ensure consistency.
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength2 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength2 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ),
+
+    % Ensure the queue process is unavailable
+    lists:foreach(fun(Srv) -> ensure_qq_proc_dead(Config, Srv, RaName) end, Servers),
+
+    % Add policy with higher priority, allowing even more messages.
+    ExpectedMaxLength3 = 30,
+    Priority3 = 3,
+    ok = rabbit_ct_broker_helpers:rpc(
+        Config,
+        0, 
+        rabbit_policy, 
+        set, 
+        [
+            <<"/">>, 
+            <<QQ/binary, "_3">>,
+            QQ, 
+            [{<<"max-length">>, ExpectedMaxLength3}, {<<"overflow">>, <<"reject-publish">>}], 
+            Priority3, 
+            <<"quorum_queues">>, 
+            <<"acting-user">>
+        ]),
+
+    % Restart the queue process.
+    {ok, Queue} = 
+        rabbit_ct_broker_helpers:rpc(
+            Config,
+            0,
+            rabbit_amqqueue,
+            lookup, 
+            [{resource, <<"/">>, queue, QQ}]),
+    lists:foreach(
+        fun(Srv) ->
+            rabbit_ct_broker_helpers:rpc(
+                Config,
+                Srv,
+                rabbit_quorum_queue,
+                recover,
+                [foo, [Queue]]
+            )
+        end,
+        Servers),
+
+    % Wait for the queue to be available again. 
+    lists:foreach(fun(Srv) ->
+        rabbit_ct_helpers:await_condition(
+            fun () ->
+                is_pid( 
+                    rabbit_ct_broker_helpers:rpc(
+                        Config,
+                        Srv,
+                        erlang,
+                        whereis,
+                        [RaName]))
+            end)
+        end,
+        Servers),
+    
+    % Wait for the policy to apply
+    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
+                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
+                ?DEFAULT_AWAIT),
+
+    % Check the policy has been applied
+    %   Insert MaxLength3 + some messages but after consuming all messages only 
+    %   MaxLength3 are retrieved.
+    %   Checking twice to ensure consistency.
+    % + 1 because QQs let one pass
+    publish_confirm_many(Ch, QQ, ExpectedMaxLength3 + 1),
+    wait_for_messages_ready(Servers, RaName, ExpectedMaxLength3 + 1),
+    fail = publish_confirm(Ch, QQ),
+    fail = publish_confirm(Ch, QQ),
+    consume_all(Ch, QQ).
+
+
 gh_12635(Config) ->
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+                                        [rabbit, quorum_min_checkpoint_interval, 1]),
 
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
     QQ = ?config(queue_name, Config),
     RaName = ra_name(QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+                    declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% stop member to simulate slow or down member
     ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
@@ -1327,10 +1483,10 @@ gh_12635(Config) ->
     %% force a checkpoint on leader
     ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, force_checkpoint]),
     rabbit_ct_helpers:await_condition(
-      fun () ->
-              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-              undefined =/= maps:get(latest_checkpoint_index, Log)
-      end),
+        fun () ->
+                {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+                undefined =/= maps:get(latest_checkpoint_index, Log)
+        end),
 
     %% publish 1 more message
     publish_confirm(Ch0, QQ),
@@ -1346,10 +1502,10 @@ gh_12635(Config) ->
     #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
 
     rabbit_ct_helpers:await_condition(
-      fun () ->
-              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-              undefined =/= maps:get(snapshot_index, Log)
-      end),
+        fun () ->
+                {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+                undefined =/= maps:get(snapshot_index, Log)
+        end),
     %% restart the down member
     ok = rpc:call(Server2, ra, restart_server, [quorum_queues, {RaName, Server2}]),
     Pid2 = rpc:call(Server2, erlang, whereis, [RaName]),
@@ -1359,10 +1515,11 @@ gh_12635(Config) ->
         {'DOWN',Ref, process,_, _} ->
             ct:fail("unexpected DOWN")
     after 500 ->
-              ok
+                ok
     end,
     flush(1),
     ok.
+
 
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
@@ -4396,4 +4553,29 @@ lists_interleave([Item | Items], List)
   when is_list(List) ->
     {Left, Right} = lists:split(2, List),
     Left ++ [Item | lists_interleave(Items, Right)].
+
+publish_confirm_many(Ch, Queue, Count) ->
+    lists:foreach(fun(_) -> publish_confirm(Ch, Queue) end, lists:seq(1, Count)).
+
+consume_all(Ch, QQ) ->
+    Consume = fun C(Acc) ->
+        case amqp_channel:call(Ch, #'basic.get'{queue = QQ}) of
+            {#'basic.get_ok'{}, Msg} ->
+                C([Msg | Acc]);
+            _ ->
+                Acc
+        end
+    end,
+    Consume([]).
+
+ensure_qq_proc_dead(Config, Server, RaName) ->
+    case rabbit_ct_broker_helpers:rpc(Config, Server, erlang, whereis, [RaName]) of
+        undefined ->
+            ok;
+        Pid ->
+            rabbit_ct_broker_helpers:rpc(Config, Server, erlang, exit, [Pid, kill]),
+            %% Give some time for the supervisor to restart the process
+            timer:sleep(500),
+            ensure_qq_proc_dead(Config, Server, RaName)
+    end.
 
