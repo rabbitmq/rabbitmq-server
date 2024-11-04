@@ -1,8 +1,19 @@
 PROJECT = rabbitmq_ct_helpers
 PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
+<<<<<<< HEAD
 DEPS = rabbit_common proper inet_tcp_proxy meck
 TEST_DEPS = rabbit
+=======
+DEPS = rabbit_common amqp10_common rabbitmq_stream_common proper inet_tcp_proxy meck
+LOCAL_DEPS = common_test eunit inets
+#TEST_DEPS = rabbit
+
+# We are calling one function from 'rabbit' so we need it in the PLT.
+# But really this should be a full dependency; or we don't use the
+# function anymore; or move it to rabbit_common. @todo
+dialyze: DEPS += rabbit
+>>>>>>> 9bb7530d04 (Move client-side stream protocol test helpers to a separate module)
 
 XREF_IGNORE = [ \
     {'Elixir.OptionParser',split,1}, \
