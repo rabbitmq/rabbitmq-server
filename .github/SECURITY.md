@@ -11,8 +11,8 @@ RabbitMQ Core team really appreciates responsible vulnerability reports
 from security researchers and our user community.
 
 To responsibly disclose a vulnerability, please use [GitHub Security Advisories](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability) or email `rabbitmq-core@groups.vmware.com` or
-[sign up for RabbitMQ community Slack](https://rabbitmq-slack.herokuapp.com) and
-send a DM to @michaelklishin. For reports received via Slack, a separate private
+[sign up for RabbitMQ Discord server]([https://rabbitmq-slack.herokuapp.com](https://rabbitmq.com/discord)) and
+send a DM to @michaelklishin. For reports received via Discord, a separate private
 channel will be set up so that multiple RabbitMQ maintainers can access the disclosed
 information.
 
@@ -26,8 +26,13 @@ When reporting a vulnerability, please including the following information:
  * Why do you think this behavior is a security vulnerability
 
 A received vulnerability report will be acknowledged by a RabbitMQ core team or VMware R&D staff member.
+For reports that will be considered legitimate and serious enough, a [GitHub Security Advisory](https://github.com/rabbitmq/rabbitmq-server/security/advisories)
+will be drafted. An advisory is a private way for reporters and collaborators to work on a solution.
 
-As the security issue moves from triage, to identified fix, to release planning we will keep the reporter updated.
+After a new patch release is shipped, a [new CVE ID will be requested](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/publishing-a-repository-security-advisory#requesting-a-cve-identification-number-optional) as
+part of the advisory and eventually published. The advisory will credit the reporters.
+The associated discussion will be removed when the advisory is published.
+
 
 ### When Should I Report a Vulnerability?
 
