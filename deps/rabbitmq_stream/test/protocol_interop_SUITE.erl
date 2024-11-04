@@ -275,94 +275,30 @@ amqp_attach_sub_batch(Config) ->
 %% -------------------------------------------------------------------
 
 publish_via_stream_protocol(Stream, Config) ->
-    %% There is no open source Erlang RabbitMQ Stream client.
-    %% Therefore, we have to build the Stream protocol commands manually.
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
 
-    StreamPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream),
-    {ok, S} = gen_tcp:connect("localhost", StreamPort, [{active, false}, {mode, binary}]),
-
-    C0 = rabbit_stream_core:init(0),
-    PeerPropertiesFrame = rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
-    ok = gen_tcp:send(S, PeerPropertiesFrame),
-    {{response, 1, {peer_properties, _, _}}, C1} = receive_stream_commands(S, C0),
-
-    ok = gen_tcp:send(S, rabbit_stream_core:frame({request, 1, sasl_handshake})),
-    {{response, _, {sasl_handshake, _, _}}, C2} = receive_stream_commands(S, C1),
-    Username = <<"guest">>,
-    Password = <<"guest">>,
-    Null = 0,
-    PlainSasl = <<Null:8, Username/binary, Null:8, Password/binary>>,
-    ok = gen_tcp:send(S, rabbit_stream_core:frame({request, 2, {sasl_authenticate, <<"PLAIN">>, PlainSasl}})),
-    {{response, 2, {sasl_authenticate, _}}, C3} = receive_stream_commands(S, C2),
-    {{tune, DefaultFrameMax, _}, C4} = receive_stream_commands(S, C3),
-
-    ok = gen_tcp:send(S, rabbit_stream_core:frame({response, 0, {tune, DefaultFrameMax, 0}})),
-    ok = gen_tcp:send(S, rabbit_stream_core:frame({request, 3, {open, <<"/">>}})),
-    {{response, 3, {open, _, _ConnectionProperties}}, C5} = receive_stream_commands(S, C4),
-
-    CreateStreamFrame = rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
-    ok = gen_tcp:send(S, CreateStreamFrame),
-    {{response, 1, {create_stream, _}}, C6} = receive_stream_commands(S, C5),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
 
     PublisherId = 99,
-    DeclarePublisherFrame = rabbit_stream_core:frame({request, 1, {declare_publisher, PublisherId, <<>>, Stream}}),
-    ok = gen_tcp:send(S, DeclarePublisherFrame),
-    {{response, 1, {declare_publisher, _}}, C7} = receive_stream_commands(S, C6),
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PublisherId),
 
-    M1 = simple_entry(1, <<"m1">>),
-    M2 = simple_entry(2, <<"m2">>),
-    M3 = simple_entry(3, <<"m3">>),
+    M1 = stream_test_utils:simple_entry(1, <<"m1">>),
+    M2 = stream_test_utils:simple_entry(2, <<"m2">>),
+    M3 = stream_test_utils:simple_entry(3, <<"m3">>),
     Messages1 = [M1, M2, M3],
-    PublishFrame1 = rabbit_stream_core:frame({publish, PublisherId, length(Messages1), Messages1}),
-    ok = gen_tcp:send(S, PublishFrame1),
-    {{publish_confirm, PublisherId, _}, C8} = receive_stream_commands(S, C7),
 
-    UncompressedSubbatch = sub_batch_entry_uncompressed(4, [<<"m4">>, <<"m5">>, <<"m6">>]),
-    PublishFrame2 = rabbit_stream_core:frame({publish, PublisherId, 3, UncompressedSubbatch}),
-    ok = gen_tcp:send(S, PublishFrame2),
-    {{publish_confirm, PublisherId, _}, C9} = receive_stream_commands(S, C8),
+    {ok, _, C3} = stream_test_utils:publish_entries(S, C2, PublisherId, length(Messages1), Messages1),
 
-    CompressedSubbatch = sub_batch_entry_compressed(5, [<<"m7">>, <<"m8">>, <<"m9">>]),
-    PublishFrame3 = rabbit_stream_core:frame({publish, PublisherId, 3, CompressedSubbatch}),
-    ok = gen_tcp:send(S, PublishFrame3),
-    {{publish_confirm, PublisherId, _}, C10} = receive_stream_commands(S, C9),
+    UncompressedSubbatch = stream_test_utils:sub_batch_entry_uncompressed(4, [<<"m4">>, <<"m5">>, <<"m6">>]),
+    {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PublisherId, 3, UncompressedSubbatch),
 
-    M10 = simple_entry(6, <<"m10">>),
-    M11 = simple_entry(7, <<"m11">>),
+    CompressedSubbatch = stream_test_utils:sub_batch_entry_compressed(5, [<<"m7">>, <<"m8">>, <<"m9">>]),
+    {ok, _, C5} = stream_test_utils:publish_entries(S, C4, PublisherId, 3, CompressedSubbatch),
+
+    M10 = stream_test_utils:simple_entry(6, <<"m10">>),
+    M11 = stream_test_utils:simple_entry(7, <<"m11">>),
     Messages2 = [M10, M11],
-    PublishFrame4 = rabbit_stream_core:frame({publish, PublisherId, length(Messages2), Messages2}),
-    ok = gen_tcp:send(S, PublishFrame4),
-    {{publish_confirm, PublisherId, _}, _C11} = receive_stream_commands(S, C10).
-
-%% Streams contain AMQP 1.0 encoded messages.
-%% In this case, the AMQP 1.0 encoded message contains a single data section.
-simple_entry(Sequence, Body)
-  when is_binary(Body) ->
-    DataSect = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
-    DataSectSize = byte_size(DataSect),
-    <<Sequence:64, 0:1, DataSectSize:31, DataSect:DataSectSize/binary>>.
-
-%% Here, each AMQP 1.0 encoded message contains a single data section.
-%% All data sections are delivered uncompressed in 1 batch.
-sub_batch_entry_uncompressed(Sequence, Bodies) ->
-    Batch = lists:foldl(fun(Body, Acc) ->
-                                Sect = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
-                                <<Acc/binary, 0:1, (byte_size(Sect)):31, Sect/binary>>
-                        end, <<>>, Bodies),
-    Size = byte_size(Batch),
-    <<Sequence:64, 1:1, 0:3, 0:4, (length(Bodies)):16, Size:32, Size:32, Batch:Size/binary>>.
-
-%% Here, each AMQP 1.0 encoded message contains a single data section.
-%% All data sections are delivered in 1 gzip compressed batch.
-sub_batch_entry_compressed(Sequence, Bodies) ->
-    Uncompressed = lists:foldl(fun(Body, Acc) ->
-                                       Bin = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
-                                       <<Acc/binary, Bin/binary>>
-                               end, <<>>, Bodies),
-    Compressed = zlib:gzip(Uncompressed),
-    CompressedLen = byte_size(Compressed),
-    <<Sequence:64, 1:1, 1:3, 0:4, (length(Bodies)):16, (byte_size(Uncompressed)):32,
-      CompressedLen:32, Compressed:CompressedLen/binary>>.
+    {ok, _, _C6} = stream_test_utils:publish_entries(S, C5, PublisherId, length(Messages2), Messages2).
 
 connection_config(Config) ->
     Host = ?config(rmq_hostname, Config),
@@ -371,27 +307,6 @@ connection_config(Config) ->
       port => Port,
       container_id => <<"my container">>,
       sasl => {plain, <<"guest">>, <<"guest">>}}.
-
-receive_stream_commands(Sock, C0) ->
-    case rabbit_stream_core:next_command(C0) of
-        empty ->
-            case gen_tcp:recv(Sock, 0, 5000) of
-                {ok, Data} ->
-                    C1 = rabbit_stream_core:incoming_data(Data, C0),
-                    case rabbit_stream_core:next_command(C1) of
-                        empty ->
-                            {ok, Data2} = gen_tcp:recv(Sock, 0, 5000),
-                            rabbit_stream_core:next_command(
-                              rabbit_stream_core:incoming_data(Data2, C1));
-                        Res ->
-                            Res
-                    end;
-                {error, Err} ->
-                    ct:fail("error receiving stream data ~w", [Err])
-            end;
-        Res ->
-            Res
-    end.
 
 receive_amqp_messages(Receiver, N) ->
     receive_amqp_messages0(Receiver, N, []).
