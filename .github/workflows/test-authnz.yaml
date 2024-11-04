@@ -3,11 +3,13 @@ on:
   push:
     branches:
       - main
-      - v3.12.x
-      - v3.11.x
+      - v4.0.x
     paths:
-      - 'deps/rabbit/**'
+      - 'deps/rabbit/src/rabbit_auth**'
+      - 'deps/rabbit/src/rabbit_access_control**'
       - 'deps/rabbitmq_auth_**'
+      - 'deps/rabbitmq_management/src/**'
+      - 'deps/rabbitmq_management/priv/**'
       - 'deps/rabbitmq_management/selenium/**'
       - 'scripts/**'
       - .bazelrc
@@ -40,7 +42,7 @@ jobs:
         - chrome
         include:
         - erlang_version: "26.2"
-          elixir_version: 1.15.7
+          elixir_version: 1.17.3
     env:
       SELENIUM_DIR: selenium
       DOCKER_NETWORK: rabbitmq_net
