@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_ct_helpers
 PROJECT_DESCRIPTION = Common Test helpers for RabbitMQ
 
-DEPS = rabbit_common proper inet_tcp_proxy meck
+DEPS = rabbit_common amqp10_common rabbitmq_stream_common proper inet_tcp_proxy meck
 LOCAL_DEPS = common_test eunit inets
 #TEST_DEPS = rabbit
 
