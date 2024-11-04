@@ -10,6 +10,7 @@ on:
       - 'deps/rabbitmq_auth_**'
       - 'deps/rabbitmq_management/src/**'
       - 'deps/rabbitmq_management/priv/**'
+      - 'deps/rabbitmq_management/selenium/**'
       - 'scripts/**'
       - .bazelrc
       - .bazelversion
