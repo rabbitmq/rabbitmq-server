@@ -134,8 +134,6 @@ all_tests() -> [
     permissions_validation_test,
     permissions_list_test,
     permissions_test,
-    connections_test_amqpl,
-    connections_test_amqp,
     multiple_invalid_connections_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
@@ -201,7 +199,10 @@ all_tests() -> [
     disabled_qq_replica_opers_test,
     qq_status_test,
     list_deprecated_features_test,
-    list_used_deprecated_features_test
+    list_used_deprecated_features_test,
+    connections_test_amqpl,
+    connections_test_amqp,
+    enable_plugin_amqp
 ].
 
 %% -------------------------------------------------------------------
@@ -1067,6 +1068,33 @@ connections_test_amqp(Config) ->
     eventually(?_assertNot(is_process_alive(C2))),
     eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
     ?assertEqual(0, length(rpc(Config, rabbit_amqp1_0, list_local, []))).
+
+%% Test that AMQP 1.0 connection can be listed if the rabbitmq_management plugin gets enabled
+%% after the connection was established.
+enable_plugin_amqp(Config) ->
+    ?assertEqual(0, length(http_get(Config, "/connections"))),
+
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management_agent),
+
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"my container">>,
+                sasl => anon},
+    {ok, Conn} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Conn, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+
+    ok = amqp10_client:close_connection(Conn),
+    receive {amqp10_event, {connection, Conn, {closed, normal}}} -> ok
+    after 5000 -> ct:fail({connection_close_timeout, Conn})
+    end.
 
 flush(Prefix) ->
     receive
