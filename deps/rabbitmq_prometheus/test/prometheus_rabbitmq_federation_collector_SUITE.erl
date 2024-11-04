@@ -123,15 +123,9 @@ single_link_then_second_added(Config) ->
                   [?ONE_RUNNING_ONE_STARTING_METRIC] ->
                       rabbit_ct_helpers:eventually(?_assertEqual([?TWO_RUNNING_METRIC],
                                                                  get_metrics(Config)),
-<<<<<<< HEAD:deps/rabbitmq_prometheus/test/prometheus_rabbitmq_federation_collector_SUITE.erl
-                                                   500,
-                                                   5)
-                      
-=======
                                                    1000,
                                                    30)
 
->>>>>>> 3575fb5492 (test: wait for links and metrics in prometheus_rabbitmq_federation_collector_SUITE):deps/rabbitmq_federation_prometheus/test/prometheus_rabbitmq_federation_collector_SUITE.erl
               end,
 
               delete_all(Ch, [q(<<"fed.downstream2">>, [{<<"x-queue-type">>, longstr, <<"classic">>}])])
