@@ -1128,8 +1128,11 @@ handle_aux(_, _, garbage_collection, Aux, RaAux) ->
 handle_aux(_RaState, _, force_checkpoint,
            #?AUX{last_checkpoint  = Check0} = Aux, RaAux) ->
     Ts = erlang:system_time(millisecond),
+    #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
+    rabbit_log:debug("~ts: rabbit_fifo: forcing checkpoint at ~b",
+                     [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
     {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, true),
-    {no_reply, Aux#?AUX{last_checkpoint= Check}, RaAux, Effects};
+    {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(RaState, _, {dlx, _} = Cmd, Aux0, RaAux) ->
     #?STATE{dlx = DlxState,
             cfg = #cfg{dead_letter_handler = DLH,
@@ -2054,17 +2057,28 @@ delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
-delivery_effect(ConsumerKey, Msgs, State) ->
+delivery_effect(ConsumerKey, Msgs,
+                #?STATE{cfg = #cfg{resource = QR}} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    RaftIdxs = lists:foldr(fun ({_, ?MSG(I, _)}, Acc) ->
-                                   [I | Acc]
-                           end, [], Msgs),
+    {RaftIdxs, Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
+                                          {[I | Acc], N+1}
+                                  end, {[], 0}, Msgs),
     {log, RaftIdxs,
-     fun(Log) ->
+     fun (Commands)
+           when length(Commands) < Num ->
+             %% the mandatory length/1 guard is a bit :(
+             rabbit_log:info("~ts: requested read consumer tag '~ts' of ~b "
+                             "indexes ~w but only ~b were returned. "
+                             "This is most likely a stale read request "
+                             "and can be ignored",
+                             [rabbit_misc:rs(QR), CTag, Num, RaftIdxs,
+                              length(Commands)]),
+             [];
+         (Commands) ->
              DelMsgs = lists:zipwith(
                          fun (Cmd, {MsgId, ?MSG(_Idx,  Header)}) ->
                                  {MsgId, {Header, get_msg(Cmd)}}
-                         end, Log, Msgs),
+                         end, Commands, Msgs),
              [{send_msg, CPid, {delivery, CTag, DelMsgs},
                ?DELIVERY_SEND_MSG_OPTS}]
      end,
@@ -2072,7 +2086,9 @@ delivery_effect(ConsumerKey, Msgs, State) ->
 
 reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
     {log, [RaftIdx],
-     fun ([Cmd]) ->
+     fun ([]) ->
+             [];
+         ([Cmd]) ->
              [{reply, From, {wrap_reply,
                              {dequeue, {MsgId, {Header, get_msg(Cmd)}}, Ready}}}]
      end}.
