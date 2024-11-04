@@ -322,23 +322,23 @@
                   <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span><br/>
                   <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
                 <% } %>
-                  <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span><br/>
+                  <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span>
                 <% if (queue_type == "classic") { %>
-                <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
+                | <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
                 <% } %>
                 <% if (queue_type == "quorum") { %>
-                  <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
+                  | <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
                   | <span class="argument-link" field="arguments" key="x-quorum-initial-group-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span><br/>
-                  | <span class="argument-link" field="arguments" key="x-quorum-target-group-size" type="number">Target cluster size</span><span class="help" id="qourum-queue-target-group-size"></span>    
-                    <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
+                  <span class="argument-link" field="arguments" key="x-quorum-target-group-size" type="number">Target cluster size</span><span class="help" id="qourum-queue-target-group-size"></span>    
+                  | <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
                 <% } %>
                 <% if (queue_type == "stream") { %>
-                  <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
-                  | <span class="argument-link" field="arguments" key="x-stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span>
-                  | <span class="argument-link" field="arguments" key="x-stream-filter-size-bytes" type="number">Filter size (per chunk) in bytes</span><span class="help" id="queue-stream-filter-size-bytes"></span>
+                  | <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
+                  | <span class="argument-link" field="arguments" key="x-stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span></br>
+                  <span class="argument-link" field="arguments" key="x-stream-filter-size-bytes" type="number">Filter size (per chunk) in bytes</span><span class="help" id="queue-stream-filter-size-bytes"></span>
                   | <span class="argument-link" field="arguments" key="x-initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
                 <% } %>
-                  <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
+                  | <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
                 </td>
               </tr>
             </table>
