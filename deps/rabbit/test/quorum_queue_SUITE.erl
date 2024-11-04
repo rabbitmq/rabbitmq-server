@@ -1302,6 +1302,7 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
         ?assertEqual(3, length(Nodes0))
     end || Q <- QQs, VHost <- VHosts].
 
+
 % Tests that, if the process of a QQ is dead in the moment of declaring a policy
 % that affects such queue, when the process is made available again, the policy
 % will eventually get applied. (https://github.com/rabbitmq/rabbitmq-server/issues/7863)
@@ -1454,6 +1455,7 @@ policy_repair(Config) ->
     fail = publish_confirm(Ch, QQ),
     fail = publish_confirm(Ch, QQ),
     consume_all(Ch, QQ).
+
 
 gh_12635(Config) ->
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
