@@ -290,11 +290,13 @@ add_rem_counter(Config, {Initial, Ops}, {AddFun, RemFun}, Tables) ->
                     {Initial, Things},
                     Ops),
     force_metric_gc(Config),
-    TabLens = lists:map(fun(T) ->
-                                length(read_table_rpc(Config, T))
-                        end, Tables),
+    ?awaitMatch([FinalLen],
+                lists:usort(lists:map(fun(T) ->
+                                              length(read_table_rpc(Config, T))
+                                      end, Tables)),
+                45000),
     [RemFun(Thing) || Thing <- Things1],
-    [FinalLen] == lists:usort(TabLens).
+    true.
 
 
 connection(Config) ->
