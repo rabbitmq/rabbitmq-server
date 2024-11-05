@@ -330,7 +330,7 @@ update_in_khepri(XName, Fun) ->
     Path = khepri_exchange_path(XName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := X, payload_version := Vsn}} ->
+        {ok, #{Path := #{data := X, payload_version := Vsn}}} ->
             X1 = Fun(X),
             UpdatePath =
                 khepri_path:combine_with_conditions(
@@ -533,8 +533,8 @@ next_serial_in_khepri(XName) ->
     Path = khepri_exchange_serial_path(XName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := Serial,
-               payload_version := Vsn}} ->
+        {ok, #{Path := #{data := Serial,
+                         payload_version := Vsn}}} ->
             UpdatePath =
                 khepri_path:combine_with_conditions(
                   Path, [#if_payload_version{version = Vsn}]),

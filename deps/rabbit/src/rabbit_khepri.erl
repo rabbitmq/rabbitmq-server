@@ -634,7 +634,7 @@ members() ->
 %% The returned list is empty if there was an error.
 
 locally_known_members() ->
-    case khepri_cluster:locally_known_members(?RA_CLUSTER_NAME) of
+    case khepri_cluster:nodes(?RA_CLUSTER_NAME, #{favor => low_latency}) of
         {ok, Members}    -> Members;
         {error, _Reason} -> []
     end.
@@ -648,7 +648,7 @@ locally_known_members() ->
 %% The returned list is empty if there was an error.
 
 nodes() ->
-    case khepri_cluster:nodes(?RA_CLUSTER_NAME) of
+    case khepri_cluster:nodes(?RA_CLUSTER_NAME, #{favor => consistency}) of
         {ok, Nodes}      -> Nodes;
         {error, _Reason} -> []
     end.
@@ -664,7 +664,7 @@ nodes() ->
 %% The returned list is empty if there was an error.
 
 locally_known_nodes() ->
-    case khepri_cluster:locally_known_nodes(?RA_CLUSTER_NAME) of
+    case khepri_cluster:nodes(?RA_CLUSTER_NAME, #{favor => low_latency}) of
         {ok, Nodes}      -> Nodes;
         {error, _Reason} -> []
     end.
