@@ -6,7 +6,7 @@ on:
       - '.github/workflows/secondary-umbrella.yaml'
       - '.github/workflows/update-elixir-patches.yaml'
       - '.github/workflows/update-otp-patches.yaml'
-      - '.github/workflows/alpha-build.yaml'
+      - '.github/workflows/release-alphas.yaml'
   workflow_dispatch:
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
@@ -64,7 +64,7 @@ jobs:
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV          
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download package-generic-unix
@@ -115,7 +115,7 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"          
+          touch "/tmp/digests/${digest#sha256:}"
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
@@ -156,10 +156,10 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)          
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} 
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
 
   summary-oci:
     needs:
