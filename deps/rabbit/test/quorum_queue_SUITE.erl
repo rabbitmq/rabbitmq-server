@@ -1424,19 +1424,6 @@ policy_repair(Config) ->
                     rabbit_ct_broker_helpers:rpc(
                         Config,
                         Srv,
-<<<<<<< HEAD
-                        erlang,
-                        whereis,
-                        [RaName]))
-            end)
-        end,
-        Servers),
-    
-    % Wait for the policy to apply
-    ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
-                rpc:call(Server0, ra, local_query, [RaName, QueryFun]),
-                ?DEFAULT_AWAIT),
-=======
                         rabbit_quorum_queue,
                         recover,
                         [foo, [Queue]]
@@ -1458,7 +1445,6 @@ policy_repair(Config) ->
                     end)
                 end,
                 Servers),
->>>>>>> 4819801a33 (Exclude policy_repair QQ test on mixed versions)
 
             % Wait for the policy to apply
             ?awaitMatch({ok, {_, #{config := #{max_length := ExpectedMaxLength3}}}, _},
