@@ -42,7 +42,13 @@ merge_app_env(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(Config,
                                     {rabbit, [
                                               {collect_statistics, fine},
+<<<<<<< HEAD
                                               {collect_statistics_interval, 500}
+=======
+                                              {collect_statistics_interval,
+                                               ?COLLECT_INTERVAL},
+                                              {core_metrics_gc_interval, 1000}
+>>>>>>> 4d194b7411 (Tests: clustering_prop_SUITE set core_metrics_gc_interval to a very low value)
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
