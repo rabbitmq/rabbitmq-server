@@ -13,6 +13,7 @@ on:
       - '.github/workflows/secondary-umbrella.yaml'
       - '.github/workflows/update-elixir-patches.yaml'
       - '.github/workflows/update-otp-patches.yaml'
+      - '.github/workflows/alpha-build.yaml'
   workflow_dispatch:
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq-arm64
