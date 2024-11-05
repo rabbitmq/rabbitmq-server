@@ -5,7 +5,7 @@ on:
     branches:
       - "main"
     paths:
-      - "deps/**"
+      - "deps/*/src/**"
       - ".github/workflows/**"
 env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
