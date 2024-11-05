@@ -115,6 +115,7 @@
 
          is_empty/0,
          create/2,
+         create/3,
          adv_create/2,
          update/2,
          cas/3,
@@ -941,7 +942,12 @@ root_path() ->
 is_empty() -> khepri:is_empty(?STORE_ID).
 
 create(Path, Data) ->
-    khepri:create(?STORE_ID, Path, Data, ?DEFAULT_COMMAND_OPTIONS).
+    create(Path, Data, #{}).
+
+create(Path, Data, Options0) ->
+    Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
+    khepri:create(?STORE_ID, Path, Data, Options).
+
 adv_create(Path, Data) -> adv_create(Path, Data, #{}).
 adv_create(Path, Data, Options0) ->
     Options = maps:merge(?DEFAULT_COMMAND_OPTIONS, Options0),
