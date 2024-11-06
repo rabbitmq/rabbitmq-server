@@ -52,17 +52,24 @@ gmake ct-unit_log_management
 ## Running Single Nodes from Source
 
 ``` shell
-# starts a node with the management plugin enabled
+# Run from repository root.
+# Starts a node with the management plugin enabled
 gmake run-broker RABBITMQ_PLUGINS=rabbitmq_management
 ```
 
 The nodes will be started in the background. They will use `rabbit@{hostname}` for its name, so CLI will be able to contact
-it without an explicit `-n` (`--node`) argument.
+it without an explicit `-n` (`--node`) argument:
+
+```shell
+# Run from repository root.
+./sbin/rabbitmq-diagnostics status
+```
 
 ## Running Clusters from Source
 
 ``` shell
-# starts a three node cluster with the management plugin enabled
+# Run from repository root.
+# Starts a three node cluster with the management plugin enabled
 gmake start-cluster NODES=3 RABBITMQ_PLUGINS=rabbitmq_management
 ```
 
@@ -81,17 +88,20 @@ epmd -names
 ```
 
 ``` shell
-# makes CLI tools talk to node rabbit-2
-rabbitmq-diagnostics cluster_status -n rabbit-2
+# Run from repository root.
+# Makes CLI tools talk to node rabbit-2
+sbin/rabbitmq-diagnostics cluster_status -n rabbit-2
 
-# makes CLI tools talk to node rabbit-1
-rabbitmq-diagnostics status -n rabbit-1
+# Run from repository root.
+# Makes CLI tools talk to node rabbit-1
+sbin/rabbitmq-diagnostics status -n rabbit-1
 ```
 
 To stop a previously started cluster:
 
 ``` shell
-# stops a three node cluster started earlier
+# Run from repository root.
+# Stops a three node cluster started earlier
 gmake stop-cluster NODES=3
 ```
 
