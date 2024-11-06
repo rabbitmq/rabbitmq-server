@@ -398,12 +398,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   defp cluster_tags(node, timeout) do
     case :rabbit_misc.rpc_call(
           node,
-          :application,
-          :get_env,
-          [:rabbit, :cluster_tags],
+          :rabbit_runtime_parameters,
+          :value_global,
+          [:cluster_tags],
           timeout) do
-      {:ok, tags} -> tags
-      _ -> []
+      :not_found -> []
+      tags -> tags
     end
   end
 

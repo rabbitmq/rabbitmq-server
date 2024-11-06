@@ -11,6 +11,8 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
+-feature(maybe_expr, enable).
+
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
@@ -38,7 +40,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0, recover/0,
+-export([maybe_set_cluster_tags/0, maybe_insert_default_data/0, boot_delegate/0, recover/0,
          pg_local_amqp_session/0,
          pg_local_amqp_connection/0]).
 
@@ -207,6 +209,12 @@
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
+
+
+-rabbit_boot_step({cluster_tags,
+                   [{description, "Set cluster tags"},
+                    {mfa,         {?MODULE, maybe_set_cluster_tags, []}},
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
@@ -1137,6 +1145,24 @@ pg_local_amqp_connection() ->
 
 pg_local_scope(Prefix) ->
     list_to_atom(io_lib:format("~s_~s", [Prefix, node()])).
+
+
+-spec maybe_set_cluster_tags() -> 'ok'.
+
+maybe_set_cluster_tags() ->
+    maybe
+        not_found ?= rabbit_runtime_parameters:lookup_global(cluster_tags),
+        Tags = application:get_env(rabbit, cluster_tags, []),
+        false ?= Tags == [],
+        ?LOG_INFO("Setting cluster tags...",
+                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+        rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>)
+    else
+        _ ->
+            % Cluster tags are either already set (Other node, earlier start, CLI)
+            % Do nothing?
+            ok
+    end.
 
 -spec maybe_insert_default_data() -> 'ok'.
 

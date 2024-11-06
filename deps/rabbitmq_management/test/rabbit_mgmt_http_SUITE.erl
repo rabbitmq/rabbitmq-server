@@ -288,8 +288,9 @@ init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase = cluster_tags_test, Config) ->
     Tags = [{<<"az">>, <<"us-east-3">>}, {<<"region">>,<<"us-east">>}, {<<"environment">>,<<"production">>}],
-    rabbit_ct_broker_helpers:rpc_all(Config,
-      application, set_env, [rabbit, cluster_tags, Tags]),
+    rpc(
+      Config, rabbit_runtime_parameters, set_global,
+      [cluster_tags, Tags, none]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(queues_detailed_test, Config) ->
     IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
@@ -358,7 +359,9 @@ end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
     Config;
 end_per_testcase0(cluster_tags_test, Config) ->
-    rpc(Config, application, unset_env, [rabbit, cluster_tags]),
+    rpc(
+      Config, rabbit_runtime_parameters, clear_global,
+      [cluster_tags, none]),
     Config;
 end_per_testcase0(Testcase, Config)
   when Testcase == list_deprecated_features_test;
