@@ -169,5 +169,5 @@ for the RabbitMQ team at Pivotal to merge your contribution.
 
 ## Where to Ask Questions
 
-If something isn't clear, feel free to ask on our [mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users)
-and [community Slack](https://rabbitmq-slack.herokuapp.com/).
+If something isn't clear, feel free to ask on [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions)
+and [community Discord server](https://rabbitmq.com/discord).
