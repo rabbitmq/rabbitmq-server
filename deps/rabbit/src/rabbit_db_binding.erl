@@ -342,7 +342,7 @@ delete_in_khepri(#binding{source = SrcName,
                                true ->
                                    case ChecksFun(Src, Dst) of
                                        ok ->
-                                           ok = delete_in_khepri_tx(Binding);
+                                           delete_in_khepri_tx(Binding);
                                        {error, _} = Err ->
                                            Err
                                    end
@@ -376,7 +376,8 @@ delete_in_khepri_tx(Binding) ->
             Set = sets:del_element(Binding, Set0),
             case sets:is_empty(Set) of
                 true ->
-                    ok = khepri_tx:delete(Path);
+                    {ok, Props} = khepri_tx_adv:delete(Path),
+                    handle_deletions_in_khepri_tx(Props);
                 false ->
                     ok = khepri_tx:put(Path, Set)
             end;

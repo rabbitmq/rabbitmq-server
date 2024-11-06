@@ -406,9 +406,22 @@ create_or_get_in_mnesia(#exchange{name = XName} = X) ->
               end
       end).
 
-create_or_get_in_khepri(#exchange{name = XName} = X) ->
+create_or_get_in_khepri(
+  #exchange{name = XName, auto_delete = AutoDelete} = X) ->
     Path = khepri_exchange_path(XName),
-    case rabbit_khepri:create(Path, X) of
+    Options = case AutoDelete of
+                  true ->
+                      %% Tie the lifetime of auto-delete exchanges to their
+                      %% children. Note that this condition is only evaluated
+                      %% after the exchange is created, so even though it can't
+                      %% be true when creating an exchange, the exchange isn't
+                      %% immediately deleted.
+                      Condition = #if_child_list_length{count = {gt, 0}},
+                      #{keep_while => #{Path => Condition}};
+                  _ ->
+                      #{}
+              end,
+    case rabbit_khepri:create(Path, X, Options) of
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
@@ -654,6 +667,9 @@ unconditional_delete_in_khepri(X) ->
     delete_in_khepri_tx(X, true).
 
 delete_in_khepri_tx(X = #exchange{name = XName}, RemoveBindingsForSource) ->
+    %% TODO. This is wrong. Deleting the exchange path will not emit events
+    %% for the deleted bindings. Add a test for this. We should have a suite
+    %% that deletes things and asserts that the event exchange emits events.
     ok = khepri_tx:delete(khepri_exchange_path(XName)),
     rabbit_db_binding:delete_all_for_exchange_in_khepri(X, RemoveBindingsForSource).
 
