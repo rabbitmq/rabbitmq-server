@@ -9,7 +9,7 @@ The process is fairly standard:
 
  * Present your idea to the RabbitMQ core team using [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions) or [RabbitMQ community Discord server](https://rabbitmq.com/discord)
  * Fork the repository or repositories you plan on contributing to
- * Run `git clean -xfffd && git clean && gmake distclean && gmake` to build all subprojects from scratch
+ * Run `git clean -xfffd && gmake clean && gmake distclean && gmake` to build all subprojects from scratch
  * Create a branch with a descriptive name
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
