@@ -7,20 +7,93 @@ Pull requests is the primary place of discussing code changes.
 
 The process is fairly standard:
 
+ * Present your idea to the RabbitMQ core team using [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions) or [RabbitMQ community Discord server](https://rabbitmq.com/discord)
  * Fork the repository or repositories you plan on contributing to
- * Run `bazel sync` if you plan to [use Bazel](https://github.com/rabbitmq/contribute/wiki/Bazel-and-BuildBuddy), or `make`
+ * Run `gmake`
  * Create a branch with a descriptive name in the relevant repositories
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
  * Submit a filled out and signed [Contributor Agreement](https://cla.pivotal.io/) if needed (see below)
  * Be patient. We will get to your pull request eventually
 
-If what you are going to work on is a substantial change, please first ask the core team
-of their opinion on [RabbitMQ mailing list](https://groups.google.com/forum/#!forum/rabbitmq-users).
 
 ## Running Tests
 
-See [this guide on how to use Bazel and BuildBuddy for RabbitMQ core development](https://github.com/rabbitmq/contribute/wiki/Bazel-and-BuildBuddy).
+Test suites of individual subprojects can be run from the subproject directory under
+`deps/*`. For example, for the core broker:
+
+``` shell
+# Running all server suites in parallel will take between 30 and 40 minutes on reasonably
+# recent multi-core machines. This is rarely necessary in development environments.
+# Running individual test suites or groups of test suites can be enough.
+#
+
+# Before you start: this will terminate all running nodes, make processes and Common Test processes
+killall -9 beam.smp; killall -9 erl; killall -9 make; killall -9 epmd; killall -9 erl_setup_child; killall -9 ct_run
+
+# the core broker subproject
+cd deps/rabbit
+
+# cleans build artifacts
+gmake clean; gmake distclean
+
+# builds the broker and all of its dependencies
+gmake
+# runs an integration test suite, tests/rabbit_fifo_SUITE with CT (Common Test)
+gmake ct-rabbit_fifo
+# runs an integration test suite, tests/quorum_queue_SUITE with CT (Common Test)
+gmake ct-quorum_queue
+# runs an integration test suite, tests/quorum_queue_SUITE with CT (Common Test)
+gmake ct-queue_parallel
+# runs a unit test suite tests/unit_log_management_SUITE with CT (Common Test)
+gmake ct-unit_log_management
+```
+
+## Running Single Nodes from Source
+
+``` shell
+# starts a node with the management plugin enabled
+gmake run-broker RABBITMQ_PLUGINS=rabbitmq_management
+```
+
+The nodes will be started in the background. They will use `rabbit@{hostname}` for its name, so CLI will be able to contact
+it without an explicit `-n` (`--node`) argument.
+
+## Running Clusters from Source
+
+``` shell
+# starts a three node cluster with the management plugin enabled
+gmake start-cluster NODES=3 RABBITMQ_PLUGINS=rabbitmq_management
+```
+
+The node will use `rabbit-{n}@{hostname}` for names, so CLI must
+be explicitly given explicit an `-n` (`--node`) argument in order to
+contact one of the nodes:
+
+ * `rabbit-1`
+ * `rabbit-2`
+ * `rabbit-3`
+
+The names of the nodes can be looked up via
+
+``` shell
+epmd -names
+```
+
+``` shell
+# makes CLI tools talk to node rabbit-2
+rabbitmq-diagnostics cluster_status -n rabbit-2
+
+# makes CLI tools talk to node rabbit-1
+rabbitmq-diagnostics status -n rabbit-1
+```
+
+To stop a previously started cluster:
+
+``` shell
+# stops a three node cluster started earlier
+gmake stop-cluster NODES=3
+```
 
 
 ## Working on Management UI with BrowserSync
@@ -28,7 +101,8 @@ See [this guide on how to use Bazel and BuildBuddy for RabbitMQ core development
 When working on management UI code, besides starting the node with
 
 ``` shell
-bazel run broker RABBITMQ_ENABLED_PLUGINS=rabbitmq_management
+# starts a node with the management plugin enabled
+gmake run-broker RABBITMQ_PLUGINS=rabbitmq_management
 ```
 
 (or any other set of plugins), it is highly recommended to use [BrowserSync](https://browsersync.io/#install)
