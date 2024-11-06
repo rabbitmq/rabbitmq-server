@@ -1,3 +1,10 @@
+<%
+   if(management_version != overview.management_version) {
+     // RabbitMQ was upgraded
+     // full reload to get the latest CSS and JavaScript files
+     needs_full_refresh = true;
+   }
+%>
 <% if(disable_stats) { %>
    <h1>Overview: Management only mode</h1>
 <% } else { %>

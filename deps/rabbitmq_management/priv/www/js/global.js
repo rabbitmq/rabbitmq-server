@@ -872,6 +872,9 @@ var timer_interval;
 // When did we last connect successfully (for the "could not connect" error)
 var last_successful_connect;
 
+// we want a full page refresh after we were disconnected or if the RabbitMQ version changed
+var needs_full_refresh = false;
+
 // Every 200 updates without user interaction we do a full refresh, to
 // work around memory leaks in browser DOM implementations.
 // TODO: maybe we don't need this any more?
@@ -886,3 +889,6 @@ var chart_data = {};
 var last_page_out_of_range_error = 0;
 
 var oauth;
+
+// version of RabbitMQ we connected to; used to detect version changes
+var management_version = "";

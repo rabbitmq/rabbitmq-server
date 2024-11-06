@@ -1306,7 +1306,11 @@ function maybe_format_extra_queue_content(queue, extraContent) {
 
 function update_status(status) {
     var text;
-    if (status == 'ok')
+    if (status == 'ok' && needs_full_refresh) {
+        // connection was restored, get the latest CSS/JS
+        needs_full_refresh = false;
+        full_refresh();
+    } else if (status == 'ok')
         text = "Refreshed " + fmt_date(new Date());
     else if (status == 'error') {
         var next_try = new Date(new Date().getTime() + timer_interval);
@@ -1496,6 +1500,7 @@ function check_bad_response(req, full_page_404) {
         clearInterval(timer);
     }
 
+    needs_full_refresh = true;
     return false;
 }
 
