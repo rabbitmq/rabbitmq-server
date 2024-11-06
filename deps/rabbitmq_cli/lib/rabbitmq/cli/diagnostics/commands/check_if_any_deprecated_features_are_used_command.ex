@@ -14,46 +14,28 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
   use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], opts) do
-    are_deprecated_features_used = %{
-      :classic_queue_mirroring => is_used_classic_queue_mirroring(opts)
-    }
-
-    deprecated_features_list =
-      Enum.reduce(
-        are_deprecated_features_used,
-        [],
-        fn
-          {_feat, _result}, {:badrpc, _} = acc ->
-            acc
-
-          {feat, result}, acc ->
-            case result do
-              {:badrpc, _} = err -> err
-              {:error, _} = err -> err
-              true -> [feat | acc]
-              false -> acc
-            end
-        end
-      )
+  def run([], %{node: node_name, timeout: timeout}) do
+    deprecated_features_list = :rabbit_misc.rpc_call(
+      node_name,
+      :rabbit_deprecated_features,
+      :list,
+      [:used],
+      timeout
+    )
 
     # health checks return true if they pass
     case deprecated_features_list do
-      {:badrpc, _} = err -> err
-      {:error, _} = err -> err
-      [] -> true
-      xs when is_list(xs) -> {false, deprecated_features_list}
+      {:badrpc, _} = err ->
+        err
+      {:error, _} = err ->
+        err
+      _ ->
+        names = Enum.sort(Map.keys(deprecated_features_list))
+        case names do
+          [] -> true
+          _  -> {false, names}
+        end
     end
-  end
-
-  def is_used_classic_queue_mirroring(%{node: node_name, timeout: timeout}) do
-    :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_mirror_queue_misc,
-      :are_cmqs_used,
-      [:none],
-      timeout
-    )
   end
 
   def output(true, %{formatter: "json"}) do
