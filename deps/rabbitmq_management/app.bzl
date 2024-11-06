@@ -285,7 +285,6 @@ def all_srcs(name = "all_srcs"):
             "priv/www/api/index.html",
             "priv/www/cli/index.html",
             "priv/www/cli/rabbitmqadmin",
-            "priv/www/css/evil.css",
             "priv/www/css/main.css",
             "priv/www/favicon.ico",
             "priv/www/img/bg-binary.png",
