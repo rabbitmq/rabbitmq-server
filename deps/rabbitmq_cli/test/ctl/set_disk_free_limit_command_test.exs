@@ -26,6 +26,12 @@ defmodule SetDiskFreeLimitCommandTest do
     # silences warnings
     context[:tag]
     on_exit([], fn -> set_disk_free_limit(@default_limit) end)
+    :rabbit_misc.rpc_call(
+        get_rabbit_hostname(),
+        :rabbit_disk_monitor,
+        :set_enabled,
+        [:true]
+      )
 
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
@@ -104,8 +110,12 @@ defmodule SetDiskFreeLimitCommandTest do
   test "run: a valid integer input returns an ok and sets the disk free limit", context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
-    Process.sleep(500)
-    assert status()[:disk_free_limit] === context[:limit]
+    await_condition(
+        fn ->
+           status()[:disk_free_limit] === context[:limit]
+        end,
+        30000
+    )
 
     set_disk_free_limit(@default_limit)
   end
@@ -115,8 +125,12 @@ defmodule SetDiskFreeLimitCommandTest do
        context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
-    Process.sleep(500)
-    assert status()[:disk_free_limit] === round(context[:limit])
+    await_condition(
+        fn ->
+           status()[:disk_free_limit] === round(context[:limit])
+        end,
+        30000
+    )
 
     set_disk_free_limit(@default_limit)
   end
@@ -126,8 +140,12 @@ defmodule SetDiskFreeLimitCommandTest do
        context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
-    Process.sleep(500)
-    assert status()[:disk_free_limit] === context[:limit] |> Float.floor() |> round
+    await_condition(
+        fn ->
+           status()[:disk_free_limit] === context[:limit] |> Float.floor() |> round
+        end,
+        30000
+    )
 
     set_disk_free_limit(@default_limit)
   end
@@ -136,8 +154,12 @@ defmodule SetDiskFreeLimitCommandTest do
   test "run: an integer string input returns an ok and sets the disk free limit", context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
-    Process.sleep(500)
-    assert status()[:disk_free_limit] === String.to_integer(context[:limit])
+    await_condition(
+        fn ->
+           status()[:disk_free_limit] === String.to_integer(context[:limit])
+        end,
+        30000
+    )
 
     set_disk_free_limit(@default_limit)
   end
@@ -145,8 +167,12 @@ defmodule SetDiskFreeLimitCommandTest do
   @tag limit: "2MB"
   test "run: an valid unit string input returns an ok and changes the limit", context do
     assert @command.run([context[:limit]], context[:opts]) == :ok
-    Process.sleep(500)
-    assert status()[:disk_free_limit] === 2_000_000
+    await_condition(
+        fn ->
+           status()[:disk_free_limit] === 2_000_000
+        end,
+        30000
+    )
 
     set_disk_free_limit(@default_limit)
   end

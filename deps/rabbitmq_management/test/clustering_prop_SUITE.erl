@@ -46,7 +46,8 @@ merge_app_env(Config) ->
                                     {rabbit, [
                                               {collect_statistics, fine},
                                               {collect_statistics_interval,
-                                               ?COLLECT_INTERVAL}
+                                               ?COLLECT_INTERVAL},
+                                              {core_metrics_gc_interval, 1000}
                                              ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management, [
