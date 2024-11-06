@@ -14,6 +14,7 @@ on:
       - '.github/workflows/update-elixir-patches.yaml'
       - '.github/workflows/update-otp-patches.yaml'
       - '.github/workflows/release-alphas.yaml'
+      - '*.md'
   workflow_dispatch:
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq-arm64
