@@ -1,72 +1,316 @@
+<!--
+    SVG icons on this page comes from:
+    https://www.svgrepo.com/collection/iconcino-interface-icons/
+-->
 <h1>Feature Flags</h1>
   <%
-       var needs_enabling = false;
+       var nonreq_feature_flags = [];
        for (var i = 0; i < feature_flags.length; i++) {
-         var feature_flag = feature_flags[i];
-         if (feature_flag.state == "disabled" && feature_flag.stability != "experimental") {
-           needs_enabling = true;
-         }
+         if (feature_flags[i].stability == 'required')
+           continue;
+         nonreq_feature_flags.push(feature_flags[i]);
        }
-  if (needs_enabling) { %>
-     <p class="warning">
-        All stable feature flags must be enabled after completing an upgrade. Without enabling all flags, upgrading to future minor or major versions of RabbitMQ may not be possible. <a href="https://www.rabbitmq.com/feature-flags.html">[Learn more]</a>
-     </p>
-  <% } %>
+  %>
+  <div id="ff-disabled-stable-warning" class="warning" style="display: none;">
+      <p>
+      All stable feature flags must be enabled after completing an upgrade.
+      Without enabling all flags, upgrading to future minor or major versions
+      of RabbitMQ may not be possible.
+      <a href="https://www.rabbitmq.com/docs/feature-flags">[Learn more]</a>
+      </p>
+      <button id="ff-enable-all-button" onclick='enable_all_stable_feature_flags(this);'>Enable all stable feature flags</button>
+  </div>
 <div class="section">
   <h2>Feature Flags</h2>
   <div class="hider">
-<%= filter_ui(feature_flags) %>
-  <div class="updatable">
-<% if (feature_flags.length > 0) { %>
+<%= filter_ui(nonreq_feature_flags) %>
+  <div id="ff-table-section" class="updatable">
+<% if (nonreq_feature_flags.length > 0) { %>
+<script>
+var nonreq_feature_flags = <%= JSON.stringify(nonreq_feature_flags) %>;
+
+/* I leave this code commented out below just in case we need that in the
+ * future. It runs some Javascript every time the auto-refresh kicks in. I thought
+ * I neede that to call `handle_refresh()` but the whole script seems to be
+ * re-evaluated anyway.
+ * -- Jean-Sébastien */
+/*
+var section = document.getElementById('ff-table-section');
+var obs_config = {childList: true};
+var callback = function (mutationsList) {
+    handle_refresh();
+};
+var observer = new MutationObserver(callback);
+observer.observe(section, obs_config);
+*/
+
+handle_refresh();
+
+function handle_refresh() {
+    var disabled_stable_feature_flags = false;
+    for (var i = 0; i < nonreq_feature_flags.length; i++) {
+        var feature_flag = nonreq_feature_flags[i];
+        if (feature_flag.state == 'state_changing') {
+            var checkbox = document.getElementById('ff-checkbox-' + feature_flag.name);
+            checkbox.indeterminate = true;
+            /* The checkbox was already marked as disabled when the HTML was
+             * generated. */
+        }
+        if (feature_flag.state == 'disabled' && feature_flag.stability != 'experimental') {
+            disabled_stable_feature_flags = true;
+        }
+    }
+
+    if (disabled_stable_feature_flags) {
+        var button = document.getElementById('ff-enable-all-button');
+        button.disabled = false;
+
+        var warning = document.getElementById('ff-disabled-stable-warning');
+        warning.style.display = 'block';
+    }
+}
+
+function enable_all_stable_feature_flags(button) {
+    button.disabled = true;
+
+    const event = new Event('change');
+    for (var i = 0; i < nonreq_feature_flags.length; i++) {
+        var feature_flag = nonreq_feature_flags[i];
+        if (feature_flag.stability == 'experimental' || feature_flag.state != 'disabled')
+            continue;
+
+        var checkbox = document.getElementById('ff-checkbox-' + feature_flag.name);
+        if (checkbox.disabled)
+            continue;
+
+        checkbox.dispatchEvent(event);
+    }
+}
+
+function lookup_feature_flag(feature_flag_name) {
+    for (var i = 0; i < nonreq_feature_flags.length; i++) {
+        var feature_flag = nonreq_feature_flags[i];
+        if (feature_flag.name == feature_flag_name)
+            return feature_flag;
+    }
+}
+
+function handle_feature_flag(checkbox, feature_flag_name) {
+    var feature_flag = lookup_feature_flag(feature_flag_name);
+
+    pause_auto_refresh();
+
+    checkbox.indeterminate = true;
+    checkbox.disabled = true;
+    checkbox.checked = false;
+
+    if (feature_flag.stability == 'experimental') {
+        var dialog = document.getElementById('ff-exp-dialog');
+        var name_placeholders = document.querySelectorAll('#ff-exp-dialog .ff-name');
+        var confirm_button = document.querySelector('#ff-exp-dialog #ff-exp-confirm');
+        var cancel_button = document.querySelector('#ff-exp-dialog #ff-exp-cancel');
+        var ack_supported = document.getElementById('ff-exp-ack-supported-checkbox');
+        var ack_unsupported1 = document.getElementById('ff-exp-ack-unsupported-checkbox1');
+        var ack_unsupported2 = document.getElementById('ff-exp-ack-unsupported-checkbox2');
+
+        switch (feature_flag.experiment_level) {
+            case 'unsupported':
+                dialog.classList.remove('ff-exp-supported');
+                dialog.classList.add('ff-exp-unsupported');
+                break;
+            case 'supported':
+                dialog.classList.remove('ff-exp-unsupported');
+                dialog.classList.add('ff-exp-supported');
+                break;
+        }
+
+        dialog.returnValue = '';
+        dialog.addEventListener('close', (event) => {
+            if (dialog.returnValue == '') {
+                checkbox.checked = false;
+                checkbox.indeterminate = false;
+                checkbox.disabled = false;
+
+                resume_auto_refresh();
+            }
+        }, {once: true});
+
+        /* Fill name placeholders with the feature flag name. */
+        name_placeholders.forEach(function (name_placeholder) {
+            name_placeholder.innerText = feature_flag.name;
+        });
+
+        var ack_listener = (event) => {
+            switch (feature_flag.experiment_level) {
+                case 'unsupported':
+                    confirm_button.disabled = !(ack_unsupported1.checked && ack_unsupported2.checked);
+                    break;
+                case 'supported':
+                    confirm_button.disabled = !ack_supported.checked;
+                    break;
+            }
+            event.target.addEventListener('click', ack_listener, {once: true});
+        };
+
+        ack_supported.checked = false;
+        ack_supported.addEventListener('click', ack_listener, {once: true});
+
+        ack_unsupported1.checked = false;
+        ack_unsupported1.addEventListener('click', ack_listener, {once: true});
+        ack_unsupported2.checked = false;
+        ack_unsupported2.addEventListener('click', ack_listener, {once: true});
+
+        confirm_button.disabled = true;
+        confirm_button.addEventListener('click', (event) => {
+            event.stopPropagation();
+
+            dialog.close('confirmed');
+            enable_feature_flag(checkbox, feature_flag);
+        }, {once: true});
+
+        cancel_button.addEventListener('click', (event) => {
+            dialog.close();
+        }, {once: true});
+
+        dialog.showModal();
+    } else {
+        enable_feature_flag(checkbox, feature_flag);
+    }
+}
+
+function enable_feature_flag(checkbox, feature_flag) {
+    var url = 'api/feature-flags/' + feature_flag.name + '/enable';
+    var params = {name: feature_flag.name};
+
+    feature_flag.state = 'state_changing';
+
+    fetch(url, {
+        method: 'PUT',
+        headers: {
+            'Authorization': authorization_header(),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+    }).then((resp) => {
+        if (resp.ok) {
+            feature_flag.state = 'enabled';
+            checkbox.checked = true;
+        } else {
+            feature_flag.state = 'disabled';
+            checkbox.checked = false;
+            checkbox.disabled = false;
+
+            resp.json().then((error) => {
+                show_popup('warn', fmt_escape_html(error.reason));
+            });
+        }
+        checkbox.indeterminate = false;
+
+        return feature_flag;
+    }).then((this_feature_flag) => {
+        for (var i = 0; i < nonreq_feature_flags.length; i++) {
+            var feature_flag = nonreq_feature_flags[i].name == this_feature_flag.name ?
+                this_feature_flag : nonreq_feature_flags[i];
+
+            if (feature_flag.stability != 'experimental' && feature_flag.state == 'disabled') {
+                var button = document.getElementById('ff-enable-all-button');
+                button.disabled = false;
+                return;
+            }
+        }
+
+        var warning = document.getElementById('ff-disabled-stable-warning');
+        warning.style.display = 'none';
+    }).then(() => {
+        resume_auto_refresh();
+    });
+}
+</script>
+
+<style>
+.specificities_icons svg {
+    width: 16px;
+    height: 16px;
+}
+
+#ff-exp-dialog {
+    width: 600px;
+}
+
+#ff-exp-dialog h3 {
+    font-size: 2em;
+    margin-top: 0;
+}
+
+#ff-exp-dialog svg {
+    width: 60px;
+    height: 60px;
+}
+
+#ff-exp-dialog.ff-exp-unsupported #ff-exp-ack-supported {
+    display: none;
+}
+
+#ff-exp-dialog.ff-exp-supported #ff-exp-ack-unsupported {
+    display: none;
+}
+
+#ff-exp-dialog button {
+    display: inline-block;
+    margin-right: 1em;
+}
+
+.ff-name {
+    font-family: monospace;
+}
+</style>
+
 <table class="list">
   <thead>
     <tr>
       <th><%= fmt_sort('Name', 'name') %></th>
+      <th class="c">Specificities</th>
       <th class="c"><%= fmt_sort('State', 'state') %></th>
       <th>Description</th>
     </tr>
   </thead>
   <tbody>
     <%
-       for (var i = 0; i < feature_flags.length; i++) {
-         var feature_flag = feature_flags[i];
-         if (feature_flag.stability == "required") {
-           /* Hide required feature flags. There is nothing the user can do
-            * about them and they just add noise to the UI. */
-           continue;
-         }
-         if (feature_flag.stability == "experimental") {
-           continue;
-         }
-         var state_color = "grey";
-         if (feature_flag.state == "enabled") {
-           state_color = "green";
-         } else if (feature_flag.state == "disabled") {
-           state_color = "yellow";
-         } else if (feature_flag.state == "unsupported") {
-           state_color = "red";
-         }
+       for (var i = 0; i < nonreq_feature_flags.length; i++) {
+         var feature_flag = nonreq_feature_flags[i];
     %>
        <tr<%= alt_rows(i)%>>
          <td><%= fmt_string(feature_flag.name) %></td>
-         <td class="c">
-           <% if (feature_flag.stability == "experimental") { %>
-              <span>Experimental</span>
-           <% } else if (feature_flag.stability == "stable" && feature_flag.state == "disabled") { %>
-              <p><span>&#9888;</span>Disabled!</p>
+         <td class="specificities_icons ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
+           <% if (feature_flag.callbacks.includes('enable')) { %>
+           <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="has_migration_icon">
+               <title>This feature flags has a migration function which might take some time and consume resources.</title>
+               <path d="M20.9844 10H17M20.9844 10V6M20.9844 10L17.6569 6.34315C14.5327 3.21895 9.46734 3.21895 6.34315 6.34315C3.21895 9.46734 3.21895 14.5327 6.34315 17.6569C9.46734 20.781 14.5327 20.781 17.6569 17.6569C18.4407 16.873 19.0279 15.9669 19.4184 15M12 9V13L15 14.5" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>
            <% } %>
-           <% if (feature_flag.state == "disabled") { %>
-           <form action="#/feature-flags-enable" method="put" style="display: inline-block" class="enable-feature-flag">
-           <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
-           <input type="submit" value="Enable" class="c"/>
-           </form>
-           <% } else { %>
-           <abbr class="status-<%= fmt_string(state_color) %>"
-             style="text-transform: capitalize"
-             title="Feature flag state: <%= fmt_string(feature_flag.state) %>">
-           <%= fmt_string(feature_flag.state) %>
-           </abbr>
+           <% if (feature_flag.stability == 'experimental') { %>
+           <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="experimental_icon">
+               <title>This is an experimental feature flag</title>
+               <path d="M10 4V10L5.20285 16.8531C4.27496 18.1786 5.22327 20 6.84131 20H17.1587C18.7767 20 19.725 18.1786 18.7972 16.8531L14 10V4M10 4H14M10 4H8M14 4H16" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>
            <% } %>
+           <% if (feature_flag.experiment_level == 'unsupported') { %>
+           <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+               <title>This experimental feature flag is not yet supported at this stage and an upgrade path is not guaranteed</title>
+               <path d="M12 15H12.01M12 12V9M4.98207 19H19.0179C20.5615 19 21.5233 17.3256 20.7455 15.9923L13.7276 3.96153C12.9558 2.63852 11.0442 2.63852 10.2724 3.96153L3.25452 15.9923C2.47675 17.3256 3.43849 19 4.98207 19Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>
+           <% } %>
+         </td>
+         <td class="c ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
+           <input id="ff-checkbox-<%= feature_flag.name %>" type="checkbox" class="toggle"
+                  <% if (feature_flag.state == 'enabled') { %>
+                  checked disabled
+                  <% } %>
+                  <% if (feature_flag.state == 'state_changing') { %>
+                  disabled
+                  <% } %>
+                  onchange='handle_feature_flag(this, "<%= feature_flag.name %>");'/>
+           <label for="ff-checkbox-<%= feature_flag.name %>" class="toggle"/>
          </td>
          <td>
          <p><%= fmt_string(feature_flag.desc) %></p>
@@ -84,76 +328,59 @@
   </div>
   </div>
 </div>
-
-
-
-<div class="section">
-  <h2>Opt-in Feature Flags</h2>
-  <div class="hider">
-<% if (feature_flags.length > 0) { %>
-<p class="warning">
-These feature flags opt-in.
-
-These flags can be enabled in production deployments after an appropriate amount of testing in non-production environments.
-</p>
-<table class="list">
-  <thead>
-    <tr>
-      <th><%= fmt_sort('Name', 'name') %></th>
-      <th class="c"><%= fmt_sort('State', 'state') %></th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <%
-       for (var i = 0; i < feature_flags.length; i++) {
-         var feature_flag = feature_flags[i];
-         if (feature_flag.stability != "experimental") {
-           continue;
-         }
-         var state_color = "grey";
-         if (feature_flag.state == "enabled") {
-           state_color = "green";
-         } else if (feature_flag.state == "disabled") {
-           state_color = "yellow";
-         } else if (feature_flag.state == "unsupported") {
-           state_color = "red";
-         }
-    %>
-       <tr<%= alt_rows(i)%>>
-         <td><%= fmt_string(feature_flag.name) %></td>
-         <td class="c">
-           <% if (feature_flag.state == "disabled") { %>
-              <div>
-              <input id="<%= feature_flag.name %>" type="checkbox" class="riskCheckbox" onclick="this.parentNode.querySelector('.enable-feature-flag input[type=submit]').disabled = !this.checked;">
-              <label for="<%= feature_flag.name %>">I understand that once enabled, this feature flag cannot be disabled</label><br>
-              <br>
-              <form action="#/feature-flags-enable" method="put" style="display: inline-block" class="enable-feature-flag">
-              <input type="hidden" name="name" value="<%= fmt_string(feature_flag.name) %>"/>
-              <input type="submit" value="Enable" class="c" disabled="disabled"/>
-              </div>
-           </form>
-           <% } else { %>
-           <abbr class="status-<%= fmt_string(state_color) %>"
-             style="text-transform: capitalize"
-             title="Feature flag state: <%= fmt_string(feature_flag.state) %>">
-           <%= fmt_string(feature_flag.state) %>
-           </abbr>
-           <% } %>
-         </td>
-         <td>
-         <p><%= fmt_string(feature_flag.desc) %></p>
-         <% if (feature_flag.doc_url) { %>
-         <p><a href="<%= fmt_string(feature_flag.doc_url) %>">[Learn more]</a></p>
-         <% } %>
-         </td>
-       </tr>
-    <% } %>
-  </tbody>
-</table>
-<% } else { %>
-    <p>... no feature_flags ...</p>
-<% } %>
-  </div>
-  </div>
-</div>
+<dialog id="ff-exp-dialog">
+    <svg width="800px" height="800px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 15H12.01M12 12V9M4.98207 19H19.0179C20.5615 19 21.5233 17.3256 20.7455 15.9923L13.7276 3.96153C12.9558 2.63852 11.0442 2.63852 10.2724 3.96153L3.25452 15.9923C2.47675 17.3256 3.43849 19 4.98207 19Z" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h3>Enabling an experimental feature flag</h3>
+    <p>
+    <strong>The <code class="ff-name"></code> feature flag is experimental</strong>.
+    This means the functionality behind it is still a work in progress. Here
+    are a few important things to keep in mind:
+    </p>
+    <ol>
+    <li id="ff-exp-ack-supported">
+    <p>
+    Before enabling it, make sure to <strong>try it in a test environment
+    first</strong> before enabling it in production.
+    </p>
+    <p>
+    The feature flag is supported even though it is still experimental.
+    Therefore, upgrades to a later version of RabbitMQ with this feature flag
+    enabled are supported.
+    </p>
+    <p>
+    <input id="ff-exp-ack-supported-checkbox" type="checkbox"/>
+    <label for="ff-exp-ack-supported-checkbox">I understand that this feature is experimental and should be tested first.</label>
+    </p>
+    </li>
+    <li id="ff-exp-ack-unsupported">
+    <p>
+    This development of this feature is at an early stage. Support is not
+    provided and enabling it in production is not recommended.
+    </p>
+    <p>
+    Once it is enabled, upgrades to a future version of RabbitMQ is not
+    guaranteed! If there is no upgrade path, you will have to use a
+    <a href="https://www.rabbitmq.com/docs/blue-green-upgrade" target="_blank">blue-green migration</a>
+    to upgrade RabbitMQ.
+    </p>
+    <p>
+    <input id="ff-exp-ack-unsupported-checkbox1" type="checkbox"/>
+    <label for="ff-exp-ack-unsupported-checkbox1">I understand that <strong>support is not provided</strong>.</label>
+    </p>
+    <p>
+    <input id="ff-exp-ack-unsupported-checkbox2" type="checkbox"/>
+    <label for="ff-exp-ack-unsupported-checkbox2">I understand that this there is <strong>no guaranteed upgrade path</strong>.</label>
+    </p>
+    </li>
+    <li>
+    If you enable it,
+    <a href="https://github.com/rabbitmq/rabbitmq-server/discussions" target="_blank">please give feedback</a>,
+    this will help the RabbitMQ team polish it and make it stable as soon as
+    possible.
+    </li>
+    </ol>
+    <button id="ff-exp-confirm">Enable <span class="ff-name"></span></button>
+    <button id="ff-exp-cancel">Cancel</button>
+</dialog>
