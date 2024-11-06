@@ -1,4 +1,4 @@
-name: Trigger an alpha release build
+name: Trigger a 4.1.x alpha release build
 on:
   workflow_dispatch:
   push:
@@ -6,6 +6,7 @@ on:
       - "main"
     paths:
       - "deps/*/src/**"
+      - 'deps/rabbitmq_management/priv/**'
       - ".github/workflows/**"
 env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
