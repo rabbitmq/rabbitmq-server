@@ -560,12 +560,29 @@ handle_tick(QName,
               num_discarded := NumDiscarded,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
-              discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
-            Nodes) ->
+              discard_checkout_message_bytes := DiscardCheckoutBytes
+             } = Overview,
+            KnownNodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
     Self = self(),
+    MembersInfo0 = maps:get(members_info, Overview, #{}),
+    RaOverview0 = maps:get(ra_overview, Overview, #{}),
+    RaOverview = maps:update_with(log,
+                                  fun (L) ->
+                                          maps:with([last_index,
+                                                     first_index,
+                                                     last_written_index,
+                                                     last_wal_write,
+                                                     lastest_checkpoint_index],
+                                                    case L of
+                                                        #{last_written_index_term := {I, _}} = LO ->
+                                                            LO#{last_written_index => I};
+                                                        LO ->
+                                                            LO
+                                                    end)
+                                  end, #{}, RaOverview0),
+
     spawn(
       fun() ->
               try
@@ -600,6 +617,17 @@ handle_tick(QName,
                              end, info(Q, Keys), Overview),
                   MsgBytesDiscarded = DiscardBytes + DiscardCheckoutBytes,
                   MsgBytes = EnqueueBytes + CheckoutBytes + MsgBytesDiscarded,
+                  MembersInfo = maps:fold(fun
+                                              ({_, N}, Val0, Acc) ->
+                                                  Val = maps:map(
+                                                          fun (status, {S, _}) ->
+                                                                  S;
+                                                              (_K, V) ->
+                                                                  V
+                                                          end, Val0),
+                                                  Acc#{N => Val}
+                                          end, #{}, MembersInfo0),
+
                   Infos = [{consumers, NumConsumers},
                            {publishers, NumEnqueuers},
                            {consumer_capacity, Util},
@@ -620,7 +648,12 @@ handle_tick(QName,
                                                     unlimited;
                                                 Limit ->
                                                     Limit
-                                            end}
+                                            end},
+                           {members_info, MembersInfo},
+                           {raft, maps:with([current_term,
+                                             commit_index,
+                                             last_applied,
+                                             log], RaOverview)}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
                   ok = repair_leader_record(Q, Self),
@@ -631,7 +664,7 @@ handle_tick(QName,
                           rabbit_log:debug("Repaired quorum queue ~ts amqqueue record", [rabbit_misc:rs(QName)])
                   end,
                   ExpectedNodes = rabbit_nodes:list_members(),
-                  case Nodes -- ExpectedNodes of
+                  case KnownNodes -- ExpectedNodes of
                       [] ->
                           ok;
                       Stale when length(ExpectedNodes) > 0 ->

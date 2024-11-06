@@ -1029,9 +1029,10 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
             %% for returns with a delivery limit set we can just return as before
             {no_reply, Aux0, RaAux0, [{append, Ret, {notify, Corr, Pid}}]}
     end;
-handle_aux(leader, _, {handle_tick, [QName, Overview0, Nodes]},
+handle_aux(leader, _, {handle_tick, [QName, MacOverview0, Nodes]},
            #?AUX{tick_pid = Pid} = Aux, RaAux) ->
-    Overview = Overview0#{members_info => ra_aux:members_info(RaAux)},
+    Overview = MacOverview0#{members_info => ra_aux:members_info(RaAux),
+                             ra_overview => ra_aux:overview(RaAux)},
     NewPid =
         case process_is_alive(Pid) of
             false ->
