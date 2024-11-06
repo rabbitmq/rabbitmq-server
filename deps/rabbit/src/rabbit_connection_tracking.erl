@@ -35,7 +35,7 @@
          list/0, list/1, list_on_node/1, list_on_node/2, list_of_user/1,
          tracked_connection_from_connection_created/1,
          tracked_connection_from_connection_state/1,
-         lookup/1, count/0]).
+         lookup/1, lookup/2, count/0]).
 
 -export([count_local_tracked_items_in_vhost/1,
          count_local_tracked_items_of_user/1]).
@@ -233,8 +233,8 @@ lookup(Name, [Node | Nodes]) when Node == node() ->
     end;
 lookup(Name, [Node | Nodes]) ->
     case rabbit_misc:rpc_call(Node, ?MODULE, lookup, [Name, [Node]]) of
-        [] -> lookup(Name, Nodes);
-        [Row] -> Row
+        not_found -> lookup(Name, Nodes);
+        Row = #tracked_connection{} -> Row
     end.
 
 lookup_internal(Name, Node) ->
