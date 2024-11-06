@@ -1,4 +1,4 @@
-name: Trigger a 4.1.x alpha release build
+name: "Trigger a 4.1.x alpha release build"
 on:
   workflow_dispatch:
   push:
