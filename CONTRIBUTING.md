@@ -44,7 +44,7 @@ gmake
 gmake ct-rabbit_fifo
 # runs an integration test suite, tests/quorum_queue_SUITE with CT (Common Test)
 gmake ct-quorum_queue
-# runs an integration test suite, tests/quorum_queue_SUITE with CT (Common Test)
+# runs an integration test suite, tests/queue_parallel_SUITE with CT (Common Test)
 gmake ct-queue_parallel
 # runs a unit test suite tests/unit_log_management_SUITE with CT (Common Test)
 gmake ct-unit_log_management
