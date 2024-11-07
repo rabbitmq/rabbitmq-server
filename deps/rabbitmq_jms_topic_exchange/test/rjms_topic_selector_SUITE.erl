@@ -56,7 +56,7 @@ init_per_group(mnesia_store = Group, Config0) ->
 init_per_group(khepri_store = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
                Config0,
-               [{metadata_store, {khepri, [khepri_db]}}]),
+               [{metadata_store, khepri}]),
     init_per_group_common(Group, Config);
 init_per_group(khepri_migration = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),

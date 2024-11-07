@@ -80,7 +80,7 @@ init_per_group(khepri_store, Config) ->
     end;
 init_per_group(mnesia_store, Config) ->
     case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, _} ->
+        khepri ->
             {skip, "These tests target mnesia"};
         _ ->
             Config
