@@ -20,7 +20,7 @@ jobs:
         run: echo "PRERELEASE_TIMESTAMP=`date --rfc-3339=seconds`" >> $GITHUB_ENV
       - name: Compute UNIX release timestamp
         run: echo "PRERELEASE_UNIX_TIMESTAMP=`date +%s`" >> $GITHUB_ENV
-      - name: Trigger an alpha release build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
+      - name: Trigger a 4.1.x alpha release build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
         run: |
           curl -L \
             -X POST \
