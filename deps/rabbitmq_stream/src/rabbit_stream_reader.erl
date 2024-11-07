@@ -2819,18 +2819,7 @@ handle_frame_post_auth(Transport,
                              CorrelationId,
                              ?RESPONSE_CODE_STREAM_DOES_NOT_EXIST),
                     increase_protocol_counter(?STREAM_DOES_NOT_EXIST),
-                    {Connection, State};
-                {error, Error} ->
-                    rabbit_log:warning("Error while trying to delete super stream ~tp: ~tp",
-                                               [SuperStream, Error]),
-                    response(Transport,
-                             Connection,
-                             delete_super_stream,
-                             CorrelationId,
-                             ?RESPONSE_CODE_PRECONDITION_FAILED),
-                    increase_protocol_counter(?PRECONDITION_FAILED),
                     {Connection, State}
-
             end;
         error ->
             response(Transport,
