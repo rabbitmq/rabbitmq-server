@@ -40,6 +40,7 @@ all_tests() ->
      delete_serial,
      delete,
      delete_if_unused,
+     auto_delete,
      exists,
      match,
      recover
@@ -283,6 +284,44 @@ delete_if_unused1(_Config) ->
     ?assertMatch({error, in_use}, rabbit_db_exchange:delete(XName1, true)),
     ?assertMatch({ok, #exchange{name = XName1}}, rabbit_db_exchange:get(XName1)),
     ?assertMatch([#exchange{}, #exchange{}], rabbit_db_exchange:get_all_durable()),
+    passed.
+
+auto_delete(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, auto_delete1, [Config]).
+
+auto_delete1(_Config) ->
+    %% An exchange with `auto_delete` set is automatically removed when all
+    %% bindings using the exchange are deleted.
+    XName1 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange-1">>),
+    XName2 = rabbit_misc:r(?VHOST, exchange, <<"test-exchange-2">>),
+    Exchange1 = #exchange{name = XName1, durable = true, auto_delete = true},
+    Exchange2 = #exchange{name = XName2, durable = true},
+    Binding1 = #binding{source = XName1, key = <<"1">>, destination = XName2},
+    Binding2 = #binding{source = XName1, key = <<"2">>, destination = XName2},
+
+    create([Exchange1, Exchange2]),
+    ok = rabbit_db_binding:create(Binding1, fun(_, _) -> ok end),
+    ok = rabbit_db_binding:create(Binding2, fun(_, _) -> ok end),
+    ?assertMatch({ok, #exchange{name = XName1}}, rabbit_db_exchange:get(XName1)),
+    ?assertMatch(
+      [#exchange{name = XName1},
+       #exchange{name = XName2}],
+      rabbit_db_exchange:get_all_durable()),
+
+    %% After one deletion the exchange still exists.
+    {ok, _Deletions1} = rabbit_db_binding:delete(Binding1, fun(_, _) -> ok end),
+    ?assertMatch({ok, #exchange{name = XName1}}, rabbit_db_exchange:get(XName1)),
+    ?assertMatch(
+      [#exchange{name = XName1},
+       #exchange{name = XName2}],
+      rabbit_db_exchange:get_all_durable()),
+
+    %% After the other, the exchange has no bindings left and should be cleaned
+    %% up.
+    {ok, _Deletions2} = rabbit_db_binding:delete(Binding2, fun(_, _) -> ok end),
+    ?assertEqual({error, not_found}, rabbit_db_exchange:get(XName1)),
+    ?assertMatch([#exchange{name = XName2}], rabbit_db_exchange:get_all_durable()),
+
     passed.
 
 exists(Config) ->
