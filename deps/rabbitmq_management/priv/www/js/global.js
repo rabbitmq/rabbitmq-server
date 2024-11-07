@@ -889,6 +889,3 @@ var chart_data = {};
 var last_page_out_of_range_error = 0;
 
 var oauth;
-
-// version of RabbitMQ we connected to; used to detect version changes
-var management_version = "";

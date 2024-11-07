@@ -1,5 +1,5 @@
 <%
-   if(management_version != overview.management_version) {
+   if(management_version != undefined && management_version != '%%VSN%%' && management_version != overview.management_version) {
      // RabbitMQ was upgraded
      // full reload to get the latest CSS and JavaScript files
      needs_full_refresh = true;

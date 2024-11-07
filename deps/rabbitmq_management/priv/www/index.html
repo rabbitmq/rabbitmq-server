@@ -11,14 +11,25 @@
     <script src="js/sammy-0.7.6.min.js" type="text/javascript"></script>
     <script src="js/json2-2016.10.28.js" type="text/javascript"></script>
     <script src="js/base64.js" type="text/javascript"></script>
-    <script src="js/global.js" type="text/javascript"></script>
-    <script src="js/main.js" type="text/javascript"></script>
-    <script src="js/prefs.js" type="text/javascript"></script>
-    <script src="js/formatters.js" type="text/javascript"></script>
-    <script src="js/charts.js" type="text/javascript"></script>
+
+    <script type="text/javascript">
+      management_version = "%%VSN%%";
+      const scripts = ["global.js", "main.js", "prefs.js", "formatters.js", "charts.js"];
+      scripts.forEach((script) => {
+        tag = document.createElement('script');
+        tag.src = 'js/' + script + '?v=' + management_version;
+        document.head.appendChild(tag);
+      });
+
+      tag = document.createElement('link');
+      tag.rel = 'stylesheet';
+      tag.type = 'text/css';
+      tag.href = 'css/main.css?v=' + management_version;
+      document.head.appendChild(tag);
+    </script>
+
     <script src="js/oidc-oauth/bootstrap.js" type="module"></script>
     
-    <link href="css/main.css" rel="stylesheet" type="text/css"/>
     <link href="favicon.ico" rel="shortcut icon" type="image/x-icon"/>    
     
     <script type="module">

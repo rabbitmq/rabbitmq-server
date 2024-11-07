@@ -45,7 +45,5 @@ list-dist-deps::
 prepare-dist::
 	$(verbose) sed 's/%%VSN%%/$(PROJECT_VERSION)/' bin/rabbitmqadmin \
 		> $(EZ_DIR)/priv/www/cli/rabbitmqadmin
-	mv $(EZ_DIR)/priv/www/css/main.css $(EZ_DIR)/priv/www/css/main-$(PROJECT_VERSION).css
-	$(verbose) sed "s#css/main.css#css/main-$(PROJECT_VERSION).css#" priv/www/index.html \
+	$(verbose) sed "s/%%VSN%%/$(PROJECT_VERSION)/" priv/www/index.html \
 		> $(EZ_DIR)/priv/www/index.html
-	echo "management_version = \"$(PROJECT_VERSION)\";" >> $(EZ_DIR)/priv/www/js/global.js
