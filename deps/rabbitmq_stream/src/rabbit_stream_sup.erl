@@ -47,9 +47,6 @@ init([]) ->
                  SslListeners0}
         end,
 
-    Nodes = rabbit_nodes:list_members(),
-    OsirisConf = #{nodes => Nodes},
-
     ServerConfiguration =
         #{initial_credits =>
               application:get_env(rabbitmq_stream, initial_credits,
@@ -65,11 +62,6 @@ init([]) ->
               application:get_env(rabbitmq_stream, heartbeat,
                                   ?DEFAULT_HEARTBEAT)},
 
-    StreamManager =
-        #{id => rabbit_stream_manager,
-          type => worker,
-          start => {rabbit_stream_manager, start_link, [OsirisConf]}},
-
     MetricsGc =
         #{id => rabbit_stream_metrics_gc,
           type => worker,
@@ -77,7 +69,7 @@ init([]) ->
 
     {ok,
      {{one_for_all, 10, 10},
-      [StreamManager, MetricsGc]
+      [MetricsGc]
       ++ listener_specs(fun tcp_listener_spec/1,
                         [SocketOpts, ServerConfiguration, NumTcpAcceptors],
                         Listeners)
