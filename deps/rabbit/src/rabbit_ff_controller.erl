@@ -850,16 +850,23 @@ get_forced_feature_flag_names_from_env() ->
     end.
 
 -spec get_forced_feature_flag_names_from_config() -> Ret when
-      Ret :: {ok, FeatureNames | undefined},
-      FeatureNames :: [rabbit_feature_flags:feature_name()].
+      Ret :: {ok, Abs | Rel | undefined},
+      Abs :: [rabbit_feature_flags:feature_name()],
+      Rel :: {rel,
+              [rabbit_feature_flags:feature_name()],
+              [rabbit_feature_flags:feature_name()]}.
 %% @private
 
 get_forced_feature_flag_names_from_config() ->
     Value = application:get_env(
               rabbit, forced_feature_flags_on_init, undefined),
     case Value of
-        undefined             -> {ok, Value};
-        _ when is_list(Value) -> {ok, Value}
+        undefined ->
+            {ok, Value};
+        _ when is_list(Value) ->
+            {ok, Value};
+        {rel, Plus, Minus} when is_list(Plus) andalso is_list(Minus) ->
+            {ok, Value}
     end.
 
 -spec enable_required_task() -> Ret when
