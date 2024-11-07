@@ -1,0 +1,112 @@
+<% if (sessions.length > 0) { %>
+<table class="list">
+ <thead>
+  <tr>
+   <th>Channel number</th>
+   <th>handle-max</th>
+   <th>next-incoming-id</th>
+   <th>incoming-window</th>
+   <th>next-outgoing-id</th>
+   <th>remote-incoming-window</th>
+   <th>remote-outgoing-window</th>
+   <th>Outgoing unsettled deliveries <span class="help" id="outgoing-unsettled-deliveries"></span></th>
+  </tr>
+ </thead>
+
+ <tbody>
+<%
+ for (var i = 0; i < sessions.length; i++) {
+  var session = sessions[i];
+%>
+  <tr>
+   <td class="c"><%= fmt_string(session.channel_number) %></td>
+   <td class="c"><%= fmt_string(session.handle_max) %></td>
+   <td class="c"><%= fmt_string(session.next_incoming_id) %></td>
+   <td class="c"><%= fmt_string(session.incoming_window) %></td>
+   <td class="c"><%= fmt_string(session.next_outgoing_id) %></td>
+   <td class="c"><%= fmt_string(session.remote_incoming_window) %></td>
+   <td class="c"><%= fmt_string(session.remote_outgoing_window) %></td>
+   <td class="c"><%= fmt_string(session.outgoing_unsettled_deliveries) %></td>
+  </tr>
+<% if (session.incoming_links.length > 0) { %>
+  <tr>
+  <td colspan="8">
+   <p>Incoming Links (<%=(session.incoming_links.length)%>) <span class="help" id="incoming-links"></span></p>
+   <table class="list">
+    <thead>
+     <tr>
+      <th>Link handle</th>
+      <th>Link name</th>
+      <th>Target address <span class="help" id="target-address"></span></th>
+      <th>snd-settle-mode <span class="help" id="snd-settle-mode"></span></th>
+      <th>max-message-size (bytes)</th>
+      <th>delivery-count</th>
+      <th>link-credit</th>
+      <th>Unconfirmed messages <span class="help" id="amqp-unconfirmed-messages"></span></th>
+     </tr>
+    </thead>
+    <tbody>
+<%
+ for (var j = 0; j < session.incoming_links.length; j++) {
+  var in_link = session.incoming_links[j];
+%>
+     <tr>
+      <td class="c"><%= fmt_string(in_link.handle) %></td>
+      <td class="c"><%= fmt_string(in_link.link_name) %></td>
+      <td class="c"><%= fmt_string(in_link.target_address) %></td>
+      <td class="c"><%= fmt_string(in_link.snd_settle_mode) %></td>
+      <td class="c"><%= fmt_string(in_link.max_message_size) %></td>
+      <td class="c"><%= fmt_string(in_link.delivery_count) %></td>
+      <td class="c"><%= fmt_string(in_link.credit) %></td>
+      <td class="c"><%= fmt_string(in_link.unconfirmed_messages) %></td>
+     </tr>
+<% } %>
+    </tbody>
+   </table>
+  </td>
+  </tr>
+<% } %>
+<% if (session.outgoing_links.length > 0) { %>
+  <tr>
+  <td colspan="8">
+   <p>Outgoing Links (<%=(session.outgoing_links.length)%>) <span class="help" id="outgoing-links"></span></p>
+   <table class="list">
+    <thead>
+     <tr>
+      <th>Link handle</th>
+      <th>Link name</th>
+      <th>Source address <span class="help" id="source-address"></span></th>
+      <th>Source queue <span class="help" id="amqp-source-queue"></span></th>
+      <th>Sender settles <span class="help" id="sender-settles"></span></th>
+      <th>max-message-size (bytes)</th>
+      <th>delivery-count</th>
+      <th>link-credit</th>
+     </tr>
+    </thead>
+    <tbody>
+<%
+ for (var k = 0; k < session.outgoing_links.length; k++) {
+  var out_link = session.outgoing_links[k];
+%>
+     <tr>
+      <td class="c"><%= fmt_string(out_link.handle) %></td>
+      <td class="c"><%= fmt_string(out_link.link_name) %></td>
+      <td class="c"><%= fmt_string(out_link.source_address) %></td>
+      <td class="c"><%= fmt_string(out_link.queue_name) %></td>
+      <td class="c"><%= fmt_boolean(out_link.send_settled) %></td>
+      <td class="c"><%= fmt_string(out_link.max_message_size) %></td>
+      <td class="c"><%= fmt_string(out_link.delivery_count) %></td>
+      <td class="c"><%= fmt_string(out_link.credit) %></td>
+     </tr>
+<% } %>
+    </tbody>
+   </table>
+  </td>
+  </tr>
+<% } %>
+<% } %>
+ </tbody>
+</table>
+<% } else { %>
+ <p>No sessions</p>
+<% } %>

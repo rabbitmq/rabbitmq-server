@@ -92,7 +92,8 @@
          conserve_resources/3,
          check_resource_access/4,
          check_read_permitted_on_topic/4,
-         reset_authz/2
+         reset_authz/2,
+         info/1
         ]).
 
 -export([init/1,
@@ -148,7 +149,9 @@
          }).
 
 -record(incoming_link, {
+          name :: binary(),
           snd_settle_mode :: snd_settle_mode(),
+          target_address :: null | binary(),
           %% The exchange is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
           %% "to" field (address v2).
@@ -197,6 +200,8 @@
          }).
 
 -record(outgoing_link, {
+          name :: binary(),
+          source_address :: binary(),
           %% Although the source address of a link might be an exchange name and binding key
           %% or a topic filter, an outgoing link will always consume from a queue.
           queue_name :: rabbit_amqqueue:name(),
@@ -490,6 +495,8 @@ conserve_resources(Pid, Source, {_, Conserve, _}) ->
 reset_authz(Pid, User) ->
     gen_server:cast(Pid, {reset_authz, User}).
 
+handle_call(infos, _From, State) ->
+    reply(infos(State), State);
 handle_call(Msg, _From, State) ->
     Reply = {error, {not_understood, Msg}},
     reply(Reply, State).
@@ -1262,11 +1269,11 @@ handle_attach(#'v1_0.attach'{
     reply_frames([Reply], State);
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
-                             name = LinkName,
+                             name = LinkName = {utf8, LinkName0},
                              handle = Handle = ?UINT(HandleInt),
                              source = Source,
                              snd_settle_mode = MaybeSndSettleMode,
-                             target = Target,
+                             target = Target = #'v1_0.target'{address = TargetAddress},
                              initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
                             },
               State0 = #state{incoming_links = IncomingLinks0,
@@ -1279,7 +1286,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
             IncomingLink = #incoming_link{
+                              name = LinkName0,
                               snd_settle_mode = SndSettleMode,
+                              target_address = address(TargetAddress),
                               exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
@@ -1316,9 +1325,10 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
-                             name = LinkName,
+                             name = LinkName = {utf8, LinkName0},
                              handle = Handle = ?UINT(HandleInt),
-                             source = Source = #'v1_0.source'{filter = DesiredFilter},
+                             source = Source = #'v1_0.source'{address = SourceAddress,
+                                                              filter = DesiredFilter},
                              snd_settle_mode = SndSettleMode,
                              rcv_settle_mode = RcvSettleMode,
                              max_message_size = MaybeMaxMessageSize,
@@ -1431,6 +1441,8 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           offered_capabilities = OfferedCaps},
                                    MaxMessageSize = max_message_size(MaybeMaxMessageSize),
                                    Link = #outgoing_link{
+                                             name = LinkName0,
+                                             source_address = address(SourceAddress),
                                              queue_name = queue_resource(Vhost, QNameBin),
                                              queue_type = QType,
                                              send_settled = SndSettled,
@@ -2672,6 +2684,11 @@ ensure_source_v1(Address,
             Err
     end.
 
+address(undefined) ->
+    null;
+address({utf8, String}) ->
+    String.
+
 -spec ensure_target(#'v1_0.target'{},
                     rabbit_types:vhost(),
                     rabbit_types:user(),
@@ -3702,6 +3719,118 @@ format_status(
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
 
+-spec info(pid()) ->
+    {ok, rabbit_types:infos()} | {error, term()}.
+info(Pid) ->
+    try gen_server:call(Pid, infos) of
+        Infos ->
+            {ok, Infos}
+    catch _:Reason ->
+              {error, Reason}
+    end.
+
+infos(#state{cfg = #cfg{channel_num = ChannelNum,
+                        max_handle = MaxHandle},
+             next_incoming_id = NextIncomingId,
+             incoming_window = IncomingWindow,
+             next_outgoing_id = NextOutgoingId,
+             remote_incoming_window = RemoteIncomingWindow,
+             remote_outgoing_window = RemoteOutgoingWindow,
+             outgoing_unsettled_map = OutgoingUnsettledMap,
+             incoming_links = IncomingLinks,
+             outgoing_links = OutgoingLinks,
+             incoming_management_links = IncomingManagementLinks,
+             outgoing_management_links = OutgoingManagementLinks
+            }) ->
+    [
+     {channel_number, ChannelNum},
+     {handle_max, MaxHandle},
+     {next_incoming_id, NextIncomingId},
+     {incoming_window, IncomingWindow},
+     {next_outgoing_id, NextOutgoingId},
+     {remote_incoming_window, RemoteIncomingWindow},
+     {remote_outgoing_window, RemoteOutgoingWindow},
+     {outgoing_unsettled_deliveries, maps:size(OutgoingUnsettledMap)},
+     {incoming_links,
+      info_incoming_management_links(IncomingManagementLinks) ++
+      info_incoming_links(IncomingLinks)},
+     {outgoing_links,
+      info_outgoing_management_links(OutgoingManagementLinks) ++
+      info_outgoing_links(OutgoingLinks)}
+    ].
+
+info_incoming_management_links(Links) ->
+    [info_incoming_link(Handle, Name, settled, ?MANAGEMENT_NODE_ADDRESS,
+                        MaxMessageSize, DeliveryCount, Credit, 0)
+     || Handle := #management_link{
+                     name = Name,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit} <- Links].
+
+info_incoming_links(Links) ->
+    [info_incoming_link(Handle, Name, SndSettleMode, TargetAddress, MaxMessageSize,
+                        DeliveryCount, Credit, maps:size(IncomingUnconfirmedMap))
+     || Handle := #incoming_link{
+                     name = Name,
+                     snd_settle_mode = SndSettleMode,
+                     target_address = TargetAddress,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit,
+                     incoming_unconfirmed_map = IncomingUnconfirmedMap} <- Links].
+
+info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
+                   MaxMessageSize, DeliveryCount, Credit, UnconfirmedMessages) ->
+    [{handle, Handle},
+     {link_name, LinkName},
+     {snd_settle_mode, SndSettleMode},
+     {target_address, TargetAddress},
+     {max_message_size, MaxMessageSize},
+     {delivery_count, DeliveryCount},
+     {credit, Credit},
+     {unconfirmed_messages, UnconfirmedMessages}].
+
+info_outgoing_management_links(Links) ->
+    [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
+                        true, MaxMessageSize, DeliveryCount, Credit)
+     || Handle := #management_link{
+                     name = Name,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit} <- Links].
+
+info_outgoing_links(Links) ->
+    [begin
+         {DeliveryCount, Credit} = case ClientFlowCtl of
+                                       #client_flow_ctl{delivery_count = DC,
+                                                        credit = C} ->
+                                           {DC, C};
+                                       credit_api_v1 ->
+                                           {'', ''}
+                                   end,
+         info_outgoing_link(Handle, Name, SourceAddress, QueueName#resource.name,
+                            SendSettled, MaxMessageSize, DeliveryCount, Credit)
+
+     end
+     || Handle := #outgoing_link{
+                     name = Name,
+                     source_address = SourceAddress,
+                     queue_name = QueueName,
+                     max_message_size = MaxMessageSize,
+                     send_settled = SendSettled,
+                     client_flow_ctl = ClientFlowCtl} <- Links].
+
+info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
+                   MaxMessageSize, DeliveryCount, Credit) ->
+    [{handle, Handle},
+     {link_name, LinkName},
+     {source_address, SourceAddress},
+     {queue_name, QueueNameBin},
+     {send_settled, SendSettled},
+     {max_message_size, MaxMessageSize},
+     {delivery_count, DeliveryCount},
+     {credit, Credit}].
 
 unwrap_simple_type(V = {list, _}) ->
     V;

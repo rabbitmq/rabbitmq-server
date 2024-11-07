@@ -967,7 +967,8 @@ silent_close_delay() ->
 -spec info(rabbit_types:connection(), rabbit_types:info_keys()) ->
     rabbit_types:infos().
 info(Pid, InfoItems) ->
-    case InfoItems -- ?INFO_ITEMS of
+    KnownItems = [session_pids | ?INFO_ITEMS],
+    case InfoItems -- KnownItems of
         [] ->
             case gen_server:call(Pid, {info, InfoItems}, infinity) of
                 {ok, InfoList} ->
@@ -1065,6 +1066,8 @@ i(client_properties, #v1{connection = #v1_connection{properties = Props}}) ->
     end;
 i(channels, #v1{tracked_channels = Channels}) ->
     maps:size(Channels);
+i(session_pids, #v1{tracked_channels = Map}) ->
+    maps:values(Map);
 i(channel_max, #v1{connection = #v1_connection{channel_max = Max}}) ->
     Max;
 i(reductions = Item, _State) ->

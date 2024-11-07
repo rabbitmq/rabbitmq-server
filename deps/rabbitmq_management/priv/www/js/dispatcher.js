@@ -46,10 +46,21 @@ dispatcher_add(function(sammy) {
         });
       sammy.get('#/connections/:name', function() {
             var name = esc(this.params['name']);
-            render({'connection': {path:    '/connections/' + name,
-                                   options: {ranges: ['data-rates-conn']}},
-                    'channels': '/connections/' + name + '/channels'},
-                'connection', '#/connections');
+            var connectionPath = '/connections/' + name;
+            var reqs = {
+                'connection': {
+                    path: connectionPath,
+                    options: { ranges: ['data-rates-conn'] }
+                }
+            };
+            // First, get the connection details to check the protocol
+            var connectionDetails = JSON.parse(sync_get(connectionPath));
+            if (connectionDetails.protocol === 'AMQP 1-0') {
+                reqs['sessions'] = connectionPath + '/sessions';
+            } else {
+                reqs['channels'] = connectionPath + '/channels';
+            }
+            render(reqs, 'connection', '#/connections');
         });
       sammy.del('#/connections', function() {
             var options = {headers: {

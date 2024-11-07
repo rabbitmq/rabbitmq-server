@@ -84,12 +84,25 @@
 </div>
 </div>
 
+<% if (connection.protocol === 'AMQP 1-0') { %>
+
+<div class="section">
+  <h2 class="updatable" >Sessions (<%=(sessions.length)%>)</h2>
+  <div class="hider updatable">
+    <%= format('sessions-list', {'sessions': sessions}) %>
+  </div>
+</div>
+
+<% } else { %>
+
 <div class="section">
   <h2 class="updatable" >Channels (<%=(channels.length)%>) </h2>
   <div class="hider updatable">
     <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
   </div>
 </div>
+
+<% } %>
 
 <% if (connection.ssl) { %>
 <div class="section">

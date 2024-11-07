@@ -586,8 +586,34 @@ var HELP = {
      </dl> ',
 
     'container-id':
-      'Name of the client application as sent from client to RabbitMQ in the "container-id" field of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.'
+      'Name of the client application as sent from client to RabbitMQ in the "container-id" field of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.',
 
+    'incoming-links':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#section-links">Links</a> where the client is the sender/publisher and RabbitMQ is the receiver of messages.',
+
+    'outgoing-links':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#section-links">Links</a> where the client is the receiver/consumer and RabbitMQ is the sender of messages.',
+
+    'target-address':
+      'The "address" field of the link <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-target">target</a>.',
+
+    'source-address':
+      'The "address" field of the link <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-source">source</a>.',
+
+    'amqp-source-queue':
+      'The client receives messages from this queue.',
+
+    'amqp-unconfirmed-messages':
+      'Number of messages that have been sent to queues but have not been confirmed by all queues.',
+
+    'snd-settle-mode':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-sender-settle-mode">Sender Settle Mode</a>',
+
+    'sender-settles':
+      '"true" if the sender sends all deliveries settled to the receiver. "false" if the sender sends all deliveries initially unsettled to the receiver.',
+
+    'outgoing-unsettled-deliveries':
+      'Number of messages that have been sent to consumers but have not yet been settled/acknowledged.'
 };
 
 ///////////////////////////////////////////////////////////////////////////
