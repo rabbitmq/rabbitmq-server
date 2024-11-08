@@ -3006,7 +3006,7 @@ detach_requeues_two_connections(QType, Config) ->
     ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
     ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
     %% Wait for credit being applied to the queue.
-    timer:sleep(10),
+    timer:sleep(100),
 
     {ok, Receiver1} = amqp10_client:attach_receiver_link(Session1, <<"receiver 1">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
@@ -3014,7 +3014,7 @@ detach_requeues_two_connections(QType, Config) ->
     end,
     ok = amqp10_client:flow_link_credit(Receiver1, 40, never),
     %% Wait for credit being applied to the queue.
-    timer:sleep(10),
+    timer:sleep(100),
 
     NumMsgs = 6,
     [begin
