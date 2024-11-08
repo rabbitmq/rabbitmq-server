@@ -55,7 +55,8 @@
 -export([query_local_pid/3,
          query_writer_pid/2,
          query_members/2,
-         query_stream_overview/2]).
+         query_stream_overview/2,
+         ra_local_query/1]).
 
 
 -export([log_overview/1,
@@ -271,7 +272,7 @@ sac_state(#?MODULE{single_active_consumer = SacState}) ->
 
 %% for debugging
 state() ->
-    case ra:local_query({?MODULE, node()}, fun(State) -> State end) of
+    case ra_local_query(fun(State) -> State end) of
         {ok, {_, Res}, _} ->
             Res;
         Any ->
@@ -289,7 +290,7 @@ local_pid(StreamId) when is_list(StreamId) ->
     query_pid(StreamId, MFA).
 
 query_pid(StreamId, MFA) when is_list(StreamId) ->
-    case ra:local_query({?MODULE, node()}, MFA) of
+    case ra_local_query(MFA) of
         {ok, {_, {ok, Pid}}, _} ->
             case erpc:call(node(Pid), erlang, is_process_alive, [Pid]) of
                 true ->
@@ -380,7 +381,7 @@ query_writer_pid(StreamId, #?MODULE{streams = Streams}) ->
     end.
 
 do_query(MFA) ->
-    case ra:local_query({?MODULE, node()}, MFA) of
+    case ra_local_query(MFA) of
         {ok, {_, {ok, _} = Result}, _} ->
             Result;
         {ok, {_, {error, not_found}}, _} ->
@@ -2337,3 +2338,6 @@ key_metrics_rpc(ServerId) ->
 
 maps_to_list(M) ->
     lists:sort(maps:to_list(M)).
+
+ra_local_query(QueryFun) ->
+    ra:local_query({?MODULE, node()}, QueryFun, infinity).
