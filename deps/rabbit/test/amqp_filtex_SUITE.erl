@@ -182,6 +182,9 @@ properties_section(Config) ->
     {ok, Receiver3} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 3">>, Address,
                         unsettled, configuration, Filter3),
+    receive {amqp10_event, {link, Receiver3, {attached, #'v1_0.attach'{}}}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
     ok = amqp10_client:flow_link_credit(Receiver3, 10, never),
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver3),
