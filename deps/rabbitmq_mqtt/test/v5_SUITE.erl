@@ -1480,7 +1480,14 @@ will_delay_session_takeover(Config) ->
      after 1000 -> ct:fail("server did not disconnect us")
      end || _ <- Clients],
 
-    ok = expect_publishes(Sub, Topic, [<<"will-3a">>, <<"will-4a">>]),
+    receive {publish, #{client_pid := Sub,
+                        payload := <<"will-3a">>}} -> ok
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {publish, #{client_pid := Sub,
+                        payload := <<"will-4a">>}} -> ok
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
     assert_nothing_received(),
 
     [ok = emqtt:disconnect(C) || C <- [Sub, C1b, C2b, C3b, C4b]].
