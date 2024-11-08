@@ -41,6 +41,8 @@
          group_consumers/5,
          overview/1]).
 
+-import(rabbit_stream_coordinator, [ra_local_query/1]).
+
 %% Single Active Consumer API
 -spec register_consumer(binary(),
                         binary(),
@@ -129,9 +131,7 @@ process_command(Cmd) ->
                          {ok,
                           [term()] | {error, atom()}}.
 consumer_groups(VirtualHost, InfoKeys) ->
-    case ra:local_query({rabbit_stream_coordinator,
-                         node()},
-                        fun(State) ->
+    case ra_local_query(fun(State) ->
                                 SacState =
                                 rabbit_stream_coordinator:sac_state(State),
                                 consumer_groups(VirtualHost,
@@ -152,9 +152,7 @@ consumer_groups(VirtualHost, InfoKeys) ->
                          {ok, [term()]} |
                          {error, atom()}.
 group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
-    case ra:local_query({rabbit_stream_coordinator,
-                         node()},
-                        fun(State) ->
+    case ra_local_query(fun(State) ->
                                 SacState =
                                 rabbit_stream_coordinator:sac_state(State),
                                 group_consumers(VirtualHost,
