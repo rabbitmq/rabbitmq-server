@@ -1198,7 +1198,7 @@ management_plugin_connection(Config) ->
                 "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)),
                 ?NO_CONTENT),
     await_exit(C1),
-    ?assertEqual([], http_get(Config, "/connections")),
+    eventually(?_assertEqual([], http_get(Config, "/connections"))),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3),
 
     C2 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
@@ -1207,7 +1207,7 @@ management_plugin_connection(Config) ->
                 "/connections/username/guest",
                 ?NO_CONTENT),
     await_exit(C2),
-    ?assertEqual([], http_get(Config, "/connections")),
+    eventually(?_assertEqual([], http_get(Config, "/connections"))),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3).
 
 management_plugin_enable(Config) ->
