@@ -202,7 +202,16 @@ all_tests() -> [
     qq_status_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test,
+<<<<<<< HEAD
     cluster_tags_test
+=======
+    connections_amqpl,
+    connections_amqp,
+    amqp_sessions,
+    amqpl_sessions,
+    enable_plugin_amqp,
+    cluster_and_node_tags_test
+>>>>>>> 3d35416635 (Node tags local to broker, add to /api/overview output and ctl status command)
 ].
 
 %% -------------------------------------------------------------------
@@ -283,8 +292,10 @@ init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc_all(Config,
       application, set_env, [rabbitmq_management, restrictions, Restrictions]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
-init_per_testcase(Testcase = cluster_tags_test, Config) ->
+init_per_testcase(Testcase = cluster_and_node_tags_test, Config) ->
     Tags = [{<<"az">>, <<"us-east-3">>}, {<<"region">>,<<"us-east">>}, {<<"environment">>,<<"production">>}],
+    rpc(Config,
+        application, set_env, [rabbit, node_tags, Tags]),
     rpc(
       Config, rabbit_runtime_parameters, set_global,
       [cluster_tags, Tags, none]),
@@ -355,7 +366,9 @@ end_per_testcase0(disabled_operator_policy_test, Config) ->
 end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
     Config;
-end_per_testcase0(cluster_tags_test, Config) ->
+end_per_testcase0(cluster_and_node_tags_test, Config) ->
+    rpc(
+      Config, application, unset_env, [rabbit, node_tags]),
     rpc(
       Config, rabbit_runtime_parameters, clear_global,
       [cluster_tags, none]),
@@ -3948,12 +3961,14 @@ list_used_deprecated_features_test(Config) ->
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
     ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
 
-cluster_tags_test(Config) ->
+cluster_and_node_tags_test(Config) ->
     Overview = http_get(Config, "/overview"),
-    Tags = maps:get(cluster_tags, Overview),
+    ClusterTags = maps:get(cluster_tags, Overview),
+    NodeTags = maps:get(node_tags, Overview),
     ExpectedTags = #{az => <<"us-east-3">>,environment => <<"production">>,
                      region => <<"us-east">>},
-    ?assertEqual(ExpectedTags, Tags),
+    ?assertEqual(ExpectedTags, ClusterTags),
+    ?assertEqual(ExpectedTags, NodeTags),
     passed.
 
 %% -------------------------------------------------------------------

@@ -69,7 +69,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
-
     product_name_section =
       case m do
         %{:product_name => product_name} when product_name != "" ->
@@ -142,6 +141,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
           xs -> alarm_lines(xs, node_name)
         end
 
+    tags_section =
+      [
+        "\n#{bright("Tags")}\n"
+      ] ++
+        case m[:tags] do
+          [] -> ["(none)"]
+          xs -> tag_lines(xs)
+        end
+
     breakdown = compute_relative_values(m[:memory])
     memory_calculation_strategy = to_atom(m[:vm_memory_calculation_strategy])
     total_memory = get_in(m[:memory], [:total, memory_calculation_strategy])
@@ -198,6 +206,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         config_section ++
         log_section ++
         alarms_section ++
+        tags_section ++
         memory_section ++
         file_descriptors ++ disk_space_section ++ totals_section ++ listeners_section
 
@@ -265,6 +274,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       disk_free: Keyword.get(result, :disk_free),
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
+      tags: Keyword.get(result, :tags),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
       data_directory: Keyword.get(result, :data_directory) |> to_string,
@@ -283,6 +293,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       n when is_integer(n) -> n
       _ -> :undefined
     end
+  end
+
+  defp tag_lines(mapping) do
+    Enum.map(mapping, fn {key, value} ->
+      "#{key}: #{value}"
+    end)
   end
 
   def space_as_iu_or_unknown(value, unit) do
