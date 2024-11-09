@@ -712,9 +712,10 @@ read_complete_body(Req, Acc) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     read_complete_body(Req, Acc, BodySizeLimit).
 read_complete_body(Req0, Acc, BodySizeLimit) ->
-    case byte_size(Acc) > BodySizeLimit of
+    N = byte_size(Acc),
+    case N > BodySizeLimit of
         true ->
-            {error, http_body_limit_exceeded};
+            {error, http_body_limit_exceeded, BodySizeLimit, N};
         false ->
             case cowboy_req:read_body(Req0) of
                 {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
@@ -736,9 +737,10 @@ read_complete_body_with_limit(Req, BodySizeLimit) when is_integer(BodySizeLimit)
     end.
 
 do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
-    case byte_size(Acc) > BodySizeLimit of
+    N = byte_size(Acc),
+    case N > BodySizeLimit of
         true ->
-            {error, http_body_limit_exceeded, BodySizeLimit, byte_size(Acc)};
+            {error, http_body_limit_exceeded, BodySizeLimit, N};
         false ->
             case cowboy_req:read_body(Req0, #{length => BodySizeLimit, period => 30000}) of
                 {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
