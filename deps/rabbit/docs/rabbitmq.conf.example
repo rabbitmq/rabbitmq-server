@@ -669,6 +669,10 @@
 ##
 # management.http_log_dir = /path/to/access.log
 
+## Limits maximum accepted HTTP request body size to 500 KiB.
+## The default is 20 MiB.
+# management.http.max_body_size = 500000
+
 ## HTTP listener and embedded Web server settings.
 # ## See https://www.rabbitmq.com/docs/management for details.
 #
