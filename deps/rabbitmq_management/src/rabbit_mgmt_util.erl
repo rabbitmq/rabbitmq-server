@@ -750,8 +750,9 @@ do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
 
 with_decode(Keys, ReqData, Context, Fun) ->
     case read_complete_body(ReqData) of
-        {error, Reason} ->
-            bad_request(Reason, ReqData, Context);
+        {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+            rabbit_log:warning("HTTP API: request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+            bad_request("Exceeded HTTP request body size limit", ReqData, Context);
         {ok, Body, ReqData1} ->
             with_decode(Keys, Body, ReqData1, Context, Fun)
     end.

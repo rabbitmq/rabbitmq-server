@@ -86,10 +86,10 @@ all_definitions(ReqData, Context) ->
 accept_json(ReqData0, Context) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     case rabbit_mgmt_util:read_complete_body_with_limit(ReqData0, BodySizeLimit) of
-        {error, Reason} ->
-            _ = rabbit_log:warning("HTTP API: uploaded definition file exceeded the maximum request body limit of ~p bytes. "
-                                   "Use the 'management.http.max_body_size' key in rabbitmq.conf to increase the limit if necessary", [BodySizeLimit]),
-            rabbit_mgmt_util:bad_request(Reason, ReqData0, Context);
+        {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+            _ = rabbit_log:warning("HTTP API: uploaded definition file size (~tp) exceeded the maximum request body limit of ~tp bytes. "
+                                   "Use the 'management.http.max_body_size' key in rabbitmq.conf to increase the limit if necessary", [BytesRead, LimitApplied]),
+            rabbit_mgmt_util:bad_request("Exceeded HTTP request body size limit", ReqData0, Context);
         {ok, Body, ReqData} ->
             accept(Body, ReqData, Context)
     end.
