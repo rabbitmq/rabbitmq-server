@@ -33,7 +33,6 @@ rabbitmq_app(
     hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_client_helpers",
     beam_files = [":beam_files"],
-    extra_apps = ["rabbit_common"],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
