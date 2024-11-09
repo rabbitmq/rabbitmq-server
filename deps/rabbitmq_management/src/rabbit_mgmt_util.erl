@@ -30,7 +30,7 @@
          list_login_vhosts_names/2]).
 -export([filter_tracked_conn_list/3]).
 -export([with_decode/5, decode/1, decode/2, set_resp_header/3,
-         args/1, read_complete_body/1]).
+         args/1, read_complete_body/1, read_complete_body_with_limit/2]).
 -export([reply_list/3, reply_list/5, reply_list/4,
          sort_list/2, destination_type/1, reply_list_or_paginate/3
          ]).
@@ -703,15 +703,19 @@ halt_response(Code, Type, Reason, ReqData, Context) ->
 id(Key, ReqData) ->
     rabbit_web_dispatch_access_control:id(Key, ReqData).
 
+%% IMPORTANT:
+%% Prefer read_complete_body_with_limit/2 with an explicit limit to make it easier
+%% to reason about what limit will be used.
 read_complete_body(Req) ->
     read_complete_body(Req, <<"">>).
 read_complete_body(Req, Acc) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     read_complete_body(Req, Acc, BodySizeLimit).
 read_complete_body(Req0, Acc, BodySizeLimit) ->
-    case bit_size(Acc) > BodySizeLimit of
+    N = byte_size(Acc),
+    case N > BodySizeLimit of
         true ->
-            {error, "Exceeded HTTP request body size limit"};
+            {error, http_body_limit_exceeded, BodySizeLimit, N};
         false ->
             case cowboy_req:read_body(Req0) of
                 {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
@@ -719,10 +723,36 @@ read_complete_body(Req0, Acc, BodySizeLimit) ->
             end
     end.
 
+read_complete_body_with_limit(Req, BodySizeLimit) when is_integer(BodySizeLimit) ->
+    case cowboy_req:body_length(Req) of
+        N when is_integer(N) ->
+            case N > BodySizeLimit of
+                true ->
+                    {error, http_body_limit_exceeded, BodySizeLimit, N};
+                false ->
+                    do_read_complete_body_with_limit(Req, <<"">>, BodySizeLimit)
+            end;
+        undefined ->
+            do_read_complete_body_with_limit(Req, <<"">>, BodySizeLimit)
+    end.
+
+do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
+    N = byte_size(Acc),
+    case N > BodySizeLimit of
+        true ->
+            {error, http_body_limit_exceeded, BodySizeLimit, N};
+        false ->
+            case cowboy_req:read_body(Req0, #{length => BodySizeLimit, period => 30000}) of
+                {ok, Data, Req}   -> {ok, <<Acc/binary, Data/binary>>, Req};
+                {more, Data, Req} -> do_read_complete_body_with_limit(Req, <<Acc/binary, Data/binary>>, BodySizeLimit)
+            end
+    end.
+
 with_decode(Keys, ReqData, Context, Fun) ->
     case read_complete_body(ReqData) of
-        {error, Reason} ->
-            bad_request(Reason, ReqData, Context);
+        {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+            rabbit_log:warning("HTTP API: request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+            bad_request("Exceeded HTTP request body size limit", ReqData, Context);
         {ok, Body, ReqData1} ->
             with_decode(Keys, Body, ReqData1, Context, Fun)
     end.

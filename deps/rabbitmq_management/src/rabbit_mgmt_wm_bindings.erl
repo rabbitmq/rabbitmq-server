@@ -16,6 +16,10 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+%% Use a much lower limit for creating bindings over the HTTP API.
+%% The payload is not meant to be even 50 KiB in size.
+-define(HTTP_BODY_SIZE_LIMIT, 5000).
+
 %%--------------------------------------------------------------------
 
 init(Req, [Mode]) ->
@@ -64,39 +68,44 @@ to_json(ReqData, {Mode, Context}) ->
       ReqData, {Mode, Context}).
 
 accept_content(ReqData0, {_Mode, Context}) ->
-    {ok, Body, ReqData} = rabbit_mgmt_util:read_complete_body(ReqData0),
-    Source = rabbit_mgmt_util:id(source, ReqData),
-    Dest = rabbit_mgmt_util:id(destination, ReqData),
-    DestType = rabbit_mgmt_util:id(dtype, ReqData),
-    VHost = rabbit_mgmt_util:vhost(ReqData),
-    {ok, Props} = rabbit_mgmt_util:decode(Body),
-    MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
-                     exchange -> 'exchange.bind';
-                     queue    -> 'queue.bind'
-                 end,
-    {Key, Args} = key_args(DestType, Props),
-    case rabbit_mgmt_util:direct_request(
-           MethodName,
-           fun rabbit_mgmt_format:format_accept_content/1,
-           [{queue, Dest},
-            {exchange, Source},
-            {destination, Dest},
-            {source, Source},
-            {routing_key, Key},
-            {arguments, Args}],
-           "Binding error: ~ts", ReqData, Context) of
-        {stop, _, _} = Res ->
-            Res;
-        {true, ReqData, Context2} ->
-            From = binary_to_list(cowboy_req:path(ReqData)),
-            Prefix = rabbit_mgmt_util:get_path_prefix(),
-            BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
-            UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
-                                                     [VHost, Source, DestType,
-                                                      Dest, BindingProps]),
-            To = Prefix ++ binary_to_list(UrlWithBindings),
-            Loc = rabbit_web_dispatch_util:relativise(From, To),
-            {{true, Loc}, ReqData, Context2}
+    case rabbit_mgmt_util:read_complete_body_with_limit(ReqData0, ?HTTP_BODY_SIZE_LIMIT) of
+        {ok, Body, ReqData} ->
+            Source = rabbit_mgmt_util:id(source, ReqData),
+            Dest = rabbit_mgmt_util:id(destination, ReqData),
+            DestType = rabbit_mgmt_util:id(dtype, ReqData),
+            VHost = rabbit_mgmt_util:vhost(ReqData),
+            {ok, Props} = rabbit_mgmt_util:decode(Body),
+            MethodName = case rabbit_mgmt_util:destination_type(ReqData) of
+                             exchange -> 'exchange.bind';
+                             queue    -> 'queue.bind'
+                         end,
+            {Key, Args} = key_args(DestType, Props),
+            case rabbit_mgmt_util:direct_request(
+                MethodName,
+                fun rabbit_mgmt_format:format_accept_content/1,
+                [{queue, Dest},
+                 {exchange, Source},
+                 {destination, Dest},
+                 {source, Source},
+                 {routing_key, Key},
+                 {arguments, Args}],
+                "Binding error: ~ts", ReqData, Context) of
+                {stop, _, _} = Res ->
+                    Res;
+                {true, ReqData, Context2} ->
+                    From = binary_to_list(cowboy_req:path(ReqData)),
+                    Prefix = rabbit_mgmt_util:get_path_prefix(),
+                    BindingProps = rabbit_mgmt_format:pack_binding_props(Key, Args),
+                    UrlWithBindings = rabbit_mgmt_format:url("/api/bindings/~ts/e/~ts/~ts/~ts/~ts",
+                        [VHost, Source, DestType,
+                            Dest, BindingProps]),
+                    To = Prefix ++ binary_to_list(UrlWithBindings),
+                    Loc = rabbit_web_dispatch_util:relativise(From, To),
+                    {{true, Loc}, ReqData, Context2}
+            end;
+        {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
+            rabbit_log:warning("HTTP API: binding creation request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+            rabbit_mgmt_util:bad_request("Payload size limit exceeded", ReqData0, Context)
     end.
 
 is_authorized(ReqData, {Mode, Context}) ->
