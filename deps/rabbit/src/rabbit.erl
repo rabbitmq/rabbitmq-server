@@ -11,8 +11,6 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/logging.hrl").
 
--feature(maybe_expr, enable).
-
 -behaviour(application).
 
 -export([start/0, boot/0, stop/0,
