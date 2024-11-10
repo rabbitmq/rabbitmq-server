@@ -48,8 +48,8 @@ do_it(ReqData0, Context) ->
     VHost = rabbit_mgmt_util:vhost(ReqData0),
     Q = rabbit_mgmt_util:id(queue, ReqData0),
     rabbit_mgmt_util:with_decode(
-      [ackmode, count, encoding], ReqData0, Context,
-      fun([AckModeBin, CountBin, EncBin], Body, ReqData) ->
+      [ackmode, count, encoding, reversed], ReqData0, Context,
+      fun([AckModeBin, CountBin, EncBin, RevBin], Body, ReqData) ->
               rabbit_mgmt_util:with_channel(
                 VHost, ReqData, Context,
                 fun (Ch) ->
@@ -65,8 +65,12 @@ do_it(ReqData0, Context) ->
                                     TruncBin  -> rabbit_mgmt_util:parse_int(
                                                    TruncBin)
                                 end,
+                        Rev = case RevBin of
+                                    <<"on">> -> true;
+                                    _        -> false
+                                end,
 
-                        Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc),
+                        Reply = basic_gets(Count, Ch, Q, AckMode, Enc, Trunc, Rev),
                         maybe_return(Reply, Ch, AckMode),
                         rabbit_mgmt_util:reply(remove_delivery_tag(Reply),
 					       ReqData, Context)
@@ -76,15 +80,14 @@ do_it(ReqData0, Context) ->
 
 
 
-basic_gets(0, _, _, _, _, _) ->
+basic_gets(0, _, _, _, _, _, _) ->
     [];
 
-basic_gets(Count, Ch, Q, AckMode, Enc, Trunc) ->
+basic_gets(Count, Ch, Q, AckMode, Enc, Trunc, Rev) ->
     case basic_get(Ch, Q, AckMode, Enc, Trunc) of
         none -> [];
-        M    -> [M | basic_gets(Count - 1, Ch, Q, AckMode, Enc, Trunc)]
+        M    -> maybe_reverse([M | basic_gets(Count - 1, Ch, Q, AckMode, Enc, Trunc, Rev)], Rev)
     end.
-
 
 
 ackmode_to_requeue(reject_requeue_false) -> false;
@@ -94,6 +97,13 @@ parse_ackmode(ack_requeue_false) -> true;
 parse_ackmode(ack_requeue_true) -> false;
 parse_ackmode(reject_requeue_false) -> false;
 parse_ackmode(reject_requeue_true) -> false.
+
+
+maybe_reverse(Result, Rev) -> 
+    case Rev of
+        true -> lists:reverse(Result);
+        false -> Result
+    end.
 
 
 % the messages must rejects later,
