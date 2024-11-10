@@ -1150,18 +1150,13 @@ pg_local_scope(Prefix) ->
 -spec maybe_set_cluster_tags() -> 'ok'.
 
 maybe_set_cluster_tags() ->
-    maybe
-        not_found ?= rabbit_runtime_parameters:lookup_global(cluster_tags),
-        Tags = application:get_env(rabbit, cluster_tags, []),
-        false ?= Tags == [],
-        ?LOG_INFO("Setting cluster tags...",
-                  #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-        rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>)
-    else
-        _ ->
-            % Cluster tags are either already set (Other node, earlier start, CLI)
-            % Do nothing?
-            ok
+    Tags = application:get_env(rabbit, cluster_tags, []),
+    case Tags of
+        [] -> ok;
+        Value ->
+            ?LOG_DEBUG("Seeding cluster tags from application environment key...",
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            rabbit_runtime_parameters:set_global(cluster_tags, Value, <<"internal_user">>)
     end.
 
 -spec maybe_insert_default_data() -> 'ok'.
