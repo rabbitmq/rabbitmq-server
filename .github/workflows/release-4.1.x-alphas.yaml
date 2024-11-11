@@ -17,10 +17,6 @@ jobs:
     steps:
       - name: Compute prerelease identifier from commit SHA
         run: echo "PRERELEASE_IDENTIFIER=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
-      - name: Compute human-readable release timestamp
-        run: echo "PRERELEASE_TIMESTAMP=`date --rfc-3339=seconds`" >> $GITHUB_ENV
-      - name: Compute UNIX release timestamp
-        run: echo "PRERELEASE_UNIX_TIMESTAMP=`date +%s`" >> $GITHUB_ENV
       - name: Trigger a 4.1.x alpha release build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
         run: |
           curl -L \
