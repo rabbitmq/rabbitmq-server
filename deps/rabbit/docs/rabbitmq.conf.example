@@ -441,6 +441,18 @@
 ## to make it easier for (human) operators to tell one cluster from another.
 # cluster_name = dev3.eng.megacorp.local
 
+## Optional key-value pairs that tag (label) the cluster.
+## They will be reported by CLI tools, by the HTTP API at 'GET /api/overview',
+## and potentially in other contexts.
+
+# cluster_tags.region = us-east-1
+# cluster_tags.zone = us-east-1d
+# cluster_tags.project = an-iot-thing
+
+# cluster_tags.role = mqtt-ingress
+# cluster_tags.environment = staging
+
+
 ## Selects the default strategy used to pick a node to place a new queue leader replica
 ## on. Can be overridden by the `x-queue-leader-locator` optional queue argument
 ## at declaration time.
