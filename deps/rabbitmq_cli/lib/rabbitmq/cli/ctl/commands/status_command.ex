@@ -141,13 +141,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
           xs -> alarm_lines(xs, node_name)
         end
 
+    IO.inspect(m[:tags])
     tags_section =
       [
         "\n#{bright("Tags")}\n"
       ] ++
         case m[:tags] do
-          [] -> ["(none)"]
-          xs -> tag_lines(xs)
+          nil -> ["(none)"]
+          []  -> ["(none)"]
+          xs  -> tag_lines(xs)
         end
 
     breakdown = compute_relative_values(m[:memory])
@@ -274,7 +276,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       disk_free: Keyword.get(result, :disk_free),
       file_descriptors: Enum.into(Keyword.get(result, :file_descriptors), %{}),
       alarms: Keyword.get(result, :alarms),
-      tags: Keyword.get(result, :tags),
+      tags: Keyword.get(result, :tags, []),
       listeners: listener_maps(Keyword.get(result, :listeners, [])),
       memory: Keyword.get(result, :memory) |> Enum.into(%{}),
       data_directory: Keyword.get(result, :data_directory) |> to_string,
