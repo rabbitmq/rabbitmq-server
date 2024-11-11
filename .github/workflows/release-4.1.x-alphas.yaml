@@ -3,7 +3,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      # will become v4.1.x a few weeks before the release
       - "main"
     paths:
       - "deps/*/src/**"
