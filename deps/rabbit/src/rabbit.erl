@@ -38,7 +38,7 @@
 
 %%---------------------------------------------------------------------------
 %% Boot steps.
--export([maybe_insert_default_data/0, boot_delegate/0, recover/0,
+-export([update_cluster_tags/0, maybe_insert_default_data/0, boot_delegate/0, recover/0,
          pg_local_amqp_session/0,
          pg_local_amqp_connection/0]).
 
@@ -207,6 +207,12 @@
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
                     {requires,    recovery},
                     {enables,     routing_ready}]}).
+
+
+-rabbit_boot_step({cluster_tags,
+                   [{description, "Set cluster tags"},
+                    {mfa,         {?MODULE, update_cluster_tags, []}},
+                    {requires,    core_initialized}]}).
 
 -rabbit_boot_step({routing_ready,
                    [{description, "message delivery logic ready"},
@@ -1137,6 +1143,15 @@ pg_local_amqp_connection() ->
 
 pg_local_scope(Prefix) ->
     list_to_atom(io_lib:format("~s_~s", [Prefix, node()])).
+
+
+-spec update_cluster_tags() -> 'ok'.
+
+update_cluster_tags() ->
+    Tags = application:get_env(rabbit, cluster_tags, []),
+    ?LOG_DEBUG("Seeding cluster tags from application environment key...",
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>).
 
 -spec maybe_insert_default_data() -> 'ok'.
 
