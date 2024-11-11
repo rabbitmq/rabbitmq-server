@@ -14,9 +14,6 @@ jobs:
   trigger_alpha_build:
     runs-on: ubuntu-latest
     steps:
-    - name: Get current UNIX timestamp
-      id: timestamp
-      uses: release-kit/unix-timestamp@v1
     - name: Trigger a 4.1.x alpha release build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
       run: |
         curl -L \
@@ -25,4 +22,4 @@ jobs:
           -H "Authorization: Bearer ${{ secrets.RABBITMQCI_BOT_TOKEN }}" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
           https://api.github.com/repos/${{ env.DEV_WORKFLOW_REPOSITORY }}/dispatches \
-          -d '{ "event_type": "new_4.1.x_alpha", "client_payload": {"release_repository": "${{ env.DEV_WORKFLOW_REPOSITORY }}", "release_description": "Commit: https://github.com/rabbitmq/rabbitmq-server/commit/${{ github.sha }}, pushed at: ${{ github.event.repository.pushed_at }}", "prerelease": true, "prerelease_kind": "alpha", "release_title": "RabbitMQ ${{ vars.SERVER_41_NEXT_PATCH_VERSION }}-alpha.${{ github.sha }} from ${{ steps.timestamp.outputs.timestamp }} (${{ github.event.repository.pushed_at }})", "base_version": "${{ vars.SERVER_41_NEXT_PATCH_VERSION }}" }}'
+          -d '{ "event_type": "new_4.1.x_alpha", "client_payload": {"release_repository": "${{ env.DEV_WORKFLOW_REPOSITORY }}", "release_description": "Commit: https://github.com/rabbitmq/rabbitmq-server/commit/${{ github.sha }}, pushed at: ${{ github.event.repository.pushed_at }}", "prerelease": true, "prerelease_kind": "alpha", "release_title": "RabbitMQ ${{ vars.SERVER_41_NEXT_PATCH_VERSION }}-alpha.${{ github.sha }} (from ${{ github.event.repository.pushed_at }})", "base_version": "${{ vars.SERVER_41_NEXT_PATCH_VERSION }}" }}'
