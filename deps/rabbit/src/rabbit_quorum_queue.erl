@@ -2164,24 +2164,19 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
             VHost when is_binary(VHost) ->
                 rabbit_amqqueue:list(VHost)
         end,
+    check_process_limit_safety(length(Qs), ProcessLimitThreshold),
     ParentPID = self(),
     HealthCheckRef = make_ref(),
     HealthCheckPids =
         lists:flatten(
             [begin
                 {resource, _VHostN, queue, QueueName} = QResource = amqqueue:get_name(Q),
-                case check_process_limit_safety(ProcessLimitThreshold) of
-                    true ->
-                        case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
-                            match ->
-                                {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
-                                _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);
-                            _ ->
-                                []
-                        end;
-                    false ->
-                        rabbit_log:warning("Leader health check failed from exceeded process limit threshold"),
-                        throw({error, leader_health_check_process_limit_exceeded})
+                case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
+                    match ->
+                        {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
+                        _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);
+                    _ ->
+                        []
                 end
             end || Q <- Qs, amqqueue:get_type(Q) == ?MODULE]),
     wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []).
@@ -2212,5 +2207,11 @@ wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
             UnhealthyAcc
     end.
 
-check_process_limit_safety(ProcessLimitThreshold) ->
-    erlang:system_info(process_count) < ProcessLimitThreshold.
+check_process_limit_safety(QCount, ProcessLimitThreshold) ->
+    case (erlang:system_info(process_count) + QCount) >= ProcessLimitThreshold of
+        true ->
+            rabbit_log:warning("Leader health check not permitted, process limit threshold will be exceeded."),
+            throw({error, leader_health_check_process_limit_exceeded});
+        false ->
+            ok
+    end.
