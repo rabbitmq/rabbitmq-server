@@ -11,7 +11,7 @@ on:
 env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
 jobs:
-  compute_prerelease_data:
+  trigger_alpha_build:
     runs-on: ubuntu-latest
     steps:
       - name: Compute prerelease identifier from commit SHA
@@ -20,9 +20,6 @@ jobs:
         run: echo "PRERELEASE_TIMESTAMP=`date --rfc-3339=seconds`" >> $GITHUB_ENV
       - name: Compute UNIX release timestamp
         run: echo "PRERELEASE_UNIX_TIMESTAMP=`date +%s`" >> $GITHUB_ENV
-  trigger_alpha_build:
-    runs-on: ubuntu-latest
-    steps:
       - name: Trigger a 4.0.x alpha release build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
         run: |
           curl -L \
