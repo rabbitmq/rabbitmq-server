@@ -47,6 +47,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {product_name,              list_to_binary(rabbit:product_name())},
                  {rabbitmq_version,          list_to_binary(rabbit:base_product_version())},
                  {cluster_name,              rabbit_nodes:cluster_name()},
+                 {cluster_tags,              cluster_tags()},
                  {erlang_version,            erlang_version()},
                  {erlang_full_version,       erlang_full_version()},
                  {release_series_support_status, rabbit_release_series:readable_support_status()},
@@ -182,3 +183,10 @@ transform_retention_intervals([{MaxAgeInSeconds, _}|Rest], Acc) ->
                      0
              end,
     transform_retention_intervals(Rest, [AccVal|Acc]).
+
+cluster_tags() ->
+    case rabbit_runtime_parameters:value_global(cluster_tags) of
+        not_found ->
+            [];
+        Tags -> Tags
+    end.

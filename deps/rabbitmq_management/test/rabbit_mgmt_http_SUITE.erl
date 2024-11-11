@@ -201,7 +201,8 @@ all_tests() -> [
     disabled_qq_replica_opers_test,
     qq_status_test,
     list_deprecated_features_test,
-    list_used_deprecated_features_test
+    list_used_deprecated_features_test,
+    cluster_tags_test
 ].
 
 %% -------------------------------------------------------------------
@@ -282,6 +283,12 @@ init_per_testcase(Testcase = disabled_qq_replica_opers_test, Config) ->
     rabbit_ct_broker_helpers:rpc_all(Config,
       application, set_env, [rabbitmq_management, restrictions, Restrictions]),
     rabbit_ct_helpers:testcase_started(Config, Testcase);
+init_per_testcase(Testcase = cluster_tags_test, Config) ->
+    Tags = [{<<"az">>, <<"us-east-3">>}, {<<"region">>,<<"us-east">>}, {<<"environment">>,<<"production">>}],
+    rpc(
+      Config, rabbit_runtime_parameters, set_global,
+      [cluster_tags, Tags, none]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(queues_detailed_test, Config) ->
     IsEnabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
                   Config, detailed_queues_endpoint),
@@ -347,6 +354,11 @@ end_per_testcase0(disabled_operator_policy_test, Config) ->
     Config;
 end_per_testcase0(disabled_qq_replica_opers_test, Config) ->
     rpc(Config, application, unset_env, [rabbitmq_management, restrictions]),
+    Config;
+end_per_testcase0(cluster_tags_test, Config) ->
+    rpc(
+      Config, rabbit_runtime_parameters, clear_global,
+      [cluster_tags, none]),
     Config;
 end_per_testcase0(Testcase, Config)
   when Testcase == list_deprecated_features_test;
@@ -3935,6 +3947,14 @@ list_used_deprecated_features_test(Config) ->
     ?assertEqual(atom_to_binary(?MODULE), maps:get(provided_by, Feature)),
     ?assertEqual(list_to_binary(Desc), maps:get(desc, Feature)),
     ?assertEqual(list_to_binary(DocUrl), maps:get(doc_url, Feature)).
+
+cluster_tags_test(Config) ->
+    Overview = http_get(Config, "/overview"),
+    Tags = maps:get(cluster_tags, Overview),
+    ExpectedTags = #{az => <<"us-east-3">>,environment => <<"production">>,
+                     region => <<"us-east">>},
+    ?assertEqual(ExpectedTags, Tags),
+    passed.
 
 %% -------------------------------------------------------------------
 %% Helpers.
