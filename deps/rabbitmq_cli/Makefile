@@ -27,6 +27,8 @@ ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace
 endif
 
+export MAKE
+
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
@@ -114,7 +116,7 @@ rel:: $(ESCRIPTS)
 
 tests:: $(ESCRIPTS)
 	$(verbose) $(MAKE) -C ../../ install-cli
-	$(verbose) $(MAKE) -C ../../ run-background-broker PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
+	$(verbose) $(MAKE) -C ../../ start-background-broker PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE); \
 		RES=$$?; \
 		$(MAKE) -C ../../ stop-node; \
