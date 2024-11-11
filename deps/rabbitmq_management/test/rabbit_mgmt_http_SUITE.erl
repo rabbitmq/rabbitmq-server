@@ -201,17 +201,8 @@ all_tests() -> [
     disabled_qq_replica_opers_test,
     qq_status_test,
     list_deprecated_features_test,
-<<<<<<< HEAD
-    list_used_deprecated_features_test
-=======
     list_used_deprecated_features_test,
-    connections_amqpl,
-    connections_amqp,
-    amqp_sessions,
-    amqpl_sessions,
-    enable_plugin_amqp,
     cluster_tags_test
->>>>>>> f5ef64ad06 (Add cluster tag config that is exposed via HTTP /api/overview and CTL cluster_status)
 ].
 
 %% -------------------------------------------------------------------
