@@ -741,6 +741,7 @@ status() ->
           {erlang_version,       erlang:system_info(system_version)},
           {memory,               rabbit_vm:memory()},
           {alarms,               alarms()},
+          {tags,                 tags()},
           {is_under_maintenance, rabbit_maintenance:is_being_drained_local_read(node())},
           {listeners,            listeners()},
           {vm_memory_calculation_strategy, vm_memory_monitor:get_memory_calculation_strategy()}],
@@ -799,6 +800,9 @@ alarms() ->
     N = node(),
     %% [{{resource_limit,memory,rabbit@mercurio},[]}]
     [{resource_limit, Limit, Node} || {{resource_limit, Limit, Node}, _} <- Alarms, Node =:= N].
+
+tags() ->
+    application:get_env(rabbit, node_tags, []).
 
 listeners() ->
     Listeners = try

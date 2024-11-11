@@ -48,6 +48,7 @@ to_json(ReqData, Context = #context{user = User = #user{tags = Tags}}) ->
                  {rabbitmq_version,          list_to_binary(rabbit:base_product_version())},
                  {cluster_name,              rabbit_nodes:cluster_name()},
                  {cluster_tags,              cluster_tags()},
+                 {node_tags,                 node_tags()},
                  {erlang_version,            erlang_version()},
                  {erlang_full_version,       erlang_full_version()},
                  {release_series_support_status, rabbit_release_series:readable_support_status()},
@@ -190,3 +191,6 @@ cluster_tags() ->
             [];
         Tags -> Tags
     end.
+
+node_tags() ->
+    application:get_env(rabbit, node_tags, []).
