@@ -15,9 +15,8 @@
          diff/2,
          foldl/4]).
 
--ifdef(TEST).
+%% For tests.
 -export([usort/1]).
--endif.
 
 -type serial_number() :: sequence_no().
 -export_type([serial_number/0]).
