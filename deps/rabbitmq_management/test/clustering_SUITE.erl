@@ -416,9 +416,12 @@ channel_closed(Config) ->
 
     force_stats(Config),
 
-    Res = http_get(Config, "/channels"),
-    % assert one channel is present
-    [_] = Res,
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              %% assert one channel is present
+              length(http_get(Config, "/channels")) == 1
+      end,
+      60000),
 
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
 
