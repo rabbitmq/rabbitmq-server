@@ -8,6 +8,7 @@ on:
       - "deps/*/src/**"
       - 'deps/rabbitmq_management/priv/**'
       - ".github/workflows/**"
+      - "rabbitmq-components.mk"
 env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
 jobs:
