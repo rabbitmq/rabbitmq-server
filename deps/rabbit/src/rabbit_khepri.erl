@@ -605,8 +605,8 @@ force_reset() ->
     case rabbit:is_running() of
         false ->
             ok = khepri:stop(?RA_CLUSTER_NAME),
-            DataDir = maps:get(data_dir, ra_system:fetch(coordination)),
-            ok = ra_system:ensure_ra_system_stopped(coordination),
+            DataDir = maps:get(data_dir, ra_system:fetch(?RA_SYSTEM)),
+            ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM),
             ok = rabbit_file:recursive_delete(
                    filelib:wildcard(DataDir ++ "/*")),
 
