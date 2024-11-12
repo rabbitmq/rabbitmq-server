@@ -116,8 +116,12 @@ rel:: $(ESCRIPTS)
 
 tests:: $(ESCRIPTS)
 	$(verbose) $(MAKE) -C ../../ install-cli
-	$(verbose) $(MAKE) -C ../../ start-background-broker PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
-	$(gen_verbose) $(MIX_TEST) $(TEST_FILE); \
+	$(verbose) $(MAKE) -C ../../ start-background-broker \
+		PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db")
+	$(gen_verbose) $(MIX_TEST) \
+		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \
+		$(TEST_FILE); \
 		RES=$$?; \
 		$(MAKE) -C ../../ stop-node; \
 		exit $$RES
