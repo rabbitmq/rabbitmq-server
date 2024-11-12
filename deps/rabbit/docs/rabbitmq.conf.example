@@ -452,6 +452,13 @@
 # cluster_tags.role = mqtt-ingress
 # cluster_tags.environment = staging
 
+## A similar set of key-value pairs can be used to tag (label)
+## the specific node that will use this configuration file.
+
+# node_tags.uuid = '88CD083F-E211-479B-814A-6DA42FE78AF3'
+# node_tags.role = mqtt-ingress
+# node_tags.environment = staging
+
 
 ## Selects the default strategy used to pick a node to place a new queue leader replica
 ## on. Can be overridden by the `x-queue-leader-locator` optional queue argument
