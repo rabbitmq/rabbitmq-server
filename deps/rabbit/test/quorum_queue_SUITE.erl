@@ -97,7 +97,8 @@ groups() ->
                                             force_all_queues_shrink_member_to_current_member,
                                             force_vhost_queues_shrink_member_to_current_member,
                                             policy_repair,
-                                            gh_12635
+                                            gh_12635,
+                                            replica_states
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -4351,6 +4352,54 @@ requeue_multiple_false(Config) ->
 
     ?assertEqual(#'queue.delete_ok'{message_count = 0},
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
+
+replica_states(Config) ->
+    [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
+        || Q <- [<<"Q1">>, <<"Q2">>, <<"Q3">>]],
+
+    Qs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+
+    [Q1_ClusterName, Q2_ClusterName, Q3_ClusterName] =
+        [begin
+            {ClusterName, _} = amqqueue:get_pid(Q),
+            ClusterName
+         end
+            || Q <- Qs, amqqueue:get_type(Q) == rabbit_quorum_queue],
+
+    Result1 = rabbit_misc:append_rpc_all_nodes(Servers, rabbit_quorum_queue, all_replica_states, []),
+    ct:pal("all replica states: ~tp", [Result1]),
+
+    lists:map(fun({_Node, ReplicaStates}) ->
+                ?assert(maps:is_key(Q1_ClusterName, ReplicaStates)),
+                ?assert(maps:is_key(Q2_ClusterName, ReplicaStates)),
+                ?assert(maps:is_key(Q3_ClusterName, ReplicaStates))
+             end, Result1),
+
+    %% Unregister a few queues (same outcome of 'noproc')
+    rabbit_ct_broker_helpers:rpc(Config, Server, erlang, unregister, [Q2_ClusterName]),
+    rabbit_ct_broker_helpers:rpc(Config, Server, erlang, unregister, [Q3_ClusterName]),
+
+    ?assert(undefined == rabbit_ct_broker_helpers:rpc(Config, Server, erlang, whereis, [Q2_ClusterName])),
+    ?assert(undefined == rabbit_ct_broker_helpers:rpc(Config, Server, erlang, whereis, [Q3_ClusterName])),
+
+    Result2 = rabbit_misc:append_rpc_all_nodes(Servers, rabbit_quorum_queue, all_replica_states, []),
+    ct:pal("replica states with a node missing Q1 and Q2: ~tp", [Result2]),
+
+    lists:map(fun({Node, ReplicaStates}) ->
+                if Node == Server ->
+                    ?assert(maps:is_key(Q1_ClusterName, ReplicaStates)),
+                    ?assertNot(maps:is_key(Q2_ClusterName, ReplicaStates)),
+                    ?assertNot(maps:is_key(Q3_ClusterName, ReplicaStates));
+                true ->
+                    ?assert(maps:is_key(Q1_ClusterName, ReplicaStates)),
+                    ?assert(maps:is_key(Q2_ClusterName, ReplicaStates)),
+                    ?assert(maps:is_key(Q3_ClusterName, ReplicaStates))
+                end
+             end, Result2).
 
 %%----------------------------------------------------------------------------
 
