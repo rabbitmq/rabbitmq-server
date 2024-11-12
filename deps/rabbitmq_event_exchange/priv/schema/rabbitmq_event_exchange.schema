@@ -5,3 +5,7 @@
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("event_exchange.vhost", Conf))
 end}.
+
+{mapping, "event_exchange.protocol", "rabbitmq_event_exchange.protocol", [
+    {datatype, {enum, [amqp_0_9_1, amqp_1_0]}}
+]}.

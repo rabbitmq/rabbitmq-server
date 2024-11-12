@@ -1,19 +1,34 @@
 [
- {virtual_host1,
-  "event_exchange.vhost = /",
-  [
-   {rabbitmq_event_exchange, [
-                              {vhost, <<"/">>}
-                             ]}
-  ], [rabbitmq_event_exchange]
- },
+{virtual_host1,
+    "event_exchange.vhost = /",
+    [{rabbitmq_event_exchange, [
+        {vhost, <<"/">>}
+    ]}],
+    [rabbitmq_event_exchange]
+},
 
- {virtual_host2,
-  "event_exchange.vhost = dev",
-  [
-   {rabbitmq_event_exchange, [
-                              {vhost, <<"dev">>}
-                             ]}
-  ], [rabbitmq_event_exchange]
- }
+{virtual_host2,
+    "event_exchange.vhost = dev",
+    [{rabbitmq_event_exchange, [
+        {vhost, <<"dev">>}
+    ]}
+    ],
+    [rabbitmq_event_exchange]
+},
+
+{protocol_amqp,
+    "event_exchange.protocol = amqp_1_0",
+    [{rabbitmq_event_exchange, [
+        {protocol, amqp_1_0}
+    ]}],
+    [rabbitmq_event_exchange]
+},
+
+{protocol_amqpl,
+    "event_exchange.protocol = amqp_0_9_1",
+    [{rabbitmq_event_exchange, [
+        {protocol, amqp_0_9_1}
+    ]}],
+    [rabbitmq_event_exchange]
+}
 ].
