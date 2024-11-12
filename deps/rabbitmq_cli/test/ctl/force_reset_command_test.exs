@@ -44,7 +44,15 @@ defmodule ForceResetCommandTest do
   test "run: reset request to an active node with a running rabbit app fails", context do
     add_vhost("some_vhost")
     assert vhost_exists?("some_vhost")
-    assert match?({:error, :mnesia_unexpectedly_running}, @command.run([], context[:opts]))
+    node = get_rabbit_hostname()
+    ret = @command.run([], context[:opts])
+    case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
+      true ->
+        assert match?({:error, :rabbitmq_unexpectedly_running}, ret)
+
+      false ->
+        assert match?({:error, :mnesia_unexpectedly_running}, ret)
+    end
     assert vhost_exists?("some_vhost")
   end
 

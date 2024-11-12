@@ -64,7 +64,7 @@ defmodule ChangeClusterNodeTypeCommandTest do
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
         assert match?(
-                 :ok,
+                 {:error, _},
                  @command.run(["ram"], context[:opts])
                )
 
