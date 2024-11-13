@@ -2185,6 +2185,34 @@ update_config_delivery_limit_test(Config) ->
 
     ok.
 
+update_config_max_length_test(Config) ->
+    QName = rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+    InitConf = #{name => ?FUNCTION_NAME,
+                 queue_resource => QName,
+                 delivery_limit => 20
+                },
+    State0 = init(InitConf),
+    ?assertMatch(#{config := #{delivery_limit := 20}},
+                 rabbit_fifo:overview(State0)),
+
+    State1 = lists:foldl(fun (Num, FS0) ->
+                         {FS, _} = enq(Config, Num, Num, Num, FS0),
+                         FS
+                     end, State0, lists:seq(1, 100)),
+    Conf = #{name => ?FUNCTION_NAME,
+             queue_resource => QName,
+             max_length => 2,
+             dead_letter_handler => undefined},
+    %% assert only one global counter effect is generated rather than 1 per
+    %% dropped message
+    {State, ok, Effects} = apply(meta(Config, ?LINE),
+                                 rabbit_fifo:make_update_config(Conf), State1),
+    ?assertMatch([{mod_call, rabbit_global_counters, messages_dead_lettered,
+                   [maxlen, rabbit_quorum_queue,disabled, 98]}], Effects),
+    ?assertMatch(#{config := #{max_length := 2},
+                   num_ready_messages := 2}, rabbit_fifo:overview(State)),
+    ok.
+
 purge_nodes_test(Config) ->
     Node = purged@node,
     ThisNode = node(),
