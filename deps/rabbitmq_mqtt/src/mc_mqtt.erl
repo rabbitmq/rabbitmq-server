@@ -426,7 +426,7 @@ protocol_state(Msg = #mqtt_msg{props = Props0,
                 undefined ->
                     Props2;
                 Ttl ->
-                    case maps:get(?ANN_TIMESTAMP, Anns) of
+                    case maps:get(?ANN_TIMESTAMP, Anns, undefined) of
                         undefined ->
                             Props2;
                         Timestamp ->
