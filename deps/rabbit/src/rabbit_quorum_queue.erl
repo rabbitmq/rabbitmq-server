@@ -1094,7 +1094,8 @@ deliver(QSs, Msg0, Options) ->
 
 
 state_info(S) ->
-    #{pending_raft_commands => rabbit_fifo_client:pending_size(S)}.
+    #{pending_raft_commands => rabbit_fifo_client:pending_size(S),
+      cached_segments => rabbit_fifo_client:num_cached_segments(S)}.
 
 -spec infos(rabbit_types:r('queue')) -> rabbit_types:infos().
 infos(QName) ->
