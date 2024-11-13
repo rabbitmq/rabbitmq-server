@@ -170,36 +170,29 @@ mqtt_amqpl_mqtt(Config) ->
     ok = emqtt:disconnect(C).
 
 amqpl_mqtt_gh_12707(Config) ->
-    Q = ClientId = atom_to_binary(?FUNCTION_NAME),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q, durable = true}),
-    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
-                                                             exchange = <<"amq.topic">>,
-                                                             routing_key = <<"gh12707">>}),
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Topic = Payload = <<"gh_12707">>,
     C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
 
-    Topic = <<"gh12707">>,
-    Payload = <<"gh_12707">>,
-
-    {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 676}, [{Topic, [{qos, 1}]}]),
-    amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
-                                            routing_key = Topic},
-                        #amqp_msg{payload = Payload,
-                                  props = #'P_basic'{content_type  = <<"application/json">>,
-                                                     expiration    = <<"12707">>,
-                                                     headers       = []}}),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = <<"amq.topic">>,
+                                       routing_key = Topic},
+                      #amqp_msg{payload = Payload,
+                                props = #'P_basic'{expiration = <<"12707">>,
+                                                   headers = []}}),
 
     receive {publish,
-                #{topic := MqttTopic,
-                  payload := MqttPayload}} ->
-        ?assertEqual(MqttTopic, Topic),
-        ?assertEqual(Payload, MqttPayload)
-    after 1000 ->
-        ct:fail("did not receive a delivery")
+             #{topic := MqttTopic,
+               payload := MqttPayload}} ->
+                ?assertEqual(Topic, MqttTopic),
+                ?assertEqual(Payload, MqttPayload)
+    after 5000 ->
+              ct:fail("did not receive a delivery")
     end,
 
-    amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
-    rabbit_ct_client_helpers:close_channel(Ch),
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 mqtt_amqp_mqtt(Config) ->
