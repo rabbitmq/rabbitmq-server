@@ -79,7 +79,8 @@ requeue_one_channel_quorum_queue(Config) ->
 requeue_one_channel(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Ctag = <<"my consumer tag">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
 
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch,
