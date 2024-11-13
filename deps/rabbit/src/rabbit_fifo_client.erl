@@ -69,7 +69,8 @@
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
                 consumers = #{} :: #{rabbit_types:ctag() => #consumer{}},
-                timer_state :: term()
+                timer_state :: term(),
+                cached_segments :: undefined | ra_flru:state()
                }).
 
 -opaque state() :: #state{}.
@@ -633,7 +634,8 @@ handle_ra_event(QName, From, {applied, Seqs},
         _ ->
             {ok, State1, Actions}
     end;
-handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
+handle_ra_event(QName, From, {machine, Del}, State0)
+      when element(1, Del) == delivery ->
     handle_delivery(QName, From, Del, State0);
 handle_ra_event(_QName, _From, {machine, Action}, State)
   when element(1, Action) =:= credit_reply orelse
@@ -835,7 +837,12 @@ handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
     %% we should return all messages.
     MsgIntIds = [Id || {Id, _} <- IdMsgs],
     {State1, Deliveries} = return(Tag, MsgIntIds, State0),
-    {ok, State1, Deliveries}.
+    {ok, State1, Deliveries};
+handle_delivery(QName, Leader, {delivery, Tag, ReadState, Msgs},
+                #state{cached_segments = Cached0} = State) ->
+    {MsgIds, Cached} = rabbit_fifo:exec_read(Cached0, ReadState, Msgs),
+    handle_delivery(QName, Leader, {delivery, Tag, MsgIds},
+                    State#state{cached_segments = Cached}).
 
 transform_msgs(QName, QRef, Msgs) ->
     lists:map(
