@@ -338,6 +338,13 @@
           <th><label>Messages:</label></th>
           <td><input type="text" name="count" value="1"/></td>
         </tr>
+        <tr>
+          <th><label>Reverse order:</label></th>
+          <td>
+            <input type="checkbox" name="reversed_messages_order" onchange="toggle_reversed_messages_order()"
+              <%=reversed_messages_order ? "checked" : "" %> />
+          </td>
+        </tr>
       </table>
       <input type="submit" value="Get Message(s)" />
     </form>

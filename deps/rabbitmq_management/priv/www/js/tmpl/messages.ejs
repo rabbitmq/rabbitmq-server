@@ -1,6 +1,7 @@
 <%
    for (var i = 0; i < msgs.length; i++) {
-   var msg = msgs[i];
+   var index = reversed_messages_order ? (msgs.length - 1) - i : i;
+   var msg = msgs[index];
 %>
 <div class="box">
 <h3>Message <%= i+1 %></h3>

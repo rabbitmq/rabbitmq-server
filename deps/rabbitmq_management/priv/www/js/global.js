@@ -652,6 +652,9 @@ var user;
 var ac = new AccessControl();
 var display = new DisplayControl();
 
+// Reverse order of rendered messages - checkbox value
+var reversed_messages_order;   
+
 var ui_data_model = {
   vhosts: [],
   nodes: [],
@@ -771,7 +774,9 @@ function setup_global_vars(overview) {
 
     disable_stats = overview.disable_stats;
     enable_queue_totals = overview.enable_queue_totals;
-    COLUMNS = disable_stats?DISABLED_STATS_COLUMNS:ALL_COLUMNS;
+    COLUMNS = disable_stats ? DISABLED_STATS_COLUMNS : ALL_COLUMNS;
+  
+    reversed_messages_order = false;
 
     setup_chart_ranges(overview.sample_retention_policies);
 }

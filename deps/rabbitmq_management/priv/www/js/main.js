@@ -1244,7 +1244,7 @@ function get_msgs(params) {
                 show_popup('info', 'Queue is empty');
             } else {
                 $('#msg-wrapper').slideUp(200);
-                replace_content('msg-wrapper', format('messages', {'msgs': msgs}));
+                replace_content('msg-wrapper', format('messages', {'msgs': msgs, 'reversed_messages_order': reversed_messages_order }));
                 $('#msg-wrapper').slideDown(200);
             }
         });
@@ -1761,6 +1761,10 @@ function rename_multifield(params, from, to) {
         }
     }
     return new_params;
+}
+
+function toggle_reversed_messages_order () {
+    reversed_messages_order = event.target.checked;
 }
 
 function select_queue_type(queuetype) {
