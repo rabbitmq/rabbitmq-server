@@ -140,7 +140,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "erlang_vm_statistics_run_queues_length",
+          "expr": "erlang_vm_statistics_run_queues_length{instance=\"$node\"}",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
@@ -156,7 +156,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "erlang_vm_statistics_dirty_io_run_queue_length",
+          "expr": "erlang_vm_statistics_dirty_io_run_queue_length{instance=\"$node\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -173,7 +173,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "erlang_vm_statistics_dirty_cpu_run_queue_length",
+          "expr": "erlang_vm_statistics_dirty_cpu_run_queue_length{instance=\"$node\"}",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -1165,6 +1165,20 @@
   ],
   "templating": {
     "list": [
+      {
+        "current": {},
+        "hide": 2,
+        "includeAll": false,
+        "label": "datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
       {
         "current": {},
         "datasource": {
