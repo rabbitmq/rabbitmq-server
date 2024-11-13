@@ -78,7 +78,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.JoinClusterCommand do
 
   def output({:error, {:node_type_unsupported, db, node_type}}, %{node: _node_name}) do
     {:error, RabbitMQ.CLI.Core.ExitCodes.exit_software(),
-     "Error: `#{node_type}` node type is unsupported by the #{db} by database engine"}
+     "Error: `#{node_type}` node type is unsupported by the #{db} database engine"}
   end
 
   def output(
