@@ -33,7 +33,8 @@ groups() ->
        mqtt_amqp,
        mqtt_amqp_alt,
        amqp_mqtt,
-       is_persistent
+       is_persistent,
+       amqpl_to_mqtt_gh_12707
       ]}
     ].
 
@@ -155,6 +156,18 @@ roundtrip_amqpl(_Config) ->
     %% We expect order to not be maintained since AMQP 0.9.1 sorts by key.
     ExpectedUserProperty = lists:keysort(1, UserProperty),
     ?assertMatch(#{'User-Property' := ExpectedUserProperty}, Props).
+
+amqpl_to_mqtt_gh_12707(_Config) ->
+    Props = #'P_basic'{expiration = <<"12707">>},
+    Payload = [<<"gh_12707">>],
+    Content = #content{properties = Props,
+                       payload_fragments_rev = Payload},
+    Anns = #{?ANN_EXCHANGE => <<"amq.topic">>,
+             ?ANN_ROUTING_KEYS => [<<"dummy">>]},
+    OriginalMsg = mc:init(mc_amqpl, Content, Anns),
+    Converted = mc:convert(mc_mqtt, OriginalMsg),
+    ?assertMatch(#mqtt_msg{}, mc:protocol_state(Converted)),
+    ?assertEqual(12707, mc:get_annotation(ttl, Converted)).
 
 %% Non-UTF-8 Correlation Data should also be converted (via AMQP 0.9.1 header x-correlation-id).
 roundtrip_amqpl_correlation(_Config) ->

@@ -35,6 +35,7 @@ groups() ->
     [{cluster_size_1, [shuffle],
       [
        mqtt_amqpl_mqtt,
+       amqpl_mqtt_gh_12707,
        mqtt_amqp_mqtt,
        amqp_mqtt_amqp,
        mqtt_stomp_mqtt,
@@ -104,7 +105,6 @@ mqtt_amqpl_mqtt(Config) ->
     #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{queue = Q,
                                                              exchange = <<"amq.topic">>,
                                                              routing_key = <<"my.topic">>}),
-    %% MQTT 5.0 to AMQP 0.9.1
     C = connect(ClientId, Config),
     MqttResponseTopic = <<"response/topic">>,
     {ok, _, [1]} = emqtt:subscribe(C, #{'Subscription-Identifier' => 999}, [{MqttResponseTopic, [{qos, 1}]}]),
@@ -167,6 +167,32 @@ mqtt_amqpl_mqtt(Config) ->
                                        props = #'P_basic'{delivery_mode = 1}}},
          amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
 
+    ok = emqtt:disconnect(C).
+
+amqpl_mqtt_gh_12707(Config) ->
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    Topic = Payload = <<"gh_12707">>,
+    C = connect(ClientId, Config),
+    {ok, _, [1]} = emqtt:subscribe(C, Topic, qos1),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    amqp_channel:call(Ch,
+                      #'basic.publish'{exchange = <<"amq.topic">>,
+                                       routing_key = Topic},
+                      #amqp_msg{payload = Payload,
+                                props = #'P_basic'{expiration = <<"12707">>,
+                                                   headers = []}}),
+
+    receive {publish,
+             #{topic := MqttTopic,
+               payload := MqttPayload}} ->
+                ?assertEqual(Topic, MqttTopic),
+                ?assertEqual(Payload, MqttPayload)
+    after 5000 ->
+              ct:fail("did not receive a delivery")
+    end,
+
+    ok = rabbit_ct_client_helpers:close_channel(Ch),
     ok = emqtt:disconnect(C).
 
 mqtt_amqp_mqtt(Config) ->
