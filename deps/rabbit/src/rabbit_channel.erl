@@ -570,8 +570,10 @@ prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm,            _MsgSeqNos, _QPid} -> 5;
         {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        {queue_event, _, {confirm,            _MsgSeqNos, _QPid}} -> 5;
+        % {queue_event, _, {confirm,            _MsgSeqNos, _QPid}} -> 5;
         {queue_event, _, {reject_publish,     _MsgSeqNos, _QPid}} -> 5;
+        {method, #'basic.ack'{}, _Content, _Flow} -> 5;
+        % {queue_event, _, {delivery, _, _}} -> 0;
         _                                       -> 0
     end.
 

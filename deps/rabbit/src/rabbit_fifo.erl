@@ -89,7 +89,10 @@
          make_purge/0,
          make_purge_nodes/1,
          make_update_config/1,
-         make_garbage_collection/0
+         make_garbage_collection/0,
+
+         exec_read/3
+
         ]).
 
 -ifdef(TEST).
@@ -2076,30 +2079,27 @@ delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
-delivery_effect(ConsumerKey, Msgs,
-                #?STATE{cfg = #cfg{resource = QR}} = State) ->
+delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {RaftIdxs, Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
-                                          {[I | Acc], N+1}
-                                  end, {[], 0}, Msgs),
-    {log, RaftIdxs,
-     fun (Commands)
-           when length(Commands) < Num ->
-             %% the mandatory length/1 guard is a bit :(
-             rabbit_log:info("~ts: requested read consumer tag '~ts' of ~b "
-                             "indexes ~w but only ~b were returned. "
-                             "This is most likely a stale read request "
-                             "and can be ignored",
-                             [rabbit_misc:rs(QR), CTag, Num, RaftIdxs,
-                              length(Commands)]),
-             [];
-         (Commands) ->
-             DelMsgs = lists:zipwith(
-                         fun (Cmd, {MsgId, ?MSG(_Idx,  Header)}) ->
-                                 {MsgId, {Header, get_msg(Cmd)}}
-                         end, Commands, Msgs),
-             [{send_msg, CPid, {delivery, CTag, DelMsgs},
-               ?DELIVERY_SEND_MSG_OPTS}]
+    {RaftIdxs, _Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
+                                           {[I | Acc], N+1}
+                                   end, {[], 0}, Msgs),
+    {log_ext, RaftIdxs,
+     fun (ReadPlan) ->
+             case node(CPid) == node() of
+                 true ->
+                     [{send_msg, CPid, {delivery, CTag, ReadPlan, Msgs},
+                       ?DELIVERY_SEND_MSG_OPTS}];
+                 false ->
+                     %% if we got there we need to read the data on this node
+                     %% and send it to the consumer pid as it isn't availble
+                     %% locally
+                     {DelMsgs, Flru} = exec_read(undefined, ReadPlan, Msgs),
+                     %% we need to evict all cached items here
+                     _ = ra_flru:evict_all(Flru),
+                     [{send_msg, CPid, {delivery, CTag, DelMsgs},
+                       ?DELIVERY_SEND_MSG_OPTS}]
+             end
      end,
      {local, node(CPid)}}.
 
@@ -3014,3 +3014,11 @@ incr_msg(Msg0, DelFailed, Anns) ->
         false ->
             Msg2
     end.
+
+exec_read(Flru0, ReadPlan, Msgs) ->
+    {Entries, Flru} = ra_log_read_plan:execute(ReadPlan, Flru0),
+    %% return a list in original order
+    {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
+                       Cmd = maps:get(Idx, Entries),
+                       {MsgId, {Header, get_msg(Cmd)}}
+               end, Msgs), Flru}.
