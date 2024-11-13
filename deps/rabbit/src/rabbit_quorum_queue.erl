@@ -441,18 +441,19 @@ become_leader0(QName, Name) ->
 -spec all_replica_states() -> {node(), #{atom() => atom()}}.
 all_replica_states() ->
     Rows0 = ets:tab2list(ra_state),
-    Rows = lists:map(fun
+    Rows = lists:filtermap(
+                    fun
                         (T = {K, _, _}) ->
-                            case rabbit_process:is_registered_process_alive(K) of
-                                true ->
-                                    to_replica_state(T);
-                                false ->
-                                    []
+                            case whereis(K) of
+                                undefined ->
+                                    false;
+                                P when is_pid(P) ->
+                                    {true, to_replica_state(T)}
                             end;
                         (_T) ->
-                            []
-                     end, Rows0),
-    {node(), maps:from_list(lists:flatten(Rows))}.
+                            false
+                    end, Rows0),
+    {node(), maps:from_list(Rows)}.
 
 to_replica_state({K, follower, promotable}) ->
     {K, promotable};
