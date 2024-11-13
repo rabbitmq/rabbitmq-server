@@ -109,16 +109,19 @@ prop_connection_channel_counts(Config) ->
                                  {1, force_stats}])),
             begin
                 % ensure we begin with no connections
+                ct:pal("Init testcase"),
                 true = validate_counts(Config, []),
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
                 %% TODO retry a few times
+                ct:pal("Check testcase"),
                 Res = retry_for(
                         fun() ->
                                 force_stats(Config),
                                 validate_counts(Config, Cons) end,
                         60),
+                ct:pal("Cleanup testcase"),
                 cleanup(Cons),
                 rabbit_ct_helpers:await_condition(
                   fun () ->
@@ -138,8 +141,16 @@ validate_counts(Config, Conns) ->
     Ch1 = length(http_get_from_node(Config, 0, "/channels")),
     Ch2 = length(http_get_from_node(Config, 1, "/channels")),
     Ch3 = length(http_get_from_node(Config, 2, "/channels")),
-    [Expected, Expected, Expected, ChanCount, ChanCount, ChanCount]
-    =:= [C1, C2, C3, Ch1, Ch2, Ch3].
+    Res = ([Expected, Expected, Expected, ChanCount, ChanCount, ChanCount]
+           =:= [C1, C2, C3, Ch1, Ch2, Ch3]),
+    case Res of
+        false ->
+            ct:pal("Validate counts connections: ~p channels: ~p got ~p",
+                   [Expected, ChanCount, [C1, C2, C3, Ch1, Ch2, Ch3]]);
+        true ->
+            ok
+    end,
+    Res.
 
 
 cleanup(Conns) ->
