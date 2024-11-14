@@ -542,10 +542,10 @@
           "displayType": "Regular",
           "displayValueWithAlias": "Never",
           "editorMode": "code",
-          "expr": "erlang_vm_dist_node_state{peer!~\"rabbitmqcli.*\"} * on(rabbitmq_instance, job) group_left(rabbitmq_cluster) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
+          "expr": "erlang_vm_dist_node_state{peer!~\"rabbitmqcli.*\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{rabbitmq_instance}} -> {{ peer }}",
+          "legendFormat": "{{rabbitmq_node}} -> {{ peer }}",
           "range": true,
           "refId": "A",
           "units": "none",
@@ -2902,7 +2902,7 @@
         "showExtraInfo": false,
         "showItems": false
       },
-      "type": "flant-statusmap-panel",
+      "type": "status-history",
       "useMax": true,
       "usingPagination": false,
       "xAxis": {
