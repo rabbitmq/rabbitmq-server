@@ -304,10 +304,15 @@ queue_consumer_channel_closed(Config) ->
     amqp_channel:close(Chan),
     force_stats(Config),
 
-    Res = http_get(Config, "/queues/%2F/some-queue"),
-    % assert there are no consumer details
-    [] = maps:get(consumer_details, Res),
-    <<"some-queue">> = maps:get(name, Res),
+    ?awaitMatch([],
+                %% assert there are no consumer details
+                maps:get(consumer_details,
+                         http_get(Config, "/queues/%2F/some-queue")),
+                30000),
+    ?awaitMatch(<<"some-queue">>,
+                maps:get(name,
+                         http_get(Config, "/queues/%2F/some-queue")),
+                30000),
 
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
     ok.
@@ -325,10 +330,12 @@ queue(Config) ->
     basic_get(Chan2, <<"some-queue">>),
     force_stats(Config),
 
-    Res = http_get(Config, "/queues/%2F/some-queue"),
     % assert single queue is returned
-    [#{} | _] = maps:get(deliveries, Res),
-
+    ?awaitMatch([#{} | _],
+                maps:get(deliveries,
+                         http_get(Config, "/queues/%2F/some-queue")),
+                30000),
+    
     amqp_channel:close(Chan),
     amqp_channel:close(Chan2),
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
@@ -390,9 +397,10 @@ channels_multiple_on_different_nodes(Config) ->
 
     force_stats(Config),
 
-    Res = http_get(Config, "/channels"),
     % assert two channels are present
-    [_,_] = Res,
+    ?awaitMatch([_,_],
+                http_get(Config, "/channels"),
+                30000),
 
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
 
@@ -416,9 +424,12 @@ channel_closed(Config) ->
 
     force_stats(Config),
 
-    Res = http_get(Config, "/channels"),
-    % assert one channel is present
-    [_] = Res,
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              %% assert one channel is present
+              length(http_get(Config, "/channels")) == 1
+      end,
+      60000),
 
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
 

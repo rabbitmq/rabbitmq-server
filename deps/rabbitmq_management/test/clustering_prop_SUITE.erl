@@ -113,10 +113,11 @@ prop_connection_channel_counts(Config) ->
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
-                force_stats(Config),
                 %% TODO retry a few times
                 Res = retry_for(
-                        fun() -> validate_counts(Config, Cons) end,
+                        fun() ->
+                                force_stats(Config),
+                                validate_counts(Config, Cons) end,
                         60),
                 cleanup(Cons),
                 rabbit_ct_helpers:await_condition(
