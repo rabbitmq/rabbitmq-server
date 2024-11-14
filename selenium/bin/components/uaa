@@ -16,6 +16,9 @@ init_uaa() {
   print "> UAA_CONFIG_DIR: ${UAA_CONFIG_DIR}"
   print "> UAA_URL: ${UAA_URL}"
   print "> UAA_DOCKER_IMAGE: ${UAA_DOCKER_IMAGE}"
+  
+  generate-ca-server-client-kpi uaa $UAA_CONFIG_DIR
+  generate-server-keystore-if-required uaa $UAA_CONFIG_DIR
 }
 start_uaa() {
   begin "Starting UAA ..."
@@ -34,12 +37,13 @@ start_uaa() {
     --detach \
     --name uaa \
     --net ${DOCKER_NETWORK} \
-    --publish 8080:8080 \
-    --mount "type=bind,source=$MOUNT_UAA_CONF_DIR,target=/uaa" \
+    --publish 8443:8443 \
+    -v ${MOUNT_UAA_CONF_DIR}:/uaa \
+    -v ${UAA_CONFIG_DIR}/server.xml:/layers/paketo-buildpacks_apache-tomcat/catalina-base/conf/server.xml \
     --env UAA_CONFIG_PATH="/uaa" \
-    --env JAVA_OPTS="-Djava.security.egd=file:/dev/./urandom" \
+    --env JAVA_OPTS="-Djava.security.policy=unlimited -Djava.security.egd=file:/dev/./urandom" \
     ${UAA_DOCKER_IMAGE}
-
+   
   wait_for_oidc_endpoint uaa $UAA_URL
   end "UAA is ready"
 }

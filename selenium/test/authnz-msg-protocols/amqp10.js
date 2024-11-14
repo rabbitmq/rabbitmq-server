@@ -15,7 +15,10 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let expectations = []
   let username = process.env.RABBITMQ_AMQP_USERNAME
   let password = process.env.RABBITMQ_AMQP_PASSWORD
-
+  let usemtls = process.env.AMQP_USE_MTLS
+  let amqpClientCommand = "npm run amqp10_roundtriptest" + 
+    (usemtls ? "" : " " + username + " " + password)
+  
   before(function () {
     if (backends.includes("http") && username.includes("http")) {
       reset()
@@ -36,9 +39,8 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     }
   })
 
-  it('can open an AMQP 1.0 connection', function () {
-    execSync("npm run amqp10_roundtriptest -- " + username + " " + password)
-
+  it('can open an AMQP 1.0 connection', function () {     
+    console.log(execSync(amqpClientCommand).toString())
   })
 
   after(function () {

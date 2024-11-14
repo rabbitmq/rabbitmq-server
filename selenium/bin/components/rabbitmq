@@ -1,6 +1,9 @@
 
 #!/usr/bin/env bash
 
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+
 init_rabbitmq() {
   RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
   RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
@@ -10,6 +13,13 @@ init_rabbitmq() {
   [[ -z "${OAUTH_SERVER_CONFIG_BASEDIR}" ]] || print "> OAUTH_SERVER_CONFIG_BASEDIR: ${OAUTH_SERVER_CONFIG_BASEDIR}"
   [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
 
+  if [[ ! -d "${RABBITMQ_CONFIG_DIR}/certs" ]]; then 
+    mkdir ${RABBITMQ_CONFIG_DIR}/certs
+  fi 
+  generate-ca-server-client-kpi rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-server-keystore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-client-keystore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-truststore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
 }
 
 start_rabbitmq() {
@@ -157,7 +167,7 @@ start_docker_rabbitmq() {
   if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
       cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
   fi
-  if [ -d ${RABBITMQ_CONFIG_DIR}/certs ]; then
+  if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then      
       cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/rabbitmq
   fi
   if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
@@ -175,10 +185,10 @@ start_docker_rabbitmq() {
     -p 15672:15672 \
     -p 15671:15671 \
     -v $CONF_DIR/rabbitmq/:/etc/rabbitmq \
-    -v $CONF_DIR/rabbitmq/:/var/rabbitmq \
+    -v $CONF_DIR/rabbitmq/imports:/var/rabbitmq/imports \
     -v ${TEST_DIR}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
-
+    
   wait_for_message rabbitmq "Server startup complete"
   end "RabbitMQ ready"
 }

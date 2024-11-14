@@ -15,15 +15,45 @@ public class RoundTripTest {
   public static String getEnv(String property, String defaultValue) {
     return System.getenv(property) == null ? defaultValue : System.getenv(property);
   }
+  public static String getEnv(String property) {
+    String value = System.getenv(property);
+    if (value == null) {
+      throw new IllegalArgumentException("Missing env variable " + property);
+    }
+    return value;
+  }
   public static void main(String args[]) throws Exception {
     String hostname = getEnv("RABBITMQ_HOSTNAME", "localhost");
     String port = getEnv("RABBITMQ_AMQP_PORT", "5672");
     String scheme = getEnv("RABBITMQ_AMQP_SCHEME", "amqp");
+    String uri = scheme + "://" + hostname + ":" + port;
     String username = args.length > 0 ? args[0] : getEnv("RABBITMQ_AMQP_USERNAME", "guest");
     String password = args.length > 1 ? args[1] : getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
-    String uri = scheme + "://" + hostname + ":" + port;
+    
+    boolean usemtls = Boolean.parseBoolean(getEnv("AMQP_USE_MTLS", "false"));
+    String certsLocation = getEnv("RABBITMQ_CERTS");
+    
+    if ("amqps".equals(scheme)) {
+      List<String> connectionParams = new ArrayList<String>();
 
-    System.out.println("AMQPS Roundrip using uri " + uri);
+      connectionParams.add("transport.trustStoreLocation=" + certsLocation + "/truststore.jks");
+      connectionParams.add("transport.trustStorePassword=foobar");
+      connectionParams.add("transport.verifyHost=true");  
+      connectionParams.add("transport.trustAll=true");    
+
+      if (usemtls) {
+        connectionParams.add("amqp.saslMechanisms=EXTERNAL");
+        connectionParams.add("transport.keyStoreLocation=" + certsLocation + "/client_rabbitmq.jks");
+        connectionParams.add("transport.keyStorePassword=foobar");
+        connectionParams.add("transport.keyAlias=client-rabbitmq-tls");
+      }
+      if (!connectionParams.isEmpty()) {
+        uri = uri + "?" + String.join("&", connectionParams);       
+        System.out.println("Using AMQP URI " + uri);
+      }
+    }
+
+    assertNotNull(uri);
 
     Hashtable<Object, Object> env = new Hashtable<>();
     env.put(Context.INITIAL_CONTEXT_FACTORY, "org.apache.qpid.jms.jndi.JmsInitialContextFactory");
@@ -33,12 +63,11 @@ public class RoundTripTest {
     env.put("jms.requestTimeout", 5);
     javax.naming.Context context = new javax.naming.InitialContext(env);
 
-    assertNotNull(uri);
-
     ConnectionFactory factory = (ConnectionFactory) context.lookup("myFactoryLookup");
     Destination queue = (Destination) context.lookup("myQueueLookup");
 
-    try (Connection connection = factory.createConnection(username, password)) {
+    try (Connection connection = 
+                      createConnection(factory, usemtls, username, password)) {
       connection.start();
 
       Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
@@ -56,5 +85,12 @@ public class RoundTripTest {
 
       assertEquals(message.getText(), receivedMessage.getText());
     }
+  }  
+  private static Connection createConnection(ConnectionFactory factory, 
+      boolean usemtls, String username, String password) throws jakarta.jms.JMSException {
+    if (usemtls) {
+      return factory.createConnection();      
+    }
+    return factory.createConnection(username, password);
   }
 }

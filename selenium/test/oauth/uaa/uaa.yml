@@ -1,3 +1,6 @@
+require_https: true
+https_port: 8443
+
 logging:
   config: /uaa/log4j2.properties
 

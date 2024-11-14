@@ -30,9 +30,9 @@ find_selenium_dir() {
 SELENIUM_ROOT_FOLDER=$(find_selenium_dir $SCRIPT)
 TEST_DIR=$SELENIUM_ROOT_FOLDER/test
 BIN_DIR=$SELENIUM_ROOT_FOLDER/bin
-LOGS=${SELENIUM_ROOT_FOLDER}/logs/${SUITE}
 SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=/tmp/selenium/${SUITE}
+LOGS=${CONF_DIR}/logs
 ENV_FILE=$CONF_DIR/.env
 
 rm -rf $CONF_DIR
@@ -132,7 +132,7 @@ build_mocha_image() {
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
   print "> tag : $tag"
   if [[ $(docker images -q mocha-test:$tag 2> /dev/null) == "" ]]; then
-    docker build -t mocha-test:$tag  --target test $SCRIPT/..
+    docker build -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
     print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"
@@ -170,13 +170,13 @@ wait_for_oidc_endpoint() {
 wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
-  CURL_ARGS="-L --fail "
+  CURL_ARGS="-k --tlsv1.2 -L --fail "
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -eq 3 ]]; then
     CURL_ARGS="$CURL_ARGS --cacert $3"
     DELAY_BETWEEN_ATTEMPTS=10
   fi
-  max_retry=10
+  max_retry=15
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (curl $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
@@ -191,7 +191,7 @@ wait_for_oidc_endpoint_local() {
 wait_for_oidc_endpoint_docker() {
   NAME=$1
   BASE_URL=$2
-  CURL_ARGS="-L --fail "
+  CURL_ARGS="-k --tlsv1.2 -L --fail "
   DOCKER_ARGS="--rm --net ${DOCKER_NETWORK} "
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -gt 2  ]]; then
@@ -199,7 +199,7 @@ wait_for_oidc_endpoint_docker() {
     CURL_ARGS="$CURL_ARGS --cacert /tmp/ca_certificate.pem"
     DELAY_BETWEEN_ATTEMPTS=10
   fi
-  max_retry=10
+  max_retry=15
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (docker run $DOCKER_ARGS curlimages/curl:7.85.0 $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
@@ -333,9 +333,11 @@ _test() {
     --env SELENIUM_POLLING=${SELENIUM_POLLING} \
     --env PROFILES="${PROFILES}" \
     --env ENV_FILE="/code/.env" \
+    --env RABBITMQ_CERTS=/etc/rabbitmq/certs \
     --env NODE_EXTRA_CA_CERTS=/nodejs/ca.pem \
     -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs/ca.pem \
     -v ${TEST_DIR}:/code/test \
+    -v ${TEST_CONFIG_DIR}/certs:/etc/rabbitmq/certs \
     -v ${SCREENS}:/screens \
     -v ${ENV_FILE}:/code/.env \
     mocha-test:${mocha_test_tag} test /code/test${TEST_CASES_PATH}
@@ -371,10 +373,104 @@ profiles_with_local_or_docker() {
 generate_env_file() {
     begin "Generating env file ..."
     mkdir -p $CONF_DIR
-    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE
-    source $ENV_FILE
+    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE    
+    source $ENV_FILE    
     end "Finished generating env file."
 }
+generate-ca-server-client-kpi() {
+  NAME=$1
+  FOLDER=$2
+  if [[ ! -f "${FOLDER}/server_${NAME}_key.pem" ]]; then
+	  do_generate-ca-server-client-kpi $1 $2
+  fi
+}
+do_generate-ca-server-client-kpi() {
+  NAME=$1
+  FOLDER=$2
+  ROOT=$SELENIUM_ROOT_FOLDER
+
+  begin "Generate certs for $NAME"
+
+  if [ ! -d "$ROOT/tls-gen" ]; then
+    git clone https://github.com/michaelklishin/tls-gen $ROOT/tls-gen
+  fi
+
+  print "Generating CA and Server (localhost and $NAME) PKI under $FOLDER ..."
+  mkdir -p $FOLDER
+
+  CUR_DIR=$(pwd)
+  cd $ROOT/tls-gen/basic
+  cp openssl.cnf openssl.cnf.bak
+  if [ -f "$FOLDER/openssl.cnf.in" ]; then     
+    cp $FOLDER/openssl.cnf.in >> openssl.cnf
+  fi 
+  if [[ ! -z "${DEBUG}" ]]; then
+    print "Used this openssl.conf"
+    cat openssl.cnf
+  fi
+  make CN=$NAME CLIENT_ALT_NAME=internaluser
+  cp openssl.cnf.bak openssl.cnf  
+  cd $CUR_DIR
+
+  cp $ROOT/tls-gen/basic/result/ca_certificate.pem $FOLDER/ca_${NAME}_certificate.pem
+  cp $ROOT/tls-gen/basic/result/server_${NAME}_certificate.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/server_${NAME}_key.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/server_${NAME}.p12 $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}_certificate.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}_key.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}.p12 $FOLDER
+  chmod ugo+r $FOLDER/*.pem
+  end "SSL Certificates generated for $NAME under $FOLDER"
+}
+generate-truststore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [[ ! -f "${FOLDER}/truststore.jks" ]]; then
+    keytool -import \
+      -trustcacerts \
+      -file ${FOLDER}/ca_${NAME}_certificate.pem \
+      -keystore ${FOLDER}/truststore.jks \
+      -storepass foobar \
+			-noprompt
+  fi
+}
+generate-server-keystore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [ ! -f "${FOLDER}/server_${NAME}.jks" ]; then
+    keytool -importkeystore \
+        -destkeystore ${FOLDER}/server_${NAME}.jks \
+        -srckeystore ${FOLDER}/server_${NAME}.p12 \
+        -deststoretype pkcs12 \
+        -srcstoretype pkcs12 \
+        -alias 1 \
+        -destalias server-${NAME}-tls \
+        -deststorepass foobar \
+        -destkeypass foobar \
+        -srcstorepass "" \
+        -srckeypass "" \
+        -noprompt
+  fi
+}
+generate-client-keystore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [ ! -f "${FOLDER}/client_${NAME}.jks" ]; then
+    keytool -importkeystore \
+        -destkeystore ${FOLDER}/client_${NAME}.jks \
+        -srckeystore ${FOLDER}/client_${NAME}.p12 \
+        -deststoretype pkcs12 \
+        -srcstoretype pkcs12 \
+        -alias 1 \
+        -destalias client-${NAME}-tls \
+        -deststorepass foobar \
+        -destkeypass foobar \
+        -srcstorepass "" \
+        -srckeypass "" \
+        -noprompt
+  fi
+}
+
 run() {
   runWith rabbitmq
 }
@@ -420,13 +516,13 @@ elif [[ "$COMMAND" == "stop-rabbitmq" ]]
   fi
 }
 determine_required_components_including_rabbitmq() {
-  if [[ "$@" != *"rabbitmq"* ]]; then
-    REQUIRED_COMPONENTS+=("rabbitmq")
-  fi
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     REQUIRED_COMPONENTS+=( "$val" )
   }
+  if [[ "$@" != *"rabbitmq"* ]]; then
+    REQUIRED_COMPONENTS+=("rabbitmq")
+  fi
 }
 determine_required_components_excluding_rabbitmq() {
   for (( i=1; i<=$#; i++)) {
@@ -489,7 +585,7 @@ test_local() {
   export RABBITMQ_AMQP_PASSWORD=${RABBITMQ_AMQP_PASSWORD}
   export SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
   export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
-
+  
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
   print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
