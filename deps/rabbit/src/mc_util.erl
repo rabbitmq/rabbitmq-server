@@ -3,6 +3,7 @@
 -include("mc.hrl").
 
 -export([is_valid_shortstr/1,
+         is_utf8_no_null_limited/1,
          is_utf8_no_null/1,
          uuid_to_urn_string/1,
          urn_string_to_uuid/1,
@@ -12,10 +13,22 @@
          is_x_header/1
         ]).
 
+-define(UTF8_SCAN_LIMIT, 4096).
+
 -spec is_valid_shortstr(term()) -> boolean().
 is_valid_shortstr(Bin) when ?IS_SHORTSTR_LEN(Bin) ->
     is_utf8_no_null(Bin);
 is_valid_shortstr(_) ->
+    false.
+
+-spec is_utf8_no_null_limited(term()) -> boolean().
+is_utf8_no_null_limited(Bin)
+  when byte_size(Bin) =< ?UTF8_SCAN_LIMIT ->
+    is_utf8_no_null(Bin);
+is_utf8_no_null_limited(_Term) ->
+    %% If longer than 4096 bytes, just assume it's not UTF-8.
+    %% It _may_ still be valid UTF-8 but checking this
+    %% on the hot path is going to be excessively slow.
     false.
 
 -spec is_utf8_no_null(term()) -> boolean().

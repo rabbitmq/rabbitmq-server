@@ -1,6 +1,12 @@
 PROJECT = rabbitmq_event_exchange
 PROJECT_DESCRIPTION = Event Exchange Type
 
+define PROJECT_ENV
+	  [
+		{protocol, amqp_0_9_1}
+	  ]
+endef
+
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
