@@ -76,6 +76,9 @@
 -export([internal_declare/2, internal_delete/2, run_backing_queue/3,
          emit_consumers_local/3, internal_delete/3]).
 
+%% Deprecated feature callback.
+-export([are_transient_nonexcl_used/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
@@ -110,8 +113,18 @@
 -rabbit_deprecated_feature(
    {transient_nonexcl_queues,
     #{deprecation_phase => permitted_by_default,
-      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-transient-non-exclusive-queues"
+      doc_url => "https://blog.rabbitmq.com/posts/2021/08/4.0-deprecation-announcements/#removal-of-transient-non-exclusive-queues",
+      callbacks => #{is_feature_used => {?MODULE, are_transient_nonexcl_used}}
      }}).
+
+are_transient_nonexcl_used(_) ->
+    case rabbit_db_queue:list_transient() of
+        {ok, Queues} ->
+            NonExclQueues = [Q || Q <- Queues, not is_exclusive(Q)],
+            length(NonExclQueues) > 0;
+        {error, _} ->
+            undefined
+    end.
 
 -define(CONSUMER_INFO_KEYS,
         [queue_name, channel_pid, consumer_tag, ack_required, prefetch_count,
