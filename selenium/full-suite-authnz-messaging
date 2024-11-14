@@ -4,6 +4,7 @@ authnz-messaging/auth-http-backend.sh
 authnz-messaging/auth-http-internal-backends-with-internal.sh
 authnz-messaging/auth-http-internal-backends.sh
 authnz-messaging/auth-internal-backend.sh
+authnz-messaging/auth-internal-mtls-backend.sh
 authnz-messaging/auth-internal-http-backends.sh
 authnz-messaging/auth-ldap-backend.sh
 authnz-messaging/auth-http-backend.sh

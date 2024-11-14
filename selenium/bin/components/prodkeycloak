@@ -16,6 +16,9 @@ init_prodkeycloak() {
   print "> PRODKEYCLOAK_CONFIG_DIR: ${PRODKEYCLOAK_CONFIG_DIR}"
   print "> PRODKEYCLOAK_URL: ${PRODKEYCLOAK_URL}"
   print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+
+    generate-ca-server-client-kpi prodkeycloak $PRODKEYCLOAK_CONFIG_DIR
+
 }
 start_prodkeycloak() {
   begin "Starting prodkeycloak ..."

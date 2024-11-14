@@ -78,11 +78,7 @@ jobs:
           ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui
         mkdir -p /tmp/short-suite
         mv /tmp/selenium/* /tmp/short-suite
-        mkdir -p /tmp/short-suite/logs
-        mv ${SELENIUM_DIR}/logs/* /tmp/short-suite/logs
-        mkdir -p /tmp/short-suite/screens
-        mv ${SELENIUM_DIR}/screens/* /tmp/short-suite/screens
-
+        
     - name: Upload Test Artifacts
       if: always()
       uses: actions/upload-artifact@v4.3.2
