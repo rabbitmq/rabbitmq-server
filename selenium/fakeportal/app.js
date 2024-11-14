@@ -56,8 +56,9 @@ function access_token(id, secret) {
   if (req.status == 200) {
     const token = JSON.parse(req.responseText).access_token;
     console.log("Token => " + token)
-    return token;
+    return token
   } else {
-    throw new Error(req.status + " : " + req.responseText);
+    throw new Error(req.status + " : " + " : " + 
+      req.response + " : " + req.responseText)
   }
 }

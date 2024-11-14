@@ -24,8 +24,8 @@ on:
       - 'deps/rabbitmq_auth_/**'
       - 'deps/rabbitmq_mqtt/**'
       - 'deps/rabbitmq_management/selenium/full-suite-authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/suites/authnz-messaging'
-      - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols'
+      - 'deps/rabbitmq_management/selenium/suites/authnz-messaging/**'
+      - 'deps/rabbitmq_management/selenium/test/authnz-msg-protocols/**'
       - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -83,7 +83,9 @@ jobs:
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
          ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
-
+        mkdir -p /tmp/full-suite-authnz-messaging
+        mv /tmp/selenium/* /tmp/full-suite-authnz-messaging
+        
     - name: Upload Test Artifacts
       if: always()
       uses: actions/upload-artifact@v4.3.2

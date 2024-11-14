@@ -9,6 +9,9 @@ init_devkeycloak() {
   print "> DEVKEYCLOAK_CONFIG_DIR: ${DEVKEYCLOAK_CONFIG_DIR}"
   print "> DEVKEYCLOAK_URL: ${DEVKEYCLOAK_URL}"
   print "> DEVKEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi devkeycloak $DEVKEYCLOAK_CONFIG_DIR
+
 }
 ensure_devkeycloak() {
   if docker ps | grep devkeycloak &> /dev/null; then

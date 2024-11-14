@@ -1,4 +1,10 @@
+#!/usr/bin/env bash
 
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [[ ! -z "${DEBUG}" ]]; then
+  set -x
+fi
 
 ensure_fakeproxy() {
   if docker ps | grep fakeproxy &> /dev/null; then
@@ -10,7 +16,7 @@ ensure_fakeproxy() {
 
 init_fakeproxy() {
   FAKEPROXY_URL=${FAKEPROXY_URL:-http://fakeproxy:9090}
-  FAKEPROXY_DIR=${SCRIPT}/../fakeportal
+  FAKEPROXY_DIR=${SCRIPT}/../../fakeportal
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
   RABBITMQ_HOST_FOR_FAKEPROXY=${RABBITMQ_HOST_FOR_FAKEPROXY:-rabbitmq:15672}
@@ -43,6 +49,8 @@ start_fakeproxy() {
     --env UAA_URL="${UAA_URL_FOR_FAKEPROXY}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
+    --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
+    -v ${TEST_CONFIG_PATH}/uaa:/etc/uaa \
     -v ${FAKEPROXY_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeproxy
 
