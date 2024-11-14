@@ -178,7 +178,7 @@ open_connections_to_limit(Config, Limit) ->
     Connections.
 
 close_all_connections(Connections) ->
-    [rabbit_ct_client_helpers:close_connection(C) || C <- Connections].
+    [catch rabbit_ct_client_helpers:close_connection(C) || C <- Connections].
 
 set_node_limit(Config, Type, Limit) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,

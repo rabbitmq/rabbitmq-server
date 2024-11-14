@@ -1204,26 +1204,50 @@ management_plugin_connection(Config) ->
     Node = atom_to_binary(get_node_config(Config, 0, nodename)),
 
     C1 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
-    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    FilterFun =
+        fun(#{client_properties := #{client_id := CId}})
+              when CId == ClientId -> true;
+           (_) -> false
+        end,
+    %% Sometimes connections remain open from other testcases,
+    %% let's match the one we're looking for
+    eventually(
+      ?_assertMatch(
+         [_],
+         lists:filter(FilterFun, http_get(Config, "/connections"))),
+      1000, 10),
     [#{client_properties := #{client_id := ClientId},
        timeout := KeepaliveSecs,
        node := Node,
-       name := ConnectionName}] = http_get(Config, "/connections"),
+       name := ConnectionName}] =
+        lists:filter(FilterFun, http_get(Config, "/connections")),
     process_flag(trap_exit, true),
     http_delete(Config,
                 "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)),
                 ?NO_CONTENT),
     await_exit(C1),
-    eventually(?_assertEqual([], http_get(Config, "/connections"))),
+    eventually(
+      ?_assertMatch(
+         [],
+         lists:filter(FilterFun, http_get(Config, "/connections"))),
+      1000, 10),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3),
-
+    
     C2 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
-    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    eventually(
+      ?_assertMatch(
+         [_],
+         lists:filter(FilterFun, http_get(Config, "/connections"))),
+      1000, 10),
     http_delete(Config,
                 "/connections/username/guest",
                 ?NO_CONTENT),
     await_exit(C2),
-    eventually(?_assertEqual([], http_get(Config, "/connections"))),
+    eventually(
+      ?_assertMatch(
+         [],
+         lists:filter(FilterFun, http_get(Config, "/connections"))),
+      1000, 10),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3).
 
 management_plugin_enable(Config) ->
@@ -1233,10 +1257,22 @@ management_plugin_enable(Config) ->
 
     %% If the (web) MQTT connection is established **before** the management plugin is enabled,
     %% the management plugin should still list the (web) MQTT connection.
-    C = connect(?FUNCTION_NAME, Config),
+    ClientId = atom_to_binary(?FUNCTION_NAME),
+    C = connect(ClientId, Config),
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
-    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    FilterFun =
+        fun(#{client_properties := #{client_id := CId}})
+              when ClientId == CId -> true;
+           (_) -> false
+        end,
+    %% Sometimes connections remain open from other testcases,
+    %% let's match the one we're looking for
+    eventually(
+      ?_assertMatch(
+         [_],
+         lists:filter(FilterFun, http_get(Config, "/connections"))),
+      1000, 10),
 
     ok = emqtt:disconnect(C).
 
