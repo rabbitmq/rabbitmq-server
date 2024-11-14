@@ -165,11 +165,23 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
     Path = khepri_vhost_path(VHostName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := VHost0, payload_version := DVersion}} ->
+        {ok, QueryRet} ->
+            {VHost0, Vsn} = case QueryRet of
+                                %% Khepri 0.16 and below returned
+                                %% `khepri:node_props()' for adv queries and
+                                %% commands targeting one node:
+                                #{data := Data, payload_version := V} ->
+                                    {Data, V};
+                                %% Khepri 0.17+ returns
+                                %% `khepri_adv:node_props_map()` instead.
+                                #{Path := #{data := Data,
+                                            payload_version := V}} ->
+                                    {Data, V}
+                            end,
             VHost = vhost:merge_metadata(VHost0, Metadata),
             rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             Ret2 = rabbit_khepri:put(Path1, VHost),
             case Ret2 of
                 ok ->
@@ -411,13 +423,25 @@ update_in_mnesia_tx(VHostName, UpdateFun)
 update_in_khepri(VHostName, UpdateFun) ->
     Path = khepri_vhost_path(VHostName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := V, payload_version := DVersion}} ->
-            V1 = UpdateFun(V),
+        {ok, QueryRet} ->
+            {VHost0, Vsn} = case QueryRet of
+                                %% Khepri 0.16 and below returned
+                                %% `khepri:node_props()' for adv queries and
+                                %% commands targeting one node:
+                                #{data := Data, payload_version := V} ->
+                                    {Data, V};
+                                %% Khepri 0.17+ returns
+                                %% `khepri_adv:node_props_map()` instead.
+                                #{Path := #{data := Data,
+                                            payload_version := V}} ->
+                                    {Data, V}
+                            end,
+            VHost1 = UpdateFun(VHost0),
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
-            case rabbit_khepri:put(Path1, V1) of
+                      Path, [#if_payload_version{version = Vsn}]),
+            case rabbit_khepri:put(Path1, VHost1) of
                 ok ->
-                    V1;
+                    VHost1;
                 {error, {khepri, mismatching_node, _}} ->
                     update_in_khepri(VHostName, UpdateFun);
                 Error ->

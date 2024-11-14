@@ -106,10 +106,22 @@ insert0_in_mnesia(Key, Cached, Message, Length) ->
 insert_in_khepri(XName, Message, Length) ->
     Path = khepri_recent_history_path(XName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := Cached0, payload_version := DVersion}} ->
+        {ok, QueryRet} ->
+            {Cached0, Vsn} = case QueryRet of
+                                 %% Khepri 0.16 and below returned
+                                 %% `khepri:node_props()' for adv queries and
+                                 %% commands targeting one node:
+                                 #{data := Data, payload_version := V} ->
+                                     {Data, V};
+                                 %% Khepri 0.17+ returns
+                                 %% `khepri_adv:node_props_map()` instead.
+                                 #{Path := #{data := Data,
+                                             payload_version := V}} ->
+                                     {Data, V}
+                             end,
             Cached = add_to_cache(Cached0, Message, Length),
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             Ret = rabbit_khepri:put(Path1, Cached),
             case Ret of
                 ok ->

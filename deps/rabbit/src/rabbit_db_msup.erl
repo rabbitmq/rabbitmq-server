@@ -135,8 +135,20 @@ create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, Id) ->
                                 mirroring_pid = Overall,
                                 childspec     = ChildSpec},
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := #mirrored_sup_childspec{mirroring_pid = Pid},
-               payload_version := Vsn}} ->
+        {ok, QueryRet} ->
+            {#mirrored_sup_childspec{mirroring_pid = Pid}, Vsn} =
+            case QueryRet of
+                %% Khepri 0.16 and below returned
+                %% `khepri:node_props()' for adv queries and
+                %% commands targeting one node:
+                #{data := Data, payload_version := V} ->
+                    {Data, V};
+                %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
+                %% instead.
+                #{Path := #{data := Data,
+                            payload_version := V}} ->
+                    {Data, V}
+            end,
             case Overall of
                 Pid ->
                     Delegate;

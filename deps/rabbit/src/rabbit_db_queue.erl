@@ -411,9 +411,15 @@ delete_in_khepri(QueueName, OnlyDurable) ->
       fun () ->
               Path = khepri_queue_path(QueueName),
               case khepri_tx_adv:delete(Path) of
+                  %% Khepri 0.16 and below returned `khepri:node_props()' for
+                  %% adv queries and commands targeting one node:
                   {ok, #{data := _}} ->
                       %% we want to execute some things, as decided by rabbit_exchange,
                       %% after the transaction.
+                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+                  %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
+                  %% instead.
+                  {ok, #{Path := #{data := _}}} ->
                       rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
                   {ok, _} ->
                       ok
@@ -606,7 +612,19 @@ update_in_khepri(QName, Fun) ->
     Path = khepri_queue_path(QName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := Q, payload_version := Vsn}} ->
+        {ok, QueryRet} ->
+            {Q, Vsn} = case QueryRet of
+                           %% Khepri 0.16 and below returned
+                           %% `khepri:node_props()' for adv queries and
+                           %% commands targeting one node:
+                           #{data := Data, payload_version := V} ->
+                               {Data, V};
+                           %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
+                           %% instead.
+                           #{Path := #{data := Data,
+                                       payload_version := V}} ->
+                               {Data, V}
+                       end,
             UpdatePath = khepri_path:combine_with_conditions(
                            Path, [#if_payload_version{version = Vsn}]),
             Q1 = Fun(Q),
@@ -657,11 +675,23 @@ update_decorators_in_khepri(QName, Decorators) ->
     Path = khepri_queue_path(QName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := Q1, payload_version := Vsn}} ->
-            Q2 = amqqueue:set_decorators(Q1, Decorators),
+        {ok, QueryRet} ->
+            {Q, Vsn} = case QueryRet of
+                           %% Khepri 0.16 and below returned
+                           %% `khepri:node_props()' for adv queries and
+                           %% commands targeting one node:
+                           #{data := Data, payload_version := V} ->
+                               {Data, V};
+                           %% Khepri 0.17+ returns
+                           %% `khepri_adv:node_props_map()` instead.
+                           #{Path := #{data := Data,
+                                       payload_version := V}} ->
+                               {Data, V}
+                       end,
+            Q1 = amqqueue:set_decorators(Q, Decorators),
             UpdatePath = khepri_path:combine_with_conditions(
                            Path, [#if_payload_version{version = Vsn}]),
-            Ret2 = rabbit_khepri:put(UpdatePath, Q2),
+            Ret2 = rabbit_khepri:put(UpdatePath, Q1),
             case Ret2 of
                 ok -> ok;
                 {error, {khepri, mismatching_node, _}} ->
@@ -1075,15 +1105,12 @@ delete_transient_in_khepri(FilterFun) ->
     case rabbit_khepri:adv_get_many(PathPattern) of
         {ok, Props} ->
             Qs = maps:fold(
-                   fun(Path0, #{data := Q, payload_version := Vsn}, Acc)
+                   fun(Path, #{data := Q, payload_version := Vsn}, Acc)
                        when ?is_amqqueue(Q) ->
                            case FilterFun(Q) of
                                true ->
-                                   Path = khepri_path:combine_with_conditions(
-                                            Path0,
-                                            [#if_payload_version{version = Vsn}]),
                                    QName = amqqueue:get_name(Q),
-                                   [{Path, QName} | Acc];
+                                   [{Path, Vsn, QName} | Acc];
                                false ->
                                    Acc
                            end
@@ -1102,20 +1129,7 @@ do_delete_transient_queues_in_khepri([], _FilterFun) ->
 do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
     Res = rabbit_khepri:transaction(
             fun() ->
-                    rabbit_misc:fold_while_ok(
-                      fun({Path, QName}, Acc) ->
-                              %% Also see `delete_in_khepri/2'.
-                              case khepri_tx_adv:delete(Path) of
-                                  {ok, #{data := _}} ->
-                                      Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
-                                                    QName, false),
-                                      {ok, [{QName, Deletions} | Acc]};
-                                  {ok, _} ->
-                                      {ok, Acc};
-                                  {error, _} = Error ->
-                                      Error
-                              end
-                      end, [], Qs)
+                    do_delete_transient_queues_in_khepri_tx(Qs, [])
             end),
     case Res of
         {ok, Items} ->
@@ -1128,6 +1142,35 @@ do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
         {error, _} = Error ->
             Error
     end.
+
+do_delete_transient_queues_in_khepri_tx([], Acc) ->
+    {ok, Acc};
+do_delete_transient_queues_in_khepri_tx([{Path, Vsn, QName} | Rest], Acc) ->
+     %% Also see `delete_in_khepri/2'.
+     VersionedPath = khepri_path:combine_with_conditions(
+                       Path, [#if_payload_version{version = Vsn}]),
+     case khepri_tx_adv:delete(VersionedPath) of
+         {ok, Res} ->
+             Acc1 = case Res of
+                        %% Khepri 0.16 and below returned `khepri:node_props()'
+                        %% for adv queries and commands targeting one node:
+                        #{data := _} ->
+                            Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                                        QName, false),
+                            [{QName, Deletions} | Acc];
+                        %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
+                        %% instead.
+                        #{Path := #{data := _}} ->
+                            Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                                        QName, false),
+                            [{QName, Deletions} | Acc];
+                        _ ->
+                            Acc
+                    end,
+             do_delete_transient_queues_in_khepri_tx(Rest, Acc1);
+         {error, _} = Error ->
+             Error
+     end.
 
 %% -------------------------------------------------------------------
 %% foreach_transient().
