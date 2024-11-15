@@ -7,17 +7,23 @@ const LoginPage = require('../../pageobjects/LoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 const ConnectionsPage = require('../../pageobjects/ConnectionsPage')
 
-var container = require('rhea')
+var container = require('rhea')  // https://github.com/amqp/rhea
+var receivedAmqpMessageCount = 0
+var connectionEstablishedPromise = new Promise((resolve, reject) => {
+  container.on('connection_open', function(context) {
+    resolve()
+  })
+})
+
 container.on('message', function (context) {
-    console.log("Received message : " + context.message.body)    
+    receivedAmqpMessageCount++
 })
 container.once('sendable', function (context) {
-    console.log("Sending message ..")
     context.sender.send({body:'Hello World!'})
 })
 
 
-describe('Given an amqp10 connection is selected', function () {  
+describe('Given an amqp10 connection opened, listed and clicked on it', function () {  
   let captureScreen
   let connectionsPage
   let connection 
@@ -29,28 +35,29 @@ describe('Given an amqp10 connection is selected', function () {
     overview = new OverviewPage(driver)
     connectionsPage = new ConnectionsPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
-    await login.login('management', 'guest')
+    await login.login('monitoring-only', 'guest')
     await overview.isLoaded()
-    
+
     connection = container.connect(
       {'host': process.env.RABBITMQ_HOSTNAME || 'rabbitmq',
        'port': process.env.RABBITMQ_AMQP_PORT || 5672,
        'username' : process.env.RABBITMQ_AMQP_USERNAME || 'guest',
        'password' : process.env.RABBITMQ_AMQP_PASSWORD || 'guest',
        'id': "selenium-connection-id",
-       'container-id': "selenium-container-id"
+       'container_id': "selenium-container-id"
       })
     connection.open_receiver('examples')
     connection.open_sender('examples')
 
-    await overview.clickOnConnectionsTab()
-    
-    console.log("Wait until connections page is loaded")
+    await connectionEstablishedPromise
+    await overview.clickOnConnectionsTab()    
     await connectionsPage.isLoaded()
-    console.log("Getting connections ..")
+
     connections_table = await connectionsPage.getConnectionsTable(20)
-    console.log("a :" + connections_table)
+    assert.equal(1, connections_table.length)
+    await connectionsPage.clickOnConnection(1)
   })
+
 
   it('can list session information', async function () {
     // flow control state

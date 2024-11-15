@@ -20,6 +20,6 @@ module.exports = class ConnectionsPage extends BasePage {
   }
   async clickOnConnection(index) {
     return this.click(By.css(
-      "div#connections-table-section table tbody tr td a[href='#/exchanges/" + vhost + "/" + name + "']"))
+      "div#connections-table-section table tbody tr td:nth-child(" + index + ")"))
   }
 }
