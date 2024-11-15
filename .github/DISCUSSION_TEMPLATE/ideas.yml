@@ -16,7 +16,6 @@ body:
     attributes:
       label: RabbitMQ series
       options:
-        - 3.13.x
         - 4.0.x
         - 4.1.x
     validations:
