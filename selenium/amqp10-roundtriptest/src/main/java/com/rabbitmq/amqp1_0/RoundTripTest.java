@@ -31,10 +31,11 @@ public class RoundTripTest {
     String password = args.length > 1 ? args[1] : getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
     
     boolean usemtls = Boolean.parseBoolean(getEnv("AMQP_USE_MTLS", "false"));
-    String certsLocation = getEnv("RABBITMQ_CERTS");
+    
     
     if ("amqps".equals(scheme)) {
       List<String> connectionParams = new ArrayList<String>();
+      String certsLocation = getEnv("RABBITMQ_CERTS");
 
       connectionParams.add("transport.trustStoreLocation=" + certsLocation + "/truststore.jks");
       connectionParams.add("transport.trustStorePassword=foobar");
@@ -84,6 +85,8 @@ public class RoundTripTest {
       TextMessage receivedMessage = (TextMessage) messageConsumer.receive(2000L);
 
       assertEquals(message.getText(), receivedMessage.getText());
+
+      Thread.sleep(30000);
     }
   }  
   private static Connection createConnection(ConnectionFactory factory, 
