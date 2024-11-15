@@ -4,3 +4,4 @@ authnz-mgt/oauth-with-uaa.sh
 mgt/vhosts.sh
 mgt/exchanges.sh
 mgt/limits.sh
+mgt/amqp10-connections.sh
