@@ -21,6 +21,7 @@ ebin/
 logs/
 **/test/*.beam
 **/test/ct.cover.spec
+ct.set-*.spec
 
 elvis
 
