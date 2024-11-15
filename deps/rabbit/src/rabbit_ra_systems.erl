@@ -16,6 +16,7 @@
          all_ra_systems/0,
          are_running/0,
          ensure_ra_system_started/1,
+         ensure_ra_system_stopped/1,
          ensure_started/0,
          ensure_stopped/0]).
 
