@@ -6,6 +6,7 @@ const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../ut
 const LoginPage = require('../../pageobjects/LoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
 const ConnectionsPage = require('../../pageobjects/ConnectionsPage')
+const ConnectionPage = require('../../pageobjects/ConnectionPage')
 
 var container = require('rhea')  // https://github.com/amqp/rhea
 var receivedAmqpMessageCount = 0
@@ -26,6 +27,7 @@ container.once('sendable', function (context) {
 describe('Given an amqp10 connection opened, listed and clicked on it', function () {  
   let captureScreen
   let connectionsPage
+  let connectionPage
   let connection 
 
   before(async function () {
@@ -34,6 +36,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     login = new LoginPage(driver)
     overview = new OverviewPage(driver)
     connectionsPage = new ConnectionsPage(driver)
+    connectionPage = new ConnectionPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
     await login.login('monitoring-only', 'guest')
     await overview.isLoaded()
@@ -55,12 +58,15 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
 
     connections_table = await connectionsPage.getConnectionsTable(20)
     assert.equal(1, connections_table.length)
-    await connectionsPage.clickOnConnection(1)
+    await connectionsPage.clickOnConnection(2)
+    console.log("clicked on connection")
+    await connectionPage.isLoaded()
   })
 
 
   it('can list session information', async function () {
-    // flow control state
+    let session_table = await connectionPage.list_sessions()
+    console.log("sessions " + session_table)
   })
   
   it('can list link information', async function () {

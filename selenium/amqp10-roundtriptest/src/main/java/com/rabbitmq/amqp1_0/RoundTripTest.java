@@ -30,8 +30,7 @@ public class RoundTripTest {
     String username = args.length > 0 ? args[0] : getEnv("RABBITMQ_AMQP_USERNAME", "guest");
     String password = args.length > 1 ? args[1] : getEnv("RABBITMQ_AMQP_PASSWORD", "guest");
     
-    boolean usemtls = Boolean.parseBoolean(getEnv("AMQP_USE_MTLS", "false"));
-    
+    boolean usemtls = Boolean.parseBoolean(getEnv("AMQP_USE_MTLS", "false"));  
     
     if ("amqps".equals(scheme)) {
       List<String> connectionParams = new ArrayList<String>();
@@ -86,7 +85,7 @@ public class RoundTripTest {
 
       assertEquals(message.getText(), receivedMessage.getText());
 
-      Thread.sleep(30000);
+      Thread.sleep(60000);
     }
   }  
   private static Connection createConnection(ConnectionFactory factory, 
