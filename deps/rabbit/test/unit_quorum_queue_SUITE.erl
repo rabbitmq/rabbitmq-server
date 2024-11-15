@@ -7,7 +7,7 @@
 
 all() ->
     [
-     all_replica_states_includes_nonvoters,
+     all_replica_states_includes_alive_nonvoters,
      filter_nonvoters,
      filter_quorum_critical_accounts_nonvoters,
      ra_machine_conf_delivery_limit
@@ -97,27 +97,29 @@ filter_nonvoters(_Config) ->
     [Q4] = rabbit_quorum_queue:filter_promotable(Qs, Ss),
     ok.
 
-all_replica_states_includes_nonvoters(_Config) ->
+all_replica_states_includes_alive_nonvoters(_Config) ->
     ets:new(ra_state, [named_table, public, {write_concurrency, true}]),
+    QPids = start_qprocs(_AliveQs = [q1, q2, q3, q4]),
     ets:insert(ra_state, [
                           {q1, leader, voter},
                           {q2, follower, voter},
                           {q3, follower, promotable},
                           {q4, init, unknown},
-                          %% pre ra-2.7.0
-                          {q5, leader},
-                          {q6, follower}
+                          %% queues in ra_state but not alive
+                          {q5, leader, voter},
+                          {q6, follower, noproc}
                          ]),
     {_, #{
           q1 := leader,
           q2 := follower,
           q3 := promotable,
-          q4 := init,
-          q5 := leader,
-          q6 := follower
-         }} = rabbit_quorum_queue:all_replica_states(),
+          q4 := init
+         } = ReplicaStates} = rabbit_quorum_queue:all_replica_states(),
+    ?assertNot(maps:is_key(q5, ReplicaStates)),
+    ?assertNot(maps:is_key(q6, ReplicaStates)),
 
     true = ets:delete(ra_state),
+    _ = stop_qprocs(QPids),
     ok.
 
 make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
@@ -127,4 +129,14 @@ make_ra_machine_conf(Q0, Arg, Pol, OpPol) ->
     Q = amqqueue:set_operator_policy(Q2, [{name, <<"p1">>},
                                           {definition, [{<<"delivery-limit">>,OpPol}]}]),
     rabbit_quorum_queue:ra_machine_config(Q).
+
+start_qprocs(Qs) ->
+    [begin
+        QPid = spawn(fun() -> receive done -> ok end end),
+        erlang:register(Q, QPid),
+        QPid
+     end || Q <- Qs].
+
+stop_qprocs(Pids) ->
+    [erlang:send(P, done)|| P <- Pids].
 
