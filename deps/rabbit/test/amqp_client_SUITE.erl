@@ -1301,7 +1301,7 @@ amqp_amqpl(QType, Config) ->
     ok = amqp10_client:send_msg(
            Sender,
            amqp10_msg:set_application_properties(
-             #{"my int" => -2},
+             #{"my int" => {int, -2}},
              amqp10_msg:new(<<>>, Body1, true))),
     %% Send with properties
     CorrelationID = <<"my correlation ID">>,
@@ -1316,7 +1316,7 @@ amqp_amqpl(QType, Config) ->
            amqp10_msg:set_properties(
              #{correlation_id => CorrelationID},
              amqp10_msg:set_application_properties(
-               #{"my int" => -2},
+               #{"my long" => -9_000_000_000},
                amqp10_msg:new(<<>>, Body1, true)))),
     %% Send with footer
     Footer = #'v1_0.footer'{content = [{{symbol, <<"x-my footer">>}, {ubyte, 255}}]},
@@ -1405,7 +1405,7 @@ amqp_amqpl(QType, Config) ->
                                              correlation_id = Corr9}}} ->
                 ?assertEqual([Body1], amqp10_framing:decode_bin(Payload9)),
                 ?assertEqual(CorrelationID, Corr9),
-                ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers9, <<"my int">>))
+                ?assertEqual({long, -9_000_000_000}, rabbit_misc:table_lookup(Headers9, <<"my long">>))
     after 30000 -> ct:fail({missing_deliver, ?LINE})
     end,
     receive {_, #amqp_msg{payload = Payload10}} ->
@@ -1453,12 +1453,14 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
     OutMsg1 = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, false),
     OutMsg2 = amqp10_msg:set_application_properties(
                 #{"string" => "string-val",
-                  "int" => 2,
+                  "long" => -2,
+                  "uint" => {uint, 2},
                   "bool" => false},
                 OutMsg1),
     OutMsg3 = amqp10_msg:set_message_annotations(
                 #{"x-string" => "string-value",
-                  "x-int" => 3,
+                  "x-long" => -3,
+                  "x-uint" => {uint, 3},
                   "x-bool" => true},
                 OutMsg2),
     OutMsg = amqp10_msg:set_headers(
@@ -1478,11 +1480,13 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
 
     %% assert application properties
     ?assertEqual({longstr, <<"string-val">>}, rabbit_misc:table_lookup(Headers, <<"string">>)),
-    ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"int">>)),
+    ?assertEqual({long, -2}, rabbit_misc:table_lookup(Headers, <<"long">>)),
+    ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"uint">>)),
     ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers, <<"bool">>)),
     %% assert message annotations
     ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)),
-    ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-int">>)),
+    ?assertEqual({long, -3}, rabbit_misc:table_lookup(Headers, <<"x-long">>)),
+    ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-uint">>)),
     ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)),
     %% assert headers
     ?assertEqual(2, DeliveryMode),

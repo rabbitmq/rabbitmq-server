@@ -1194,32 +1194,10 @@ make_link_ref(Role, Session, Handle) ->
 translate_message_annotations(MA)
   when map_size(MA) > 0 ->
     {map, maps:fold(fun(K, V, Acc) ->
-                            [{sym(K), wrap_map_value(V)} | Acc]
+                            [{sym(K), amqp10_client_types:infer(V)} | Acc]
                     end, [], MA)};
 translate_message_annotations(_MA) ->
     undefined.
-
-wrap_map_value(true) ->
-    {boolean, true};
-wrap_map_value(false) ->
-    {boolean, false};
-wrap_map_value(V) when is_integer(V) ->
-    case V < 0 of
-        true ->
-            {int, V};
-        false ->
-            uint(V)
-    end;
-wrap_map_value(V) when is_binary(V) ->
-    utf8(V);
-wrap_map_value(V) when is_list(V) ->
-    utf8(list_to_binary(V));
-wrap_map_value(V) when is_atom(V) ->
-    utf8(atom_to_list(V));
-wrap_map_value(TaggedValue) when is_atom(element(1, TaggedValue)) ->
-    TaggedValue.
-
-utf8(V) -> amqp10_client_types:utf8(V).
 
 sym(B) when is_binary(B) -> {symbol, B};
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
