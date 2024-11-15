@@ -441,18 +441,27 @@ become_leader0(QName, Name) ->
 -spec all_replica_states() -> {node(), #{atom() => atom()}}.
 all_replica_states() ->
     Rows0 = ets:tab2list(ra_state),
-    Rows = lists:map(fun
-                         ({K, follower, promotable}) ->
-                             {K, promotable};
-                         ({K, follower, non_voter}) ->
-                             {K, non_voter};
-                         ({K, S, _}) ->
-                             %% voter or unknown
-                             {K, S};
-                         (T) ->
-                             T
-                     end, Rows0),
+    Rows = lists:filtermap(
+                    fun
+                        (T = {K, _, _}) ->
+                            case whereis(K) of
+                                undefined ->
+                                    false;
+                                P when is_pid(P) ->
+                                    {true, to_replica_state(T)}
+                            end;
+                        (_T) ->
+                            false
+                    end, Rows0),
     {node(), maps:from_list(Rows)}.
+
+to_replica_state({K, follower, promotable}) ->
+    {K, promotable};
+to_replica_state({K, follower, non_voter}) ->
+    {K, non_voter};
+to_replica_state({K, S, _}) ->
+    %% voter or unknown
+    {K, S}.
 
 -spec list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 list_with_minimum_quorum() ->
