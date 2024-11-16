@@ -105,7 +105,7 @@
 
 %% Called to inform the BQ about messages which have reached the
 %% queue, but are not going to be further passed to BQ.
--callback discard(rabbit_types:msg_id(), pid(), state()) -> state().
+-callback discard(rabbit_types:basic_message(), pid(), state()) -> state().
 
 %% Return ids of messages which have been confirmed since the last
 %% invocation of this function (or initialisation).
