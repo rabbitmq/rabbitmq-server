@@ -544,7 +544,7 @@ publish_delivered(Msg, MsgProps, ChPid, State) ->
                            State),
     {SeqId, a(maybe_update_rates(State1))}.
 
-discard(_MsgId, _ChPid, State) -> State.
+discard(_Msg, _ChPid, State) -> State.
 
 drain_confirmed(State = #vqstate { confirmed = C }) ->
     case sets:is_empty(C) of

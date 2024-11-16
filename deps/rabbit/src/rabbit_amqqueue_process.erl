@@ -648,7 +648,7 @@ discard(#delivery{confirm = Confirm,
                true  -> confirm_messages([MsgId], MTC, QName);
                false -> MTC
            end,
-    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    BQS1 = BQ:discard(Msg, SenderPid, BQS),
     {BQS1, MTC1}.
 
 run_message_queue(ActiveConsumersChanged, State) ->
@@ -815,7 +815,7 @@ send_reject_publish(#delivery{confirm = true,
                                              amqqueue:get_name(Q), MsgSeqNo),
 
     MTC1 = maps:remove(MsgId, MTC),
-    BQS1 = BQ:discard(MsgId, SenderPid, BQS),
+    BQS1 = BQ:discard(Msg, SenderPid, BQS),
     State#q{ backing_queue_state = BQS1, msg_id_to_channel = MTC1 };
 send_reject_publish(#delivery{confirm = false}, State) ->
     State.

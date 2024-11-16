@@ -218,22 +218,12 @@ publish_delivered(Msg, MsgProps, ChPid,
                   State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(publish_delivered(Msg, MsgProps, ChPid, BQS)).
 
-%% TODO this is a hack. The BQ api does not give us enough information
-%% here - if we had the Msg we could look at its priority and forward
-%% to the appropriate sub-BQ. But we don't so we are stuck.
-%%
-%% But fortunately VQ ignores discard/4, so we can too, *assuming we
-%% are talking to VQ*. discard/4 is used by HA, but that's "above" us
-%% (if in use) so we don't break that either, just some hypothetical
-%% alternate BQ implementation.
-discard(_MsgId, _ChPid, State = #state{}) ->
-    State;
-    %% We should have something a bit like this here:
-    %% pick1(fun (_P, BQSN) ->
-    %%               BQ:discard(MsgId, ChPid, BQSN)
-    %%       end, Msg, State);
-discard(MsgId, ChPid, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(discard(MsgId, ChPid, BQS)).
+discard(Msg, ChPid, State = #state{bq = BQ}) ->
+    pick1(fun (_P, BQSN) ->
+                  BQ:discard(Msg, ChPid, BQSN)
+          end, Msg, State);
+discard(Msg, ChPid, State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough1(discard(Msg, ChPid, BQS)).
 
 drain_confirmed(State = #state{bq = BQ}) ->
     fold_append2(fun (_P, BQSN) -> BQ:drain_confirmed(BQSN) end, State);
