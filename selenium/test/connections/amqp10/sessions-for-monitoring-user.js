@@ -74,7 +74,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     let sessions = await connectionPage.getSessions()
     assert.equal(1, sessions.sessions.length)
     let session = connectionPage.getSessionInfo(sessions.sessions, 0)
-    console.log("session: " + JSON.stringify(session))
+    //console.log("session: " + JSON.stringify(session))
     assert.equal(0, session.channelNumber)
     assert.equal(1, session.nextIncomingId)
     assert.equal(0, session.outgoingUnsettledDeliveries)
@@ -86,7 +86,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     assert.equal(1, sessions.outgoing_links.length)    
 
     let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
-    console.log("incomingLink: " + JSON.stringify(incomingLink))
+    //console.log("incomingLink: " + JSON.stringify(incomingLink))
     assert.equal(1, incomingLink.handle)
     assert.equal("sender-link", incomingLink.name)
     assert.equal("examples", incomingLink.targetAddress)
@@ -94,7 +94,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     assert.equal("0", incomingLink.unconfirmedMessages)
     
     let outgoingLink = connectionPage.getOutgoingLinkInfo(sessions.outgoing_links, 0)
-    console.log("outgoingLink: " + JSON.stringify(outgoingLink))
+    //console.log("outgoingLink: " + JSON.stringify(outgoingLink))
     assert.equal(0, outgoingLink.handle)
     assert.equal("receiver-link", outgoingLink.name)
     assert.equal("examples", outgoingLink.sourceAddress)
