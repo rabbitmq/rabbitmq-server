@@ -49,9 +49,16 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
        'id': "selenium-connection-id",
        'container_id': "selenium-container-id"
       })
-    connection.open_receiver('examples')
-    connection.open_sender('examples')
-
+    connection.open_receiver({
+      source: 'examples',
+      target: 'receiver-target',
+      name: 'receiver-link'
+    })
+    connection.open_sender({
+      target: 'examples',
+      source: 'sender-source',
+      name: 'sender-link'
+    })
     await connectionEstablishedPromise
     await overview.clickOnConnectionsTab()    
     await connectionsPage.isLoaded()
@@ -64,21 +71,38 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
 
 
   it('can list session information', async function () {
-    let a = await connectionPage.list_sessions()
-    console.log(a.length + " sessions")
-    for(var i = 0; i < a.length; i++) {
-      console.log(a[i].length + " columns " + a[i])      
-      for(var z = 0; z < a[i].length; z++) {
-        console.log(a[i][z]);
-      }
-    }
+    let sessions = await connectionPage.getSessions()
+    assert.equal(1, sessions.sessions.length)
+    let session = connectionPage.getSessionInfo(sessions.sessions, 0)
+    console.log("session: " + JSON.stringify(session))
+    assert.equal(0, session.channelNumber)
+    assert.equal(1, session.nextIncomingId)
+    assert.equal(0, session.outgoingUnsettledDeliveries)
   })
   
   it('can list link information', async function () {
-    // names 
-    // target and source information
-    // unconfirmed messages 
-    // flow control
+    let sessions = await connectionPage.getSessions()
+    assert.equal(1, sessions.incoming_links.length)
+    assert.equal(1, sessions.outgoing_links.length)    
+
+    let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
+    console.log("incomingLink: " + JSON.stringify(incomingLink))
+    assert.equal(1, incomingLink.handle)
+    assert.equal("sender-link", incomingLink.name)
+    assert.equal("examples", incomingLink.targetAddress)
+    assert.equal("mixed", incomingLink.sndSettleMode)
+    assert.equal("0", incomingLink.unconfirmedMessages)
+    
+    let outgoingLink = connectionPage.getOutgoingLinkInfo(sessions.outgoing_links, 0)
+    console.log("outgoingLink: " + JSON.stringify(outgoingLink))
+    assert.equal(0, outgoingLink.handle)
+    assert.equal("receiver-link", outgoingLink.name)
+    assert.equal("examples", outgoingLink.sourceAddress)
+    assert.equal("examples", outgoingLink.queueName)
+    
+    assert.equal(false, outgoingLink.sendSettled)
+    assert.equal("unlimited", outgoingLink.maxMessageSize)
+   
   })
 
   after(async function () {    
