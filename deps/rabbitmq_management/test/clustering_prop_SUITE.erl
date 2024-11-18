@@ -122,7 +122,6 @@ prop_connection_channel_counts(Config) ->
                                 validate_counts(Config, Cons) end,
                         60),
                 ct:pal("Cleanup testcase"),
-                cleanup(Cons),
                 rabbit_ct_helpers:await_condition(
                   fun () ->
                           cleanup(Cons),
