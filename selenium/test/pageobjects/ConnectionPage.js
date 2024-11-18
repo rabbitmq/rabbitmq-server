@@ -44,10 +44,10 @@ module.exports = class ConnectionPage extends BasePage {
       name: links[index][1],
       targetAddress: links[index][2],
       sndSettleMode: links[index][3],
-      maxMessageSize: links[index][4],
-      deliveryCount: links[index][5],
-      linkCredit: links[index][6],
-      unconfirmedMessages: links[index][7]      
+      maxMessageSize: Number(links[index][4]),
+      deliveryCount: Number(links[index][5]),
+      linkCredit: Number(links[index][6]),
+      unconfirmedMessages: Number(links[index][7])      
     }
   } 
   getOutgoingLinkInfo(links, index) {
@@ -58,8 +58,8 @@ module.exports = class ConnectionPage extends BasePage {
       queueName: links[index][3],
       sendSettled: links[index][4] == "&#9679;" ? true : false,
       maxMessageSize: links[index][5],      
-      deliveryCount: links[index][6],
-      linkCredit: links[index][7]      
+      deliveryCount: Number(links[index][6]),
+      linkCredit: Number(links[index][7])      
     }
   }
 }
