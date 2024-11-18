@@ -68,7 +68,8 @@ merge_app_env(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config, {rabbit, [
                                   {collect_statistics, fine},
-                                  {collect_statistics_interval, ?STATS_INTERVAL}
+                                  {collect_statistics_interval, ?STATS_INTERVAL},
+                                  {core_metrics_gc_interval, 500}
                                  ]}),
     rabbit_ct_helpers:merge_app_env(Config1,
                                     {rabbitmq_management_agent, [
