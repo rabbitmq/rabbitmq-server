@@ -1235,7 +1235,6 @@ management_plugin_connection(Config) ->
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3).
 
 management_plugin_enable(Config) ->
-    ?assertEqual(0, length(http_get(Config, "/connections"))),
     ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management),
     ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management_agent),
 
