@@ -59,14 +59,19 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     connections_table = await connectionsPage.getConnectionsTable(20)
     assert.equal(1, connections_table.length)
     await connectionsPage.clickOnConnection(2)
-    console.log("clicked on connection")
     await connectionPage.isLoaded()
   })
 
 
   it('can list session information', async function () {
-    let session_table = await connectionPage.list_sessions()
-    console.log("sessions " + session_table)
+    let a = await connectionPage.list_sessions()
+    console.log(a.length + " sessions")
+    for(var i = 0; i < a.length; i++) {
+      console.log(a[i].length + " columns " + a[i])      
+      for(var z = 0; z < a[i].length; z++) {
+        console.log(a[i][z]);
+      }
+    }
   })
   
   it('can list link information', async function () {
