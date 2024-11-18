@@ -81,6 +81,7 @@ test_oauth_providers_attributes(_) ->
     } = sort_settings(rabbit_oauth2_schema:translate_oauth_providers(Conf)).
 
 test_resource_servers_attributes(_) ->
+<<<<<<< HEAD
     Conf = [{["auth_oauth2","resource_servers","rabbitmq1","id"],"rabbitmq1xxx"},
             {["auth_oauth2","resource_servers","rabbitmq1","scope_prefix"],"somescope."},
             {["auth_oauth2","resource_servers","rabbitmq1","additional_scopes_key"],"roles"},
@@ -88,6 +89,21 @@ test_resource_servers_attributes(_) ->
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],"groupid"}
             ],
     #{<<"rabbitmq1xxx">> := [{additional_scopes_key, <<"roles">>},
+=======
+    Conf = [
+        {["auth_oauth2","resource_servers","rabbitmq1","id"],
+            "rabbitmq1xxx"},
+        {["auth_oauth2","resource_servers","rabbitmq1","scope_prefix"],
+            "somescope."},
+        {["auth_oauth2","resource_servers","rabbitmq1","additional_scopes_key"],
+            "roles"},
+        {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","1"],
+            "userid"},
+        {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],
+            "groupid"}
+    ],
+    #{<<"rabbitmq1xxx">> := [{extra_scopes_source, <<"roles">>},
+>>>>>>> 0d51ee9ec0 (rabbitmq-auth-backend-oauth2: correctly map additional_scopes_key)
                           {id, <<"rabbitmq1xxx">>},
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
@@ -95,12 +111,25 @@ test_resource_servers_attributes(_) ->
     } = sort_settings(rabbit_oauth2_schema:translate_resource_servers(Conf)),
 
     Conf2 = [
+<<<<<<< HEAD
             {["auth_oauth2","resource_servers","rabbitmq1","scope_prefix"],"somescope."},
             {["auth_oauth2","resource_servers","rabbitmq1","additional_scopes_key"],"roles"},
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","1"],"userid"},
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],"groupid"}
             ],
     #{<<"rabbitmq1">> := [{additional_scopes_key, <<"roles">>},
+=======
+        {["auth_oauth2","resource_servers","rabbitmq1","scope_prefix"],
+            "somescope."},
+        {["auth_oauth2","resource_servers","rabbitmq1","additional_scopes_key"],
+            "roles"},
+        {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","1"],
+            "userid"},
+        {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],
+            "groupid"}
+    ],
+    #{<<"rabbitmq1">> := [{extra_scopes_source, <<"roles">>},
+>>>>>>> 0d51ee9ec0 (rabbitmq-auth-backend-oauth2: correctly map additional_scopes_key)
                           {id, <<"rabbitmq1">>},
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}

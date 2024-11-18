@@ -14,6 +14,15 @@
     translate_signing_keys/1
 ]).
 
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+  "additional_scopes_key" => "extra_scopes_source"
+}).
+
+resource_servers_key_synonym(Name) ->
+  case maps:find(Name, ?RESOURCE_SERVERS_SYNONYMS) of {ok, Synonym} -> Synonym;
+    error -> Name
+  end.
+
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
 
@@ -99,8 +108,13 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
+<<<<<<< HEAD
     OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
         || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings ],
+=======
+    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+        || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
+>>>>>>> 0d51ee9ec0 (rabbitmq-auth-backend-oauth2: correctly map additional_scopes_key)
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
 mapOauthProviderProperty({Key, Value}) ->
