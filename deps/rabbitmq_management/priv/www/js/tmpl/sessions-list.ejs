@@ -1,5 +1,5 @@
 <% if (sessions.length > 0) { %>
-<table class="list">
+<table class="list" id="sessions">
  <thead>
   <tr>
    <th>Channel number</th>
@@ -18,7 +18,7 @@
  for (var i = 0; i < sessions.length; i++) {
   var session = sessions[i];
 %>
-  <tr>
+  <tr class="session">
    <td class="c"><%= fmt_string(session.channel_number) %></td>
    <td class="c"><%= fmt_string(session.handle_max) %></td>
    <td class="c"><%= fmt_string(session.next_incoming_id) %></td>
@@ -30,9 +30,9 @@
   </tr>
 <% if (session.incoming_links.length > 0) { %>
   <tr>
-  <td colspan="8">
+  <td colspan="8" >
    <p>Incoming Links (<%=(session.incoming_links.length)%>) <span class="help" id="incoming-links"></span></p>
-   <table class="list">
+   <table class="list" id="incoming-links">
     <thead>
      <tr>
       <th>Link handle</th>
@@ -50,7 +50,7 @@
  for (var j = 0; j < session.incoming_links.length; j++) {
   var in_link = session.incoming_links[j];
 %>
-     <tr>
+     <tr class="link">
       <td class="c"><%= fmt_string(in_link.handle) %></td>
       <td class="c"><%= fmt_string(in_link.link_name) %></td>
       <td class="c"><%= fmt_string(in_link.target_address) %></td>
@@ -68,9 +68,9 @@
 <% } %>
 <% if (session.outgoing_links.length > 0) { %>
   <tr>
-  <td colspan="8">
+  <td colspan="8" >
    <p>Outgoing Links (<%=(session.outgoing_links.length)%>) <span class="help" id="outgoing-links"></span></p>
-   <table class="list">
+   <table class="list" id="outgoing-links">
     <thead>
      <tr>
       <th>Link handle</th>
@@ -88,7 +88,7 @@
  for (var k = 0; k < session.outgoing_links.length; k++) {
   var out_link = session.outgoing_links[k];
 %>
-     <tr>
+     <tr class="link">
       <td class="c"><%= fmt_string(out_link.handle) %></td>
       <td class="c"><%= fmt_string(out_link.link_name) %></td>
       <td class="c"><%= fmt_string(out_link.source_address) %></td>

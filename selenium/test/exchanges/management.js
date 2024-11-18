@@ -32,13 +32,13 @@ describe('Exchange management', function () {
   })
 
   it('display summary of exchanges', async function () {
-    assert.equal("All exchanges (8)", await exchanges.getPagingSectionHeaderText())
+    assert.equal("All exchanges (15)", await exchanges.getPagingSectionHeaderText())
   })
 
   it('list all default exchanges', async function () {
-    actual_table = await exchanges.getExchangesTable(3)
-    console.log("a :" + actual_table)
-    expected_table = [
+    let actual_table = await exchanges.getExchangesTable(3)
+    
+    let expected_table = [
       ["/", "(AMQP default)", "direct"],
       ["/", "amq.direct", "direct"],
       ["/", "amq.fanout", "fanout"],
@@ -46,8 +46,17 @@ describe('Exchange management', function () {
       ["/", "amq.match", "headers"],
       ["/", "amq.rabbitmq.event", "topic"],
       ["/", "amq.rabbitmq.trace", "topic"],
-      ["/", "amq.topic", "topic"]
+      ["/", "amq.topic", "topic"],
+   
+      ["other", "(AMQP default)", "direct"],
+      ["other", "amq.direct", "direct"],
+      ["other", "amq.fanout", "fanout"],
+      ["other", "amq.headers", "headers"],
+      ["other", "amq.match", "headers"],
+      ["other", "amq.rabbitmq.trace", "topic"],
+      ["other", "amq.topic", "topic"]
     ]
+    
     console.log("e :" + actual_table)
     assert.deepEqual(actual_table, expected_table)
   })

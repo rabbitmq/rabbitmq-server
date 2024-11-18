@@ -1,7 +1,7 @@
 <h2>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
 
 <% if (!disable_stats) { %>
-<div class="section">
+<div class="section" id="connection-overview-section">
 <h2>Overview</h2>
 <div class="hider updatable">
   <%= data_rates('data-rates-conn', connection, 'Data rates') %>
@@ -86,7 +86,7 @@
 
 <% if (connection.protocol === 'AMQP 1-0') { %>
 
-<div class="section">
+<div class="section" id="connection-sessions-section">
   <h2 class="updatable" >Sessions (<%=(sessions.length)%>)</h2>
   <div class="hider updatable">
     <%= format('sessions-list', {'sessions': sessions}) %>
@@ -95,7 +95,7 @@
 
 <% } else { %>
 
-<div class="section">
+<div class="section" id="connection-channels-section">
   <h2 class="updatable" >Channels (<%=(channels.length)%>) </h2>
   <div class="hider updatable">
     <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
@@ -149,7 +149,7 @@
 <% } %>
 
 <% if (properties_size(connection.client_properties) > 0) { %>
-<div class="section-hidden">
+<div class="section-hidden" id="connection-client-properies-section">
 <h2>Client properties</h2>
 <div class="hider">
 <%= fmt_table_long(connection.client_properties) %>
@@ -158,7 +158,7 @@
 <% } %>
 
 <% if(connection.reductions || connection.garbage_collection) { %>
-<div class="section-hidden">
+<div class="section-hidden" id="connection-runtime-metrics-section">
 <h2>Runtime Metrics (Advanced)</h2>
  <div class="hider updatable">
  <%= data_reductions('reductions-rates-conn', connection) %>
@@ -197,7 +197,7 @@
 <% } %>
 <% } %>
 
-<div class="section-hidden">
+<div class="section-hidden" id="connection-close-section">
   <h2>Close this connection</h2>
   <div class="hider">
     <form action="#/connections" method="delete" class="confirm">

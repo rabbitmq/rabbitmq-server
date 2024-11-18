@@ -1,8 +1,8 @@
 <h1>Connections</h1>
-<div class="section">
+<div class="section" id="connections-paging-section">
  <%= paginate_ui(connections, 'connections') %>
 </div>
-<div class="updatable">
+<div class="updatable" id="connections-table-section">
 <% if (connections.items.length > 0) { %>
 <table class="list">
  <thead>

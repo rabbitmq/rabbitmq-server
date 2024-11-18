@@ -56,6 +56,9 @@
   "vhosts": [
     {
       "name": "/"
+    },
+    {
+      "name": "other"
     }
   ],
   "permissions": [
@@ -76,6 +79,20 @@
     {
       "user": "rabbit_no_management",
       "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "rabbit_no_management",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "monitoring-only",
+      "vhost": "other",
       "configure": ".*",
       "write": ".*",
       "read": ".*"
