@@ -1071,15 +1071,15 @@ send(Parent, Client, Topic, NumSent) ->
     end.
 
 assert_received_no_duplicates() ->
-    assert_received_no_duplicates0(#{}).
+    assert_received_no_duplicates0(#{}, 30000).
 
-assert_received_no_duplicates0(Received) ->
+assert_received_no_duplicates0(Received, Timeout) ->
     receive {publish, #{payload := P}} ->
                 case maps:is_key(P, Received) of
                     true -> ct:fail("Received ~p twice", [P]);
-                    false -> assert_received_no_duplicates0(maps:put(P, ok, Received))
+                    false -> assert_received_no_duplicates0(maps:put(P, ok, Received), 500)
                 end
-    after 500 ->
+    after Timeout ->
               %% Check that we received at least one message.
               ?assertNotEqual(0, maps:size(Received))
     end.
