@@ -7,6 +7,21 @@
 
 -module(rabbit_oauth2_schema).
 
+<<<<<<< HEAD
+=======
+-define(AUTH_OAUTH2, "auth_oauth2").
+-define(SCOPE_ALIASES, "scope_aliases").
+-define(RESOURCE_SERVERS, "resource_servers").
+-define(OAUTH_PROVIDERS, "oauth_providers").
+-define(SIGNING_KEYS, "signing_keys").
+-define(AUTH_OAUTH2_SCOPE_ALIASES, ?AUTH_OAUTH2 ++ "." ++ ?SCOPE_ALIASES).
+-define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
+-define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
+-define(AUTH_OAUTH2_SIGNING_KEYS, ?AUTH_OAUTH2 ++ "." ++ ?SIGNING_KEYS).
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+  "additional_scopes_key" => "extra_scopes_source"
+}).
+>>>>>>> f1ee5b551a (Update rabbit_oauth2_schema.erl)
 
 -export([
     translate_oauth_providers/1,
@@ -14,14 +29,7 @@
     translate_signing_keys/1
 ]).
 
--define(RESOURCE_SERVERS_SYNONYMS, #{
-  "additional_scopes_key" => "extra_scopes_source"
-}).
-
-resource_servers_key_synonym(Name) ->
-  case maps:find(Name, ?RESOURCE_SERVERS_SYNONYMS) of {ok, Synonym} -> Synonym;
-    error -> Name
-  end.
+resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
