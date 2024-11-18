@@ -121,9 +121,11 @@ prop_connection_channel_counts(Config) ->
                         60),
                 cleanup(Cons),
                 rabbit_ct_helpers:await_condition(
-                  fun () -> validate_counts(Config, []) end,
+                  fun () ->
+                          cleanup(Cons),
+                          force_stats(Config),
+                          validate_counts(Config, []) end,
                   60000),
-                force_stats(Config),
                 Res
             end).
 
