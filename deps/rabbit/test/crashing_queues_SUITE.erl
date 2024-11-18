@@ -81,7 +81,7 @@ crashing_durable(Config) ->
     ConnB = rabbit_ct_client_helpers:open_connection(Config, B),
     QName = <<"crashing-q">>,
     amqp_channel:call(ChA, #'confirm.select'{}),
-    test_queue_failure(A, ChA, ConnB, 1, 0,
+    test_queue_failure(A, ChA, ConnB, 1,
                        #'queue.declare'{queue = QName, durable = true}),
     ok.
 
@@ -91,11 +91,11 @@ crashing_transient(Config) ->
     ConnB = rabbit_ct_client_helpers:open_connection(Config, B),
     QName = <<"crashing-q">>,
     amqp_channel:call(ChA, #'confirm.select'{}),
-    test_queue_failure(A, ChA, ConnB, 0, 0,
+    test_queue_failure(A, ChA, ConnB, 0,
                        #'queue.declare'{queue = QName, durable = false}),
     ok.
 
-test_queue_failure(Node, Ch, RaceConn, MsgCount, FollowerCount, Decl) ->
+test_queue_failure(Node, Ch, RaceConn, MsgCount, Decl) ->
     #'queue.declare_ok'{queue = QName} = amqp_channel:call(Ch, Decl),
     try
         publish(Ch, QName, transient),
