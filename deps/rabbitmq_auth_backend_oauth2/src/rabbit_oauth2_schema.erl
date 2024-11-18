@@ -16,6 +16,9 @@
 -define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
 -define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
 -define(AUTH_OAUTH2_SIGNING_KEYS, ?AUTH_OAUTH2 ++ "." ++ ?SIGNING_KEYS).
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+  "additional_scopes_key" => "extra_scopes_source"
+}).
 
 -export([
     translate_oauth_providers/1,
@@ -25,14 +28,7 @@
     translate_scope_aliases/1
 ]).
 
--define(RESOURCE_SERVERS_SYNONYMS, #{
-  "additional_scopes_key" => "extra_scopes_source"
-}).
-
-resource_servers_key_synonym(Name) ->
-  case maps:find(Name, ?RESOURCE_SERVERS_SYNONYMS) of {ok, Synonym} -> Synonym;
-    error -> Name
-  end.
+resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
