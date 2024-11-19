@@ -16,6 +16,9 @@
 -define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
 -define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
 -define(AUTH_OAUTH2_SIGNING_KEYS, ?AUTH_OAUTH2 ++ "." ++ ?SIGNING_KEYS).
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+  "additional_scopes_key" => "extra_scopes_source"
+}).
 
 -export([
     translate_oauth_providers/1,
@@ -24,6 +27,8 @@
     translate_endpoint_params/2,
     translate_scope_aliases/1
 ]).
+
+resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
@@ -240,7 +245,7 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
+    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
