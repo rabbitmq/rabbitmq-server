@@ -7,27 +7,15 @@
 
 -module(rabbit_oauth2_schema).
 
-<<<<<<< HEAD
-=======
--define(AUTH_OAUTH2, "auth_oauth2").
--define(SCOPE_ALIASES, "scope_aliases").
--define(RESOURCE_SERVERS, "resource_servers").
--define(OAUTH_PROVIDERS, "oauth_providers").
--define(SIGNING_KEYS, "signing_keys").
--define(AUTH_OAUTH2_SCOPE_ALIASES, ?AUTH_OAUTH2 ++ "." ++ ?SCOPE_ALIASES).
--define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
--define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
--define(AUTH_OAUTH2_SIGNING_KEYS, ?AUTH_OAUTH2 ++ "." ++ ?SIGNING_KEYS).
--define(RESOURCE_SERVERS_SYNONYMS, #{
-  "additional_scopes_key" => "extra_scopes_source"
-}).
->>>>>>> f1ee5b551a (Update rabbit_oauth2_schema.erl)
-
 -export([
     translate_oauth_providers/1,
     translate_resource_servers/1,
     translate_signing_keys/1
 ]).
+
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+    "additional_scopes_key" => "extra_scopes_source"
+  }).
 
 resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
 
@@ -116,13 +104,8 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-<<<<<<< HEAD
-    OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
-        || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings ],
-=======
     OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
-        || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
->>>>>>> 0d51ee9ec0 (rabbitmq-auth-backend-oauth2: correctly map additional_scopes_key)
+        || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
 mapOauthProviderProperty({Key, Value}) ->
