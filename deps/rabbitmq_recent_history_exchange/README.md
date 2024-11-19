@@ -47,8 +47,7 @@ the message.
 
 ## Disabling the Plugin
 
-A future version of RabbitMQ will allow users to disable plugins. When
-you disable this plugin, it will delete all the cached messages.
+When you disable this plugin, it will delete all the cached messages.
 
 ## License
 
