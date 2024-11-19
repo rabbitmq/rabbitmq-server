@@ -2064,8 +2064,8 @@ delivery_effect(ConsumerKey, Msgs,
                 #?STATE{cfg = #cfg{resource = _QR}} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {RaftIdxs, _Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
-                                          {[I | Acc], N+1}
-                                  end, {[], 0}, Msgs),
+                                           {[I | Acc], N+1}
+                                   end, {[], 0}, Msgs),
     {log_ext, RaftIdxs,
      fun
          % (Commands)
