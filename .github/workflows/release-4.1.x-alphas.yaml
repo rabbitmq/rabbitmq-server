@@ -31,6 +31,6 @@ jobs:
               "prerelease": true,
               "prerelease_kind": "alpha",
               "prerelease_identifier": "${{ env.PRERELEASE_IDENTIFIER }}",
-              "release_title": "RabbitMQ ${{ vars.SERVER_40_NEXT_PATCH_VERSION }}-alpha.${{ env.PRERELEASE_IDENTIFIER }} (from ${{ github.event.repository.pushed_at }})",
+              "release_title": "RabbitMQ ${{ vars.SERVER_41_NEXT_PATCH_VERSION }}-alpha.${{ env.PRERELEASE_IDENTIFIER }} (from ${{ github.event.repository.pushed_at }})",
               "base_version": "${{ vars.SERVER_41_NEXT_PATCH_VERSION }}"
             }
