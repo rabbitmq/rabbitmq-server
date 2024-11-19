@@ -585,16 +585,36 @@ remove_down_member(NodeToRemove) ->
 %% @private
 
 reset() ->
-    %% Rabbit should be stopped, but Khepri needs to be running. Restart it.
-    ok = setup(),
-    ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
-    ok = khepri:stop(?RA_CLUSTER_NAME).
+    case rabbit:is_running() of
+        false ->
+            %% Rabbit should be stopped, but Khepri needs to be running.
+            %% Restart it.
+            ok = setup(),
+            ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
+            ok = khepri:stop(?RA_CLUSTER_NAME),
+
+            _ = file:delete(rabbit_guid:filename()),
+            ok;
+        true ->
+            throw({error, rabbitmq_unexpectedly_running})
+    end.
 
 %% @private
 
 force_reset() ->
-    DataDir = maps:get(data_dir, ra_system:fetch(coordination)),
-    ok = rabbit_file:recursive_delete(filelib:wildcard(DataDir ++ "/*")).
+    case rabbit:is_running() of
+        false ->
+            ok = khepri:stop(?RA_CLUSTER_NAME),
+            DataDir = maps:get(data_dir, ra_system:fetch(?RA_SYSTEM)),
+            ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM),
+            ok = rabbit_file:recursive_delete(
+                   filelib:wildcard(DataDir ++ "/*")),
+
+            _ = file:delete(rabbit_guid:filename()),
+            ok;
+        true ->
+            throw({error, rabbitmq_unexpectedly_running})
+    end.
 
 %% @private
 
