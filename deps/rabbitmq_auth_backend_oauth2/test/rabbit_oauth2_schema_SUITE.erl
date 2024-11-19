@@ -87,11 +87,11 @@ test_resource_servers_attributes(_) ->
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","1"],"userid"},
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],"groupid"}
             ],
-    #{<<"rabbitmq1xxx">> := [{additional_scopes_key, <<"roles">>},
-                          {id, <<"rabbitmq1xxx">>},
-                          {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
-                          {scope_prefix, <<"somescope.">>}
-                        ]
+    #{<<"rabbitmq1xxx">> := [{extra_scopes_source, <<"roles">>},
+                             {id, <<"rabbitmq1xxx">>},
+                             {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
+                             {scope_prefix, <<"somescope.">>}
+                            ]
     } = sort_settings(rabbit_oauth2_schema:translate_resource_servers(Conf)),
 
     Conf2 = [
@@ -100,11 +100,11 @@ test_resource_servers_attributes(_) ->
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","1"],"userid"},
             {["auth_oauth2","resource_servers","rabbitmq1","preferred_username_claims","2"],"groupid"}
             ],
-    #{<<"rabbitmq1">> := [{additional_scopes_key, <<"roles">>},
+    #{<<"rabbitmq1">> := [{extra_scopes_source, <<"roles">>},
                           {id, <<"rabbitmq1">>},
                           {preferred_username_claims, [<<"userid">>, <<"groupid">>]},
                           {scope_prefix, <<"somescope.">>}
-                        ]
+                         ]
     } = sort_settings(rabbit_oauth2_schema:translate_resource_servers(Conf2)).
 
 test_oauth_providers_attributes_with_invalid_uri(_) ->

@@ -7,12 +7,17 @@
 
 -module(rabbit_oauth2_schema).
 
-
 -export([
     translate_oauth_providers/1,
     translate_resource_servers/1,
     translate_signing_keys/1
 ]).
+
+-define(RESOURCE_SERVERS_SYNONYMS, #{
+    "additional_scopes_key" => "extra_scopes_source"
+  }).
+
+resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
 
 extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
@@ -99,7 +104,7 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(Key), list_to_binary(V)}}
+    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
         || {["auth_oauth2","resource_servers", Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
