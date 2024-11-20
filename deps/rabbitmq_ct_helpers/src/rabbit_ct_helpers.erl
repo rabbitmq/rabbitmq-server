@@ -584,9 +584,14 @@ ensure_rabbitmq_queues_cmd(Config) ->
 
 ensure_ssl_certs(Config) ->
     SrcDir = ?config(rabbitmq_ct_helpers_srcdir, Config),
+    UniqueDir = io_lib:format(
+                  "~s2-~p",
+                  [node(), erlang:unique_integer([positive,monotonic])]),
     CertsMakeDir = filename:join([SrcDir, "tools", "tls-certs"]),
     PrivDir = ?config(priv_dir, Config),
-    CertsDir = filename:join(PrivDir, "certs"),
+    CertsDir = filename:join([PrivDir, UniqueDir, "certs"]),
+    _ = filelib:ensure_dir(CertsDir),
+    _ = file:make_dir(CertsDir),
     CertsPwd = proplists:get_value(rmq_certspwd, Config, ?SSL_CERT_PASSWORD),
     Cmd = [
       "PASSWORD=" ++ CertsPwd,
