@@ -59,7 +59,7 @@ jobs:
       with:
         version: 'tags/v4.0.3'
         regex: true
-        file: "rabbitmq-server-generic-unix-[\\d.]*\\.tar\\.xz"
+        file: "rabbitmq-server-generic-unix-\\d.+\\.tar\\.xz"
         target: ./
 
     - name: MIXED CLUSTERS - SETUP SECONDARY_DIST
