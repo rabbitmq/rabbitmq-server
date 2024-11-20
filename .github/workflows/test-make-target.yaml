@@ -65,11 +65,16 @@ jobs:
     - name: MIXED CLUSTERS - SETUP SECONDARY_DIST
       if: inputs.mixed_clusters
       run: |
-        gpg --import rabbitmq-release-signing-key.asc
-        gpg --verify rabbitmq-server-generic-unix-*.asc rabbitmq-server-generic-unix-*.tar.xz
-        tar xf rabbitmq-server-generic-unix-*.tar.xz
+        ls -l rabbitmq-server-generic-unix-*.tar.xz*
 
-        echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-`echo -n ${{ steps.fetch_secondary_dist.outputs.version }} | sed s/v//`" >> $GITHUB_ENV
+        archive_name=$(echo rabbitmq-server-generic-unix-*.tar.xz)
+        archive_version=$(echo $archive_name | sed -E -e 's/^rabbitmq-server-generic-unix-//' -e 's/\.tar\.xz$//')
+
+        gpg --import rabbitmq-release-signing-key.asc
+        gpg --verify $archive_name.asc $archive_name
+        tar xf $archive_name
+
+        echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-$archive_version" >> $GITHUB_ENV
 
     - name: SETUP DOTNET (rabbit)
       uses: actions/setup-dotnet@v4
