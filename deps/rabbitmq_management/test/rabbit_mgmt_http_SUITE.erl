@@ -56,7 +56,7 @@ all() ->
     ].
 
 groups() ->
-    [
+    [        
         {all_tests_with_prefix, [], some_tests() ++ all_tests()},
         {all_tests_without_prefix, [], some_tests()},
         %% We have several groups because their interference is
@@ -103,7 +103,6 @@ definitions_group4_tests() ->
     [
         definitions_vhost_test
     ].
-
 
 all_tests() -> [
     cli_redirect_test,
@@ -202,7 +201,17 @@ all_tests() -> [
     qq_status_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test,
+<<<<<<< HEAD
     cluster_and_node_tags_test
+=======
+    connections_amqpl,
+    connections_amqp,
+    amqp_sessions,
+    amqpl_sessions,
+    enable_plugin_amqp,
+    cluster_and_node_tags_test,
+    version_test
+>>>>>>> ce760c688b (Insert control-cache headers to every resource and reload index.html)
 ].
 
 %% -------------------------------------------------------------------
@@ -3748,6 +3757,13 @@ oauth_test(Config) ->
     ?assertEqual(<<"http://localhost:8080/uaa">>, maps:get(oauth_provider_url, Map3)),
     %% cleanup
     rpc(Config, application, unset_env, [rabbitmq_management, oauth_enabled]).
+
+version_test(Config) ->
+    ActualVersion = http_get(Config, "/version"),
+    ct:log("ActualVersion : ~p", [ActualVersion]),
+    ExpectedVersion = rpc(Config, rabbit, base_product_version, []),
+    ct:log("ExpectedVersion : ~p", [ExpectedVersion]),
+    ?assertEqual(ExpectedVersion, binary_to_list(ActualVersion)).
 
 login_test(Config) ->
     http_put(Config, "/users/myuser", [{password, <<"myuser">>},

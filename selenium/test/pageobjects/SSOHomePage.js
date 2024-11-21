@@ -87,8 +87,11 @@ module.exports = class SSOHomePage extends BasePage {
 
   async basicAuthLogin (username, password) {
     await this.isLoaded()
+    await this.waitForDisplayed(BASIC_AUTH_LOGIN_USERNAME)
     await this.sendKeys(BASIC_AUTH_LOGIN_USERNAME, username)
+    await this.waitForDisplayed(BASIC_AUTH_LOGIN_PASSWORD)
     await this.sendKeys(BASIC_AUTH_LOGIN_PASSWORD, password)
+    await this.waitForDisplayed(BASIC_AUTH_LOGIN_FORM)
     return this.submit(BASIC_AUTH_LOGIN_FORM)
   }
 

@@ -55,14 +55,18 @@ set_common_permission_headers(ReqData0, EndpointModule) ->
     lists:foldl(fun(Fun, ReqData) ->
                         Fun(ReqData, EndpointModule)
                 end, ReqData0,
-               [fun set_csp_headers/2,
+               [fun set_etag_based_cache_headers/2,
+                fun set_csp_headers/2,
                 fun set_hsts_headers/2,
                 fun set_cors_headers/2,
                 fun set_content_type_options_header/2,
                 fun set_xss_protection_header/2,
                 fun set_frame_options_header/2]).
 
+set_etag_based_cache_headers(ReqData0, _Module) ->
+    cowboy_req:set_resp_header(<<"cache-control">>, <<"public, max-age=0, must-revalidate">>, ReqData0).
+
 set_no_cache_headers(ReqData0, _Module) ->
-    ReqData1 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-cache, no-store, must-revalidate">>, ReqData0),
+    ReqData1 = cowboy_req:set_resp_header(<<"cache-control">>, <<"no-cache, no-store, max-age=0, must-revalidate">>, ReqData0),
     ReqData2 = cowboy_req:set_resp_header(<<"pragma">>, <<"no-cache">>, ReqData1),
     cowboy_req:set_resp_header(<<"expires">>, rabbit_data_coercion:to_binary(0), ReqData2).
