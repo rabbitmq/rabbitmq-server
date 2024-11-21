@@ -104,7 +104,8 @@ init_per_group(https, Config) ->
     CertsDir = ?config(rmq_certsdir, Config0),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
-    [{group, https},        
+    [{group, https},
+        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -121,6 +122,7 @@ init_per_group(https_down, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{issuer, build_issuer("https")},
+        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
 
@@ -133,6 +135,7 @@ init_per_group(with_all_oauth_provider_settings, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{with_all_oauth_provider_settings, true},
+     {certsdir, CertsDir},
      {oauth_provider_id, <<"uaa">>},
      {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
 
@@ -142,6 +145,7 @@ init_per_group(without_all_oauth_providers_settings, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{with_all_oauth_provider_settings, false},
+        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, keep_only_issuer_and_ssl_options(
             build_https_oauth_provider(<<"uaa">>, CaCertFile))} | Config];
@@ -281,11 +285,8 @@ init_per_testcase(TestCase, Config0) ->
 
     case ?config(group, Config) of
         https ->
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
+            start_https_oauth_server(?AUTH_PORT, ?config(certsdir, Config),
                 ListOfExpectations);
-        without_all_oauth_providers_settings ->
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
-                ListOfExpectations);    
         _ ->
             do_nothing
     end,
@@ -301,8 +302,6 @@ end_per_testcase(_, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
     case ?config(group, Config) of
         https ->
-            stop_https_auth_server();
-        without_all_oauth_providers_settings ->
             stop_https_auth_server();
         _ ->
             do_nothing
