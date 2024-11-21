@@ -62,6 +62,9 @@ not see any browser interaction, everything happens in the background, i.e. rabb
 
 **The interactive mode** - This mode is convenient when we are still working on RabbitMQ source code and/or in the selenium tests. In this mode, you run RabbitMQ and tests directly from source to speed things up. The components, such as, UAA or keycloak, run in docker.
 
+**IMPORTANT** - If you intend to switch between version of RabbitMQ, make sure
+you run `./clean.sh` to clear any state left from the last test run. 
+
 
 ## Run tests in headless-mode
 

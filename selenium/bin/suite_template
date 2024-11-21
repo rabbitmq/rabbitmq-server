@@ -571,7 +571,7 @@ teardown_local_others() {
   if [[ $REQUIRED_COMPONENTS == "" ]]; then
     print "There are no other components"
   else
-    teardown_components
+    teardown_components true
   fi
 }
 test_local() {
@@ -624,13 +624,18 @@ start_components() {
 }
 
 teardown_components() {
-  begin "Tear down ..."
+  skip_rabbitmq=${1:-false}
+
+  begin "Tear down ... "
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
-    local component="$i"
-    stop="stop_$i"
-    type "$stop" &>/dev/null && $stop || kill_container_if_exist "$component"
-    print "Tear down $component"
+    if [[ $i != "rabbitmq" || ($i == "rabbitmq" && $skip_rabbitmq == false) ]] 
+    then 
+      local component="$i"
+      stop="stop_$i"
+      type "$stop" &>/dev/null && $stop || kill_container_if_exist "$component"
+      print "Tear down $component"    
+    fi 
   done
   end "Finished teardown"
 }
