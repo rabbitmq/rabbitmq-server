@@ -879,6 +879,7 @@ rabbitmq_ct_helpers:
 - rabbit_ct_proper_helpers
 - rabbit_ct_vm_helpers
 - rabbit_mgmt_test_util
+- stream_test_utils
 rabbitmq_event_exchange:
 - rabbit_event_exchange_decorator
 - rabbit_exchange_type_event
