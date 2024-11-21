@@ -596,30 +596,34 @@ query_node_props1([], [], NodesAndProps, ThisNode) ->
     query_node_props2(NodesAndProps1, [], ThisNode).
 
 query_node_props2([{Node, Members} | Rest], NodesAndProps, ThisNode) ->
-    try
-        erpc:call(
-          Node, logger, debug,
-          ["Peer discovery: temporary hidden node '~ts' queries properties "
-           "from node '~ts'", [node(), Node]]),
-        StartTime = get_node_start_time(Node, microsecond),
-        IsReady = is_node_db_ready(Node, ThisNode),
-        NodeAndProps = {Node, Members, StartTime, IsReady},
-        NodesAndProps1 = [NodeAndProps | NodesAndProps],
-        query_node_props2(Rest, NodesAndProps1, ThisNode)
-    catch
-        _:Error:_ ->
-            %% If one of the erpc calls we use to get the start time fails,
-            %% there is something wrong with the remote node because it
-            %% doesn't depend on RabbitMQ. We exclude it from the discovered
-            %% nodes.
-            ?LOG_DEBUG(
-               "Peer discovery: failed to query start time of node '~ts': "
-               "~0tp~n"
-               "Peer discovery: node '~ts' excluded from the discovered nodes",
-               [Node, Error, Node],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            query_node_props2(Rest, NodesAndProps, ThisNode)
-    end;
+    NodesAndProps2 = try
+                         erpc:call(
+                           Node, logger, debug,
+                           ["Peer discovery: temporary hidden node '~ts' "
+                            "queries properties from node '~ts'",
+                            [node(), Node]]),
+                         StartTime = get_node_start_time(Node, microsecond),
+                         IsReady = is_node_db_ready(Node, ThisNode),
+                         NodeAndProps = {Node, Members, StartTime, IsReady},
+                         NodesAndProps1 = [NodeAndProps | NodesAndProps],
+                         NodesAndProps1
+                     catch
+                         _:Error:_ ->
+                             %% If one of the erpc calls we use to get the
+                             %% start time fails, there is something wrong with
+                             %% the remote node because it doesn't depend on
+                             %% RabbitMQ. We exclude it from the discovered
+                             %% nodes.
+                             ?LOG_DEBUG(
+                                "Peer discovery: failed to query start time "
+                                "+ DB readyness of node '~ts': ~0tp~n"
+                                "Peer discovery: node '~ts' excluded from the "
+                                "discovered nodes",
+                                [Node, Error, Node],
+                                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                             NodesAndProps
+                     end,
+    query_node_props2(Rest, NodesAndProps2, ThisNode);
 query_node_props2([], NodesAndProps, _ThisNode) ->
     NodesAndProps1 = lists:reverse(NodesAndProps),
     NodesAndProps2 = sort_nodes_and_props(NodesAndProps1),
