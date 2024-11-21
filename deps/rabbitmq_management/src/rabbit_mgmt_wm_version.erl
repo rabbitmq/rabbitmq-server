@@ -28,9 +28,9 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 to_json(ReqData, Context) ->   
-    Version = case rabbit:product_version() of
-        undefined -> rabbit:base_product_version();
-        V -> V
+    Version = case rabbit:product_info() of
+        #{product_version := Value} -> Value;
+        #{product_base_version := Base} -> Base
     end,
     rabbit_mgmt_util:reply(list_to_binary(Version), ReqData, Context).
 
