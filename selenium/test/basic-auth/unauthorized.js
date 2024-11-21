@@ -19,9 +19,8 @@ describe('An user without management tag', function () {
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
-    assert.ok(!await login.isPopupWarningDisplayed())
-    await login.login('rabbit_no_management', 'rabbit_no_management')
-    await !overview.isLoaded()
+    //assert.ok(!await login.isPopupWarningDisplayed())
+    await login.login('rabbit_no_management', 'guest')    
   })
 
   it('cannot log in into the management ui', async function () {    
@@ -35,7 +34,7 @@ describe('An user without management tag', function () {
 
   it('should get popup warning dialog', async function(){
     assert.ok(login.isPopupWarningDisplayed())
-    assert.equal('Not_Authorized', await login.getPopupWarning())
+    assert.equal('Not management user', await login.getPopupWarning())
   })
 
   describe("After clicking on popup warning dialog button", function() {

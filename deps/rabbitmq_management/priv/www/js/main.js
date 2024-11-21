@@ -119,15 +119,13 @@ function check_login () {
   if (user == false || user.error) {
     clear_auth();
     if (oauth.enabled) {
-      //hide_popup_warn();
       renderWarningMessageInLoginStatus(oauth, 'Not authorized');
     } else {
-      //hide_popup_warn();
       replace_content('login-status', '<p>Login failed</p>');
     }
     return false;
   }
-
+  check_version()
   hide_popup_warn()
   replace_content('outer', format('layout', {}))
   var user_login_session_timeout = parseInt(user.login_session_timeout)
@@ -1861,4 +1859,13 @@ function get_chart_range_type(arg) {
 
     console.log('[WARNING]: range type not found for arg: ' + arg);
     return 'basic';
+}
+
+function check_version() {
+    let curVersion = sync_get('/version')
+    let storedVersion = get_pref('version')
+    if (!storedVersion || storedVersion != curVersion) {
+        store_pref('version', curVersion)
+        location.reload()
+    }
 }

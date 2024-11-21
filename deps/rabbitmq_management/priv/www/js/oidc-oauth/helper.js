@@ -290,18 +290,26 @@ export function oauth_completeLogin() {
 
 export function oauth_initiateLogout() {
   if (oauth.sp_initiated) {
-    mgr.metadataService.getEndSessionEndpoint().then(endpoint => {
-      if (endpoint == undefined) {
-        // Logout only from management UI
-        mgr.removeUser().then(res => {
-          clear_auth()
-          oauth_redirectToLogin()
+    return mgr.getUser().then(user => {
+      if (user != null) {
+        mgr.metadataService.getEndSessionEndpoint().then(endpoint => {
+          if (endpoint == undefined) {
+            // Logout only from management UI
+            mgr.removeUser().then(res => {
+              clear_auth()
+              oauth_redirectToLogin()
+            })
+          }else {
+            // OpenId Connect RP-Initiated Logout
+            mgr.signoutRedirect()
+          }
         })
       }else {
-        // OpenId Connect RP-Initiated Logout
-        mgr.signoutRedirect()
+        clear_auth()
+        go_to_home()
       }
     })
+
   } else {
     go_to_authority()
   }
@@ -370,8 +378,7 @@ export function hasAnyResourceServerReady(oauth, onReadyCallback) {
           return group;
         }, {})
         let warnings = []
-        for(var url in groupByProviderURL){
-          console.log(url + ': ' + groupByProviderURL[url]);
+        for(var url in groupByProviderURL){          
           const notReadyResources = groupByProviderURL[url].filter((oauthserver) => notReadyServers.includes(oauthserver.oauth_provider_url))
           const notCompliantResources = groupByProviderURL[url].filter((oauthserver) => notCompliantServers.includes(oauthserver.oauth_provider_url))
           if (notReadyResources.length == 1) {
@@ -385,7 +392,6 @@ export function hasAnyResourceServerReady(oauth, onReadyCallback) {
             warnings.push(warningMessageOAuthResources(url, notCompliantResources, " not compliant"))
           }
         }
-        console.log("warnings:" + warnings)
         oauth.declared_resource_servers_count = oauth.resource_servers.length
         oauth.resource_servers = oauth.resource_servers.filter((resource) =>
           !notReadyServers.includes(resource.oauth_provider_url) && !notCompliantServers.includes(resource.oauth_provider_url))
