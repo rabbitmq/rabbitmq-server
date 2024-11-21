@@ -2066,6 +2066,7 @@ delivery_effect(ConsumerKey, Msgs,
     {RaftIdxs, _Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
                                            {[I | Acc], N+1}
                                    end, {[], 0}, Msgs),
+    rabbit_log:debug("DELIVERY EFFECT created for ~s ~p!", [CTag, RaftIdxs]),
     {log_ext, RaftIdxs,
      fun
          % (Commands)
@@ -2079,15 +2080,9 @@ delivery_effect(ConsumerKey, Msgs,
          %                      length(Commands)]),
          %     [];
          (ReadPlan) ->
-             % Fun = fun (Flru0) ->
-             %               {Entries, Flru} = ra_log:execute_read(ReadPlan, Flru0),
-             %               %% pretend entries is a map
-             %               {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
-             %                                 {_, _, Cmd} = maps:get(Idx, Entries),
-             %                                 %% hacky
-             %                                 {MsgId, {Header, get_msg(element(3, Cmd))}}
-             %                         end, Msgs), Flru}
-             %       end,
+             rabbit_log:debug("READPLAN created for ~s ~p!", [CTag, RaftIdxs]),
+             %% TODO: check if CPid is local or not
+             %% TODO: could consider introducing a leader local proxy process
              [{send_msg, CPid, {delivery, CTag, ReadPlan, Msgs},
                ?DELIVERY_SEND_MSG_OPTS}]
      end,
@@ -3026,10 +3021,10 @@ incr_msg(Msg0, DelFailed, Anns) ->
     end.
 
 exec_read(Flru0, ReadPlan, Msgs) ->
-    {Entries, Flru} = ra_log:execute_read(ReadPlan, Flru0),
+    {Entries, Flru} = ra:execute_read_plan(ReadPlan, Flru0),
     %% pretend entries is a map
     {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
-                       {_, _, Cmd} = maps:get(Idx, Entries),
+                       {_, _, Cmd, _} = maps:get(Idx, Entries),
                        %% hacky
-                       {MsgId, {Header, get_msg(element(3, Cmd))}}
+                       {MsgId, {Header, get_msg(Cmd)}}
                end, Msgs), Flru}.

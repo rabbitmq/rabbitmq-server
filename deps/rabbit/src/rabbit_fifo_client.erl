@@ -168,7 +168,7 @@ enqueue(QName, Correlation, Msg,
 %% @param QueueName Name of the queue.
 %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
-%% @returns
+%% @return's
 %% `{ok, State, Actions}' if the command was successfully sent.
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned

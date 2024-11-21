@@ -3632,6 +3632,7 @@ receive_and_ack(Ch) ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple = false})
     after 5000 ->
+              flush(1),
               ct:fail("receive_and_ack timed out", [])
     end.
 
