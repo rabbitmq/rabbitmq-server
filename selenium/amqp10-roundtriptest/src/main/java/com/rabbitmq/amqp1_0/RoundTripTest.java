@@ -83,9 +83,7 @@ public class RoundTripTest {
           Message.DEFAULT_TIME_TO_LIVE);
       TextMessage receivedMessage = (TextMessage) messageConsumer.receive(2000L);
 
-      assertEquals(message.getText(), receivedMessage.getText());
-
-      Thread.sleep(60000);
+      assertEquals(message.getText(), receivedMessage.getText());      
     }
   }  
   private static Connection createConnection(ConnectionFactory factory, 
