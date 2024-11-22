@@ -10,7 +10,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--include("include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
 -export([set/2, set/4,
          get/1,
@@ -364,10 +364,9 @@ khepri_rp_path(Key) ->
     khepri_global_rp_path(Key).
 
 khepri_global_rp_path(Key) when ?IS_KHEPRI_PATH_CONDITION(Key) ->
-    ?KHEPRI_ROOT_PATH ++ [runtime_params, Key].
+    ?RABBITMQ_KHEPRI_GLOBAL_RUNTIME_PARAM_PATH(Key).
 
 khepri_vhost_rp_path(VHost, Component, Name)
   when ?IS_KHEPRI_PATH_CONDITION(Component) andalso
        ?IS_KHEPRI_PATH_CONDITION(Name) ->
-    VHostPath = rabbit_db_vhost:khepri_vhost_path(VHost),
-    VHostPath ++ [runtime_params, Component, Name].
+    ?RABBITMQ_KHEPRI_VHOST_RUNTIME_PARAM_PATH(VHost, Component, Name).

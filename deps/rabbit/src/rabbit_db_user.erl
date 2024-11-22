@@ -12,7 +12,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--include("include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
 -export([create/1,
          update/2,
@@ -1094,14 +1094,15 @@ clear_in_khepri() ->
 
 khepri_user_path(Username)
   when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    ?KHEPRI_ROOT_PATH ++ [users, Username].
+    ?RABBITMQ_KHEPRI_USER_PATH(Username).
 
 khepri_user_permission_path(Username, VHostName)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    (rabbit_db_vhost:khepri_vhost_path(VHostName) ++
-     [user_permissions, Username]).
+  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
+       ?IS_KHEPRI_PATH_CONDITION(VHostName) ->
+    ?RABBITMQ_KHEPRI_USER_PERMISSION_PATH(VHostName, Username).
 
 khepri_topic_permission_path(Username, VHostName, Exchange)
-  when ?IS_KHEPRI_PATH_CONDITION(Username) ->
-    (rabbit_db_exchange:khepri_exchange_path(VHostName, Exchange) ++
-     [user_permissions, Username]).
+  when ?IS_KHEPRI_PATH_CONDITION(Username) andalso
+       ?IS_KHEPRI_PATH_CONDITION(VHostName) andalso
+       ?IS_KHEPRI_PATH_CONDITION(Exchange) ->
+    ?RABBITMQ_KHEPRI_TOPIC_PERMISSION_PATH(VHostName, Exchange, Username).
