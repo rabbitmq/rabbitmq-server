@@ -50,8 +50,11 @@ describe('management user with vhosts permissions', function () {
     assert.ok(!await overview.isPopupWarningDisplayed())
   })
   it('can access limited options in admin tab', async function () {
+    console.log("before clickOnAdminTab")
     await overview.clickOnAdminTab()
+    console.log("before waitForAdminTab")
     await overview.waitForAdminTab()
+    console.log("after waitForAdminTab")
     assert.ok(!await overview.isPopupWarningDisplayed())
   })
 
