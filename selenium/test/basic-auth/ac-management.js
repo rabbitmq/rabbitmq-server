@@ -59,7 +59,7 @@ describe('management user with vhosts permissions', function () {
     await overview.clickOnAdminTab()
     await admin.clickOnLimits()
     await limits.list_virtual_host_limits()
-    assert.rejects(limits.list_user_limits())
+    assert.rejects(await limits.list_user_limits())
   })
 
 
