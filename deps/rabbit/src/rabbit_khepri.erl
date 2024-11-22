@@ -96,7 +96,7 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
--include("include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
 -export([setup/0,
          setup/1,
@@ -943,7 +943,7 @@ cluster_status_from_khepri() ->
 %% This path must be prepended to all paths used by RabbitMQ subsystems.
 
 root_path() ->
-    ?KHEPRI_ROOT_PATH.
+    ?RABBITMQ_KHEPRI_ROOT_PATH.
 
 %% -------------------------------------------------------------------
 %% "Proxy" functions to Khepri API.

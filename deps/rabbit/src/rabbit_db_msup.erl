@@ -10,7 +10,7 @@
 -include_lib("khepri/include/khepri.hrl").
 -include("mirrored_supervisor.hrl").
 
--include("include/khepri.hrl").
+-include("include/rabbit_khepri.hrl").
 
 -export([
          create_tables/0,
@@ -328,8 +328,8 @@ clear_in_khepri() ->
 khepri_mirrored_supervisor_path(Group, Id)
   when ?IS_KHEPRI_PATH_CONDITION(Group) andalso
        ?IS_KHEPRI_PATH_CONDITION(Id) ->
-    ?KHEPRI_ROOT_PATH ++ [mirrored_supervisors, Group, Id];
+    ?RABBITMQ_KHEPRI_MIRRORED_SUPERVISOR_PATH(Group, Id);
 khepri_mirrored_supervisor_path(Group, Id)
   when is_atom(Group) ->
     IdPath = Group:id_to_khepri_path(Id),
-    ?KHEPRI_ROOT_PATH ++ [mirrored_supervisors, Group] ++ IdPath.
+    ?RABBITMQ_KHEPRI_ROOT_PATH ++ [mirrored_supervisors, Group] ++ IdPath.
