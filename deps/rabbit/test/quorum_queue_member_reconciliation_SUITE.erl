@@ -92,7 +92,10 @@ reset_nodes([], _Leader) ->
     ok;
 reset_nodes([Node| Nodes], Leader) ->
     ok = rabbit_control_helper:command(stop_app, Node),
-    ok = rabbit_control_helper:command(forget_cluster_node, Leader, [atom_to_list(Node)]),
+    case rabbit_control_helper:command(forget_cluster_node, Leader, [atom_to_list(Node)]) of
+        ok -> ok;
+        {error, _, <<"Error:\n{:not_a_cluster_node, ~c\"The node selected is not in the cluster.\"}">>} -> ok
+    end,
     ok = rabbit_control_helper:command(reset, Node),
     ok = rabbit_control_helper:command(start_app, Node),
     reset_nodes(Nodes, Leader).
