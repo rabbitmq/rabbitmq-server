@@ -252,7 +252,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
       rabbitmq_version: Keyword.get(result, :rabbitmq_version) |> to_string,
       erlang_version: Keyword.get(result, :erlang_version) |> to_string |> String.trim_trailing(),
       crypto_lib_version: crypto_lib_version,
-      release_series_support_status: Keyword.get(result, :release_series_support_status, true),
       uptime: Keyword.get(result, :uptime),
       is_under_maintenance: Keyword.get(result, :is_under_maintenance, false),
       processes: Enum.into(Keyword.get(result, :processes), %{}),
