@@ -115,6 +115,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_wm_vhost.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
+            "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -248,6 +249,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_wm_vhost.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
+            "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -472,6 +474,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_wm_vhost.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
+            "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
         ],
     )
