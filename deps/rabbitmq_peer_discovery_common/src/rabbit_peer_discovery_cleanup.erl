@@ -28,6 +28,8 @@
 -compile(export_all).
 -endif.
 
+-import(rabbit_data_coercion, [as_list/1]).
+
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(CONFIG_KEY, node_cleanup).
 
@@ -318,9 +320,3 @@ service_discovery_nodes() ->
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end.
-
--spec as_list(list() | any()) -> [any()].
-as_list(Nodes) when is_list(Nodes) ->
-    Nodes;
-as_list(Other) ->
-    [Other].
