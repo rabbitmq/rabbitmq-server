@@ -105,7 +105,6 @@ init_per_group(https, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
     [{group, https},
-        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -122,9 +121,8 @@ init_per_group(https_down, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{issuer, build_issuer("https")},
-        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
-        {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
+        {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config0];
 
 init_per_group(openid_configuration_with_path, Config) ->
     [{use_openid_configuration_with_path, true} | Config];
@@ -135,9 +133,8 @@ init_per_group(with_all_oauth_provider_settings, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{with_all_oauth_provider_settings, true},
-     {certsdir, CertsDir},
      {oauth_provider_id, <<"uaa">>},
-     {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
+     {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config0];
 
 init_per_group(without_all_oauth_providers_settings, Config) ->
     Config0 = rabbit_ct_helpers:run_setup_steps(Config),
@@ -145,10 +142,9 @@ init_per_group(without_all_oauth_providers_settings, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
 
     [{with_all_oauth_provider_settings, false},
-        {certsdir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, keep_only_issuer_and_ssl_options(
-            build_https_oauth_provider(<<"uaa">>, CaCertFile))} | Config];
+            build_https_oauth_provider(<<"uaa">>, CaCertFile))} | Config0];
 
 init_per_group(with_default_oauth_provider, Config) ->
     OAuthProvider = ?config(oauth_provider, Config),
@@ -285,7 +281,7 @@ init_per_testcase(TestCase, Config0) ->
 
     case ?config(group, Config) of
         https ->
-            start_https_oauth_server(?AUTH_PORT, ?config(certsdir, Config),
+            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
                 ListOfExpectations);
         _ ->
             do_nothing
