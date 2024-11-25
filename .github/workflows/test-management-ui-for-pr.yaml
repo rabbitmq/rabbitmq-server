@@ -71,35 +71,19 @@ jobs:
 
     - name: Run short ui suites on a standalone rabbitmq server
       run: |
-<<<<<<< HEAD
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
-            ${SELENIUM_DIR}/run-suites.sh
-        mkdir -p /tmp/full-suite
-        mv /tmp/selenium/* /tmp/full-suite
-        mkdir -p /tmp/full-suite/logs
-        mv ${SELENIUM_DIR}/logs/* /tmp/full-suite/logs
-        mkdir -p /tmp/full-suite/screens
-        mv ${SELENIUM_DIR}/screens/* /tmp/full-suite/screens
-
-=======
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
           ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui        
         mkdir -p /tmp/short-suite
         mv /tmp/selenium/* /tmp/short-suite
         
->>>>>>> ce760c688b (Insert control-cache headers to every resource and reload index.html)
     - name: Upload Test Artifacts
       if: always()
       uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-<<<<<<< HEAD
-          /tmp/full-suite
-=======
           /tmp/short-suite
->>>>>>> ce760c688b (Insert control-cache headers to every resource and reload index.html)
 
   summary-selenium:
     needs:

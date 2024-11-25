@@ -200,10 +200,7 @@ all_tests() -> [
     disabled_qq_replica_opers_test,
     qq_status_test,
     list_deprecated_features_test,
-    list_used_deprecated_features_test,
-<<<<<<< HEAD
-    cluster_and_node_tags_test
-=======
+    list_used_deprecated_features_test,    
     connections_amqpl,
     connections_amqp,
     amqp_sessions,
@@ -211,7 +208,6 @@ all_tests() -> [
     enable_plugin_amqp,
     cluster_and_node_tags_test,
     version_test
->>>>>>> ce760c688b (Insert control-cache headers to every resource and reload index.html)
 ].
 
 %% -------------------------------------------------------------------
