@@ -39,7 +39,7 @@ start_keycloak() {
     --publish 8443:8443 \
 		--env KEYCLOAK_ADMIN=admin \
 		--env KEYCLOAK_ADMIN_PASSWORD=admin \
-		--mount type=bind,source=${MOUNT_KEYCLOAK_CONF_DIR},target=/opt/keycloak/data/import/ \
+		-v ${MOUNT_KEYCLOAK_CONF_DIR}:/opt/keycloak/data/import/ \
 		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
     --https-certificate-file=/opt/keycloak/data/import/server_keycloak_certificate.pem \
     --https-certificate-key-file=/opt/keycloak/data/import/server_keycloak_key.pem
