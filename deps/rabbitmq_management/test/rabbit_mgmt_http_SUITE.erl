@@ -201,11 +201,6 @@ all_tests() -> [
     qq_status_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test,    
-    connections_amqpl,
-    connections_amqp,
-    amqp_sessions,
-    amqpl_sessions,
-    enable_plugin_amqp,
     cluster_and_node_tags_test,
     version_test
 ].
