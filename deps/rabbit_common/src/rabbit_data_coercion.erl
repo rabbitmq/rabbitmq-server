@@ -10,6 +10,7 @@
 -export([to_binary/1, to_list/1, to_atom/1, to_integer/1, to_proplist/1, to_map/1]).
 -export([to_atom/2, atomize_keys/1, to_list_of_binaries/1]).
 -export([to_utf8_binary/1, to_unicode_charlist/1]).
+-export([as_list/1]).
 
 -spec to_binary(Val :: binary() | list() | atom() | integer() | function()) -> binary().
 to_binary(Val) when is_list(Val)     -> list_to_binary(Val);
@@ -109,3 +110,9 @@ to_unicode_charlist(Val) ->
         UnicodeValue ->
             UnicodeValue
     end.
+
+-spec as_list(list() | any()) -> [any()].
+as_list(Nodes) when is_list(Nodes) ->
+    Nodes;
+as_list(Other) ->
+    [Other].
