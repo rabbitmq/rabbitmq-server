@@ -28,6 +28,8 @@
 -compile(export_all).
 -endif.
 
+-import(rabbit_data_coercion, [as_list/1]).
+
 -define(CONFIG_MODULE, rabbit_peer_discovery_config).
 -define(CONFIG_KEY, node_cleanup).
 
@@ -241,7 +243,7 @@ maybe_cleanup(State, UnreachableNodes) ->
        "Peer discovery: cleanup discovered unreachable nodes: ~tp",
        [UnreachableNodes],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-    case lists:subtract(UnreachableNodes, service_discovery_nodes()) of
+    case lists:subtract(as_list(UnreachableNodes), as_list(service_discovery_nodes())) of
         [] ->
             ?LOG_DEBUG(
                "Peer discovery: all unreachable nodes are still "
@@ -304,7 +306,8 @@ unreachable_nodes() ->
 service_discovery_nodes() ->
     Module = rabbit_peer_discovery:backend(),
     case rabbit_peer_discovery:normalize(Module:list_nodes()) of
-        {ok, {Nodes, _Type}} ->
+        {ok, {OneOrMultipleNodes, _Type}} ->
+            Nodes = as_list(OneOrMultipleNodes),
             ?LOG_DEBUG(
                "Peer discovery cleanup: ~tp returned ~tp",
                [Module, Nodes],
