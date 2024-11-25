@@ -104,7 +104,7 @@ init_per_group(https, Config) ->
     CertsDir = ?config(rmq_certsdir, Config0),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
-    [{group, https},        
+    [{group, https},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -122,7 +122,7 @@ init_per_group(https_down, Config) ->
 
     [{issuer, build_issuer("https")},
         {oauth_provider_id, <<"uaa">>},
-        {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
+        {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config0];
 
 init_per_group(openid_configuration_with_path, Config) ->
     [{use_openid_configuration_with_path, true} | Config];
@@ -134,7 +134,7 @@ init_per_group(with_all_oauth_provider_settings, Config) ->
 
     [{with_all_oauth_provider_settings, true},
      {oauth_provider_id, <<"uaa">>},
-     {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config];
+     {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config0];
 
 init_per_group(without_all_oauth_providers_settings, Config) ->
     Config0 = rabbit_ct_helpers:run_setup_steps(Config),
@@ -144,7 +144,7 @@ init_per_group(without_all_oauth_providers_settings, Config) ->
     [{with_all_oauth_provider_settings, false},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, keep_only_issuer_and_ssl_options(
-            build_https_oauth_provider(<<"uaa">>, CaCertFile))} | Config];
+            build_https_oauth_provider(<<"uaa">>, CaCertFile))} | Config0];
 
 init_per_group(with_default_oauth_provider, Config) ->
     OAuthProvider = ?config(oauth_provider, Config),
@@ -283,9 +283,6 @@ init_per_testcase(TestCase, Config0) ->
         https ->
             start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
                 ListOfExpectations);
-        without_all_oauth_providers_settings ->
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
-                ListOfExpectations);    
         _ ->
             do_nothing
     end,
@@ -301,8 +298,6 @@ end_per_testcase(_, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
     case ?config(group, Config) of
         https ->
-            stop_https_auth_server();
-        without_all_oauth_providers_settings ->
             stop_https_auth_server();
         _ ->
             do_nothing

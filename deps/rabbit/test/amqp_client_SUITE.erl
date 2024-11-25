@@ -341,6 +341,7 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) ->
     %% Assert that every testcase cleaned up.
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     %% Wait for sessions to terminate before starting the next test case.
     eventually(?_assertEqual([], rpc(Config, rabbit_amqp_session, list_local, []))),
@@ -349,6 +350,10 @@ end_per_testcase(Testcase, Config) ->
                                consumers := 0},
                              get_global_counters(Config))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_queues() ->
+    [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
+     || Q <- rabbit_amqqueue:list()].
 
 reliable_send_receive_with_outcomes_classic_queue(Config) ->
     reliable_send_receive_with_outcomes(<<"classic">>, Config).

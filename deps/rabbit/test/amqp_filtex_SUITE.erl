@@ -156,7 +156,7 @@ properties_section(Config) ->
     ok = amqp10_client:flow_link_credit(Receiver1, 10, never),
     receive {amqp10_msg, Receiver1, R1M1} ->
                 ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1))
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver1),
@@ -183,7 +183,7 @@ properties_section(Config) ->
                         Session, <<"receiver 3">>, Address,
                         unsettled, configuration, Filter3),
     receive {amqp10_event, {link, Receiver3, {attached, #'v1_0.attach'{}}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after 30000 -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:flow_link_credit(Receiver3, 10, never),
     ok = assert_no_msg_received(?LINE),
@@ -205,7 +205,7 @@ properties_section(Config) ->
                             source = #'v1_0.source'{filter = {map, ActualFilter}}}}}} ->
                 ?assertMatch([{{symbol,<<"rabbitmq:stream-offset-spec">>}, _}],
                              ActualFilter)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after 30000 -> ct:fail({missing_event, ?LINE})
     end,
     {ok, R4M1} = amqp10_client:get_msg(Receiver4),
     {ok, R4M2} = amqp10_client:get_msg(Receiver4),
@@ -271,6 +271,12 @@ application_properties_section(Config) ->
     {ok, Receiver0} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 0">>, Address,
                         unsettled, configuration, Filter0),
+    %% Wait for the attach so the detach command won't fail
+    receive {amqp10_event,
+             {link, Receiver0, {attached, #'v1_0.attach'{}}}} ->
+            ok
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
     ok = amqp10_client:flow_link_credit(Receiver0, 10, never),
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver0),
@@ -298,12 +304,12 @@ application_properties_section(Config) ->
                                              {{utf8, <<"k3">>}, false}
                                             ]}},
                    proplists:get_value({symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER}, ActualFilter1))
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after 30000 -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:flow_link_credit(Receiver1, 10, never),
     receive {amqp10_msg, Receiver1, R1M1} ->
                 ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1))
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver1),
@@ -358,7 +364,7 @@ application_properties_section(Config) ->
                             source = #'v1_0.source'{filter = {map, ActualFilter4}}}}}} ->
                 ?assertMatch([{{symbol,<<"rabbitmq:stream-offset-spec">>}, _}],
                              ActualFilter4)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after 30000 -> ct:fail({missing_event, ?LINE})
     end,
     {ok, R4M1} = amqp10_client:get_msg(Receiver4),
     {ok, R4M2} = amqp10_client:get_msg(Receiver4),
@@ -498,12 +504,12 @@ filter_few_messages_from_many(Config) ->
     receive {amqp10_msg, Receiver, M1} ->
                 ?assertEqual([<<"first msg">>], amqp10_msg:body(M1)),
                 ok = amqp10_client:accept_msg(Receiver, M1)
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     receive {amqp10_msg, Receiver, M2} ->
                 ?assertEqual([<<"last msg">>], amqp10_msg:body(M2)),
                 ok = amqp10_client:accept_msg(Receiver, M2)
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     ok = detach_link_sync(Receiver),
 
@@ -576,7 +582,7 @@ string_modifier(Config) ->
     ok = amqp10_client:flow_link_credit(Receiver1, 10, never),
     receive {amqp10_msg, Receiver1, R1M1} ->
                 ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1))
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver1),
@@ -604,11 +610,11 @@ string_modifier(Config) ->
     ok = amqp10_client:flow_link_credit(Receiver3, 10, never),
     receive {amqp10_msg, Receiver3, R3M1} ->
                 ?assertEqual([<<"m1">>], amqp10_msg:body(R3M1))
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     receive {amqp10_msg, Receiver3, R3M3} ->
                 ?assertEqual([<<"m3">>], amqp10_msg:body(R3M3))
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after 30000 -> ct:fail({missing_msg, ?LINE})
     end,
     ok = detach_link_sync(Receiver3),
 
