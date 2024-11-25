@@ -51,7 +51,7 @@ boot() ->
 %% See start_processes_for_all/1.
 -spec reconcile() -> 'ok'.
 reconcile() ->
-    case is_reconciliation_enabled() of
+    case rabbit:is_running() andalso is_reconciliation_enabled() of
         false -> ok;
         true  ->
             _ = reconcile_once(),
