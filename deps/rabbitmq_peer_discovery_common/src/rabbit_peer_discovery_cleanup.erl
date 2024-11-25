@@ -241,7 +241,7 @@ maybe_cleanup(State, UnreachableNodes) ->
        "Peer discovery: cleanup discovered unreachable nodes: ~tp",
        [UnreachableNodes],
        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
-    case lists:subtract(UnreachableNodes, service_discovery_nodes()) of
+    case lists:subtract(as_list(UnreachableNodes), as_list(service_discovery_nodes())) of
         [] ->
             ?LOG_DEBUG(
                "Peer discovery: all unreachable nodes are still "
@@ -304,7 +304,8 @@ unreachable_nodes() ->
 service_discovery_nodes() ->
     Module = rabbit_peer_discovery:backend(),
     case rabbit_peer_discovery:normalize(Module:list_nodes()) of
-        {ok, {Nodes, _Type}} ->
+        {ok, {OneOrMultipleNodes, _Type}} ->
+            Nodes = as_list(OneOrMultipleNodes),
             ?LOG_DEBUG(
                "Peer discovery cleanup: ~tp returned ~tp",
                [Module, Nodes],
@@ -317,3 +318,9 @@ service_discovery_nodes() ->
                #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
             []
     end.
+
+-spec as_list(list() | any()) -> [any()].
+as_list(Nodes) when is_list(Nodes) ->
+    Nodes;
+as_list(Other) ->
+    [Other].
