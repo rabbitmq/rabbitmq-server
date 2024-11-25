@@ -93,13 +93,7 @@ init_per_group(https, Config) ->
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
     [{group, https},
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
         {certsdir, CertsDir},
->>>>>>> 9b1e762081 (Store the certsDir of the group which)
-=======
->>>>>>> 4a925f9a8c (Tests: system_SUITE return configuration from run steps)
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -251,17 +245,8 @@ init_per_testcase(TestCase, Config) ->
 
     case ?config(group, Config) of
         https ->
-<<<<<<< HEAD
-<<<<<<< HEAD
             ct:log("Start https with expectations ~p", [ListOfExpectations]),
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
-=======
-            start_https_oauth_server(?AUTH_PORT, ?config(certsdir, Config),
->>>>>>> 9b1e762081 (Store the certsDir of the group which)
-=======
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
->>>>>>> 4a925f9a8c (Tests: system_SUITE return configuration from run steps)
-                ListOfExpectations);
+            start_https_oauth_server(?AUTH_PORT, ?config(certsdir, Config), ListOfExpectations);
         _ ->
             do_nothing
     end,
