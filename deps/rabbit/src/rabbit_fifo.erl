@@ -3021,10 +3021,9 @@ incr_msg(Msg0, DelFailed, Anns) ->
     end.
 
 exec_read(Flru0, ReadPlan, Msgs) ->
-    {Entries, Flru} = ra:execute_read_plan(ReadPlan, Flru0),
-    %% pretend entries is a map
+    {Entries, Flru} = ra_log_read_plan:execute(ReadPlan, Flru0),
+    %% return a list in original order
     {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
-                       {_, _, Cmd, _} = maps:get(Idx, Entries),
-                       %% hacky
+                       Cmd = maps:get(Idx, Entries),
                        {MsgId, {Header, get_msg(Cmd)}}
                end, Msgs), Flru}.
