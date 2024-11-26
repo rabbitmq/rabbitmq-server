@@ -19,7 +19,7 @@ present a client certificate.
 
 This mechanism must also be enabled in RabbitMQ's configuration file,
 see [Authentication Mechanisms](https://www.rabbitmq.com/docs/access-control/) and
-[Configuration](https://www.rabbitmq.com/configure.html) guides for
+[Configuration](https://www.rabbitmq.com/docs/configure) guides for
 more details.
 
 A couple of examples:
@@ -42,6 +42,21 @@ username and passwords.
 For safety the server must be configured with the SSL option 'verify'
 set to 'verify_peer', to ensure that if an SSL client presents a
 certificate, it gets verified.
+
+### On Certificate Formats and Generation
+
+RabbitMQ uses certificates and private keys in the PEM format. How they are generated
+is entirely up to the cluster operator. They can be obtained from a well-known and trusted
+commercial certificate authority or generated as "self-signed" (the CA will be project-specific
+and will not be widely trusted).
+
+[`tls-gen`](https://github.com/rabbitmq/tls-gen) is a tool that can generate self-signed certificate chains:
+a CA, a CA certificate, zero or more intermediate certificates and a client or server (leaf) certificate.
+
+Some of the examples below will use `openssl` CLI tools directly because of their widespread use.
+However, this plugin will work just fine with any x.509 standards compliant certificate in the PEM format,
+regardless of what tool has generated them.
+
 
 ### Username Extraction from Certificate
 
@@ -101,12 +116,12 @@ ssl_cert_login_from = common_name
 ```
 
 Note that the authenticated user will then be looked up in the
-[configured authentication / authorisation backend(s)](https://www.rabbitmq.com/access-control.html). This will be
+[configured authentication / authorisation backend(s)](https://www.rabbitmq.com/docs/access-control). This will be
 the internal node database by default but could include other
 backends if so configured.
 
 ## Copyright & License
 
-(c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 Released under the same license as RabbitMQ.
