@@ -1004,6 +1004,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_user_limits
 - rabbit_mgmt_wm_users
 - rabbit_mgmt_wm_users_bulk_delete
+- rabbit_mgmt_wm_version
 - rabbit_mgmt_wm_vhost
 - rabbit_mgmt_wm_vhost_restart
 - rabbit_mgmt_wm_vhosts
