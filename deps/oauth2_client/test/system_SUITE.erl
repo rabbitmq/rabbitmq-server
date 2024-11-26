@@ -247,10 +247,7 @@ init_per_testcase(TestCase, Config) ->
     case ?config(group, Config) of
         https ->
             start_https_oauth_server(?AUTH_PORT, ?config(certsDir, Config),
-                ListOfExpectations);
-        without_all_oauth_providers_settings ->
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
-                ListOfExpectations); 
+                ListOfExpectations);        
         _ ->
             do_nothing
     end,
