@@ -52,7 +52,8 @@ all() ->
         {group, definitions_group1_without_prefix},
         {group, definitions_group2_without_prefix},
         {group, definitions_group3_without_prefix},
-        {group, definitions_group4_without_prefix}
+        {group, definitions_group4_without_prefix},
+        {group, default_queue_type_without_prefix}
     ].
 
 groups() ->
@@ -66,7 +67,8 @@ groups() ->
         {definitions_group1_without_prefix, [], definitions_group1_tests()},
         {definitions_group2_without_prefix, [], definitions_group2_tests()},
         {definitions_group3_without_prefix, [], definitions_group3_tests()},
-        {definitions_group4_without_prefix, [], definitions_group4_tests()}
+        {definitions_group4_without_prefix, [], definitions_group4_tests()},
+        {default_queue_type_without_prefix, [], default_queue_type_group_tests()}
     ].
 
 some_tests() ->
@@ -102,6 +104,14 @@ definitions_group3_tests() ->
 definitions_group4_tests() ->
     [
         definitions_vhost_test
+    ].
+
+default_queue_type_group_tests() ->
+    [
+        default_queue_type_fallback_in_overview_test,
+        default_queue_type_with_value_configured_in_overview_test,
+        default_queue_types_in_vhost_list_test,
+        default_queue_type_of_one_vhost_test
     ].
 
 all_tests() -> [
@@ -3971,9 +3981,123 @@ cluster_and_node_tags_test(Config) ->
     ?assertEqual(ExpectedTags, NodeTags),
     passed.
 
+default_queue_type_fallback_in_overview_test(Config) ->
+    Overview = http_get(Config, "/overview"),
+    DQT = maps:get(default_queue_type, Overview),
+    ?assertEqual(<<"classic">>, DQT).
+
+default_queue_type_with_value_configured_in_overview_test(Config) ->
+    Overview = with_default_queue_type(Config, rabbit_quorum_queue,
+        fun(Cfg) ->
+            http_get(Cfg, "/overview")
+        end),
+
+    DQT = maps:get(default_queue_type, Overview),
+    ?assertEqual(<<"quorum">>, DQT).
+
+default_queue_types_in_vhost_list_test(Config) ->
+    TestName = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    VHost1 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 1])),
+    VHost2 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 2])),
+    VHost3 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 3])),
+    VHost4 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 4])),
+
+    VHosts = #{
+        VHost1 => undefined,
+        VHost2 => <<"classic">>,
+        VHost3 => <<"quorum">>,
+        VHost4 => <<"stream">>
+    },
+
+    try
+        begin
+            lists:foreach(
+                fun({V, QT}) ->
+                    rabbit_ct_broker_helpers:add_vhost(Config, V),
+                    rabbit_ct_broker_helpers:set_full_permissions(Config, V),
+                    rabbit_ct_broker_helpers:update_vhost_metadata(Config, V, #{
+                        default_queue_type => QT
+                    })
+                end, maps:to_list(VHosts)),
+
+            List = http_get(Config, "/vhosts"),
+            ct:pal("GET /api/vhosts returned: ~tp", [List]),
+            VH1 = find_map_by_name(VHost1, List),
+            ?assertEqual(<<"classic">>, maps:get(default_queue_type, VH1)),
+
+            VH2 = find_map_by_name(VHost2, List),
+            ?assertEqual(<<"classic">>, maps:get(default_queue_type, VH2)),
+
+            VH3 = find_map_by_name(VHost3, List),
+            ?assertEqual(<<"quorum">>, maps:get(default_queue_type, VH3)),
+
+            VH4 = find_map_by_name(VHost4, List),
+            ?assertEqual(<<"stream">>, maps:get(default_queue_type, VH4))
+        end
+    after
+        lists:foreach(
+            fun(V) ->
+                rabbit_ct_broker_helpers:delete_vhost(Config, V)
+            end, maps:keys(VHosts))
+    end.
+
+default_queue_type_of_one_vhost_test(Config) ->
+    TestName = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    VHost1 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 1])),
+    VHost2 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 2])),
+    VHost3 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 3])),
+    VHost4 = rabbit_data_coercion:to_binary(io_lib:format("~ts-~b", [TestName, 4])),
+
+    VHosts = #{
+        VHost1 => undefined,
+        VHost2 => <<"classic">>,
+        VHost3 => <<"quorum">>,
+        VHost4 => <<"stream">>
+    },
+
+    try
+        begin
+            lists:foreach(
+                fun({V, QT}) ->
+                    rabbit_ct_broker_helpers:add_vhost(Config, V),
+                    rabbit_ct_broker_helpers:set_full_permissions(Config, V),
+                    rabbit_ct_broker_helpers:update_vhost_metadata(Config, V, #{
+                        default_queue_type => QT
+                    })
+                end, maps:to_list(VHosts)),
+
+            VH1 = http_get(Config, io_lib:format("/vhosts/~ts", [VHost1])),
+            ?assertEqual(<<"classic">>, maps:get(default_queue_type, VH1)),
+
+            VH2 = http_get(Config, io_lib:format("/vhosts/~ts", [VHost2])),
+            ?assertEqual(<<"classic">>, maps:get(default_queue_type, VH2)),
+
+            VH3 = http_get(Config, io_lib:format("/vhosts/~ts", [VHost3])),
+            ?assertEqual(<<"quorum">>, maps:get(default_queue_type, VH3)),
+
+            VH4 = http_get(Config, io_lib:format("/vhosts/~ts", [VHost4])),
+            ?assertEqual(<<"stream">>, maps:get(default_queue_type, VH4))
+        end
+    after
+        lists:foreach(
+            fun(V) ->
+                rabbit_ct_broker_helpers:delete_vhost(Config, V)
+            end, maps:keys(VHosts))
+    end.
+
 %% -------------------------------------------------------------------
 %% Helpers.
 %% -------------------------------------------------------------------
+
+%% Finds a map by its <<"name">> key in an HTTP API response.
+-spec find_map_by_name(binary(), [#{binary() => any()}]) -> #{binary() => any()} | undefined.
+find_map_by_name(NameToFind, List) ->
+    case lists:filter(fun(#{name := Name}) ->
+                        Name =:= NameToFind
+                      end, List) of
+        []    -> undefined;
+        [Val] -> Val
+    end.
 
 msg(Key, Headers, Body) ->
     msg(Key, Headers, Body, <<"string">>).
@@ -4067,3 +4191,13 @@ await_condition(Fun) ->
                         false
               end
       end, ?COLLECT_INTERVAL * 100).
+
+
+clear_default_queue_type(Config) ->
+    rpc(Config, application, unset_env, [rabbit, default_queue_type]).
+
+with_default_queue_type(Config, DQT, Fun) ->
+    rpc(Config, application, set_env, [rabbit, default_queue_type, DQT]),
+    ToReturn = Fun(Config),
+    rpc(Config, application, unset_env, [rabbit, default_queue_type]),
+    ToReturn.
