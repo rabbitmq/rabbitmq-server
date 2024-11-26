@@ -23,6 +23,7 @@
          feature_flag_name/1,
          to_binary/1,
          default/0,
+         default_alias/0,
          fallback/0,
          inject_dqt/1,
          vhosts_with_dqt/1,
@@ -356,6 +357,10 @@ default() ->
                             default_queue_type,
                             fallback()),
     rabbit_data_coercion:to_atom(V).
+
+-spec default_alias() -> binary().
+default_alias() ->
+    short_alias_of(default()).
 
 -spec to_binary(module()) -> binary().
 to_binary(rabbit_classic_queue) ->
