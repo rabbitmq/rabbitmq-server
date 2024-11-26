@@ -90,9 +90,11 @@ init_per_group(https, Config) ->
     application:ensure_all_started(cowboy),
     Config0 = rabbit_ct_helpers:run_setup_steps(Config),
     CertsDir = ?config(rmq_certsdir, Config0),
+    ct:log("certsdir: ~p", [CertsDir]),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
     WrongCaCertFile = filename:join([CertsDir, "server", "server.pem"]),
     [{group, https},
+        {certsDir, CertsDir},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)},
         {oauth_provider_with_issuer, keep_only_issuer_and_ssl_options(
@@ -117,18 +119,18 @@ init_per_group(openid_configuration_with_path, Config) ->
 
 init_per_group(with_all_oauth_provider_settings, Config) ->
     Config0 = rabbit_ct_helpers:run_setup_steps(Config),
-    CertsDir = ?config(rmq_certsdir, Config0),
+    CertsDir = ?config(certsDir, Config0),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
-
+    ct:log("certsdir: ~p", [CertsDir]),
     [{with_all_oauth_provider_settings, true},
      {oauth_provider_id, <<"uaa">>},
      {oauth_provider, build_https_oauth_provider(<<"uaa">>, CaCertFile)} | Config0];
 
 init_per_group(without_all_oauth_providers_settings, Config) ->
     Config0 = rabbit_ct_helpers:run_setup_steps(Config),
-    CertsDir = ?config(rmq_certsdir, Config0),
+    CertsDir = ?config(certsDir, Config0),
     CaCertFile = filename:join([CertsDir, "testca", "cacert.pem"]),
-
+    ct:log("certsdir: ~p", [CertsDir]),
     [{with_all_oauth_provider_settings, false},
         {oauth_provider_id, <<"uaa">>},
         {oauth_provider, keep_only_issuer_and_ssl_options(
@@ -244,8 +246,7 @@ init_per_testcase(TestCase, Config) ->
 
     case ?config(group, Config) of
         https ->
-            ct:log("Start https with expectations ~p", [ListOfExpectations]),
-            start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
+            start_https_oauth_server(?AUTH_PORT, ?config(certsDir, Config),
                 ListOfExpectations);
         without_all_oauth_providers_settings ->
             start_https_oauth_server(?AUTH_PORT, ?config(rmq_certsdir, Config),
@@ -623,8 +624,8 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}}
             = Expected <- Expectations ]}
     ]),
-    ct:log("start_https_oauth_server with expectation list : ~p -> dispatch: ~p",
-        [Expectations, Dispatch]),
+    ct:log("start_https_oauth_server with expectation : ~p  -> dispatch: ~p . certsDir: ~p",
+        [Expectations, Dispatch, CertsDir]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -635,8 +636,8 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
-    ct:log("start_https_oauth_server with expectation : ~p  -> dispatch: ~p",
-        [Expected, Dispatch]),
+    ct:log("start_https_oauth_server with expectation : ~p  -> dispatch: ~p . certsDir: ~p",
+        [Expected, Dispatch, CertsDir]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
