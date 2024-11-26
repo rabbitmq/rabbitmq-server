@@ -545,6 +545,8 @@ vhosts_description_test(Config) ->
     Expected = #{name => <<"myvhost">>,
                  metadata => #{
                                description => <<"vhost description">>,
+                               %% this is an injected DQT
+                               default_queue_type => <<"classic">>,
                                tags => [<<"tag1">>, <<"tag2">>]
                               }},
     assert_item(Expected, http_get(Config, "/vhosts/myvhost")),
