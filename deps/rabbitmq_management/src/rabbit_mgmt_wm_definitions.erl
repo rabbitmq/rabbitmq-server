@@ -271,7 +271,12 @@ retain_whitelisted(Items) ->
 retain_whitelisted_items(Name, List, Allowed) ->
     {Name, [only_whitelisted_for_item(I, Allowed) || I <- List]}.
 
-only_whitelisted_for_item(Item, Allowed) ->
+only_whitelisted_for_item(Item, Allowed) when is_map(Item) ->
+    Map1 = maps:with(Allowed, Item),
+    maps:filter(fun(_Key, Val) ->
+                    Val =/= undefined
+                end, Map1);
+only_whitelisted_for_item(Item, Allowed) when is_list(Item) ->
     [{K, Fact} || {K, Fact} <- Item, lists:member(K, Allowed), Fact =/= undefined].
 
 strip_vhost(Item) ->

@@ -26,11 +26,14 @@
   get_description/1,
   get_tags/1,
   get_default_queue_type/1,
+
   set_limits/2,
   set_metadata/2,
   merge_metadata/2,
   new_metadata/3,
-  is_tagged_with/2
+  is_tagged_with/2,
+
+  to_map/1
 ]).
 
 -define(record_version, vhost_v2).
@@ -196,3 +199,13 @@ new_metadata(Description, Tags, DefaultQueueType) ->
 -spec is_tagged_with(vhost(), tag()) -> boolean().
 is_tagged_with(VHost, Tag) ->
     lists:member(Tag, get_tags(VHost)).
+
+-spec to_map(vhost()) -> map().
+to_map(VHost) ->
+    #{
+        name               => get_name(VHost),
+        description        => get_description(VHost),
+        tags               => get_tags(VHost),
+        default_queue_type => get_default_queue_type(VHost),
+        metadata           => get_metadata(VHost)
+    }.

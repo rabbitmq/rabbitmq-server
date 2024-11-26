@@ -11,6 +11,7 @@
 -behaviour(rabbit_registry_class).
 
 -include("amqqueue.hrl").
+-include("vhost.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 
@@ -23,6 +24,8 @@
          to_binary/1,
          default/0,
          fallback/0,
+         inject_dqt/1,
+         vhosts_with_dqt/1,
          is_enabled/1,
          is_compatible/4,
          declare/2,
@@ -318,6 +321,15 @@ short_alias_of(rabbit_stream_queue) ->
     <<"stream">>;
 %% AMQP 1.0 management client
 short_alias_of({utf8, <<"stream">>}) ->
+    <<"stream">>;
+%% for cases where this function is used for
+%% formatting of values that already might use these
+%% short aliases
+short_alias_of(<<"quorum">>) ->
+    <<"quorum">>;
+short_alias_of(<<"classic">>) ->
+    <<"classic">>;
+short_alias_of(<<"stream">>) ->
     <<"stream">>;
 short_alias_of(_Other) ->
     undefined.
@@ -840,6 +852,29 @@ known_queue_type_names() ->
     {QueueTypes, _} = lists:unzip(Registered),
     QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
     ?KNOWN_QUEUE_TYPES ++ QTypeBins.
+
+inject_dqt(VHost) when ?is_vhost(VHost) ->
+    inject_dqt(vhost:to_map(VHost));
+inject_dqt(VHost) when is_list(VHost) ->
+    inject_dqt(rabbit_data_coercion:to_map(VHost));
+inject_dqt(M = #{default_queue_type := undefined}) ->
+    NQT = short_alias_of(default()),
+    Meta0 = maps:get(metadata, M, #{}),
+    Meta = Meta0#{default_queue_type => NQT},
+
+    M#{default_queue_type => NQT, metadata => Meta};
+inject_dqt(M = #{default_queue_type := DQT}) ->
+    NQT = short_alias_of(DQT),
+    Meta0 = maps:get(metadata, M, #{}),
+    Meta = Meta0#{default_queue_type => NQT},
+
+    M#{default_queue_type => NQT, metadata => Meta}.
+
+-spec vhosts_with_dqt([any()]) -> [map()].
+vhosts_with_dqt(List) when is_list(List) ->
+    %% inject DQT (default queue type) at the top level and
+    %% its metadata
+    lists:map(fun inject_dqt/1, List).
 
 -spec check_queue_limits(amqqueue:amqqueue()) ->
           ok |
