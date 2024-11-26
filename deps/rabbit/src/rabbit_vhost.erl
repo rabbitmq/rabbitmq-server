@@ -511,13 +511,14 @@ default_queue_type(VirtualHost) ->
     default_queue_type(VirtualHost, rabbit_queue_type:fallback()).
 -spec default_queue_type(VirtualHost :: vhost:name(), Fallback :: rabbit_queue_type:queue_type()) -> rabbit_queue_type:queue_type().
 default_queue_type(VirtualHost, FallbackQueueType) ->
+    NodeDefault = application:get_env(rabbit, default_queue_type, FallbackQueueType),
     case exists(VirtualHost) of
-        false -> FallbackQueueType;
+        false -> NodeDefault;
         true ->
             Record = lookup(VirtualHost),
             case vhost:get_default_queue_type(Record) of
-                undefined       -> FallbackQueueType;
-                <<"undefined">> -> FallbackQueueType;
+                undefined       -> NodeDefault;
+                <<"undefined">> -> NodeDefault;
                 Type            -> Type
             end
 end.
@@ -622,8 +623,19 @@ i(tracing, VHost) -> rabbit_trace:enabled(vhost:get_name(VHost));
 i(cluster_state, VHost) -> vhost_cluster_state(vhost:get_name(VHost));
 i(description, VHost) -> vhost:get_description(VHost);
 i(tags, VHost) -> vhost:get_tags(VHost);
-i(default_queue_type, VHost) -> vhost:get_default_queue_type(VHost);
-i(metadata, VHost) -> vhost:get_metadata(VHost);
+i(default_queue_type, VHost) -> rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost)));
+i(metadata, VHost) ->
+    DQT = rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost))),
+    case vhost:get_metadata(VHost) of
+        undefined ->
+            #{default_queue_type => DQT};
+        M = #{default_queue_type := undefined} ->
+            M#{default_queue_type => DQT};
+        M = #{default_queue_type := QT} ->
+            M#{default_queue_type => rabbit_queue_type:short_alias_of(QT)};
+        M when is_map(M) ->
+            M#{default_queue_type => DQT}
+    end;
 i(Item, VHost)     ->
   rabbit_log:error("Don't know how to compute a virtual host info item '~ts' for virtual host '~tp'", [Item, VHost]),
   throw({bad_argument, Item}).
