@@ -54,7 +54,7 @@ produced by OpenSSL's "-nameopt [RFC 2253"](https://tools.ietf.org/html/rfc2253)
 You can obtain this string form from a certificate with a command like:
 
 ```
-openssl x509 -in path/to/cert.pem -nameopt RFC2253 -subject -noout
+openssl x509 -nameopt RFC2253 -subject -noout -in path/to/cert.pem
 ```
 
 or from an existing amqps connection with commands like:
