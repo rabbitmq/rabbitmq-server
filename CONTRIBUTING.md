@@ -50,6 +50,21 @@ gmake ct-queue_parallel
 gmake ct-unit_log_management
 ```
 
+### Running Specific Groups or Tests
+
+All `ct-*` Make targets support a `t=` argument which are transformed to [`-group` and `-case` Common Test runner options](https://www.erlang.org/doc/apps/common_test/run_test_chapter.html).
+
+``` shell
+# Runs a a group of tests named 'all_tests_with_prefix' in suite 'test/rabbit_mgmt_http_SUITE.erl'
+gmake ct-rabbit_mgmt_http t="all_tests_with_prefix"
+
+# Runs a test named 'users_test' in group 'all_tests_with_prefix' in suite 'test/rabbit_mgmt_http_SUITE.erl'
+gmake ct-rabbit_mgmt_http t="all_tests_with_prefix:users_test"
+# Runs a test named 'queues_test' in group 'all_tests_with_prefix' in suite 'test/rabbit_mgmt_http_SUITE.erl'
+gmake ct-rabbit_mgmt_http t="all_tests_with_prefix:queues_test"
+```
+
+
 ## Running Single Nodes from Source
 
 ``` shell
