@@ -16,7 +16,7 @@
 
 -compile([export_all, nowarn_export_all]).
 
--define(TOUT, 30000).
+-define(TIMEOUT, 30000).
 
 suite() ->
     [{timetrap, {minutes, 4}}].
@@ -186,7 +186,7 @@ open_close_connection(Config) ->
     {ok, Connection2} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection2, opened}} -> ok
-    after ?TOUT -> exit(connection_timeout)
+    after ?TIMEOUT -> exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection2),
     ok = amqp10_client:close_connection(Connection).
@@ -203,7 +203,7 @@ open_connection_plain_sasl(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection, opened}} -> ok
-    after ?TOUT -> exit(connection_timeout)
+    after ?TIMEOUT -> exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection).
 
@@ -227,7 +227,7 @@ open_connection_plain_sasl_parse_uri(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection, opened}} -> ok
-    after ?TOUT -> exit(connection_timeout)
+    after ?TIMEOUT -> exit(connection_timeout)
     end,
     ok = amqp10_client:close_connection(Connection).
 
@@ -247,7 +247,7 @@ open_connection_plain_sasl_failure(Config) ->
         % some implementation may simply close the tcp_connection
         {amqp10_event, {connection, Connection, {closed, shutdown}}} -> ok
 
-    after ?TOUT ->
+    after ?TIMEOUT ->
               ct:pal("Connection process is alive? = ~tp~n",
                      [erlang:is_process_alive(Connection)]),
               exit(connection_timeout)
@@ -471,27 +471,27 @@ notify_with_performative(Config) ->
 
     {ok, Connection} = amqp10_client:open_connection(OpenConf),
     receive {amqp10_event, {connection, Connection, {opened, #'v1_0.open'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     {ok, Session1} = amqp10_client:begin_session(Connection),
     receive {amqp10_event, {session, Session1, {begun, #'v1_0.begin'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     {ok, Sender1} = amqp10_client:attach_sender_link(Session1, <<"sender 1">>, <<"/exchanges/amq.fanout">>),
     receive {amqp10_event, {link, Sender1, {attached, #'v1_0.attach'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = amqp10_client:detach_link(Sender1),
     receive {amqp10_event, {link, Sender1, {detached, #'v1_0.detach'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = amqp10_client:end_session(Session1),
     receive {amqp10_event, {session, Session1, {ended, #'v1_0.end'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     %% Test that the amqp10_client:*_sync functions work.
@@ -503,7 +503,7 @@ notify_with_performative(Config) ->
 
     ok = amqp10_client:close_connection(Connection),
     receive {amqp10_event, {connection, Connection, {closed, #'v1_0.close'{}}}} -> ok
-    after ?TOUT -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end.
 
 % a message is sent before the link attach is guaranteed to
@@ -602,13 +602,13 @@ subscribe(Config) ->
     [begin
          receive {amqp10_msg, Receiver, Msg} ->
                      ok = amqp10_client:accept_msg(Receiver, Msg)
-         after ?TOUT -> ct:fail(timeout)
+         after ?TIMEOUT -> ct:fail(timeout)
          end
      end || _ <- lists:seq(1, 10)],
     ok = assert_no_message(Receiver),
 
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
-    after ?TOUT -> flush(),
+    after ?TIMEOUT -> flush(),
                   exit(credit_exhausted_assert)
     end,
 
@@ -856,7 +856,7 @@ multi_transfer_without_delivery_id(Config) ->
     receive
         {amqp10_msg, Receiver, _InMsg} ->
             ok
-    after ?TOUT ->
+    after ?TIMEOUT ->
               exit(delivery_timeout)
     end,
 
@@ -911,7 +911,7 @@ incoming_heartbeat(Config) ->
           {closed, _}}}
           when Connection0 =:= Connection ->
             ok
-    after ?TOUT ->
+    after ?TIMEOUT ->
               exit(incoming_heartbeat_assert)
     end,
     demonitor(MockRef).
@@ -928,7 +928,7 @@ await_link(Who, What, Err) ->
         {amqp10_event, {link, Who0, {detached, Why}}}
           when Who0 =:= Who ->
             ct:fail(Why)
-    after ?TOUT ->
+    after ?TIMEOUT ->
               flush(),
               ct:fail(Err)
     end.
@@ -945,7 +945,7 @@ await_disposition(DeliveryTag) ->
     receive
         {amqp10_disposition, {accepted, DeliveryTag0}}
           when DeliveryTag0 =:= DeliveryTag -> ok
-    after ?TOUT ->
+    after ?TIMEOUT ->
               flush(),
               ct:fail(dispostion_timeout)
     end.
@@ -970,7 +970,7 @@ receive_messages0(Receiver, N, Acc) ->
     receive
         {amqp10_msg, Receiver, Msg} ->
             receive_messages0(Receiver, N - 1, [Msg | Acc])
-    after ?TOUT  ->
+    after ?TIMEOUT  ->
               LastReceivedMsg = case Acc of
                                     [] -> none;
                                     [M | _] -> M
