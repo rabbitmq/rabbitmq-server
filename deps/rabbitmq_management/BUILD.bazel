@@ -167,7 +167,7 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
-    shard_count = 6,
+    shard_count = 7,
     runtime_deps = [
         "//deps/amqp10_client:erlang_app",
     ],

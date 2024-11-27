@@ -111,6 +111,7 @@
     add_vhost/2,
     add_vhost/3,
     add_vhost/4,
+    update_vhost_metadata/3,
     delete_vhost/2,
     delete_vhost/3,
     delete_vhost/4,
@@ -1540,6 +1541,9 @@ add_vhost(Config, Node, VHost) ->
 
 add_vhost(Config, Node, VHost, Username) ->
     catch rpc(Config, Node, rabbit_vhost, add, [VHost, Username]).
+
+update_vhost_metadata(Config, VHost, Meta) ->
+    catch rpc(Config, 0, rabbit_vhost, update_metadata, [VHost, Meta, <<"acting-user">>]).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).

@@ -9,7 +9,7 @@ jobs:
     with:
       ref: refs/heads/main
       erlang_version: 26.2
-      elixir_version: 1.15
+      elixir_version: 1.17
       project_version: 4.0.0
 
   check-v4_0_x:
@@ -17,7 +17,7 @@ jobs:
     with:
       ref: refs/heads/main
       erlang_version: 26.2
-      elixir_version: 1.15
+      elixir_version: 1.17
       project_version: 4.0.0
 
   check-v3_13_x:
@@ -25,7 +25,7 @@ jobs:
     with:
       ref: refs/heads/v3.13.x
       erlang_version: 26.2
-      elixir_version: 1.15
+      elixir_version: 1.17
       project_version: 3.13.0
 
   check-v3_12_x:
@@ -33,5 +33,5 @@ jobs:
     with:
       ref: refs/heads/v3.12.x
       erlang_version: 26.1
-      elixir_version: 1.15
+      elixir_version: 1.17
       project_version: 3.12.0

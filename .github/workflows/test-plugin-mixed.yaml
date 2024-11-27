@@ -35,7 +35,7 @@ jobs:
           # - khepri
         include:
         - erlang_version: 26
-          elixir_version: 1.15
+          elixir_version: 1.17
     timeout-minutes: 120
     steps:
     - name: LOAD REPO CACHE

@@ -19,6 +19,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 
   def merge_defaults([], opts) do
+    # this default historically benefits those who script using 'rabbitmqctl list_vhosts',
+    # adding more fields here would break scripts but be more useful to a human reader. MK.
     merge_defaults(["name"], opts)
   end
 

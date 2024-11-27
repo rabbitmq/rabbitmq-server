@@ -29,10 +29,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let expectations = []
   let username = process.env.RABBITMQ_AMQP_USERNAME
   let password = process.env.RABBITMQ_AMQP_PASSWORD
-<<<<<<< HEAD
-=======
   let amqp;
->>>>>>> 0ba194ae53 (Replace java amqp10 with javascript one)
 
   before(function () {
     if (backends.includes("http") && username.includes("http")) {
@@ -76,7 +73,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
         closeAmqp(amqp.connection)
       }
     } catch (error) {
-      console.error("Failed to close amqp10 connection due to " + error);      
-    }  
+      console.error("Failed to close amqp10 connection due to " + error);
+    }
   })
 })

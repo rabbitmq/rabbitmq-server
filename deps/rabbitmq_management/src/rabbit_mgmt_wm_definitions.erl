@@ -58,30 +58,39 @@ all_definitions(ReqData, Context) ->
     Vsn = rabbit:base_product_version(),
     ProductName = rabbit:product_name(),
     ProductVersion = rabbit:product_version(),
-    rabbit_mgmt_util:reply(
-      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
-       {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
-       {product_name, rabbit_data_coercion:to_binary(ProductName)},
-       {product_version, rabbit_data_coercion:to_binary(ProductVersion)}] ++
-      retain_whitelisted(
-        [{users,             rabbit_mgmt_wm_users:users(all)},
-         {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
-         {permissions,       rabbit_mgmt_wm_permissions:permissions()},
-         {topic_permissions, rabbit_mgmt_wm_topic_permissions:topic_permissions()},
-         {parameters,        rabbit_mgmt_wm_parameters:basic(ReqData)},
-         {global_parameters, rabbit_mgmt_wm_global_parameters:basic()},
-         {policies,          rabbit_mgmt_wm_policies:basic(ReqData)},
-         {queues,            Qs},
-         {exchanges,         Xs},
-         {bindings,          Bs}]),
-      case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-          undefined -> ReqData;
-          Filename  -> rabbit_mgmt_util:set_resp_header(
-                         <<"Content-Disposition">>,
-                         "attachment; filename=" ++
-                             binary_to_list(Filename), ReqData)
-      end,
-      Context).
+
+    Contents = [
+        {users,             rabbit_mgmt_wm_users:users(all)},
+        {vhosts,            rabbit_mgmt_wm_vhosts:basic()},
+        {permissions,       rabbit_mgmt_wm_permissions:permissions()},
+        {topic_permissions, rabbit_mgmt_wm_topic_permissions:topic_permissions()},
+        {parameters,        rabbit_mgmt_wm_parameters:basic(ReqData)},
+        {global_parameters, rabbit_mgmt_wm_global_parameters:basic()},
+        {policies,          rabbit_mgmt_wm_policies:basic(ReqData)},
+        {queues,            Qs},
+        {exchanges,         Xs},
+        {bindings,          Bs}
+    ],
+
+    TopLevelDefsAndMetadata = [
+        {rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
+        {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
+        {product_name, rabbit_data_coercion:to_binary(ProductName)},
+        {product_version, rabbit_data_coercion:to_binary(ProductVersion)},
+        {rabbitmq_definition_format, <<"cluster">>},
+        {original_cluster_name, rabbit_nodes:cluster_name()},
+        {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of cluster '~ts'", [rabbit_nodes:cluster_name()]))}
+    ],
+    Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
+    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+                   undefined -> ReqData;
+                   Filename  -> rabbit_mgmt_util:set_resp_header(
+                       <<"Content-Disposition">>,
+                       "attachment; filename=" ++
+                       binary_to_list(Filename), ReqData)
+               end,
+
+    rabbit_mgmt_util:reply(Result, ReqData1, Context).
 
 accept_json(ReqData0, Context) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
@@ -94,7 +103,10 @@ accept_json(ReqData0, Context) ->
             accept(Body, ReqData, Context)
     end.
 
-vhost_definitions(ReqData, VHost, Context) ->
+vhost_definitions(ReqData, VHostName, Context) ->
+    %% the existence of this virtual host is verified in the called, 'to_json/2'
+    VHost = rabbit_vhost:lookup(VHostName),
+
     %% rabbit_mgmt_wm_<>:basic/1 filters by VHost if it is available.
     %% TODO: should we stop stripping virtual host? Such files cannot be imported on boot, for example.
     Xs = [strip_vhost(X) || X <- rabbit_mgmt_wm_exchanges:basic(ReqData),
@@ -105,25 +117,48 @@ vhost_definitions(ReqData, VHost, Context) ->
     %% TODO: should we stop stripping virtual host? Such files cannot be imported on boot, for example.
     Bs = [strip_vhost(B) || B <- rabbit_mgmt_wm_bindings:basic(ReqData),
                             export_binding(B, QNames)],
-    {ok, Vsn} = application:get_key(rabbit, vsn),
     Parameters = [strip_vhost(
                     rabbit_mgmt_format:parameter(P))
-                  || P <- rabbit_runtime_parameters:list(VHost)],
-    rabbit_mgmt_util:reply(
-      [{rabbit_version, rabbit_data_coercion:to_binary(Vsn)}] ++
-          retain_whitelisted(
-            [{parameters,  Parameters},
-             {policies,    [strip_vhost(P) || P <- rabbit_mgmt_wm_policies:basic(ReqData)]},
-             {queues,      Qs},
-             {exchanges,   Xs},
-             {bindings,    Bs}]),
-      case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
-          undefined -> ReqData;
-          Filename  ->
-              HeaderVal = "attachment; filename=" ++ binary_to_list(Filename),
-              rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>, HeaderVal, ReqData)
-      end,
-      Context).
+                  || P <- rabbit_runtime_parameters:list(VHostName)],
+    Contents = [
+        {parameters,  Parameters},
+        {policies,    [strip_vhost(P) || P <- rabbit_mgmt_wm_policies:basic(ReqData)]},
+        {queues,      Qs},
+        {exchanges,   Xs},
+        {bindings,    Bs}
+    ],
+
+    Vsn = rabbit:base_product_version(),
+    ProductName = rabbit:product_name(),
+    ProductVersion = rabbit:product_version(),
+
+    DQT = rabbit_queue_type:short_alias_of(rabbit_vhost:default_queue_type(VHostName)),
+    %% note: the type changes to a map
+    VHost1 = rabbit_queue_type:inject_dqt(VHost),
+    Metadata = maps:get(metadata, VHost1),
+
+    TopLevelDefsAndMetadata = [
+        {rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
+        {rabbitmq_version, rabbit_data_coercion:to_binary(Vsn)},
+        {product_name, rabbit_data_coercion:to_binary(ProductName)},
+        {product_version, rabbit_data_coercion:to_binary(ProductVersion)},
+        {rabbitmq_definition_format, <<"single_virtual_host">>},
+        {original_vhost_name, VHostName},
+        {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of virtual host '~ts'", [VHostName]))},
+        {metadata, Metadata},
+        {description, vhost:get_description(VHost)},
+        {default_queue_type, DQT},
+        {limits, vhost:get_limits(VHost)}
+    ],
+    Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
+
+    ReqData1 = case rabbit_mgmt_util:qs_val(<<"download">>, ReqData) of
+                   undefined -> ReqData;
+                   Filename  ->
+                       HeaderVal = "attachment; filename=" ++ binary_to_list(Filename),
+                       rabbit_mgmt_util:set_resp_header(<<"Content-Disposition">>, HeaderVal, ReqData)
+               end,
+    rabbit_mgmt_util:reply(Result, ReqData1, Context).
 
 accept_multipart(ReqData0, Context) ->
     {Parts, ReqData} = get_all_parts(ReqData0),
@@ -271,7 +306,12 @@ retain_whitelisted(Items) ->
 retain_whitelisted_items(Name, List, Allowed) ->
     {Name, [only_whitelisted_for_item(I, Allowed) || I <- List]}.
 
-only_whitelisted_for_item(Item, Allowed) ->
+only_whitelisted_for_item(Item, Allowed) when is_map(Item) ->
+    Map1 = maps:with(Allowed, Item),
+    maps:filter(fun(_Key, Val) ->
+                    Val =/= undefined
+                end, Map1);
+only_whitelisted_for_item(Item, Allowed) when is_list(Item) ->
     [{K, Fact} || {K, Fact} <- Item, lists:member(K, Allowed), Fact =/= undefined].
 
 strip_vhost(Item) ->
