@@ -1,7 +1,21 @@
 const assert = require('assert')
 const { tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
-const {execSync} = require('child_process')
+const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
+
+var receivedAmqpMessageCount = 0
+var untilConnectionEstablished = new Promise((resolve, reject) => {
+  onAmqp('connection_open', function(context) {
+    resolve()
+  })
+})
+
+onAmqp('message', function (context) {
+    receivedAmqpMessageCount++
+})
+onceAmqp('sendable', function (context) {
+    context.sender.send({body:'first message'})    
+})
 
 const profiles = process.env.PROFILES || ""
 var backends = ""
@@ -15,6 +29,10 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let expectations = []
   let username = process.env.RABBITMQ_AMQP_USERNAME
   let password = process.env.RABBITMQ_AMQP_PASSWORD
+<<<<<<< HEAD
+=======
+  let amqp;
+>>>>>>> 0ba194ae53 (Replace java amqp10 with javascript one)
 
   before(function () {
     if (backends.includes("http") && username.includes("http")) {
@@ -36,14 +54,29 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     }
   })
 
-  it('can open an AMQP 1.0 connection', function () {
-    execSync("npm run amqp10_roundtriptest -- " + username + " " + password)
-
+  it('can open an AMQP 1.0 connection', async function () {     
+    amqp = openAmqp()
+    await untilConnectionEstablished
+    var untilMessageReceived = new Promise((resolve, reject) => {
+      onAmqp('message', function(context) {
+        resolve()
+      })
+    })
+    amqp.sender.send({body:'second message'})    
+    await untilMessageReceived
+    assert.equal(2, receivedAmqpMessageCount)
   })
 
   after(function () {
-      if ( backends.includes("http") ) {
-        verifyAll(expectations)
+    if ( backends.includes("http") ) {
+      verifyAll(expectations)
+    }
+    try {
+      if (amqp != null) {
+        closeAmqp(amqp.connection)
       }
+    } catch (error) {
+      console.error("Failed to close amqp10 connection due to " + error);      
+    }  
   })
 })
