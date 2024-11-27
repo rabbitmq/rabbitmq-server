@@ -211,7 +211,7 @@ all_tests() -> [
     disabled_qq_replica_opers_test,
     qq_status_test,
     list_deprecated_features_test,
-    list_used_deprecated_features_test,    
+    list_used_deprecated_features_test,
     cluster_and_node_tags_test,
     version_test
 ].
@@ -256,11 +256,19 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(all_tests_with_prefix=Group, Config0) ->
+init_per_group(Group, Config0) when Group == all_tests_with_prefix ->
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     Config2 = finish_init(Group, Config1),
     start_broker(Config2);
+init_per_group(Group, Config0) when Group == default_queue_type_group_tests ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            Config1 = finish_init(Group, Config0),
+            start_broker(Config1)
+    end;
 init_per_group(Group, Config0) ->
     Config1 = finish_init(Group, Config0),
     start_broker(Config1).
@@ -308,6 +316,13 @@ init_per_testcase(queues_detailed_test, Config) ->
     case IsEnabled of
         true  -> Config;
         false -> {skip, "The detailed queues endpoint is not available."}
+    end;
+init_per_testcase(Testcase, Config) when Testcase == definitions_file_metadata_test ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "not mixed versions compatible"};
+        _ ->
+            rabbit_ct_helpers:testcase_started(Config, Testcase)
     end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
