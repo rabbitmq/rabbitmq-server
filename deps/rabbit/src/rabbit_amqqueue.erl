@@ -118,12 +118,19 @@
      }}).
 
 are_transient_nonexcl_used(_) ->
-    case rabbit_db_queue:list_transient() of
-        {ok, Queues} ->
-            NonExclQueues = [Q || Q <- Queues, not is_exclusive(Q)],
-            length(NonExclQueues) > 0;
-        {error, _} ->
-            undefined
+    case rabbit_db:is_virgin_node() of
+        true ->
+            %% a virgin node can't have any queues and the check is performed before
+            %% metadata store is ready, so skip the query
+            false;
+        false ->
+            case rabbit_db_queue:list_transient() of
+                {ok, Queues} ->
+                    NonExclQueues = [Q || Q <- Queues, not is_exclusive(Q)],
+                    length(NonExclQueues) > 0;
+                {error, _} ->
+                    undefined
+            end
     end.
 
 -define(CONSUMER_INFO_KEYS,
