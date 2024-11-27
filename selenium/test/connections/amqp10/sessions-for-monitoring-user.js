@@ -1,6 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
+const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../../amqp')
 const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../../utils')
 
 const LoginPage = require('../../pageobjects/LoginPage')
@@ -8,18 +9,17 @@ const OverviewPage = require('../../pageobjects/OverviewPage')
 const ConnectionsPage = require('../../pageobjects/ConnectionsPage')
 const ConnectionPage = require('../../pageobjects/ConnectionPage')
 
-var container = require('rhea')  // https://github.com/amqp/rhea
 var receivedAmqpMessageCount = 0
 var untilConnectionEstablished = new Promise((resolve, reject) => {
-  container.on('connection_open', function(context) {
+  onAmqp('connection_open', function(context) {
     resolve()
   })
 })
 
-container.on('message', function (context) {
+onAmqp('message', function (context) {
     receivedAmqpMessageCount++
 })
-container.once('sendable', function (context) {
+onceAmqp('sendable', function (context) {
     context.sender.send({body:'first message'})    
 })
 
@@ -28,7 +28,7 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
   let captureScreen
   let connectionsPage
   let connectionPage
-  let connection 
+  let amqp 
 
   before(async function () {
     driver = buildDriver()
@@ -41,24 +41,8 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     await login.login('monitoring-only', 'guest')
     await overview.isLoaded()
 
-    connection = container.connect(
-      {'host': process.env.RABBITMQ_HOSTNAME || 'rabbitmq',
-       'port': process.env.RABBITMQ_AMQP_PORT || 5672,
-       'username' : process.env.RABBITMQ_AMQP_USERNAME || 'guest',
-       'password' : process.env.RABBITMQ_AMQP_PASSWORD || 'guest',
-       'id': "selenium-connection-id",
-       'container_id': "selenium-container-id"
-      })
-    connection.open_receiver({
-      source: 'examples',
-      target: 'receiver-target',
-      name: 'receiver-link'
-    })
-    sender = connection.open_sender({
-      target: 'examples',
-      source: 'sender-source',
-      name: 'sender-link'
-    })
+
+    amqp = openAmqp()    
     await untilConnectionEstablished
     await overview.clickOnConnectionsTab()    
     await connectionsPage.isLoaded()
@@ -108,11 +92,11 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
 
   it('display live link information', async function () {
     var untilMessageReceived = new Promise((resolve, reject) => {
-      container.on('message', function(context) {
+      onAmqp('message', function(context) {
         resolve()
       })
     })
-    sender.send({body:'second message'})    
+    amqp.sender.send({body:'second message'})    
     await untilMessageReceived
     assert.equal(2, receivedAmqpMessageCount)
 
@@ -121,16 +105,14 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
     assert.equal(2, incomingLink.deliveryCount)
     
-    //console.log("incomingLink: " + JSON.stringify(incomingLink))
-    //console.log("outgoingLink: " + JSON.stringify(outgoingLink))
   }) 
 
 
   after(async function () {    
     await teardown(driver, this, captureScreen)
     try {
-      if (connection != null) {
-        connection.close()
+      if (amqp != null) {
+        closeAmqp(amqp.connection)
       }
     } catch (error) {
       console.error("Failed to close amqp10 connection due to " + error);      
