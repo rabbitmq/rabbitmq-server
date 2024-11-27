@@ -985,7 +985,7 @@ list_transient() ->
        }).
 
 list_transient_in_mnesia() ->
-    Pattern = amqqueue:pattern_match_all(),
+    Pattern = amqqueue:pattern_match_on_durable(false),
     AllQueues = mnesia:dirty_match_object(
                   ?MNESIA_TABLE,
                   Pattern),
