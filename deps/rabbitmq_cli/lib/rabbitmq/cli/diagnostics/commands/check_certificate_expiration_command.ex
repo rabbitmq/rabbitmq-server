@@ -77,7 +77,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   end
 
   def unit_label(1, unit) do
-    unit |> String.slice(0..-2)
+    unit |> String.slice(0..-2//-1)
   end
 
   def unit_label(_within, unit) do
