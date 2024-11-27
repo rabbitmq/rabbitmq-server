@@ -12,8 +12,6 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--include("src/amqp10_client.hrl").
-
 -compile([export_all, nowarn_export_all]).
 
 -define(TIMEOUT, 30000).
