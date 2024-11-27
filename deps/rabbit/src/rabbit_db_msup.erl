@@ -226,9 +226,10 @@ find_mirror_in_khepri(Group, Id) ->
 %% update_all().
 %% -------------------------------------------------------------------
 
--spec update_all(Overall, Overall) -> [ChildSpec] when
+-spec update_all(Overall, Overall) -> [ChildSpec] | Error when
       Overall :: pid(),
-      ChildSpec :: supervisor2:child_spec().
+      ChildSpec :: supervisor2:child_spec(),
+      Error :: {error, any()}.
 
 update_all(Overall, OldOverall) ->
     rabbit_khepri:handle_fallback(
