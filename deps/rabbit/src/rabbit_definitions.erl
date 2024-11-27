@@ -1071,10 +1071,13 @@ list_vhosts() ->
     [vhost_definition(V) || V <- rabbit_vhost:all()].
 
 vhost_definition(VHost) ->
+    Name = vhost:get_name(VHost),
+    DQT = rabbit_queue_type:short_alias_of(rabbit_vhost:default_queue_type(Name)),
     #{
-        <<"name">> => vhost:get_name(VHost),
+        <<"name">> => Name,
         <<"limits">> => vhost:get_limits(VHost),
-        <<"metadata">> => vhost:get_metadata(VHost)
+        <<"metadata">> => vhost:get_metadata(VHost),
+        <<"default_queue_type">> => DQT
     }.
 
 list_users() ->
