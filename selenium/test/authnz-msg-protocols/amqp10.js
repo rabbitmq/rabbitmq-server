@@ -54,11 +54,6 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     }
   })
 
-<<<<<<< HEAD
-  it('can open an AMQP 1.0 connection', function () {
-    execSync("npm run amqp10_roundtriptest -- " + username + " " + password)
-
-=======
   it('can open an AMQP 1.0 connection', async function () {     
     amqp = openAmqp()
     await untilConnectionEstablished
@@ -70,7 +65,6 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     amqp.sender.send({body:'second message'})    
     await untilMessageReceived
     assert.equal(2, receivedAmqpMessageCount)
->>>>>>> 0ba194ae53 (Replace java amqp10 with javascript one)
   })
 
   after(function () {
