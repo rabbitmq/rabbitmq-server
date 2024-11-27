@@ -92,7 +92,8 @@ definitions_group1_tests() ->
 definitions_group2_tests() ->
     [
         definitions_default_queue_type_test,
-        definitions_vhost_metadata_test
+        definitions_vhost_metadata_test,
+        definitions_file_metadata_test
     ].
 
 definitions_group3_tests() ->
@@ -2087,7 +2088,7 @@ long_definitions_vhosts(long_definitions_multipart_test) ->
 definitions_vhost_metadata_test(Config) ->
     register_parameters_and_policy_validator(Config),
 
-    VHostName = <<"definitions-vhost-metadata-test">>,
+    VHostName = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     Desc = <<"Created by definitions_vhost_metadata_test">>,
     DQT = <<"quorum">>,
     Tags = [<<"one">>, <<"tag-two">>],
@@ -2098,19 +2099,19 @@ definitions_vhost_metadata_test(Config) ->
     },
 
     %% Create a test vhost
-    http_put(Config, "/vhosts/definitions-vhost-metadata-test", Metadata, {group, '2xx'}),
+    http_put(Config, io_lib:format("/vhosts/~ts", [VHostName]), Metadata, {group, '2xx'}),
     PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
-    http_put(Config, "/permissions/definitions-vhost-metadata-test/guest", PermArgs, {group, '2xx'}),
+    http_put(Config, io_lib:format("/permissions/~ts/guest", [VHostName]), PermArgs, {group, '2xx'}),
 
     %% Get the definitions
     Definitions = http_get(Config, "/definitions", ?OK),
+    ct:pal("Exported definitions:~n~tp~tn", [Definitions]),
 
     %% Check if vhost definition is correct
     VHosts = maps:get(vhosts, Definitions),
     {value, VH} = lists:search(fun(VH) ->
                                     maps:get(name, VH) =:= VHostName
                                 end, VHosts),
-    ct:pal("VHost: ~p", [VH]),
     ?assertEqual(#{
         name => VHostName,
         description => Desc,
@@ -2123,7 +2124,41 @@ definitions_vhost_metadata_test(Config) ->
     http_post(Config, "/definitions", Definitions, {group, '2xx'}),
 
     %% Remove the test vhost
-    http_delete(Config, "/vhosts/definitions-vhost-metadata-test", {group, '2xx'}),
+    http_delete(Config, io_lib:format("/vhosts/~ts", [VHostName]), {group, '2xx'}),
+    ok.
+
+definitions_file_metadata_test(Config) ->
+    register_parameters_and_policy_validator(Config),
+
+    VHostName = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    Desc = <<"Created by definitions_vhost_metadata_test">>,
+    DQT = <<"quorum">>,
+    Tags = [<<"tag-one">>, <<"tag-two">>],
+    Metadata = #{
+        description => Desc,
+        default_queue_type => DQT,
+        tags => Tags
+    },
+
+    http_put(Config, io_lib:format("/vhosts/~ts", [VHostName]), Metadata, {group, '2xx'}),
+    PermArgs = [{configure, <<".*">>}, {write, <<".*">>}, {read, <<".*">>}],
+    http_put(Config, io_lib:format("/permissions/~ts/guest", [VHostName]), PermArgs, {group, '2xx'}),
+
+    AllDefinitions = http_get(Config, "/definitions", ?OK),
+    %% verify definitions file metadata
+    ?assertEqual(<<"cluster">>, maps:get(rabbitmq_definition_format, AllDefinitions)),
+    ?assert(is_binary(maps:get(original_cluster_name, AllDefinitions))),
+
+    %% Post the definitions back
+    http_post(Config, "/definitions", AllDefinitions, {group, '2xx'}),
+
+    VHDefinitions = http_get(Config, io_lib:format("/definitions/~ts", [VHostName]), ?OK),
+    %% verify definitions file metadata
+    ?assertEqual(<<"single_virtual_host">>, maps:get(rabbitmq_definition_format, VHDefinitions)),
+    ?assertEqual(VHostName, (maps:get(original_vhost_name, VHDefinitions))),
+
+    %% Remove the test vhost
+    http_delete(Config, io_lib:format("/vhosts/~ts", [VHostName]), {group, '2xx'}),
     ok.
 
 definitions_default_queue_type_test(Config) ->
