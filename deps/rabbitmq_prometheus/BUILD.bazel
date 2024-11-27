@@ -110,8 +110,8 @@ rabbitmq_integration_suite(
     size = "medium",
     flaky = True,
     runtime_deps = [
-        "//deps/rabbitmq_stream_common:erlang_app",
         "//deps/rabbitmq_stream:erlang_app",
+        "//deps/rabbitmq_stream_common:erlang_app",
     ],
 )
 
