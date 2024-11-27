@@ -2009,6 +2009,7 @@ definitions_file_metadata_test(Config) ->
     %% verify definitions file metadata
     ?assertEqual(<<"single_virtual_host">>, maps:get(rabbitmq_definition_format, VHDefinitions)),
     ?assertEqual(VHostName, (maps:get(original_vhost_name, VHDefinitions))),
+    ?assert(is_map_key(default_queue_type, maps:get(metadata, VHDefinitions))),
 
     %% Remove the test vhost
     http_delete(Config, io_lib:format("/vhosts/~ts", [VHostName]), {group, '2xx'}),
