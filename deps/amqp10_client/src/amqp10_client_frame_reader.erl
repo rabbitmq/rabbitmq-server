@@ -152,6 +152,7 @@ handle_event(cast, {unregister_session, _Session, OutgoingChannel, IncomingChann
                          incoming_channels = IncomingChannels1},
     {keep_state, State1};
 handle_event(cast, close, _StateName, State = #state{socket = Socket}) ->
+    logger:warning("frame_reader handle_event cast close"),
     _ = close_socket(Socket),
     {stop, normal, State#state{socket = undefined}};
 
@@ -167,11 +168,13 @@ handle_event(info, {Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
             set_active_once(NewState),
             {next_state, NextState, NewState#state{buffer = Remaining}};
         {error, Reason, NewState} ->
+            logger:warning("frame_reader info handle_input error ~p", [Reason]),
             {stop, Reason, NewState}
     end;
 
 handle_event(info, {TcpError, _, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
+    logger:warning("frame_reader handle_event info TcpError: ~p", [TcpError]),
     logger:warning("AMQP 1.0 connection socket errored, connection state: '~ts', reason: '~tp'",
                     [StateName, Reason]),
     State1 = State#state{socket = undefined,
@@ -180,6 +183,7 @@ handle_event(info, {TcpError, _, Reason}, StateName, State)
     {stop, {error, Reason}, State1};
 handle_event(info, {TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
+    logger:warning("frame_reader handle_event info TcpClosed: ~p", [TcpClosed]),
     logger:warning("AMQP 1.0 connection socket was closed, connection state: '~ts'",
                     [StateName]),
     State1 = State#state{socket = undefined,
