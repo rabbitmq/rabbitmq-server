@@ -147,7 +147,8 @@ vhost_definitions(ReqData, VHostName, Context) ->
         {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of virtual host '~ts'", [VHostName]))},
         {metadata, Metadata},
         {description, vhost:get_description(VHost)},
-        {default_queue_type, DQT}
+        {default_queue_type, DQT},
+        {limits, vhost:get_limits(VHost)}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
 
