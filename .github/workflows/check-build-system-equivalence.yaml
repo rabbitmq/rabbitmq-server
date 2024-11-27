@@ -23,7 +23,7 @@ on:
       elixir_version:
         description: 'Elixir version to build with'
         required: true
-        default: "1.15"
+        default: "1.17"
       project_version:
         description: 'PROJECT_VERSION used for make'
         required: true
