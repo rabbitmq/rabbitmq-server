@@ -19,7 +19,7 @@ function getAmqpsConnectionOptions() {
     options['enable_sasl_external'] = true  
   }
   options['transport'] = 'tls'
-  let certsLocation = getEnv("RABBITMQ_CERTS");
+  let certsLocation = process.env.RABBITMQ_CERTS
   options['key'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_key.pem'))
   options['cert'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_certificate.pem'))
   options['ca'] = fs.readFileSync(path.resolve(certsLocation,'ca_rabbitmq_certificate.pem')) 
