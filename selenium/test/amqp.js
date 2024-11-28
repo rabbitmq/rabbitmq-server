@@ -1,6 +1,7 @@
 var container = require('rhea')  // https://github.com/amqp/rhea
 var fs = require('fs');
 var path = require('path');
+var connectionOptions = getConnectionOptions()
 
 function getAmqpConnectionOptions() {
   return {
@@ -23,12 +24,14 @@ function getAmqpsConnectionOptions() {
   options['key'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_key.pem'))
   options['cert'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_certificate.pem'))
   options['ca'] = fs.readFileSync(path.resolve(certsLocation,'ca_rabbitmq_certificate.pem')) 
+  return options
 }
 function getConnectionOptions() {
-  switch(process.env.RABBITMQ_AMQP_SCHEME || 'amqp'){
-    case 'amqp':
+  let scheme = process.env.RABBITMQ_AMQP_SCHEME || 'amqp'
+  switch(scheme){
+    case "amqp":
       return getAmqpConnectionOptions()
-    case 'amqps':
+    case "amqps":
       return getAmqpsConnectionOptions()
   }  
 }
@@ -40,7 +43,7 @@ module.exports = {
         resolve()
       })
     })
-    let connection = container.connect(getConnectionOptions())
+    let connection = container.connect(connectionOptions)
     let receiver = connection.open_receiver({
       source: 'my-queue',
       target: 'receiver-target',
