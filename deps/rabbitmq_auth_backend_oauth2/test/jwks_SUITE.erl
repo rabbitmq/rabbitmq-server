@@ -17,6 +17,10 @@
                                    open_unmanaged_connection/4, open_unmanaged_connection/5,
                                    close_connection_and_channel/2]).
 -import(rabbit_mgmt_test_util, [amqp_port/1]).
+-import(rabbit_ct_helpers, [
+    set_config/2,
+    get_config/2, get_config/3
+]).
 
 all() ->
     [
