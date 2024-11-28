@@ -7,4 +7,4 @@ TEST_CONFIG_PATH=/oauth
 PROFILES="uaa fakeportal fakeproxy fakeportal-mgt-oauth-provider idp-initiated mgt-prefix uaa-oauth-provider"
 
 source $SCRIPT/../../bin/suite_template $@
-runWith uaa fakeportal fakeproxy
+runWith rabbitmq uaa fakeportal fakeproxy

@@ -513,13 +513,13 @@ elif [[ "$COMMAND" == "stop-rabbitmq" ]]
   fi
 }
 determine_required_components_including_rabbitmq() {
-  if [[ "$@" != *"rabbitmq"* ]]; then
-    REQUIRED_COMPONENTS+=("rabbitmq")
-  fi
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
     REQUIRED_COMPONENTS+=( "$val" )
   }
+  if [[ "$@" != *"rabbitmq"* ]]; then
+    REQUIRED_COMPONENTS+=("rabbitmq")
+  fi
 }
 determine_required_components_excluding_rabbitmq() {
   for (( i=1; i<=$#; i++)) {
