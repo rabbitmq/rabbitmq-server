@@ -42,12 +42,12 @@ module.exports = {
     })
     let connection = container.connect(getConnectionOptions())
     let receiver = connection.open_receiver({
-      source: 'examples',
+      source: 'my-queue',
       target: 'receiver-target',
       name: 'receiver-link'
     })
     let sender = connection.open_sender({
-      target: 'examples',
+      target: 'my-queue',
       source: 'sender-source',
       name: 'sender-link'
     })
