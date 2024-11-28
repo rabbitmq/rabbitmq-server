@@ -9,6 +9,7 @@
 -export([add_signing_key/3,
          decode_and_verify/1,
          get_jwk/2,
+         resolve_resource_server_id/1,
          verify_signing_key/2]).
 
 -export([client_id/1, sub/1, client_id/2, sub/2]).
@@ -79,6 +80,7 @@ decode_and_verify(Token) ->
           end
     end.
 
+-spec resolve_resource_server_id(binary()) -> binary() | {error, term()}.
 resolve_resource_server_id(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of
         {error, _} = Error ->

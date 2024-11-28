@@ -20,8 +20,9 @@
 
 % for testing
 -export([post_process_payload/2, get_expanded_scopes/2]).
-
+-import(uaa_jwt, [resolve_resource_server_id/1]).
 -import(rabbit_data_coercion, [to_map/1]).
+-import(rabbit_oauth2_config, [get_preferred_username_claims/1]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -98,46 +99,28 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
-<<<<<<< HEAD
-  case check_token(NewToken) of
-      %% avoid logging the token
-      {error, _} = E  -> E;
-      {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-        {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
-      {refused, Err} ->
-        {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
-      {ok, DecodedToken} ->
-          Tags = tags_from(DecodedToken),
-
-          {ok, AuthUser#auth_user{tags = Tags,
-                                  impl = fun() -> DecodedToken end}}
-  end.
-=======
-    case resolve_resource_server(NewToken) of
-        {error, _} = Err0 -> Err0;
-        {ResourceServer, _} = Tuple ->
-            case check_token(NewToken, Tuple) of
-                %% avoid logging the token
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
-                {refused, Err} ->
-                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
-                {ok, DecodedToken} ->
-                    CurToken = AuthUser#auth_user.impl,
-                    case ensure_same_username(
-                            ResourceServer#resource_server.preferred_username_claims,
-                            CurToken(), DecodedToken) of 
-                        ok ->
-                            Tags = tags_from(DecodedToken),
-                            {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
-                        {error, mismatch_username_after_token_refresh} -> 
-                            {refused, 
-                                "Not allowed to change username on refreshed token"}
-                    end
+    case check_token(NewToken) of
+        %% avoid logging the token
+        {error, _} = E  -> E;
+        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+        {refused, Err} ->
+            {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+        {ok, DecodedToken} ->
+            ResourceServerId = resolve_resource_server_id(DecodedToken),        
+            CurToken = AuthUser#auth_user.impl,
+            case ensure_same_username(
+                            get_preferred_username_claims(ResourceServerId),
+                            CurToken(), DecodedToken) of           
+                ok -> 
+                    Tags = tags_from(DecodedToken),
+                    {ok, AuthUser#auth_user{tags = Tags,
+                                            impl = fun() -> DecodedToken end}};
+                {error, mismatch_username_after_token_refresh} -> 
+                    {refused, 
+                        "Not allowed to change username on refreshed token"}
             end
     end.
->>>>>>> 3718fe3289 (Prevent change of username on token refresh)
 
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
     case DecodedTokenFun() of
@@ -162,37 +145,20 @@ authenticate(_, AuthProps0) ->
           {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
         {ok, DecodedToken} ->
             Func = fun(Token0) ->
-                        Username = username_from(rabbit_oauth2_config:get_preferred_username_claims(), Token0),
-                        Tags     = tags_from(Token0),
-
-                        {ok, #auth_user{username = Username,
-                                        tags = Tags,
-                                        impl = fun() -> Token0 end}}
-                   end,
+                ResourceServerId = resolve_resource_server_id(Token0),
+                Username = username_from(
+                    get_preferred_username_claims(ResourceServerId), 
+                    Token0),
+                Tags     = tags_from(Token0),
+                {ok, #auth_user{username = Username,
+                                tags = Tags,
+                                impl = fun() -> Token0 end}}
+            end,
             case with_decoded_token(DecodedToken, Func) of
                 {error, Err} ->
                     {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-<<<<<<< HEAD
                 Else ->
                     Else
-=======
-                {ok, DecodedToken} ->                    
-                    Func = fun(Token0) ->
-                                Username = username_from(
-                                    ResourceServer#resource_server.preferred_username_claims,
-                                    Token0),
-                                Tags     = tags_from(Token0),
-                                {ok, #auth_user{username = Username,
-                                                tags = Tags,
-                                                impl = fun() -> Token0 end}}
-                           end,
-                    case with_decoded_token(DecodedToken, Func) of
-                        {error, Err} ->
-                            {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                        Else ->
-                            Else
-                    end
->>>>>>> 3718fe3289 (Prevent change of username on token refresh)
             end
     end.
 
