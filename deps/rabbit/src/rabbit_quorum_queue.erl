@@ -1346,7 +1346,7 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
                         maps:get(id, Conf)
                 end,
             case ra:add_member(Members, ServerIdSpec, Timeout) of
-                {ok, _, Leader} ->
+                {ok, {RaIndex, RaTerm}, Leader} ->
                     Fun = fun(Q1) ->
                                   Q2 = update_type_state(
                                          Q1, fun(#{nodes := Nodes} = Ts) ->
@@ -1354,6 +1354,19 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
                                              end),
                                   amqqueue:set_pid(Q2, Leader)
                           end,
+                    %% The `ra:member_add/3` call above returns before the
+                    %% change is committed. This is ok for that addition but
+                    %% any follow-up changes to the cluster might be rejected
+                    %% with the `cluster_change_not_permitted` error.
+                    %%
+                    %% Instead of changing other places to wait or retry their
+                    %% cluster membership change, we wait for the current add
+                    %% to be applied using a conditional leader query before
+                    %% proceeding and returning.
+                    {ok, _, _} = ra:leader_query(
+                                   Leader,
+                                   {erlang, is_list, []},
+                                   #{condition => {applied, {RaIndex, RaTerm}}}),
                     _ = rabbit_amqqueue:update(QName, Fun),
                     rabbit_log:info("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
                     ok;
