@@ -30,7 +30,7 @@ do
   fi
   echo -e "=== $TEST_STATUS $SUITE ==========================================="
   echo " "
-done <<< "$(cat $SCRIPT/$SUITE_FILE | sort)"
+done <<< "$(cat $SCRIPT/$SUITE_FILE)"
 
 echo -e "=== Summary (${TOTAL_SUITES}/${GREEN}${#SUCCESSFUL_SUITES[@]}/${RED}${#FAILED_SUITES[@]}${NC}) ============================================"
 if [ ${#SUCCESSFUL_SUITES[@]} -gt 0 ]; then echo -e " > ${GREEN}Successful suites ${NC}"; fi
