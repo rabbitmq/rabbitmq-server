@@ -22,6 +22,8 @@
 
 %% End of Key JWT fields
 
+-type raw_jwt_token() :: binary() | #{binary() => any()}.
+-type decoded_jwt_token() :: #{binary() => any()}.
 
 -record(internal_oauth_provider, {
     id :: oauth_provider_id(),
