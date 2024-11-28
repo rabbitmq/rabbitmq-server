@@ -47,7 +47,7 @@ start_keycloak() {
     --https-certificate-file=/opt/keycloak/data/import/server_keycloak_certificate.pem \
     --https-certificate-key-file=/opt/keycloak/data/import/server_keycloak_key.pem
 
-  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL $MOUNT_KEYCLOAK_CONF_DIR/ca_certificate.pem
+  wait_for_oidc_endpoint keycloak $KEYCLOAK_URL $MOUNT_KEYCLOAK_CONF_DIR/ca_keycloak_certificate.pem
   end "Keycloak is ready"
 
   print " Note: If you modify keycloak configuration. Make sure to run the following command to export the configuration."
