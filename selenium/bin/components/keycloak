@@ -17,6 +17,9 @@ init_keycloak() {
   print "> KEYCLOAK_CONFIG_DIR: ${KEYCLOAK_CONFIG_DIR}"
   print "> KEYCLOAK_URL: ${KEYCLOAK_URL}"
   print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi keycloak $KEYCLOAK_CONFIG_DIR
+
 }
 start_keycloak() {
   begin "Starting keycloak ..."

@@ -10,6 +10,13 @@ init_rabbitmq() {
   [[ -z "${OAUTH_SERVER_CONFIG_BASEDIR}" ]] || print "> OAUTH_SERVER_CONFIG_BASEDIR: ${OAUTH_SERVER_CONFIG_BASEDIR}"
   [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
 
+  if [[ ! -d "${RABBITMQ_CONFIG_DIR}/certs" ]]; then 
+    mkdir ${RABBITMQ_CONFIG_DIR}/certs
+  fi 
+  generate-ca-server-client-kpi rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-server-keystore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-client-keystore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
+  generate-truststore-if-required rabbitmq $RABBITMQ_CONFIG_DIR/certs
 }
 
 start_rabbitmq() {

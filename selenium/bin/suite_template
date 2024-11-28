@@ -375,6 +375,99 @@ generate_env_file() {
     source $ENV_FILE
     end "Finished generating env file."
 }
+generate-ca-server-client-kpi() {
+  NAME=$1
+  FOLDER=$2
+  if [[ ! -f "${FOLDER}/server_${NAME}_key.pem" ]]; then
+	  do_generate-ca-server-client-kpi $1 $2
+  fi
+}
+do_generate-ca-server-client-kpi() {
+  NAME=$1
+  FOLDER=$2
+  ROOT=$SELENIUM_ROOT_FOLDER
+
+  begin "Generate certs for $NAME"
+
+  if [ ! -d "$ROOT/tls-gen" ]; then
+    git clone https://github.com/michaelklishin/tls-gen $ROOT/tls-gen
+  fi
+
+  print "Generating CA and Server (localhost and $NAME) PKI under $FOLDER ..."
+  mkdir -p $FOLDER
+
+  CUR_DIR=$(pwd)
+  cd $ROOT/tls-gen/basic
+  cp openssl.cnf openssl.cnf.bak
+  if [ -f "$FOLDER/openssl.cnf.in" ]; then     
+    cp $FOLDER/openssl.cnf.in >> openssl.cnf
+  fi 
+  if [[ ! -z "${DEBUG}" ]]; then
+    print "Used this openssl.conf"
+    cat openssl.cnf
+  fi
+  make CN=$NAME CLIENT_ALT_NAME=internaluser
+  cp openssl.cnf.bak openssl.cnf  
+  cd $CUR_DIR
+
+  cp $ROOT/tls-gen/basic/result/ca_certificate.pem $FOLDER/ca_${NAME}_certificate.pem
+  cp $ROOT/tls-gen/basic/result/server_${NAME}_certificate.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/server_${NAME}_key.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/server_${NAME}.p12 $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}_certificate.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}_key.pem $FOLDER
+  cp $ROOT/tls-gen/basic/result/client_${NAME}.p12 $FOLDER
+  chmod ugo+r $FOLDER/*.pem
+  end "SSL Certificates generated for $NAME under $FOLDER"
+}
+generate-truststore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [[ ! -f "${FOLDER}/truststore.jks" ]]; then
+    keytool -import \
+      -trustcacerts \
+      -file ${FOLDER}/ca_${NAME}_certificate.pem \
+      -keystore ${FOLDER}/truststore.jks \
+      -storepass foobar \
+			-noprompt
+  fi
+}
+generate-server-keystore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [ ! -f "${FOLDER}/server_${NAME}.jks" ]; then
+    keytool -importkeystore \
+        -destkeystore ${FOLDER}/server_${NAME}.jks \
+        -srckeystore ${FOLDER}/server_${NAME}.p12 \
+        -deststoretype pkcs12 \
+        -srcstoretype pkcs12 \
+        -alias 1 \
+        -destalias server-${NAME}-tls \
+        -deststorepass foobar \
+        -destkeypass foobar \
+        -srcstorepass "" \
+        -srckeypass "" \
+        -noprompt
+  fi
+}
+generate-client-keystore-if-required() {
+  NAME=$1
+  FOLDER=$2
+  if [ ! -f "${FOLDER}/client_${NAME}.jks" ]; then
+    keytool -importkeystore \
+        -destkeystore ${FOLDER}/client_${NAME}.jks \
+        -srckeystore ${FOLDER}/client_${NAME}.p12 \
+        -deststoretype pkcs12 \
+        -srcstoretype pkcs12 \
+        -alias 1 \
+        -destalias client-${NAME}-tls \
+        -deststorepass foobar \
+        -destkeypass foobar \
+        -srcstorepass "" \
+        -srckeypass "" \
+        -noprompt
+  fi
+}
 run() {
   runWith rabbitmq
 }
