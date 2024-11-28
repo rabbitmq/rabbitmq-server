@@ -20,6 +20,7 @@ on:
       - .github/workflows/test-authnz.yaml
   pull_request:
     paths:
+      - 'selenium/**'
       - 'deps/rabbit/**'
       - 'deps/rabbitmq_auth_/**'
       - 'deps/rabbitmq_mqtt/**'
