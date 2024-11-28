@@ -663,10 +663,14 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
     ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
-handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
+handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg},
+            #ch{consumer_mapping = CMap} = State)
+  when is_map_key(CTag, CMap) ->
     ok = send(Msg, State),
     noreply(consumer_monitor(CTag, State));
-
+handle_cast({command, #'basic.consume_ok'{}}, State) ->
+    %% a consumer was not found so just ignore this
+    noreply(State);
 handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
