@@ -16,6 +16,9 @@ init_uaa() {
   print "> UAA_CONFIG_DIR: ${UAA_CONFIG_DIR}"
   print "> UAA_URL: ${UAA_URL}"
   print "> UAA_DOCKER_IMAGE: ${UAA_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi uaa $UAA_CONFIG_DIR
+  generate-server-keystore-if-required uaa $UAA_CONFIG_DIR
 }
 start_uaa() {
   begin "Starting UAA ..."

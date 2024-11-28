@@ -9,6 +9,9 @@ init_devkeycloak() {
   print "> DEVKEYCLOAK_CONFIG_DIR: ${DEVKEYCLOAK_CONFIG_DIR}"
   print "> DEVKEYCLOAK_URL: ${DEVKEYCLOAK_URL}"
   print "> DEVKEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi devkeycloak $DEVKEYCLOAK_CONFIG_DIR
+
 }
 ensure_devkeycloak() {
   if docker ps | grep devkeycloak &> /dev/null; then
@@ -45,7 +48,7 @@ start_devkeycloak() {
     --https-certificate-key-file=/opt/keycloak/data/import/server_devkeycloak_key.pem \
     --hostname=devkeycloak --hostname-admin=devkeycloak --https-port=8442
 
-  wait_for_oidc_endpoint devkeycloak $DEVKEYCLOAK_URL $MOUNT_DEVKEYCLOAK_CONF_DIR/ca_certificate.pem
+  wait_for_oidc_endpoint devkeycloak $DEVKEYCLOAK_URL $MOUNT_DEVKEYCLOAK_CONF_DIR/ca_devkeycloak_certificate.pem
   end "devkeycloak is ready"
   print " Note: If you modify devkeycloak configuration, make sure to run the following command to export the configuration."
   print " docker exec -it devkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"

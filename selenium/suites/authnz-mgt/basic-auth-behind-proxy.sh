@@ -6,4 +6,4 @@ TEST_CASES_PATH=/basic-auth
 PROFILES="proxy"
 
 source $SCRIPT/../../bin/suite_template
-runWith proxy
+runWith rabbitmq proxy
