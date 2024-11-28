@@ -38,15 +38,11 @@
 -endif.
 
 %%
-%% App environment
+%% Types
 %%
 
-
-%% a term defined for Rich Authorization Request tokens to identify a RabbitMQ permission
-%% verify server_server_id aud field is on the aud field
-%% a term used by the IdentityServer community
-%% scope aliases map "role names" to a set of scopes
-
+-type ok_extracted_auth_user() :: {ok, rabbit_types:auth_user()}.
+-type auth_user_extraction_fun() :: fun((decoded_jwt_token()) -> any()).
 
 %%
 %% API
@@ -176,9 +172,6 @@ authenticate(_, AuthProps0) ->
                     end
             end
     end.
-
--type ok_extracted_auth_user() :: {ok, rabbit_types:auth_user()}.
--type auth_user_extraction_fun() :: fun((decoded_jwt_token()) -> any()).
 
 -spec with_decoded_token(Token, Fun) -> Result
     when Token :: decoded_jwt_token(),
