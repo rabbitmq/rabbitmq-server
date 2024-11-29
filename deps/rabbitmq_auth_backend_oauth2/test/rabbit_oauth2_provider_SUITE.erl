@@ -474,23 +474,13 @@ get_oauth_provider_has_jwks_uri(Config) ->
 get_oauth_provider_has_proxy(Config) ->
     {ok, OAuthProvider} = get_oauth_provider(
         ?config(oauth_provider_id, Config), [jwks_uri]),    
-    ct:log("key_config: ~p",
-        [ application:get_all_env(rabbitmq_auth_backend_oauth2)]),
-    ct:log("oauthprovider: ~p", [OAuthProvider]),
     ?assertEqual(false, 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
-
-    ct:log("Parsed : ~p", [uri_string:parse("http://idp:8080")]),
-
-    Options = oauth2_client:extract_proxy_options_from_url("http://idp:8080"),
-    ct:log("Options1: ~p", [Options]),
-    Options2 = oauth2_client:extract_proxy_options_from_url(<<"http://idp:8080">>),
-    ct:log("Options2: ~p", [Options2]),
 
     ?assertEqual(?config(proxy_port, Config), 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
     ?assertEqual(?config(proxy_hostname, Config), 
-        OAuthProvider#oauth_provider.proxy_options#proxy_options.hostname),
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.host),
     ?assertEqual(?config(proxy_username, Config), 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
     ?assertEqual(?config(proxy_password, Config), 
@@ -500,16 +490,13 @@ get_oauth_provider_has_proxy(Config) ->
 get_oauth_provider_has_https_proxy(Config) ->
     {ok, OAuthProvider} = get_oauth_provider(
         ?config(oauth_provider_id, Config), [jwks_uri]),    
-    ct:log("key_config: ~p",
-        [ application:get_all_env(rabbitmq_auth_backend_oauth2)]),
-    ct:log("oauthprovider: ~p", [OAuthProvider]),
     ?assertEqual(true, 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
 
     ?assertEqual(?config(proxy_port, Config), 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
     ?assertEqual(?config(proxy_hostname, Config), 
-        OAuthProvider#oauth_provider.proxy_options#proxy_options.hostname),
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.host),
     ?assertEqual(?config(proxy_username, Config), 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
     ?assertEqual(?config(proxy_password, Config), 

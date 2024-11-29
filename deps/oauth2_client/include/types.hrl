@@ -22,7 +22,7 @@
 
 -record(proxy_options, {
     https :: boolean(),
-    hostname :: uri_string:uri_string(),
+    host :: uri_string:uri_string(),
     port :: integer(),
     username :: option(string() | binary()),
     password :: option(string() | binary())
