@@ -409,15 +409,15 @@ lookup_root_oauth_provider() ->
 extract_proxy_options_from_url(URL) when is_binary(URL) ->
     extract_proxy_options_from_url(binary_to_list(URL));
 extract_proxy_options_from_url(URL) when is_list(URL) ->
-    Parsed = uri_string:parse(URL),
+    #{host := Host, port := Port, scheme := Scheme} = uri_string:parse(URL),
     #proxy_options{
         https = 
-            case maps:get("scheme", Parsed, "http") of 
+            case Scheme of 
                 "http" -> false;
                 "https" -> true
             end,
-        hostname = maps:get("host", Parsed, undefined),
-        port = maps:get("port", Parsed, undefined)
+        host = Host,
+        port = Port
     }.
         
 -spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options() | undefined.
@@ -583,7 +583,7 @@ get_proxy_if_any(ProxyOptions) ->
         undefined -> 
             []; 
         Proxy -> 
-            P = {Proxy#proxy_options.hostname, Proxy#proxy_options.port},
+            P = {Proxy#proxy_options.host, Proxy#proxy_options.port},
             case Proxy#proxy_options.https of 
                 true -> [{https_proxy, P}];
                 false -> [{proxy, P}]
@@ -705,7 +705,7 @@ format_proxy_options(ProxyOptions) ->
     lists:flatten(io_lib:format("{https: ~p, hostname: ~p, port: ~p, username: ~p, " ++
         "password: ~p }", [
         ProxyOptions#proxy_options.https,
-        ProxyOptions#proxy_options.hostname,
+        ProxyOptions#proxy_options.host,
         ProxyOptions#proxy_options.port,
         ProxyOptions#proxy_options.username,
         ProxyOptions#proxy_options.password])).
