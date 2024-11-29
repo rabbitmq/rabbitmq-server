@@ -173,37 +173,6 @@ get_algorithms(OAuthProviderId) ->
         V -> proplists:get_value(algorithms, V, undefined)
     end.
 
--spec get_proxy(oauth_provider_id()) -> list() | undefined.
-get_proxy(root) ->
-    proplists:get_value(proxy, get_env(key_config, []), undefined);
-get_proxy(OAuthProviderId) ->
-    OAuthProviders = get_env(oauth_providers, #{}),
-    case maps:get(OAuthProviderId, OAuthProviders, undefined) of
-        undefined -> undefined;
-        V -> proplists:get_value(proxy, V, undefined)
-    end.
-
--spec get_proxy_auth(oauth_provider_id()) -> {list(),list()} | undefined.
-get_proxy_auth(root) ->
-    get_proxy_auth(
-        proplists:get_value(proxy_username, get_env(key_config, []), undefined),
-        proplists:get_value(proxy_password, get_env(key_config, []), undefined)
-    );
-get_proxy_auth(OAuthProviderId) ->
-    OAuthProviders = get_env(oauth_providers, #{}),
-    case maps:get(OAuthProviderId, OAuthProviders, undefined) of
-        undefined -> undefined;
-        V -> get_proxy_auth(
-                proplists:get_value(proxy_username, V, undefined),
-                proplists:get_value(proxy_password, V, undefined)
-            )        
-    end.
-get_proxy_auth(Username, Password) ->
-    case {Username, Password} of 
-        {undefined, _} -> undefined;
-        {_, undefined} -> undefined;
-        {_,_} = Auth -> Auth 
-    end. 
 
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
