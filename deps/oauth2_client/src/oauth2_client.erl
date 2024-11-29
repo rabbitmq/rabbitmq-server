@@ -8,7 +8,7 @@
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
-        get_openid_configuration/2,
+        get_openid_configuration/3,
         build_openid_discovery_endpoint/3,         
         merge_openid_configuration/2,
         merge_oauth_provider/2,
@@ -94,8 +94,9 @@ drop_trailing_path_separator(Path) when is_list(Path) ->
     end.
 
 -spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
-    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(DiscoverEndpoint, TLSOptions) ->    
+    ssl:tls_option() | [], proxy_options() | undefined) -> 
+        {ok, openid_configuration()} | {error, term()}.
+get_openid_configuration(DiscoverEndpoint, TLSOptions, _ProxyOptions) ->    
     rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
         format_ssl_options(TLSOptions)]),
     Options = [],
@@ -283,7 +284,8 @@ download_oauth_provider(OAuthProvider) ->
         undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
         URL ->
             rabbit_log:debug("Downloading oauth_provider using ~p ", [URL]),
-            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
+            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider),
+                    OAuthProvider#oauth_provider.proxy_options) of
                 {ok, OpenIdConfiguration} ->
                     {ok, update_oauth_provider_endpoints_configuration(
                         merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
@@ -527,6 +529,7 @@ get_ssl_options_if_any(OAuthProvider) ->
         undefined -> [];
         Options ->  [{ssl, Options}]
     end.
+
 get_timeout_of_default(Timeout) ->
     case Timeout of
         undefined -> [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
