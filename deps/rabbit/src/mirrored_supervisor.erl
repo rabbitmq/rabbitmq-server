@@ -345,7 +345,7 @@ handle_info({'DOWN', _Ref, process, Pid, _Reason},
                            child_order = ChildOrder}) ->
     %% No guarantee pg will have received the DOWN before us.
     R = case lists:sort(pg:get_members(Group)) -- [Pid] of
-            [O | _] -> ChildSpecs = update_all(O, Pid),
+            [O | _] -> ChildSpecs = retry_update_all(O, Pid),
                        [start(Delegate, ChildSpec)
                         || ChildSpec <- restore_child_order(ChildSpecs,
                                                             ChildOrder)];
@@ -427,6 +427,22 @@ check_stop(Group, Delegate, Id) ->
     end.
 
 id({Id, _, _, _, _, _}) -> Id.
+
+retry_update_all(O, Pid) ->
+    retry_update_all(O, Pid, 10000).
+
+retry_update_all(O, Pid, TimeLeft) when TimeLeft > 0 ->
+    case update_all(O, Pid) of
+        List when is_list(List) ->
+            List;
+        {error, timeout} ->
+            Sleep = 200,
+            TimeLeft1 = TimeLeft - Sleep,
+            timer:sleep(Sleep),
+            retry_update_all(O, Pid, TimeLeft1)
+    end;
+retry_update_all(O, Pid, _TimeLeft) ->
+    update_all(O, Pid).
 
 update_all(Overall, OldOverall) ->
     rabbit_db_msup:update_all(Overall, OldOverall).
