@@ -21,7 +21,9 @@
 -type openid_configuration() :: #openid_configuration{}.
 
 -record(proxy_options, {
-    proxy :: uri_string:uri_string(),
+    https :: boolean(),
+    hostname :: uri_string:uri_string(),
+    port :: integer(),
     username :: option(string() | binary()),
     password :: option(string() | binary())
 }).

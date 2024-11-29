@@ -13,7 +13,8 @@
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
-        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1
+        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1,
+        extract_proxy_options_from_url/1
         ]).
 
 -include("oauth2_client.hrl").
@@ -29,8 +30,9 @@ get_access_token(OAuthProvider, Request) ->
     Type = ?CONTENT_URLENCODED,
     Body = build_access_token_request_body(Request),
     HTTPOptions = get_ssl_options_if_any(OAuthProvider) ++
-        get_timeout_of_default(Request#access_token_request.timeout),
-    Options = [],
+        get_timeout_of_default(Request#access_token_request.timeout) ++ 
+        get_proxy_auth_if_any(OAuthProvider#oauth_provider.proxy_options),
+    Options = get_proxy_if_any(OAuthProvider#oauth_provider.proxy_options),
     Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
     parse_access_token_response(Response).
 
@@ -43,8 +45,9 @@ refresh_access_token(OAuthProvider, Request) ->
     Type = ?CONTENT_URLENCODED,
     Body = build_refresh_token_request_body(Request),
     HTTPOptions = get_ssl_options_if_any(OAuthProvider) ++
-        get_timeout_of_default(Request#refresh_token_request.timeout),
-    Options = [],
+        get_timeout_of_default(Request#refresh_token_request.timeout) ++ 
+        get_proxy_auth_if_any(OAuthProvider#oauth_provider.proxy_options),
+    Options = get_proxy_if_any(OAuthProvider#oauth_provider.proxy_options),
     Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
     parse_access_token_response(Response).
 
@@ -96,11 +99,12 @@ drop_trailing_path_separator(Path) when is_list(Path) ->
 -spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
     ssl:tls_option() | [], proxy_options() | undefined) -> 
         {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(DiscoverEndpoint, TLSOptions, _ProxyOptions) ->    
+get_openid_configuration(DiscoverEndpoint, TLSOptions, ProxyOptions) ->    
     rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
         format_ssl_options(TLSOptions)]),
-    Options = [],
-    Response = httpc:request(get, {DiscoverEndpoint, []}, TLSOptions, Options),
+    Options = get_proxy_if_any(ProxyOptions),
+    Response = httpc:request(get, {DiscoverEndpoint, []},
+        TLSOptions ++ get_proxy_auth_if_any(ProxyOptions), Options),
     parse_openid_configuration_response(Response).
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
@@ -401,13 +405,28 @@ lookup_root_oauth_provider() ->
         proxy_options = extract_proxy_options(Map)
     }.
 
--spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options().
+-spec extract_proxy_options_from_url(list()|binary()) -> proxy_options().
+extract_proxy_options_from_url(URL) when is_binary(URL) ->
+    extract_proxy_options_from_url(binary_to_list(URL));
+extract_proxy_options_from_url(URL) when is_list(URL) ->
+    Parsed = uri_string:parse(URL),
+    #proxy_options{
+        https = 
+            case maps:get("scheme", Parsed, "http") of 
+                "http" -> false;
+                "https" -> true
+            end,
+        hostname = maps:get("host", Parsed, undefined),
+        port = maps:get("port", Parsed, undefined)
+    }.
+        
+-spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options() | undefined.
 extract_proxy_options(List) when is_list(List) ->
     case proplists:get_value(proxy, List, undefined) of 
         undefined -> undefined;
         URL -> 
-            #proxy_options{
-                proxy = URL,
+            Options = extract_proxy_options_from_url(URL),
+            Options#proxy_options{
                 username = proplists:get_value(proxy_username, List, undefined),
                 password = proplists:get_value(proxy_password, List, undefined)
             }
@@ -416,8 +435,8 @@ extract_proxy_options(Map) ->
     case maps:get(proxy, Map, undefined) of
         undefined -> undefined;
         URL -> 
-            #proxy_options{
-                proxy = URL,
+            Options = extract_proxy_options_from_url(URL),            
+            Options#proxy_options{
                 username = maps:get(proxy_username, Map, undefined),
                 password = maps:get(proxy_password, Map, undefined)
             }
@@ -559,6 +578,30 @@ get_timeout_of_default(Timeout) ->
         Timeout -> [{timeout, Timeout}]
     end.
 
+get_proxy_if_any(ProxyOptions) ->
+    case ProxyOptions of
+        undefined -> 
+            []; 
+        Proxy -> 
+            P = {Proxy#proxy_options.hostname, Proxy#proxy_options.port},
+            case Proxy#proxy_options.https of 
+                true -> [{https_proxy, P}];
+                false -> [{proxy, P}]
+            end
+    end.
+
+get_proxy_auth_if_any(ProxyOptions) ->
+    case ProxyOptions of
+        undefined -> 
+            []; 
+        Proxy -> 
+            case {Proxy#proxy_options.username, Proxy#proxy_options.password} of 
+                {undefined, _} -> [];
+                {_, undefined} -> [];
+                {_, _} = Auth -> [{proxy_auth, Auth}]
+            end
+    end.
+
 is_json(?CONTENT_JSON) -> true;
 is_json(_) -> false.
 
@@ -654,14 +697,16 @@ format_ssl_options(TlsOptions) ->
         proplists:get_value(cacertfile, TlsOptions),
         CaCertsCount])).
 
--spec format_proxy_options(proxy_options()) -> string().
+-spec format_proxy_options(proxy_options()|undefined) -> string().
 format_proxy_options(undefined) ->
     lists:flatten(io_lib:format("{no proxy}", []));
 
 format_proxy_options(ProxyOptions) ->
-    lists:flatten(io_lib:format("{proxy: ~p, username: ~p, " ++
+    lists:flatten(io_lib:format("{https: ~p, hostname: ~p, port: ~p, username: ~p, " ++
         "password: ~p }", [
-        ProxyOptions#proxy_options.proxy,
+        ProxyOptions#proxy_options.https,
+        ProxyOptions#proxy_options.hostname,
+        ProxyOptions#proxy_options.port,
         ProxyOptions#proxy_options.username,
         ProxyOptions#proxy_options.password])).
 
