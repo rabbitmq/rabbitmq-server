@@ -197,7 +197,11 @@ start_consul(Config) ->
     ct:pal("Starting Consul daemon"),
     ConsulBin = ?config(consul_bin, Config),
     ConsulConfDir = ?config(consul_conf_dir, Config),
-    Cmd = [ConsulBin, "agent", "-config-dir", ConsulConfDir],
+    PrivDir = ?config(priv_dir, Config),
+    LogFile = filename:join(PrivDir, "consul.log"),
+    Cmd = [ConsulBin, "agent",
+           "-config-dir", ConsulConfDir,
+           "-log-file", LogFile],
     ConsulPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
     rabbit_ct_helpers:set_config(Config, {consul_pid, ConsulPid}).
 
