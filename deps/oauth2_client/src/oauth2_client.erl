@@ -305,7 +305,7 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
 
 get_root_oauth_provider(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_root_oauth_provider(),
-    rabbit_log:debug("Using root oauth_provider ~p", 
+    ct:log("Using root oauth_provider ~p", 
         [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
@@ -397,8 +397,31 @@ lookup_root_oauth_provider() ->
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
-        ssl_options = extract_ssl_options_as_list(Map)
+        ssl_options = extract_ssl_options_as_list(Map),
+        proxy_options = extract_proxy_options(Map)
     }.
+
+-spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options().
+extract_proxy_options(List) when is_list(List) ->
+    case proplists:get_value(proxy, List, undefined) of 
+        undefined -> undefined;
+        URL -> 
+            #proxy_options{
+                proxy = URL,
+                username = proplists:get_value(proxy_username, List, undefined),
+                password = proplists:get_value(proxy_password, List, undefined)
+            }
+    end;
+extract_proxy_options(Map) ->
+    case maps:get(proxy, Map, undefined) of
+        undefined -> undefined;
+        URL -> 
+            #proxy_options{
+                proxy = URL,
+                username = maps:get(proxy_username, Map, undefined),
+                password = maps:get(proxy_password, Map, undefined)
+            }
+    end.
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
@@ -591,7 +614,9 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options = 
             extract_ssl_options_as_list(maps:from_list(
-                proplists:get_value(https, PropList, [])))
+                proplists:get_value(https, PropList, []))),
+        proxy_options = 
+            extract_proxy_options(PropList)
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
@@ -629,6 +654,17 @@ format_ssl_options(TlsOptions) ->
         proplists:get_value(cacertfile, TlsOptions),
         CaCertsCount])).
 
+-spec format_proxy_options(proxy_options()) -> string().
+format_proxy_options(undefined) ->
+    lists:flatten(io_lib:format("{no proxy}", []));
+
+format_proxy_options(ProxyOptions) ->
+    lists:flatten(io_lib:format("{proxy: ~p, username: ~p, " ++
+        "password: ~p }", [
+        ProxyOptions#proxy_options.proxy,
+        ProxyOptions#proxy_options.username,
+        ProxyOptions#proxy_options.password])).
+
 format_oauth_provider_id(root) -> "<from keyconfig>";
 format_oauth_provider_id(Id) -> binary_to_list(Id).
 
@@ -637,7 +673,7 @@ format_oauth_provider(OAuthProvider) ->
     lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
         " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "jwks_uri: ~p, ssl_options: ~p }", [
+        "jwks_uri: ~p, ssl_options: ~p, proxy_options: ~p}", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.discovery_endpoint,
@@ -645,7 +681,8 @@ format_oauth_provider(OAuthProvider) ->
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
         OAuthProvider#oauth_provider.jwks_uri,
-        format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
+        format_ssl_options(OAuthProvider#oauth_provider.ssl_options),
+        format_proxy_options(OAuthProvider#oauth_provider.proxy_options)])).
 
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
