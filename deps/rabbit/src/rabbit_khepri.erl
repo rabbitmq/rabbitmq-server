@@ -827,7 +827,8 @@ cli_cluster_status() ->
             Nodes = locally_known_nodes(),
             [{nodes, [{disc, Nodes}]},
              {running_nodes, [N || N <- Nodes, rabbit_nodes:is_running(N)]},
-             {cluster_name, rabbit_nodes:cluster_name()}];
+             {cluster_name, rabbit_nodes:cluster_name()},
+             {partitions, []}];
         false ->
             []
     end.
