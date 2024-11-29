@@ -3,6 +3,7 @@ on:
   push:
     branches:
     - main
+    - v4.0.x
     paths:
     - deps/**
     - scripts/**
