@@ -17,6 +17,10 @@
                                    open_unmanaged_connection/4, open_unmanaged_connection/5,
                                    close_connection_and_channel/2]).
 -import(rabbit_mgmt_test_util, [amqp_port/1]).
+-import(rabbit_ct_helpers, [
+    set_config/2,
+    get_config/2, get_config/3
+]).
 
 all() ->
     [
@@ -45,7 +49,8 @@ groups() ->
         test_failed_connection_with_a_token_with_insufficient_resource_permission,
         test_failed_connection_with_algorithm_restriction,
         test_failed_token_refresh_case1,
-        test_failed_token_refresh_case2
+        test_failed_token_refresh_case2,
+        cannot_change_username_on_refreshed_token
         ]},
     {no_peer_verification, [], [
         {group, happy_path},
@@ -531,6 +536,11 @@ generate_valid_token(Config, Jwk, Scopes, Audience) ->
     IncludeKid = rabbit_ct_helpers:get_config(Config, include_kid, true),
     ?UTIL_MOD:sign_token_hs(Token, Jwk, IncludeKid).
 
+generate_valid_token_with_sub(Config, Jwk, Scopes, Sub) ->
+    Token = ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token_with_scopes(Scopes), Sub),
+    IncludeKid = rabbit_ct_helpers:get_config(Config, include_kid, true),
+    ?UTIL_MOD:sign_token_hs(Token, Jwk, IncludeKid).
+
 generate_valid_token_with_extra_fields(Config, ExtraFields) ->
     Jwk = case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
               undefined -> ?UTIL_MOD:fixture_jwk();
@@ -911,6 +921,29 @@ test_failed_token_refresh_case2(Config) ->
        amqp_connection:open_channel(Conn)),
 
     close_connection(Conn).
+
+cannot_change_username_on_refreshed_token(Config) ->
+    Jwk = 
+        case get_config(Config, fixture_jwk) of
+            undefined -> ?UTIL_MOD:fixture_jwk();
+            Value     -> Value
+        end,
+    {_, CurToken} = generate_valid_token(Config, Jwk, <<"oldUsername">>, [
+        <<"rabbitmq.configure:vhost4/*">>,
+        <<"rabbitmq.write:vhost4/*">>,
+        <<"rabbitmq.read:vhost4/*">>]),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, 
+                <<"oldUsername">>, CurToken),
+   
+    {_, RefreshToken} = generate_valid_token_with_sub(Config, Jwk, <<"newUsername">>,
+        [<<"rabbitmq.configure:vhost4/*">>,
+         <<"rabbitmq.write:vhost4/*">>,
+         <<"rabbitmq.read:vhost4/*">>]),
+
+    %% the error is communicated asynchronously via a connection-level error
+    ?assertException(exit, _, amqp_connection:update_secret(Conn, RefreshToken,
+        <<"token refresh">>)).
+
 
 test_failed_connection_with_algorithm_restriction(Config) ->
     {_Algo, Token} = rabbit_ct_helpers:get_config(Config, fixture_jwt),

@@ -9,6 +9,7 @@
 -export([add_signing_key/3,
          decode_and_verify/1,
          get_jwk/2,
+         resolve_resource_server_id/1,
          verify_signing_key/2]).
 
 -export([client_id/1, sub/1, client_id/2, sub/2]).
@@ -79,6 +80,14 @@ decode_and_verify(Token) ->
           end
     end.
 
+-spec resolve_resource_server_id(binary()|map()) -> binary() | {error, term()}.
+resolve_resource_server_id(Token) when is_map(Token) ->
+    case maps:get(<<"aud">>, Token, undefined) of
+        undefined ->
+            {error, audience_not_found_in_token};
+        Audience ->
+            rabbit_oauth2_config:get_resource_server_id_for_audience(Audience)
+    end;
 resolve_resource_server_id(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of
         {error, _} = Error ->
@@ -86,6 +95,7 @@ resolve_resource_server_id(Token) ->
         {ok, Audience} ->
             rabbit_oauth2_config:get_resource_server_id_for_audience(Audience)
     end.
+
 
 -spec get_jwk(binary(), oauth_provider_id()) -> {ok, map()} | {error, term()}.
 get_jwk(KeyId, OAuthProviderId) ->
