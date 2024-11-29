@@ -68,6 +68,9 @@ verify_provider() -> [
     ]}, 
     {oauth_provider_with_proxy, [], [
         get_oauth_provider_has_proxy
+    ]},
+    {oauth_provider_with_https_proxy, [], [
+        get_oauth_provider_has_https_proxy
     ]}
 ].
 
@@ -154,7 +157,7 @@ init_per_group(with_resource_server_id, Config) ->
 
 init_per_group(oauth_provider_with_proxy, Config) ->
     Proxy = [
-        {proxy, build_url_to_oauth_provider(<<"/">>)},
+        {proxy, "http://idp:8080"},
         {proxy_username, <<"user1">>},
         {proxy_password, <<"pwd1">>}
     ],
@@ -167,7 +170,30 @@ init_per_group(oauth_provider_with_proxy, Config) ->
             OAuthProvider = maps:get(Id, OAuthProviders, []),
             set_env(oauth_providers, maps:put(Id, Proxy ++ OAuthProvider, OAuthProviders))
     end,
-    Proxy ++ Config;
+    [{proxy_hostname, "idp"},
+     {proxy_port, 8080}, 
+     {proxy_username, <<"user1">>},
+     {proxy_password, <<"pwd1">>}] ++ Config;
+
+init_per_group(oauth_provider_with_https_proxy, Config) ->
+    Proxy = [
+        {proxy, "https://idp:8843"},
+        {proxy_username, <<"user1">>},
+        {proxy_password, <<"pwd1">>}
+    ],
+    case ?config(oauth_provider_id, Config) of 
+        root -> 
+            KeyConfig = get_env(key_config, []),
+            set_env(key_config, KeyConfig ++ Proxy);
+        Id -> 
+            OAuthProviders = get_env(oauth_providers, #{}),
+            OAuthProvider = maps:get(Id, OAuthProviders, []),
+            set_env(oauth_providers, maps:put(Id, Proxy ++ OAuthProvider, OAuthProviders))
+    end,
+    [{proxy_hostname, "idp"},
+     {proxy_port, 8843}, 
+     {proxy_username, <<"user1">>},
+     {proxy_password, <<"pwd1">>}] ++ Config;
 
 init_per_group(with_algorithms, Config) ->
     KeyConfig = get_env(key_config, []),
@@ -222,6 +248,8 @@ end_per_group(oauth_provider_with_proxy, Config) ->
             unset_oauth_provider_properties(Id, [proxy, proxy_username, proxy_password])
     end,
     Config;
+end_per_group(oauth_provider_with_https_proxy, Config) ->
+    end_per_group(oauth_provider_with_proxy, Config);
 
 end_per_group(with_root_static_signing_keys, Config) ->
     KeyConfig = call_get_env(Config, key_config, []),
@@ -448,9 +476,40 @@ get_oauth_provider_has_proxy(Config) ->
         ?config(oauth_provider_id, Config), [jwks_uri]),    
     ct:log("key_config: ~p",
         [ application:get_all_env(rabbitmq_auth_backend_oauth2)]),
+    ct:log("oauthprovider: ~p", [OAuthProvider]),
+    ?assertEqual(false, 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
 
-    ?assertEqual(?config(proxy, Config), 
-        OAuthProvider#oauth_provider.proxy_options#proxy_options.proxy),
+    ct:log("Parsed : ~p", [uri_string:parse("http://idp:8080")]),
+
+    Options = oauth2_client:extract_proxy_options_from_url("http://idp:8080"),
+    ct:log("Options1: ~p", [Options]),
+    Options2 = oauth2_client:extract_proxy_options_from_url(<<"http://idp:8080">>),
+    ct:log("Options2: ~p", [Options2]),
+
+    ?assertEqual(?config(proxy_port, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
+    ?assertEqual(?config(proxy_hostname, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.hostname),
+    ?assertEqual(?config(proxy_username, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
+    ?assertEqual(?config(proxy_password, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.password).
+
+
+get_oauth_provider_has_https_proxy(Config) ->
+    {ok, OAuthProvider} = get_oauth_provider(
+        ?config(oauth_provider_id, Config), [jwks_uri]),    
+    ct:log("key_config: ~p",
+        [ application:get_all_env(rabbitmq_auth_backend_oauth2)]),
+    ct:log("oauthprovider: ~p", [OAuthProvider]),
+    ?assertEqual(true, 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
+
+    ?assertEqual(?config(proxy_port, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
+    ?assertEqual(?config(proxy_hostname, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.hostname),
     ?assertEqual(?config(proxy_username, Config), 
         OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
     ?assertEqual(?config(proxy_password, Config), 
