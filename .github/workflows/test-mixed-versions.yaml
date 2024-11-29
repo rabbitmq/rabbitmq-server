@@ -2,7 +2,6 @@ name: Test Mixed Version Clusters
 on:
   push:
     branches:
-    - v4.0.x
     - v3.13.x
     - bump-otp-*
     - bump-elixir-*
