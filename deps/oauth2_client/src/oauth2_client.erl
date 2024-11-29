@@ -305,7 +305,7 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
 
 get_root_oauth_provider(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_root_oauth_provider(),
-    ct:log("Using root oauth_provider ~p", 
+    rabbit_log:debug("Using root oauth_provider ~p", 
         [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
