@@ -80,12 +80,19 @@ decode_and_verify(Token) ->
           end
     end.
 
--spec resolve_resource_server_id(binary()) -> binary() | {error, term()}.
-resolve_resource_server_id(Token) ->
+-spec resolve_resource_server_id(binary()|map()) -> binary() | {error, term()}.
+resolve_resource_server_id(Token) when is_binary(Token) ->
     case uaa_jwt_jwt:get_aud(Token) of
         {error, _} = Error ->
             Error;
         {ok, Audience} ->
+            rabbit_oauth2_config:get_resource_server_id_for_audience(Audience)
+    end;
+resolve_resource_server_id(Token) when is_map(Token) ->
+    case maps:get(<<"aud">>, Token, undefined) of
+        undefined ->
+            {error, audience_not_found_in_token};
+        Audience ->
             rabbit_oauth2_config:get_resource_server_id_for_audience(Audience)
     end.
 
