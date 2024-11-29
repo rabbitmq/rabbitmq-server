@@ -75,9 +75,7 @@ groups() ->
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     logger:set_primary_config(level, debug),
-    rabbit_ct_helpers:run_setup_steps(
-      Config,
-      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]).
+    rabbit_ct_helpers:run_setup_steps(Config, []).
 
 end_per_suite(Config) ->
     Config.

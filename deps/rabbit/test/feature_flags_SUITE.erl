@@ -64,6 +64,7 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
+       enable_feature_flag_when_ff_file_is_unwritable,
        required_feature_flag_enabled_by_default,
        required_plugin_feature_flag_enabled_by_default,
        required_plugin_feature_flag_enabled_after_activation,
@@ -73,6 +74,7 @@ groups() ->
       [
        enable_feature_flag_in_a_healthy_situation,
        enable_unsupported_feature_flag_in_a_healthy_situation,
+       enable_feature_flag_when_ff_file_is_unwritable,
        enable_feature_flag_with_a_network_partition,
        mark_feature_flag_as_enabled_with_a_network_partition,
        required_feature_flag_enabled_by_default,
@@ -122,10 +124,9 @@ end_per_suite(Config) ->
 
 init_per_group(registry, Config) ->
     logger:set_primary_config(level, debug),
-    rabbit_ct_helpers:run_steps(
-      Config,
-      [fun rabbit_ct_helpers:redirect_logger_to_ct_logs/1]);
+    rabbit_ct_helpers:run_steps(Config, []);
 init_per_group(feature_flags_v2, Config) ->
+    %% @todo Remove this entirely as that FF became required in 3.12.
     %% `feature_flags_v2' is now required and won't work in mixed-version
     %% clusters if the other version doesn't support it.
     case rabbit_ct_helpers:is_mixed_versions() of
@@ -267,6 +268,7 @@ init_per_testcase(Testcase, Config) ->
             Config2 = rabbit_ct_helpers:set_config(
                         Config1,
                         [{rmq_nodename_suffix, Testcase},
+                         {secondary_enabled_plugins, "my_plugin"},
                          {tcp_ports_base, {skip_n_nodes,
                                            TestNumber * ClusterSize}},
                          {net_ticktime, 5}
@@ -655,6 +657,7 @@ enable_unsupported_feature_flag_in_a_healthy_situation(Config) ->
        False,
        is_feature_flag_enabled(Config, FeatureName)).
 
+%% This test case must run as an unprivileged user.
 enable_feature_flag_when_ff_file_is_unwritable(Config) ->
     Supported = rabbit_ct_broker_helpers:is_feature_flag_supported(
                   Config, ff_from_testsuite),

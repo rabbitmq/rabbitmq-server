@@ -87,7 +87,7 @@ callback_mode() -> [state_functions, state_enter].
 terminate(Reason, State, Data) ->
     rabbit_log:debug("etcd v3 API client will terminate in state ~tp, reason: ~tp",
                      [State, Reason]),
-    disconnect(?ETCD_CONN_NAME, Data),
+    _ = disconnect(?ETCD_CONN_NAME, Data),
     rabbit_log:debug("etcd v3 API client has disconnected"),
     rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
     ok.
@@ -157,13 +157,13 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
             }};
         {error, Errors} ->
             [rabbit_log:error("etcd peer discovery: failed to connect to endpoint ~tp: ~tp", [Endpoint, Err]) || {Endpoint, Err} <- Errors],
-            ensure_disconnected(?ETCD_CONN_NAME, Data),
+            _ = ensure_disconnected(?ETCD_CONN_NAME, Data),
             Actions = [{state_timeout, reconnection_interval(), recover}],
             {keep_state, reset_statem_data(Data), Actions}
     end;
 recover(state_timeout, _PrevState, Data) ->
     rabbit_log:debug("etcd peer discovery: connection entered a reconnection delay state"),
-    ensure_disconnected(?ETCD_CONN_NAME, Data),
+    _ = ensure_disconnected(?ETCD_CONN_NAME, Data),
     {next_state, recover, reset_statem_data(Data)};
 recover({call, From}, Req, _Data) ->
     rabbit_log:error("etcd v3 API: client received a call ~tp while not connected, will do nothing", [Req]),

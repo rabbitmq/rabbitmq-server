@@ -6,25 +6,30 @@ ifeq ($(.DEFAULT_GOAL),)
 endif
 
 # PROJECT_VERSION defaults to:
-#   1. the version exported by rabbitmq-server-release;
+#   1. the version exported by environment;
 #   2. the version stored in `git-revisions.txt`, if it exists;
 #   3. a version based on git-describe(1), if it is a Git clone;
 #   4. 0.0.0
+#
+# Note that in the case where git-describe(1) is used
+# (e.g. during development), running "git gc" may help
+# improve the performance.
 
 PROJECT_VERSION := $(RABBITMQ_VERSION)
 
 ifeq ($(PROJECT_VERSION),)
-PROJECT_VERSION := $(shell \
-if test -f git-revisions.txt; then \
+ifneq ($(wildcard git-revisions.txt),)
+PROJECT_VERSION = $(shell \
 	head -n1 git-revisions.txt | \
-	awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}'; \
-else \
+	awk '{print $$$(words $(PROJECT_DESCRIPTION) version);}')
+else
+PROJECT_VERSION = $(shell \
 	(git describe --dirty --abbrev=7 --tags --always --first-parent \
-	 2>/dev/null || echo rabbitmq_v0_0_0) | \
-	sed -e 's/^rabbitmq_v//' -e 's/^v//' -e 's/_/./g' -e 's/-/+/' \
-	 -e 's/-/./g'; \
-fi)
+		2>/dev/null || echo 0.0.0) | \
+		sed -e 's/^v//' -e 's/_/./g' -e 's/-/+/' -e 's/-/./g')
 endif
+endif
+
 
 # --------------------------------------------------------------------
 # RabbitMQ components.

@@ -11,7 +11,7 @@ dep_temp = hex 0.4.7
 dep_x509 = hex 0.8.8
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
-DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
+DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
@@ -113,7 +113,12 @@ rel:: $(ESCRIPTS)
 	@:
 
 tests:: $(ESCRIPTS)
-	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
+	$(verbose) $(MAKE) -C ../../ install-cli
+	$(verbose) $(MAKE) -C ../../ run-background-broker PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
+	$(gen_verbose) $(MIX_TEST) $(TEST_FILE); \
+		RES=$$?; \
+		$(MAKE) -C ../../ stop-node; \
+		exit $$RES
 
 .PHONY: test
 

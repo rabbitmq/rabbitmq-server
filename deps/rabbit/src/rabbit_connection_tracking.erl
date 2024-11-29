@@ -151,8 +151,8 @@ unregister_tracked(ConnId = {Node, _Name}) when Node =:= node() ->
     case ets:lookup(?TRACKED_CONNECTION_TABLE, ConnId) of
         []     -> ok;
         [#tracked_connection{vhost = VHost, username = Username}] ->
-            ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username, -1),
-            ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, -1),
+            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_USER, Username, -1),
+            _ = ets:update_counter(?TRACKED_CONNECTION_TABLE_PER_VHOST, VHost, -1),
             ets:delete(?TRACKED_CONNECTION_TABLE, ConnId)
     end.
 

@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(config_schema_SUITE).
+-module(web_mqtt_config_schema_SUITE).
 
 -compile(export_all).
 

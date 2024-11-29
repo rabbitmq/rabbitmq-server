@@ -8,9 +8,10 @@
 
 TEST_ERLC_OPTS += +nowarn_export_all
 
-ifneq ($(filter-out rabbit_common amqp_client,$(PROJECT)),)
+ifneq ($(filter rabbitmq_cli,$(BUILD_DEPS) $(DEPS)),)
 # Add the CLI ebin directory to the code path for the compiler: plugin
 # CLI extensions may access behaviour modules defined in this directory.
+
 RMQ_ERLC_OPTS += -pa $(DEPS_DIR)/rabbitmq_cli/_build/dev/lib/rabbitmqctl/ebin
 endif
 

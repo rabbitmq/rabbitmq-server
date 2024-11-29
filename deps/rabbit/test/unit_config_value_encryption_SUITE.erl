@@ -68,7 +68,10 @@ decrypt_config(_Config) ->
     ok.
 
 do_decrypt_config(Algo = {C, H, I, P}) ->
-    ok = application:load(rabbit),
+    case application:load(rabbit) of
+        ok -> ok;
+        {error, {already_loaded, rabbit}} -> ok
+    end,
     RabbitConfig = application:get_all_env(rabbit),
     %% Encrypt a few values in configuration.
     %% Common cases.

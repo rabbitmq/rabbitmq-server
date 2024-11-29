@@ -276,7 +276,7 @@ run_make_dist(Config) ->
             end;
         _ ->
             global:del_lock(LockId, [node()]),
-            ct:pal(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
+            ct:log(?LOW_IMPORTANCE, "(skip `$MAKE test-dist`)", []),
             Config
     end.
 
@@ -394,7 +394,7 @@ wait_for_rabbitmq_nodes(Config, Starting, NodeConfigs, Clustered) ->
             NodeConfigs1 = [NC || {_, NC} <- NodeConfigs],
             Config1 = rabbit_ct_helpers:set_config(Config,
               {rmq_nodes, NodeConfigs1}),
-            stop_rabbitmq_nodes(Config1),
+            _ = stop_rabbitmq_nodes(Config1),
             Error;
         {Pid, I, NodeConfig} when NodeConfigs =:= [] ->
             wait_for_rabbitmq_nodes(Config, Starting -- [Pid],
@@ -434,6 +434,7 @@ start_rabbitmq_node(Master, Config, NodeConfig, I) ->
             %% It's unlikely we'll ever succeed to start RabbitMQ.
             Master ! {self(), Error},
             unlink(Master);
+        %% @todo This might not work right now in at least some cases...
         {skip, _} ->
             %% Try again with another TCP port numbers base.
             NodeConfig4 = move_nonworking_nodedir_away(NodeConfig3),
@@ -490,11 +491,15 @@ init_tcp_port_numbers(Config, NodeConfig, I) ->
     update_tcp_ports_in_rmq_config(NodeConfig2, ?TCP_PORTS_LIST).
 
 tcp_port_base_for_broker(Config, I, PortsCount) ->
+    tcp_port_base_for_broker0(Config, I, PortsCount).
+
+tcp_port_base_for_broker0(Config, I, PortsCount) ->
+    Base0 = persistent_term:get(rabbit_ct_tcp_port_base, ?TCP_PORTS_BASE),
     Base = case rabbit_ct_helpers:get_config(Config, tcp_ports_base) of
         undefined ->
-            ?TCP_PORTS_BASE;
+            Base0;
         {skip_n_nodes, N} ->
-            tcp_port_base_for_broker1(?TCP_PORTS_BASE, N, PortsCount);
+            tcp_port_base_for_broker1(Base0, N, PortsCount);
         B ->
             B
     end,
@@ -503,6 +508,7 @@ tcp_port_base_for_broker(Config, I, PortsCount) ->
 tcp_port_base_for_broker1(Base, I, PortsCount) ->
     Base + I * PortsCount * ?NODE_START_ATTEMPTS.
 
+%% @todo Refactor to simplify this...
 update_tcp_ports_in_rmq_config(NodeConfig, [tcp_port_amqp = Key | Rest]) ->
     NodeConfig1 = rabbit_ct_helpers:merge_app_env(NodeConfig,
       {rabbit, [{tcp_listeners, [?config(Key, NodeConfig)]}]}),
@@ -623,21 +629,52 @@ write_config_file(Config, NodeConfig, _I) ->
              ConfigFile ++ "\": " ++ file:format_error(Reason)}
     end.
 
+-define(REQUIRED_FEATURE_FLAGS, [
+    %% Required in 3.11:
+    "virtual_host_metadata,"
+    "quorum_queue,"
+    "implicit_default_bindings,"
+    "maintenance_mode_status,"
+    "user_limits,"
+    %% Required in 3.12:
+    "stream_queue,"
+    "classic_queue_type_delivery_support,"
+    "tracking_records_in_ets,"
+    "stream_single_active_consumer,"
+    "listener_records_in_ets,"
+    "feature_flags_v2,"
+    "direct_exchange_routing_v2,"
+    "classic_mirrored_queue_version," %% @todo Missing in FF docs!!
+    %% Required in 3.12 in rabbitmq_management_agent:
+%    "drop_unroutable_metric,"
+%    "empty_basic_get_metric,"
+    %% Required in 4.0:
+    "stream_sac_coordinator_unblock_group,"
+    "restart_streams,"
+    "stream_update_config_command,"
+    "stream_filtering,"
+    "message_containers" %% @todo Update FF docs!! It *is* required.
+]).
+
 do_start_rabbitmq_node(Config, NodeConfig, I) ->
     WithPlugins0 = rabbit_ct_helpers:get_config(Config,
-      broker_with_plugins),
+      broker_with_plugins), %% @todo This is probably not used.
     WithPlugins = case is_list(WithPlugins0) of
         true  -> lists:nth(I + 1, WithPlugins0);
         false -> WithPlugins0
     end,
     ForceUseSecondary = rabbit_ct_helpers:get_config(
-                          Config, force_secondary_umbrella, undefined),
+                          Config, force_secondary, undefined),
     CanUseSecondary = case ForceUseSecondary of
                           undefined ->
                               (I + 1) rem 2 =:= 0;
                           Override when is_boolean(Override) ->
                               Override
                       end,
+    UseSecondaryDist = case ?config(secondary_dist, Config) of
+                               false -> false;
+                               _     -> CanUseSecondary
+                           end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false -> false;
                                _     -> CanUseSecondary
@@ -669,25 +706,9 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
             DistArg = re:replace(DistModS, "_dist$", "", [{return, list}]),
             "-pa \"" ++ DistModPath ++ "\" -proto_dist " ++ DistArg
     end,
-    %% Set the net_ticktime.
-    CurrentTicktime = case net_kernel:get_net_ticktime() of
-        {ongoing_change_to, T} -> T;
-        T                      -> T
-    end,
-    StartArgs1 = case rabbit_ct_helpers:get_config(Config, net_ticktime) of
-        undefined ->
-            case CurrentTicktime of
-                60 -> ok;
-                _  -> net_kernel:set_net_ticktime(60)
-            end,
-            StartArgs0;
-        Ticktime ->
-            case CurrentTicktime of
-                Ticktime -> ok;
-                _        -> net_kernel:set_net_ticktime(Ticktime)
-            end,
-            StartArgs0 ++ " -kernel net_ticktime " ++ integer_to_list(Ticktime)
-    end,
+    %% Set the net_ticktime to 5s for all nodes (including CT via CT_OPTS).
+    %% A lower tick time helps trigger distribution failures faster.
+    StartArgs1 = StartArgs0 ++ " -kernel net_ticktime 5",
     ExtraArgs0 = [],
     ExtraArgs1 = case rabbit_ct_helpers:get_config(Config, rmq_plugins_dir) of
                      undefined ->
@@ -699,8 +720,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
     StartWithPluginsDisabled = rabbit_ct_helpers:get_config(
                                  Config, start_rmq_with_plugins_disabled),
     ExtraArgs2 = case StartWithPluginsDisabled of
-                     true -> ["LEAVE_PLUGINS_DISABLED=yes" | ExtraArgs1];
-                     _    -> ExtraArgs1
+                     true ->
+                        ["LEAVE_PLUGINS_DISABLED=1" | ExtraArgs1];
+                     _ ->
+                        ExtraArgs1
                  end,
     KeepPidFile = rabbit_ct_helpers:get_config(
                     Config, keep_pid_file_on_exit),
@@ -744,7 +767,30 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                          {"RABBITMQ_PLUGINS=~ts/rabbitmq-plugins", [SecScriptsDir]}
                          | ExtraArgs4];
                     false ->
-                        ExtraArgs4
+                        case UseSecondaryDist of
+                            true ->
+                                SecondaryDist = ?config(secondary_dist, Config),
+                                SecondaryEnabledPlugins = case {
+                                    StartWithPluginsDisabled,
+                                    ?config(secondary_enabled_plugins, Config),
+                                    filename:basename(SrcDir)
+                                } of
+                                    {true, _, _} -> "";
+                                    {_, undefined, "rabbit"} -> "";
+                                    {_, undefined, SrcPlugin} -> SrcPlugin;
+                                    {_, SecondaryEnabledPlugins0, _} -> SecondaryEnabledPlugins0
+                                end,
+                                [{"DIST_DIR=~ts/plugins", [SecondaryDist]},
+                                 {"CLI_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
+                                 {"CLI_ESCRIPTS_DIR=~ts/escript", [SecondaryDist]},
+                                 {"RABBITMQ_SCRIPTS_DIR=~ts/sbin", [SecondaryDist]},
+                                 {"RABBITMQ_SERVER=~ts/sbin/rabbitmq-server", [SecondaryDist]},
+                                 {"RABBITMQ_ENABLED_PLUGINS=~ts", [SecondaryEnabledPlugins]},
+                                 {"RABBITMQ_FEATURE_FLAGS=~ts", [?REQUIRED_FEATURE_FLAGS]}
+                                | ExtraArgs4];
+                            false ->
+                                ExtraArgs4
+                        end
                 end,
     MakeVars = [
       {"RABBITMQ_NODENAME=~ts", [Nodename]},
@@ -754,7 +800,6 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
       {"RABBITMQ_SERVER_START_ARGS=~ts", [StartArgs1]},
       {"RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=+S 2 +sbwt very_short +A 24 ~ts", [AdditionalErlArgs]},
       "RABBITMQ_LOG=debug",
-      "RMQCTL_WAIT_TIMEOUT=180",
       {"TEST_TMPDIR=~ts", [PrivDir]}
       | ExtraArgs],
     Cmd = ["start-background-broker" | MakeVars],
@@ -770,6 +815,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
                     _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
+                    %% @todo Need to stop all nodes in the cluster, not just the one node.
                     {skip, "Failed to initialize RabbitMQ"}
             end;
         RunCmd ->
@@ -832,7 +878,7 @@ query_node(Config, NodeConfig) ->
                    %% 3.7.x node. If this is the case, we can ignore
                    %% this and leave the `enabled_plugins_file` config
                    %% variable unset.
-                   ct:pal("NO RABBITMQ_FEATURE_FLAGS_FILE"),
+                   ct:log("NO RABBITMQ_FEATURE_FLAGS_FILE"),
                    Vars0
            end,
     cover_add_node(Nodename),
@@ -896,7 +942,7 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
                          T1 = erlang:monotonic_time(),
                          Ret = Fun(NodeConfig),
                          T2 = erlang:monotonic_time(),
-                         ct:pal(
+                         ct:log(
                            ?LOW_IMPORTANCE,
                            "Time to run ~tp for node ~ts: ~b us",
                           [Fun,
@@ -914,7 +960,7 @@ handle_nodes_in_parallel(NodeConfigs, Fun) ->
 
 wait_for_node_handling([], Fun, T0, Results) ->
     T3 = erlang:monotonic_time(),
-    ct:pal(
+    ct:log(
       ?LOW_IMPORTANCE,
       "Time to run ~tp for all nodes: ~b us",
       [Fun, erlang:convert_time_unit(T3 - T0, native, microsecond)]),
@@ -929,7 +975,7 @@ wait_for_node_handling(Procs, Fun, T0, Results) ->
 move_nonworking_nodedir_away(NodeConfig) ->
     ConfigFile = ?config(erlang_node_config_filename, NodeConfig),
     ConfigDir = filename:dirname(ConfigFile),
-    case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
+    ok = case os:getenv("RABBITMQ_CT_HELPERS_DELETE_UNUSED_NODES") =/= false
         andalso ?OTP_RELEASE >= 23 of
         true ->
             file:del_dir_r(ConfigDir);
@@ -969,7 +1015,7 @@ configured_metadata_store(Config) ->
     end.
 
 configure_metadata_store(Config) ->
-    ct:pal("Configuring metadata store..."),
+    ct:log("Configuring metadata store..."),
     case configured_metadata_store(Config) of
         {khepri, FFs0} ->
             case enable_khepri_metadata_store(Config, FFs0) of
@@ -980,12 +1026,12 @@ configure_metadata_store(Config) ->
                     Config1
             end;
         mnesia ->
-            ct:pal("Enabling Mnesia metadata store"),
+            ct:log("Enabling Mnesia metadata store"),
             Config
     end.
 
 enable_khepri_metadata_store(Config, FFs0) ->
-    ct:pal("Enabling Khepri metadata store"),
+    ct:log("Enabling Khepri metadata store"),
     FFs = [khepri_db | FFs0],
     lists:foldl(fun(_FF, {skip, _Reason} = Skip) ->
                         Skip;
@@ -1147,7 +1193,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
       {"RABBITMQ_NODENAME_FOR_PATHS=~ts", [InitialNodename]}
     ],
     Cmd = ["stop-node" | MakeVars],
-    case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
+    _ = case rabbit_ct_helpers:get_config(Config, rabbitmq_run_cmd) of
         undefined ->
             rabbit_ct_helpers:make(Config, SrcDir, Cmd);
         RunCmd ->
@@ -1156,7 +1202,7 @@ stop_rabbitmq_node(Config, NodeConfig) ->
     NodeConfig.
 
 find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
-    ct:pal(
+    ct:log(
       "Looking up any crash reports in the nodes' log files. If we find "
       "some, they will appear below:"),
     CrashesCount = lists:foldl(
@@ -1165,7 +1211,11 @@ find_crashes_in_logs(NodeConfigs, IgnoredCrashes) ->
                                        NodeConfig, IgnoredCrashes),
                              Total + Count
                      end, 0, NodeConfigs),
-    ct:pal("Found ~b crash report(s)", [CrashesCount]),
+    LogFn = case CrashesCount of
+        0 -> log;
+        _ -> pal
+    end,
+    ct:LogFn("Found ~b crash report(s)", [CrashesCount]),
     ?assertEqual(0, CrashesCount).
 
 count_crashes_in_logs(NodeConfig, IgnoredCrashes) ->
@@ -1294,6 +1344,10 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
     CanUseSecondary = (I + 1) rem 2 =:= 0,
     BazelRunSecCmd = rabbit_ct_helpers:get_config(
                        Config, rabbitmq_run_secondary_cmd),
+    UseSecondaryDist = case ?config(secondary_dist, Config) of
+                               false -> false;
+                               _     -> CanUseSecondary
+                           end,
     UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
                                false ->
                                    case BazelRunSecCmd of
@@ -1336,7 +1390,14 @@ rabbitmqctl(Config, Node, Args, Timeout) ->
                                      "rabbitmqctl"])
                           end;
                       false ->
-                          ?config(rabbitmqctl_cmd, Config)
+                          case UseSecondaryDist of
+                              true ->
+                                  SecondaryDist = ?config(secondary_dist, Config),
+                                  rabbit_misc:format(
+                                    "~ts/sbin/rabbitmqctl", [SecondaryDist]);
+                              false ->
+                                  ?config(rabbitmqctl_cmd, Config)
+                          end
                   end,
 
     NodeConfig = get_node_config(Config, Node),
@@ -1929,10 +1990,8 @@ restart_node(Config, Node) ->
 
 stop_node(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
-    case stop_rabbitmq_node(Config, NodeConfig) of
-        {skip, _} = Error -> Error;
-        _                 -> ok
-    end.
+    _ = stop_rabbitmq_node(Config, NodeConfig),
+    ok.
 
 stop_node_after(Config, Node, Sleep) ->
     timer:sleep(Sleep),
@@ -1955,7 +2014,7 @@ kill_node(Config, Node) ->
               _ ->
                   rabbit_misc:format("kill -9 ~ts", [Pid])
           end,
-    os:cmd(Cmd),
+    _ = os:cmd(Cmd),
     await_os_pid_death(Pid).
 
 kill_node_after(Config, Node, Sleep) ->
@@ -2246,7 +2305,7 @@ if_cover(F) ->
       os:getenv("COVERAGE")
      } of
         {false, false} -> ok;
-        _ -> F()
+        _ -> _ = F(), ok
     end.
 
 setup_meck(Config) ->

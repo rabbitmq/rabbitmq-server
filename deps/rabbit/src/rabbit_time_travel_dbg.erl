@@ -28,7 +28,7 @@ start(Pid, Apps) ->
     TracerPid = spawn_link(?MODULE, init, []),
     {ok, _} = dbg:tracer(process, {fun (Msg, _) -> TracerPid ! Msg end, []}),
     _ = [dbg:tpl(M, []) || M <- Mods],
-    dbg:p(Pid, [c]),
+    _ = dbg:p(Pid, [c]),
     ok.
 
 apps_to_mods([], Acc) ->

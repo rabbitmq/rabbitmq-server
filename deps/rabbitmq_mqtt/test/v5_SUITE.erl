@@ -42,16 +42,11 @@
 -define(RC_TOPIC_ALIAS_INVALID, 16#94).
 
 all() ->
-    [{group, mqtt},
-     {group, web_mqtt}].
+    [{group, mqtt}].
 
 groups() ->
     [
      {mqtt, [],
-      [{cluster_size_1, [shuffle], cluster_size_1_tests()},
-       {cluster_size_3, [shuffle], cluster_size_3_tests()}
-      ]},
-     {web_mqtt, [],
       [{cluster_size_1, [shuffle], cluster_size_1_tests()},
        {cluster_size_3, [shuffle], cluster_size_3_tests()}
       ]}
@@ -153,9 +148,6 @@ end_per_suite(Config) ->
 
 init_per_group(mqtt, Config) ->
     rabbit_ct_helpers:set_config(Config, {websocket, false});
-init_per_group(web_mqtt, Config) ->
-    rabbit_ct_helpers:set_config(Config, {websocket, true});
-
 init_per_group(Group, Config0) ->
     Nodes = case Group of
                 cluster_size_1 -> 1;
@@ -198,8 +190,6 @@ init_per_testcase(T, Config) ->
     init_per_testcase0(T, Config).
 
 init_per_testcase0(Testcase, Config) ->
-    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    [ok = rabbit_ct_broker_helpers:enable_plugin(Config, N, rabbitmq_web_mqtt) || N <- Nodes],
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(T, Config)

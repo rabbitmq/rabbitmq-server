@@ -25,7 +25,7 @@ respond(Files, Req, State) ->
 respond_error(Reason, Req, State) ->
     Error = io_lib:format("Error listing certificates ~tp", [Reason]),
     logger:log(error, "~ts", [Error]),
-    Req2 = cowboy_req:reply(500, [], iolist_to_binary(Error), Req),
+    Req2 = cowboy_req:reply(500, #{}, iolist_to_binary(Error), Req),
     {ok, Req2, State}.
 
 json_encode(Files) ->
@@ -40,7 +40,6 @@ cert_id(FileName, FileDate, FileHash) ->
 cert_path(FileName) ->
     iolist_to_binary(["/certs/", FileName]).
 
--spec list_files(string()) -> [{string(), file:date_time(), integer()}].
 list_files(Directory) ->
     case file:list_dir(Directory) of
         {ok, FileNames} ->

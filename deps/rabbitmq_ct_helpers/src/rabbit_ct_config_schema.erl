@@ -24,7 +24,7 @@ init_schemas(App, Config) ->
 run_snippets(Config) ->
     {ok, [Snippets]} = file:consult(?config(conf_snippets, Config)),
     ct:pal("Loaded config schema snippets: ~tp", [Snippets]),
-    lists:map(
+    lists:foreach(
       fun({N, S, C, P}) ->
               ok = test_snippet(Config, {snippet_id(N), S, []}, C, P, true);
          ({N, S, A, C, P}) ->
@@ -70,12 +70,12 @@ test_snippet(Config, Snippet = {SnipID, _, _}, Expected, _Plugins, Sort) ->
 
 write_snippet(Config, {Name, Conf, Advanced}) ->
     ResultsDir = ?config(results_dir, Config),
-    file:make_dir(filename:join(ResultsDir, Name)),
+    _ = file:make_dir(filename:join(ResultsDir, Name)),
     ConfFile = filename:join([ResultsDir, Name, "config.conf"]),
     AdvancedFile = filename:join([ResultsDir, Name, "advanced.config"]),
 
-    file:write_file(ConfFile, Conf),
-    rabbit_file:write_term_file(AdvancedFile, [Advanced]),
+    ok = file:write_file(ConfFile, Conf),
+    ok = rabbit_file:write_term_file(AdvancedFile, [Advanced]),
     {ConfFile, AdvancedFile}.
 
 generate_config(ConfFile, AdvancedFile) ->

@@ -1,5 +1,8 @@
 # --------------------------------------------------------------------
 # Hex.pm.
+#
+# This Erlang.mk plugin should only be included by
+# applications that produce an Hex.pm release.
 # --------------------------------------------------------------------
 
 .PHONY: hex-publish hex-publish-docs
