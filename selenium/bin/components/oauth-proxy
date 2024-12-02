@@ -17,6 +17,7 @@ init_oauth-proxy() {
   print "> OAUTH_PROVIDER_URL: ${OAUTH_PROVIDER_URL}"
   print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
   print "> PROXY_PORT: ${PROXY_PORT}"
+  
 }
 start_oauth-proxy() {
   begin "Starting oauth-proxy ..."
@@ -38,7 +39,6 @@ start_oauth-proxy() {
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
-  PROXY_URL=$(calculate_forward_proxy_url $OAUTH_PROVIDER_URL $PROXY_HOSTNAME $PROXY_PORT)
-  
-  end "Proxy is ready"
+  wait_for_url $OAUTH_PROVIDER_URL ${PROXY_HOSTNAME}:${PROXY_PORT}
+  end "oauth-proxy is ready"
 }
