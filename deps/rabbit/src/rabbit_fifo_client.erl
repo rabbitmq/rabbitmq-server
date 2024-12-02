@@ -133,7 +133,7 @@ enqueue(QName, Correlation, Msg,
             %% it is safe to reject the message as we never attempted
             %% to send it
             {reject_publish, State0};
-        {error, {{shutdown, delete}, _Stack}} ->
+        {error, {shutdown, delete}} ->
             rabbit_log:debug("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
                              [?MODULE, rabbit_misc:rs(QName)]),
             {reject_publish, State0};
