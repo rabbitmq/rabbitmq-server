@@ -7,4 +7,4 @@ TEST_CONFIG_PATH=/oauth
 PROFILES="oauth-proxy keycloak proxy-oauth-provider keycloak-mgt-oauth-provider tls"
 
 source $SCRIPT/../../bin/suite_template $@
-runWith keycloak forward-proxy
+runWith keycloak oauth-proxy
