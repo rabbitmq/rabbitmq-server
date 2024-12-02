@@ -37,14 +37,21 @@ defmodule ForceBootCommandTest do
   end
 
   test "run: sets a force boot marker file on target node", context do
-    stop_rabbitmq_app()
-    on_exit(fn -> start_rabbitmq_app() end)
-    assert @command.run([], context[:opts]) == :ok
-    data_dir = :rpc.call(get_rabbit_hostname(), :rabbit, :data_dir, [])
+    node = get_rabbit_hostname()
+    case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
+      true ->
+        :ok
 
-    path = Path.join(data_dir, "force_load")
-    assert File.exists?(path)
-    File.rm(path)
+      false ->
+        stop_rabbitmq_app()
+        on_exit(fn -> start_rabbitmq_app() end)
+        assert @command.run([], context[:opts]) == :ok
+        data_dir = :rpc.call(node, :rabbit, :data_dir, [])
+
+        path = Path.join(data_dir, "force_load")
+        assert File.exists?(path)
+        File.rm(path)
+    end
   end
 
   test "run: if RABBITMQ_MNESIA_DIR is defined, creates a force boot marker file" do
