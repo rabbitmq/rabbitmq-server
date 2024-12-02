@@ -202,8 +202,18 @@ start_consul(Config) ->
     Cmd = [ConsulBin, "agent",
            "-config-dir", ConsulConfDir,
            "-log-file", LogFile],
-    ConsulPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+    ConsulPid = spawn(fun() -> do_start_consul(Cmd) end),
     rabbit_ct_helpers:set_config(Config, {consul_pid, ConsulPid}).
+
+do_start_consul(Cmd) ->
+    case rabbit_ct_helpers:exec(Cmd) of
+        {ok, Stdout} ->
+            ct:pal("Consul daemon exited:~n~s", [Stdout]);
+        {error, Reason, Stdout} ->
+            ct:pal(
+               "Consul daemon exited with error ~0p:~n~s",
+               [Reason, Stdout])
+    end.
 
 stop_consul(Config) ->
     case rabbit_ct_helpers:get_config(Config, consul_pid) of
