@@ -24,7 +24,7 @@ erlang_bytecode(
     srcs = [
         "src/horus.erl",
         "src/horus_cover.erl",
-        "src/horus_utils.erl",
+        "src/horus_utils.erl"
     ],
     hdrs = [":public_and_private_hdrs"],
     app_name = "horus",
@@ -50,8 +50,9 @@ filegroup(
 filegroup(
     name = "private_hdrs",
     srcs = [
+        "src/horus_cover.hrl",
         "src/horus_error.hrl",
-        "src/horus_fun.hrl",
+        "src/horus_fun.hrl"
     ],
 )
 
