@@ -22,6 +22,11 @@
          khepri_global_rp_path/1
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [set_in_khepri/2,
+                             set_in_khepri_tx/2]}).
+
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
 -define(KHEPRI_GLOBAL_PROJECTION, rabbit_khepri_global_rtparam).
 -define(KHEPRI_VHOST_PROJECTION, rabbit_khepri_per_vhost_rtparam).

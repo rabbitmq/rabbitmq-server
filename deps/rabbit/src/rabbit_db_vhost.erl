@@ -53,6 +53,11 @@
         ]).
 -endif.
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [merge_metadata_in_khepri/2,
+                             update_in_khepri/2]}).
+
 -define(MNESIA_TABLE, rabbit_vhost).
 -define(KHEPRI_PROJECTION, rabbit_khepri_vhost).
 

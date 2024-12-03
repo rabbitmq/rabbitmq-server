@@ -22,6 +22,10 @@
 
 -export([khepri_recent_history_path/1]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [insert_in_khepri/3]}).
+
 -rabbit_mnesia_tables_to_khepri_db(
    [{?RH_TABLE, rabbit_db_rh_exchange_m2k_converter}]).
 

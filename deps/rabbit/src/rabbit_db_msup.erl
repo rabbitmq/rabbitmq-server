@@ -27,6 +27,10 @@
 
 -export([khepri_mirrored_supervisor_path/2]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [create_or_update_in_khepri/5]}).
+
 -define(TABLE, mirrored_sup_childspec).
 -define(TABLE_DEF,
         {?TABLE,

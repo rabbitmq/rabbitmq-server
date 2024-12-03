@@ -79,6 +79,13 @@
 -dialyzer({nowarn_function, [foreach_transient/1,
                              foreach_transient_in_khepri/1]}).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [delete_in_khepri_tx/2,
+                             update_in_khepri/2,
+                             update_decorators_in_khepri/2,
+                             do_delete_transient_queues_in_khepri_tx/2]}).
+
 -define(MNESIA_TABLE, rabbit_queue).
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_queue).
 
@@ -409,22 +416,25 @@ delete_in_khepri(QueueName) ->
 delete_in_khepri(QueueName, OnlyDurable) ->
     rabbit_khepri:transaction(
       fun () ->
-              Path = khepri_queue_path(QueueName),
-              case khepri_tx_adv:delete(Path) of
-                  %% Khepri 0.16 and below returned `khepri:node_props()' for
-                  %% adv queries and commands targeting one node:
-                  {ok, #{data := _}} ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
-                  %% instead.
-                  {ok, #{Path := #{data := _}}} ->
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, _} ->
-                      ok
-              end
+              delete_in_khepri_tx(QueueName, OnlyDurable)
       end, rw).
+
+delete_in_khepri_tx(QueueName, OnlyDurable) ->
+    Path = khepri_queue_path(QueueName),
+    case khepri_tx_adv:delete(Path) of
+        %% Khepri 0.16 and below returned `khepri:node_props()' for
+        %% adv queries and commands targeting one node:
+        {ok, #{data := _}} ->
+            %% we want to execute some things, as decided by rabbit_exchange,
+            %% after the transaction.
+            rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+        %% Khepri 0.17+ returns `khepri_adv:node_props_map()`
+        %% instead.
+        {ok, #{Path := #{data := _}}} ->
+            rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+        {ok, _} ->
+            ok
+    end.
 
 %% -------------------------------------------------------------------
 %% internal_delete().

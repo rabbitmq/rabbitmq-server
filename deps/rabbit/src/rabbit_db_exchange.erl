@@ -56,6 +56,11 @@
          khepri_exchange_serial_path/1, khepri_exchange_serial_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [update_in_khepri/2,
+                             next_serial_in_khepri/1]}).
+
 -define(MNESIA_TABLE, rabbit_exchange).
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_exchange).
 -define(MNESIA_SERIAL_TABLE, rabbit_exchange_serial).

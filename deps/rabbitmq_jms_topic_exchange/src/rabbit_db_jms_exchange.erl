@@ -24,6 +24,10 @@
          khepri_jms_topic_exchange_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [update_in_khepri/4]}).
+
 -rabbit_mnesia_tables_to_khepri_db(
      [{?JMS_TOPIC_TABLE, rabbit_db_jms_exchange_m2k_converter}]).
 

@@ -24,6 +24,10 @@
          khepri_consistent_hash_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [create_binding_in_khepri/4]}).
+
 -define(HASH_RING_STATE_TABLE, rabbit_exchange_type_consistent_hash_ring_state).
 
 -rabbit_mnesia_tables_to_khepri_db(
