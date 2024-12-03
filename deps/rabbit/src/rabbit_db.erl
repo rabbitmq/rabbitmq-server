@@ -182,7 +182,7 @@ force_load_on_next_boot() ->
     %% Potentially, it could also be replaced with a way to export all the
     %% data.
     case rabbit_khepri:is_enabled() of
-        true  -> ok;
+        true  -> {error, unsupported_with_khepri};
         false -> force_load_on_next_boot_using_mnesia()
     end.
 
