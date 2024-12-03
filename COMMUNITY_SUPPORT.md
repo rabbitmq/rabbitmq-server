@@ -11,7 +11,7 @@ and our community forums.
 ### How is Community Support Related to Patch Releases?
 
 Being covered by community support for a release series also means that patch releases, general and security-related ones,
-are produced regularly. Patch releases **will not be produced** for series out of community support, with potential
+are produced regularly and are available publicly. Patch releases, even if produced, **will not be made available to non-paying users** for series out of community support, with potential
 exception for very high severity CVEs.
 
 ### What is Broadcom's Obligation to Reply to Messages or Issues Reported?
