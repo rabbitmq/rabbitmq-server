@@ -131,6 +131,7 @@ cluster_size_3_tests() ->
      pubsub,
      queue_down_qos1,
      consuming_classic_queue_down,
+     flow_classic_queue,
      flow_quorum_queue,
      flow_stream,
      rabbit_mqtt_qos0_queue,
@@ -485,6 +486,24 @@ publish_to_all_non_deprecated_queue_types(Config, QoS) ->
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000).
+
+%% This test case does not require multiple nodes
+%% but it is grouped together with flow test cases for other queue types
+%% (and historically used to use a mirrored classic queue on multiple nodes)
+flow_classic_queue(Config) ->
+    %% New nodes lookup via persistent_term:get/1 (since 4.0.0)
+    %% Old nodes lookup via application:get_env/2. (that is taken care of by flow/3)
+    %% Therefore, we set both persistent_term and application.
+    Key = credit_flow_default_credit,
+    Val = {2, 1},
+    DefaultVal = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
+    Result = rpc_all(Config, persistent_term, put, [Key, Val]),
+    ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
+
+    flow(Config, {rabbit, Key, Val}, <<"classic">>),
+
+    ?assertEqual(Result, rpc_all(Config, persistent_term, put, [Key, DefaultVal])),
+    ok.
 
 flow_quorum_queue(Config) ->
     flow(Config, {rabbit, quorum_commands_soft_limit, 1}, <<"quorum">>).
