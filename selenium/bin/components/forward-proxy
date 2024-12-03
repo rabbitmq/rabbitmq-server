@@ -1,16 +1,16 @@
 
 HTTPD_DOCKER_IMAGE=httpd:latest
 
-ensure_oauth-proxy() {
-  if docker ps | grep oauth-proxy &> /dev/null; then
-     print "oauth-proxy already running ..."
+ensure_forward-proxy() {
+  if docker ps | grep forward-proxy &> /dev/null; then
+     print "forward-proxy already running ..."
  else
-   start_oauth-proxy
+   start_forward-proxy
  fi
 }
-init_oauth-proxy() {
-  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/oauth-proxy
-  PROXY_HOSTNAME=oauth-proxy 
+init_forward-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/forward-proxy
+  PROXY_HOSTNAME=forward-proxy 
   PROXY_PORT=9092 
 
   print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
@@ -19,11 +19,11 @@ init_oauth-proxy() {
   print "> PROXY_PORT: ${PROXY_PORT}"
   
 }
-start_oauth-proxy() {
-  begin "Starting oauth-proxy ..."
+start_forward-proxy() {
+  begin "Starting forward-proxy ..."
 
-  init_oauth-proxy
-  kill_container_if_exist oauth-proxy
+  init_forward-proxy
+  kill_container_if_exist forward-proxy
 
   MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
 
@@ -33,12 +33,12 @@ start_oauth-proxy() {
 
   docker run \
     --detach \
-    --name oauth-proxy \
+    --name forward-proxy \
     --net ${DOCKER_NETWORK} \
     --publish 9092:9092 \
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
   wait_for_url $OAUTH_PROVIDER_URL ${PROXY_HOSTNAME}:${PROXY_PORT}
-  end "oauth-proxy is ready"
+  end "forward-proxy is ready"
 }

@@ -208,14 +208,23 @@ module.exports = class BasePage {
 
   async waitForDisplayed (locator) {
     if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
-    try {
-      return this.waitForVisible(await this.waitForLocated(locator))
-    }catch(error) {
-      if (!error.name.includes("NoSuchSessionError")) {
-        console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+    let times = 5
+    do {
+      try {
+        return this.waitForVisible(await this.waitForLocated(locator))
+      }catch(error) {
+        if (!error.name.includes("NoSuchSessionError")) {
+          console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+        }
+        if (times > 0) {
+          times--
+          this.driver.sleep(500)
+        } else {
+          throw error
+        }
       }
-      throw error
-    }
+    } while (true)
+    
   }
 
   async getText (locator) {

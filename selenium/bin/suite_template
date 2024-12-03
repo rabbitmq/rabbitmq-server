@@ -568,6 +568,12 @@ run_on_docker_with() {
   trap teardown_components EXIT
 
   start_components
+  TEST_RESULT=$?
+  if [ $TEST_RESULT -ne 0 ]; then
+    teardown_components
+    exit $TEST_RESULT
+  fi
+
   test
   TEST_RESULT=$?
   save_logs
