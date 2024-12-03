@@ -238,10 +238,10 @@ wait_for_url_local() {
   curl_args="-L -f -v"
   max_retry=10
   counter=0
-  if [[ "$proxy" != "none" ]]; then 
+  if [[ "$proxy" != "none" && "$proxy" != ""  ]]; then 
     curl_args="--proxy ${proxy} ${curl_args}"
   fi 
-  if [[ "$proxy_user" != "none" ]]; then 
+  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
     curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
   fi 
   until (curl $curl_args $url >/dev/null 2>&1)
@@ -258,10 +258,10 @@ wait_for_url_docker() {
   max_retry=10
   counter=0
   curl_args="-L -f -v"
-  if [[ "$proxy" != "none" ]]; then 
+  if [[ "$proxy" != "none"  && "$proxy" != "" ]]; then 
     curl_args="--proxy ${proxy} ${curl_args}"
   fi 
-  if [[ "$proxy_user" != "none" ]]; then 
+  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
     curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
   fi 
   until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 $curl_args $url >/dev/null 2>&1)
