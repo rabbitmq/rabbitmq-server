@@ -56,12 +56,22 @@
   "vhosts": [
     {
       "name": "/"
+    },
+    {
+      "name": "other"
     }
   ],
   "permissions": [
     {
       "user": "guest",
       "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "guest",
+      "vhost": "other",
       "configure": ".*",
       "write": ".*",
       "read": ".*"
