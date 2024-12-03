@@ -189,8 +189,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "horus",
     build_file = "@rabbitmq-server//bazel:BUILD.horus",
-    sha256 = "4ebcb0ce86c8ee411d24b289c504b14431ee004d9f2c48e6f88d4128ded33a2e",
-    version = "0.2.6",
+    sha256 = "d564d30ebc274f0d92c3d44a336d0b892f000be159912ae4e6838701e85495ec",
+    version = "0.3.1",
 )
 
 erlang_package.hex_package(
