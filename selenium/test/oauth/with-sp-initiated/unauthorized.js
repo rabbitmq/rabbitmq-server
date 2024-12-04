@@ -29,8 +29,7 @@ describe('An user without management tag', function () {
     if (!await homePage.isLoaded()) {
       throw new Error('Failed to login')
     }
-    const visible = await homePage.isWarningVisible()
-    assert.ok(visible)
+    assert.ok(await homePage.isWarningVisible())
   })
 
   it('should get "Not authorized" warning message and logout button but no login button', async function(){

@@ -51,6 +51,9 @@ module.exports = class SSOHomePage extends BasePage {
   async getOAuthResourceOptions () {
     return this.getSelectableOptions(SELECT_RESOURCES)
   }
+  async isLoginButtonNotVisible() {
+    return this.waitForNotDisplayed(OAUTH2_LOGIN_BUTTON)
+  }
   async isLoginButtonVisible() {
     try {
       await this.waitForDisplayed(OAUTH2_LOGIN_BUTTON)
