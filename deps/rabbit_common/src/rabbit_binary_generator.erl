@@ -228,8 +228,5 @@ lookup_amqp_exception(Other, Protocol) ->
     {ShouldClose, Code, Text, none}.
 
 amqp_exception_explanation(Text, Expl) ->
-    ExplBin = list_to_binary(Expl),
-    CompleteTextBin = <<Text/binary, " - ", ExplBin/binary>>,
-    if size(CompleteTextBin) > 255 -> <<CompleteTextBin:252/binary, "...">>;
-       true                        -> CompleteTextBin
-    end.
+    LimitedText = io_lib:format("~ts - ~ts", [Text, Expl], [{chars_limit, 255}]),
+    unicode:characters_to_binary(LimitedText).
