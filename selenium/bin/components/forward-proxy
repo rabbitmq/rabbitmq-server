@@ -18,7 +18,9 @@ init_forward-proxy() {
   print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
   print "> PROXY_PORT: ${PROXY_PORT}"
   
+  generate-ca-server-client-kpi forward-proxy $HTTPD_CONFIG_DIR
 }
+
 start_forward-proxy() {
   begin "Starting forward-proxy ..."
 
@@ -30,6 +32,7 @@ start_forward-proxy() {
   mkdir -p $MOUNT_HTTPD_CONFIG_DIR
   ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
   print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+  cp ${HTTPD_CONFIG_DIR}/*.pem $MOUNT_HTTPD_CONFIG_DIR
 
   docker run \
     --detach \
@@ -39,6 +42,6 @@ start_forward-proxy() {
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
-  wait_for_url $OAUTH_PROVIDER_URL ${PROXY_HOSTNAME}:${PROXY_PORT}
+  wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
   end "forward-proxy is ready"
 }

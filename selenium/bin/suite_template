@@ -524,6 +524,7 @@ elif [[ "$COMMAND" == "stop-rabbitmq" ]]
     stop_local_rabbitmq
   elif [[ "$COMMAND" == "start-others" ]]
   then
+    trap "teardown_components" EXIT
     start_local_others
   elif [[ "$COMMAND" == "ensure-others" ]]
   then
@@ -565,15 +566,9 @@ run_on_docker_with() {
   build_mocha_image
   start_selenium
 
-  trap teardown_components EXIT
+  trap "teardown_components" EXIT
 
   start_components
-  TEST_RESULT=$?
-  if [ $TEST_RESULT -ne 0 ]; then
-    teardown_components
-    exit $TEST_RESULT
-  fi
-
   test
   TEST_RESULT=$?
   save_logs
@@ -652,7 +647,6 @@ start_components() {
     $start
   done
 }
-
 teardown_components() {
   skip_rabbitmq=${1:-false}
 
