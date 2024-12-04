@@ -32,7 +32,7 @@ describe('Given there are three oauth resources but two enabled', function () {
     if (!await overview.isLoaded()) {
       throw new Error('Failed to login')
     }
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
     await overview.logout()
   })
   it('prod_user registered in prodkeycloak can log in using RabbitMQ Development OAuth 2.0 resource', async function () {
@@ -46,7 +46,7 @@ describe('Given there are three oauth resources but two enabled', function () {
     if (!await overview.isLoaded()) {
       throw new Error('Failed to login')
     }
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
     await overview.logout()
   })
 

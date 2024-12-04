@@ -524,7 +524,6 @@ elif [[ "$COMMAND" == "stop-rabbitmq" ]]
     stop_local_rabbitmq
   elif [[ "$COMMAND" == "start-others" ]]
   then
-    trap "teardown_components" EXIT
     start_local_others
   elif [[ "$COMMAND" == "ensure-others" ]]
   then
