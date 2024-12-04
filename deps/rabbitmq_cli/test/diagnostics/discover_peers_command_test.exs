@@ -37,7 +37,7 @@ defmodule DiscoverPeersCommandTest do
 
   @tag test_timeout: 15000
   test "run: returns a list of nodes when the backend isn't configured", context do
-    this_node = node()
-    assert match?({:ok, {[this_node], _}}, @command.run([], context[:opts]))
+    this_node = context.opts.node
+    assert match?({:ok, {[^this_node], _}}, @command.run([], context[:opts]))
   end
 end
