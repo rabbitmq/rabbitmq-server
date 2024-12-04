@@ -46,6 +46,7 @@ groups() ->
             pid_decompose_compose,
             platform_and_version,
             frame_encoding_does_not_fail_with_empty_binary_payload,
+            map_exception_does_not_fail_with_unicode_explaination,
             amqp_table_conversion,
             name_type,
             get_erl_path,
@@ -413,6 +414,13 @@ frame_encoding_does_not_fail_with_empty_binary_payload(_Config) ->
                     {[<<"payload">>], [[<<2,0,1,0,0,0,14>>,[<<0,60,0,0,0,0,0,0,0,0,0,7>>,<<0,0>>],206],
                                        [<<3,0,1,0,0,0,7>>,[<<"payload">>],206]]}
                     ]],
+    ok.
+
+map_exception_does_not_fail_with_unicode_explaination(_Config) ->
+    NonAsciiExplaination = "no queue 'non_ascii_name_😍_你好' in vhost '/'",
+    rabbit_binary_generator:map_exception(0,
+        #amqp_error{name = not_found, explanation = NonAsciiExplaination, method = 'queue.declare'},
+        rabbit_framing_amqp_0_9_1),
     ok.
 
 amqp_table_conversion(_Config) ->
