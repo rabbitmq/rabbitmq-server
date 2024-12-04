@@ -94,7 +94,7 @@ defmodule RabbitMQ.CLI.AutoComplete do
 
   defp complete_command_opts(command, <<"-", _::binary>> = opt) do
     switches =
-      command.switches
+      command.switches()
       |> Keyword.keys()
       |> Enum.map(fn sw -> "--" <> to_string(sw) end)
 
