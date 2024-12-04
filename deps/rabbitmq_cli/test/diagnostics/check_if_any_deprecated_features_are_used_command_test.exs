@@ -10,7 +10,6 @@ defmodule CheckIfAnyDeprecatedFeaturesAreUsedCommandTest do
 
   @command RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedCommand
   @policy_name "cmq-policy-8373"
-  # @policy_value "{\"ha-mode\":\"all\"}"
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
