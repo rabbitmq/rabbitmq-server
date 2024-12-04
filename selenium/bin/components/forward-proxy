@@ -42,6 +42,6 @@ start_forward-proxy() {
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
-  wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
+  #wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
   end "forward-proxy is ready"
 }

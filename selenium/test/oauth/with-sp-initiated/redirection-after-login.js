@@ -33,7 +33,7 @@ describe('A user which accesses a protected URL without a session', function () 
       throw new Error('Failed to login')
     }
 
-    assert.equal("All exchanges (8)", await exchanges.getPagingSectionHeaderText())
+    assert.equal("All exchanges (15)", await exchanges.getPagingSectionHeaderText())
   })
 
 
