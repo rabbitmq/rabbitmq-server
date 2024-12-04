@@ -17,7 +17,7 @@ VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
 MIX_TEST_OPTS ?= ""
-MIX_TEST = ERL_COMPILER_OPTIONS=deterministic mix test --max-cases=$(MAX_CASES)
+MIX_TEST = ERL_COMPILER_OPTIONS=deterministic MIX_ENV=test mix do compile --warnings-as-errors, test --max-cases=$(MAX_CASES) --warnings-as-errors
 
 ifneq ("",$(MIX_TEST_OPTS))
 MIX_TEST := $(MIX_TEST) $(MIX_TEST_OPTS)
