@@ -121,7 +121,7 @@ defmodule RabbitMQCtlTest do
 
   test "short node name without the host part connects properly" do
     command = ["status", "-n", "rabbit"]
-    capture_io(:stderr, fn -> error_check(command, exit_ok()) end)
+    capture_io(:stdio, fn -> error_check(command, exit_ok()) end)
   end
 
   test "a non-existent command results in help message displayed" do
