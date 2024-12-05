@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToLogin, goToHome, captureScreensFor, teardown } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown } = require('../../utils')
 
 const OverviewPage = require('../../pageobjects/OverviewPage')
 

@@ -30,7 +30,7 @@ describe('A user which accesses any protected URL without a session where basic 
   })
 
   it('should not have a warning message', async function () {
-    assert.ok(await homePage.isWarningVisible())
+    assert.ok(await homePage.isWarningNotVisible())
   })
 
 
