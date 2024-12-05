@@ -100,8 +100,8 @@ drop_trailing_path_separator(Path) when is_list(Path) ->
     ssl:tls_option() | [], proxy_options() | undefined) -> 
         {ok, openid_configuration()} | {error, term()}.
 get_openid_configuration(DiscoverEndpoint, TLSOptions, ProxyOptions) ->    
-    rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
-        format_ssl_options(TLSOptions)]),
+    rabbit_log:debug("get_openid_configuration from ~p (~p) [~p]", [DiscoverEndpoint,
+        format_ssl_options(TLSOptions), format_proxy_options(ProxyOptions)]),
     Options = get_proxy_if_any(ProxyOptions),
     Response = httpc:request(get, {DiscoverEndpoint, []},
         TLSOptions ++ get_proxy_auth_if_any(ProxyOptions), Options),
