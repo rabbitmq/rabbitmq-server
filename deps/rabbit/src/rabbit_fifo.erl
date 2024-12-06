@@ -3016,9 +3016,19 @@ incr_msg(Msg0, DelFailed, Anns) ->
     end.
 
 exec_read(Flru0, ReadPlan, Msgs) ->
-    {Entries, Flru} = ra_log_read_plan:execute(ReadPlan, Flru0),
-    %% return a list in original order
-    {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
-                       Cmd = maps:get(Idx, Entries),
-                       {MsgId, {Header, get_msg(Cmd)}}
-               end, Msgs), Flru}.
+    try ra_log_read_plan:execute(ReadPlan, Flru0) of
+        {Entries, Flru} ->
+            %% return a list in original order
+            {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
+                               Cmd = maps:get(Idx, Entries),
+                               {MsgId, {Header, get_msg(Cmd)}}
+                       end, Msgs), Flru}
+    catch exit:{missing_key, _}
+            when Flru0 =/= undefined ->
+              %% this segment has most likely been appended to but the
+              %% cached index doesn't know about new items and need to be
+              %% re-generated
+              _ = ra_flru:evict_all(Flru0),
+              %% retry without segment cache
+              exec_read(undefined, ReadPlan, Msgs)
+    end.
