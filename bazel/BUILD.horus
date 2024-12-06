@@ -50,6 +50,7 @@ filegroup(
 filegroup(
     name = "private_hdrs",
     srcs = [
+        "src/horus_cover.hrl",
         "src/horus_error.hrl",
         "src/horus_fun.hrl",
     ],
