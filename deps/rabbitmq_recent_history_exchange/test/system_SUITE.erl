@@ -59,8 +59,8 @@ end_per_suite(Config) ->
 
 init_per_group(mnesia_store, Config) ->
     case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, _} -> {skip, "These tests target Mnesia"};
-        _           -> Config
+        khepri -> {skip, "These tests target Mnesia"};
+        _      -> Config
     end;
 init_per_group(khepri_store, Config) ->
     case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
