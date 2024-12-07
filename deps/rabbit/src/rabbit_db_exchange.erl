@@ -56,6 +56,11 @@
          khepri_exchange_serial_path/1, khepri_exchange_serial_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [update_in_khepri/2,
+                             next_serial_in_khepri/1]}).
+
 -define(MNESIA_TABLE, rabbit_exchange).
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_exchange).
 -define(MNESIA_SERIAL_TABLE, rabbit_exchange_serial).
@@ -331,7 +336,19 @@ update_in_khepri(XName, Fun) ->
     Path = khepri_exchange_path(XName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := X, payload_version := Vsn}} ->
+        {ok, QueryRet} ->
+            {X, Vsn} = case QueryRet of
+                           %% Khepri 0.16 and below returned
+                           %% `khepri:node_props()' for adv queries and
+                           %% commands targeting one node:
+                           #{data := Data, payload_version := V} ->
+                               {Data, V};
+                           %% Khepri 0.17+ returns
+                           %% `khepri_adv:node_props_map()` instead.
+                           #{Path := #{data := Data,
+                                       payload_version := V}} ->
+                               {Data, V}
+                       end,
             X1 = Fun(X),
             UpdatePath =
                 khepri_path:combine_with_conditions(
@@ -534,8 +551,19 @@ next_serial_in_khepri(XName) ->
     Path = khepri_exchange_serial_path(XName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := Serial,
-               payload_version := Vsn}} ->
+        {ok, QueryRet} ->
+            {Serial, Vsn} = case QueryRet of
+                                %% Khepri 0.16 and below returned
+                                %% `khepri:node_props()' for adv queries and
+                                %% commands targeting one node:
+                                #{data := Data, payload_version := V} ->
+                                    {Data, V};
+                                %% Khepri 0.17+ returns
+                                %% `khepri_adv:node_props_map()` instead.
+                                #{Path := #{data := Data,
+                                            payload_version := V}} ->
+                                    {Data, V}
+                            end,
             UpdatePath =
                 khepri_path:combine_with_conditions(
                   Path, [#if_payload_version{version = Vsn}]),
@@ -711,13 +739,20 @@ delete_all_in_khepri_tx(VHostName) ->
     {ok, NodeProps} = khepri_tx_adv:delete_many(Pattern),
     Deletions =
     maps:fold(
-      fun(_Path, #{data := X}, Deletions) ->
-              {deleted, #exchange{name = XName}, Bindings, XDeletions} =
-                rabbit_db_binding:delete_all_for_exchange_in_khepri(
-                  X, false, true),
-              Deletions1 = rabbit_binding:add_deletion(
-                             XName, X, deleted, Bindings, XDeletions),
-              rabbit_binding:combine_deletions(Deletions, Deletions1)
+      fun(Path, Props, Deletions) ->
+              case {Path, Props} of
+                  {?RABBITMQ_KHEPRI_EXCHANGE_PATH(VHostName, _),
+                   #{data := X}} ->
+                      {deleted,
+                       #exchange{name = XName}, Bindings, XDeletions} =
+                        rabbit_db_binding:delete_all_for_exchange_in_khepri(
+                          X, false, true),
+                      Deletions1 = rabbit_binding:add_deletion(
+                                     XName, X, deleted, Bindings, XDeletions),
+                      rabbit_binding:combine_deletions(Deletions, Deletions1);
+                  {_, _} ->
+                      Deletions
+              end
       end, rabbit_binding:new_deletions(), NodeProps),
     {ok, Deletions}.
 

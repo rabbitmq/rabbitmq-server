@@ -24,6 +24,10 @@
          khepri_consistent_hash_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [create_binding_in_khepri/4]}).
+
 -define(HASH_RING_STATE_TABLE, rabbit_exchange_type_consistent_hash_ring_state).
 
 -rabbit_mnesia_tables_to_khepri_db(
@@ -104,13 +108,25 @@ create_binding_in_mnesia_tx(Src, Dst, Weight, UpdateFun) ->
 create_binding_in_khepri(Src, Dst, Weight, UpdateFun) ->
     Path = khepri_consistent_hash_path(Src),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := Chx0, payload_version := DVersion}} ->
+        {ok, QueryRet} ->
+            {Chx0, Vsn} = case QueryRet of
+                              %% Khepri 0.16 and below returned
+                              %% `khepri:node_props()' for adv queries and
+                              %% commands targeting one node:
+                              #{data := Data, payload_version := V} ->
+                                  {Data, V};
+                              %% Khepri 0.17+ returns
+                              %% `khepri_adv:node_props_map()` instead.
+                              #{Path := #{data := Data,
+                                          payload_version := V}} ->
+                                  {Data, V}
+                          end,
             case UpdateFun(Chx0, Dst, Weight) of
                 already_exists ->
                     already_exists;
                 Chx ->
                     Path1 = khepri_path:combine_with_conditions(
-                              Path, [#if_payload_version{version = DVersion}]),
+                              Path, [#if_payload_version{version = Vsn}]),
                     Ret2 = rabbit_khepri:put(Path1, Chx),
                     case Ret2 of
                         ok ->
