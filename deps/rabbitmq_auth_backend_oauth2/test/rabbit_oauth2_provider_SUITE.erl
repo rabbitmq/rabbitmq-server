@@ -65,6 +65,12 @@ verify_provider() -> [
     ]},
     {oauth_provider_with_issuer, [], [
         get_oauth_provider_has_jwks_uri
+    ]}, 
+    {oauth_provider_with_proxy, [], [
+        get_oauth_provider_has_proxy
+    ]},
+    {oauth_provider_with_https_proxy, [], [
+        get_oauth_provider_has_https_proxy
     ]}
 ].
 
@@ -149,6 +155,46 @@ init_per_group(with_resource_server_id, Config) ->
     set_env(resource_server_id, ?RABBITMQ),
     Config;
 
+init_per_group(oauth_provider_with_proxy, Config) ->
+    Proxy = [
+        {proxy, "http://idp:8080"},
+        {proxy_username, <<"user1">>},
+        {proxy_password, <<"pwd1">>}
+    ],
+    case ?config(oauth_provider_id, Config) of 
+        root -> 
+            KeyConfig = get_env(key_config, []),
+            set_env(key_config, KeyConfig ++ Proxy);
+        Id -> 
+            OAuthProviders = get_env(oauth_providers, #{}),
+            OAuthProvider = maps:get(Id, OAuthProviders, []),
+            set_env(oauth_providers, maps:put(Id, Proxy ++ OAuthProvider, OAuthProviders))
+    end,
+    [{proxy_hostname, "idp"},
+     {proxy_port, 8080}, 
+     {proxy_username, <<"user1">>},
+     {proxy_password, <<"pwd1">>}] ++ Config;
+
+init_per_group(oauth_provider_with_https_proxy, Config) ->
+    Proxy = [
+        {proxy, "https://idp:8843"},
+        {proxy_username, <<"user1">>},
+        {proxy_password, <<"pwd1">>}
+    ],
+    case ?config(oauth_provider_id, Config) of 
+        root -> 
+            KeyConfig = get_env(key_config, []),
+            set_env(key_config, KeyConfig ++ Proxy);
+        Id -> 
+            OAuthProviders = get_env(oauth_providers, #{}),
+            OAuthProvider = maps:get(Id, OAuthProviders, []),
+            set_env(oauth_providers, maps:put(Id, Proxy ++ OAuthProvider, OAuthProviders))
+    end,
+    [{proxy_hostname, "idp"},
+     {proxy_port, 8843}, 
+     {proxy_username, <<"user1">>},
+     {proxy_password, <<"pwd1">>}] ++ Config;
+
 init_per_group(with_algorithms, Config) ->
     KeyConfig = get_env(key_config, []),
     set_env(key_config, KeyConfig ++ [{algorithms, [<<"HS256">>, <<"RS256">>]}]),
@@ -189,6 +235,21 @@ init_per_group(_any, Config) ->
 
 end_per_group(with_rabbitmq_node, Config) ->
     rabbit_ct_helpers:run_steps(Config, rabbit_ct_broker_helpers:teardown_steps());
+
+end_per_group(oauth_provider_with_proxy, Config) ->
+    case ?config(oauth_provider_id, Config) of 
+        root -> 
+            KeyConfig = get_env(key_config, []),    
+            KeyConfig0 = proplists:delete(proxy, KeyConfig),
+            KeyConfig1 = proplists:delete(proxy_username, KeyConfig0),
+            KeyConfig2 = proplists:delete(proxy_password, KeyConfig1),
+            set_env(key_config, KeyConfig2);
+        Id -> 
+            unset_oauth_provider_properties(Id, [proxy, proxy_username, proxy_password])
+    end,
+    Config;
+end_per_group(oauth_provider_with_https_proxy, Config) ->
+    end_per_group(oauth_provider_with_proxy, Config);
 
 end_per_group(with_root_static_signing_keys, Config) ->
     KeyConfig = call_get_env(Config, key_config, []),
@@ -407,9 +468,39 @@ get_oauth_provider_with_jwks_uri_returns_error(Config) ->
 
 get_oauth_provider_has_jwks_uri(Config) ->
     {ok, OAuthProvider} = get_oauth_provider(
-        ?config(oauth_provider_id, Config), [jwks_uri]),
-        ct:log("OAuthProvider: ~p", [OAuthProvider]),
+        ?config(oauth_provider_id, Config), [jwks_uri]),        
     ?assertEqual(?config(jwks_uri, Config), OAuthProvider#oauth_provider.jwks_uri).
+
+get_oauth_provider_has_proxy(Config) ->
+    {ok, OAuthProvider} = get_oauth_provider(
+        ?config(oauth_provider_id, Config), [jwks_uri]),    
+    ?assertEqual(false, 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
+
+    ?assertEqual(?config(proxy_port, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
+    ?assertEqual(?config(proxy_hostname, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.host),
+    ?assertEqual(?config(proxy_username, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
+    ?assertEqual(?config(proxy_password, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.password).
+
+
+get_oauth_provider_has_https_proxy(Config) ->
+    {ok, OAuthProvider} = get_oauth_provider(
+        ?config(oauth_provider_id, Config), [jwks_uri]),    
+    ?assertEqual(true, 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.https),
+
+    ?assertEqual(?config(proxy_port, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.port),
+    ?assertEqual(?config(proxy_hostname, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.host),
+    ?assertEqual(?config(proxy_username, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.username),
+    ?assertEqual(?config(proxy_password, Config), 
+        OAuthProvider#oauth_provider.proxy_options#proxy_options.password).
 
 
 %% ---- Utility functions
