@@ -154,6 +154,8 @@ discard(Msgs, Reason, undefined, State) ->
               [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
     Idxs = [I || ?MSG(I, _) <- Msgs0],
+    %% TODO: this could be turned into a log_ext effect instead to avoid
+    %% reading from disk inside the qq process
     Effect = {log, Idxs,
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(Idxs, Log)),

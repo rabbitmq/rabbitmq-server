@@ -69,7 +69,8 @@
                 pending = #{} :: #{seq() =>
                                    {term(), rabbit_fifo:command()}},
                 consumers = #{} :: #{rabbit_types:ctag() => #consumer{}},
-                timer_state :: term()
+                timer_state :: term(),
+                cached_segments :: undefined | ra_flru:state()
                }).
 
 -opaque state() :: #state{}.
@@ -132,9 +133,15 @@ enqueue(QName, Correlation, Msg,
             %% it is safe to reject the message as we never attempted
             %% to send it
             {reject_publish, State0};
+        {error, {shutdown, delete}} ->
+            rabbit_log:debug("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
+                             [?MODULE, rabbit_misc:rs(QName)]),
+            {reject_publish, State0};
         {timeout, _} ->
             {reject_publish, State0};
         Err ->
+            rabbit_log:debug("~ts: QQ ~ts error when registering enqueuer ~p",
+                             [?MODULE, rabbit_misc:rs(QName), Err]),
             exit(Err)
     end;
 enqueue(_QName, _Correlation, _Msg,
@@ -167,7 +174,7 @@ enqueue(QName, Correlation, Msg,
 %% @param QueueName Name of the queue.
 %% @param Msg an arbitrary erlang term representing the message.
 %% @param State the current {@module} state.
-%% @returns
+%% @return's
 %% `{ok, State, Actions}' if the command was successfully sent.
 %% {@module} assigns a sequence number to every raft command it issues. The
 %% SequenceNumber can be correlated to the applied sequence numbers returned
@@ -633,7 +640,8 @@ handle_ra_event(QName, From, {applied, Seqs},
         _ ->
             {ok, State1, Actions}
     end;
-handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
+handle_ra_event(QName, From, {machine, Del}, State0)
+      when element(1, Del) == delivery ->
     handle_delivery(QName, From, Del, State0);
 handle_ra_event(_QName, _From, {machine, Action}, State)
   when element(1, Action) =:= credit_reply orelse
@@ -835,7 +843,12 @@ handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
     %% we should return all messages.
     MsgIntIds = [Id || {Id, _} <- IdMsgs],
     {State1, Deliveries} = return(Tag, MsgIntIds, State0),
-    {ok, State1, Deliveries}.
+    {ok, State1, Deliveries};
+handle_delivery(QName, Leader, {delivery, Tag, ReadState, Msgs},
+                #state{cached_segments = Cached0} = State) ->
+    {MsgIds, Cached} = rabbit_fifo:exec_read(Cached0, ReadState, Msgs),
+    handle_delivery(QName, Leader, {delivery, Tag, MsgIds},
+                    State#state{cached_segments = Cached}).
 
 transform_msgs(QName, QRef, Msgs) ->
     lists:map(
