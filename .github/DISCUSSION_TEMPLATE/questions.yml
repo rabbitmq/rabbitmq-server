@@ -16,7 +16,9 @@ body:
       options:
         - label: I have read [RabbitMQ's Community Support Policy](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
           required: true
-        - label: I agree to provide all relevant information (versions, logs, rabbitmq-diagnostics output, detailed reproduction steps)
+        - label: I run RabbitMQ 4.x, the series covered by [community support](https://github.com/rabbitmq/rabbitmq-server/blob/main/COMMUNITY_SUPPORT.md)
+          required: true
+        - label: I promise to provide all relevant information (versions, logs from all nodes, rabbitmq-diagnostics output, detailed reproduction steps)
           required: true
   - type: markdown
     attributes:
@@ -27,8 +29,8 @@ body:
     attributes:
       label: RabbitMQ version used
       options:
+        - 4.0.4
         - 4.0.3
-        - 3.13.7 or older
     validations:
       required: true
   - type: dropdown
