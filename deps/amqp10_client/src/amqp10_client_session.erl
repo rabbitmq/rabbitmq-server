@@ -467,11 +467,6 @@ mapped({call, From},
        #state{remote_incoming_window = Window})
   when Window =< 0 ->
     {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
-mapped({call, From},
-       {transfer, _Transfer, _Sections},
-       #state{remote_incoming_window = Window})
-  when Window =< 0 ->
-    {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
 mapped({call, From = {Pid, _}},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
                                    delivery_tag = {binary, DeliveryTag},
