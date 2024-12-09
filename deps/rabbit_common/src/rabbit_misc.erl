@@ -827,7 +827,7 @@ process_info(Pid, Items) ->
         true ->
             rpc:call(Node, erlang, process_info, [Pid, Items]);
         _ ->
-            {badrcp, nodedown}
+            {badrpc, nodedown}
     end.
 
 -spec pget(term(), list() | map()) -> term().
