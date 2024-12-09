@@ -1952,7 +1952,10 @@ session_flow_fields(Frames, State)
 session_flow_fields(Flow = #'v1_0.flow'{},
                     #state{next_outgoing_id = NextOutgoingId,
                            next_incoming_id = NextIncomingId,
-                           incoming_window = IncomingWindow}) ->
+                           incoming_window = IncomingWindow0}) ->
+    %% IncomingWindow0 can be negative when the sending client overshoots our window.
+    %% However, we must set a floor of 0 in the FLOW frame because field incoming-window is an uint.
+    IncomingWindow = max(0, IncomingWindow0),
     Flow#'v1_0.flow'{
            next_outgoing_id = ?UINT(NextOutgoingId),
            outgoing_window = ?UINT_OUTGOING_WINDOW,
