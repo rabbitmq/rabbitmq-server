@@ -108,6 +108,7 @@ groups() ->
        detach_requeues_drop_head_classic_queue,
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
+       resource_alarm_send_many,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
        global_counters,
@@ -3207,6 +3208,42 @@ resource_alarm_after_session_begin(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
+%% Test case for
+%% https://github.com/rabbitmq/rabbitmq-server/issues/12816
+resource_alarm_send_many(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = QName}),
+    Address = rabbitmq_amqp_address:queue(QName),
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% Send many messages while a memory alarm kicks in.
+    %% Our expectations are:
+    %% 1. At some point, our client's remote-incoming-window should be exceeded because
+    %%    RabbitMQ sets its incoming-window to 0 when the alarm kicks in.
+    %% 2. No crash.
+    {Pid, Ref} = spawn_monitor(?MODULE,
+                               send_until_remote_incoming_window_exceeded,
+                               [Session, Address]),
+    DefaultWatermark = rpc(Config, vm_memory_monitor, get_vm_memory_high_watermark, []),
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0]),
+    receive {'DOWN', Ref, process, Pid, Reason} ->
+                ?assertEqual(normal, Reason)
+    after 30_000 ->
+              ct:fail(send_timeout)
+    end,
+
+    %% Clear memory alarm.
+    ok = rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [DefaultWatermark]),
+    timer:sleep(100),
+
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection),
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
+    ok = rabbit_ct_client_helpers:close_channel(Ch).
+
 auth_attempt_metrics(Config) ->
     open_and_close_connection(Config),
     [Attempt1] = rpc(Config, rabbit_core_metrics, get_auth_attempts, []),
@@ -6284,6 +6321,28 @@ count_received_messages0(Receiver, Count) ->
             count_received_messages0(Receiver, Count + 1)
     after 5000 ->
               Count
+    end.
+
+send_until_remote_incoming_window_exceeded(Session, Address) ->
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, settled),
+    ok = wait_for_credit(Sender),
+    ok = send_until_remote_incoming_window_exceeded0(Sender, 100_000),
+    ok = amqp10_client:detach_link(Sender).
+
+send_until_remote_incoming_window_exceeded0(_Sender, 0) ->
+    ct:fail(remote_incoming_window_never_exceeded);
+send_until_remote_incoming_window_exceeded0(Sender, Left) ->
+    Bin = integer_to_binary(Left),
+    Msg = amqp10_msg:new(Bin, Bin, true),
+    case amqp10_client:send_msg(Sender, Msg) of
+        ok ->
+            send_until_remote_incoming_window_exceeded0(Sender, Left - 1);
+        {error, insufficient_credit} ->
+            ok = wait_for_credit(Sender),
+            send_until_remote_incoming_window_exceeded0(Sender, Left);
+        {error, remote_incoming_window_exceeded = Reason} ->
+            ct:pal("~s: ~b messages left", [Reason, Left]),
+            ok
     end.
 
 assert_link_credit_runs_out(_Sender, 0) ->
