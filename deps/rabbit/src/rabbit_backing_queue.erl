@@ -220,9 +220,8 @@
 
 %% Called prior to a publish or publish_delivered call. Allows the BQ
 %% to signal that it's already seen this message, (e.g. it was published
-%% or discarded previously) specifying whether to drop the message or reject it.
--callback is_duplicate(mc:state(), state())
-                      -> {{true, drop} | {true, reject} | boolean(), state()}.
+%% or discarded previously).
+-callback is_duplicate(mc:state(), state()) -> {boolean(), state()}.
 
 -callback set_queue_mode(queue_mode(), state()) -> state().
 
