@@ -17,7 +17,12 @@ init_prodkeycloak() {
   print "> PRODKEYCLOAK_URL: ${PRODKEYCLOAK_URL}"
   print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
 
+<<<<<<< HEAD
   generate-ca-server-client-kpi prodkeycloak $PRODKEYCLOAK_CONFIG_DIR
+=======
+    generate-ca-server-client-kpi prodkeycloak $PRODKEYCLOAK_CONFIG_DIR
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 }
 start_prodkeycloak() {
   begin "Starting prodkeycloak ..."
@@ -46,7 +51,11 @@ start_prodkeycloak() {
     --https-certificate-key-file=/opt/keycloak/data/import/server_prodkeycloak_key.pem \
     --hostname=prodkeycloak --hostname-admin=prodkeycloak --https-port=8443
 
+<<<<<<< HEAD
   wait_for_oidc_endpoint prodkeycloak $PRODKEYCLOAK_URL $MOUNT_PRODKEYCLOAK_CONF_DIR/ca_prodkeycloak_certificate.pem
+=======
+  wait_for_oidc_endpoint prodkeycloak $PRODKEYCLOAK_URL $MOUNT_PRODKEYCLOAK_CONF_DIR/ca_certificate.pem
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   end "prodkeycloak is ready"
   print " Note: If you modify prodkeycloak configuration, make sure to run the following command to export the configuration."
   print " docker exec -it prodkeycloak /opt/keycloak/bin/kc.sh export --users realm_file --realm test --dir /opt/keycloak/data/import/"

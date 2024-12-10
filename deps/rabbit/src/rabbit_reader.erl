@@ -42,8 +42,14 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+<<<<<<< HEAD
 
 -export([start_link/2, info_keys/0, info/1, info/2, force_event_refresh/2,
+=======
+-include("rabbit_amqp_reader.hrl").
+
+-export([start_link/2, info/2, force_event_refresh/2,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          shutdown/2]).
 
 -export([system_continue/3, system_terminate/4, system_code_change/4]).
@@ -116,6 +122,7 @@
   connection_blocked_message_sent
 }).
 
+<<<<<<< HEAD
 -define(STATISTICS_KEYS, [pid, recv_oct, recv_cnt, send_oct, send_cnt,
                           send_pend, state, channels, reductions,
                           garbage_collection]).
@@ -124,6 +131,8 @@
 -define(OTHER_METRICS, [recv_cnt, send_cnt, send_pend, state, channels,
                         garbage_collection]).
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -define(CREATION_EVENT_KEYS,
         [pid, name, port, peer_port, host,
         peer_host, ssl, peer_cert_subject, peer_cert_issuer,
@@ -132,8 +141,11 @@
         timeout, frame_max, channel_max, client_properties, connected_at,
         node, user_who_performed_action]).
 
+<<<<<<< HEAD
 -define(INFO_KEYS, ?CREATION_EVENT_KEYS ++ ?STATISTICS_KEYS -- [pid]).
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -define(AUTH_NOTIFICATION_INFO_KEYS,
         [host, name, peer_host, peer_port, protocol, auth_mechanism,
          ssl, ssl_protocol, ssl_cipher, peer_cert_issuer, peer_cert_subject,
@@ -184,6 +196,7 @@ system_terminate(Reason, _Parent, _Deb, _State) ->
 system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
+<<<<<<< HEAD
 -spec info_keys() -> rabbit_types:info_keys().
 
 info_keys() -> ?INFO_KEYS.
@@ -193,6 +206,8 @@ info_keys() -> ?INFO_KEYS.
 info(Pid) ->
     gen_server:call(Pid, info, infinity).
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
 
 info(Pid, Items) ->
@@ -629,9 +644,12 @@ handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
         force  -> stop;
         normal -> NewState
     end;
+<<<<<<< HEAD
 handle_other({'$gen_call', From, info}, State) ->
     gen_server:reply(From, infos(?INFO_KEYS, State)),
     State;
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 handle_other({'$gen_call', From, {info, Items}}, State) ->
     gen_server:reply(From, try {ok, infos(Items, State)}
                            catch Error -> {error, Error}
@@ -1600,8 +1618,13 @@ i(state, #v1{connection_state = ConnectionState,
     end;
 i(garbage_collection, _State) ->
     rabbit_misc:get_gc_info(self());
+<<<<<<< HEAD
 i(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
+=======
+i(reductions = Item, _State) ->
+    {Item, Reductions} = erlang:process_info(self(), Item),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     Reductions;
 i(Item,               #v1{connection = Conn}) -> ic(Item, Conn).
 
@@ -1623,6 +1646,10 @@ ic(client_properties, #connection{client_properties = CP}) -> CP;
 ic(auth_mechanism,    #connection{auth_mechanism = none})  -> none;
 ic(auth_mechanism,    #connection{auth_mechanism = {Name, _Mod}}) -> Name;
 ic(connected_at,      #connection{connected_at = T}) -> T;
+<<<<<<< HEAD
+=======
+ic(container_id, _) -> ''; % AMQP 1.0 specific field
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 ic(Item,              #connection{}) -> throw({bad_argument, Item}).
 
 socket_info(Get, Select, #v1{sock = Sock}) ->
@@ -1640,12 +1667,21 @@ maybe_emit_stats(State) ->
 
 emit_stats(State) ->
     [{_, Pid},
+<<<<<<< HEAD
      {_, Recv_oct},
      {_, Send_oct},
      {_, Reductions}] = infos(?SIMPLE_METRICS, State),
     Infos = infos(?OTHER_METRICS, State),
     rabbit_core_metrics:connection_stats(Pid, Infos),
     rabbit_core_metrics:connection_stats(Pid, Recv_oct, Send_oct, Reductions),
+=======
+     {_, RecvOct},
+     {_, SendOct},
+     {_, Reductions}] = infos(?SIMPLE_METRICS, State),
+    Infos = infos(?OTHER_METRICS, State),
+    rabbit_core_metrics:connection_stats(Pid, Infos),
+    rabbit_core_metrics:connection_stats(Pid, RecvOct, SendOct, Reductions),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     State1 = rabbit_event:reset_stats_timer(State, #v1.stats_timer),
     ensure_stats_timer(State1).
 
@@ -1660,6 +1696,10 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                               pending_recv = PendingRecv,
                               helper_sup = {_HelperSup091, HelperSup10},
                               proxy_socket = ProxySocket,
+<<<<<<< HEAD
+=======
+                              stats_timer = StatsTimer,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                               connection = #connection{
                                               name = Name,
                                               host = Host,
@@ -1668,7 +1708,11 @@ pack_for_1_0(Buf, BufLen, #v1{sock         = Sock,
                                               peer_port = PeerPort,
                                               connected_at = ConnectedAt}}) ->
     {Sock, PendingRecv, HelperSup10, Buf, BufLen, ProxySocket,
+<<<<<<< HEAD
      Name, Host, PeerHost, Port, PeerPort, ConnectedAt}.
+=======
+     Name, Host, PeerHost, Port, PeerPort, ConnectedAt, StatsTimer}.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 respond_and_close(State, Channel, Protocol, Reason, LogErr) ->
     log_hard_error(State, Channel, LogErr),

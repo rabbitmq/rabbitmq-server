@@ -37,7 +37,13 @@ setup(#{feature_flags_file := FFFile}) ->
                       "Failed to initialize feature flags registry: ~tp",
                       [Reason],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+<<<<<<< HEAD
                     throw({error, failed_to_initialize_feature_flags_registry})
+=======
+                    throw({error,
+                           {failed_to_initialize_feature_flags_registry,
+                            Reason}})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             end;
         {error, Reason} ->
             ?LOG_ERROR(

@@ -1,12 +1,19 @@
 load("@rules_erlang//:eunit2.bzl", "eunit")
 load("@rules_erlang//:xref2.bzl", "xref")
 load("@rules_erlang//:dialyze.bzl", "dialyze", "plt")
+<<<<<<< HEAD
 load("//:rabbitmq_home.bzl", "rabbitmq_home")
 load("//:rabbitmq_run.bzl", "rabbitmq_run")
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 load(
     "//:rabbitmq.bzl",
     "RABBITMQ_DIALYZER_OPTS",
     "assert_suites",
+<<<<<<< HEAD
+=======
+    "broker_for_integration_suites",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     "rabbitmq_app",
     "rabbitmq_integration_suite",
 )
@@ -86,6 +93,7 @@ eunit(
     target = ":test_erlang_app",
 )
 
+<<<<<<< HEAD
 rabbitmq_home(
     name = "broker-for-tests-home",
     plugins = [
@@ -99,6 +107,9 @@ rabbitmq_run(
     name = "rabbitmq-for-tests-run",
     home = ":broker-for-tests-home",
 )
+=======
+broker_for_integration_suites()
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 rabbitmq_integration_suite(
     name = "config_schema_SUITE",
@@ -109,10 +120,13 @@ rabbitmq_integration_suite(
     name = "rabbit_prometheus_http_SUITE",
     size = "medium",
     flaky = True,
+<<<<<<< HEAD
     runtime_deps = [
         "//deps/rabbitmq_stream:erlang_app",
         "//deps/rabbitmq_stream_common:erlang_app",
     ],
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 )
 
 assert_suites()

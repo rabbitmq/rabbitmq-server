@@ -141,9 +141,15 @@ connection_stats(Pid, Infos) ->
     ets:insert(connection_metrics, {Pid, Infos}),
     ok.
 
+<<<<<<< HEAD
 connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
     %% Includes delete marker
     ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions, 0}),
+=======
+connection_stats(Pid, RecvOct, SendOct, Reductions) ->
+    %% Includes delete marker
+    ets:insert(connection_coarse_metrics, {Pid, RecvOct, SendOct, Reductions, 0}),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ok.
 
 channel_created(Pid, Infos) ->

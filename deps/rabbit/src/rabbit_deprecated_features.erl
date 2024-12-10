@@ -2,11 +2,21 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @author The RabbitMQ team
 %% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+=======
+%% Copyright (c) 2023-2024 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
+%% @author The RabbitMQ team
+%% @copyright 2023-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc.
+%% and/or its subsidiaries. All rights reserved.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 %%
 %% @doc
 %% This module provides an API to manage deprecated features in RabbitMQ. It

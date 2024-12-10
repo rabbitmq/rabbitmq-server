@@ -14,6 +14,10 @@
          init/1,
          size/1,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          property/2,
          routing_headers/2,
          convert_to/3,
@@ -390,6 +394,14 @@ x_header(Key, #mqtt_msg{props = #{'User-Property' := UserProp}}) ->
 x_header(_Key, #mqtt_msg{}) ->
     undefined.
 
+<<<<<<< HEAD
+=======
+x_headers(#mqtt_msg{props = #{'User-Property' := UserProp}}) ->
+    #{Key => {utf8, Val} || {<<"x-", _/binary>> = Key, Val} <- UserProp};
+x_headers(#mqtt_msg{}) ->
+    #{}.
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 property(correlation_id, #mqtt_msg{props = #{'Correlation-Data' := Corr}}) ->
     case mc_util:urn_string_to_uuid(Corr) of
         {ok, UUId} ->

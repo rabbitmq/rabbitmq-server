@@ -22,7 +22,11 @@ define PROJECT_APP_EXTRA_KEYS
 endef
 
 DEPS = rabbit_common rabbit amqp_client cowboy cowlib rabbitmq_web_dispatch rabbitmq_management_agent oauth2_client
+<<<<<<< HEAD
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper amqp10_client
+=======
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers proper rabbitmq_amqp_client
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 LOCAL_DEPS += ranch ssl crypto public_key
 
 # FIXME: Add Ranch as a BUILD_DEPS to be sure the correct version is picked.

@@ -965,7 +965,11 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
       exclusive_consume := ExclusiveConsume,
       args := Args,
       ok_msg := OkMsg,
+<<<<<<< HEAD
       acting_user :=  ActingUser} = Spec,
+=======
+      acting_user := ActingUser} = Spec,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
     QName = amqqueue:get_name(Q),

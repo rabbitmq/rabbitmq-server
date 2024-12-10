@@ -187,7 +187,10 @@ check_default_values(_) ->
       interactive_shell => default,
       keep_pid_file_on_exit => default,
       log_base_dir => default,
+<<<<<<< HEAD
       log_feature_flags_registry => default,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
       log_levels => default,
       main_config_file => default,
       main_log_file => default,
@@ -231,7 +234,10 @@ check_default_values(_) ->
          interactive_shell => false,
          keep_pid_file_on_exit => false,
          log_base_dir => "/var/log/rabbitmq",
+<<<<<<< HEAD
          log_feature_flags_registry => false,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          log_levels => undefined,
          main_config_file => "/etc/rabbitmq/rabbitmq",
          main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",
@@ -282,7 +288,10 @@ check_default_values(_) ->
          interactive_shell => false,
          keep_pid_file_on_exit => false,
          log_base_dir => "%APPDATA%/RabbitMQ/log",
+<<<<<<< HEAD
          log_feature_flags_registry => false,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          log_levels => undefined,
          main_config_file => "%APPDATA%/RabbitMQ/rabbitmq",
          main_log_file => "%APPDATA%/RabbitMQ/log/" ++ NodeS ++ ".log",
@@ -408,7 +417,10 @@ check_values_from_reachable_remote_node(Config) ->
           interactive_shell => default,
           keep_pid_file_on_exit => default,
           log_base_dir => default,
+<<<<<<< HEAD
           log_feature_flags_registry => default,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
           log_levels => default,
           main_config_file => default,
           main_log_file => default,
@@ -452,7 +464,10 @@ check_values_from_reachable_remote_node(Config) ->
              interactive_shell => false,
              keep_pid_file_on_exit => false,
              log_base_dir => "/var/log/rabbitmq",
+<<<<<<< HEAD
              log_feature_flags_registry => false,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
              log_levels => undefined,
              main_config_file => "/etc/rabbitmq/rabbitmq",
              main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",
@@ -540,7 +555,10 @@ check_values_from_offline_remote_node(_) ->
       interactive_shell => default,
       keep_pid_file_on_exit => default,
       log_base_dir => default,
+<<<<<<< HEAD
       log_feature_flags_registry => default,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
       log_levels => default,
       main_config_file => default,
       main_log_file => default,
@@ -584,7 +602,10 @@ check_values_from_offline_remote_node(_) ->
          interactive_shell => false,
          keep_pid_file_on_exit => false,
          log_base_dir => "/var/log/rabbitmq",
+<<<<<<< HEAD
          log_feature_flags_registry => false,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          log_levels => undefined,
          main_config_file => "/etc/rabbitmq/rabbitmq",
          main_log_file => "/var/log/rabbitmq/" ++ NodeS ++ ".log",

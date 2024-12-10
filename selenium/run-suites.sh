@@ -30,7 +30,11 @@ do
   fi
   echo -e "=== $TEST_STATUS $SUITE ==========================================="
   echo " "
+<<<<<<< HEAD
 done <<< "$(cat $SCRIPT/$SUITE_FILE)"
+=======
+done <<< "$(cat $SCRIPT/$SUITE_FILE | sort)"
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 echo -e "=== Summary (${TOTAL_SUITES}/${GREEN}${#SUCCESSFUL_SUITES[@]}/${RED}${#FAILED_SUITES[@]}${NC}) ============================================"
 if [ ${#SUCCESSFUL_SUITES[@]} -gt 0 ]; then echo -e " > ${GREEN}Successful suites ${NC}"; fi

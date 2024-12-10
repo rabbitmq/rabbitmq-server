@@ -72,7 +72,11 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+<<<<<<< HEAD
         srcs = ["include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+=======
+        srcs = ["include/amqp10_filtex.hrl", "include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     )
     filegroup(
         name = "private_hdrs",

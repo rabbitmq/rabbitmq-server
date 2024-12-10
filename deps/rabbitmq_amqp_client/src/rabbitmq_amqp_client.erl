@@ -28,7 +28,13 @@
         declare_exchange/3,
         bind_exchange/5,
         unbind_exchange/5,
+<<<<<<< HEAD
         delete_exchange/2
+=======
+        delete_exchange/2,
+
+        set_token/2
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
        ].
 
 -define(TIMEOUT, 20_000).
@@ -97,6 +103,11 @@ await_attached(Ref) ->
     receive
         {amqp10_event, {link, Ref, attached}} ->
             ok;
+<<<<<<< HEAD
+=======
+        {amqp10_event, {link, Ref, {attached, #'v1_0.attach'{}}}} ->
+            ok;
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?TIMEOUT ->
@@ -129,6 +140,11 @@ await_detached(Ref) ->
     receive
         {amqp10_event, {link, Ref, {detached, normal}}} ->
             ok;
+<<<<<<< HEAD
+=======
+        {amqp10_event, {link, Ref, {detached, #'v1_0.detach'{}}}} ->
+            ok;
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?TIMEOUT ->
@@ -377,6 +393,26 @@ delete_exchange(LinkPair, ExchangeName) ->
             Err
     end.
 
+<<<<<<< HEAD
+=======
+%% Renew OAuth 2.0 token.
+-spec set_token(link_pair(), binary()) ->
+    ok | {error, term()}.
+set_token(LinkPair, Token) ->
+    Props = #{subject => <<"PUT">>,
+              to => <<"/auth/tokens">>},
+    Body = {binary, Token},
+    case request(LinkPair, Props, Body) of
+        {ok, Resp} ->
+            case is_success(Resp) of
+                true -> ok;
+                false -> {error, Resp}
+            end;
+        Err ->
+            Err
+    end.
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -spec request(link_pair(), amqp10_msg:amqp10_properties(), amqp10_prim()) ->
     {ok, Response :: amqp10_msg:amqp10_msg()} | {error, term()}.
 request(#link_pair{session = Session,

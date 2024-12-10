@@ -132,6 +132,10 @@ dispatcher() ->
      {"/connections/:connection",                              rabbit_mgmt_wm_connection, []},
      {"/connections/username/:username",                       rabbit_mgmt_wm_connection_user_name, []},
      {"/connections/:connection/channels",                     rabbit_mgmt_wm_connection_channels, []},
+<<<<<<< HEAD
+=======
+     {"/connections/:connection/sessions",                     rabbit_mgmt_wm_connection_sessions, []},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
      {"/channels",                                             rabbit_mgmt_wm_channels, []},
      {"/channels/:channel",                                    rabbit_mgmt_wm_channel, []},
      {"/consumers",                                            rabbit_mgmt_wm_consumers, []},

@@ -1,5 +1,6 @@
 # RabbitMQ Event Exchange
 
+<<<<<<< HEAD
 ## Overview
 
 This plugin exposes the internal RabbitMQ event mechanism as messages that clients
@@ -152,3 +153,10 @@ TL;DR:
 
 Released under the Mozilla Public License 2.0,
 the same as RabbitMQ.
+=======
+See the [website](https://www.rabbitmq.com/docs/event-exchange) for documentation.
+
+## License
+
+Released under the Mozilla Public License 2.0, the same as RabbitMQ.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

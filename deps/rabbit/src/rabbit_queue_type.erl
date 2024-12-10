@@ -58,6 +58,10 @@
          fold_state/3,
          is_policy_applicable/2,
          is_server_named_allowed/1,
+<<<<<<< HEAD
+=======
+         amqp_capabilities/1,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          arguments/1,
          arguments/2,
          notify_decorators/1,
@@ -129,6 +133,10 @@
                           consumer_tag := rabbit_types:ctag(),
                           exclusive_consume => boolean(),
                           args => rabbit_framing:amqp_table(),
+<<<<<<< HEAD
+=======
+                          filter => rabbit_amqp_filtex:filter_expressions(),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                           ok_msg := term(),
                           acting_user := rabbit_types:username()}.
 -type cancel_reason() :: cancel | remove.
@@ -493,6 +501,15 @@ is_server_named_allowed(Type) ->
     Capabilities = Type:capabilities(),
     maps:get(server_named, Capabilities, false).
 
+<<<<<<< HEAD
+=======
+-spec amqp_capabilities(queue_type()) ->
+    [binary()].
+amqp_capabilities(Type) ->
+    Capabilities = Type:capabilities(),
+    maps:get(?FUNCTION_NAME, Capabilities, []).
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -spec arguments(arguments()) -> [binary()].
 arguments(ArgumentType) ->
     Args0 = lists:map(fun(T) ->

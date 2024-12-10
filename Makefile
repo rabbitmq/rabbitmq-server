@@ -599,6 +599,10 @@ TIER1_PLUGINS := \
 	   rabbitmq_amqp1_0 \
 	   rabbitmq_auth_backend_cache \
 	   rabbitmq_auth_backend_http \
+<<<<<<< HEAD
+=======
+	   rabbitmq_auth_backend_ldap \
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 	   rabbitmq_auth_backend_oauth2 \
 	   rabbitmq_auth_mechanism_ssl \
 	   rabbitmq_aws \

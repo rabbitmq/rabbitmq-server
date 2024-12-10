@@ -9,6 +9,10 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([unpack/1,
+<<<<<<< HEAD
+=======
+         infer/1,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          utf8/1,
          uint/1,
          make_properties/1]).
@@ -73,6 +77,7 @@
               properties/0]).
 
 
+<<<<<<< HEAD
 unpack({_, Value}) -> Value;
 unpack(Value) -> Value.
 
@@ -80,6 +85,34 @@ utf8(S) when is_list(S) -> {utf8, list_to_binary(S)};
 utf8(B) when is_binary(B) -> {utf8, B}.
 
 uint(N) -> {uint, N}.
+=======
+unpack({_, Value}) ->
+    Value;
+unpack(Value) ->
+    Value.
+
+infer(V) when is_integer(V) ->
+    {long, V};
+infer(V) when is_number(V) ->
+    %% AMQP double and Erlang float are both 64-bit.
+    {double, V};
+infer(V) when is_boolean(V) ->
+    {boolean, V};
+infer(V) when is_atom(V) ->
+    {utf8, atom_to_binary(V, utf8)};
+infer(TaggedValue) when is_atom(element(1, TaggedValue)) ->
+    TaggedValue;
+infer(V) ->
+    utf8(V).
+
+utf8(V) when is_binary(V) ->
+    {utf8, V};
+utf8(V) when is_list(V) ->
+    {utf8, unicode:characters_to_binary(V)}.
+
+uint(N) ->
+    {uint, N}.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 make_properties(#{properties := Props})
   when map_size(Props) > 0 ->

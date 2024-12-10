@@ -131,8 +131,13 @@ delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
+<<<<<<< HEAD
     ?assertMatch({#exchange{}, not_deleted, [#binding{}], none},
                  dict:fetch(XName1, Deletions)),
+=======
+    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ?assertEqual(false, rabbit_db_binding:exists(Binding)),
     passed.
 
@@ -152,8 +157,13 @@ auto_delete1(_Config) ->
     Ret = rabbit_db_binding:delete(Binding, fun(_, _) -> ok end),
     ?assertMatch({ok, _}, Ret),
     {ok, Deletions} = Ret,
+<<<<<<< HEAD
     ?assertMatch({#exchange{}, deleted, [#binding{}], none},
                  dict:fetch(XName1, Deletions)),
+=======
+    ?assertMatch({#exchange{}, not_deleted, [#binding{}]},
+                 rabbit_binding:fetch_deletion(XName1, Deletions)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ?assertEqual(false, rabbit_db_binding:exists(Binding)),
     passed.
 

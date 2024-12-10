@@ -6,7 +6,11 @@ BUILD_WITHOUT_QUIC=1
 export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = inets public_key
+<<<<<<< HEAD
 BUILD_DEPS = rabbit_common
+=======
+BUILD_DEPS = rabbit_common rabbitmq_cli
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 DEPS = rabbit cowlib jose base64url oauth2_client
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_web_mqtt emqtt rabbitmq_amqp_client
 

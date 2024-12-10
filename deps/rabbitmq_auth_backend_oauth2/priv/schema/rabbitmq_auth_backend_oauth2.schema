@@ -73,6 +73,29 @@
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
 
+<<<<<<< HEAD
+=======
+{mapping,
+ "auth_oauth2.scope_aliases.$alias",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.scope_aliases.$index.alias",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.scope_aliases.$index.scope",
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.scope_aliases",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_scope_aliases(Conf)
+ end}.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 %% Configure the plugin to skip validation of the aud field
 %%
@@ -143,6 +166,16 @@
  "rabbitmq_auth_backend_oauth2.token_endpoint",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
+<<<<<<< HEAD
+=======
+%% DEPRECATES auth_oauth2.jwks_url
+{mapping,
+ "auth_oauth2.jwks_uri",
+ "rabbitmq_auth_backend_oauth2.jwks_uri",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+%% DEPRECATED
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 {mapping,
  "auth_oauth2.jwks_url",
  "rabbitmq_auth_backend_oauth2.key_config.jwks_url",
@@ -159,6 +192,44 @@
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
 {mapping,
+<<<<<<< HEAD
+=======
+ "auth_oauth2.discovery_endpoint_path",
+ "rabbitmq_auth_backend_oauth2.discovery_endpoint_path",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.discovery_endpoint_params.$param",
+ "rabbitmq_auth_backend_oauth2.discovery_endpoint_params",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.discovery_endpoint_params",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_endpoint_params("discovery_endpoint_params", Conf)
+ end}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery_endpoint_params.$param",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.discovery_endpoint_path",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.algorithms.$algorithm",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_oauth2.oauth_providers",
+ fun(Conf) ->
+    rabbit_oauth2_schema:translate_oauth_providers(Conf)
+ end}.
+
+{mapping,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
  "auth_oauth2.https.peer_verification",
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
  [{datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -301,6 +372,10 @@
   [{datatype, string}]
 }.
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 {mapping,
   "auth_oauth2.resource_servers.$name.scope_prefix",
   "rabbitmq_auth_backend_oauth2.resource_servers",
@@ -320,6 +395,24 @@
 }.
 
 {mapping,
+<<<<<<< HEAD
+=======
+ "auth_oauth2.resource_servers.$name.scope_aliases.$alias",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.scope_aliases.$index.alias",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.resource_servers.$name.scope_aliases.$index.scope",
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, string}]}.
+
+{mapping,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   "auth_oauth2.resource_servers.$name.oauth_provider_id",
   "rabbitmq_auth_backend_oauth2.resource_servers",
   [{datatype, string}]
@@ -333,5 +426,9 @@
 
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->
+<<<<<<< HEAD
     rabbit_oauth2_schema:translate_resource_servers(Conf)    
+=======
+    rabbit_oauth2_schema:translate_resource_servers(Conf)
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
  end}.

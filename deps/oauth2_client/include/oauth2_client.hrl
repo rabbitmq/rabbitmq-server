@@ -5,6 +5,10 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+<<<<<<< HEAD
+=======
+-include("types.hrl").
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 % define access token request common constants
 
@@ -44,6 +48,7 @@
 -define(RESPONSE_END_SESSION_ENDPOINT, <<"end_session_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).
+<<<<<<< HEAD
 
 %% The closest we have to a type import in Erlang
 -type option(T) :: rabbit_types:option(T).
@@ -107,3 +112,5 @@
   }).
 
 -type refresh_token_request() :: #refresh_token_request{}.
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

@@ -37,7 +37,11 @@
                                                     rabbit_mqtt_processor:state(),
          connection_state :: running | blocked,
          conserve :: boolean(),
+<<<<<<< HEAD
          stats_timer :: option(rabbit_event:state()),
+=======
+         stats_timer :: rabbit_event:state(),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
          conn_name :: binary()
         }).
@@ -87,9 +91,15 @@ init(Ref) ->
                             await_recv = false,
                             connection_state = running,
                             conserve = false,
+<<<<<<< HEAD
                             parse_state = rabbit_mqtt_packet:init_state()},
             State1 = control_throttle(State0),
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+=======
+                            parse_state = rabbit_mqtt_packet:init_state(),
+                            stats_timer = rabbit_event:init_stats_timer()},
+            State = control_throttle(State0),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             gen_server:enter_loop(?MODULE, [], State);
         {error, Reason = enotconn} ->
             ?LOG_INFO("MQTT could not get connection string: ~s", [Reason]),
@@ -128,6 +138,7 @@ handle_cast({close_connection, Reason},
 
 handle_cast(QueueEvent = {queue_event, _, _},
             State = #state{proc_state = PState0}) ->
+<<<<<<< HEAD
     try
         case rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
             {ok, PState} ->
@@ -135,6 +146,13 @@ handle_cast(QueueEvent = {queue_event, _, _},
             {error, Reason0, PState} ->
                 {stop, Reason0, pstate(State, PState)}
         end
+=======
+    try rabbit_mqtt_processor:handle_queue_event(QueueEvent, PState0) of
+        {ok, PState} ->
+            maybe_process_deferred_recv(control_throttle(pstate(State, PState)));
+        {error, Reason0, PState} ->
+            {stop, Reason0, pstate(State, PState)}
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     catch throw:{send_failed, Reason1} ->
               network_error(Reason1, State)
     end;
@@ -442,8 +460,11 @@ maybe_process_deferred_recv(State = #state{ deferred_recv = Data, socket = Sock 
     handle_info({tcp, Sock, Data},
                 State#state{ deferred_recv = undefined }).
 
+<<<<<<< HEAD
 maybe_emit_stats(#state{stats_timer = undefined}) ->
     ok;
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 maybe_emit_stats(State) ->
     rabbit_event:if_enabled(State, #state.stats_timer,
                             fun() -> emit_stats(State) end).

@@ -89,6 +89,10 @@ rabbitmq_app(
         "//deps/rabbitmq_web_dispatch:erlang_app",
         "@cowboy//:erlang_app",
         "@cowlib//:erlang_app",
+<<<<<<< HEAD
+=======
+        "@cuttlefish//:erlang_app",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         "@ranch//:erlang_app",
     ],
 )
@@ -130,6 +134,14 @@ rabbitmq_suite(
     ],
 )
 
+<<<<<<< HEAD
+=======
+rabbitmq_suite(
+    name = "rabbit_mgmt_schema_SUITE",
+    size = "small",
+)
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 rabbitmq_integration_suite(
     name = "clustering_prop_SUITE",
     size = "large",
@@ -167,7 +179,11 @@ rabbitmq_integration_suite(
     additional_beam = [
         "test/rabbit_mgmt_runtime_parameters_util.beam",
     ],
+<<<<<<< HEAD
     shard_count = 7,
+=======
+    shard_count = 6,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     runtime_deps = [
         "//deps/amqp10_client:erlang_app",
     ],

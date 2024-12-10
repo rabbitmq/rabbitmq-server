@@ -4,6 +4,10 @@ authnz-messaging/auth-http-backend.sh
 authnz-messaging/auth-http-internal-backends-with-internal.sh
 authnz-messaging/auth-http-internal-backends.sh
 authnz-messaging/auth-internal-backend.sh
+<<<<<<< HEAD
+=======
+authnz-messaging/auth-internal-mtls-backend.sh
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 authnz-messaging/auth-internal-http-backends.sh
 authnz-messaging/auth-ldap-backend.sh
 authnz-messaging/auth-http-backend.sh

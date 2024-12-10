@@ -1,7 +1,11 @@
 <h2>Connection <%= fmt_string(connection.name) %> <%= fmt_maybe_vhost(connection.vhost) %></h1>
 
 <% if (!disable_stats) { %>
+<<<<<<< HEAD
 <div class="section">
+=======
+<div class="section" id="connection-overview-section">
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 <h2>Overview</h2>
 <div class="hider updatable">
   <%= data_rates('data-rates-conn', connection, 'Data rates') %>
@@ -17,11 +21,27 @@
 
 <% if (connection.client_properties.connection_name) { %>
 <tr>
+<<<<<<< HEAD
   <th>Client-provided name</th>
+=======
+  <th>Client-provided connection name</th>
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   <td><%= fmt_string(connection.client_properties.connection_name) %></td>
 </tr>
 <% } %>
 
+<<<<<<< HEAD
+=======
+<% if (connection.container_id) { %>
+<tr>
+  <th>Container ID
+    <span class="help" id="container-id"></span>
+  </th>
+  <td><%= fmt_string(connection.container_id) %></td>
+</tr>
+<% } %>
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 <tr>
  <th>Username</th>
  <td><%= fmt_string(connection.user) %></td>
@@ -75,13 +95,33 @@
 </div>
 </div>
 
+<<<<<<< HEAD
 <div class="section">
+=======
+<% if (connection.protocol === 'AMQP 1-0') { %>
+
+<div class="section" id="connection-sessions-section">
+  <h2 class="updatable" >Sessions (<%=(sessions.length)%>)</h2>
+  <div class="hider updatable">
+    <%= format('sessions-list', {'sessions': sessions}) %>
+  </div>
+</div>
+
+<% } else { %>
+
+<div class="section" id="connection-channels-section">
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   <h2 class="updatable" >Channels (<%=(channels.length)%>) </h2>
   <div class="hider updatable">
     <%= format('channels-list', {'channels': channels, 'mode': 'connection'}) %>
   </div>
 </div>
 
+<<<<<<< HEAD
+=======
+<% } %>
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 <% if (connection.ssl) { %>
 <div class="section">
 <h2>SSL</h2>
@@ -127,7 +167,11 @@
 <% } %>
 
 <% if (properties_size(connection.client_properties) > 0) { %>
+<<<<<<< HEAD
 <div class="section-hidden">
+=======
+<div class="section-hidden" id="connection-client-properies-section">
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 <h2>Client properties</h2>
 <div class="hider">
 <%= fmt_table_long(connection.client_properties) %>
@@ -136,7 +180,11 @@
 <% } %>
 
 <% if(connection.reductions || connection.garbage_collection) { %>
+<<<<<<< HEAD
 <div class="section-hidden">
+=======
+<div class="section-hidden" id="connection-runtime-metrics-section">
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 <h2>Runtime Metrics (Advanced)</h2>
  <div class="hider updatable">
  <%= data_reductions('reductions-rates-conn', connection) %>
@@ -175,7 +223,11 @@
 <% } %>
 <% } %>
 
+<<<<<<< HEAD
 <div class="section-hidden">
+=======
+<div class="section-hidden" id="connection-close-section">
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   <h2>Close this connection</h2>
   <div class="hider">
     <form action="#/connections" method="delete" class="confirm">

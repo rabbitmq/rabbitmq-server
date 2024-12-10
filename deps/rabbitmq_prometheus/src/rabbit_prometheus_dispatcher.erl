@@ -16,6 +16,10 @@ build_dispatcher() ->
     prometheus_registry:register_collectors([
         prometheus_rabbitmq_core_metrics_collector,
         prometheus_rabbitmq_global_metrics_collector,
+<<<<<<< HEAD
+=======
+        prometheus_rabbitmq_message_size_metrics_collector,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         prometheus_rabbitmq_alarm_metrics_collector,
         prometheus_rabbitmq_dynamic_collector,
         prometheus_process_collector]),
@@ -27,7 +31,12 @@ build_dispatcher() ->
         prometheus_vm_statistics_collector,
         prometheus_vm_msacc_collector,
         prometheus_rabbitmq_core_metrics_collector,
+<<<<<<< HEAD
         prometheus_rabbitmq_global_metrics_collector
+=======
+        prometheus_rabbitmq_global_metrics_collector,
+        prometheus_rabbitmq_message_size_metrics_collector
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         ]),
     prometheus_registry:register_collectors('detailed', [
         prometheus_rabbitmq_core_metrics_collector

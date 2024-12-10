@@ -892,10 +892,14 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, {ok, Status}} ->
+<<<<<<< HEAD
             case rabbit_db_cluster:check_compatibility(Node) of
                 ok    -> {ok, Status};
                 Error -> Error
             end
+=======
+            {ok, Status}
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end.
 
 remote_node_info(Node) ->

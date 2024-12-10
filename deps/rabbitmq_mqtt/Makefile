@@ -27,7 +27,12 @@ define PROJECT_ENV
 	    {mailbox_soft_limit, 200},
 	    {max_packet_size_unauthenticated, 65536},
 	    %% 256 MB is upper limit defined by MQTT spec
+<<<<<<< HEAD
 	    {max_packet_size_authenticated, 268435455},
+=======
+	    %% We set 16 MB as defined in deps/rabbit/Makefile max_message_size
+	    {max_packet_size_authenticated, 16777216},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 	    {topic_alias_maximum, 16}
 	  ]
 endef

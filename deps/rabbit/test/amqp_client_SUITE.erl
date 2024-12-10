@@ -27,6 +27,20 @@
 -import(event_recorder,
         [assert_event_type/2,
          assert_event_prop/2]).
+<<<<<<< HEAD
+=======
+-import(amqp_utils,
+        [init/1, init/2,
+         connection_config/1, connection_config/2,
+         flush/1,
+         wait_for_credit/1,
+         wait_for_accepts/1,
+         send_messages/3, send_messages/4,
+         detach_link_sync/1,
+         end_session_sync/1,
+         wait_for_session_end/1,
+         close_connection_sync/1]).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 all() ->
     [
@@ -97,16 +111,28 @@ groups() ->
        detach_requeues_drop_head_classic_queue,
        resource_alarm_before_session_begin,
        resource_alarm_after_session_begin,
+<<<<<<< HEAD
        resource_alarm_send_many,
        max_message_size_client_to_server,
        max_message_size_server_to_client,
        global_counters,
        stream_filtering,
+=======
+       max_message_size_client_to_server,
+       max_message_size_server_to_client,
+       global_counters,
+       stream_bloom_filter,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
        available_messages_classic_queue,
        available_messages_quorum_queue,
        available_messages_stream,
        incoming_message_interceptors,
+<<<<<<< HEAD
        trace,
+=======
+       trace_classic_queue,
+       trace_stream,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
        user_id,
        message_ttl,
        plugin,
@@ -146,7 +172,16 @@ groups() ->
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
        session_max_per_connection,
        link_max_per_session,
+<<<<<<< HEAD
        reserved_annotation
+=======
+       reserved_annotation,
+       x_cc_annotation_exchange,
+       x_cc_annotation_exchange_routing_key_empty,
+       x_cc_annotation_queue,
+       x_cc_annotation_null,
+       bad_x_cc_annotation_exchange
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
       ]},
 
      {cluster_size_3, [shuffle],
@@ -287,12 +322,24 @@ init_per_testcase(T, Config)
   when T =:= detach_requeues_one_session_quorum_queue orelse
        T =:= single_active_consumer_quorum_queue orelse
        T =:= detach_requeues_two_connections_quorum_queue ->
+<<<<<<< HEAD
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
             rabbit_ct_helpers:testcase_started(Config, T);
         {skip, _} ->
             {skip, "Feature flag rabbitmq_4.0.0 enables the consumer removal API"}
     end;
+=======
+    %% Feature flag rabbitmq_4.0.0 enables the consumer removal API.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    rabbit_ct_helpers:testcase_started(Config, T);
+init_per_testcase(T, Config)
+  when T =:= leader_transfer_quorum_queue_credit_single orelse
+       T =:= leader_transfer_quorum_queue_credit_batches ->
+    %% These test cases flake with feature flag 'rabbitmq_4.0.0' disabled.
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    rabbit_ct_helpers:testcase_started(Config, T);
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 init_per_testcase(T = immutable_bare_message, Config) ->
     case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
         true ->
@@ -317,6 +364,7 @@ init_per_testcase(T = dead_letter_reject, Config) ->
             {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
              "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
     end;
+<<<<<<< HEAD
 init_per_testcase(T, Config)
   when  T =:= leader_transfer_quorum_queue_credit_single orelse
         T =:= leader_transfer_quorum_queue_credit_batches orelse
@@ -337,6 +385,8 @@ init_per_testcase(T, Config)
     %% If node 1 runs 3.x, this is the old real plugin.
     ok = rabbit_ct_broker_helpers:enable_plugin(Config, 1, rabbitmq_amqp1_0),
     rabbit_ct_helpers:testcase_started(Config, T);
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -1170,7 +1220,11 @@ roundtrip_with_drain(Config, QueueType, QName)
     % wait for a delivery
     receive {amqp10_msg, Receiver, InMsg} ->
                 ok = amqp10_client:accept_msg(Receiver, InMsg)
+<<<<<<< HEAD
     after 2000 ->
+=======
+    after 30000 ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
               Reason = delivery_timeout,
               flush(Reason),
               ct:fail(Reason)
@@ -1257,7 +1311,11 @@ drain_many(Config, QueueType, QName)
     %% We expect the server to send us the last message and
     %% to advance the delivery-count promptly.
     receive {amqp10_msg, _, _} -> ok
+<<<<<<< HEAD
     after 2000 -> ct:fail({missing_delivery, ?LINE})
+=======
+    after 30000 -> ct:fail({missing_delivery, ?LINE})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end,
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 300 -> ct:fail("expected credit_exhausted")
@@ -1307,7 +1365,11 @@ amqp_amqpl(QType, Config) ->
     ok = amqp10_client:send_msg(
            Sender,
            amqp10_msg:set_application_properties(
+<<<<<<< HEAD
              #{"my int" => -2},
+=======
+             #{"my int" => {int, -2}},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
              amqp10_msg:new(<<>>, Body1, true))),
     %% Send with properties
     CorrelationID = <<"my correlation ID">>,
@@ -1322,7 +1384,11 @@ amqp_amqpl(QType, Config) ->
            amqp10_msg:set_properties(
              #{correlation_id => CorrelationID},
              amqp10_msg:set_application_properties(
+<<<<<<< HEAD
                #{"my int" => -2},
+=======
+               #{"my long" => -9_000_000_000},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                amqp10_msg:new(<<>>, Body1, true)))),
     %% Send with footer
     Footer = #'v1_0.footer'{content = [{{symbol, <<"x-my footer">>}, {ubyte, 255}}]},
@@ -1411,7 +1477,11 @@ amqp_amqpl(QType, Config) ->
                                              correlation_id = Corr9}}} ->
                 ?assertEqual([Body1], amqp10_framing:decode_bin(Payload9)),
                 ?assertEqual(CorrelationID, Corr9),
+<<<<<<< HEAD
                 ?assertEqual({signedint, -2}, rabbit_misc:table_lookup(Headers9, <<"my int">>))
+=======
+                ?assertEqual({long, -9_000_000_000}, rabbit_misc:table_lookup(Headers9, <<"my long">>))
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     after 30000 -> ct:fail({missing_deliver, ?LINE})
     end,
     receive {_, #amqp_msg{payload = Payload10}} ->
@@ -1459,12 +1529,22 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
     OutMsg1 = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, false),
     OutMsg2 = amqp10_msg:set_application_properties(
                 #{"string" => "string-val",
+<<<<<<< HEAD
                   "int" => 2,
+=======
+                  "long" => -2,
+                  "uint" => {uint, 2},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                   "bool" => false},
                 OutMsg1),
     OutMsg3 = amqp10_msg:set_message_annotations(
                 #{"x-string" => "string-value",
+<<<<<<< HEAD
                   "x-int" => 3,
+=======
+                  "x-long" => -3,
+                  "x-uint" => {uint, 3},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                   "x-bool" => true},
                 OutMsg2),
     OutMsg = amqp10_msg:set_headers(
@@ -1484,11 +1564,21 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
 
     %% assert application properties
     ?assertEqual({longstr, <<"string-val">>}, rabbit_misc:table_lookup(Headers, <<"string">>)),
+<<<<<<< HEAD
     ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"int">>)),
     ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers, <<"bool">>)),
     %% assert message annotations
     ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)),
     ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-int">>)),
+=======
+    ?assertEqual({long, -2}, rabbit_misc:table_lookup(Headers, <<"long">>)),
+    ?assertEqual({unsignedint, 2}, rabbit_misc:table_lookup(Headers, <<"uint">>)),
+    ?assertEqual({bool, false}, rabbit_misc:table_lookup(Headers, <<"bool">>)),
+    %% assert message annotations
+    ?assertEqual({longstr, <<"string-value">>}, rabbit_misc:table_lookup(Headers, <<"x-string">>)),
+    ?assertEqual({long, -3}, rabbit_misc:table_lookup(Headers, <<"x-long">>)),
+    ?assertEqual({unsignedint, 3}, rabbit_misc:table_lookup(Headers, <<"x-uint">>)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ?assertEqual({bool, true}, rabbit_misc:table_lookup(Headers, <<"x-bool">>)),
     %% assert headers
     ?assertEqual(2, DeliveryMode),
@@ -1888,18 +1978,31 @@ events(Config) ->
 
     Protocol = {protocol, {1, 0}},
     AuthProps = [{name, <<"guest">>},
+<<<<<<< HEAD
                        {auth_mechanism, <<"PLAIN">>},
                        {ssl, false},
                        Protocol],
     ?assertMatch(
       {value, _},
       find_event(user_authentication_success, AuthProps, Events)),
+=======
+                 {auth_mechanism, <<"PLAIN">>},
+                 {ssl, false},
+                 Protocol],
+    ?assertMatch(
+       {value, _},
+       find_event(user_authentication_success, AuthProps, Events)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
     Node = get_node_config(Config, 0, nodename),
     ConnectionCreatedProps = [Protocol,
                               {node, Node},
                               {vhost, <<"/">>},
                               {user, <<"guest">>},
+<<<<<<< HEAD
+=======
+                              {container_id, <<"my container">>},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                               {type, network}],
     {value, ConnectionCreatedEvent} = find_event(
                                         connection_created,
@@ -1920,8 +2023,13 @@ events(Config) ->
                              Pid,
                              ClientProperties],
     ?assertMatch(
+<<<<<<< HEAD
       {value, _},
       find_event(connection_closed, ConnectionClosedProps, Events)),
+=======
+       {value, _},
+       find_event(connection_closed, ConnectionClosedProps, Events)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ok.
 
 sync_get_unsettled_classic_queue(Config) ->
@@ -3011,7 +3119,11 @@ detach_requeues_two_connections(QType, Config) ->
     ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
     ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
     %% Wait for credit being applied to the queue.
+<<<<<<< HEAD
     timer:sleep(10),
+=======
+    timer:sleep(100),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
     {ok, Receiver1} = amqp10_client:attach_receiver_link(Session1, <<"receiver 1">>, Address, unsettled),
     receive {amqp10_event, {link, Receiver1, attached}} -> ok
@@ -3019,7 +3131,11 @@ detach_requeues_two_connections(QType, Config) ->
     end,
     ok = amqp10_client:flow_link_credit(Receiver1, 40, never),
     %% Wait for credit being applied to the queue.
+<<<<<<< HEAD
     timer:sleep(10),
+=======
+    timer:sleep(100),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
     NumMsgs = 6,
     [begin
@@ -3203,6 +3319,7 @@ resource_alarm_after_session_begin(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
+<<<<<<< HEAD
 %% Test case for
 %% https://github.com/rabbitmq/rabbitmq-server/issues/12816
 resource_alarm_send_many(Config) ->
@@ -3239,6 +3356,8 @@ resource_alarm_send_many(Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 auth_attempt_metrics(Config) ->
     open_and_close_connection(Config),
     [Attempt1] = rpc(Config, rabbit_core_metrics, get_auth_attempts, []),
@@ -3409,7 +3528,11 @@ last_queue_confirms(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, 2),
     %% Since the quorum queue has become available, we should now get a confirmation for m2.
     receive {amqp10_disposition, {accepted, DTag2}} -> ok
+<<<<<<< HEAD
     after 10_000 -> ct:fail({missing_accepted, DTag2})
+=======
+    after 30_000 -> ct:fail({missing_accepted, DTag2})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end,
 
     ok = amqp10_client:detach_link(SenderClassicQ),
@@ -3458,7 +3581,11 @@ target_queue_deleted(Config) ->
     after 30000 -> ct:fail({missing_accepted, DTag1})
     end,
 
+<<<<<<< HEAD
     N0 = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+=======
+    N0 = get_node_config(Config, 0, nodename),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     RaName = ra_name(QuorumQ),
     ServerId0 = {RaName, N0},
     {ok, Members, _Leader} = ra:members(ServerId0),
@@ -3484,7 +3611,11 @@ target_queue_deleted(Config) ->
     ok = rabbit_ct_broker_helpers:start_node(Config, ReplicaNode),
     %% Since the quorum queue has become available, we should now get a confirmation for m2.
     receive {amqp10_disposition, {accepted, DTag2}} -> ok
+<<<<<<< HEAD
     after 10_000 -> ct:fail({missing_accepted, DTag2})
+=======
+    after 30_000 -> ct:fail({missing_accepted, DTag2})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end,
 
     ok = amqp10_client:detach_link(Sender),
@@ -3527,7 +3658,11 @@ target_classic_queue_down(Config) ->
     %% We expect that the server closes links that receive from classic queues that are down.
     ExpectedError = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_ILLEGAL_STATE},
     receive {amqp10_event, {link, Receiver1, {detached, ExpectedError}}} -> ok
+<<<<<<< HEAD
     after 10_000 -> ct:fail({missing_event, ?LINE})
+=======
+    after 30_000 -> ct:fail({missing_event, ?LINE})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end,
     %% However the server should not close links that send to classic queues that are down.
     receive Unexpected -> ct:fail({unexpected, Unexpected})
@@ -3567,6 +3702,7 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
+<<<<<<< HEAD
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
             async_notify(unsettled, <<"classic">>, Config);
@@ -3575,6 +3711,13 @@ async_notify_unsettled_classic_queue(Config) ->
              "queues with credit API v1 is known to be broken: "
              "https://github.com/rabbitmq/rabbitmq-server/issues/2597"}
     end.
+=======
+    %% This test flakes with feature flag 'rabbitmq_4.0.0' disabled.
+    %% Link flow control in classic queues with credit API v1 is known to be broken:
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/2597
+    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
+    async_notify(unsettled, <<"classic">>, Config).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 async_notify_unsettled_quorum_queue(Config) ->
     async_notify(unsettled, <<"quorum">>, Config).
@@ -3876,7 +4019,10 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
     ok = end_session_sync(Session1),
     ok = close_connection_sync(Connection1),
 
+<<<<<<< HEAD
     %% Consume from a follower.
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     OpnConf = connection_config(0, Config),
     {ok, Connection0} = amqp10_client:open_connection(OpnConf),
     {ok, Session0} = amqp10_client:begin_session_sync(Connection0),
@@ -3890,6 +4036,10 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
     ok = wait_for_accepts(NumMsgs),
     ok = detach_link_sync(Sender),
 
+<<<<<<< HEAD
+=======
+    %% Consume from a follower.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ok = wait_for_local_member(QType, QName, Config),
     Filter = consume_from_first(QType),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
@@ -3958,8 +4108,17 @@ list_connections(Config) ->
     [ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, Node) || Node <- [0, 1, 2]],
 
     Connection091 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+<<<<<<< HEAD
     {ok, C0} = amqp10_client:open_connection(connection_config(0, Config)),
     {ok, C2} = amqp10_client:open_connection(connection_config(2, Config)),
+=======
+    ContainerId0 = <<"ID 0">>,
+    ContainerId2 = <<"ID 2">>,
+    Cfg0 = maps:put(container_id, ContainerId0, connection_config(0, Config)),
+    Cfg2 = maps:put(container_id, ContainerId2, connection_config(2, Config)),
+    {ok, C0} = amqp10_client:open_connection(Cfg0),
+    {ok, C2} = amqp10_client:open_connection(Cfg2),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     receive {amqp10_event, {connection, C0, opened}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -3967,8 +4126,13 @@ list_connections(Config) ->
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
 
+<<<<<<< HEAD
     {ok, StdOut} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "protocol"]),
     Protocols0 = re:split(StdOut, <<"\n">>, [trim]),
+=======
+    {ok, StdOut0} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "protocol"]),
+    Protocols0 = re:split(StdOut0, <<"\n">>, [trim]),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     %% Remove any whitespaces.
     Protocols1 = [binary:replace(Subject, <<" ">>, <<>>, [global]) || Subject <- Protocols0],
     Protocols = lists:sort(Protocols1),
@@ -3977,6 +4141,16 @@ list_connections(Config) ->
                   <<"{1,0}">>],
                  Protocols),
 
+<<<<<<< HEAD
+=======
+    %% CLI should list AMQP 1.0 container-id
+    {ok, StdOut1} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "container_id"]),
+    ContainerIds0 = re:split(StdOut1, <<"\n">>, [trim]),
+    ContainerIds = lists:sort(ContainerIds0),
+    ?assertEqual([<<>>, ContainerId0, ContainerId2],
+                 ContainerIds),
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ok = rabbit_ct_client_helpers:close_connection(Connection091),
     ok = close_connection_sync(C0),
     ok = close_connection_sync(C2).
@@ -4129,7 +4303,11 @@ global_counters(Config) ->
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
+<<<<<<< HEAD
 stream_filtering(Config) ->
+=======
+stream_bloom_filter(Config) ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     Stream = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(Stream),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
@@ -4412,16 +4590,37 @@ incoming_message_interceptors(Config) ->
     ok = amqp10_client:close_connection(Connection),
     true = rpc(Config, persistent_term, erase, [Key]).
 
+<<<<<<< HEAD
 trace(Config) ->
     Node = atom_to_binary(get_node_config(Config, 0, nodename)),
     TraceQ = <<"my trace queue">>,
     Q = <<"my queue">>,
+=======
+trace_classic_queue(Config) ->
+    trace(atom_to_binary(?FUNCTION_NAME), <<"classic">>, Config).
+
+trace_stream(Config) ->
+    trace(atom_to_binary(?FUNCTION_NAME), <<"stream">>, Config).
+
+trace(Q, QType, Config) ->
+    Node = atom_to_binary(get_node_config(Config, 0, nodename)),
+    TraceQ = <<"my trace queue">>,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     Qs = [Q, TraceQ],
     RoutingKey = <<"my routing key">>,
     Payload = <<"my payload">>,
     CorrelationId = <<"my correlation 👀"/utf8>>,
     Ch = rabbit_ct_client_helpers:open_channel(Config),
+<<<<<<< HEAD
     [#'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = Q0}) || Q0 <- Qs],
+=======
+    #'queue.declare_ok'{} = amqp_channel:call(
+                              Ch, #'queue.declare'{
+                                     queue = Q,
+                                     durable = true,
+                                     arguments = [{<<"x-queue-type">>, longstr, QType}]}),
+    #'queue.declare_ok'{} = amqp_channel:call(Ch, #'queue.declare'{queue = TraceQ}),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue       = TraceQ,
                                              exchange    = <<"amq.rabbitmq.trace">>,
@@ -4439,16 +4638,32 @@ trace(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_on"]),
     {ok, SessionReceiver} = amqp10_client:begin_session_sync(Connection),
 
+<<<<<<< HEAD
+=======
+    {ok, Receiver} = amqp10_client:attach_receiver_link(SessionReceiver,
+                                                        <<"test-receiver">>,
+                                                        rabbitmq_amqp_address:queue(Q)),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     {ok, Sender} = amqp10_client:attach_sender_link(
                      SessionSender,
                      <<"test-sender">>,
                      rabbitmq_amqp_address:exchange(<<"amq.direct">>, RoutingKey)),
     ok = wait_for_credit(Sender),
+<<<<<<< HEAD
     {ok, Receiver} = amqp10_client:attach_receiver_link(SessionReceiver,
                                                         <<"test-receiver">>,
                                                         rabbitmq_amqp_address:queue(Q)),
     Msg0 = amqp10_msg:new(<<"tag 1">>, Payload, true),
     Msg = amqp10_msg:set_properties(#{correlation_id => CorrelationId}, Msg0),
+=======
+    Msg0 = amqp10_msg:new(<<"tag 1">>, Payload, true),
+    Msg = amqp10_msg:set_message_annotations(
+            #{<<"x-cc">> => {list, [{utf8, <<"my CC key">>}]}},
+            amqp10_msg:set_properties(#{correlation_id => CorrelationId}, Msg0)),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ok = amqp10_client:send_msg(Sender, Msg),
     {ok, _} = amqp10_client:get_msg(Receiver),
 
@@ -4458,7 +4673,11 @@ trace(Config) ->
                payload = Payload}} =
     amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.direct">>,
+<<<<<<< HEAD
                    <<"routing_keys">> := [RoutingKey],
+=======
+                   <<"routing_keys">> := [RoutingKey, <<"my CC key">>],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
                    <<"node">> := Node,
                    <<"vhost">> := <<"/">>,
@@ -4473,7 +4692,11 @@ trace(Config) ->
                payload = Payload}} =
     amqp_channel:call(Ch, #'basic.get'{queue = TraceQ}),
     ?assertMatch(#{<<"exchange_name">> := <<"amq.direct">>,
+<<<<<<< HEAD
                    <<"routing_keys">> := [RoutingKey],
+=======
+                   <<"routing_keys">> := [RoutingKey, <<"my CC key">>],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                    <<"connection">> := <<"127.0.0.1:", _/binary>>,
                    <<"node">> := Node,
                    <<"vhost">> := <<"/">>,
@@ -4644,9 +4867,13 @@ idle_time_out_on_client(Config) ->
     receive
         {amqp10_event,
          {connection, Connection,
+<<<<<<< HEAD
           {closed,
            {resource_limit_exceeded,
             <<"remote idle-time-out">>}}}} -> ok
+=======
+          {closed, _}}} -> ok
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     after 30000 ->
               ct:fail({missing_event, ?LINE})
     end,
@@ -4668,7 +4895,11 @@ handshake_timeout(Config) ->
     Par = ?FUNCTION_NAME,
     {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
     ok = rpc(Config, application, set_env, [App, Par, 200]),
+<<<<<<< HEAD
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+=======
+    Port = get_node_config(Config, 0, tcp_port_amqp),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     {ok, Socket} = gen_tcp:connect("localhost", Port, [{active, false}]),
     ?assertEqual({error, closed}, gen_tcp:recv(Socket, 0, 400)),
     ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
@@ -4683,7 +4914,11 @@ credential_expires(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, opened}} -> ok
+<<<<<<< HEAD
     after 2000 -> ct:fail({missing_event, ?LINE})
+=======
+    after 30000 -> ct:fail({missing_event, ?LINE})
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end,
 
     %% Since we don't renew our credential, we expect the server to close our connection.
@@ -4692,7 +4927,11 @@ credential_expires(Config) ->
          {connection, Connection,
           {closed,
            {unauthorized_access, <<"credential expired">>}}}} -> ok
+<<<<<<< HEAD
     after 10_000 ->
+=======
+    after 30_000 ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
               flush(?LINE),
               ct:fail({missing_event, ?LINE})
     end,
@@ -5977,6 +6216,7 @@ reserved_annotation(Config) ->
     end,
     ok = close_connection_sync(Connection).
 
+<<<<<<< HEAD
 %% internal
 %%
 
@@ -5990,6 +6230,244 @@ init(Node, Config) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
     {Connection, Session, LinkPair}.
 
+=======
+%% Test that x-cc routing keys work together with target address
+%% /exchanges/:exchange/:routing-key
+x_cc_annotation_exchange(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key 1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"key 2">>, #{}),
+    Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"key 1">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {list, [{utf8, <<"key 2">>}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, rabbitmq_amqp_address:queue(QName2), settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address
+%% /exchanges/:exchange
+x_cc_annotation_exchange_routing_key_empty(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key 1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"key 2">>, #{}),
+    AddressEmptyRoutingKey = rabbitmq_amqp_address:exchange(<<"amq.direct">>),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, AddressEmptyRoutingKey),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {list, [{utf8, <<"key 1">>},
+                                                                  {utf8, <<"key 2">>}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, rabbitmq_amqp_address:queue(QName1), settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, rabbitmq_amqp_address:queue(QName2), settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address
+%% /queues/:queue
+x_cc_annotation_queue(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    Address1 = rabbitmq_amqp_address:queue(QName1),
+    Address2 = rabbitmq_amqp_address:queue(QName2),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address1),
+    ok = wait_for_credit(Sender),
+
+    Payload = <<"my message">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:set_message_annotations(
+                                          #{<<"x-cc">> => {list, [{utf8, QName2}]}},
+                                          amqp10_msg:new(<<"tag">>, Payload))),
+    ok = wait_for_accepted(<<"tag">>),
+    ok = amqp10_client:detach_link(Sender),
+
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, Address1, settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, Address2, settled),
+    {ok, Msg1} = amqp10_client:get_msg(Receiver1),
+    {ok, Msg2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([Payload], amqp10_msg:body(Msg1)),
+    ?assertEqual([Payload], amqp10_msg:body(Msg2)),
+
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% Test that x-cc routing keys work together with target address 'null'
+x_cc_annotation_null(Config) ->
+    QName1 = <<"queue 1">>,
+    QName2 = <<"queue 2">>,
+    QAddress1 = rabbitmq_amqp_address:queue(QName1),
+    QAddress2 = rabbitmq_amqp_address:queue(QName2),
+    {Connection, Session, LinkPair} = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName1, #{}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName2, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName1, <<"amq.direct">>, <<"key-1">>, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName2, <<"amq.direct">>, <<"🗝️-2"/utf8>>, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, null),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(Session, <<"receiver 1">>, QAddress1, settled),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(Session, <<"receiver 2">>, QAddress2, settled),
+
+    Msg1 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {list, [{utf8, <<"key-1">>},
+                                     {utf8, <<"key-3">>}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"🗝️-2"/utf8>>)},
+               amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(Sender, Msg1),
+    ok = wait_for_accepted(<<"t1">>),
+    {ok, R1M1} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M1} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R1M1)),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R2M1)),
+
+    Msg2 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {list, [{utf8, <<"🗝️-2"/utf8>>},
+                                     {utf8, <<"key-1">>}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:exchange(<<"amq.direct">>)},
+               amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(Sender, Msg2),
+    ok = wait_for_accepted(<<"t2">>),
+    {ok, R1M2} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M2} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R1M2)),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R2M2)),
+
+    Msg3 = amqp10_msg:set_message_annotations(
+             #{<<"x-cc">> => {list, [{utf8, QName1}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:queue(QName2)},
+               amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(Sender, Msg3),
+    ok = wait_for_accepted(<<"t3">>),
+    {ok, R1M3} = amqp10_client:get_msg(Receiver1),
+    {ok, R2M3} = amqp10_client:get_msg(Receiver2),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R1M3)),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R2M3)),
+
+    Msg4 = amqp10_msg:set_message_annotations(
+             %% We send a symbol instead of utf8..
+             #{<<"x-cc">> => {list, [{symbol, QName1}]}},
+             amqp10_msg:set_properties(
+               #{to => rabbitmq_amqp_address:queue(QName2)},
+               amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(Sender, Msg4),
+    %% "If the source of the link supports the rejected outcome, and the message has not
+    %% already been settled by the sender, then the routing node MUST reject the message.
+    %% In this case the error field of rejected MUST contain the error which would have been communicated
+    %% in the detach which would have be sent if a link to the same address had been attempted."
+    %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
+    receive {amqp10_disposition, {{rejected, Error}, <<"t4">>}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation:", _/binary>>}},
+                   Error)
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName1),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName2),
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+bad_x_cc_annotation_exchange(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session(Connection),
+
+    Address = rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"key-1">>),
+    {ok, Sender1} = amqp10_client:attach_sender_link(Session, <<"sender 1">>, Address),
+    ok = wait_for_credit(Sender1),
+    ok = amqp10_client:send_msg(
+           Sender1,
+           amqp10_msg:set_message_annotations(
+             %% We send an array instead of a list.
+             #{<<"x-cc">> => {array, utf8, [{utf8, <<"🗝️-2"/utf8>>}]}},
+             amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = wait_for_settlement(<<"t1">>, released),
+    receive {amqp10_event, {link, Sender1, {detached, Error1}}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation: "
+                                             "{array,utf8,[{utf8,<<\"🗝️-2"/utf8, _Rest/binary>>}},
+                   Error1)
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender2} = amqp10_client:attach_sender_link(Session, <<"sender 2">>, Address),
+    ok = wait_for_credit(Sender2),
+    ok = amqp10_client:send_msg(
+           Sender2,
+           amqp10_msg:set_message_annotations(
+             %% We include a non-utf8 type in the list.
+             #{<<"x-cc">> => {list, [{symbol, <<"key-3">>}]}},
+             amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = wait_for_settlement(<<"t2">>, released),
+    receive {amqp10_event, {link, Sender2, {detached, Error2}}} ->
+                ?assertEqual(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                      description = {utf8, <<"bad value for 'x-cc' message-annotation: "
+                                             "{list,[{symbol,<<\"key-3\">>}]}">>}},
+                   Error2)
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = end_session_sync(Session),
+    ok = amqp10_client:close_connection(Connection).
+
+%% internal
+%%
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 receive_all_messages(Receiver, Accept) ->
     receive_all_messages0(Receiver, Accept, []).
 
@@ -6004,6 +6482,7 @@ receive_all_messages0(Receiver, Accept, Acc) ->
               lists:reverse(Acc)
     end.
 
+<<<<<<< HEAD
 connection_config(Config) ->
     connection_config(0, Config).
 
@@ -6024,6 +6503,8 @@ flush(Prefix) ->
               ok
     end.
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 open_and_close_connection(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
@@ -6032,6 +6513,7 @@ open_and_close_connection(Config) ->
     end,
     ok = close_connection_sync(Connection).
 
+<<<<<<< HEAD
 % before we can send messages we have to wait for credit from the server
 wait_for_credit(Sender) ->
     receive
@@ -6084,6 +6566,8 @@ wait_for_connection_close(Connection) ->
               ct:fail({connection_close_timeout, Connection})
     end.
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 wait_for_accepted(Tag) ->
     wait_for_settlement(Tag, accepted).
 
@@ -6096,6 +6580,7 @@ wait_for_settlement(Tag, State) ->
               ct:fail({settled_timeout, Tag})
     end.
 
+<<<<<<< HEAD
 wait_for_accepts(0) ->
     ok;
 wait_for_accepts(N) ->
@@ -6106,6 +6591,8 @@ wait_for_accepts(N) ->
               ct:fail({missing_accepted, N})
     end.
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 delete_queue(Session, QName) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
                        Session, <<"delete queue">>),
@@ -6156,6 +6643,7 @@ count_received_messages0(Receiver, Count) ->
               Count
     end.
 
+<<<<<<< HEAD
 send_messages(Sender, Left, Settled) ->
     send_messages(Sender, Left, Settled, <<>>).
 
@@ -6204,6 +6692,8 @@ send_until_remote_incoming_window_exceeded0(Sender, Left) ->
             ok
     end.
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 assert_link_credit_runs_out(_Sender, 0) ->
     ct:fail(sufficient_link_credit);
 assert_link_credit_runs_out(Sender, Left) ->
@@ -6216,7 +6706,11 @@ assert_link_credit_runs_out(Sender, Left) ->
             receive {amqp10_event, {link, Sender, credited}} ->
                         ct:pal("credited with ~b messages left", [Left]),
                         assert_link_credit_runs_out(Sender, Left - 1)
+<<<<<<< HEAD
             after 500 ->
+=======
+            after 30000 ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                       ct:pal("insufficient link credit with ~b messages left", [Left]),
                       ok
             end
@@ -6331,8 +6825,13 @@ find_event(Type, Props, Events) when is_list(Props), is_list(Events) ->
       fun(#event{type = EventType, props = EventProps}) ->
               Type =:= EventType andalso
                 lists:all(
+<<<<<<< HEAD
                   fun({Key, _Value}) ->
                           lists:keymember(Key, 1, EventProps)
+=======
+                  fun(Prop) ->
+                          lists:member(Prop, EventProps)
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                   end, Props)
       end, Events).
 

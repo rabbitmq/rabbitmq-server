@@ -56,8 +56,15 @@ function access_token(id, secret) {
   if (req.status == 200) {
     const token = JSON.parse(req.responseText).access_token;
     console.log("Token => " + token)
+<<<<<<< HEAD
     return token;
   } else {
     throw new Error(req.status + " : " + req.responseText);
+=======
+    return token
+  } else {
+    throw new Error(req.status + " : " + " : " + 
+      req.response + " : " + req.responseText)
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   }
 }

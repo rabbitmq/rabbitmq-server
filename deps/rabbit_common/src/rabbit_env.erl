@@ -65,7 +65,10 @@
          "RABBITMQ_KEEP_PID_FILE_ON_EXIT",
          "RABBITMQ_LOG",
          "RABBITMQ_LOG_BASE",
+<<<<<<< HEAD
          "RABBITMQ_LOG_FF_REGISTRY",
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          "RABBITMQ_LOGS",
          "RABBITMQ_MNESIA_BASE",
          "RABBITMQ_MNESIA_DIR",
@@ -150,7 +153,10 @@ get_context_after_reloading_env(Context) ->
              fun keep_pid_file_on_exit/1,
              fun feature_flags_file/1,
              fun forced_feature_flags_on_init/1,
+<<<<<<< HEAD
              fun log_feature_flags_registry/1,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
              fun plugins_path/1,
              fun plugins_expand_dir/1,
              fun enabled_plugins_file/1,
@@ -999,6 +1005,7 @@ forced_feature_flags_on_init(Context) ->
     case Value of
         false ->
             %% get_prefixed_env_var() considers an empty string
+<<<<<<< HEAD
             %% is the same as an undefined environment variable.
             update_context(Context,
                            forced_feature_flags_on_init, undefined, default);
@@ -1017,6 +1024,17 @@ log_feature_flags_registry(Context) ->
             Log = value_is_yes(Value),
             update_context(Context,
                            log_feature_flags_registry, Log, environment)
+=======
+            %% as an undefined environment variable.
+            update_context(
+              Context,
+              forced_feature_flags_on_init, undefined, default);
+        _ ->
+            FeatureNames = string:lexemes(Value, ","),
+            update_context(
+              Context,
+              forced_feature_flags_on_init, FeatureNames, environment)
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     end.
 
 %% -------------------------------------------------------------------

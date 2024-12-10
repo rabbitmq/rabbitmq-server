@@ -144,8 +144,11 @@ all_tests() -> [
     permissions_validation_test,
     permissions_list_test,
     permissions_test,
+<<<<<<< HEAD
     connections_test_amqpl,
     connections_test_amqp,
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     multiple_invalid_connections_test,
     quorum_queues_test,
     stream_queues_have_consumers_field,
@@ -212,6 +215,14 @@ all_tests() -> [
     qq_status_test,
     list_deprecated_features_test,
     list_used_deprecated_features_test,
+<<<<<<< HEAD
+=======
+    connections_amqpl,
+    connections_amqp,
+    amqp_sessions,
+    amqpl_sessions,
+    enable_plugin_amqp,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     cluster_and_node_tags_test,
     version_test
 ].
@@ -250,17 +261,26 @@ finish_init(Group, Config) ->
     merge_app_env(Config1).
 
 init_per_suite(Config) ->
+<<<<<<< HEAD
     {ok, _} = application:ensure_all_started(amqp10_client),
+=======
+    {ok, _} = application:ensure_all_started(rabbitmq_amqp_client),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     Config.
 
 end_per_suite(Config) ->
     Config.
 
+<<<<<<< HEAD
 init_per_group(Group, Config0) when Group == all_tests_with_prefix ->
+=======
+init_per_group(all_tests_with_prefix=Group, Config0) ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     PathConfig = {rabbitmq_management, [{path_prefix, ?PATH_PREFIX}]},
     Config1 = rabbit_ct_helpers:merge_app_env(Config0, PathConfig),
     Config2 = finish_init(Group, Config1),
     start_broker(Config2);
+<<<<<<< HEAD
 init_per_group(Group, Config0) when Group == default_queue_type_group_tests ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
@@ -269,6 +289,8 @@ init_per_group(Group, Config0) when Group == default_queue_type_group_tests ->
             Config1 = finish_init(Group, Config0),
             start_broker(Config1)
     end;
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 init_per_group(Group, Config0) ->
     Config1 = finish_init(Group, Config0),
     start_broker(Config1).
@@ -317,6 +339,7 @@ init_per_testcase(queues_detailed_test, Config) ->
         true  -> Config;
         false -> {skip, "The detailed queues endpoint is not available."}
     end;
+<<<<<<< HEAD
 init_per_testcase(Testcase, Config) when Testcase == definitions_file_metadata_test ->
     case rabbit_ct_helpers:is_mixed_versions() of
         true ->
@@ -324,6 +347,8 @@ init_per_testcase(Testcase, Config) when Testcase == definitions_file_metadata_t
         _ ->
             rabbit_ct_helpers:testcase_started(Config, Testcase)
     end;
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:close_all_connections(Config, 0, <<"rabbit_mgmt_SUITE:init_per_testcase">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
@@ -1022,7 +1047,11 @@ topic_permissions_test(Config) ->
     http_delete(Config, "/vhosts/myvhost2", {group, '2xx'}),
     passed.
 
+<<<<<<< HEAD
 connections_test_amqpl(Config) ->
+=======
+connections_amqpl(Config) ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     {Conn, _Ch} = open_connection_and_channel(Config),
     LocalPort = local_port(Conn),
     Path = binary_to_list(
@@ -1055,7 +1084,11 @@ connections_test_amqpl(Config) ->
     passed.
 
 %% Test that AMQP 1.0 connection can be listed and closed via the rabbitmq_management plugin.
+<<<<<<< HEAD
 connections_test_amqp(Config) ->
+=======
+connections_amqp(Config) ->
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     Node = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
     User = <<"guest">>,
@@ -1112,6 +1145,153 @@ connections_test_amqp(Config) ->
     eventually(?_assertEqual([], http_get(Config, "/connections")), 10, 5),
     ?assertEqual(0, length(rpc(Config, rabbit_amqp1_0, list_local, []))).
 
+<<<<<<< HEAD
+=======
+%% Test that AMQP 1.0 sessions and links can be listed via the rabbitmq_management plugin.
+amqp_sessions(Config) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    User = <<"guest">>,
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"my container">>,
+                sasl => {plain, User, <<"guest">>}},
+    {ok, C} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, C, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+
+    {ok, Session1} = amqp10_client:begin_session_sync(C),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session1, <<"my link pair">>),
+    QName = <<"my queue">>,
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(
+                     Session1,
+                     <<"my sender">>,
+                     rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"my key">>)),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session1,
+                       <<"my receiver">>,
+                       rabbitmq_amqp_address:queue(QName)),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(Receiver, 5000, never),
+
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+    [Connection] = http_get(Config, "/connections"),
+    ConnectionName = maps:get(name, Connection),
+    Path = "/connections/" ++ binary_to_list(uri_string:quote(ConnectionName)) ++ "/sessions",
+    [Session] = http_get(Config, Path),
+    ?assertMatch(
+       #{channel_number := 0,
+         handle_max := HandleMax,
+         next_incoming_id := NextIncomingId,
+         incoming_window := IncomingWindow,
+         next_outgoing_id := NextOutgoingId,
+         remote_incoming_window := RemoteIncomingWindow,
+         remote_outgoing_window := RemoteOutgoingWindow,
+         outgoing_unsettled_deliveries := 0,
+         incoming_links := [#{handle := 0,
+                              link_name := <<"my link pair">>,
+                              target_address := <<"/management">>,
+                              delivery_count := DeliveryCount1,
+                              credit := Credit1,
+                              snd_settle_mode := <<"settled">>,
+                              max_message_size := IncomingMaxMsgSize,
+                              unconfirmed_messages := 0},
+                            #{handle := 2,
+                              link_name := <<"my sender">>,
+                              target_address := <<"/exchanges/amq.direct/my%20key">>,
+                              delivery_count := DeliveryCount2,
+                              credit := Credit2,
+                              snd_settle_mode := <<"mixed">>,
+                              max_message_size := IncomingMaxMsgSize,
+                              unconfirmed_messages := 0}],
+         outgoing_links := [#{handle := 1,
+                              link_name := <<"my link pair">>,
+                              source_address := <<"/management">>,
+                              queue_name := <<>>,
+                              delivery_count := DeliveryCount3,
+                              credit := 0,
+                              max_message_size := <<"unlimited">>,
+                              send_settled := true},
+                            #{handle := 3,
+                              link_name := <<"my receiver">>,
+                              source_address := <<"/queues/my%20queue">>,
+                              queue_name := <<"my queue">>,
+                              delivery_count := DeliveryCount4,
+                              credit := 5000,
+                              max_message_size := <<"unlimited">>,
+                              send_settled := true}]
+        } when is_integer(HandleMax) andalso
+               is_integer(NextIncomingId) andalso
+               is_integer(IncomingWindow) andalso
+               is_integer(NextOutgoingId) andalso
+               is_integer(RemoteIncomingWindow) andalso
+               is_integer(RemoteOutgoingWindow) andalso
+               is_integer(Credit1) andalso
+               is_integer(Credit2) andalso
+               is_integer(IncomingMaxMsgSize) andalso
+               is_integer(DeliveryCount1) andalso
+               is_integer(DeliveryCount2) andalso
+               is_integer(DeliveryCount3) andalso
+               is_integer(DeliveryCount4),
+               Session),
+
+    {ok, _Session2} = amqp10_client:begin_session_sync(C),
+    Sessions = http_get(Config, Path),
+    ?assertEqual(2, length(Sessions)),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = amqp10_client:close_connection(C).
+
+%% Test that GET /connections/:name/sessions returns
+%% 400 Bad Request for non-AMQP 1.0 connections.
+amqpl_sessions(Config) ->
+    {Conn, _Ch} = open_connection_and_channel(Config),
+    LocalPort = local_port(Conn),
+    Path = binary_to_list(
+             rabbit_mgmt_format:print(
+               "/connections/127.0.0.1%3A~w%20-%3E%20127.0.0.1%3A~w/sessions",
+               [LocalPort, amqp_port(Config)])),
+    ok = await_condition(
+           fun() ->
+                   http_get(Config, Path, 400),
+                   true
+           end).
+
+%% Test that AMQP 1.0 connection can be listed if the rabbitmq_management plugin gets enabled
+%% after the connection was established.
+enable_plugin_amqp(Config) ->
+    ?assertEqual(0, length(http_get(Config, "/connections"))),
+
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management),
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_management_agent),
+
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    OpnConf = #{address => ?config(rmq_hostname, Config),
+                port => Port,
+                container_id => <<"my container">>,
+                sasl => anon},
+    {ok, Conn} = amqp10_client:open_connection(OpnConf),
+    receive {amqp10_event, {connection, Conn, opened}} -> ok
+    after 5000 -> ct:fail(opened_timeout)
+    end,
+
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management_agent),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_management),
+    eventually(?_assertEqual(1, length(http_get(Config, "/connections"))), 1000, 10),
+
+    ok = amqp10_client:close_connection(Conn),
+    receive {amqp10_event, {connection, Conn, {closed, normal}}} -> ok
+    after 5000 -> ct:fail({connection_close_timeout, Conn})
+    end.
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 flush(Prefix) ->
     receive
         Msg ->

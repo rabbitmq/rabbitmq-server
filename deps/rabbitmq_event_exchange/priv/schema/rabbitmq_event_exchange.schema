@@ -5,3 +5,10 @@
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("event_exchange.vhost", Conf))
 end}.
+<<<<<<< HEAD
+=======
+
+{mapping, "event_exchange.protocol", "rabbitmq_event_exchange.protocol", [
+    {datatype, {enum, [amqp_0_9_1, amqp_1_0]}}
+]}.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

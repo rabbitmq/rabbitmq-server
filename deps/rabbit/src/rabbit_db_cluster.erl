@@ -57,7 +57,11 @@ can_join(RemoteNode) ->
        "DB: checking if `~ts` can join cluster using remote node `~ts`",
        [node(), RemoteNode],
        #{domain => ?RMQLOG_DOMAIN_DB}),
+<<<<<<< HEAD
     case rabbit_feature_flags:check_node_compatibility(RemoteNode) of
+=======
+    case rabbit_feature_flags:check_node_compatibility(RemoteNode, true) of
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         ok ->
             case rabbit_khepri:is_enabled(RemoteNode) of
                 true  -> can_join_using_khepri(RemoteNode);

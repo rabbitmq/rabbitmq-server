@@ -13,7 +13,14 @@ def all_beam_files(name = "all_beam_files"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+<<<<<<< HEAD
             "src/rabbit_oauth2_config.erl",
+=======
+            "src/rabbit_oauth2_keycloak.erl",
+            "src/rabbit_oauth2_provider.erl",
+            "src/rabbit_oauth2_rar.erl",
+            "src/rabbit_oauth2_resource_server.erl",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -48,7 +55,14 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+<<<<<<< HEAD
             "src/rabbit_oauth2_config.erl",
+=======
+            "src/rabbit_oauth2_keycloak.erl",
+            "src/rabbit_oauth2_provider.erl",
+            "src/rabbit_oauth2_rar.erl",
+            "src/rabbit_oauth2_resource_server.erl",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -85,6 +99,10 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+<<<<<<< HEAD
+=======
+        srcs = ["include/oauth2.hrl"],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     )
 
     filegroup(
@@ -94,7 +112,14 @@ def all_srcs(name = "all_srcs"):
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand.erl",
             "src/rabbit_auth_backend_oauth2.erl",
             "src/rabbit_auth_backend_oauth2_app.erl",
+<<<<<<< HEAD
             "src/rabbit_oauth2_config.erl",
+=======
+            "src/rabbit_oauth2_keycloak.erl",
+            "src/rabbit_oauth2_provider.erl",
+            "src/rabbit_oauth2_rar.erl",
+            "src/rabbit_oauth2_resource_server.erl",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             "src/rabbit_oauth2_schema.erl",
             "src/rabbit_oauth2_scope.erl",
             "src/uaa_jwks.erl",
@@ -174,7 +199,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/system_SUITE.beam"],
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
+<<<<<<< HEAD
         deps = ["//deps/amqp_client:erlang_app"],
+=======
+        deps = ["//deps/amqp10_common:erlang_app", "//deps/amqp_client:erlang_app"],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     )
     erlang_bytecode(
         name = "test_jwks_http_app_beam",
@@ -223,9 +252,19 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
+<<<<<<< HEAD
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
+=======
+        hdrs = ["include/oauth2.hrl"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = [
+            "//deps/oauth2_client:erlang_app",
+            "//deps/rabbit_common:erlang_app",
+        ],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     )
     erlang_bytecode(
         name = "wildcard_match_SUITE_beam_files",
@@ -236,10 +275,28 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
+<<<<<<< HEAD
         name = "rabbit_oauth2_config_SUITE_beam_files",
         testonly = True,
         srcs = ["test/rabbit_oauth2_config_SUITE.erl"],
         outs = ["test/rabbit_oauth2_config_SUITE.beam"],
+=======
+        name = "rabbit_oauth2_provider_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_oauth2_provider_SUITE.erl"],
+        outs = ["test/rabbit_oauth2_provider_SUITE.beam"],
+        hdrs = ["include/oauth2.hrl"],
+        app_name = "rabbitmq_auth_backend_oauth2",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/oauth2_client:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "rabbit_oauth2_resource_server_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_oauth2_resource_server_SUITE.erl"],
+        outs = ["test/rabbit_oauth2_resource_server_SUITE.beam"],
+        hdrs = ["include/oauth2.hrl"],
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         app_name = "rabbitmq_auth_backend_oauth2",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/oauth2_client:erlang_app"],

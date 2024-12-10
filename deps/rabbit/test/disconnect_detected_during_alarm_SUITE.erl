@@ -96,7 +96,11 @@ disconnect_detected_during_alarm(Config) ->
 
     ListConnections =
         fun() ->
+<<<<<<< HEAD
             rpc:call(A, rabbit_networking, connection_info_all, [])
+=======
+            rpc:call(A, rabbit_networking, connection_info_all, [[state]])
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         end,
 
     %% We've already disconnected, but blocked connection still should still linger on.

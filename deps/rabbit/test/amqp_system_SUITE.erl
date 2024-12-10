@@ -51,6 +51,14 @@ groups() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+suite() ->
+    [
+      {timetrap, {minutes, 3}}
+    ].
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config.

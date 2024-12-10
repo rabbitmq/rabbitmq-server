@@ -249,7 +249,11 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
     end.
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
+<<<<<<< HEAD
     {'ok', rabbit_types:auth_user()} |
+=======
+    {'ok', rabbit_types:user()} |
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     {'refused', string()} |
     {'error', any()}.
 

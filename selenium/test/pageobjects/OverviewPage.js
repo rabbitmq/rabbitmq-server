@@ -26,6 +26,7 @@ module.exports = class OverviewPage extends BasePage {
   }
   async downloadBrokerDefinitions(filename) {
     return this.click(DOWNLOAD_DEFINITIONS_SECTION)
+<<<<<<< HEAD
 
     /*
     await this.driver.sleep(1000)
@@ -33,5 +34,7 @@ module.exports = class OverviewPage extends BasePage {
     await this.click(DOWNLOAD_BROKER_FILE)
     return driver.sleep(5000);
     */
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
   }
 }

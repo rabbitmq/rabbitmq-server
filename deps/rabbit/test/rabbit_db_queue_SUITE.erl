@@ -292,8 +292,13 @@ delete1(_Config) ->
     ?assertEqual({ok, Q}, rabbit_db_queue:get(QName)),
     %% TODO Can we handle the deletions outside of rabbit_db_queue? Probably not because
     %% they should be done in a single transaction, but what a horrid API to have!
+<<<<<<< HEAD
     Dict = rabbit_db_queue:delete(QName, normal),
     ?assertEqual(0, dict:size(Dict)),
+=======
+    Deletions = rabbit_db_queue:delete(QName, normal),
+    ?assertEqual(rabbit_binding:new_deletions(), Deletions),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     ?assertEqual(ok, rabbit_db_queue:delete(QName, normal)),
     ?assertEqual({error, not_found}, rabbit_db_queue:get(QName)),
     passed.

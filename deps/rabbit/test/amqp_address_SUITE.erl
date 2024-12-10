@@ -18,6 +18,12 @@
         [rpc/4]).
 -import(rabbit_ct_helpers,
         [eventually/1]).
+<<<<<<< HEAD
+=======
+-import(amqp_utils,
+        [flush/1,
+         wait_for_credit/1]).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 all() ->
     [
@@ -301,10 +307,16 @@ target_per_message_exchange_routing_key(Config) ->
     Tag1 = Body1 = <<1>>,
     Tag2 = Body2 = <<2>>,
 
+<<<<<<< HEAD
     %% Although mc_amqp:essential_properties/1 parses these annotations, they should be ignored.
     Msg1 = amqp10_msg:set_message_annotations(
              #{<<"x-exchange">> => <<"ignored">>,
                <<"x-routing-key">> => <<"ignored">>},
+=======
+    %% Although mc_amqp:essential_properties/1 parses the x-exchange annotation, it should be ignored.
+    Msg1 = amqp10_msg:set_message_annotations(
+             #{<<"x-exchange">> => <<"ignored">>},
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
              amqp10_msg:set_properties(#{to => To1}, amqp10_msg:new(Tag1, Body1))),
     Msg2 = amqp10_msg:set_properties(#{to => To2}, amqp10_msg:new(Tag2, Body2)),
     ok = amqp10_client:send_msg(Sender, Msg1),
@@ -651,6 +663,7 @@ connection_config(Config) ->
       container_id => <<"my container">>,
       sasl => {plain, <<"guest">>, <<"guest">>}}.
 
+<<<<<<< HEAD
 % before we can send messages we have to wait for credit from the server
 wait_for_credit(Sender) ->
     receive
@@ -662,6 +675,8 @@ wait_for_credit(Sender) ->
               ct:fail(?FUNCTION_NAME)
     end.
 
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 wait_for_settled(State, Tag) ->
     receive
         {amqp10_disposition, {State, Tag}} ->
@@ -671,6 +686,7 @@ wait_for_settled(State, Tag) ->
               flush(Reason),
               ct:fail(Reason)
     end.
+<<<<<<< HEAD
 
 flush(Prefix) ->
     receive Msg ->
@@ -679,3 +695,5 @@ flush(Prefix) ->
     after 1 ->
               ok
     end.
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

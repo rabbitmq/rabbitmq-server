@@ -7,7 +7,15 @@
 
 -module(rabbit_oauth2_scope).
 
+<<<<<<< HEAD
 -export([vhost_access/2, resource_access/3, topic_access/4, concat_scopes/2]).
+=======
+-export([vhost_access/2,
+        resource_access/3,
+        topic_access/4,
+        concat_scopes/2,
+        filter_matching_scope_prefix_and_drop_it/2]).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -88,3 +96,23 @@ parse_resource_pattern(Pattern, Permission) ->
             {VhostPattern, NamePattern, RoutingKeyPattern, Permission};
         _Other -> ignore
     end.
+<<<<<<< HEAD
+=======
+
+-spec filter_matching_scope_prefix_and_drop_it(list(), binary()|list()) -> list().
+filter_matching_scope_prefix_and_drop_it(Scopes, <<"">>) -> Scopes;
+filter_matching_scope_prefix_and_drop_it(Scopes, PrefixPattern)  ->
+    PatternLength = byte_size(PrefixPattern),
+    lists:filtermap(
+        fun(ScopeEl) ->
+            case binary:match(ScopeEl, PrefixPattern) of
+                {0, PatternLength} ->
+                    ElLength = byte_size(ScopeEl),
+                    {true,
+                     binary:part(ScopeEl,
+                                 {PatternLength, ElLength - PatternLength})};
+                _ -> false
+            end
+        end,
+        Scopes).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

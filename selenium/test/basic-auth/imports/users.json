@@ -70,6 +70,7 @@
       "read": ".*"
     },
     {
+<<<<<<< HEAD
       "user": "guest",
       "vhost": "other",
       "configure": ".*",
@@ -77,6 +78,8 @@
       "read": ".*"
     },
     {
+=======
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
       "user": "management",
       "vhost": "/",
       "configure": ".*",
@@ -89,6 +92,23 @@
       "configure": ".*",
       "write": ".*",
       "read": ".*"
+<<<<<<< HEAD
+=======
+    },
+    {
+      "user": "rabbit_no_management",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "monitoring-only",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     }
   ]
 

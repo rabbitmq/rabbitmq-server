@@ -381,7 +381,23 @@ handle_http_req(<<"GET">>,
     Bindings0 = rabbit_binding:list_for_source_and_destination(SrcXName, DstName),
     Bindings = [B || B = #binding{key = K} <- Bindings0, K =:= Key],
     RespPayload = encode_bindings(Bindings),
+<<<<<<< HEAD
     {<<"200">>, RespPayload, PermCaches}.
+=======
+    {<<"200">>, RespPayload, PermCaches};
+
+handle_http_req(<<"PUT">>,
+                [<<"auth">>, <<"tokens">>],
+                _Query,
+                ReqPayload,
+                _Vhost,
+                _User,
+                ConnPid,
+                PermCaches) ->
+    {binary, Token} = ReqPayload,
+    ok = rabbit_amqp_reader:set_credential(ConnPid, Token),
+    {<<"204">>, null, PermCaches}.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 decode_queue({map, KVList}) ->
     M = lists:foldl(

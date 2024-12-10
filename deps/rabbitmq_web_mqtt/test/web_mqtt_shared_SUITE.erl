@@ -87,6 +87,10 @@ bind_exchange_to_exchange_single_message(Config) -> mqtt_shared_SUITE:?FUNCTION_
 pubsub(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 queue_down_qos1(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 consuming_classic_queue_down(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+<<<<<<< HEAD
+=======
+flow_classic_queue(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 flow_quorum_queue(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 flow_stream(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 rabbit_mqtt_qos0_queue(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).

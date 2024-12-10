@@ -1,5 +1,13 @@
 authnz-mgt/basic-auth.sh
 authnz-mgt/oauth-with-keycloak.sh
+<<<<<<< HEAD
 mgt/vhosts.sh
 mgt/exchanges.sh
 mgt/limits.sh
+=======
+authnz-mgt/oauth-with-uaa.sh
+mgt/vhosts.sh
+mgt/exchanges.sh
+mgt/limits.sh
+mgt/amqp10-connections.sh
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)

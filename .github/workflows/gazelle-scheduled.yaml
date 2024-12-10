@@ -12,9 +12,15 @@ jobs:
       matrix:
         target_branch:
         - main
+<<<<<<< HEAD
         - v3.12.x
         - v3.11.x
         - v3.10.x
+=======
+        - v4.0.x
+        - v3.13.x
+        - v3.12.x
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY

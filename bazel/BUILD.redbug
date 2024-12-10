@@ -49,12 +49,16 @@ filegroup(
     ],
 )
 
+<<<<<<< HEAD
 filegroup(
     name = "private_hdrs",
     srcs = [
         "src/redbug_dbg.hrl",
     ],
 )
+=======
+filegroup(name = "private_hdrs")
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 filegroup(name = "public_hdrs")
 

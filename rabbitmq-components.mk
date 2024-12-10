@@ -53,7 +53,11 @@ dep_prometheus = hex 4.11.0
 dep_ra = hex 2.14.0
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.6
+<<<<<<< HEAD
 dep_redbug = hex 2.1.0
+=======
+dep_redbug = hex 2.0.7
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.7.5

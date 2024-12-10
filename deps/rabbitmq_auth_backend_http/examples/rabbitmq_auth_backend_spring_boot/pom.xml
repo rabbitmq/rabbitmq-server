@@ -29,13 +29,21 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
+<<<<<<< HEAD
         <version>3.3.2</version>
+=======
+        <version>3.4.0</version>
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     </parent>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
+<<<<<<< HEAD
         <junit.jupiter.version>5.10.3</junit.jupiter.version>
+=======
+        <junit.jupiter.version>5.11.3</junit.jupiter.version>
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     </properties>
 
     <groupId>com.rabbitmq.examples</groupId>

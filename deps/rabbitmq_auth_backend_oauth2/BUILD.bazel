@@ -113,7 +113,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
     name = "rabbit_oauth2_config_SUITE",
+=======
+    name = "rabbit_oauth2_provider_SUITE",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     additional_beam = [
         "test/oauth2_http_mock.beam",
     ],
@@ -123,6 +127,13 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
+=======
+    name = "rabbit_oauth2_resource_server_SUITE",
+)
+
+rabbitmq_integration_suite(
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     name = "jwks_SUITE",
     additional_beam = [
         "test/rabbit_auth_backend_oauth2_test_util.beam",

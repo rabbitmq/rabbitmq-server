@@ -17,6 +17,10 @@ def all_beam_files(name = "all_beam_files"):
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
         deps = [
+<<<<<<< HEAD
+=======
+            "//deps/amqp10_common:erlang_app",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
         ],
@@ -40,6 +44,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
         deps = [
+<<<<<<< HEAD
+=======
+            "//deps/amqp10_common:erlang_app",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
         ],

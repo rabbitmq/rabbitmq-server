@@ -76,6 +76,10 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/amqp10_common:erlang_app",
+<<<<<<< HEAD
+=======
+        "//deps/rabbit_common:erlang_app",
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
         "@credentials_obfuscation//:erlang_app",
     ],
 )

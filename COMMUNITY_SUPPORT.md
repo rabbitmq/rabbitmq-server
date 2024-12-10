@@ -6,7 +6,17 @@ This document explains who is eligible for community support for open source Rab
 ### What is Community Support?
 
 Community support is defined as all questions, root cause analysis requests, issue reports, and other interactions the RabbitMQ core team has with open source RabbitMQ users on GitHub
+<<<<<<< HEAD
 and our community forums. 
+=======
+and our community forums.
+
+### How is Community Support Related to Patch Releases?
+
+Being covered by community support for a release series also means that patch releases, general and security-related ones,
+are produced regularly and are available publicly. Patch releases, even if produced, **will not be made available to non-paying users** for series out of community support, with potential
+exception for very high severity CVEs.
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 
 ### What is Broadcom's Obligation to Reply to Messages or Issues Reported?
 

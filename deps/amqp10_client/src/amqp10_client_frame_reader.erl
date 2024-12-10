@@ -105,7 +105,12 @@ init([Sup, ConnConfig]) when is_map(ConnConfig) ->
             {ok, expecting_connection_pid, State}
     end.
 
+<<<<<<< HEAD
 connect(Address, Port, #{tls_opts := {secure_port, Opts}}) ->
+=======
+connect(Address, Port, #{tls_opts := {secure_port, Opts0}}) ->
+    Opts = rabbit_ssl_options:fix_client(Opts0),
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
     case ssl:connect(Address, Port, ?RABBIT_TCP_OPTS ++ Opts) of
       {ok, S} ->
           {ssl, S};

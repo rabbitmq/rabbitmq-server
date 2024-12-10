@@ -23,7 +23,11 @@ on:
       elixir_version:
         description: 'Elixir version to build with'
         required: true
+<<<<<<< HEAD
         default: "1.17"
+=======
+        default: "1.15"
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
       project_version:
         description: 'PROJECT_VERSION used for make'
         required: true

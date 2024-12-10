@@ -26,6 +26,10 @@
          priority/1,
          set_ttl/2,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
          routing_headers/2,
          exchange/1,
          routing_keys/1,
@@ -88,6 +92,10 @@
                         {timestamp, non_neg_integer()} |
                         {list, [tagged_value()]} |
                         {map, [{tagged_value(), tagged_value()}]} |
+<<<<<<< HEAD
+=======
+                        {array, atom(), [tagged_value()]} |
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                         null |
                         undefined.
 
@@ -104,11 +112,23 @@
     {MetadataSize :: non_neg_integer(),
      PayloadSize :: non_neg_integer()}.
 
+<<<<<<< HEAD
 %% retrieve and x- header from the protocol data
+=======
+%% retrieve an x- header from the protocol data
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 %% the return value should be tagged with an AMQP 1.0 type
 -callback x_header(binary(), proto_state()) ->
     tagged_value().
 
+<<<<<<< HEAD
+=======
+%% retrieve x- headers from the protocol data
+%% the return values should be tagged with an AMQP 1.0 type
+-callback x_headers(proto_state()) ->
+    #{binary() => tagged_value()}.
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 %% retrieve a property field from the protocol data
 %% e.g. message_id, correlation_id
 -callback property(atom(), proto_state()) ->
@@ -148,7 +168,11 @@ init(Proto, Data, Anns) ->
 -spec init(protocol(), term(), annotations(), environment()) -> state().
 init(Proto, Data, Anns0, Env) ->
     {ProtoData, ProtoAnns} = Proto:init(Data),
+<<<<<<< HEAD
     Anns1 = case map_size(Env) == 0 of
+=======
+    Anns1 = case map_size(Env) =:= 0 of
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
                 true -> Anns0;
                 false -> Anns0#{env => Env}
             end,
@@ -214,6 +238,28 @@ x_header(Key, #?MODULE{protocol = Proto,
 x_header(Key, BasicMsg) ->
     mc_compat:x_header(Key, BasicMsg).
 
+<<<<<<< HEAD
+=======
+-spec x_headers(state()) ->
+    #{binary() => tagged_value()}.
+x_headers(#?MODULE{protocol = Proto,
+                   annotations = Anns,
+                   data = Data}) ->
+    %% x-headers may be have been added to the annotations map.
+    New = maps:filtermap(
+            fun(Key, Val) ->
+                    case mc_util:is_x_header(Key) of
+                        true ->
+                            {true, mc_util:infer_type(Val)};
+                        false ->
+                            false
+                    end
+            end, Anns),
+    maps:merge(Proto:x_headers(Data), New);
+x_headers(BasicMsg) ->
+    mc_compat:x_headers(BasicMsg).
+
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 -spec routing_headers(state(), [x_headers | complex_types]) ->
     #{binary() => property_value()}.
 routing_headers(#?MODULE{protocol = Proto,
@@ -301,7 +347,11 @@ message_id(BasicMsg) ->
     mc_compat:message_id(BasicMsg).
 
 -spec property(atom(), state()) ->
+<<<<<<< HEAD
     {utf8, binary()} | undefined.
+=======
+    tagged_value().
+>>>>>>> f3540ee7d2 (web_mqtt_shared_SUITE: propagate flow_classic_queue to mqtt_shared_SUITE #12907 12906)
 property(Property, #?MODULE{protocol = Proto,
                             data = Data}) ->
     Proto:property(Property, Data);
