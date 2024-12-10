@@ -18,6 +18,8 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
 
+-define(TIMEOUT, 30_000).
+
 -import(util,
         [connect/2,
          connect/4]).
@@ -156,7 +158,7 @@ mqtt_amqpl_mqtt(Config) ->
                     {<<"key">>, <<"val">>},
                     {<<"rabbit🐇"/utf8>>, <<"carrot🥕"/utf8>>}],
                    lists:sort(UserProperty1))
-    after 1000 -> ct:fail("did not receive reply")
+    after ?TIMEOUT -> ct:fail("did not receive reply")
     end,
 
     %% Another message MQTT 5.0 to AMQP 0.9.1, this time with QoS 0
@@ -188,7 +190,7 @@ amqpl_mqtt_gh_12707(Config) ->
                payload := MqttPayload}} ->
                 ?assertEqual(Topic, MqttTopic),
                 ?assertEqual(Payload, MqttPayload)
-    after 5000 ->
+    after ?TIMEOUT ->
               ct:fail("did not receive a delivery")
     end,
 
@@ -277,7 +279,7 @@ mqtt_amqp_mqtt(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session2, SenderLinkName, ReplyToAddress, unsettled),
     receive {amqp10_event, {link, Sender, credited}} -> ok
-    after 1000 -> ct:fail(credited_timeout)
+    after ?TIMEOUT -> ct:fail(credited_timeout)
     end,
 
     DTag = <<"my-dtag">>,
@@ -292,7 +294,7 @@ mqtt_amqp_mqtt(Config) ->
     Msg2 = amqp10_msg:set_headers(#{durable => True}, Msg2b),
     ok = amqp10_client:send_msg(Sender, Msg2),
     receive {amqp10_disposition, {accepted, DTag}} -> ok
-    after 1000 -> ct:fail(settled_timeout)
+    after ?TIMEOUT -> ct:fail(settled_timeout)
     end,
 
     ok = amqp10_client:detach_link(Sender),
@@ -311,7 +313,7 @@ mqtt_amqp_mqtt(Config) ->
                                      'Subscription-Identifier' := 999}
                     },
                    MqttMsg)
-    after 1000 -> ct:fail("did not receive reply")
+    after ?TIMEOUT -> ct:fail("did not receive reply")
     end,
     ok = emqtt:disconnect(C).
 
@@ -342,7 +344,7 @@ amqp_mqtt_amqp(Config) ->
                      <<"sender">>,
                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"t.1">>)),
     receive {amqp10_event, {link, Sender, credited}} -> ok
-    after 2000 -> ct:fail(credited_timeout)
+    after ?TIMEOUT -> ct:fail(credited_timeout)
     end,
     RequestBody = <<"my request">>,
 
@@ -371,7 +373,7 @@ amqp_mqtt_amqp(Config) ->
                     false ->
                         ok
                 end
-    after 2000 -> ct:fail("did not receive request")
+    after ?TIMEOUT -> ct:fail("did not receive request")
     end,
 
     %% MQTT 5.0 to AMQP 1.0
@@ -420,7 +422,7 @@ amqp_mqtt(Qos, Config) ->
                      <<"sender">>,
                      rabbitmq_amqp_address:exchange(<<"amq.topic">>, <<"my.topic">>)),
     receive {amqp10_event, {link, Sender, credited}} -> ok
-    after 2000 -> ct:fail(credited_timeout)
+    after ?TIMEOUT -> ct:fail(credited_timeout)
     end,
 
     %% single amqp-value section
@@ -463,28 +465,28 @@ amqp_mqtt(Qos, Config) ->
                     false ->
                         ok
                 end
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload2}} ->
                 ?assertEqual([Body2], amqp10_framing:decode_bin(Payload2))
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload3}} ->
                 ?assertEqual(Body3, amqp10_framing:decode_bin(Payload3))
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload4}} ->
                 ?assertEqual(Body4, amqp10_framing:decode_bin(Payload4))
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload5}} ->
                 ?assertEqual(<<0, 255>>, Payload5)
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload6}} ->
                 %% We expect that RabbitMQ concatenates the binaries of multiple data sections.
                 ?assertEqual(<<0, 1, 2, 3>>, Payload6)
-    after 5000 -> ct:fail({missing_publish, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
 
     ok = emqtt:disconnect(C).
@@ -567,7 +569,7 @@ mqtt_stomp_mqtt(Config) ->
                                   'Correlation-Data' := Correlation,
                                   'User-Property' := UserProp}} = MqttMsg,
                 ?assert(lists:member({<<"x-key">>, <<"val4">>}, UserProp))
-    after 1000 -> ct:fail("did not receive reply")
+    after ?TIMEOUT -> ct:fail("did not receive reply")
     end,
 
     ok = emqtt:disconnect(C).

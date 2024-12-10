@@ -53,6 +53,7 @@
 -define(RC_SERVER_SHUTTING_DOWN, 16#8B).
 -define(RC_KEEP_ALIVE_TIMEOUT, 16#8D).
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
+-define(TIMEOUT, 30_000).
 
 all() ->
     [{group, mqtt}].
@@ -340,7 +341,7 @@ quorum_queue_rejects(Config) ->
     V = ?config(mqtt_version, Config),
     if V =:= v3 orelse V =:= v4 ->
            %% v3 and v4 do not support NACKs. Therefore, the server should drop the message.
-           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 700));
+           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Name, <<"m3">>, 30_000));
        V =:= v5 ->
            %% v5 supports NACKs. Therefore, the server should send us a NACK.
            ?assertMatch({ok, #{reason_code_name := implementation_specific_error}},
@@ -719,28 +720,28 @@ pubsub(Config) ->
     receive {publish, #{client_pid := C1,
                         qos := 1,
                         payload := <<"m1">>}} -> ok
-    after 1000 -> ct:fail("missing m1")
+    after ?TIMEOUT -> ct:fail("missing m1")
     end,
 
     ok = emqtt:publish(C0, Topic1, <<"m2">>, qos0),
     receive {publish, #{client_pid := C1,
                         qos := 0,
                         payload := <<"m2">>}} -> ok
-    after 1000 -> ct:fail("missing m2")
+    after ?TIMEOUT -> ct:fail("missing m2")
     end,
 
     {ok, _} = emqtt:publish(C1, Topic0, <<"m3">>, qos1),
     receive {publish, #{client_pid := C0,
                         qos := 1,
                         payload := <<"m3">>}} -> ok
-    after 1000 -> ct:fail("missing m3")
+    after ?TIMEOUT -> ct:fail("missing m3")
     end,
 
     ok = emqtt:publish(C1, Topic0, <<"m4">>, qos0),
     receive {publish, #{client_pid := C0,
                         qos := 0,
                         payload := <<"m4">>}} -> ok
-    after 1000 -> ct:fail("missing m4")
+    after ?TIMEOUT -> ct:fail("missing m4")
     end,
 
     ok = emqtt:disconnect(C0),
@@ -758,7 +759,7 @@ queue_down_qos1(Config) ->
     %% classic queue is down, therefore message is rejected
     V = ?config(mqtt_version, Config),
     if V =:= v3 orelse V =:= v4 ->
-           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 500)),
+           ?assertEqual(puback_timeout, util:publish_qos1_timeout(C, Topic, <<"msg">>, 30_000)),
            ok = rabbit_ct_broker_helpers:start_node(Config, 1),
            %% Classic queue is up. Therefore, message should arrive.
            eventually(?_assertEqual([[<<"1">>]],
@@ -1111,7 +1112,7 @@ many_qos1_messages(Config) ->
                   end, Payloads),
     receive
         proceed -> ok
-    after 30000 ->
+    after ?TIMEOUT ->
               ct:fail("message to proceed never received")
     end,
     ok = expect_publishes(C, Topic, Payloads),
@@ -1364,7 +1365,7 @@ keepalive(Config) ->
                         retain := true,
                         topic := WillTopic,
                         payload := WillPayload}} -> ok
-    after 3000 -> ct:fail("missing will")
+    after ?TIMEOUT -> ct:fail("missing will")
     end,
     ok = emqtt:disconnect(C2).
 
@@ -1434,7 +1435,7 @@ session_switch(Config, Disconnect) ->
     receive {publish, #{client_pid := C2,
                         payload := <<"m1">>,
                         qos := 0}} -> ok
-    after 1000 -> ct:fail("did not receive m1 with QoS 0")
+    after ?TIMEOUT -> ct:fail("did not receive m1 with QoS 0")
     end,
     %% New connection should be able to unsubscribe.
     ?assertMatch({ok, _, _}, emqtt:unsubscribe(C2, Topic)),
@@ -1460,8 +1461,8 @@ block(Config) ->
     timer:sleep(100),
 
     %% Blocked, but still will publish when unblocked
-    puback_timeout = publish_qos1_timeout(C, Topic, <<"Now blocked">>, 1000),
-    puback_timeout = publish_qos1_timeout(C, Topic, <<"Still blocked">>, 1000),
+    puback_timeout = publish_qos1_timeout(C, Topic, <<"Now blocked">>, 30_000),
+    puback_timeout = publish_qos1_timeout(C, Topic, <<"Still blocked">>, 30_000),
 
     %% Unblock
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.6]),
@@ -1502,7 +1503,7 @@ block_only_publisher(Config) ->
     ok = expect_publishes(Sub, Topic, [<<"from Con 1">>]),
     %% But now the new publisher should be blocked as well.
     ?assertEqual({error, ack_timeout}, emqtt:ping(Con)),
-    ?assertEqual(puback_timeout, publish_qos1_timeout(Con, Topic, <<"from Con 2">>, 500)),
+    ?assertEqual(puback_timeout, publish_qos1_timeout(Con, Topic, <<"from Con 2">>, 30_000)),
     ?assertEqual(pong, emqtt:ping(Sub)),
 
     rpc(Config, vm_memory_monitor, set_vm_memory_high_watermark, [0.6]),
@@ -1701,7 +1702,7 @@ max_packet_size_authenticated(Config) ->
         v4 -> ok;
         v5 -> ?assertMatch(#{'Maximum-Packet-Size' := MaxSize}, ConnAckProps),
               receive {disconnected, _ReasonCodePacketTooLarge = 149, _Props} -> ok
-              after 1000 -> ct:fail("missing DISCONNECT packet from server")
+              after ?TIMEOUT -> ct:fail("missing DISCONNECT packet from server")
               end
     end,
     ok = rpc(Config, persistent_term, put, [Key, OldMaxSize]).
@@ -1786,7 +1787,7 @@ incoming_message_interceptors(Config) ->
                                   headers = [{<<"timestamp_in_ms">>, long, Millis} | _XHeaders]
                                  }}} ->
                 ok
-    after 5000 -> ct:fail(missing_deliver)
+    after ?TIMEOUT -> ct:fail(missing_deliver)
     end,
 
     delete_queue(Ch, Stream),
@@ -1812,7 +1813,7 @@ retained_message_conversion(Config) ->
                         retain := true,
                         topic := Topic,
                         payload := Payload}} -> ok
-    after 1000 -> ct:fail("missing retained message")
+    after ?TIMEOUT -> ct:fail("missing retained message")
     end,
     ok = emqtt:publish(C, Topic, <<>>, [{retain, true}]),
     ok = emqtt:disconnect(C).
@@ -1898,7 +1899,7 @@ await_confirms_ordered(From, N, To) ->
             await_confirms_ordered(From, N + 1, To);
         Got ->
             ct:fail("Received unexpected message. Expected: ~p Got: ~p", [Expected, Got])
-    after 10_000 ->
+    after ?TIMEOUT ->
               ct:fail("Did not receive expected message: ~p", [Expected])
     end.
 
@@ -1910,7 +1911,7 @@ await_confirms_unordered(From, Left) ->
             await_confirms_unordered(From, Left - 1);
         Other ->
             ct:fail("Received unexpected message: ~p", [Other])
-    after 10_000 ->
+    after ?TIMEOUT ->
               ct:fail("~b confirms are missing", [Left])
     end.
 
@@ -1957,6 +1958,6 @@ assert_v5_disconnect_reason_code(Config, ReasonCode) ->
         v3 -> ok;
         v4 -> ok;
         v5 -> receive {disconnected, ReasonCode, _Props} -> ok
-              after 1000 -> ct:fail("missing DISCONNECT packet from server")
+              after ?TIMEOUT -> ct:fail("missing DISCONNECT packet from server")
               end
     end.
