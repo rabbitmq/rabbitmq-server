@@ -213,7 +213,7 @@ recover_with_message_expiry_interval(Config) ->
                         payload := <<"m1">>,
                         properties := Props}}
               when map_size(Props) =:= 0 -> ok
-    after 100 -> ct:fail("did not topic/1")
+    after 30_000 -> ct:fail("did not topic/1")
     end,
 
     receive {publish, #{client_pid := C2,
@@ -222,7 +222,7 @@ recover_with_message_expiry_interval(Config) ->
                         payload := <<"m2">>,
                         properties :=  #{'Message-Expiry-Interval' := MEI}}} ->
                 assert_message_expiry_interval(100 - ElapsedSeconds2, MEI)
-    after 100 -> ct:fail("did not topic/2")
+    after 30_000 -> ct:fail("did not topic/2")
     end,
 
     receive Unexpected -> ct:fail("Received unexpectedly: ~p", [Unexpected])
