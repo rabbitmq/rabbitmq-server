@@ -50,7 +50,8 @@
          build_acyclic_graph/3]).
 -export([const/1]).
 -export([ntoa/1, ntoab/1]).
--export([is_process_alive/1]).
+-export([is_process_alive/1,
+         process_info/2]).
 -export([pget/2, pget/3, pupdate/3, pget_or_die/2, pmerge/3, pset/3, plmerge/2]).
 -export([deep_pget/2, deep_pget/3]).
 -export([format_message_queue/2]).
@@ -811,6 +812,23 @@ is_process_alive(Pid) ->
     Node = node(Pid),
     lists:member(Node, [node() | nodes(connected)]) andalso
         rpc:call(Node, erlang, is_process_alive, [Pid]) =:= true.
+
+%% Get process info of a prossibly remote process.
+%% We try to avoid reconnecting to down nodes.
+-spec process_info(pid(), ItemSpec) -> Result| undefined | {badrpc, term()}
+              when
+      ItemSpec :: atom() | list() | tuple(),
+      Result :: {atom() | tuple(), term()} | [{atom() | tuple(), term()}].
+process_info(Pid, Items) when node(Pid) =:= node() ->
+    erlang:process_info(Pid, Items);
+process_info(Pid, Items) ->
+    Node = node(Pid),
+    case lists:member(Node, [node() | nodes(connected)]) of
+        true ->
+            rpc:call(Node, erlang, process_info, [Pid, Items]);
+        _ ->
+            {badrpc, nodedown}
+    end.
 
 -spec pget(term(), list() | map()) -> term().
 pget(K, M) when is_map(M) ->
