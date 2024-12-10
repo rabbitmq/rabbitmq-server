@@ -36,8 +36,7 @@ describe('Once user logs in with its own token', function () {
 
     it('user should be presented with a login button to log in', async function () {
       await homePage.isLoaded()
-      const value = await homePage.getLoginButton()
-      assert.equal(value, 'Click here to log in')
+      assert.equal(await homePage.getLoginButton(), 'Click here to log in')
     })
 
     after(async function () {

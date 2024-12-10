@@ -21,7 +21,7 @@ describe('When basic authentication is enabled but UAA is down', function () {
 
   it('can log in with Basic Auth', async function () {
     await homePage.toggleBasicAuthSection()
-    assert.ok(await homePage.isLoginButtonVisible)
+    assert.ok(await homePage.getBasicAuthLoginButton())
     await homePage.basicAuthLogin('guest', 'guest')
     await overview.isLoaded()
     assert.equal(await overview.getUser(), 'User guest')

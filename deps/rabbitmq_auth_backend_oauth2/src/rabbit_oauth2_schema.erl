@@ -261,6 +261,9 @@ mapOauthProviderProperty({Key, Value}) ->
             cuttlefish:invalid(io_lib:format(
                 "Invalid attribute (~p) value: should be a map of Key,Value pairs", 
                     [Key]));
+        proxy -> validator_uri(Key, Value);
+        proxy_username -> binary_to_list(Value);
+        proxy_password -> binary_to_list(Value);
         _ -> Value
     end}.
 

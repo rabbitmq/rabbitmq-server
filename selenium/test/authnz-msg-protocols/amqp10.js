@@ -3,16 +3,12 @@ const { tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
 const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
 
-var receivedAmqpMessageCount = 0
 var untilConnectionEstablished = new Promise((resolve, reject) => {
   onAmqp('connection_open', function(context) {
     resolve()
   })
 })
 
-onAmqp('message', function (context) {
-    receivedAmqpMessageCount++
-})
 onceAmqp('sendable', function (context) {
     context.sender.send({body:'first message'})    
 })
@@ -52,16 +48,21 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   })
 
   it('can open an AMQP 1.0 connection', async function () {     
+    var untilFirstMessageReceived = new Promise((resolve, reject) => {
+      onAmqp('message', function(context) {
+        resolve()
+      })
+    })
     amqp = openAmqp()
     await untilConnectionEstablished
-    var untilMessageReceived = new Promise((resolve, reject) => {
+    await untilFirstMessageReceived
+    var untilSecondMessageReceived = new Promise((resolve, reject) => {
       onAmqp('message', function(context) {
         resolve()
       })
     })
     amqp.sender.send({body:'second message'})    
-    await untilMessageReceived
-    assert.equal(2, receivedAmqpMessageCount)
+    await untilSecondMessageReceived
   })
 
   after(function () {
