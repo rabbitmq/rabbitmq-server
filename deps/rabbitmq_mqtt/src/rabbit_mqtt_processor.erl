@@ -72,6 +72,7 @@
          published = false :: boolean(),
          ssl_login_name :: none | binary(),
          retainer_pid :: pid(),
+         delivery_flow :: flow | noflow,
          trace_state :: rabbit_trace:state(),
          prefetch :: non_neg_integer(),
          vhost :: rabbit_types:vhost(),
@@ -148,6 +149,10 @@ process_connect(
                "protocol version: ~p, keepalive: ~p, property names: ~p",
                [ClientId0, Username0, CleanStart, ProtoVer, KeepaliveSecs, maps:keys(ConnectProps)]),
     SslLoginName = ssl_login_name(Socket),
+    Flow = case rabbit_misc:get_env(rabbit, classic_queue_flow_control, true) of
+             true   -> flow;
+             false  -> noflow
+           end,
     MaxPacketSize = maps:get('Maximum-Packet-Size', ConnectProps, ?MAX_PACKET_SIZE),
     TopicAliasMax = persistent_term:get(?PERSISTENT_TERM_TOPIC_ALIAS_MAXIMUM),
     TopicAliasMaxOutbound = min(maps:get('Topic-Alias-Maximum', ConnectProps, 0), TopicAliasMax),
@@ -208,6 +213,7 @@ process_connect(
                           clean_start = CleanStart,
                           session_expiry_interval_secs = SessionExpiry,
                           ssl_login_name = SslLoginName,
+                          delivery_flow = Flow,
                           trace_state = TraceState,
                           prefetch = prefetch(ConnectProps),
                           conn_name = ConnName,
@@ -1551,6 +1557,7 @@ publish_to_queues(
   #mqtt_msg{topic = Topic,
             packet_id = PacketId} = MqttMsg,
   #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
+                    delivery_flow = Flow,
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
@@ -1563,7 +1570,7 @@ publish_to_queues(
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(Msg, QNames, ConnName, Username, TraceState),
-            Opts = maps_put_truthy(correlation, PacketId, #{}),
+            Opts = maps_put_truthy(flow, Flow, maps_put_truthy(correlation, PacketId, #{})),
             deliver_to_queues(Msg, Opts, QNames, State);
         {error, not_found} ->
             ?LOG_ERROR("~s not found", [rabbit_misc:rs(ExchangeName)]),
@@ -2477,6 +2484,7 @@ format_status(
                   published = Published,
                   ssl_login_name = SSLLoginName,
                   retainer_pid = RetainerPid,
+                  delivery_flow = DeliveryFlow,
                   trace_state = TraceState,
                   prefetch = Prefetch,
                   client_id = ClientID,
@@ -2498,6 +2506,7 @@ format_status(
             ssl_login_name => SSLLoginName,
             retainer_pid => RetainerPid,
 
+            delivery_flow => DeliveryFlow,
             trace_state => TraceState,
             prefetch => Prefetch,
             client_id => ClientID,
