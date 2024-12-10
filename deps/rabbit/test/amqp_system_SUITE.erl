@@ -51,6 +51,14 @@ groups() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+suite() ->
+    [
+      {timetrap, {minutes, 3}}
+    ].
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config.

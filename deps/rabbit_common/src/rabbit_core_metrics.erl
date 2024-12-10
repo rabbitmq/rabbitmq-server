@@ -141,9 +141,15 @@ connection_stats(Pid, Infos) ->
     ets:insert(connection_metrics, {Pid, Infos}),
     ok.
 
+<<<<<<< HEAD
 connection_stats(Pid, Recv_oct, Send_oct, Reductions) ->
     %% Includes delete marker
     ets:insert(connection_coarse_metrics, {Pid, Recv_oct, Send_oct, Reductions, 0}),
+=======
+connection_stats(Pid, RecvOct, SendOct, Reductions) ->
+    %% Includes delete marker
+    ets:insert(connection_coarse_metrics, {Pid, RecvOct, SendOct, Reductions, 0}),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     ok.
 
 channel_created(Pid, Infos) ->

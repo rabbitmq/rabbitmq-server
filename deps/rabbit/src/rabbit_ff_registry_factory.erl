@@ -2,7 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+=======
+%% Copyright (c) 2019-2024 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %%
 
 -module(rabbit_ff_registry_factory).
@@ -260,26 +265,47 @@ maybe_initialize_registry(NewSupportedFeatureFlags,
     maps:map(
       fun
           (FeatureName, FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+<<<<<<< HEAD
               Stability = rabbit_feature_flags:get_stability(FeatureProps),
+=======
+              RequireLevel = (
+                rabbit_feature_flags:get_require_level(FeatureProps)),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
               ProvidedBy = maps:get(provided_by, FeatureProps),
               State = case FeatureStates0 of
                           #{FeatureName := FeatureState} -> FeatureState;
                           _                              -> false
                       end,
+<<<<<<< HEAD
               case Stability of
                   required when State =:= true ->
                       %% The required feature flag is already enabled, we keep
                       %% it this way.
                       State;
                   required when NewNode ->
+=======
+              case RequireLevel of
+                  hard when State =:= true ->
+                      %% The required feature flag is already enabled, we keep
+                      %% it this way.
+                      State;
+                  hard when NewNode ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                       %% This is the very first time the node starts, we
                       %% already mark the required feature flag as enabled.
                       ?assertNotEqual(state_changing, State),
                       true;
+<<<<<<< HEAD
                   required when ProvidedBy =/= rabbit ->
                       ?assertNotEqual(state_changing, State),
                       true;
                   required ->
+=======
+                  hard when ProvidedBy =/= rabbit ->
+                      ?assertNotEqual(state_changing, State),
+                      true;
+                  hard ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                       %% This is not a new node and the required feature flag
                       %% is disabled. This is an error and RabbitMQ must be
                       %% downgraded to enable the feature flag.
@@ -442,6 +468,7 @@ do_initialize_registry(#{feature_flags := AllFeatureFlags,
                          written_to_disk := WrittenToDisk} = Inventory) ->
     %% We log the state of those feature flags.
     ?LOG_DEBUG(
+<<<<<<< HEAD
       lists:flatten(
         "Feature flags: list of feature flags found:\n" ++
         [io_lib:format(
@@ -473,6 +500,68 @@ do_initialize_registry(#{feature_flags := AllFeatureFlags,
                 true  -> "yes";
                 false -> "no"
             end])]),
+=======
+       begin
+           AllFeatureNames = lists:sort(maps:keys(AllFeatureFlags)),
+           {FeatureNames,
+            DeprFeatureNames} = lists:partition(
+                                  fun(FeatureName) ->
+                                          FeatureProps = maps:get(
+                                                           FeatureName,
+                                                           AllFeatureFlags),
+                                          ?IS_FEATURE_FLAG(FeatureProps)
+                                  end, AllFeatureNames),
+
+           IsRequired = fun(FeatureName) ->
+                                FeatureProps = maps:get(
+                                                 FeatureName,
+                                                 AllFeatureFlags),
+                                required =:=
+                                rabbit_feature_flags:get_stability(
+                                  FeatureProps)
+                        end,
+           {ReqFeatureNames,
+            NonReqFeatureNames} = lists:partition(IsRequired, FeatureNames),
+           {ReqDeprFeatureNames,
+            NonReqDeprFeatureNames} = lists:partition(
+                                        IsRequired, DeprFeatureNames),
+
+           lists:flatten(
+             "Feature flags: list of feature flags found:\n" ++
+             [io_lib:format(
+                "Feature flags:   [~ts] ~ts~n",
+                [case maps:get(FeatureName, FeatureStates, false) of
+                     true           -> "x";
+                     state_changing -> "~";
+                     false          -> " "
+                 end,
+                 FeatureName])
+              || FeatureName <- NonReqFeatureNames] ++
+             "Feature flags: list of deprecated features found:\n" ++
+             [io_lib:format(
+                "Feature flags:   [~ts] ~ts~n",
+                [case maps:get(FeatureName, FeatureStates, false) of
+                     true           -> "x";
+                     state_changing -> "~";
+                     false          -> " "
+                 end,
+                 FeatureName])
+              || FeatureName <- NonReqDeprFeatureNames] ++
+             [io_lib:format(
+                "Feature flags: required feature flags not listed above: ~b~n"
+                "Feature flags: removed deprecated features not listed "
+                "above: ~b~n"
+                "Feature flags: scanned applications: ~0tp~n"
+                "Feature flags: feature flag states written to disk: ~ts",
+                [length(ReqFeatureNames),
+                 length(ReqDeprFeatureNames),
+                 ScannedApps,
+                 case WrittenToDisk of
+                     true  -> "yes";
+                     false -> "no"
+                 end])])
+       end,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}
      ),
 

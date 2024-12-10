@@ -397,6 +397,10 @@ process_request(?PUBLISH,
         {ok, Topic, Props, State1} ->
             EffectiveQos = maybe_downgrade_qos(Qos),
             rabbit_global_counters:messages_received(ProtoVer, 1),
+<<<<<<< HEAD
+=======
+            rabbit_msg_size_metrics:observe(ProtoVer, iolist_size(Payload)),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             State = maybe_increment_publisher(State1),
             Msg = #mqtt_msg{retain = Retain,
                             qos = EffectiveQos,

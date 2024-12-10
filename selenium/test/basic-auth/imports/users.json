@@ -70,6 +70,7 @@
       "read": ".*"
     },
     {
+<<<<<<< HEAD
       "user": "guest",
       "vhost": "other",
       "configure": ".*",
@@ -77,6 +78,8 @@
       "read": ".*"
     },
     {
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       "user": "management",
       "vhost": "/",
       "configure": ".*",
@@ -89,6 +92,23 @@
       "configure": ".*",
       "write": ".*",
       "read": ".*"
+<<<<<<< HEAD
+=======
+    },
+    {
+      "user": "rabbit_no_management",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "monitoring-only",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     }
   ]
 

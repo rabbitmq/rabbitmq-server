@@ -76,6 +76,10 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/amqp10_common:erlang_app",
+<<<<<<< HEAD
+=======
+        "//deps/rabbit_common:erlang_app",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         "@credentials_obfuscation//:erlang_app",
     ],
 )

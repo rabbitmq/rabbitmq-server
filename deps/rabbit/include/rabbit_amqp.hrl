@@ -37,6 +37,10 @@
         [pid,
          frame_max,
          timeout,
+<<<<<<< HEAD
+=======
+         container_id,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
          vhost,
          user,
          node

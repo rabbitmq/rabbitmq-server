@@ -8,6 +8,10 @@
 -module(rabbit_ssl_options).
 
 -export([fix/1]).
+<<<<<<< HEAD
+=======
+-export([fix_client/1]).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 
 -define(BAD_SSL_PROTOCOL_VERSIONS, [
@@ -22,6 +26,30 @@ fix(Config) ->
       fix_ssl_protocol_versions(
         hibernate_after(Config))).
 
+<<<<<<< HEAD
+=======
+-spec fix_client(rabbit_types:infos()) -> rabbit_types:infos().
+fix_client(Config) ->
+    fix_cacerts(
+        fix(Config)).
+
+fix_cacerts(SslOptsConfig) ->
+    CACerts = proplists:get_value(cacerts, SslOptsConfig, undefined),
+    CACertfile = proplists:get_value(cacertfile, SslOptsConfig, undefined),
+    case {CACerts, CACertfile} of
+        {undefined, undefined} ->
+            try public_key:cacerts_get() of
+                CaCerts ->
+                    [{cacerts, CaCerts} | SslOptsConfig]
+            catch
+                _ -> 
+                    SslOptsConfig
+            end;
+        _CaCerts ->
+            SslOptsConfig
+    end.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 fix_verify_fun(SslOptsConfig) ->
     %% Starting with ssl 4.0.1 in Erlang R14B, the verify_fun function
     %% takes 3 arguments and returns a tuple.

@@ -11,6 +11,10 @@
 
 -behaviour(gen_server).
 
+<<<<<<< HEAD
+=======
+-include_lib("kernel/include/logger.hrl").
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 -include("rabbit_amqp.hrl").
@@ -30,6 +34,15 @@
        }}
    }).
 
+<<<<<<< HEAD
+=======
+-rabbit_deprecated_feature(
+   {amqp_filter_set_bug,
+    #{deprecation_phase => permitted_by_default,
+      doc_url => "https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set"
+     }}).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% This is the link credit that we grant to sending clients.
 %% We are free to choose whatever we want, sending clients must obey.
 %% Default soft limits / credits in deps/rabbit/Makefile are:
@@ -84,7 +97,13 @@
          list_local/0,
          conserve_resources/3,
          check_resource_access/4,
+<<<<<<< HEAD
          check_read_permitted_on_topic/4
+=======
+         check_read_permitted_on_topic/4,
+         reset_authz/2,
+         info/1
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         ]).
 
 -export([init/1,
@@ -140,7 +159,13 @@
          }).
 
 -record(incoming_link, {
+<<<<<<< HEAD
           snd_settle_mode :: snd_settle_mode(),
+=======
+          name :: binary(),
+          snd_settle_mode :: snd_settle_mode(),
+          target_address :: null | binary(),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
           %% The exchange is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
           %% "to" field (address v2).
@@ -148,6 +173,10 @@
           %% The routing key is either defined in the ATTACH frame and static for
           %% the life time of the link or dynamically provided in each message's
           %% "to" field (address v2) or "subject" field (address v1).
+<<<<<<< HEAD
+=======
+          %% (A publisher can set additional routing keys via the x-cc message annotation.)
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
           routing_key :: rabbit_types:routing_key() | to | subject,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
@@ -188,6 +217,11 @@
          }).
 
 -record(outgoing_link, {
+<<<<<<< HEAD
+=======
+          name :: binary(),
+          source_address :: binary(),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
           %% Although the source address of a link might be an exchange name and binding key
           %% or a topic filter, an outgoing link will always consume from a queue.
           queue_name :: rabbit_amqqueue:name(),
@@ -386,6 +420,13 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
          handle_max = ClientHandleMax}}) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
+<<<<<<< HEAD
+=======
+    logger:update_process_metadata(#{channel_number => ChannelNum,
+                                     connection => ConnName,
+                                     vhost => Vhost,
+                                     user => User#user.username}),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
     ok = pg:join(pg_scope(), self(), self()),
     Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
@@ -473,6 +514,15 @@ list_local() ->
 conserve_resources(Pid, Source, {_, Conserve, _}) ->
     gen_server:cast(Pid, {conserve_resources, Source, Conserve}).
 
+<<<<<<< HEAD
+=======
+-spec reset_authz(pid(), rabbit_types:user()) -> ok.
+reset_authz(Pid, User) ->
+    gen_server:cast(Pid, {reset_authz, User}).
+
+handle_call(infos, _From, State) ->
+    reply(infos(State), State);
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 handle_call(Msg, _From, State) ->
     Reply = {error, {not_understood, Msg}},
     reply(Reply, State).
@@ -567,15 +617,35 @@ handle_cast({conserve_resources, Alarm, Conserve},
     noreply(State);
 handle_cast(refresh_config, #state{cfg = #cfg{vhost = Vhost} = Cfg} = State0) ->
     State = State0#state{cfg = Cfg#cfg{trace_state = rabbit_trace:init(Vhost)}},
+<<<<<<< HEAD
     noreply(State).
+=======
+    noreply(State);
+handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
+    State1 = State0#state{
+               permission_cache = [],
+               topic_permission_cache = [],
+               cfg = Cfg#cfg{user = User}},
+    try recheck_authz(State1) of
+        State ->
+            noreply(State)
+    catch exit:#'v1_0.error'{} = Error ->
+              log_error_and_close_session(Error, State1)
+    end.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
                                    writer_pid = WriterPid,
                                    channel_num = Ch}}) ->
     End = #'v1_0.end'{error = Error},
+<<<<<<< HEAD
     rabbit_log:warning("Closing session for connection ~p: ~tp",
                        [ReaderPid, Error]),
+=======
+    ?LOG_WARNING("Closing session for connection ~p: ~tp",
+                 [ReaderPid, Error]),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     ok = rabbit_amqp_writer:send_command_sync(WriterPid, Ch, End),
     {stop, {shutdown, Error}, State}.
 
@@ -862,8 +932,13 @@ destroy_outgoing_link(_, _, _, Acc) ->
     Acc.
 
 detach(Handle, Link, Error = #'v1_0.error'{}) ->
+<<<<<<< HEAD
     rabbit_log:warning("Detaching link handle ~b due to error: ~tp",
                        [Handle, Error]),
+=======
+    ?LOG_WARNING("Detaching link handle ~b due to error: ~tp",
+                 [Handle, Error]),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     publisher_or_consumer_deleted(Link),
     #'v1_0.detach'{handle = ?UINT(Handle),
                    closed = true,
@@ -954,8 +1029,13 @@ handle_frame(#'v1_0.flow'{handle = Handle} = Flow,
                                 %% "If set to a handle that is not currently associated with
                                 %% an attached link, the recipient MUST respond by ending the
                                 %% session with an unattached-handle session error." [2.7.4]
+<<<<<<< HEAD
                                 rabbit_log:warning(
                                   "Received Flow frame for unknown link handle: ~tp", [Flow]),
+=======
+                                ?LOG_WARNING("Received Flow frame for unknown link handle: ~tp",
+                                             [Flow]),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                                 protocol_error(
                                   ?V_1_0_SESSION_ERROR_UNATTACHED_HANDLE,
                                   "Unattached link handle: ~b", [HandleInt])
@@ -1234,11 +1314,19 @@ handle_attach(#'v1_0.attach'{
     reply_frames([Reply], State);
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
+<<<<<<< HEAD
                              name = LinkName,
                              handle = Handle = ?UINT(HandleInt),
                              source = Source,
                              snd_settle_mode = MaybeSndSettleMode,
                              target = Target,
+=======
+                             name = LinkName = {utf8, LinkName0},
+                             handle = Handle = ?UINT(HandleInt),
+                             source = Source,
+                             snd_settle_mode = MaybeSndSettleMode,
+                             target = Target = #'v1_0.target'{address = TargetAddress},
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                              initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
                             },
               State0 = #state{incoming_links = IncomingLinks0,
@@ -1251,7 +1339,13 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
             IncomingLink = #incoming_link{
+<<<<<<< HEAD
                               snd_settle_mode = SndSettleMode,
+=======
+                              name = LinkName0,
+                              snd_settle_mode = SndSettleMode,
+                              target_address = address(TargetAddress),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                               exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
@@ -1288,12 +1382,23 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
+<<<<<<< HEAD
                             name = LinkName,
                             handle = Handle = ?UINT(HandleInt),
                             source = Source,
                             snd_settle_mode = SndSettleMode,
                             rcv_settle_mode = RcvSettleMode,
                             max_message_size = MaybeMaxMessageSize} = Attach,
+=======
+                             name = LinkName = {utf8, LinkName0},
+                             handle = Handle = ?UINT(HandleInt),
+                             source = Source = #'v1_0.source'{address = SourceAddress,
+                                                              filter = DesiredFilter},
+                             snd_settle_mode = SndSettleMode,
+                             rcv_settle_mode = RcvSettleMode,
+                             max_message_size = MaybeMaxMessageSize,
+                             properties = Properties},
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
              State0 = #state{queue_states = QStates0,
                              outgoing_links = OutgoingLinks0,
                              permission_cache = PermCache0,
@@ -1363,6 +1468,13 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                     credit_api_v1,
                                     credit_api_v1}
                            end,
+<<<<<<< HEAD
+=======
+                           ConsumerArgs0 = parse_attach_properties(Properties),
+                           {EffectiveFilter, ConsumerFilter, ConsumerArgs1} =
+                           parse_filter(DesiredFilter),
+                           ConsumerArgs = ConsumerArgs0 ++ ConsumerArgs1,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                            Spec = #{no_ack => SndSettled,
                                     channel_pid => self(),
                                     limiter_pid => none,
@@ -1370,11 +1482,21 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                     mode => Mode,
                                     consumer_tag => handle_to_ctag(HandleInt),
                                     exclusive_consume => false,
+<<<<<<< HEAD
                                     args => consumer_arguments(Attach),
+=======
+                                    args => ConsumerArgs,
+                                    filter => ConsumerFilter,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                                     ok_msg => undefined,
                                     acting_user => Username},
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
                                {ok, QStates} ->
+<<<<<<< HEAD
+=======
+                                   OfferedCaps0 = rabbit_queue_type:amqp_capabilities(QType),
+                                   OfferedCaps = rabbit_amqp_util:capabilities(OfferedCaps0),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                                    A = #'v1_0.attach'{
                                           name = LinkName,
                                           handle = Handle,
@@ -1386,12 +1508,26 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           %% will be requeued. That's why the we only support RELEASED as the default outcome.
                                           source = Source#'v1_0.source'{
                                                             default_outcome = #'v1_0.released'{},
+<<<<<<< HEAD
                                                             outcomes = outcomes(Source)},
                                           role = ?AMQP_ROLE_SENDER,
                                           %% Echo back that we will respect the client's requested max-message-size.
                                           max_message_size = MaybeMaxMessageSize},
                                    MaxMessageSize = max_message_size(MaybeMaxMessageSize),
                                    Link = #outgoing_link{
+=======
+                                                            outcomes = outcomes(Source),
+                                                            %% "the sending endpoint sets the filter actually in place" [3.5.3]
+                                                            filter = EffectiveFilter},
+                                          role = ?AMQP_ROLE_SENDER,
+                                          %% Echo back that we will respect the client's requested max-message-size.
+                                          max_message_size = MaybeMaxMessageSize,
+                                          offered_capabilities = OfferedCaps},
+                                   MaxMessageSize = max_message_size(MaybeMaxMessageSize),
+                                   Link = #outgoing_link{
+                                             name = LinkName0,
+                                             source_address = address(SourceAddress),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                                              queue_name = queue_resource(Vhost, QNameBin),
                                              queue_type = QType,
                                              send_settled = SndSettled,
@@ -2126,9 +2262,15 @@ handle_deliver(ConsumerTag, AckRequired,
                         outgoing_links = OutgoingLinks};
         _ ->
             %% TODO handle missing link -- why does the queue think it's there?
+<<<<<<< HEAD
             rabbit_log:warning(
               "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
               [Handle, ConsumerTag, QName]),
+=======
+            ?LOG_WARNING(
+               "No link handle ~b exists for delivery with consumer tag ~p from queue ~tp",
+               [Handle, ConsumerTag, QName]),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             State
     end.
 
@@ -2348,16 +2490,30 @@ incoming_link_transfer(
     end,
     validate_transfer_snd_settle_mode(SndSettleMode, Settled),
     validate_transfer_rcv_settle_mode(RcvSettleMode, Settled),
+<<<<<<< HEAD
     validate_message_size(PayloadBin, MaxMessageSize),
+=======
+    PayloadSize = iolist_size(PayloadBin),
+    validate_message_size(PayloadSize, MaxMessageSize),
+    rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     messages_received(Settled),
 
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
+<<<<<<< HEAD
         {ok, X, RoutingKey, Mc1, PermCache} ->
             Mc2 = rabbit_message_interceptor:intercept(Mc1),
             check_user_id(Mc2, User),
             TopicPermCache = check_write_permitted_on_topic(
                                X, User, RoutingKey, TopicPermCache0),
+=======
+        {ok, X, RoutingKeys, Mc1, PermCache} ->
+            Mc2 = rabbit_message_interceptor:intercept(Mc1),
+            check_user_id(Mc2, User),
+            TopicPermCache = check_write_permitted_on_topics(
+                               X, User, RoutingKeys, TopicPermCache0),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
@@ -2392,14 +2548,22 @@ incoming_link_transfer(
                                    "delivery_tag=~p, delivery_id=~p, reason=~p",
                                    [DeliveryTag, DeliveryId, Reason])
             end;
+<<<<<<< HEAD
         {error, #'v1_0.error'{} = Err} ->
+=======
+        {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             Disposition = case Settled of
                               true -> [];
                               false -> [released(DeliveryId)]
                           end,
             Detach = [detach(HandleInt, Link0, Err)],
             {error, Disposition ++ Detach};
+<<<<<<< HEAD
         {error, anonymous_terminus, #'v1_0.error'{} = Err} ->
+=======
+        {error, {anonymous_terminus, true}, #'v1_0.error'{} = Err} ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             %% https://docs.oasis-open.org/amqp/anonterm/v1.0/cs01/anonterm-v1.0-cs01.html#doc-routingerrors
             case Settled of
                 true ->
@@ -2424,6 +2588,7 @@ incoming_link_transfer(
     end.
 
 lookup_target(#exchange{} = X, LinkRKey, Mc, _, _, PermCache) ->
+<<<<<<< HEAD
     lookup_routing_key(X, LinkRKey, Mc, PermCache);
 lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
     case rabbit_exchange:lookup(XName) of
@@ -2431,6 +2596,15 @@ lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
             lookup_routing_key(X, LinkRKey, Mc, PermCache);
         {error, not_found} ->
             {error, error_not_found(XName)}
+=======
+    lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
+lookup_target(#resource{} = XName, LinkRKey, Mc, _, _, PermCache) ->
+    case rabbit_exchange:lookup(XName) of
+        {ok, X} ->
+            lookup_routing_key(X, LinkRKey, Mc, false, PermCache);
+        {error, not_found} ->
+            {error, {anonymous_terminus, false}, error_not_found(XName)}
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end;
 lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
     case mc:property(to, Mc) of
@@ -2442,25 +2616,43 @@ lookup_target(to, to, Mc, Vhost, User, PermCache0) ->
                     case rabbit_exchange:lookup(XName) of
                         {ok, X} ->
                             check_internal_exchange(X),
+<<<<<<< HEAD
                             lookup_routing_key(X, RKey, Mc, PermCache);
                         {error, not_found} ->
                             {error, anonymous_terminus, error_not_found(XName)}
                     end;
                 {error, bad_address} ->
                     {error, anonymous_terminus,
+=======
+                            lookup_routing_key(X, RKey, Mc, true, PermCache);
+                        {error, not_found} ->
+                            {error, {anonymous_terminus, true}, error_not_found(XName)}
+                    end;
+                {error, bad_address} ->
+                    {error, {anonymous_terminus, true},
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                      #'v1_0.error'{
                         condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                         description = {utf8, <<"bad 'to' address string: ", String/binary>>}}}
             end;
         undefined ->
+<<<<<<< HEAD
             {error, anonymous_terminus,
+=======
+            {error, {anonymous_terminus, true},
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
              #'v1_0.error'{
                 condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                 description = {utf8, <<"anonymous terminus requires 'to' address to be set">>}}}
     end.
 
 lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
+<<<<<<< HEAD
                    RKey0, Mc0, PermCache) ->
+=======
+                   RKey0, Mc0, AnonTerm, PermCache) ->
+    Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     RKey = case RKey0 of
                subject ->
                    case mc:property(subject, Mc0) of
@@ -2472,9 +2664,37 @@ lookup_routing_key(X = #exchange{name = #resource{name = XNameBin}},
                _ when is_binary(RKey0) ->
                    RKey0
            end,
+<<<<<<< HEAD
     Mc1 = mc:set_annotation(?ANN_EXCHANGE, XNameBin, Mc0),
     Mc = mc:set_annotation(?ANN_ROUTING_KEYS, [RKey], Mc1),
     {ok, X, RKey, Mc, PermCache}.
+=======
+    case mc:x_header(<<"x-cc">>, Mc0) of
+        undefined ->
+            RKeys = [RKey],
+            Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
+            {ok, X, RKeys, Mc, PermCache};
+        {list, CCs0} = L ->
+            try lists:map(fun({utf8, CC}) -> CC end, CCs0) of
+                CCs ->
+                    RKeys = [RKey | CCs],
+                    Mc = mc:set_annotation(?ANN_ROUTING_KEYS, RKeys, Mc1),
+                    {ok, X, RKeys, Mc, PermCache}
+            catch error:function_clause ->
+                      {error, {anonymous_terminus, AnonTerm}, bad_x_cc(L)}
+            end;
+        BadValue ->
+            {error, {anonymous_terminus, AnonTerm}, bad_x_cc(BadValue)}
+    end.
+
+bad_x_cc(Value) ->
+    Desc = unicode:characters_to_binary(
+             lists:flatten(
+               io_lib:format(
+                 "bad value for 'x-cc' message-annotation: ~tp", [Value]))),
+    #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                  description = {utf8, Desc}}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 process_routing_confirm([], _SenderSettles = true, _, U) ->
     rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
@@ -2611,6 +2831,14 @@ ensure_source_v1(Address,
             Err
     end.
 
+<<<<<<< HEAD
+=======
+address(undefined) ->
+    null;
+address({utf8, String}) ->
+    String.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 -spec ensure_target(#'v1_0.target'{},
                     rabbit_types:vhost(),
                     rabbit_types:user(),
@@ -2710,11 +2938,18 @@ parse_target_v2_string(String) ->
     end.
 
 parse_target_v2_string0(<<"/exchanges/", Rest/binary>>) ->
+<<<<<<< HEAD
     Key = cp_slash,
     Pattern = try persistent_term:get(Key)
               catch error:badarg ->
                         Cp = binary:compile_pattern(<<"/">>),
                         ok = persistent_term:put(Key, Cp),
+=======
+    Pattern = try persistent_term:get(cp_slash)
+              catch error:badarg ->
+                        Cp = binary:compile_pattern(<<"/">>),
+                        ok = persistent_term:put(cp_slash, Cp),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                         Cp
               end,
     case binary:split(Rest, Pattern, [global]) of
@@ -2949,7 +3184,11 @@ credit_reply_timeout(QType, QName) ->
     Fmt = "Timed out waiting for credit reply from ~s ~s. "
     "Hint: Enable feature flag rabbitmq_4.0.0",
     Args = [QType, rabbit_misc:rs(QName)],
+<<<<<<< HEAD
     rabbit_log:error(Fmt, Args),
+=======
+    ?LOG_ERROR(Fmt, Args),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
 
 default(undefined, Default) -> Default;
@@ -2985,6 +3224,7 @@ encode_frames(T, Msg, MaxPayloadSize, Transfers) ->
             lists:reverse([[T, Msg] | Transfers])
     end.
 
+<<<<<<< HEAD
 consumer_arguments(#'v1_0.attach'{
                       source = #'v1_0.source'{filter = Filter},
                       properties = Properties}) ->
@@ -2992,12 +3232,18 @@ consumer_arguments(#'v1_0.attach'{
     filter_to_consumer_args(Filter).
 
 properties_to_consumer_args({map, KVList}) ->
+=======
+parse_attach_properties(undefined) ->
+    [];
+parse_attach_properties({map, KVList}) ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     Key = {symbol, <<"rabbitmq:priority">>},
     case proplists:lookup(Key, KVList) of
         {Key, Val = {int, _Prio}} ->
             [mc_amqpl:to_091(<<"x-priority">>, Val)];
         _ ->
             []
+<<<<<<< HEAD
     end;
 properties_to_consumer_args(_) ->
     [].
@@ -3066,6 +3312,82 @@ keyfind_unpack_described(Key, KvList) ->
             Kv;
         false ->
             false
+=======
+    end.
+
+parse_filter(undefined) ->
+    {undefined, [], []};
+parse_filter({map, DesiredKVList}) ->
+    {EffectiveKVList, ConsusumerFilter, ConsumerArgs} =
+    lists:foldr(fun parse_filters/2, {[], [], []}, DesiredKVList),
+    {{map, EffectiveKVList}, ConsusumerFilter, ConsumerArgs}.
+
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-offset-spec">>}, Value}},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case Value of
+        {timestamp, Ts} ->
+            %% 0.9.1 uses second based timestamps
+            Arg = {<<"x-stream-offset">>, timestamp, Ts div 1000},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        {utf8, Spec} ->
+            %% next, last, first and "10m" etc
+            Arg = {<<"x-stream-offset">>, longstr, Spec},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        {_Type, Offset}
+          when is_integer(Offset) andalso Offset >= 0 ->
+            Arg = {<<"x-stream-offset">>, long, Offset},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        _ ->
+            Acc
+    end;
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-filter">>}, Value}},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case Value of
+        {list, Filters0} ->
+            Filters = lists:filtermap(fun({utf8, Filter0}) ->
+                                              {true, {longstr, Filter0}};
+                                         (_) ->
+                                              false
+                                      end, Filters0),
+            Arg = {<<"x-stream-filter">>, array, Filters},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+
+        {utf8, Filter0} ->
+            Arg = {<<"x-stream-filter">>, longstr, Filter0},
+            {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+        _ ->
+            Acc
+    end;
+parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-match-unfiltered">>}, Match}},
+              {EffectiveFilters, ConsumerFilter, ConsumerArgs})
+  when is_boolean(Match) ->
+    Arg = {<<"x-stream-match-unfiltered">>, bool, Match},
+    {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
+parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, Acc)
+  when element(1, Value) =/= described ->
+    case rabbit_deprecated_features:is_permitted(amqp_filter_set_bug) of
+        true ->
+            parse_filters({Symbol, {described, Symbol, Value}}, Acc);
+        false ->
+            Acc
+    end;
+parse_filters(Filter = {{symbol, _Key}, Value},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case rabbit_amqp_filtex:validate(Value) of
+        {ok, FilterExpression = {FilterType, _}} ->
+            case proplists:is_defined(FilterType, ConsumerFilter) of
+                true ->
+                    %% For now, let's prohibit multiple top level filters of the same type
+                    %% (properties or application-properties). There should be no use case.
+                    %% In future, we can allow multiple times the same top level grouping
+                    %% filter expression type (all/any/not).
+                    Acc;
+                false ->
+                    {[Filter | EffectiveFilters], [FilterExpression | ConsumerFilter], ConsumerArgs}
+            end;
+        error ->
+            Acc
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end.
 
 validate_attach(#'v1_0.attach'{target = #'v1_0.coordinator'{}}) ->
@@ -3134,9 +3456,14 @@ validate_transfer_rcv_settle_mode(_, _) ->
 
 validate_message_size(_, unlimited) ->
     ok;
+<<<<<<< HEAD
 validate_message_size(Message, MaxMsgSize)
   when is_integer(MaxMsgSize) ->
     MsgSize = iolist_size(Message),
+=======
+validate_message_size(MsgSize, MaxMsgSize)
+  when is_integer(MsgSize) ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     case MsgSize =< MaxMsgSize of
         true ->
             ok;
@@ -3150,7 +3477,13 @@ validate_message_size(Message, MaxMsgSize)
               ?V_1_0_LINK_ERROR_MESSAGE_SIZE_EXCEEDED,
               "message size (~b bytes) > maximum message size (~b bytes)",
               [MsgSize, MaxMsgSize])
+<<<<<<< HEAD
     end.
+=======
+    end;
+validate_message_size(Msg, MaxMsgSize) ->
+    validate_message_size(iolist_size(Msg), MaxMsgSize).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -spec ensure_terminus(source | target,
                       term(),
@@ -3427,6 +3760,7 @@ check_resource_access(Resource, Perm, User, Cache) ->
             end
     end.
 
+<<<<<<< HEAD
 -spec check_write_permitted_on_topic(
         rabbit_types:exchange(),
         rabbit_types:user(),
@@ -3435,6 +3769,22 @@ check_resource_access(Resource, Perm, User, Cache) ->
     topic_permission_cache().
 check_write_permitted_on_topic(Resource, User, RoutingKey, TopicPermCache) ->
     check_topic_authorisation(Resource, User, RoutingKey, write, TopicPermCache).
+=======
+-spec check_write_permitted_on_topics(
+        rabbit_types:exchange(),
+        rabbit_types:user(),
+        [rabbit_types:routing_key(),...],
+        topic_permission_cache()) ->
+    topic_permission_cache().
+check_write_permitted_on_topics(#exchange{type = topic} = Resource,
+                                User, RoutingKeys, TopicPermCache) ->
+    lists:foldl(
+      fun(RoutingKey, Cache) ->
+              check_topic_authorisation(Resource, User, RoutingKey, write, Cache)
+      end, TopicPermCache, RoutingKeys);
+check_write_permitted_on_topics(_, _, _, TopicPermCache) ->
+    TopicPermCache.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -spec check_read_permitted_on_topic(
         rabbit_types:exchange(),
@@ -3474,6 +3824,32 @@ check_topic_authorisation(#exchange{type = topic,
 check_topic_authorisation(_, _, _, _, Cache) ->
     Cache.
 
+<<<<<<< HEAD
+=======
+recheck_authz(#state{incoming_links = IncomingLinks,
+                     outgoing_links = OutgoingLinks,
+                     permission_cache = Cache0,
+                     cfg = #cfg{user = User}
+                    } = State) ->
+    ?LOG_DEBUG("rechecking link authorizations", []),
+    Cache1 = maps:fold(
+               fun(_Handle, #incoming_link{exchange = X}, Cache) ->
+                       case X of
+                           #exchange{name = XName} ->
+                               check_resource_access(XName, write, User, Cache);
+                           #resource{} = XName ->
+                               check_resource_access(XName, write, User, Cache);
+                           to ->
+                               Cache
+                       end
+               end, Cache0, IncomingLinks),
+    Cache2 = maps:fold(
+               fun(_Handle, #outgoing_link{queue_name = QName}, Cache) ->
+                       check_resource_access(QName, read, User, Cache)
+               end, Cache1, OutgoingLinks),
+    State#state{permission_cache = Cache2}.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 check_user_id(Mc, User) ->
     case rabbit_access_control:check_user_id(Mc, User) of
         ok ->
@@ -3610,6 +3986,121 @@ format_status(
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
 
+<<<<<<< HEAD
+=======
+-spec info(pid()) ->
+    {ok, rabbit_types:infos()} | {error, term()}.
+info(Pid) ->
+    try gen_server:call(Pid, infos) of
+        Infos ->
+            {ok, Infos}
+    catch _:Reason ->
+              {error, Reason}
+    end.
+
+infos(#state{cfg = #cfg{channel_num = ChannelNum,
+                        max_handle = MaxHandle},
+             next_incoming_id = NextIncomingId,
+             incoming_window = IncomingWindow,
+             next_outgoing_id = NextOutgoingId,
+             remote_incoming_window = RemoteIncomingWindow,
+             remote_outgoing_window = RemoteOutgoingWindow,
+             outgoing_unsettled_map = OutgoingUnsettledMap,
+             incoming_links = IncomingLinks,
+             outgoing_links = OutgoingLinks,
+             incoming_management_links = IncomingManagementLinks,
+             outgoing_management_links = OutgoingManagementLinks
+            }) ->
+    [
+     {channel_number, ChannelNum},
+     {handle_max, MaxHandle},
+     {next_incoming_id, NextIncomingId},
+     {incoming_window, IncomingWindow},
+     {next_outgoing_id, NextOutgoingId},
+     {remote_incoming_window, RemoteIncomingWindow},
+     {remote_outgoing_window, RemoteOutgoingWindow},
+     {outgoing_unsettled_deliveries, maps:size(OutgoingUnsettledMap)},
+     {incoming_links,
+      info_incoming_management_links(IncomingManagementLinks) ++
+      info_incoming_links(IncomingLinks)},
+     {outgoing_links,
+      info_outgoing_management_links(OutgoingManagementLinks) ++
+      info_outgoing_links(OutgoingLinks)}
+    ].
+
+info_incoming_management_links(Links) ->
+    [info_incoming_link(Handle, Name, settled, ?MANAGEMENT_NODE_ADDRESS,
+                        MaxMessageSize, DeliveryCount, Credit, 0)
+     || Handle := #management_link{
+                     name = Name,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit} <- Links].
+
+info_incoming_links(Links) ->
+    [info_incoming_link(Handle, Name, SndSettleMode, TargetAddress, MaxMessageSize,
+                        DeliveryCount, Credit, maps:size(IncomingUnconfirmedMap))
+     || Handle := #incoming_link{
+                     name = Name,
+                     snd_settle_mode = SndSettleMode,
+                     target_address = TargetAddress,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit,
+                     incoming_unconfirmed_map = IncomingUnconfirmedMap} <- Links].
+
+info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
+                   MaxMessageSize, DeliveryCount, Credit, UnconfirmedMessages) ->
+    [{handle, Handle},
+     {link_name, LinkName},
+     {snd_settle_mode, SndSettleMode},
+     {target_address, TargetAddress},
+     {max_message_size, MaxMessageSize},
+     {delivery_count, DeliveryCount},
+     {credit, Credit},
+     {unconfirmed_messages, UnconfirmedMessages}].
+
+info_outgoing_management_links(Links) ->
+    [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
+                        true, MaxMessageSize, DeliveryCount, Credit)
+     || Handle := #management_link{
+                     name = Name,
+                     max_message_size = MaxMessageSize,
+                     delivery_count = DeliveryCount,
+                     credit = Credit} <- Links].
+
+info_outgoing_links(Links) ->
+    [begin
+         {DeliveryCount, Credit} = case ClientFlowCtl of
+                                       #client_flow_ctl{delivery_count = DC,
+                                                        credit = C} ->
+                                           {DC, C};
+                                       credit_api_v1 ->
+                                           {'', ''}
+                                   end,
+         info_outgoing_link(Handle, Name, SourceAddress, QueueName#resource.name,
+                            SendSettled, MaxMessageSize, DeliveryCount, Credit)
+
+     end
+     || Handle := #outgoing_link{
+                     name = Name,
+                     source_address = SourceAddress,
+                     queue_name = QueueName,
+                     max_message_size = MaxMessageSize,
+                     send_settled = SendSettled,
+                     client_flow_ctl = ClientFlowCtl} <- Links].
+
+info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
+                   MaxMessageSize, DeliveryCount, Credit) ->
+    [{handle, Handle},
+     {link_name, LinkName},
+     {source_address, SourceAddress},
+     {queue_name, QueueNameBin},
+     {send_settled, SendSettled},
+     {max_message_size, MaxMessageSize},
+     {delivery_count, DeliveryCount},
+     {credit, Credit}].
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 unwrap_simple_type(V = {list, _}) ->
     V;

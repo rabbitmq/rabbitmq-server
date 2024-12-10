@@ -5,3 +5,10 @@
 fun(Conf) ->
     list_to_binary(cuttlefish:conf_get("event_exchange.vhost", Conf))
 end}.
+<<<<<<< HEAD
+=======
+
+{mapping, "event_exchange.protocol", "rabbitmq_event_exchange.protocol", [
+    {datatype, {enum, [amqp_0_9_1, amqp_1_0]}}
+]}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)

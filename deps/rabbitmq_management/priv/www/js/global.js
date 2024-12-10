@@ -108,7 +108,12 @@ var ALL_COLUMNS =
                         ['rate-redeliver', 'redelivered',        false],
                         ['rate-ack',       'ack',                true]]},
      'connections':
+<<<<<<< HEAD
      {'Overview': [['user',   'User name', true],
+=======
+     {'Overview': [['container_id', 'Container ID', true],
+                   ['user',   'User name', true],
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                    ['state',  'State',     true]],
       'Details': [['ssl',            'TLS',      true],
                   ['ssl_info',       'TLS details',    false],
@@ -582,8 +587,42 @@ var HELP = {
         <dd>Rate at which queues are created. Declaring a queue that already exists counts for a "Declared" event, but not for a "Created" event. </dd>\
         <dt>Deleted</dt>\
         <dd>Rate at which queues are deleted.</dd>\
+<<<<<<< HEAD
      </dl> '
 
+=======
+     </dl> ',
+
+    'container-id':
+      'Name of the client application as sent from client to RabbitMQ in the "container-id" field of the AMQP 1.0 <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-open">open</a> frame.',
+
+    'incoming-links':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#section-links">Links</a> where the client is the sender/publisher and RabbitMQ is the receiver of messages.',
+
+    'outgoing-links':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#section-links">Links</a> where the client is the receiver/consumer and RabbitMQ is the sender of messages.',
+
+    'target-address':
+      'The "address" field of the link <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-target">target</a>.',
+
+    'source-address':
+      'The "address" field of the link <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-source">source</a>.',
+
+    'amqp-source-queue':
+      'The client receives messages from this queue.',
+
+    'amqp-unconfirmed-messages':
+      'Number of messages that have been sent to queues but have not been confirmed by all queues.',
+
+    'snd-settle-mode':
+      '<a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-transport-v1.0-os.html#type-sender-settle-mode">Sender Settle Mode</a>',
+
+    'sender-settles':
+      '"true" if the sender sends all deliveries settled to the receiver. "false" if the sender sends all deliveries initially unsettled to the receiver.',
+
+    'outgoing-unsettled-deliveries':
+      'Number of messages that have been sent to consumers but have not yet been settled/acknowledged.'
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 };
 
 ///////////////////////////////////////////////////////////////////////////

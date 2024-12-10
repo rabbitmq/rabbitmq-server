@@ -132,12 +132,23 @@
 boot_step() ->
     [begin
          %% Protocol counters
+<<<<<<< HEAD
          init([{protocol, Proto}]),
 
          %% Protocol & Queue Type counters
          init([{protocol, Proto}, {queue_type, rabbit_classic_queue}]),
          init([{protocol, Proto}, {queue_type, rabbit_quorum_queue}]),
          init([{protocol, Proto}, {queue_type, rabbit_stream_queue}])
+=======
+         Protocol = {protocol, Proto},
+         init([Protocol]),
+         rabbit_msg_size_metrics:init(Proto),
+
+         %% Protocol & Queue Type counters
+         init([Protocol, {queue_type, rabbit_classic_queue}]),
+         init([Protocol, {queue_type, rabbit_quorum_queue}]),
+         init([Protocol, {queue_type, rabbit_stream_queue}])
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
      end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
@@ -247,13 +258,21 @@ publisher_created(Protocol) ->
     counters:add(fetch(Protocol), ?PUBLISHERS, 1).
 
 publisher_deleted(Protocol) ->
+<<<<<<< HEAD
     counters:add(fetch(Protocol), ?PUBLISHERS, -1).
+=======
+    counters:sub(fetch(Protocol), ?PUBLISHERS, 1).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 consumer_created(Protocol) ->
     counters:add(fetch(Protocol), ?CONSUMERS, 1).
 
 consumer_deleted(Protocol) ->
+<<<<<<< HEAD
     counters:add(fetch(Protocol), ?CONSUMERS, -1).
+=======
+    counters:sub(fetch(Protocol), ?CONSUMERS, 1).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
     Index = case Reason of

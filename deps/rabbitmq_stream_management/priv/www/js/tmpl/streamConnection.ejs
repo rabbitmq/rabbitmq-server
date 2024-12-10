@@ -17,7 +17,11 @@
 
 <% if (connection.client_properties.connection_name) { %>
 <tr>
+<<<<<<< HEAD
   <th>Client-provided name</th>
+=======
+  <th>Client-provided connection name</th>
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   <td><%= fmt_string(connection.client_properties.connection_name) %></td>
 </tr>
 <% } %>

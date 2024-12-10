@@ -4,7 +4,11 @@
 
 DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 
+<<<<<<< HEAD
 dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+=======
+dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ':io.format "~s~n", [:code.lib_dir :elixir ]'))
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 # --------------------------------------------------------------------
 # Common Test flags.

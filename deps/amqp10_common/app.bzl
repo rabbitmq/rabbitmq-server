@@ -72,7 +72,11 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+<<<<<<< HEAD
         srcs = ["include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+=======
+        srcs = ["include/amqp10_filtex.hrl", "include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     )
     filegroup(
         name = "private_hdrs",

@@ -892,10 +892,14 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, {ok, Status}} ->
+<<<<<<< HEAD
             case rabbit_db_cluster:check_compatibility(Node) of
                 ok    -> {ok, Status};
                 Error -> Error
             end
+=======
+            {ok, Status}
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end.
 
 remote_node_info(Node) ->

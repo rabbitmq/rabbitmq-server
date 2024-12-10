@@ -10,7 +10,13 @@ var untilConnectionEstablished = new Promise((resolve, reject) => {
   })
 })
 
+<<<<<<< HEAD
 
+=======
+onAmqp('message', function (context) {
+    receivedAmqpMessageCount++
+})
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 onceAmqp('sendable', function (context) {
     context.sender.send({body:'first message'})    
 })
@@ -50,6 +56,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   })
 
   it('can open an AMQP 1.0 connection', async function () {     
+<<<<<<< HEAD
     var untilFirstMessageReceived = new Promise((resolve, reject) => {
       onAmqp('message', function(context) {
         resolve()
@@ -59,12 +66,22 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     await untilConnectionEstablished
     await untilFirstMessageReceived
     var untilSecondMessageReceived = new Promise((resolve, reject) => {
+=======
+    amqp = openAmqp()
+    await untilConnectionEstablished
+    var untilMessageReceived = new Promise((resolve, reject) => {
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       onAmqp('message', function(context) {
         resolve()
       })
     })
     amqp.sender.send({body:'second message'})    
+<<<<<<< HEAD
     await untilSecondMessageReceived    
+=======
+    await untilMessageReceived
+    assert.equal(2, receivedAmqpMessageCount)
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   })
 
   after(function () {
@@ -76,7 +93,12 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
         closeAmqp(amqp.connection)
       }
     } catch (error) {
+<<<<<<< HEAD
       console.error("Failed to close amqp10 connection due to " + error);
     }
+=======
+      console.error("Failed to close amqp10 connection due to " + error);      
+    }  
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   })
 })

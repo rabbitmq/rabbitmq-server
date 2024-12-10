@@ -28,7 +28,13 @@
         declare_exchange/3,
         bind_exchange/5,
         unbind_exchange/5,
+<<<<<<< HEAD
         delete_exchange/2
+=======
+        delete_exchange/2,
+
+        set_token/2
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
        ].
 
 -define(TIMEOUT, 20_000).
@@ -97,6 +103,11 @@ await_attached(Ref) ->
     receive
         {amqp10_event, {link, Ref, attached}} ->
             ok;
+<<<<<<< HEAD
+=======
+        {amqp10_event, {link, Ref, {attached, #'v1_0.attach'{}}}} ->
+            ok;
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?TIMEOUT ->
@@ -129,6 +140,11 @@ await_detached(Ref) ->
     receive
         {amqp10_event, {link, Ref, {detached, normal}}} ->
             ok;
+<<<<<<< HEAD
+=======
+        {amqp10_event, {link, Ref, {detached, #'v1_0.detach'{}}}} ->
+            ok;
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         {amqp10_event, {link, Ref, {detached, Err}}} ->
             {error, Err}
     after ?TIMEOUT ->
@@ -377,6 +393,26 @@ delete_exchange(LinkPair, ExchangeName) ->
             Err
     end.
 
+<<<<<<< HEAD
+=======
+%% Renew OAuth 2.0 token.
+-spec set_token(link_pair(), binary()) ->
+    ok | {error, term()}.
+set_token(LinkPair, Token) ->
+    Props = #{subject => <<"PUT">>,
+              to => <<"/auth/tokens">>},
+    Body = {binary, Token},
+    case request(LinkPair, Props, Body) of
+        {ok, Resp} ->
+            case is_success(Resp) of
+                true -> ok;
+                false -> {error, Resp}
+            end;
+        Err ->
+            Err
+    end.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 -spec request(link_pair(), amqp10_msg:amqp10_properties(), amqp10_prim()) ->
     {ok, Response :: amqp10_msg:amqp10_msg()} | {error, term()}.
 request(#link_pair{session = Session,

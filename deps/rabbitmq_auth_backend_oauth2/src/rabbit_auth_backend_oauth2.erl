@@ -8,6 +8,10 @@
 -module(rabbit_auth_backend_oauth2).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+<<<<<<< HEAD
+=======
+-include("oauth2.hrl").
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -15,6 +19,7 @@
 -export([description/0]).
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4,
+<<<<<<< HEAD
          check_topic_access/4, check_token/1, update_state/2,
          expiry_timestamp/1]).
 
@@ -23,12 +28,31 @@
 -import(uaa_jwt, [resolve_resource_server_id/1]).
 -import(rabbit_data_coercion, [to_map/1]).
 -import(rabbit_oauth2_config, [get_preferred_username_claims/1]).
+=======
+         check_topic_access/4, update_state/2,
+         expiry_timestamp/1]).
+
+%% for testing
+-export([normalize_token_scope/2, get_expanded_scopes/2]).
+
+-import(rabbit_data_coercion, [to_map/1]).
+-import(uaa_jwt, [
+    decode_and_verify/3,
+    get_scope/1, set_scope/2,
+    resolve_resource_server/1]).
+
+-import(rabbit_oauth2_keycloak, [has_keycloak_scopes/1, extract_scopes_from_keycloak_format/1]).
+-import(rabbit_oauth2_rar, [extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
+
+-import(rabbit_oauth2_scope, [filter_matching_scope_prefix_and_drop_it/2]).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -ifdef(TEST).
 -compile(export_all).
 -endif.
 
 %%
+<<<<<<< HEAD
 %% App environment
 %%
 
@@ -46,6 +70,14 @@
 
 -define(AUD_JWT_FIELD, <<"aud">>).
 -define(SCOPE_JWT_FIELD, <<"scope">>).
+=======
+%% Types
+%%
+
+-type ok_extracted_auth_user() :: {ok, rabbit_types:auth_user()}.
+-type auth_user_extraction_fun() :: fun((decoded_jwt_token()) -> any()).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %%
 %% API
 %%
@@ -56,6 +88,14 @@ description() ->
 
 %%--------------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+-spec user_login_authentication(rabbit_types:username(), [term()] | map()) ->
+    {'ok', rabbit_types:auth_user()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 user_login_authentication(Username, AuthProps) ->
     case authenticate(Username, AuthProps) of
 	{refused, Msg, Args} = AuthResult ->
@@ -65,18 +105,37 @@ user_login_authentication(Username, AuthProps) ->
 	    AuthResult
     end.
 
+<<<<<<< HEAD
+=======
+-spec user_login_authorization(rabbit_types:username(), [term()] | map()) ->
+    {'ok', any()} |
+    {'ok', any(), any()} |
+    {'refused', string(), [any()]} |
+    {'error', any()}.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 user_login_authorization(Username, AuthProps) ->
     case authenticate(Username, AuthProps) of
         {ok, #auth_user{impl = Impl}} -> {ok, Impl};
         Else                          -> Else
     end.
 
+<<<<<<< HEAD
+=======
+-spec check_vhost_access(AuthUser :: rabbit_types:auth_user(),
+                         VHost :: rabbit_types:vhost(),
+                         AuthzData :: rabbit_types:authz_data()) -> boolean() | {'error', any()}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
         fun(_Token) ->
             DecodedToken = DecodedTokenFun(),
+<<<<<<< HEAD
             Scopes = get_scopes(DecodedToken),
+=======
+            Scopes = get_scope(DecodedToken),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
             rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
@@ -86,7 +145,11 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
+<<<<<<< HEAD
             Scopes = get_scopes(Token),
+=======
+            Scopes = get_scope(Token),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
@@ -99,6 +162,7 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
+<<<<<<< HEAD
     case check_token(NewToken) of
         %% avoid logging the token
         {error, _} = E  -> E;
@@ -119,6 +183,30 @@ update_state(AuthUser, NewToken) ->
                 {error, mismatch_username_after_token_refresh} -> 
                     {refused, 
                         "Not allowed to change username on refreshed token"}
+=======
+    case resolve_resource_server(NewToken) of
+        {error, _} = Err0 -> Err0;
+        {ResourceServer, _} = Tuple ->
+            case check_token(NewToken, Tuple) of
+                %% avoid logging the token
+                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+                {refused, Err} ->
+                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+                {ok, DecodedToken} ->
+                    CurToken = AuthUser#auth_user.impl,
+                    case ensure_same_username(
+                            ResourceServer#resource_server.preferred_username_claims,
+                            CurToken(), DecodedToken) of 
+                        ok ->
+                            Tags = tags_from(DecodedToken),
+                            {ok, AuthUser#auth_user{tags = Tags,
+                                                    impl = fun() -> DecodedToken end}};
+                        {error, mismatch_username_after_token_refresh} -> 
+                            {refused, 
+                                "Not allowed to change username on refreshed token"}
+                    end
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             end
     end.
 
@@ -132,6 +220,7 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 
 %%--------------------------------------------------------------------
 
+<<<<<<< HEAD
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token     = token_from_context(AuthProps),
@@ -162,6 +251,39 @@ authenticate(_, AuthProps0) ->
             end
     end.
 
+=======
+-spec authenticate(Username, Props) -> Result
+    when Username :: rabbit_types:username(),
+         Props :: list() | map(),
+         Result :: {ok, any()} | {refused, list(), list()} | {refused, {error, any()}}.
+
+authenticate(_, AuthProps0) ->
+    AuthProps = to_map(AuthProps0),
+    Token     = token_from_context(AuthProps),
+    case resolve_resource_server(Token) of
+        {error, _} = Err0 ->
+            {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
+        {ResourceServer, _} = Tuple ->
+            case check_token(Token, Tuple) of
+                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+                {refused, Err} ->
+                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                {ok, DecodedToken} ->
+                    case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                        {error, Err} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                        Else ->
+                            Else
+                    end
+            end
+    end.
+
+-spec with_decoded_token(Token, Fun) -> Result
+    when Token :: decoded_jwt_token(),
+         Fun :: auth_user_extraction_fun(),
+         Result :: {ok, any()} | {'error', any()}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
         ok               -> Fun(DecodedToken);
@@ -169,6 +291,24 @@ with_decoded_token(DecodedToken, Fun) ->
             rabbit_log:error(Msg),
             Err
     end.
+<<<<<<< HEAD
+=======
+
+%% This is a helper function used with HOFs that may return errors.
+-spec auth_user_from_token(Token, ResourceServer) -> Result
+    when Token :: decoded_jwt_token(),
+         ResourceServer :: resource_server(),
+         Result :: ok_extracted_auth_user().
+auth_user_from_token(Token0, ResourceServer) ->
+    Username = username_from(
+        ResourceServer#resource_server.preferred_username_claims,
+        Token0),
+    Tags     = tags_from(Token0),
+    {ok, #auth_user{username = Username,
+                    tags = Tags,
+                    impl = fun() -> Token0 end}}.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedToken) ->
     CurUsername = username_from(PreferredUsernameClaims, CurrentDecodedToken),
     case {CurUsername, username_from(PreferredUsernameClaims, NewDecodedToken)} of 
@@ -184,6 +324,7 @@ validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     end;
 validate_token_expiry(#{}) -> ok.
 
+<<<<<<< HEAD
 -spec check_token(binary() | map()) ->
           {'ok', map()} |
           {'error', term() }|
@@ -278,6 +419,63 @@ post_process_payload_with_scope_alias_in_extra_scopes_source(ResourceServerId, P
                                                         ScopeAliasMapping :: map()) -> map().
 post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAliasMapping) ->
       Scopes0 = maps:get(FieldName, Payload, []),
+=======
+-spec check_token(raw_jwt_token(), {resource_server(), internal_oauth_provider()}) ->
+          {'ok', decoded_jwt_token()} |
+          {'error', term() } |
+          {'refused', 'signature_invalid' | {'error', term()} | {'invalid_aud', term()}}.
+
+check_token(DecodedToken, _) when is_map(DecodedToken) ->
+    {ok, DecodedToken};
+
+check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
+    case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
+        {error, Reason} -> {refused, {error, Reason}};
+        {true, Payload} -> {ok, normalize_token_scope(ResourceServer, Payload)};
+        {false, _} -> {refused, signature_invalid}
+    end.
+
+-spec normalize_token_scope(
+    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
+normalize_token_scope(ResourceServer, Payload) ->
+    Payload0 = maps:map(fun(K, V) ->
+        case K of
+            ?SCOPE_JWT_FIELD when is_binary(V) ->
+                binary:split(V, <<" ">>, [global, trim_all]);
+             _ -> V
+         end
+       end, Payload),
+
+    Payload1 = case has_additional_scopes_key(ResourceServer, Payload0) of
+        true  -> extract_scopes_from_additional_scopes_key(ResourceServer, Payload0);
+        false -> Payload0
+        end,
+
+    Payload2 = case has_keycloak_scopes(Payload1) of
+        true  -> extract_scopes_from_keycloak_format(Payload1);
+        false -> Payload1
+        end,
+
+    Payload3 = case ResourceServer#resource_server.scope_aliases of
+        undefined -> Payload2;
+        ScopeAliases  -> extract_scopes_using_scope_aliases(ScopeAliases, Payload2)
+        end,
+
+    Payload4 = case has_rich_auth_request_scopes(Payload3) of
+        true  -> extract_scopes_from_rich_auth_request(ResourceServer, Payload3);
+        false -> Payload3
+        end,
+
+    FilteredScopes = filter_matching_scope_prefix_and_drop_it(
+        get_scope(Payload4), ResourceServer#resource_server.scope_prefix),
+    set_scope(FilteredScopes, Payload4).
+
+
+-spec extract_scopes_using_scope_aliases(
+    ScopeAliasMapping :: map(), Payload :: map()) -> map().
+extract_scopes_using_scope_aliases(ScopeAliasMapping, Payload) ->
+      Scopes0 = get_scope(Payload),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       Scopes = rabbit_data_coercion:to_list_of_binaries(Scopes0),
       %% for all scopes, look them up in the scope alias map, and if they are
       %% present, add the alias to the final scope list. Note that we also preserve
@@ -295,6 +493,7 @@ post_process_payload_with_scope_alias_field_named(Payload, FieldName, ScopeAlias
                                 Acc ++ Binaries
                         end
                       end, Scopes, Scopes),
+<<<<<<< HEAD
        maps:put(?SCOPE_JWT_FIELD, ExpandedScopes, Payload).
 
 
@@ -593,6 +792,44 @@ resolve_scope_var(Elem, Token, Vhost) ->
                           _ -> ElemAsBinary
                         end)
     end.
+=======
+       set_scope(ExpandedScopes, Payload).
+
+-spec has_additional_scopes_key(
+    ResourceServer :: resource_server(), Payload :: map()) -> boolean().
+has_additional_scopes_key(ResourceServer, Payload) when is_map(Payload) ->
+    case ResourceServer#resource_server.additional_scopes_key of
+        undefined -> false;
+        ScopeKey -> maps:is_key(ScopeKey, Payload)
+    end.
+
+-spec extract_scopes_from_additional_scopes_key(
+    ResourceServer :: resource_server(), Payload :: map()) -> map().
+extract_scopes_from_additional_scopes_key(ResourceServer, Payload) ->
+    Claim = maps:get(ResourceServer#resource_server.additional_scopes_key, Payload),
+    AdditionalScopes = extract_additional_scopes(ResourceServer, Claim),
+    set_scope(AdditionalScopes ++ get_scope(Payload), Payload).
+
+extract_additional_scopes(ResourceServer, ComplexClaim) ->
+    ResourceServerId = ResourceServer#resource_server.id,
+    case ComplexClaim of
+        L when is_list(L) -> L;
+        M when is_map(M) ->
+            case maps:get(ResourceServerId, M, undefined) of
+                undefined           -> [];
+                Ks when is_list(Ks) ->
+                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+                ClaimBin when is_binary(ClaimBin) ->
+                    UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
+                _ -> []
+                end;
+        Bin when is_binary(Bin) ->
+            binary:split(Bin, <<" ">>, [global, trim_all]);
+        _ -> []
+    end.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 %% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
 %% credential.  The former is the most common scenario for the first time authentication.
@@ -648,6 +885,7 @@ find_claim_in_token(Claim, Token) ->
         _ -> false
     end.
 
+<<<<<<< HEAD
 -define(TAG_SCOPE_PREFIX, <<"tag:">>).
 
 -spec tags_from(map()) -> list(atom()).
@@ -670,3 +908,52 @@ matching_scopes_without_prefix(Scopes, PrefixPattern) ->
             end
         end,
         Scopes).
+=======
+-spec get_expanded_scopes(map(), #resource{}) -> [binary()].
+get_expanded_scopes(Token, #resource{virtual_host = VHost}) ->
+    Context = #{ token => Token , vhost => VHost},
+    case get_scope(Token) of
+        [] -> [];
+        Scopes -> lists:map(fun(Scope) -> list_to_binary(parse_scope(Scope, Context)) end, Scopes)
+    end.
+
+
+parse_scope(Scope, Context) ->
+    { Acc0, _} = lists:foldl(fun(Elem, { Acc, Stage }) -> parse_scope_part(Elem, Acc, Stage, Context) end,
+        { [], undefined }, re:split(Scope,"([\{.*\}])",[{return,list},trim])),
+    Acc0.
+
+parse_scope_part(Elem, Acc, Stage, Context) ->
+    case Stage of
+        error -> {Acc, error};
+        undefined ->
+            case Elem of
+                "{" -> { Acc, fun capture_var_name/3};
+                Value -> { Acc ++ Value, Stage}
+            end;
+        _ -> Stage(Elem, Acc, Context)
+    end.
+
+capture_var_name(Elem, Acc, #{ token := Token, vhost := Vhost}) ->
+    { Acc ++ resolve_scope_var(Elem, Token, Vhost), fun expect_closing_var/3}.
+
+expect_closing_var("}" , Acc, _Context) -> { Acc , undefined };
+expect_closing_var(_ , _Acc, _Context) -> {"", error}.
+
+resolve_scope_var(Elem, Token, Vhost) ->
+    case Elem of
+        "vhost" -> binary_to_list(Vhost);
+        _ ->
+            ElemAsBinary = list_to_binary(Elem),
+            binary_to_list(case maps:get(ElemAsBinary, Token, ElemAsBinary) of
+                          Value when is_binary(Value) -> Value;
+                          _ -> ElemAsBinary
+                        end)
+    end.
+
+-spec tags_from(decoded_jwt_token()) -> list(atom()).
+tags_from(DecodedToken) ->
+    Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
+    TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
+    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)

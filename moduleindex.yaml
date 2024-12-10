@@ -543,6 +543,10 @@ rabbit:
 - rabbit_access_control
 - rabbit_alarm
 - rabbit_amqp1_0
+<<<<<<< HEAD
+=======
+- rabbit_amqp_filtex
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_amqp_management
 - rabbit_amqp_reader
 - rabbit_amqp_session
@@ -670,6 +674,10 @@ rabbit:
 - rabbit_metrics
 - rabbit_mirror_queue_misc
 - rabbit_mnesia
+<<<<<<< HEAD
+=======
+- rabbit_msg_size_metrics
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_msg_store
 - rabbit_msg_store_gc
 - rabbit_networking
@@ -835,7 +843,14 @@ rabbitmq_auth_backend_oauth2:
 - Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand
 - rabbit_auth_backend_oauth2
 - rabbit_auth_backend_oauth2_app
+<<<<<<< HEAD
 - rabbit_oauth2_config
+=======
+- rabbit_oauth2_keycloak
+- rabbit_oauth2_provider
+- rabbit_oauth2_rar
+- rabbit_oauth2_resource_server
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_oauth2_schema
 - rabbit_oauth2_scope
 - uaa_jwks
@@ -928,6 +943,10 @@ rabbitmq_management:
 - rabbit_mgmt_nodes
 - rabbit_mgmt_oauth_bootstrap
 - rabbit_mgmt_reset_handler
+<<<<<<< HEAD
+=======
+- rabbit_mgmt_schema
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_mgmt_stats
 - rabbit_mgmt_sup
 - rabbit_mgmt_sup_sup
@@ -943,6 +962,10 @@ rabbitmq_management:
 - rabbit_mgmt_wm_cluster_name
 - rabbit_mgmt_wm_connection
 - rabbit_mgmt_wm_connection_channels
+<<<<<<< HEAD
+=======
+- rabbit_mgmt_wm_connection_sessions
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_mgmt_wm_connection_user_name
 - rabbit_mgmt_wm_connections
 - rabbit_mgmt_wm_connections_vhost
@@ -1103,6 +1126,10 @@ rabbitmq_prometheus:
 - prometheus_rabbitmq_core_metrics_collector
 - prometheus_rabbitmq_dynamic_collector
 - prometheus_rabbitmq_global_metrics_collector
+<<<<<<< HEAD
+=======
+- prometheus_rabbitmq_message_size_metrics_collector
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 - rabbit_prometheus_app
 - rabbit_prometheus_dispatcher
 - rabbit_prometheus_handler

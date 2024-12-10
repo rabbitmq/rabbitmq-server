@@ -14,6 +14,10 @@ def all_beam_files(name = "all_beam_files"):
             "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+<<<<<<< HEAD
+=======
+            "src/collectors/prometheus_rabbitmq_message_size_metrics_collector.erl",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",
@@ -44,6 +48,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+<<<<<<< HEAD
+=======
+            "src/collectors/prometheus_rabbitmq_message_size_metrics_collector.erl",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",
@@ -85,6 +93,10 @@ def all_srcs(name = "all_srcs"):
             "src/collectors/prometheus_rabbitmq_core_metrics_collector.erl",
             "src/collectors/prometheus_rabbitmq_dynamic_collector.erl",
             "src/collectors/prometheus_rabbitmq_global_metrics_collector.erl",
+<<<<<<< HEAD
+=======
+            "src/collectors/prometheus_rabbitmq_message_size_metrics_collector.erl",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             "src/rabbit_prometheus_app.erl",
             "src/rabbit_prometheus_dispatcher.erl",
             "src/rabbit_prometheus_handler.erl",

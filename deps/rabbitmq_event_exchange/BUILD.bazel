@@ -42,6 +42,10 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
+<<<<<<< HEAD
+=======
+        "//deps/amqp10_common:erlang_app",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],

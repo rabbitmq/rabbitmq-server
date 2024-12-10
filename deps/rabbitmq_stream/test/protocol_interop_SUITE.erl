@@ -14,6 +14,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+<<<<<<< HEAD
+=======
+-include_lib("amqp10_common/include/amqp10_filtex.hrl").
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 all() ->
     [{group, tests}].
@@ -24,7 +28,12 @@ groups() ->
        amqpl,
        amqp_credit_multiple_grants,
        amqp_credit_single_grant,
+<<<<<<< HEAD
        amqp_attach_sub_batch
+=======
+       amqp_attach_sub_batch,
+       amqp_filter_expression
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       ]
      }].
 
@@ -270,6 +279,54 @@ amqp_attach_sub_batch(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:close_connection(Connection).
 
+<<<<<<< HEAD
+=======
+%% Test that AMQP filter expressions work when messages
+%% are published via the stream protocol and consumed via AMQP.
+amqp_filter_expression(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME),
+    publish_via_stream_protocol(Stream, Config),
+
+    %% Consume from the stream via AMQP 1.0.
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = <<"/queue/", Stream/binary>>,
+
+    AppPropsFilter = [{{utf8, <<"my key">>},
+                       {utf8, <<"my value">>}}],
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"test-receiver">>, Address, settled, configuration,
+                       #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                         ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter}
+                        }),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 100, never),
+    receive {amqp10_msg, Receiver, M2} ->
+                ?assertEqual([<<"m2">>], amqp10_msg:body(M2))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M4} ->
+                ?assertEqual([<<"m4">>], amqp10_msg:body(M4))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M5} ->
+                ?assertEqual([<<"m5">>], amqp10_msg:body(M5))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, Receiver, M6} ->
+                ?assertEqual([<<"m6">>], amqp10_msg:body(M6))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, _} = Msg ->
+                ct:fail({received_unexpected_msg, Msg})
+    after 10 -> ok
+    end,
+
+    ok = amqp10_client:detach_link(Receiver),
+    ok = amqp10_client:close_connection(Connection).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -283,7 +340,13 @@ publish_via_stream_protocol(Stream, Config) ->
     {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PublisherId),
 
     M1 = stream_test_utils:simple_entry(1, <<"m1">>),
+<<<<<<< HEAD
     M2 = stream_test_utils:simple_entry(2, <<"m2">>),
+=======
+    M2 = stream_test_utils:simple_entry(2, <<"m2">>, #'v1_0.application_properties'{
+                                                        content = [{{utf8, <<"my key">>},
+                                                                    {utf8, <<"my value">>}}]}),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     M3 = stream_test_utils:simple_entry(3, <<"m3">>),
     Messages1 = [M1, M2, M3],
 

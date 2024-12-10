@@ -36,9 +36,15 @@ describe('Exchange management', function () {
   })
 
   it('list all default exchanges', async function () {
+<<<<<<< HEAD
     actual_table = await exchanges.getExchangesTable(3)
     console.log("a :" + actual_table)
     expected_table = [
+=======
+    let actual_table = await exchanges.getExchangesTable(3)
+    
+    let expected_table = [
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       ["/", "(AMQP default)", "direct"],
       ["/", "amq.direct", "direct"],
       ["/", "amq.fanout", "fanout"],
@@ -47,7 +53,11 @@ describe('Exchange management', function () {
       ["/", "amq.rabbitmq.event", "topic"],
       ["/", "amq.rabbitmq.trace", "topic"],
       ["/", "amq.topic", "topic"],
+<<<<<<< HEAD
 
+=======
+   
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       ["other", "(AMQP default)", "direct"],
       ["other", "amq.direct", "direct"],
       ["other", "amq.fanout", "fanout"],
@@ -56,6 +66,10 @@ describe('Exchange management', function () {
       ["other", "amq.rabbitmq.trace", "topic"],
       ["other", "amq.topic", "topic"]
     ]
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     console.log("e :" + actual_table)
     assert.deepEqual(actual_table, expected_table)
   })

@@ -17,6 +17,10 @@ def all_beam_files(name = "all_beam_files"):
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
         deps = [
+<<<<<<< HEAD
+=======
+            "//deps/amqp10_common:erlang_app",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
         ],
@@ -40,6 +44,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
         deps = [
+<<<<<<< HEAD
+=======
+            "//deps/amqp10_common:erlang_app",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             "//deps/rabbit:erlang_app",
             "//deps/rabbit_common:erlang_app",
         ],

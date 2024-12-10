@@ -20,6 +20,10 @@
          priority/1,
          set_ttl/2,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
          routing_headers/2,
          %%%
          convert_to/2,
@@ -138,6 +142,12 @@ set_ttl(Value, #basic_message{content = Content0} = Msg) ->
 x_header(Key,#basic_message{content = Content}) ->
     mc_amqpl:x_header(Key, Content).
 
+<<<<<<< HEAD
+=======
+x_headers(#basic_message{content = Content}) ->
+    mc_amqpl:x_headers(Content).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 routing_headers(#basic_message{content = Content}, Opts) ->
     mc_amqpl:routing_headers(Content, Opts).
 

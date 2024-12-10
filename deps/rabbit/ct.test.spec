@@ -16,6 +16,10 @@
 ,   amqp_auth_SUITE
 ,   amqp_client_SUITE
 ,   amqp_credit_api_v2_SUITE
+<<<<<<< HEAD
+=======
+,   amqp_filtex_SUITE
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 ,   amqp_proxy_protocol_SUITE
 ,   amqp_system_SUITE
 ,   amqpl_consumer_ack_SUITE
@@ -65,7 +69,12 @@
 ]}.
 
 {define, 'Set4', [
+<<<<<<< HEAD
     peer_discovery_dns_SUITE
+=======
+    msg_size_metrics_SUITE
+,   peer_discovery_dns_SUITE
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 ,   peer_discovery_tmp_hidden_node_SUITE
 ,   per_node_limit_SUITE
 ,   per_user_connection_channel_limit_SUITE
@@ -80,6 +89,10 @@
 ,   product_info_SUITE
 ,   proxy_protocol_SUITE
 ,   publisher_confirms_parallel_SUITE
+<<<<<<< HEAD
+=======
+,   unit_msg_size_metrics_SUITE
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 ]}.
 
 {define, 'Set5', [

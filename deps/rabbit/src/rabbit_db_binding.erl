@@ -304,7 +304,14 @@ delete_in_mnesia(Src, Dst, B) ->
                     should_index_table(Src), fun delete/3),
     Deletions0 = maybe_auto_delete_exchange_in_mnesia(
                    B#binding.source, [B], rabbit_binding:new_deletions(), false),
+<<<<<<< HEAD
     fun() -> {ok, rabbit_binding:process_deletions(Deletions0)} end.
+=======
+    fun() ->
+            ok = rabbit_binding:process_deletions(Deletions0),
+            {ok, Deletions0}
+    end.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 absent_errs_only_in_mnesia(Names) ->
     Errs = [E || Name <- Names,
@@ -354,7 +361,12 @@ delete_in_khepri(#binding{source = SrcName,
         {error, _} = Err ->
             Err;
         Deletions ->
+<<<<<<< HEAD
             {ok, rabbit_binding:process_deletions(Deletions)}
+=======
+            ok = rabbit_binding:process_deletions(Deletions),
+            {ok, Deletions}
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end.
 
 exists_in_khepri(Path, Binding) ->
@@ -381,6 +393,7 @@ delete_in_khepri(Binding) ->
     end.
 
 maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions, OnlyDurable) ->
+<<<<<<< HEAD
     {Entry, Deletions1} =
         case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName, OnlyDurable) of
             {not_deleted, X} ->
@@ -390,6 +403,20 @@ maybe_auto_delete_exchange_in_khepri(XName, Bindings, Deletions, OnlyDurable) ->
                  rabbit_binding:combine_deletions(Deletions, Deletions2)}
         end,
     rabbit_binding:add_deletion(XName, Entry, Deletions1).
+=======
+    case rabbit_db_exchange:maybe_auto_delete_in_khepri(XName, OnlyDurable) of
+        {not_deleted, undefined} ->
+            Deletions;
+        {not_deleted, X} ->
+            rabbit_binding:add_deletion(
+              XName, X, not_deleted, Bindings, Deletions);
+        {deleted, X, Deletions1} ->
+            Deletions2 = rabbit_binding:combine_deletions(
+                           Deletions, Deletions1),
+            rabbit_binding:add_deletion(
+              XName, X, deleted, Bindings, Deletions2)
+    end.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -1153,6 +1180,7 @@ sync_index_route(_, _, _) ->
       OnlyDurable :: boolean(),
       Ret :: rabbit_binding:deletions().
 maybe_auto_delete_exchange_in_mnesia(XName, Bindings, Deletions, OnlyDurable) ->
+<<<<<<< HEAD
     {Entry, Deletions1} =
         case rabbit_db_exchange:maybe_auto_delete_in_mnesia(XName, OnlyDurable) of
             {not_deleted, X} ->
@@ -1162,6 +1190,20 @@ maybe_auto_delete_exchange_in_mnesia(XName, Bindings, Deletions, OnlyDurable) ->
                  rabbit_binding:combine_deletions(Deletions, Deletions2)}
         end,
     rabbit_binding:add_deletion(XName, Entry, Deletions1).
+=======
+    case rabbit_db_exchange:maybe_auto_delete_in_mnesia(XName, OnlyDurable) of
+        {not_deleted, undefined} ->
+            Deletions;
+        {not_deleted, X} ->
+            rabbit_binding:add_deletion(
+              XName, X, not_deleted, Bindings, Deletions);
+        {deleted, X, Deletions1} ->
+            Deletions2 = rabbit_binding:combine_deletions(
+                           Deletions, Deletions1),
+            rabbit_binding:add_deletion(
+              XName, X, deleted, Bindings, Deletions2)
+    end.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 %% Instead of locking entire table on remove operations we can lock the
 %% affected resource only.

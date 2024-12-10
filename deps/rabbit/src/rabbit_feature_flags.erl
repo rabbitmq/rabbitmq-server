@@ -2,11 +2,21 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 %% @author The RabbitMQ team
 %% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+=======
+%% Copyright (c) 2019-2024 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
+%% @author The RabbitMQ team
+%% @copyright 2019-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc.
+%% and/or its subsidiaries. All rights reserved.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %%
 %% @doc
 %% This module offers a framework to declare capabilities a RabbitMQ node
@@ -103,7 +113,13 @@
          init/0,
          get_state/1,
          get_stability/1,
+<<<<<<< HEAD
          check_node_compatibility/1,
+=======
+         get_require_level/1,
+         get_experiment_level/1,
+         check_node_compatibility/1, check_node_compatibility/2,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
          sync_feature_flags_with_cluster/2,
          refresh_feature_flags_after_app_load/0,
          enabled_feature_flags_list_file/0
@@ -145,6 +161,11 @@
 -type feature_props() :: #{desc => string(),
                            doc_url => string(),
                            stability => stability(),
+<<<<<<< HEAD
+=======
+                           require_level => require_level(),
+                           experiment_level => experiment_level(),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                            depends_on => [feature_name()],
                            callbacks =>
                            #{callback_name() => callback_fun_name()}}.
@@ -181,6 +202,11 @@
                                     desc => string(),
                                     doc_url => string(),
                                     stability => stability(),
+<<<<<<< HEAD
+=======
+                                    require_level => require_level(),
+                                    experiment_level => experiment_level(),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                                     depends_on => [feature_name()],
                                     callbacks =>
                                     #{callback_name() => callback_fun_name()},
@@ -205,6 +231,36 @@
 %% Experimental feature flags are not enabled by default on a fresh RabbitMQ
 %% node. They must be enabled by the user.
 
+<<<<<<< HEAD
+=======
+-type require_level() :: hard | soft.
+%% The level of requirement of a feature flag.
+%%
+%% A hard required feature flags must be enabled before a RabbitMQ node is
+%% upgraded to a version where it is required.
+%%
+%% A soft required feature flag will be automatically enabled when a RabbitMQ
+%% node is upgraded to a version where it is required.
+
+-type experiment_level() :: unsupported | supported.
+%% The level of support of an experimental feature flag.
+%%
+%% At first, an experimental feature flag is offered to give a chance to users
+%% to try it and give feedback as part of the design and development of the
+%% feature. At this stage, it is unsupported: it must not be enabled in a
+%% production environment and upgrade to a later version of RabbitMQ while
+%% this experimental feature flag is enabled is not supported.
+%%
+%% Then, the experimental feature flag becomes supported. At this point, it is
+%% stable enough that upgrading is guarantied and help will be provided.
+%% However it is not mature enough to be marked as stable (which would make it
+%% enabled by default in a new deployment or when running `rabbitmqctl
+%% enable_feature_flag all'.
+%%
+%% The next step is to change its stability to `stable'. Once done, the
+%% `experiment_level()' field is irrelevant.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 -type callback_fun_name() :: {Module :: module(), Function :: atom()}.
 %% The name of the module and function to call when changing the state of
 %% the feature flag.
@@ -313,6 +369,11 @@
               feature_state/0,
               feature_states/0,
               stability/0,
+<<<<<<< HEAD
+=======
+              require_level/0,
+              experiment_level/0,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
               callback_fun_name/0,
               callbacks/0,
               callback_name/0,
@@ -682,13 +743,24 @@ info() ->
 info(Options) when is_map(Options) ->
     rabbit_ff_extra:info(Options).
 
+<<<<<<< HEAD
 -spec get_state(feature_name()) -> enabled | disabled | unavailable.
+=======
+-spec get_state(feature_name()) -> enabled |
+                                   state_changing |
+                                   disabled |
+                                   unavailable.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% @doc
 %% Returns the state of a feature flag.
 %%
 %% The possible states are:
 %% <ul>
 %% <li>`enabled': the feature flag is enabled.</li>
+<<<<<<< HEAD
+=======
+%% <li>`state_changing': the feature flag is being enabled.</li>
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% <li>`disabled': the feature flag is supported by all nodes in the
 %%   cluster but currently disabled.</li>
 %% <li>`unavailable': the feature flag is unsupported by at least one
@@ -696,6 +768,7 @@ info(Options) when is_map(Options) ->
 %% </ul>
 %%
 %% @param FeatureName The name of the feature flag to check.
+<<<<<<< HEAD
 %% @returns `enabled', `disabled' or `unavailable'.
 
 get_state(FeatureName) when is_atom(FeatureName) ->
@@ -706,6 +779,22 @@ get_state(FeatureName) when is_atom(FeatureName) ->
                      true  -> disabled;
                      false -> unavailable
                  end
+=======
+%% @returns `enabled', `state_changing', `disabled' or `unavailable'.
+
+get_state(FeatureName) when is_atom(FeatureName) ->
+    IsEnabled = is_enabled(FeatureName, non_blocking),
+    case IsEnabled of
+        true  ->
+            enabled;
+        state_changing ->
+            state_changing;
+        false ->
+            case is_supported(FeatureName) of
+                true  -> disabled;
+                false -> unavailable
+            end
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end.
 
 -spec get_stability
@@ -742,7 +831,11 @@ get_stability(FeatureName) when is_atom(FeatureName) ->
         undefined    -> undefined;
         FeatureProps -> get_stability(FeatureProps)
     end;
+<<<<<<< HEAD
 get_stability(FeatureProps) when  ?IS_FEATURE_FLAG(FeatureProps) ->
+=======
+get_stability(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     maps:get(stability, FeatureProps, stable);
 get_stability(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
     Phase = rabbit_deprecated_features:get_phase(FeatureProps),
@@ -753,6 +846,90 @@ get_stability(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
         permitted_by_default -> experimental
     end.
 
+<<<<<<< HEAD
+=======
+-spec get_require_level
+(FeatureName) -> RequireLevel | undefined when
+      FeatureName :: feature_name(),
+      RequireLevel :: require_level() | none;
+(FeatureProps) -> RequireLevel when
+      FeatureProps ::
+      feature_props_extended() |
+      rabbit_deprecated_features:feature_props_extended(),
+      RequireLevel :: require_level() | none.
+%% @doc
+%% Returns the requirement level of a feature flag.
+%%
+%% The possible requirement levels are:
+%% <ul>
+%% <li>`hard': the feature flag must be enabled before the RabbitMQ node is
+%%   upgraded to a version where it is hard required.</li>
+%% <li>`soft': the feature flag will be automatically enabled wher a RabbitMQ
+%%   node is upgraded to a version where it is soft required.</li>
+%% <li>`none': the feature flag is not required.</li>
+%% </ul>
+%%
+%% @param FeatureName The name of the feature flag to check.
+%% @param FeatureProps A feature flag properties map.
+%% @returns `hard', `soft' or `none', or `undefined' if the given feature flag
+%% name doesn't correspond to a known feature flag.
+
+get_require_level(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
+        undefined    -> undefined;
+        FeatureProps -> get_require_level(FeatureProps)
+    end;
+get_require_level(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        required  -> maps:get(require_level, FeatureProps, soft);
+        _         -> none
+    end;
+get_require_level(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        required -> hard;
+        _        -> none
+    end.
+
+-spec get_experiment_level
+(FeatureName) -> ExperimentLevel | undefined when
+      FeatureName :: feature_name(),
+      ExperimentLevel :: experiment_level() | none;
+(FeatureProps) -> ExperimentLevel when
+      FeatureProps ::
+      feature_props_extended() |
+      rabbit_deprecated_features:feature_props_extended(),
+      ExperimentLevel :: experiment_level() | none.
+%% @doc
+%% Returns the experimental level of an experimental feature flag.
+%%
+%% The possible experiment levels are:
+%% <ul>
+%% <li>`unsupported': the experimental feature flag must not be enabled in
+%%   production and upgrades with it enabled is unsupported.</li>
+%% <li>`supported': the experimental feature flag is not yet stable enough but
+%%   upgrades are guarantied to be possible. This is returned too if the
+%%   feature flag is stable or required.</li>
+%% </ul>
+%%
+%% @param FeatureName The name of the feature flag to check.
+%% @param FeatureProps A feature flag properties map.
+%% @returns `unsupported', `supported', or `undefined' if the given feature
+%% flag name doesn't correspond to a known feature flag.
+
+get_experiment_level(FeatureName) when is_atom(FeatureName) ->
+    case rabbit_ff_registry_wrapper:get(FeatureName) of
+        undefined    -> undefined;
+        FeatureProps -> get_experiment_level(FeatureProps)
+    end;
+get_experiment_level(FeatureProps) when ?IS_FEATURE_FLAG(FeatureProps) ->
+    case get_stability(FeatureProps) of
+        experimental -> maps:get(experiment_level, FeatureProps, unsupported);
+        _            -> supported
+    end;
+get_experiment_level(FeatureProps) when ?IS_DEPRECATION(FeatureProps) ->
+    supported.
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% -------------------------------------------------------------------
 %% Feature flags registry.
 %% -------------------------------------------------------------------
@@ -911,6 +1088,11 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                 ValidProps = [desc,
                               doc_url,
                               stability,
+<<<<<<< HEAD
+=======
+                              require_level,
+                              experiment_level,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                               depends_on,
                               callbacks],
                 ?assertEqual([], maps:keys(FeatureProps) -- ValidProps),
@@ -922,6 +1104,20 @@ assert_feature_flag_is_valid(FeatureName, FeatureProps) ->
                 ?assert(Stability =:= stable orelse
                         Stability =:= experimental orelse
                         Stability =:= required),
+<<<<<<< HEAD
+=======
+                ?assert(Stability =:= experimental orelse
+                        not maps:is_key(experiment_level, FeatureProps)),
+                ?assert(Stability =:= required orelse
+                        not maps:is_key(require_level, FeatureProps)),
+                RequireLevel = maps:get(require_level, FeatureProps, soft),
+                ?assert(RequireLevel =:= hard orelse RequireLevel =:= soft),
+                ExperimentLevel = maps:get(
+                                    experiment_level, FeatureProps,
+                                    unsupported),
+                ?assert(ExperimentLevel =:= unsupported orelse
+                        ExperimentLevel =:= supported),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                 ?assertNot(maps:is_key(migration_fun, FeatureProps)),
                 ?assertNot(maps:is_key(warning, FeatureProps)),
                 case FeatureProps of
@@ -1302,7 +1498,13 @@ does_node_support(Node, FeatureNames, Timeout) ->
             false
     end.
 
+<<<<<<< HEAD
 -spec check_node_compatibility(node()) -> ok | {error, any()}.
+=======
+-spec check_node_compatibility(RemoteNode) -> Ret when
+      RemoteNode :: node(),
+      Ret :: ok | {error, any()}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% @doc
 %% Checks if a node is compatible with the local node.
 %%
@@ -1314,11 +1516,48 @@ does_node_support(Node, FeatureNames, Timeout) ->
 %%   local node</li>
 %% </ol>
 %%
+<<<<<<< HEAD
 %% @param Node the name of the remote node to test.
 %% @returns `ok' if they are compatible, `{error, Reason}' if they are not.
 
 check_node_compatibility(Node) ->
     rabbit_ff_controller:check_node_compatibility(Node).
+=======
+%% @param RemoteNode the name of the remote node to test.
+%% @returns `ok' if they are compatible, `{error, Reason}' if they are not.
+
+check_node_compatibility(RemoteNode) ->
+    check_node_compatibility(RemoteNode, false).
+
+-spec check_node_compatibility(RemoteNode, LocalNodeAsVirgin) -> Ret when
+      RemoteNode :: node(),
+      LocalNodeAsVirgin :: boolean(),
+      Ret :: ok | {error, any()}.
+%% @doc
+%% Checks if a node is compatible with the local node.
+%%
+%% To be compatible, the following two conditions must be met:
+%% <ol>
+%% <li>feature flags enabled on the local node must be supported by the
+%%   remote node</li>
+%% <li>feature flags enabled on the remote node must be supported by the
+%%   local node</li>
+%% </ol>
+%%
+%% Unlike {@link check_node_compatibility/1}, the local node's feature flags
+%% inventory is evaluated as if the node was virgin if `LocalNodeAsVirgin' is
+%% true. This is useful if the local node will be reset as part of joining a
+%% remote cluster for instance.
+%%
+%% @param RemoteNode the name of the remote node to test.
+%% @param LocalNodeAsVirgin flag to indicate if the local node should be
+%% evaluated as if it was virgin.
+%% @returns `ok' if they are compatible, `{error, Reason}' if they are not.
+
+check_node_compatibility(RemoteNode, LocalNodeAsVirgin) ->
+    rabbit_ff_controller:check_node_compatibility(
+      RemoteNode, LocalNodeAsVirgin).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
     rabbit_ff_controller:rpc_call(Node, ?MODULE, Function, Args, Timeout).
@@ -1330,7 +1569,11 @@ run_feature_flags_mod_on_remote_node(Node, Function, Args, Timeout) ->
 sync_feature_flags_with_cluster([] = _Nodes, true = _NodeIsVirgin) ->
     rabbit_ff_controller:enable_default();
 sync_feature_flags_with_cluster([] = _Nodes, false = _NodeIsVirgin) ->
+<<<<<<< HEAD
     ok;
+=======
+    rabbit_ff_controller:enable_required();
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 sync_feature_flags_with_cluster(Nodes, _NodeIsVirgin) ->
     %% We don't use `rabbit_nodes:filter_running()' here because the given
     %% `Nodes' list may contain nodes which are not members yet (the cluster

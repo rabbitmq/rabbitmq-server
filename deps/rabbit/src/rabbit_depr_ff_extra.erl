@@ -2,7 +2,11 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% Copyright (c) 2023 Broadcom. All Rights Reserved. The term “Broadcom”
+=======
+%% Copyright (c) 2023-2024 Broadcom. All Rights Reserved. The term “Broadcom”
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 %% refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 %% @doc

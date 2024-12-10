@@ -10,7 +10,11 @@ on:
       - 'deps/rabbitmq_auth_**'
       - 'deps/rabbitmq_management/src/**'
       - 'deps/rabbitmq_management/priv/**'
+<<<<<<< HEAD
       - 'selenium/**'
+=======
+      - 'deps/rabbitmq_management/selenium/**'
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       - 'scripts/**'
       - .bazelrc
       - .bazelversion
@@ -20,12 +24,19 @@ on:
       - .github/workflows/test-authnz.yaml
   pull_request:
     paths:
+<<<<<<< HEAD
       - 'deps/rabbit/**'
       - 'deps/rabbitmq_auth_/**'
       - 'deps/rabbitmq_mqtt/**'
       - 'selenium/full-suite-authnz-messaging'
       - 'selenium/suites/authnz-messaging'
       - 'selenium/test/authnz-msg-protocols'
+=======
+      - 'selenium/**'
+      - 'deps/rabbit/**'
+      - 'deps/rabbitmq_auth_/**'
+      - 'deps/rabbitmq_mqtt/**'
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       - .github/workflows/test-authnz.yaml
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -64,6 +75,7 @@ jobs:
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
 
+<<<<<<< HEAD
     - name: Configure Bazel
       run: |
         if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
@@ -81,6 +93,12 @@ jobs:
     - name: Build & Load RabbitMQ OCI
       run: |
         bazelisk run packaging/docker-image:rabbitmq-amd64
+=======
+    - name: Build & Load RabbitMQ OCI
+      run: |
+        make package-generic-unix
+        make docker-image
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
     - name: Configure Docker Network
       run: |
@@ -93,9 +111,18 @@ jobs:
 
     - name: Run Suites
       run: |
+<<<<<<< HEAD
         RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
          ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
 
+=======
+        IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
+        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
+         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging
+        mkdir -p /tmp/full-suite-authnz-messaging
+        mv /tmp/selenium/* /tmp/full-suite-authnz-messaging
+        
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     - name: Upload Test Artifacts
       if: always()
       uses: actions/upload-artifact@v4.3.2

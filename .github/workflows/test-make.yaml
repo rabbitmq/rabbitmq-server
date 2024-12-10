@@ -3,7 +3,10 @@ on:
   push:
     branches:
     - main
+<<<<<<< HEAD
     - v4.0.x
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     paths:
     - deps/**
     - scripts/**

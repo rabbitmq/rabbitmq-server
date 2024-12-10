@@ -29,6 +29,7 @@
 register() ->
     ok = prometheus_registry:register_collector(?MODULE).
 
+<<<<<<< HEAD
 deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
@@ -48,3 +49,18 @@ collect_mf(_Registry, Callback) ->
 %% ===================================================================
 %% Private functions
 %% ===================================================================
+=======
+deregister_cleanup(_) ->
+    ok.
+
+collect_mf(_Registry, Callback) ->
+    maps:foreach(
+      fun(Name, #{type := Type, help := Help, values := Values}) ->
+              Callback(
+                create_mf(?METRIC_NAME(Name),
+                          Help,
+                          Type,
+                          maps:to_list(Values)))
+      end,
+      rabbit_global_counters:prometheus_format()).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)

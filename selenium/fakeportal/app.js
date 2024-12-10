@@ -56,8 +56,15 @@ function access_token(id, secret) {
   if (req.status == 200) {
     const token = JSON.parse(req.responseText).access_token;
     console.log("Token => " + token)
+<<<<<<< HEAD
     return token;
   } else {
     throw new Error(req.status + " : " + req.responseText);
+=======
+    return token
+  } else {
+    throw new Error(req.status + " : " + " : " + 
+      req.response + " : " + req.responseText)
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   }
 }

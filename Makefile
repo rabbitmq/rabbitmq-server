@@ -599,6 +599,10 @@ TIER1_PLUGINS := \
 	   rabbitmq_amqp1_0 \
 	   rabbitmq_auth_backend_cache \
 	   rabbitmq_auth_backend_http \
+<<<<<<< HEAD
+=======
+	   rabbitmq_auth_backend_ldap \
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 	   rabbitmq_auth_backend_oauth2 \
 	   rabbitmq_auth_mechanism_ssl \
 	   rabbitmq_aws \

@@ -249,7 +249,11 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
     end.
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
+<<<<<<< HEAD
     {'ok', rabbit_types:auth_user()} |
+=======
+    {'ok', rabbit_types:user()} |
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     {'refused', string()} |
     {'error', any()}.
 

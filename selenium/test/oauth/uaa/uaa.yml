@@ -1,3 +1,9 @@
+<<<<<<< HEAD
+=======
+require_https: true
+https_port: 8443
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 logging:
   config: /uaa/log4j2.properties
 

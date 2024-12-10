@@ -1,6 +1,10 @@
 var container = require('rhea')  // https://github.com/amqp/rhea
 var fs = require('fs');
 var path = require('path');
+<<<<<<< HEAD
+=======
+var connectionOptions = getConnectionOptions()
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 function getAmqpConnectionOptions() {
   return {
@@ -19,6 +23,7 @@ function getAmqpsConnectionOptions() {
     options['enable_sasl_external'] = true  
   }
   options['transport'] = 'tls'
+<<<<<<< HEAD
   let certsLocation = getEnv("RABBITMQ_CERTS");
   options['key'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_key.pem'))
   options['cert'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_certificate.pem'))
@@ -29,6 +34,20 @@ function getConnectionOptions() {
     case 'amqp':
       return getAmqpConnectionOptions()
     case 'amqps':
+=======
+  let certsLocation = process.env.RABBITMQ_CERTS
+  options['key'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_key.pem'))
+  options['cert'] = fs.readFileSync(path.resolve(certsLocation,'client_rabbitmq_certificate.pem'))
+  options['ca'] = fs.readFileSync(path.resolve(certsLocation,'ca_rabbitmq_certificate.pem')) 
+  return options
+}
+function getConnectionOptions() {
+  let scheme = process.env.RABBITMQ_AMQP_SCHEME || 'amqp'
+  switch(scheme){
+    case "amqp":
+      return getAmqpConnectionOptions()
+    case "amqps":
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       return getAmqpsConnectionOptions()
   }  
 }
@@ -40,7 +59,11 @@ module.exports = {
         resolve()
       })
     })
+<<<<<<< HEAD
     let connection = container.connect(getConnectionOptions())
+=======
+    let connection = container.connect(connectionOptions)
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     let receiver = connection.open_receiver({
       source: 'my-queue',
       target: 'receiver-target',

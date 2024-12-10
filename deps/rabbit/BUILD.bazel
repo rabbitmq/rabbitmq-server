@@ -462,6 +462,16 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
+=======
+    name = "msg_size_metrics_SUITE",
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     name = "list_consumers_sanity_check_SUITE",
     size = "medium",
 )
@@ -857,6 +867,15 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "topic_permission_SUITE",
     size = "medium",
+<<<<<<< HEAD
+=======
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 )
 
 rabbitmq_integration_suite(
@@ -977,6 +996,14 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_suite(
+<<<<<<< HEAD
+=======
+    name = "unit_msg_size_metrics_SUITE",
+    size = "small",
+)
+
+rabbitmq_suite(
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     name = "unit_operator_policy_SUITE",
     size = "small",
     deps = [
@@ -1197,6 +1224,10 @@ rabbitmq_integration_suite(
     name = "amqp_client_SUITE",
     size = "large",
     additional_beam = [
+<<<<<<< HEAD
+=======
+        ":test_amqp_utils_beam",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         ":test_event_recorder_beam",
     ],
     shard_count = 3,
@@ -1206,6 +1237,19 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
+=======
+    name = "amqp_filtex_SUITE",
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
+    runtime_deps = [
+        "//deps/rabbitmq_amqp_client:erlang_app",
+    ],
+)
+
+rabbitmq_integration_suite(
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     name = "amqp_proxy_protocol_SUITE",
     size = "medium",
 )
@@ -1225,6 +1269,10 @@ rabbitmq_integration_suite(
 rabbitmq_integration_suite(
     name = "amqp_auth_SUITE",
     additional_beam = [
+<<<<<<< HEAD
+=======
+        ":test_amqp_utils_beam",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         ":test_event_recorder_beam",
     ],
     shard_count = 2,
@@ -1235,6 +1283,12 @@ rabbitmq_integration_suite(
 
 rabbitmq_integration_suite(
     name = "amqp_address_SUITE",
+<<<<<<< HEAD
+=======
+    additional_beam = [
+        ":test_amqp_utils_beam",
+    ],
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     shard_count = 2,
     runtime_deps = [
         "//deps/rabbitmq_amqp_client:erlang_app",
@@ -1348,6 +1402,10 @@ eunit(
         ":test_clustering_utils_beam",
         ":test_event_recorder_beam",
         ":test_rabbit_ct_hook_beam",
+<<<<<<< HEAD
+=======
+        ":test_amqp_utils_beam",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     ],
     target = ":test_erlang_app",
     test_env = {

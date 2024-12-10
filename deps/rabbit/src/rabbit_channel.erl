@@ -471,7 +471,11 @@ force_event_refresh(Ref) ->
 list_queue_states(Pid) ->
     gen_server2:call(Pid, list_queue_states).
 
+<<<<<<< HEAD
 -spec update_user_state(pid(), rabbit_types:auth_user()) -> 'ok' | {error, channel_terminated}.
+=======
+-spec update_user_state(pid(), rabbit_types:user()) -> 'ok' | {error, channel_terminated}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 update_user_state(Pid, UserState) when is_pid(Pid) ->
     case erlang:is_process_alive(Pid) of
@@ -997,7 +1001,11 @@ check_msg_size(Content, GCThreshold) ->
     Size = rabbit_basic:maybe_gc_large_msg(Content, GCThreshold),
     case Size =< MaxMessageSize of
         true ->
+<<<<<<< HEAD
             ok;
+=======
+            rabbit_msg_size_metrics:observe(amqp091, Size);
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         false ->
             Fmt = case MaxMessageSize of
                       ?MAX_MSG_SIZE ->

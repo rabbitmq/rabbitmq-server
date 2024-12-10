@@ -105,7 +105,12 @@ init([Sup, ConnConfig]) when is_map(ConnConfig) ->
             {ok, expecting_connection_pid, State}
     end.
 
+<<<<<<< HEAD
 connect(Address, Port, #{tls_opts := {secure_port, Opts}}) ->
+=======
+connect(Address, Port, #{tls_opts := {secure_port, Opts0}}) ->
+    Opts = rabbit_ssl_options:fix_client(Opts0),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     case ssl:connect(Address, Port, ?RABBIT_TCP_OPTS ++ Opts) of
       {ok, S} ->
           {ssl, S};

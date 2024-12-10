@@ -37,7 +37,13 @@ setup(#{feature_flags_file := FFFile}) ->
                       "Failed to initialize feature flags registry: ~tp",
                       [Reason],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+<<<<<<< HEAD
                     throw({error, failed_to_initialize_feature_flags_registry})
+=======
+                    throw({error,
+                           {failed_to_initialize_feature_flags_registry,
+                            Reason}})
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             end;
         {error, Reason} ->
             ?LOG_ERROR(

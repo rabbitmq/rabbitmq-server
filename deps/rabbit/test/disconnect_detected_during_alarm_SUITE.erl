@@ -96,7 +96,11 @@ disconnect_detected_during_alarm(Config) ->
 
     ListConnections =
         fun() ->
+<<<<<<< HEAD
             rpc:call(A, rabbit_networking, connection_info_all, [])
+=======
+            rpc:call(A, rabbit_networking, connection_info_all, [[state]])
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         end,
 
     %% We've already disconnected, but blocked connection still should still linger on.

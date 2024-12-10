@@ -23,7 +23,11 @@ on:
       elixir_version:
         description: 'Elixir version to build with'
         required: true
+<<<<<<< HEAD
         default: "1.17"
+=======
+        default: "1.15"
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       project_version:
         description: 'PROJECT_VERSION used for make'
         required: true

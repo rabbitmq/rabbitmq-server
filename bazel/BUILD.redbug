@@ -49,12 +49,16 @@ filegroup(
     ],
 )
 
+<<<<<<< HEAD
 filegroup(
     name = "private_hdrs",
     srcs = [
         "src/redbug_dbg.hrl",
     ],
 )
+=======
+filegroup(name = "private_hdrs")
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 filegroup(name = "public_hdrs")
 

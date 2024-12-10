@@ -42,7 +42,11 @@
           stats_timer :: option(rabbit_event:state()),
           keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
           conn_name :: option(binary())
+<<<<<<< HEAD
         }).
+=======
+         }).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -type state() :: #state{}.
 
@@ -79,6 +83,7 @@ init(Req, Opts) ->
                 false ->
                     no_supported_sub_protocol(Protocol, Req);
                 true ->
+<<<<<<< HEAD
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
                     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
 
@@ -86,6 +91,14 @@ init(Req, Opts) ->
                      cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
                      #state{socket = maps:get(proxy_header, Req, undefined)},
                      WsOpts}
+=======
+                    Req1 = cowboy_req:set_resp_header(<<"sec-websocket-protocol">>, <<"mqtt">>, Req),
+                    State = #state{socket = maps:get(proxy_header, Req, undefined),
+                                   stats_timer = rabbit_event:init_stats_timer()},
+                    WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
+                    WsOpts  = maps:merge(#{compress => true}, WsOpts0),
+                    {?MODULE, Req1, State, WsOpts}
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             end
     end.
 
@@ -112,8 +125,12 @@ websocket_init(State0 = #state{socket = Sock}) ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_INFO("Accepting Web MQTT connection ~s", [ConnName]),
             _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+<<<<<<< HEAD
             State1 = State0#state{conn_name = ConnName},
             State = rabbit_event:init_stats_timer(State1, #state.stats_timer),
+=======
+            State = State0#state{conn_name = ConnName},
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             process_flag(trap_exit, true),
             {[], State, hibernate};
         {error, Reason} ->

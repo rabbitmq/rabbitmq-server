@@ -47,7 +47,11 @@ jobs:
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         run: |
+<<<<<<< HEAD
           make package-generic-unix PROJECT_VERSION=4.0.0
+=======
+          make package-generic-unix PROJECT_VERSION=4.1.0-alpha.1
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v4.3.1

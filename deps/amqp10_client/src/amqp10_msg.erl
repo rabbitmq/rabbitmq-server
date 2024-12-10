@@ -38,6 +38,11 @@
          set_message_annotations/2
         ]).
 
+<<<<<<< HEAD
+=======
+-import(amqp10_client_types, [utf8/1]).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -type opt(T) :: T | undefined.
@@ -380,13 +385,21 @@ set_application_properties(
   Props0, #amqp10_msg{application_properties =
                       #'v1_0.application_properties'{content = APs0}} = Msg) ->
     Props = maps:fold(fun (K, V, S) ->
+<<<<<<< HEAD
                               S#{utf8(K) => wrap_ap_value(V)}
+=======
+                              S#{utf8(K) => amqp10_client_types:infer(V)}
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                       end, maps:from_list(APs0), Props0),
     APs = #'v1_0.application_properties'{content = maps:to_list(Props)},
     Msg#amqp10_msg{application_properties = APs}.
 
 -spec set_delivery_annotations(#{binary() => binary() | integer() | string()},
+<<<<<<< HEAD
                                  amqp10_msg()) -> amqp10_msg().
+=======
+                               amqp10_msg()) -> amqp10_msg().
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 set_delivery_annotations(Props,
                          #amqp10_msg{delivery_annotations = undefined} =
                          Msg) ->
@@ -394,6 +407,7 @@ set_delivery_annotations(Props,
     set_delivery_annotations(Props,
                              Msg#amqp10_msg{delivery_annotations = Anns});
 set_delivery_annotations(
+<<<<<<< HEAD
   Props0, #amqp10_msg{delivery_annotations =
                       #'v1_0.delivery_annotations'{content = Anns0}} = Msg) ->
     Anns = maps:fold(fun (K, V, S) ->
@@ -401,10 +415,20 @@ set_delivery_annotations(
                      end, maps:from_list(Anns0), Props0),
     Anns1 = #'v1_0.delivery_annotations'{content = maps:to_list(Anns)},
     Msg#amqp10_msg{delivery_annotations = Anns1}.
+=======
+  Props, #amqp10_msg{delivery_annotations =
+                     #'v1_0.delivery_annotations'{content = Anns0}} = Msg) ->
+    Anns1 = maps:fold(fun (K, V, S) ->
+                              S#{sym(K) => amqp10_client_types:infer(V)}
+                      end, maps:from_list(Anns0), Props),
+    Anns = #'v1_0.delivery_annotations'{content = maps:to_list(Anns1)},
+    Msg#amqp10_msg{delivery_annotations = Anns}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -spec set_message_annotations(#{binary() => binary() | number() | string() | tuple()},
                               amqp10_msg()) -> amqp10_msg().
 set_message_annotations(Props,
+<<<<<<< HEAD
                          #amqp10_msg{message_annotations = undefined} =
                          Msg) ->
     Anns = #'v1_0.message_annotations'{content = []},
@@ -439,6 +463,21 @@ wrap_ap_value(V) when is_number(V) ->
     {double, V};
 wrap_ap_value(TaggedValue) when is_tuple(TaggedValue) ->
     TaggedValue.
+=======
+                        #amqp10_msg{message_annotations = undefined} =
+                        Msg) ->
+    Anns = #'v1_0.message_annotations'{content = []},
+    set_message_annotations(Props,
+                            Msg#amqp10_msg{message_annotations = Anns});
+set_message_annotations(
+  Props, #amqp10_msg{message_annotations =
+                     #'v1_0.message_annotations'{content = Anns0}} = Msg) ->
+    Anns1 = maps:fold(fun (K, V, S) ->
+                              S#{sym(K) => amqp10_client_types:infer(V)}
+                      end, maps:from_list(Anns0), Props),
+    Anns = #'v1_0.message_annotations'{content = maps:to_list(Anns1)},
+    Msg#amqp10_msg{message_annotations = Anns}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 %% LOCAL
 header_value(durable, undefined) -> false;
@@ -474,7 +513,10 @@ parse_from_amqp(#'v1_0.footer'{} = Header, AmqpMsg) ->
     AmqpMsg#amqp10_msg{footer = Header}.
 
 unpack(V) -> amqp10_client_types:unpack(V).
+<<<<<<< HEAD
 utf8(V) -> amqp10_client_types:utf8(V).
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
 sym(B) when is_binary(B) -> {symbol, B}.
 uint(B) -> {uint, B}.

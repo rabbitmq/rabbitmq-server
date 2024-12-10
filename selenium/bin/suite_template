@@ -30,9 +30,15 @@ find_selenium_dir() {
 SELENIUM_ROOT_FOLDER=$(find_selenium_dir $SCRIPT)
 TEST_DIR=$SELENIUM_ROOT_FOLDER/test
 BIN_DIR=$SELENIUM_ROOT_FOLDER/bin
+<<<<<<< HEAD
 LOGS=${SELENIUM_ROOT_FOLDER}/logs/${SUITE}
 SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=/tmp/selenium/${SUITE}
+=======
+SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
+CONF_DIR=/tmp/selenium/${SUITE}
+LOGS=${CONF_DIR}/logs
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 ENV_FILE=$CONF_DIR/.env
 
 rm -rf $CONF_DIR
@@ -132,7 +138,11 @@ build_mocha_image() {
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
   print "> tag : $tag"
   if [[ $(docker images -q mocha-test:$tag 2> /dev/null) == "" ]]; then
+<<<<<<< HEAD
     docker build -t mocha-test:$tag  --target test $SCRIPT/..
+=======
+    docker build -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"
@@ -170,13 +180,21 @@ wait_for_oidc_endpoint() {
 wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
+<<<<<<< HEAD
   CURL_ARGS="-L --fail "
+=======
+  CURL_ARGS="-k --tlsv1.2 -L --fail "
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -eq 3 ]]; then
     CURL_ARGS="$CURL_ARGS --cacert $3"
     DELAY_BETWEEN_ATTEMPTS=10
   fi
+<<<<<<< HEAD
   max_retry=10
+=======
+  max_retry=15
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (curl $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
@@ -191,7 +209,11 @@ wait_for_oidc_endpoint_local() {
 wait_for_oidc_endpoint_docker() {
   NAME=$1
   BASE_URL=$2
+<<<<<<< HEAD
   CURL_ARGS="-L --fail "
+=======
+  CURL_ARGS="-k --tlsv1.2 -L --fail "
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   DOCKER_ARGS="--rm --net ${DOCKER_NETWORK} "
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -gt 2  ]]; then
@@ -199,7 +221,11 @@ wait_for_oidc_endpoint_docker() {
     CURL_ARGS="$CURL_ARGS --cacert /tmp/ca_certificate.pem"
     DELAY_BETWEEN_ATTEMPTS=10
   fi
+<<<<<<< HEAD
   max_retry=10
+=======
+  max_retry=15
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (docker run $DOCKER_ARGS curlimages/curl:7.85.0 $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
@@ -333,9 +359,17 @@ _test() {
     --env SELENIUM_POLLING=${SELENIUM_POLLING} \
     --env PROFILES="${PROFILES}" \
     --env ENV_FILE="/code/.env" \
+<<<<<<< HEAD
     --env NODE_EXTRA_CA_CERTS=/nodejs/ca.pem \
     -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs/ca.pem \
     -v ${TEST_DIR}:/code/test \
+=======
+    --env RABBITMQ_CERTS=/etc/rabbitmq/certs \
+    --env NODE_EXTRA_CA_CERTS=/nodejs/ca.pem \
+    -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs/ca.pem \
+    -v ${TEST_DIR}:/code/test \
+    -v ${TEST_CONFIG_DIR}/certs:/etc/rabbitmq/certs \
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     -v ${SCREENS}:/screens \
     -v ${ENV_FILE}:/code/.env \
     mocha-test:${mocha_test_tag} test /code/test${TEST_CASES_PATH}
@@ -371,8 +405,13 @@ profiles_with_local_or_docker() {
 generate_env_file() {
     begin "Generating env file ..."
     mkdir -p $CONF_DIR
+<<<<<<< HEAD
     ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE
     source $ENV_FILE
+=======
+    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE    
+    source $ENV_FILE    
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     end "Finished generating env file."
 }
 generate-ca-server-client-kpi() {
@@ -468,6 +507,10 @@ generate-client-keystore-if-required() {
         -noprompt
   fi
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 run() {
   runWith rabbitmq
 }
@@ -582,7 +625,11 @@ test_local() {
   export RABBITMQ_AMQP_PASSWORD=${RABBITMQ_AMQP_PASSWORD}
   export SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
   export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
   print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"

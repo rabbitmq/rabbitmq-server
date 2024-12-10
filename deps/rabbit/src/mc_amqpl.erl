@@ -11,6 +11,10 @@
          init/1,
          size/1,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
          routing_headers/2,
          convert_to/3,
          convert_from/3,
@@ -42,7 +46,10 @@
 -define(AMQP10_FOOTER, <<"x-amqp-1.0-footer">>).
 -define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 -define(CLASS_ID, 60).
+<<<<<<< HEAD
 -define(LONGSTR_UTF8_LIMIT, 4096).
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -opaque state() :: #content{}.
 
@@ -273,6 +280,26 @@ x_header(Key, #content{properties = none} = Content0) ->
     Content = rabbit_binary_parser:ensure_content_decoded(Content0),
     x_header(Key, Content).
 
+<<<<<<< HEAD
+=======
+x_headers(#content{properties = #'P_basic'{headers = undefined}}) ->
+    #{};
+x_headers(#content{properties = #'P_basic'{headers = Headers}}) ->
+    L = lists:filtermap(
+          fun({Name, Type, Val}) ->
+                  case mc_util:is_x_header(Name) of
+                      true ->
+                          {true, {Name, from_091(Type, Val)}};
+                      false ->
+                          false
+                  end
+          end, Headers),
+    maps:from_list(L);
+x_headers(#content{properties = none} = Content0) ->
+    Content = rabbit_binary_parser:ensure_content_decoded(Content0),
+    x_headers(Content).
+
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 property(Prop, Content) ->
     mc_util:infer_type(mc_compat:get_property(Prop, Content)).
 
@@ -664,6 +691,7 @@ wrap(_Type, undefined) ->
 wrap(Type, Val) ->
     {Type, Val}.
 
+<<<<<<< HEAD
 from_091(longstr, V)
   when is_binary(V) andalso
        byte_size(V) =< ?LONGSTR_UTF8_LIMIT ->
@@ -671,12 +699,19 @@ from_091(longstr, V)
     %% it _may_ still be valid utf8 but checking this for every longstr header
     %% value is going to be excessively slow
     case mc_util:is_utf8_no_null(V) of
+=======
+from_091(longstr, V) ->
+    case mc_util:is_utf8_no_null_limited(V) of
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
         true ->
             {utf8, V};
         false ->
             {binary, V}
     end;
+<<<<<<< HEAD
 from_091(longstr, V) -> {binary, V};
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 from_091(long, V) -> {long, V};
 from_091(unsignedbyte, V) -> {ubyte, V};
 from_091(short, V) -> {short, V};
@@ -707,7 +742,10 @@ supported_header_value_type(table) ->
 supported_header_value_type(_) ->
     true.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 amqp10_map_get(_K, []) ->
     undefined;
 amqp10_map_get(K, Tuples) ->

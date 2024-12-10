@@ -10,7 +10,11 @@
 -include("rabbit.hrl").
 
 -export([start_link/0]).
+<<<<<<< HEAD
 -export([init_stats_timer/2, init_disabled_stats_timer/2,
+=======
+-export([init_stats_timer/0, init_stats_timer/2, init_disabled_stats_timer/2,
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
          ensure_stats_timer/3, stop_stats_timer/2, reset_stats_timer/2]).
 -export([stats_level/2, if_enabled/3]).
 -export([notify/2, notify/3, notify_if/3]).
@@ -89,6 +93,7 @@ start_link() ->
 %% Nowadays, instead of sending a message to rabbit_event via notify(stats),
 %% some stat-emitting objects update ETS tables directly via module rabbit_core_metrics.
 
+<<<<<<< HEAD
 init_stats_timer(C, P) ->
     %% If the rabbit app is not loaded - use default none:5000
     StatsLevel = application:get_env(rabbit, collect_statistics, none),
@@ -106,6 +111,36 @@ ensure_stats_timer(C, P, Msg) ->
             TRef = erlang:send_after(Interval, self(), Msg),
             setelement(P, C, State#state{timer = TRef});
         #state{} ->
+=======
+-spec init_stats_timer() -> state().
+init_stats_timer() ->
+    %% If the rabbit app is not loaded - use default none:5000
+    StatsLevel = application:get_env(rabbit, collect_statistics, none),
+    Interval = application:get_env(rabbit, collect_statistics_interval, 5000),
+    #state{level = StatsLevel,
+           interval = Interval,
+           timer = undefined}.
+
+init_stats_timer(C, P) ->
+    State = init_stats_timer(),
+    setelement(P, C, State).
+
+init_disabled_stats_timer(C, P) ->
+    State = #state{level = none,
+                   interval = 0,
+                   timer = undefined},
+    setelement(P, C, State).
+
+ensure_stats_timer(C, P, Msg) ->
+    case element(P, C) of
+        #state{level = Level,
+               interval = Interval,
+               timer = undefined} = State
+          when Level =/= none ->
+            TRef = erlang:send_after(Interval, self(), Msg),
+            setelement(P, C, State#state{timer = TRef});
+        _State ->
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
             C
     end.
 
@@ -156,5 +191,9 @@ event_cons(Type, Props, Ref) ->
     #event{type      = Type,
            props     = Props,
            reference = Ref,
+<<<<<<< HEAD
            timestamp = os:system_time(milli_seconds)}.
+=======
+           timestamp = os:system_time(millisecond)}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 

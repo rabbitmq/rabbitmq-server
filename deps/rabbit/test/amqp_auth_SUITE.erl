@@ -21,6 +21,13 @@
 -import(event_recorder,
         [assert_event_type/2,
          assert_event_prop/2]).
+<<<<<<< HEAD
+=======
+-import(amqp_utils,
+        [flush/1,
+         wait_for_credit/1,
+         close_connection_sync/1]).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 all() ->
     [
@@ -1077,6 +1084,7 @@ amqp_error(Condition, Description)
        condition = Condition,
        description = {utf8, Description}}.
 
+<<<<<<< HEAD
 % before we can send messages we have to wait for credit from the server
 wait_for_credit(Sender) ->
     receive
@@ -1096,10 +1104,13 @@ flush(Prefix) ->
               ok
     end.
 
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 delete_all_queues(Config) ->
     Qs = rpc(Config, rabbit_amqqueue, list, []),
     [{ok, _QLen} = rpc(Config, rabbit_amqqueue, delete, [Q, false, false, <<"fake-user">>])
      || Q <- Qs].
+<<<<<<< HEAD
 
 close_connection_sync(Connection)
   when is_pid(Connection) ->
@@ -1108,3 +1119,5 @@ close_connection_sync(Connection)
     after 5000 -> flush(missing_closed),
                   ct:fail("missing CLOSE from server")
     end.
+=======
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)

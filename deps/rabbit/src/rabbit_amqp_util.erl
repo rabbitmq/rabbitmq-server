@@ -8,7 +8,12 @@
 -module(rabbit_amqp_util).
 -include("rabbit_amqp.hrl").
 
+<<<<<<< HEAD
 -export([protocol_error/3]).
+=======
+-export([protocol_error/3,
+         capabilities/1]).
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 -spec protocol_error(term(), io:format(), [term()]) ->
     no_return().
@@ -17,3 +22,14 @@ protocol_error(Condition, Msg, Args) ->
     Reason = #'v1_0.error'{condition = Condition,
                            description = {utf8, Description}},
     exit(Reason).
+<<<<<<< HEAD
+=======
+
+-spec capabilities([binary()]) ->
+    undefined | {array, symbol, [{symbol, binary()}]}.
+capabilities([]) ->
+    undefined;
+capabilities(Capabilities) ->
+    Caps = [{symbol, C} || C <- Capabilities],
+    {array, symbol, Caps}.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)

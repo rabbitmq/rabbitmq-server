@@ -12,7 +12,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+<<<<<<< HEAD
     "chromedriver": "^128.0.0",
+=======
+    "chromedriver": "^130.0.4",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     "ejs": "^3.1.8",
     "express": "^4.18.2",
     "geckodriver": "^3.0.2",
@@ -21,7 +25,11 @@
     "path": "^0.12.7",
     "proxy": "^1.0.2",
     "rhea": "^3.0.3",
+<<<<<<< HEAD
     "selenium-webdriver": "^4.19.0",
+=======
+    "selenium-webdriver": "^4.26.0",
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
     "xmlhttprequest": "^1.8.0"
   },
   "devDependencies": {

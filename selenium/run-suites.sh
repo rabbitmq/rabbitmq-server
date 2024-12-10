@@ -30,7 +30,11 @@ do
   fi
   echo -e "=== $TEST_STATUS $SUITE ==========================================="
   echo " "
+<<<<<<< HEAD
 done <<< "$(cat $SCRIPT/$SUITE_FILE)"
+=======
+done <<< "$(cat $SCRIPT/$SUITE_FILE | sort)"
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 echo -e "=== Summary (${TOTAL_SUITES}/${GREEN}${#SUCCESSFUL_SUITES[@]}/${RED}${#FAILED_SUITES[@]}${NC}) ============================================"
 if [ ${#SUCCESSFUL_SUITES[@]} -gt 0 ]; then echo -e " > ${GREEN}Successful suites ${NC}"; fi

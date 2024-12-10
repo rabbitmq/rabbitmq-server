@@ -109,17 +109,29 @@ prop_connection_channel_counts(Config) ->
                                  {1, force_stats}])),
             begin
                 % ensure we begin with no connections
+<<<<<<< HEAD
+=======
+                ct:pal("Init testcase"),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                 true = validate_counts(Config, []),
                 Cons = lists:foldl(fun (Op, Agg) ->
                                           execute_op(Config, Op, Agg)
                                    end, [], Ops),
                 %% TODO retry a few times
+<<<<<<< HEAD
+=======
+                ct:pal("Check testcase"),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                 Res = retry_for(
                         fun() ->
                                 force_stats(Config),
                                 validate_counts(Config, Cons) end,
                         60),
+<<<<<<< HEAD
                 cleanup(Cons),
+=======
+                ct:pal("Cleanup testcase"),
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
                 rabbit_ct_helpers:await_condition(
                   fun () ->
                           cleanup(Cons),
@@ -138,8 +150,21 @@ validate_counts(Config, Conns) ->
     Ch1 = length(http_get_from_node(Config, 0, "/channels")),
     Ch2 = length(http_get_from_node(Config, 1, "/channels")),
     Ch3 = length(http_get_from_node(Config, 2, "/channels")),
+<<<<<<< HEAD
     [Expected, Expected, Expected, ChanCount, ChanCount, ChanCount]
     =:= [C1, C2, C3, Ch1, Ch2, Ch3].
+=======
+    Res = ([Expected, Expected, Expected, ChanCount, ChanCount, ChanCount]
+           =:= [C1, C2, C3, Ch1, Ch2, Ch3]),
+    case Res of
+        false ->
+            ct:pal("Validate counts connections: ~p channels: ~p got ~p",
+                   [Expected, ChanCount, [C1, C2, C3, Ch1, Ch2, Ch3]]);
+        true ->
+            ok
+    end,
+    Res.
+>>>>>>> 8d7535e0b (amqqueue_process: adopt new `is_duplicate` backing queue callback)
 
 
 cleanup(Conns) ->
