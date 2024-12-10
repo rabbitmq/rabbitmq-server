@@ -449,7 +449,7 @@ deliver(Qs0, Msg0, Options) ->
     Confirm = MsgSeqNo /= undefined,
 
     {MPids, Qs} = qpids(Qs0, Confirm, MsgSeqNo),
-    Delivery = rabbit_basic:delivery(Mandatory, Confirm, Msg, MsgSeqNo),
+    Delivery = rabbit_basic:delivery(Mandatory, Confirm, Msg, MsgSeqNo, Flow),
 
     case Flow of
         %% Here we are tracking messages sent by the rabbit_channel

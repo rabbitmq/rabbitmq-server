@@ -8,6 +8,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([nowarn_export_all, export_all]).
 
@@ -18,11 +19,17 @@
 
 all() ->
     [
+     {group, cluster_size_1},
      {group, cluster_size_3}
     ].
 
 groups() ->
     [
+     {cluster_size_1, [], [
+                           classic_queue_flow_control_enabled,
+                           classic_queue_flow_control_disabled
+                           ]
+     },
      {cluster_size_3, [], [
                            leader_locator_client_local,
                            leader_locator_balanced,
@@ -42,10 +49,14 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(Group, Config) ->
+    Nodes = case Group of
+                cluster_size_1 -> 1;
+                cluster_size_3 -> 3
+            end,
     Config1 = rabbit_ct_helpers:set_config(Config,
                                            [
                                             {rmq_nodename_suffix, Group},
-                                            {rmq_nodes_count, 3},
+                                            {rmq_nodes_count, Nodes},
                                             {rmq_nodes_clustered, true},
                                             {tcp_ports_base, {skip_n_nodes, 3}}
                                            ]),
@@ -71,6 +82,67 @@ init_per_testcase(T, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
+classic_queue_flow_control_enabled(Config) ->
+    FlowEnabled = true,
+    VerifyFun =
+        fun(QPid, ConnPid) ->
+                %% Only 2+2 messages reach the message queue of the classic queue.
+                %% (before the credits of the connection and channel processes run out)
+                ?awaitMatch(4, proc_info(QPid, message_queue_len), 1000),
+                ?assertMatch({0, _}, gen_server2_queue(QPid)),
+
+                %% The connection gets into flow state
+                ?assertEqual([{state, flow}], rabbit_reader:info(ConnPid, [state])),
+
+                Dict = proc_info(ConnPid, dictionary),
+                ?assertMatch([_|_], proplists:get_value(credit_blocked, Dict)),
+                ok
+        end,
+    flow_control(Config, FlowEnabled, VerifyFun).
+
+classic_queue_flow_control_disabled(Config) ->
+    FlowEnabled = false,
+    VerifyFun =
+        fun(QPid, ConnPid) ->
+                %% All published messages will end up in the message
+                %% queue of the suspended classic queue process
+                ?awaitMatch(100, proc_info(QPid, message_queue_len), 1000),
+                ?assertMatch({0, _}, gen_server2_queue(QPid)),
+
+                %% The connection dos not get into flow state
+                ?assertEqual([{state, running}], rabbit_reader:info(ConnPid, [state])),
+
+                Dict = proc_info(ConnPid, dictionary),
+                ?assertMatch([], proplists:get_value(credit_blocked, Dict, []))
+        end,
+    flow_control(Config, FlowEnabled, VerifyFun).
+
+flow_control(Config, FlowEnabled, VerifyFun) ->
+    OrigCredit = set_default_credit(Config, {2, 1}),
+    OrigFlow = set_flow_control(Config, FlowEnabled),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    QueueName = atom_to_binary(?FUNCTION_NAME),
+    declare(Ch, QueueName, [{<<"x-queue-type">>, longstr,  <<"classic">>}]),
+    QPid = get_queue_pid(Config, QueueName),
+    try
+        sys:suspend(QPid),
+
+        %% Publish 100 messages without publisher confirms
+        publish_many(Ch, QueueName, 100),
+
+        [ConnPid] = rabbit_ct_broker_helpers:rpc(Config, rabbit_networking, local_connections, []),
+
+        VerifyFun(QPid, ConnPid),
+        ok
+    after
+        sys:resume(QPid),
+        delete_queues(Ch, [QueueName]),
+        set_default_credit(Config, OrigCredit),
+        set_flow_control(Config, OrigFlow),
+        rabbit_ct_client_helpers:close_channel(Ch)
+    end.
 
 leader_locator_client_local(Config) ->
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -129,7 +201,55 @@ declare(Ch, Q, Args) ->
                                            auto_delete = false,
                                            arguments = Args}).
 
+delete_queues(Ch, Qs) ->
+    [?assertMatch(#'queue.delete_ok'{},
+                  amqp_channel:call(Ch, #'queue.delete'{queue = Q}))
+     || Q <- Qs].
+
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
      || Q <- rabbit_amqqueue:list()].
 
+
+publish(Ch, QName, Payload) ->
+    amqp_channel:cast(Ch,
+                      #'basic.publish'{exchange    = <<>>,
+                                       routing_key = QName},
+                      #amqp_msg{payload = Payload}).
+
+publish_many(Ch, QName, Count) ->
+    [publish(Ch, QName, integer_to_binary(I))
+     || I <- lists:seq(1, Count)].
+
+proc_info(Pid, Info) ->
+    case rabbit_misc:process_info(Pid, Info) of
+        {Info, Value} ->
+            Value;
+        Error ->
+            {error, Error}
+    end.
+
+gen_server2_queue(Pid) ->
+    Status = sys:get_status(Pid),
+    {status, Pid,_Mod,
+     [_Dict, _SysStatus, _Parent, _Dbg,
+      [{header, _},
+       {data, Data}|_]]} = Status,
+    proplists:get_value("Queued messages", Data).
+
+set_default_credit(Config, Value) ->
+    Key = credit_flow_default_credit,
+    OrigValue = rabbit_ct_broker_helpers:rpc(Config, persistent_term, get, [Key]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [Key, Value]),
+    OrigValue.
+
+set_flow_control(Config, Value) when is_boolean(Value) ->
+    Key = classic_queue_flow_control,
+    {ok, OrigValue} = rabbit_ct_broker_helpers:rpc(Config, application, get_env, [rabbit, Key]),
+    rabbit_ct_broker_helpers:rpc(Config, application, set_env, [rabbit, Key, Value]),
+    OrigValue.
+
+get_queue_pid(Config, QueueName) ->
+    {ok, QRec} = rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_amqqueue, lookup, [QueueName, <<"/">>]),
+    amqqueue:get_pid(QRec).
