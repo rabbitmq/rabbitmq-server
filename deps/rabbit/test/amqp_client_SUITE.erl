@@ -6156,7 +6156,6 @@ count_received_messages0(Receiver, Count) ->
               Count
     end.
 
-<<<<<<< HEAD
 send_messages(Sender, Left, Settled) ->
     send_messages(Sender, Left, Settled, <<>>).
 
@@ -6181,7 +6180,8 @@ send_messages(Sender, Left, Settled, BodySuffix) ->
             %% So, we must be defensive here and assume that the next amqp10_client:send/2 call might return {error, insufficient_credit}
             %% again causing us then to really wait to receive a credited event (instead of just processing an old credited event).
             send_messages(Sender, Left, Settled, BodySuffix)
-=======
+    end.
+
 send_until_remote_incoming_window_exceeded(Session, Address) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address, settled),
     ok = wait_for_credit(Sender),
@@ -6202,7 +6202,6 @@ send_until_remote_incoming_window_exceeded0(Sender, Left) ->
         {error, remote_incoming_window_exceeded = Reason} ->
             ct:pal("~s: ~b messages left", [Reason, Left]),
             ok
->>>>>>> 0d34ef604 (Set a floor of zero for incoming-window)
     end.
 
 assert_link_credit_runs_out(_Sender, 0) ->
