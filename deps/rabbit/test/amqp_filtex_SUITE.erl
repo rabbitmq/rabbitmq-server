@@ -552,7 +552,7 @@ string_modifier(Config) ->
     ok = amqp10_client:send_msg(
            Sender,
            amqp10_msg:set_properties(
-             #{subject => <<"$Hello">>,
+             #{subject => <<"&Hello">>,
                reply_to_group_id => <<"xyz 5">>},
              amqp10_msg:new(<<"t3">>, <<"m3">>))),
 
@@ -561,17 +561,17 @@ string_modifier(Config) ->
     flush(sent),
 
     PropsFilter1 = [
-                    {{symbol, <<"to">>}, {utf8, <<"$p:abc ">>}},
-                    {{symbol, <<"reply-to">>}, {utf8, <<"$p:abc">>}},
-                    {{symbol, <<"subject">>}, {utf8, <<"$p:ab">>}},
-                    {{symbol, <<"group-id">>}, {utf8, <<"$p:a">>}},
-                    {{symbol, <<"reply-to-group-id">>}, {utf8, <<"$s:5">>}},
-                    {{symbol, <<"correlation-id">>}, {utf8, <<"$s:abc 7">>}},
-                    {{symbol, <<"message-id">>}, {utf8, <<"$p:abc 6">>}}
+                    {{symbol, <<"to">>}, {utf8, <<"&p:abc ">>}},
+                    {{symbol, <<"reply-to">>}, {utf8, <<"&p:abc">>}},
+                    {{symbol, <<"subject">>}, {utf8, <<"&p:ab">>}},
+                    {{symbol, <<"group-id">>}, {utf8, <<"&p:a">>}},
+                    {{symbol, <<"reply-to-group-id">>}, {utf8, <<"&s:5">>}},
+                    {{symbol, <<"correlation-id">>}, {utf8, <<"&s:abc 7">>}},
+                    {{symbol, <<"message-id">>}, {utf8, <<"&p:abc 6">>}}
                    ],
     AppPropsFilter1 = [
-                       {{utf8, <<"k1">>}, {utf8, <<"$s: 8">>}},
-                       {{utf8, <<"k2">>}, {utf8, <<"$p:abc ">>}}
+                       {{utf8, <<"k1">>}, {utf8, <<"&s: 8">>}},
+                       {{utf8, <<"k2">>}, {utf8, <<"&p:abc ">>}}
                       ],
     Filter1 = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter1},
                 ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter1},
@@ -590,7 +590,7 @@ string_modifier(Config) ->
     %% Same filters as before except for subject which shouldn't match anymore.
     PropsFilter2 = lists:keyreplace(
                      {symbol, <<"subject">>}, 1, PropsFilter1,
-                     {{symbol, <<"subject">>}, {utf8, <<"$s:xxxxxxxxxxxxxx">>}}),
+                     {{symbol, <<"subject">>}, {utf8, <<"&s:xxxxxxxxxxxxxx">>}}),
     Filter2 = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter2},
                 ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter1},
                 <<"rabbitmq:stream-offset-spec">> => <<"first">>},
@@ -601,7 +601,7 @@ string_modifier(Config) ->
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver2),
 
-    PropsFilter3 = [{{symbol, <<"reply-to-group-id">>}, {utf8, <<"$s: 5">>}}],
+    PropsFilter3 = [{{symbol, <<"reply-to-group-id">>}, {utf8, <<"&s: 5">>}}],
     Filter3 = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter3},
                 <<"rabbitmq:stream-offset-spec">> => <<"first">>},
     {ok, Receiver3} = amqp10_client:attach_receiver_link(
@@ -618,8 +618,8 @@ string_modifier(Config) ->
     end,
     ok = detach_link_sync(Receiver3),
 
-    %% '$$" is the escape prefix for case-sensitive matching of a string starting with ‘&’
-    PropsFilter4 = [{{symbol, <<"subject">>}, {utf8, <<"$$Hello">>}}],
+    %% '&&" is the escape prefix for case-sensitive matching of a string starting with ‘&’
+    PropsFilter4 = [{{symbol, <<"subject">>}, {utf8, <<"&&Hello">>}}],
     Filter4 = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter4},
                 <<"rabbitmq:stream-offset-spec">> => <<"first">>},
     {ok, Receiver4} = amqp10_client:attach_receiver_link(
@@ -629,12 +629,12 @@ string_modifier(Config) ->
     ?assertEqual([<<"m3">>], amqp10_msg:body(R4M3)),
     ok = detach_link_sync(Receiver4),
 
-    %% Starting the reference field value with $ is invalid without using a valid modifier
+    %% Starting the reference field value with & is invalid without using a valid modifier
     %% prefix is invalid.
     %% RabbitMQ should exclude this filter in its reply attach frame because
     %% "the sending endpoint [RabbitMQ] sets the filter actually in place".
     %% Hence, no filter expression is actually in place and we should receive all messages.
-    PropsFilter5 = [{{symbol, <<"subject">>}, {utf8, <<"$Hello">>}}],
+    PropsFilter5 = [{{symbol, <<"subject">>}, {utf8, <<"&Hello">>}}],
     Filter5 = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter5},
                 <<"rabbitmq:stream-offset-spec">> => <<"first">>},
     {ok, Receiver5} = amqp10_client:attach_receiver_link(

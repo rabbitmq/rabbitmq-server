@@ -182,14 +182,14 @@ validate_app_props(_, _) ->
     error.
 
 %% [filtex-v1.0-wd09 4.1.1]
-parse_string_modifier_prefix(<<"$s:", Suffix/binary>>) ->
+parse_string_modifier_prefix(<<"&s:", Suffix/binary>>) ->
     {suffix, size(Suffix), Suffix};
-parse_string_modifier_prefix(<<"$p:", Prefix/binary>>) ->
+parse_string_modifier_prefix(<<"&p:", Prefix/binary>>) ->
     {prefix, size(Prefix), Prefix};
-parse_string_modifier_prefix(<<"$$", _/binary>> = String) ->
+parse_string_modifier_prefix(<<"&&", _/binary>> = String) ->
     %% "Escape prefix for case-sensitive matching of a string starting with ‘&’"
     string:slice(String, 1);
-parse_string_modifier_prefix(<<"$", _/binary>> = String) ->
+parse_string_modifier_prefix(<<"&", _/binary>> = String) ->
     throw({?MODULE, invalid_reference_field_value, String});
 parse_string_modifier_prefix(String) ->
     String.
