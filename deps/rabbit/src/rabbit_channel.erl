@@ -1776,6 +1776,7 @@ handle_consuming_queue_down_or_eol(QName,
 cancel_consumer(CTag, QName,
                 State = #ch{cfg = #conf{capabilities = Capabilities},
                             consumer_mapping = CMap}) ->
+    rabbit_log:info("rabbit_channel: cancelling consumer ~p on queue ~p", [CTag, QName]),
     case rabbit_misc:table_lookup(
            Capabilities, <<"consumer_cancel_notify">>) of
         {bool, true} -> ok = send(#'basic.cancel'{consumer_tag = CTag,

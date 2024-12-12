@@ -390,9 +390,11 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
                                                unconfirmed = U0} = State0) ->
     State = State0#?STATE{monitored = maps:remove(Pid, Monitored)},
     Actions0 = [{queue_down, QName}],
+    rabbit_log:info("classic_queue:handle_event(~p, down)", [QName]),
     case rabbit_misc:is_abnormal_exit(Info) of
         false when Info =:= normal ->
             %% queue was deleted
+            rabbit_log:info("Queue ~p was deleted", [QName]),
             {eol, []};
         false ->
             MsgSeqNos = maps:keys(

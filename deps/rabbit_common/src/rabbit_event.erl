@@ -152,6 +152,9 @@ if_enabled(C, P, Fun) ->
 notify_if(true,   Type,  Props) -> notify(Type, Props);
 notify_if(false, _Type, _Props) -> ok.
 
+notify(queue_deleted, Props) ->
+    rabbit_log:info("rabbit_event:notify(queue_deleted, ~p)", [Props]),
+    notify(queue_deleted, rabbit_data_coercion:to_proplist(Props), none);
 notify(Type, Props) -> notify(Type, rabbit_data_coercion:to_proplist(Props), none).
 
 notify(Type, Props, Ref) ->

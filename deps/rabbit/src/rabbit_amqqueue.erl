@@ -1972,6 +1972,7 @@ notify_queue_binding_deletions(QueueDeletions) ->
     rabbit_binding:notify_deletions(QueueDeletions, ?INTERNAL_USER).
 
 notify_transient_queues_deleted(QueueDeletions) ->
+    rabbit_log:info("notify_transient_queues_deleted: ~p", [QueueDeletions]),
     lists:foreach(
       fun(Queue) ->
               ok = rabbit_event:notify(queue_deleted,
