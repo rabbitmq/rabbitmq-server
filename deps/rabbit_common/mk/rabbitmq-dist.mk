@@ -3,7 +3,6 @@
 DIST_DIR ?= $(CURDIR)/plugins
 CLI_SCRIPTS_DIR ?= $(CURDIR)/sbin
 CLI_ESCRIPTS_DIR ?= $(CURDIR)/escript
-MIX = echo y | mix
 
 # Set $(DIST_AS_EZS) to a non-empty value to enable the packaging of
 # plugins as .ez archives.
@@ -81,17 +80,13 @@ endef
 
 # Real entry point: it tests the existence of an .app file to determine
 # if it is an Erlang application (and therefore if it should be provided
-# as an .ez plugin archive) and calls do_ez_target_erlangmk. If instead
-# it finds a Mix configuration file, it is skipped, as the only elixir
-# applications in the directory are used by rabbitmq_cli and compiled
-# with it.
+# as an .ez plugin archive) and calls do_ez_target_erlangmk.
 #
 #   $(call ez_target,path_to_app)
 
 define ez_target
 dist_$(1)_appdir  = $(2)
 dist_$(1)_appfile = $$(dist_$(1)_appdir)/ebin/$(1).app
-dist_$(1)_mixfile = $$(dist_$(1)_appdir)/mix.exs
 
 $$(if $$(shell test -f $$(dist_$(1)_appfile) && echo OK), \
   $$(eval $$(call do_ez_target_erlangmk,$(1),$$(call get_app_version,$$(dist_$(1)_appfile)),$$(dist_$(1)_appdir))))
@@ -117,9 +112,8 @@ endif
 endif
 
 # The actual recipe to create the .ez plugin archive. Some variables
-# are defined in the do_ez_target_erlangmk and do_ez_target_mix macros
-# above. All .ez archives are also listed in this do_ez_target_erlangmk
-# and do_ez_target_mix macros.
+# are defined in the do_ez_target_erlangmk macro
+# above. All .ez archives are also listed in this macro.
 
 RSYNC ?= rsync
 RSYNC_V_0 =
@@ -200,7 +194,7 @@ test-dist:: $(ERLANG_MK_RECURSIVE_TEST_DEPS_LIST) test-build
 		$(MAYBE_APPS_LIST)"; \
 	fi
 
-DIST_EZS = $(ERLANGMK_DIST_EZS) $(MIX_DIST_EZS)
+DIST_EZS = $(ERLANGMK_DIST_EZS)
 
 do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
@@ -223,43 +217,21 @@ endif
 install-cli: install-cli-scripts install-cli-escripts
 	@:
 
-install-cli-scripts:
+install-cli-scripts: | $(CLI_SCRIPTS_DIR)
 	$(gen_verbose) \
 	set -e; \
 	test -d "$(DEPS_DIR)/rabbit/scripts"; \
-	if command -v flock >/dev/null; then \
-		flock $(CLI_SCRIPTS_LOCK) \
-		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
-	elif command -v lockf >/dev/null; then \
-		lockf $(CLI_SCRIPTS_LOCK) \
-		sh -e -c 'mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/'; \
-	else \
-		mkdir -p "$(CLI_SCRIPTS_DIR)" && \
-			cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/; \
-	fi
+	$(call maybe_flock,$(CLI_SCRIPTS_LOCK), \
+		cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/)
 
-install-cli-escripts:
-	$(gen_verbose) \
-	if command -v flock >/dev/null; then \
-		flock $(CLI_ESCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
+install-cli-escripts: | $(CLI_ESCRIPTS_DIR)
+	$(gen_verbose) $(call maybe_flock,$(CLI_ESCRIPTS_LOCK), \
 		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
 			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
-			DESTDIR='; \
-	elif command -v lockf >/dev/null; then \
-		lockf $(CLI_ESCRIPTS_LOCK) \
-		sh -c 'mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
-		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
-			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
-			DESTDIR='; \
-	else \
-		mkdir -p "$(CLI_ESCRIPTS_DIR)" && \
-		$(MAKE) -C "$(DEPS_DIR)/rabbitmq_cli" install \
-			PREFIX="$(abspath $(CLI_ESCRIPTS_DIR))" \
-			DESTDIR= ; \
-	fi
+			DESTDIR= IS_DEP=1)
+
+$(CLI_SCRIPTS_DIR) $(CLI_ESCRIPTS_DIR):
+	$(verbose) mkdir -p $@
 
 clean-dist::
 	$(gen_verbose) rm -rf \
