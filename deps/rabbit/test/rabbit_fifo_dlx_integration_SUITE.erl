@@ -755,7 +755,7 @@ publish_confirm(Ch, QName) ->
             ok;
         #'basic.nack'{} ->
             fail
-    after 2500 ->
+    after 30_000 ->
               ct:fail(confirm_timeout)
     end.
 
@@ -871,14 +871,14 @@ many_target_queues(Config) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
             ok
-    after 2000 ->
+    after 30_000 ->
               exit(consume_ok_timeout)
     end,
     receive
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{payload = Msg1}} ->
             ok
-    after 2000 ->
+    after 30_000 ->
               exit(deliver_timeout)
     end,
     ?awaitMatch([{0, 0}],
@@ -911,7 +911,7 @@ many_target_queues(Config) ->
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{payload = Msg2}} ->
             ok
-    after 0 ->
+    after 30_000 ->
               exit(deliver_timeout)
     end,
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),

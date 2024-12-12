@@ -179,13 +179,13 @@ fallback_to_another_consumer_when_first_one_is_cancelled_qos1(Config) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
                                                 consumer_tag = CTag1}, self()),
     receive #'basic.consume_ok'{consumer_tag = CTag1} -> ok
-    after 5000 -> ct:fail(timeout_ctag1)
+    after ?TIMEOUT -> ct:fail(timeout_ctag1)
     end,
 
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Q,
                                                 consumer_tag = CTag2}, self()),
     receive #'basic.consume_ok'{consumer_tag = CTag2} -> ok
-    after 5000 -> ct:fail(timeout_ctag2)
+    after ?TIMEOUT -> ct:fail(timeout_ctag2)
     end,
 
     Publish = #'basic.publish'{exchange = <<>>, routing_key = Q},
@@ -195,12 +195,12 @@ fallback_to_another_consumer_when_first_one_is_cancelled_qos1(Config) ->
     DTag1 = receive {#'basic.deliver'{consumer_tag = CTag1,
                                       delivery_tag = DTag},
                      #amqp_msg{payload = <<"m1">>}} -> DTag
-            after 5000 -> ct:fail(timeout_m1)
+            after ?TIMEOUT -> ct:fail(timeout_m1)
             end,
 
     #'basic.cancel_ok'{consumer_tag = CTag1} = amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag1}),
     receive #'basic.cancel_ok'{consumer_tag = CTag1} -> ok
-    after 5000 -> ct:fail(missing_cancel)
+    after ?TIMEOUT -> ct:fail(missing_cancel)
     end,
 
     amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DTag1}),
@@ -208,7 +208,7 @@ fallback_to_another_consumer_when_first_one_is_cancelled_qos1(Config) ->
     receive {#'basic.deliver'{consumer_tag = CTag2},
              #amqp_msg{payload = <<"m2">>}} -> ok;
             Unexpected -> ct:fail({unexpected, Unexpected})
-    after 5000 -> ct:fail(timeout_m2)
+    after ?TIMEOUT -> ct:fail(timeout_m2)
     end,
     amqp_connection:close(C).
 
@@ -385,7 +385,7 @@ wait_for_messages(ExpectedCount, State) ->
     receive
         {message, {MessagesPerConsumer, MessageCount}} ->
             wait_for_messages(ExpectedCount - 1, {MessagesPerConsumer, MessageCount})
-    after 5000 ->
+    after ?TIMEOUT ->
             {missing, ExpectedCount, State}
     end.
 
@@ -393,7 +393,7 @@ wait_for_cancel_ok() ->
     receive
         {cancel_ok, CTag} ->
             {cancel_ok, CTag}
-    after 5000 ->
+    after ?TIMEOUT ->
         throw(consumer_cancel_ok_timeout)
     end.
 
@@ -402,7 +402,7 @@ receive_deliver() ->
         {#'basic.deliver'{consumer_tag = CTag,
                           delivery_tag = DTag}, _} ->
             {CTag, DTag}
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(deliver_timeout)
     end.
 

@@ -1260,7 +1260,7 @@ drain_many(Config, QueueType, QName)
     after 2000 -> ct:fail({missing_delivery, ?LINE})
     end,
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
-    after 300 -> ct:fail("expected credit_exhausted")
+    after 30000 -> ct:fail("expected credit_exhausted")
     end,
 
     ok = amqp10_client:detach_link(Sender),

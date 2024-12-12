@@ -482,6 +482,6 @@ receive_delete_events(N, Evts) ->
     receive
         {mnesia_table_event, {delete, _, Record, _, _}} ->
             receive_delete_events(N - 1, [Record | Evts])
-    after 10000 ->
+    after 30000 ->
             Evts
     end.

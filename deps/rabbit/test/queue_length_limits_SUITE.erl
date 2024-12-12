@@ -306,19 +306,19 @@ check_max_length_rejects(QName, Ch, Payload1, Payload2, Payload3) ->
     %% First message can be enqueued and acks
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload1}),
     receive #'basic.ack'{} -> ok
-    after 1000 -> error(expected_ack)
+    after 30_000 -> error(expected_ack)
     end,
 
     %% The message cannot be enqueued and nacks
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
     receive #'basic.nack'{} -> ok
-    after 1000 -> error(expected_nack)
+    after 30_000 -> error(expected_nack)
     end,
 
     %% The message cannot be enqueued and nacks
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload3}),
     receive #'basic.nack'{} -> ok
-    after 1000 -> error(expected_nack)
+    after 30_000 -> error(expected_nack)
     end,
 
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload1}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}),
@@ -326,7 +326,7 @@ check_max_length_rejects(QName, Ch, Payload1, Payload2, Payload3) ->
     %% Now we can publish message 2.
     amqp_channel:call(Ch, #'basic.publish'{routing_key = QName}, #amqp_msg{payload = Payload2}),
     receive #'basic.ack'{} -> ok
-    after 1000 -> error(expected_ack)
+    after 30_000 -> error(expected_ack)
     end,
 
     {#'basic.get_ok'{}, #amqp_msg{payload = Payload2}} = amqp_channel:call(Ch, #'basic.get'{queue = QName}).

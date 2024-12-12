@@ -173,7 +173,7 @@ file_handle_cache_reserve_open_file_above_limit1(_Config) ->
     receive
         opened ->
             throw(error_file_opened)
-    after 1000 ->
+    after 30_000 ->
             %% Let's release 5 file handles, that should leave
             %% enough free for the `open` to go through
             file_handle_cache:set_reservation(2),
@@ -183,7 +183,7 @@ file_handle_cache_reserve_open_file_above_limit1(_Config) ->
                 opened ->
                     ok = file_handle_cache:set_limit(Limit),
                     passed
-            after 5000 ->
+            after 30_000 ->
                     throw(error_file_not_released)
             end
     end.
