@@ -1880,6 +1880,7 @@ determine_persist_to(Msg,
     %% via the direct client), we make a guess based on the number of
     %% headers.
 
+    %% @todo We can probably simplify this.
     {MetaSize, _BodySize} = mc:size(Msg),
      case BodySize >= IndexMaxSize of
          true  -> msg_store;

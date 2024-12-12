@@ -21,7 +21,7 @@ DEPS = rabbit_common rabbit rabbitmq_web_dispatch
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 LOCAL_DEPS += xmerl ranch ssl crypto public_key
 
-PLT_APPS += rabbitmqctl
+PLT_APPS += rabbitmq_cli
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

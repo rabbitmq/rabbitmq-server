@@ -44,11 +44,8 @@ dist:
 # Umbrella. Those manpages are copied to www.rabbitmq.com
 #
 # We explicitely set $HOME as a Make variable below because some package
-# builders do that, as part of cleaning the build environment. It
-# exercises our hack to convince mix(1) to work offline because that
-# hack depends on `$HOME`. A Make variable on the command line takes
-# precedence over variables declared in Makefiles, so our hack needs
-# to consider this. We do the same with the Freedesktop.org-specified
+# builders do that, as part of cleaning the build environment.
+# We do the same with the Freedesktop.org-specified
 # variables ($XDG_*_HOME).
 	$(MAKE) -C $(SOURCE_DIR) \
 		HOME="$(HOME)" \
