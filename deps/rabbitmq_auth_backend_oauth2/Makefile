@@ -10,7 +10,7 @@ BUILD_DEPS = rabbit_common rabbitmq_cli
 DEPS = rabbit cowlib jose base64url oauth2_client
 TEST_DEPS = cowboy rabbitmq_web_dispatch rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_web_mqtt emqtt rabbitmq_amqp_client
 
-PLT_APPS += rabbitmqctl
+PLT_APPS += rabbitmq_cli
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
@@ -18,6 +18,9 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 dep_base64url = hex 1.0.1
 
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.11.0
+
+# Required to properly autopatch jose.
+ELIXIR = system
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk

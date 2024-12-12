@@ -342,7 +342,7 @@ maybe_rabbit_srcdir(Config) ->
 ensure_application_srcdir(Config, App, Module) ->
     ensure_application_srcdir(Config, App, erlang, Module).
 
-ensure_application_srcdir(Config, App, Lang, Module) ->
+ensure_application_srcdir(Config, App, _Lang, Module) ->
     AppS = atom_to_list(App),
     Key = list_to_atom(AppS ++ "_srcdir"),
     SecondaryKey = list_to_atom("secondary_" ++ AppS ++ "_srcdir"),
@@ -351,18 +351,10 @@ ensure_application_srcdir(Config, App, Lang, Module) ->
             case code:which(Module) of
                 non_existing ->
                     filename:join(?config(erlang_mk_depsdir, Config), AppS);
-                P when Lang =:= erlang ->
+                P ->
                     %% P is $SRCDIR/ebin/$MODULE.beam.
                     filename:dirname(
-                      filename:dirname(P));
-                P when Lang =:= elixir ->
-                    %% P is $SRCDIR/_build/$MIX_ENV/lib/$APP/ebin/$MODULE.beam.
-                    filename:dirname(
-                      filename:dirname(
-                        filename:dirname(
-                          filename:dirname(
-                            filename:dirname(
-                              filename:dirname(P))))))
+                      filename:dirname(P))
             end;
         P ->
             P
@@ -500,9 +492,8 @@ new_script_location(Config, Script) ->
 
 ensure_rabbitmqctl_app(Config) ->
     SrcDir = ?config(rabbitmq_cli_srcdir, Config),
-    MixEnv = os:getenv("MIX_ENV", "dev"),
     EbinDir = filename:join(
-      [SrcDir, "_build", MixEnv, "lib", "rabbitmqctl", "ebin"]),
+      [SrcDir, "ebin"]),
     case filelib:is_file(filename:join(EbinDir, "rabbitmqctl.app")) of
         true ->
             true = code:add_path(EbinDir),
@@ -513,11 +504,11 @@ ensure_rabbitmqctl_app(Config) ->
                     Config;
                 {error, _} ->
                     {skip, "Access to rabbitmq_cli ebin dir. required, " ++
-                     "please build rabbitmq_cli and set MIX_ENV"}
+                     "please build rabbitmq_cli"}
             end;
         false ->
             {skip, "Access to rabbitmq_cli ebin dir. required, " ++
-             "please build rabbitmq_cli and set MIX_ENV"}
+             "please build rabbitmq_cli"}
     end.
 
 load_rabbitmqctl_app(Config) ->
