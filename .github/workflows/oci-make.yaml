@@ -40,7 +40,11 @@ jobs:
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         run: |
+<<<<<<< HEAD
           make package-generic-unix PROJECT_VERSION=4.0.0
+=======
+          make package-generic-unix PROJECT_VERSION=4.1.0-alpha.1
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v4.3.1
@@ -65,7 +69,11 @@ jobs:
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
+<<<<<<< HEAD
           echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV          
+=======
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download package-generic-unix
@@ -116,7 +124,11 @@ jobs:
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
+<<<<<<< HEAD
           touch "/tmp/digests/${digest#sha256:}"          
+=======
+          touch "/tmp/digests/${digest#sha256:}"
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
@@ -157,10 +169,17 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+<<<<<<< HEAD
             $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)          
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} 
+=======
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
   summary-oci:
     needs:

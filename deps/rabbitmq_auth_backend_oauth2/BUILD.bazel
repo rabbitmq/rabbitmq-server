@@ -113,7 +113,11 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
     name = "rabbit_oauth2_config_SUITE",
+=======
+    name = "rabbit_oauth2_provider_SUITE",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     additional_beam = [
         "test/oauth2_http_mock.beam",
     ],
@@ -123,6 +127,13 @@ rabbitmq_integration_suite(
 )
 
 rabbitmq_integration_suite(
+<<<<<<< HEAD
+=======
+    name = "rabbit_oauth2_resource_server_SUITE",
+)
+
+rabbitmq_integration_suite(
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     name = "jwks_SUITE",
     additional_beam = [
         "test/rabbit_auth_backend_oauth2_test_util.beam",

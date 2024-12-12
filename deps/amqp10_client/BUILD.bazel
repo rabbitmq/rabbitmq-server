@@ -76,6 +76,10 @@ rabbitmq_app(
     priv = [":priv"],
     deps = [
         "//deps/amqp10_common:erlang_app",
+<<<<<<< HEAD
+=======
+        "//deps/rabbit_common:erlang_app",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         "@credentials_obfuscation//:erlang_app",
     ],
 )

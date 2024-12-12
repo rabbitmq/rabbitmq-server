@@ -892,10 +892,14 @@ check_cluster_consistency(Node, CheckNodesConsistency) ->
                     Error
             end;
         {_OTP, _Rabbit, {ok, Status}} ->
+<<<<<<< HEAD
             case rabbit_db_cluster:check_compatibility(Node) of
                 ok    -> {ok, Status};
                 Error -> Error
             end
+=======
+            {ok, Status}
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     end.
 
 remote_node_info(Node) ->

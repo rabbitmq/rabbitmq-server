@@ -16,13 +16,23 @@
 -rabbit_feature_flag(
    {?QUEUE_TYPE_QOS_0,
     #{desc          => "Support pseudo queue type for MQTT QoS 0 subscribers omitting a queue process",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {delete_ra_cluster_mqtt_node,
     #{desc          => "Delete Ra cluster 'mqtt_node' since MQTT client IDs are tracked locally",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -38,6 +48,10 @@
    {mqtt_v5,
     #{desc       => "Support MQTT 5.0",
       stability  => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on => [
                      %% MQTT 5.0 feature Will Delay Interval depends on client ID tracking in pg local.
                      delete_ra_cluster_mqtt_node,

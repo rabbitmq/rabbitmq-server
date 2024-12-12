@@ -72,7 +72,11 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+<<<<<<< HEAD
         srcs = ["include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+=======
+        srcs = ["include/amqp10_filtex.hrl", "include/amqp10_framing.hrl", "include/amqp10_types.hrl"],
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     )
     filegroup(
         name = "private_hdrs",

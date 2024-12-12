@@ -8,6 +8,10 @@
          init/1,
          size/1,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
          property/2,
          routing_headers/2,
          convert_to/3,
@@ -21,7 +25,11 @@
 
 -define(MESSAGE_ANNOTATIONS_GUESS_SIZE, 100).
 
+<<<<<<< HEAD
 -define(SIMPLE_VALUE(V),
+=======
+-define(IS_SIMPLE_VALUE(V),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         is_binary(V) orelse
         is_number(V) orelse
         is_boolean(V)).
@@ -125,6 +133,12 @@ size(#v1{message_annotations = MA,
 x_header(Key, Msg) ->
     message_annotation(Key, Msg, undefined).
 
+<<<<<<< HEAD
+=======
+x_headers(Msg) ->
+    #{K => V || {{_T, K}, V} <- message_annotations(Msg)}.
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 property(_Prop, #msg_body_encoded{properties = undefined}) ->
     undefined;
 property(Prop, #msg_body_encoded{properties = Props}) ->
@@ -145,6 +159,7 @@ property(Prop, #v1{bare_and_footer = Bin,
     Props = amqp10_framing:decode(PropsDescribed),
     property0(Prop, Props).
 
+<<<<<<< HEAD
 property0(correlation_id, #'v1_0.properties'{correlation_id = Corr}) ->
     Corr;
 property0(message_id, #'v1_0.properties'{message_id = MsgId}) ->
@@ -155,6 +170,34 @@ property0(subject, #'v1_0.properties'{subject = Subject}) ->
     Subject;
 property0(to, #'v1_0.properties'{to = To}) ->
     To;
+=======
+property0(message_id, #'v1_0.properties'{message_id = Val}) ->
+    Val;
+property0(user_id, #'v1_0.properties'{user_id = Val}) ->
+    Val;
+property0(to, #'v1_0.properties'{to = Val}) ->
+    Val;
+property0(subject, #'v1_0.properties'{subject = Val}) ->
+    Val;
+property0(reply_to, #'v1_0.properties'{reply_to = Val}) ->
+    Val;
+property0(correlation_id, #'v1_0.properties'{correlation_id = Val}) ->
+    Val;
+property0(content_type, #'v1_0.properties'{content_type = Val}) ->
+    Val;
+property0(content_encoding, #'v1_0.properties'{content_encoding = Val}) ->
+    Val;
+property0(absolute_expiry_time, #'v1_0.properties'{absolute_expiry_time = Val}) ->
+    Val;
+property0(creation_time, #'v1_0.properties'{creation_time = Val}) ->
+    Val;
+property0(group_id, #'v1_0.properties'{group_id = Val}) ->
+    Val;
+property0(group_sequence, #'v1_0.properties'{group_sequence = Val}) ->
+    Val;
+property0(reply_to_group_id, #'v1_0.properties'{reply_to_group_id = Val}) ->
+    Val;
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 property0(_Prop, #'v1_0.properties'{}) ->
     undefined.
 
@@ -454,7 +497,11 @@ message_annotations_as_simple_map(#v1{message_annotations = Content}) ->
 message_annotations_as_simple_map0(Content) ->
     %% the section record format really is terrible
     lists:filtermap(fun({{symbol, K}, {_T, V}})
+<<<<<<< HEAD
                           when ?SIMPLE_VALUE(V) ->
+=======
+                          when ?IS_SIMPLE_VALUE(V) ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                             {true, {K, V}};
                        (_) ->
                             false
@@ -480,7 +527,11 @@ application_properties_as_simple_map(
 application_properties_as_simple_map0(Content, L) ->
     %% the section record format really is terrible
     lists:foldl(fun({{utf8, K}, {_T, V}}, Acc)
+<<<<<<< HEAD
                       when ?SIMPLE_VALUE(V) ->
+=======
+                      when ?IS_SIMPLE_VALUE(V) ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                         [{K, V} | Acc];
                    ({{utf8, K}, V}, Acc)
                      when V =:= undefined orelse is_boolean(V) ->
@@ -602,11 +653,16 @@ encode_deaths(Deaths) ->
               {map, Map}
       end, Deaths).
 
+<<<<<<< HEAD
 essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
+=======
+essential_properties(Msg) ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
     Ttl = get_property(ttl, Msg),
+<<<<<<< HEAD
     Anns0 = #{?ANN_DURABLE => Durable},
     Anns = maps_put_truthy(
              ?ANN_PRIORITY, Priority,
@@ -640,3 +696,13 @@ essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
                       Acc
               end, Anns, MA)
     end.
+=======
+    Anns = #{?ANN_DURABLE => Durable},
+    maps_put_truthy(
+      ?ANN_PRIORITY, Priority,
+      maps_put_truthy(
+        ?ANN_TIMESTAMP, Timestamp,
+        maps_put_truthy(
+          ttl, Ttl,
+          Anns))).
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)

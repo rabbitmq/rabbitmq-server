@@ -16,6 +16,10 @@
 ,   amqp_auth_SUITE
 ,   amqp_client_SUITE
 ,   amqp_credit_api_v2_SUITE
+<<<<<<< HEAD
+=======
+,   amqp_filtex_SUITE
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 ,   amqp_proxy_protocol_SUITE
 ,   amqp_system_SUITE
 ,   amqpl_consumer_ack_SUITE
@@ -65,7 +69,12 @@
 ]}.
 
 {define, 'Set4', [
+<<<<<<< HEAD
     peer_discovery_dns_SUITE
+=======
+    msg_size_metrics_SUITE
+,   peer_discovery_dns_SUITE
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 ,   peer_discovery_tmp_hidden_node_SUITE
 ,   per_node_limit_SUITE
 ,   per_user_connection_channel_limit_SUITE
@@ -80,6 +89,10 @@
 ,   product_info_SUITE
 ,   proxy_protocol_SUITE
 ,   publisher_confirms_parallel_SUITE
+<<<<<<< HEAD
+=======
+,   unit_msg_size_metrics_SUITE
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 ]}.
 
 {define, 'Set5', [

@@ -322,8 +322,11 @@ init_per_testcase(Testcase, Config) ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
+<<<<<<< HEAD
         subscribe_redelivery_limit_disable when IsMixed ->
             {skip, "subscribe_redelivery_limit_disable isn't mixed versions compatible"};
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1471,14 +1474,22 @@ gh_12635(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+<<<<<<< HEAD
                                         [rabbit, quorum_min_checkpoint_interval, 1]),
+=======
+                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
     QQ = ?config(queue_name, Config),
     RaName = ra_name(QQ),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+<<<<<<< HEAD
                     declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+=======
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
     %% stop member to simulate slow or down member
     ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
@@ -1489,10 +1500,17 @@ gh_12635(Config) ->
     %% force a checkpoint on leader
     ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, force_checkpoint]),
     rabbit_ct_helpers:await_condition(
+<<<<<<< HEAD
         fun () ->
                 {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
                 undefined =/= maps:get(latest_checkpoint_index, Log)
         end),
+=======
+      fun () ->
+              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+              undefined =/= maps:get(latest_checkpoint_index, Log)
+      end),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
     %% publish 1 more message
     publish_confirm(Ch0, QQ),
@@ -1508,10 +1526,17 @@ gh_12635(Config) ->
     #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
 
     rabbit_ct_helpers:await_condition(
+<<<<<<< HEAD
         fun () ->
                 {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
                 undefined =/= maps:get(snapshot_index, Log)
         end),
+=======
+      fun () ->
+              {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+              undefined =/= maps:get(snapshot_index, Log)
+      end),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     %% restart the down member
     ok = rpc:call(Server2, ra, restart_server, [quorum_queues, {RaName, Server2}]),
     Pid2 = rpc:call(Server2, erlang, whereis, [RaName]),
@@ -1521,12 +1546,19 @@ gh_12635(Config) ->
         {'DOWN',Ref, process,_, _} ->
             ct:fail("unexpected DOWN")
     after 500 ->
+<<<<<<< HEAD
                 ok
+=======
+              ok
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     end,
     flush(1),
     ok.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)

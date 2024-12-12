@@ -284,8 +284,13 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "redbug",
     build_file = "@rabbitmq-server//bazel:BUILD.redbug",
+<<<<<<< HEAD
     sha256 = "55d6d59697481ca4cc5ad54749aa6d78299aa8a8096027e7ae1f59db9dc94c78",
     version = "2.1.0",
+=======
+    sha256 = "3624feb7a4b78fd9ae0e66cc3158fe7422770ad6987a1ebf8df4d3303b1c4b0c",
+    version = "2.0.7",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 )
 
 erlang_package.hex_package(
@@ -428,7 +433,11 @@ secondary_umbrella = use_extension(
 
 use_repo(
     secondary_umbrella,
+<<<<<<< HEAD
     "rabbitmq-server-generic-unix-3.13",
+=======
+    "rabbitmq-server-generic-unix-4.0",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 )
 
 hex = use_extension(

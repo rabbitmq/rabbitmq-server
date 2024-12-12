@@ -32,6 +32,10 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_schema.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_stats.erl",
             "src/rabbit_mgmt_sup.erl",
             "src/rabbit_mgmt_sup_sup.erl",
@@ -47,6 +51,10 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_wm_cluster_name.erl",
             "src/rabbit_mgmt_wm_connection.erl",
             "src/rabbit_mgmt_wm_connection_channels.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_wm_connection_sessions.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_wm_connection_user_name.erl",
             "src/rabbit_mgmt_wm_connections.erl",
             "src/rabbit_mgmt_wm_connections_vhost.erl",
@@ -166,6 +174,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_schema.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_stats.erl",
             "src/rabbit_mgmt_sup.erl",
             "src/rabbit_mgmt_sup_sup.erl",
@@ -181,6 +193,10 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_wm_cluster_name.erl",
             "src/rabbit_mgmt_wm_connection.erl",
             "src/rabbit_mgmt_wm_connection_channels.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_wm_connection_sessions.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_wm_connection_user_name.erl",
             "src/rabbit_mgmt_wm_connections.erl",
             "src/rabbit_mgmt_wm_connections_vhost.erl",
@@ -361,6 +377,10 @@ def all_srcs(name = "all_srcs"):
             "priv/www/js/tmpl/queues.ejs",
             "priv/www/js/tmpl/rate-options.ejs",
             "priv/www/js/tmpl/registry.ejs",
+<<<<<<< HEAD
+=======
+            "priv/www/js/tmpl/sessions-list.ejs",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "priv/www/js/tmpl/status.ejs",
             "priv/www/js/tmpl/topic-permissions.ejs",
             "priv/www/js/tmpl/user.ejs",
@@ -391,6 +411,10 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_nodes.erl",
             "src/rabbit_mgmt_oauth_bootstrap.erl",
             "src/rabbit_mgmt_reset_handler.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_schema.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_stats.erl",
             "src/rabbit_mgmt_sup.erl",
             "src/rabbit_mgmt_sup_sup.erl",
@@ -406,6 +430,10 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_wm_cluster_name.erl",
             "src/rabbit_mgmt_wm_connection.erl",
             "src/rabbit_mgmt_wm_connection_channels.erl",
+<<<<<<< HEAD
+=======
+            "src/rabbit_mgmt_wm_connection_sessions.erl",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "src/rabbit_mgmt_wm_connection_user_name.erl",
             "src/rabbit_mgmt_wm_connections.erl",
             "src/rabbit_mgmt_wm_connections_vhost.erl",
@@ -499,6 +527,17 @@ def all_srcs(name = "all_srcs"):
 
 def test_suite_beam_files(name = "test_suite_beam_files"):
     erlang_bytecode(
+<<<<<<< HEAD
+=======
+        name = "rabbit_mgmt_schema_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_mgmt_schema_SUITE.erl"],
+        outs = ["test/rabbit_mgmt_schema_SUITE.beam"],
+        app_name = "rabbitmq_management",
+        erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         name = "cache_SUITE_beam_files",
         testonly = True,
         srcs = ["test/cache_SUITE.erl"],

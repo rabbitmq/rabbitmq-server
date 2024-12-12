@@ -1,3 +1,13 @@
+<<<<<<< HEAD
+=======
+#!/usr/bin/env bash
+
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [[ ! -z "${DEBUG}" ]]; then
+  set -x
+fi
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 ensure_fakeportal() {
   if docker ps | grep fakeportal &> /dev/null; then
@@ -9,7 +19,11 @@ ensure_fakeportal() {
 
 init_fakeportal() {
   FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
+<<<<<<< HEAD
   FAKEPORTAL_DIR=${SCRIPT}/../fakeportal
+=======
+  FAKEPORTAL_DIR=${SCRIPT}/../../fakeportal
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
   RABBITMQ_HOST=${RABBITMQ_HOST:-proxy:9090}
@@ -44,6 +58,11 @@ start_fakeportal() {
     --env UAA_URL="${UAA_URL_FOR_FAKEPORTAL}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
+<<<<<<< HEAD
+=======
+    --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
+    -v ${TEST_CONFIG_PATH}/uaa:/etc/uaa \
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeportal
 

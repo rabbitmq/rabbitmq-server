@@ -470,6 +470,7 @@ delete(XName, IfUnused, Username) ->
         _ = rabbit_runtime_parameters:set(XName#resource.virtual_host,
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
+<<<<<<< HEAD
         Deletions = process_deletions(rabbit_db_exchange:delete(XName, IfUnused)),
         case Deletions of
             {error, _} ->
@@ -477,6 +478,17 @@ delete(XName, IfUnused, Username) ->
             _ ->
                 rabbit_binding:notify_deletions(Deletions, Username),
                 ok
+=======
+        case rabbit_db_exchange:delete(XName, IfUnused) of
+            {deleted, #exchange{name = XName} = X, Bs, Deletions} ->
+                Deletions1 = rabbit_binding:add_deletion(
+                               XName, X, deleted, Bs, Deletions),
+                ok = rabbit_binding:process_deletions(Deletions1),
+                ok = rabbit_binding:notify_deletions(Deletions1, Username),
+                ok;
+            {error, _} = Err ->
+                Err
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         end
     after
         rabbit_runtime_parameters:clear(XName#resource.virtual_host,
@@ -491,6 +503,7 @@ delete(XName, IfUnused, Username) ->
 
 delete_all(VHostName, ActingUser) ->
     {ok, Deletions} = rabbit_db_exchange:delete_all(VHostName),
+<<<<<<< HEAD
     Deletions1 = rabbit_binding:process_deletions(Deletions),
     rabbit_binding:notify_deletions(Deletions1, ActingUser),
     ok.
@@ -502,6 +515,12 @@ process_deletions({deleted, #exchange{name = XName} = X, Bs, Deletions}) ->
       rabbit_binding:add_deletion(
         XName, {X, deleted, Bs}, Deletions)).
 
+=======
+    ok = rabbit_binding:process_deletions(Deletions),
+    ok = rabbit_binding:notify_deletions(Deletions, ActingUser),
+    ok.
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 -spec ensure_deleted(ExchangeName, IfUnused, Username) -> Ret when
       ExchangeName :: name(),
       IfUnused :: boolean(),

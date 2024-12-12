@@ -14,7 +14,11 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
+<<<<<<< HEAD
 		<version>3.3.2</version>
+=======
+		<version>3.4.0</version>
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 
@@ -23,7 +27,11 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
+<<<<<<< HEAD
 		<kotlin.version>2.0.0</kotlin.version>
+=======
+		<kotlin.version>2.1.0</kotlin.version>
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 		<junit-jupiter.version>5.10.0</junit-jupiter.version>
 	</properties>
 

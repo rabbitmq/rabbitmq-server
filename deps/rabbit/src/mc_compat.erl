@@ -20,6 +20,10 @@
          priority/1,
          set_ttl/2,
          x_header/2,
+<<<<<<< HEAD
+=======
+         x_headers/1,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
          routing_headers/2,
          %%%
          convert_to/2,
@@ -138,6 +142,12 @@ set_ttl(Value, #basic_message{content = Content0} = Msg) ->
 x_header(Key,#basic_message{content = Content}) ->
     mc_amqpl:x_header(Key, Content).
 
+<<<<<<< HEAD
+=======
+x_headers(#basic_message{content = Content}) ->
+    mc_amqpl:x_headers(Content).
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 routing_headers(#basic_message{content = Content}, Opts) ->
     mc_amqpl:routing_headers(Content, Opts).
 

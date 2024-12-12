@@ -51,6 +51,14 @@ groups() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+suite() ->
+    [
+      {timetrap, {minutes, 3}}
+    ].
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
     Config.

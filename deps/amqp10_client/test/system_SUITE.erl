@@ -12,10 +12,17 @@
 
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
+<<<<<<< HEAD
 -include("src/amqp10_client.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
+=======
+-compile([export_all, nowarn_export_all]).
+
+-define(TIMEOUT, 30000).
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 suite() ->
     [{timetrap, {minutes, 4}}].
 
@@ -30,7 +37,11 @@ all() ->
 
 groups() ->
     [
+<<<<<<< HEAD
      {rabbitmq, [], shared()},
+=======
+     {rabbitmq, [], shared() ++ [notify_with_performative]},
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      {activemq, [], shared()},
      {rabbitmq_strict, [], [
                             basic_roundtrip_tls,
@@ -184,7 +195,11 @@ open_close_connection(Config) ->
     {ok, Connection2} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection2, opened}} -> ok
+<<<<<<< HEAD
     after 5000 -> exit(connection_timeout)
+=======
+    after ?TIMEOUT -> exit(connection_timeout)
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     end,
     ok = amqp10_client:close_connection(Connection2),
     ok = amqp10_client:close_connection(Connection).
@@ -201,7 +216,11 @@ open_connection_plain_sasl(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection, opened}} -> ok
+<<<<<<< HEAD
     after 5000 -> exit(connection_timeout)
+=======
+    after ?TIMEOUT -> exit(connection_timeout)
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     end,
     ok = amqp10_client:close_connection(Connection).
 
@@ -225,7 +244,11 @@ open_connection_plain_sasl_parse_uri(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive
         {amqp10_event, {connection, Connection, opened}} -> ok
+<<<<<<< HEAD
     after 5000 -> exit(connection_timeout)
+=======
+    after ?TIMEOUT -> exit(connection_timeout)
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     end,
     ok = amqp10_client:close_connection(Connection).
 
@@ -245,7 +268,11 @@ open_connection_plain_sasl_failure(Config) ->
         % some implementation may simply close the tcp_connection
         {amqp10_event, {connection, Connection, {closed, shutdown}}} -> ok
 
+<<<<<<< HEAD
     after 5000 ->
+=======
+    after ?TIMEOUT ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               ct:pal("Connection process is alive? = ~tp~n",
                      [erlang:is_process_alive(Connection)]),
               exit(connection_timeout)
@@ -458,6 +485,55 @@ transfer_id_vs_delivery_id(Config) ->
     ?assertEqual(serial_number:add(amqp10_msg:delivery_id(RcvMsg1), 1),
                  amqp10_msg:delivery_id(RcvMsg2)).
 
+<<<<<<< HEAD
+=======
+notify_with_performative(Config) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+
+    OpenConf = #{?FUNCTION_NAME => true,
+                 address => Hostname,
+                 port => Port,
+                 sasl => anon},
+
+    {ok, Connection} = amqp10_client:open_connection(OpenConf),
+    receive {amqp10_event, {connection, Connection, {opened, #'v1_0.open'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Session1} = amqp10_client:begin_session(Connection),
+    receive {amqp10_event, {session, Session1, {begun, #'v1_0.begin'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    {ok, Sender1} = amqp10_client:attach_sender_link(Session1, <<"sender 1">>, <<"/exchanges/amq.fanout">>),
+    receive {amqp10_event, {link, Sender1, {attached, #'v1_0.attach'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Sender1),
+    receive {amqp10_event, {link, Sender1, {detached, #'v1_0.detach'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:end_session(Session1),
+    receive {amqp10_event, {session, Session1, {ended, #'v1_0.end'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+
+    %% Test that the amqp10_client:*_sync functions work.
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender2} = amqp10_client:attach_sender_link_sync(Session2, <<"sender 2">>, <<"/exchanges/amq.fanout">>),
+    ok = amqp10_client:detach_link(Sender2),
+    ok = amqp10_client:end_session(Session2),
+    flush(),
+
+    ok = amqp10_client:close_connection(Connection),
+    receive {amqp10_event, {connection, Connection, {closed, #'v1_0.close'{}}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end.
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 % a message is sent before the link attach is guaranteed to
 % have completed and link credit granted
 % also queue a link detached immediately after transfer
@@ -554,13 +630,21 @@ subscribe(Config) ->
     [begin
          receive {amqp10_msg, Receiver, Msg} ->
                      ok = amqp10_client:accept_msg(Receiver, Msg)
+<<<<<<< HEAD
          after 2000 -> ct:fail(timeout)
+=======
+         after ?TIMEOUT -> ct:fail(timeout)
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
          end
      end || _ <- lists:seq(1, 10)],
     ok = assert_no_message(Receiver),
 
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+<<<<<<< HEAD
     after 5000 -> flush(),
+=======
+    after ?TIMEOUT -> flush(),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                   exit(credit_exhausted_assert)
     end,
 
@@ -808,7 +892,11 @@ multi_transfer_without_delivery_id(Config) ->
     receive
         {amqp10_msg, Receiver, _InMsg} ->
             ok
+<<<<<<< HEAD
     after 2000 ->
+=======
+    after ?TIMEOUT ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               exit(delivery_timeout)
     end,
 
@@ -832,8 +920,15 @@ incoming_heartbeat(Config) ->
     Hostname = ?config(mock_host, Config),
     Port = ?config(mock_port, Config),
     OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+<<<<<<< HEAD
                        {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>},
                                           idle_time_out = {uint, 0}}]}
+=======
+                       {Ch, [#'v1_0.open'{
+                                container_id = {utf8, <<"mock">>},
+                                %% The server doesn't expect any heartbeats from us (client).
+                                idle_time_out = {uint, 0}}]}
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                end,
 
     CloseStep = fun({0 = Ch, #'v1_0.close'{error = _TODO}, _Pay}) ->
@@ -847,6 +942,7 @@ incoming_heartbeat(Config) ->
     MockRef = monitor(process, MockPid),
     ok = mock_server:set_steps(Mock, Steps),
     CConf = #{address => Hostname, port => Port, sasl => ?config(sasl, Config),
+<<<<<<< HEAD
               idle_time_out => 1000, notify => self()},
     {ok, Connection} = amqp10_client:open_connection(CConf),
     receive
@@ -856,11 +952,31 @@ incoming_heartbeat(Config) ->
           when Connection0 =:= Connection ->
             ok
     after 5000 ->
+=======
+              %% If the server does not send any traffic to us (client), we will expect
+              %% our client to close the connection after 1 second because
+              %% "the value in idle-time-out SHOULD be half the peer's actual timeout threshold."
+              idle_time_out => 500,
+              notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(CConf),
+    %% We expect our client to initiate closing the connection
+    %% and the server to reply with a close frame.
+    receive
+        {amqp10_event,
+         {connection, Connection0,
+          {closed, _}}}
+          when Connection0 =:= Connection ->
+            ok
+    after ?TIMEOUT ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               exit(incoming_heartbeat_assert)
     end,
     demonitor(MockRef).
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 %%% HELPERS
 %%%
 
@@ -873,7 +989,11 @@ await_link(Who, What, Err) ->
         {amqp10_event, {link, Who0, {detached, Why}}}
           when Who0 =:= Who ->
             ct:fail(Why)
+<<<<<<< HEAD
     after 5000 ->
+=======
+    after ?TIMEOUT ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               flush(),
               ct:fail(Err)
     end.
@@ -890,7 +1010,11 @@ await_disposition(DeliveryTag) ->
     receive
         {amqp10_disposition, {accepted, DeliveryTag0}}
           when DeliveryTag0 =:= DeliveryTag -> ok
+<<<<<<< HEAD
     after 3000 ->
+=======
+    after ?TIMEOUT ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               flush(),
               ct:fail(dispostion_timeout)
     end.
@@ -902,7 +1026,11 @@ count_received_messages0(Receiver, Count) ->
     receive
         {amqp10_msg, Receiver, _Msg} ->
             count_received_messages0(Receiver, Count + 1)
+<<<<<<< HEAD
     after 500 ->
+=======
+    after 5000 ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               Count
     end.
 
@@ -915,7 +1043,11 @@ receive_messages0(Receiver, N, Acc) ->
     receive
         {amqp10_msg, Receiver, Msg} ->
             receive_messages0(Receiver, N - 1, [Msg | Acc])
+<<<<<<< HEAD
     after 5000  ->
+=======
+    after ?TIMEOUT  ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               LastReceivedMsg = case Acc of
                                     [] -> none;
                                     [M | _] -> M

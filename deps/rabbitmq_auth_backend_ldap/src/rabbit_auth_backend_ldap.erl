@@ -761,7 +761,11 @@ ssl_conf() ->
     end.
 
 ssl_options() ->
+<<<<<<< HEAD
     Opts0 = rabbit_networking:fix_ssl_options(env(ssl_options)),
+=======
+    Opts0 = rabbit_ssl_options:fix_client(env(ssl_options)),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     case env(ssl_hostname_verification, undefined) of
         wildcard ->
             rabbit_log_ldap:debug("Enabling wildcard-aware hostname verification for LDAP client connections"),

@@ -1,6 +1,14 @@
+<<<<<<< HEAD
 
 #!/usr/bin/env bash
 
+=======
+#!/usr/bin/env bash
+
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 init_rabbitmq() {
   RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
   RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
@@ -60,6 +68,10 @@ start_local_rabbitmq() {
   init_rabbitmq
 
   RABBITMQ_SERVER_ROOT=$(realpath ../)
+<<<<<<< HEAD
+=======
+  
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
@@ -164,7 +176,11 @@ start_docker_rabbitmq() {
   if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
       cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
   fi
+<<<<<<< HEAD
   if [ -d ${RABBITMQ_CONFIG_DIR}/certs ]; then
+=======
+  if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then      
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/rabbitmq
   fi
   if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
@@ -182,10 +198,17 @@ start_docker_rabbitmq() {
     -p 15672:15672 \
     -p 15671:15671 \
     -v $CONF_DIR/rabbitmq/:/etc/rabbitmq \
+<<<<<<< HEAD
     -v $CONF_DIR/rabbitmq/:/var/rabbitmq \
     -v ${TEST_DIR}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
 
+=======
+    -v $CONF_DIR/rabbitmq/imports:/var/rabbitmq/imports \
+    -v ${TEST_DIR}:/config \
+    ${RABBITMQ_DOCKER_IMAGE}
+    
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
   wait_for_message rabbitmq "Server startup complete"
   end "RabbitMQ ready"
 }

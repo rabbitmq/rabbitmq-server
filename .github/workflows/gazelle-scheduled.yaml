@@ -12,9 +12,15 @@ jobs:
       matrix:
         target_branch:
         - main
+<<<<<<< HEAD
         - v3.12.x
         - v3.11.x
         - v3.10.x
+=======
+        - v4.0.x
+        - v3.13.x
+        - v3.12.x
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY

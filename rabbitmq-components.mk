@@ -53,7 +53,11 @@ dep_prometheus = hex 4.11.0
 dep_ra = hex 2.14.0
 dep_ranch = hex 2.1.0
 dep_recon = hex 2.5.6
+<<<<<<< HEAD
 dep_redbug = hex 2.1.0
+=======
+dep_redbug = hex 2.0.7
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.7.5

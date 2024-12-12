@@ -4,7 +4,11 @@
 
 DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 
+<<<<<<< HEAD
 dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
+=======
+dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ':io.format "~s~n", [:code.lib_dir :elixir ]'))
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 # --------------------------------------------------------------------
 # Common Test flags.

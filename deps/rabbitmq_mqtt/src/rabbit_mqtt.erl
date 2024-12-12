@@ -87,7 +87,12 @@ init_global_counters(ProtoVer) ->
     rabbit_global_counters:init([Proto]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
     rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]),
+<<<<<<< HEAD
     rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]).
+=======
+    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
+    rabbit_msg_size_metrics:init(ProtoVer).
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 persist_static_configuration() ->
     rabbit_mqtt_util:init_sparkplug(),
@@ -112,6 +117,11 @@ persist_static_configuration() ->
 
     {ok, MaxSizeAuth} = application:get_env(?APP_NAME, max_packet_size_authenticated),
     assert_valid_max_packet_size(MaxSizeAuth),
+<<<<<<< HEAD
+=======
+    {ok, MaxMsgSize} = application:get_env(rabbit, max_message_size),
+    ?assert(MaxSizeAuth =< MaxMsgSize),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
 
 assert_valid_max_packet_size(Val) ->

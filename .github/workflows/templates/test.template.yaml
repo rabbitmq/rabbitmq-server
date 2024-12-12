@@ -23,7 +23,11 @@ on:
   push:
     branches:
 #!      - main
+<<<<<<< HEAD
 #!      - v4.0.x
+=======
+      - v4.0.x
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       - v3.13.x
       - v3.12.x
       - v3.11.x

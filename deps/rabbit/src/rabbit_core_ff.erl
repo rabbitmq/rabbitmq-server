@@ -10,14 +10,24 @@
 -rabbit_feature_flag(
    {classic_mirrored_queue_version,
     #{desc          => "Support setting version for classic mirrored queues",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {quorum_queue,
     #{desc          => "Support queues of type `quorum`",
       doc_url       => "https://www.rabbitmq.com/docs/quorum-queues",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
@@ -25,6 +35,10 @@
     #{desc          => "Support queues of type `stream`",
       doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [quorum_queue]
      }}).
 
@@ -32,18 +46,29 @@
    {implicit_default_bindings,
     #{desc          => "Default bindings are now implicit, instead of "
                        "being stored in the database",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {virtual_host_metadata,
     #{desc          => "Virtual host metadata (description, tags, etc)",
+<<<<<<< HEAD
       stability     => required
+=======
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {maintenance_mode_status,
     #{desc          => "Maintenance mode status",
+<<<<<<< HEAD
       stability     => required
      }}).
 
@@ -51,6 +76,17 @@
     {user_limits,
      #{desc          => "Configure connection and channel limits for a user",
        stability     => required
+=======
+      stability     => required,
+      require_level => hard
+     }}).
+
+-rabbit_feature_flag(
+   {user_limits,
+    #{desc          => "Configure connection and channel limits for a user",
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
@@ -58,33 +94,62 @@
     #{desc          => "Single active consumer for streams",
       doc_url       => "https://www.rabbitmq.com/docs/stream",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_queue]
      }}).
 
 -rabbit_feature_flag(
+<<<<<<< HEAD
     {feature_flags_v2,
      #{desc          => "Feature flags subsystem V2",
        stability     => required
+=======
+   {feature_flags_v2,
+    #{desc          => "Feature flags subsystem V2",
+      stability     => required,
+      require_level => hard
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {direct_exchange_routing_v2,
+<<<<<<< HEAD
     #{desc       => "v2 direct exchange routing implementation",
       stability  => required,
       depends_on => [feature_flags_v2, implicit_default_bindings]
+=======
+    #{desc          => "v2 direct exchange routing implementation",
+      stability     => required,
+      require_level => hard,
+      depends_on    => [feature_flags_v2, implicit_default_bindings]
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {listener_records_in_ets,
+<<<<<<< HEAD
     #{desc       => "Store listener records in ETS instead of Mnesia",
       stability  => required,
       depends_on => [feature_flags_v2]
+=======
+    #{desc          => "Store listener records in ETS instead of Mnesia",
+      stability     => required,
+      require_level => hard,
+      depends_on    => [feature_flags_v2]
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      }}).
 
 -rabbit_feature_flag(
    {tracking_records_in_ets,
     #{desc          => "Store tracking records in ETS instead of Mnesia",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [feature_flags_v2]
      }}).
 
@@ -94,6 +159,10 @@
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/5931",
       %%TODO remove compatibility code
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_queue]
      }}).
 
@@ -102,6 +171,10 @@
     #{desc          => "Support for restarting streams with optional preferred next leader argument."
       "Used to implement stream leader rebalancing",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_queue]
      }}).
 
@@ -110,6 +183,10 @@
     #{desc          => "Bug fix to unblock a group of consumers in a super stream partition",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/7743",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_single_active_consumer]
      }}).
 
@@ -117,6 +194,10 @@
    {stream_filtering,
     #{desc          => "Support for stream filtering.",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_queue]
      }}).
 
@@ -124,14 +205,25 @@
    {message_containers,
     #{desc          => "Message containers.",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [feature_flags_v2]
      }}).
 
 -rabbit_feature_flag(
    {khepri_db,
+<<<<<<< HEAD
     #{desc          => "New Raft-based metadata store. Fully supported as of RabbitMQ 4.0",
       doc_url       => "https://www.rabbitmq.com/docs/next/metadata-store",
       stability     => experimental,
+=======
+    #{desc          => "New Raft-based metadata store.",
+      doc_url       => "https://www.rabbitmq.com/docs/next/metadata-store",
+      stability     => experimental,
+      experiment_level => supported,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [feature_flags_v2,
                         direct_exchange_routing_v2,
                         maintenance_mode_status,
@@ -154,6 +246,10 @@
     #{desc          => "A new internal command that is used to update streams as "
                         "part of a policy.",
       stability     => required,
+<<<<<<< HEAD
+=======
+      require_level => hard,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       depends_on    => [stream_queue]
      }}).
 

@@ -254,7 +254,11 @@ unmapped({call, From}, {attach, Attach},
 begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                next_outgoing_id = {uint, NOI},
                                incoming_window = {uint, InWindow},
+<<<<<<< HEAD
                                outgoing_window = {uint, OutWindow}},
+=======
+                               outgoing_window = {uint, OutWindow}} = Begin,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
            #state{early_attach_requests = EARs} = State) ->
 
     State1 = State#state{remote_channel = RemoteChannel},
@@ -264,7 +268,11 @@ begin_sent(cast, #'v1_0.begin'{remote_channel = {ushort, RemoteChannel},
                                  S2
                          end, State1, EARs),
 
+<<<<<<< HEAD
     ok = notify_session_begun(State2),
+=======
+    ok = notify_session_begun(Begin, State2),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
     {next_state, mapped, State2#state{early_attach_requests = [],
                                       next_incoming_id = NOI,
@@ -291,18 +299,30 @@ mapped(cast, {flow_session, Flow0 = #'v1_0.flow'{incoming_window = {uint, Incomi
                    outgoing_window = ?UINT_OUTGOING_WINDOW},
     ok = send(Flow, State),
     {keep_state, State#state{incoming_window = IncomingWindow}};
+<<<<<<< HEAD
 mapped(cast, #'v1_0.end'{error = Err}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     % TODO: send notifications for links?
     Reason = reason(Err),
     ok = notify_session_ended(State, Reason),
+=======
+mapped(cast, #'v1_0.end'{} = End, State) ->
+    %% We receive the first end frame, reply and terminate.
+    _ = send_end(State),
+    % TODO: send notifications for links?
+    ok = notify_session_ended(End, State),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     {stop, normal, State};
 mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                             initial_delivery_count = IDC,
                             handle = {uint, InHandle},
                             role = PeerRoleBool,
+<<<<<<< HEAD
                             max_message_size = MaybeMaxMessageSize},
+=======
+                            max_message_size = MaybeMaxMessageSize} = Attach,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
        #state{links = Links, link_index = LinkIndex,
               link_handle_index = LHI} = State0) ->
 
@@ -311,7 +331,11 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
     LinkIndexKey = {OurRole, Name},
     #{LinkIndexKey := OutHandle} = LinkIndex,
     #{OutHandle := Link0} = Links,
+<<<<<<< HEAD
     ok = notify_link_attached(Link0),
+=======
+    ok = notify_link_attached(Link0, Attach, State0),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
     {DeliveryCount, MaxMessageSize} =
     case Link0 of
@@ -334,6 +358,7 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
                          link_index = maps:remove(LinkIndexKey, LinkIndex),
                          link_handle_index = LHI#{InHandle => OutHandle}},
     {keep_state, State};
+<<<<<<< HEAD
 mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
                             error = Err},
        #state{links = Links, link_handle_index = LHI} = State0) ->
@@ -341,6 +366,13 @@ mapped(cast, #'v1_0.detach'{handle = {uint, InHandle},
               fun (#link{output_handle = OutHandle} = Link, State) ->
                       Reason = reason(Err),
                       ok = notify_link_detached(Link, Reason),
+=======
+mapped(cast, #'v1_0.detach'{handle = {uint, InHandle}} = Detach,
+       #state{links = Links, link_handle_index = LHI} = State0) ->
+    with_link(InHandle, State0,
+              fun (#link{output_handle = OutHandle} = Link, State) ->
+                      ok = notify_link_detached(Link, Detach, State),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                       {keep_state,
                        State#state{links = maps:remove(OutHandle, Links),
                                    link_handle_index = maps:remove(InHandle, LHI)}}
@@ -547,9 +579,14 @@ mapped(_EvtType, Msg, _State) ->
                    [Msg, 10]),
     keep_state_and_data.
 
+<<<<<<< HEAD
 end_sent(_EvtType, #'v1_0.end'{error = Err}, State) ->
     Reason = reason(Err),
     ok = notify_session_ended(State, Reason),
+=======
+end_sent(_EvtType, #'v1_0.end'{} = End, State) ->
+    ok = notify_session_ended(End, State),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     {stop, normal, State};
 end_sent(_EvtType, _Frame, _State) ->
     % just drop frames here
@@ -732,6 +769,7 @@ translate_terminus_durability(configuration) -> 1;
 translate_terminus_durability(unsettled_state) -> 2.
 
 translate_filters(Filters)
+<<<<<<< HEAD
   when is_map(Filters) andalso
        map_size(Filters) == 0 ->
     undefined;
@@ -741,6 +779,15 @@ translate_filters(Filters)
      maps:fold(
        fun
           (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+=======
+  when map_size(Filters) =:= 0 ->
+    undefined;
+translate_filters(Filters) ->
+    {map,
+     maps:fold(
+       fun
+           (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                %% special case conversion
                Key = sym(K),
                [{Key, {described, Key, translate_legacy_amqp_headers_binding(V)}} | Acc];
@@ -986,10 +1033,31 @@ maybe_notify_link_credit(#link{role = sender,
 maybe_notify_link_credit(_Old, _New) ->
     ok.
 
+<<<<<<< HEAD
 notify_link_attached(Link) ->
     notify_link(Link, attached).
 
 notify_link_detached(Link, Reason) ->
+=======
+notify_link_attached(Link, Perf, #state{connection_config = Cfg}) ->
+    What = case Cfg of
+               #{notify_with_performative := true} ->
+                   {attached, Perf};
+               _ ->
+                   attached
+           end,
+    notify_link(Link, What).
+
+notify_link_detached(Link,
+                     Perf = #'v1_0.detach'{error = Err},
+                     #state{connection_config = Cfg}) ->
+    Reason = case Cfg of
+                 #{notify_with_performative := true} ->
+                     Perf;
+                 _ ->
+                     reason(Err)
+             end,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     notify_link(Link, {detached, Reason}).
 
 notify_link(#link{notify = Pid, ref = Ref}, What) ->
@@ -997,11 +1065,34 @@ notify_link(#link{notify = Pid, ref = Ref}, What) ->
     Pid ! Evt,
     ok.
 
+<<<<<<< HEAD
 notify_session_begun(#state{notify = Pid}) ->
     Pid ! amqp10_session_event(begun),
     ok.
 
 notify_session_ended(#state{notify = Pid}, Reason) ->
+=======
+notify_session_begun(Perf, #state{notify = Pid,
+                                  connection_config = Cfg}) ->
+    Evt = case Cfg of
+              #{notify_with_performative := true} ->
+                  {begun, Perf};
+              _ ->
+                  begun
+          end,
+    Pid ! amqp10_session_event(Evt),
+    ok.
+
+notify_session_ended(Perf = #'v1_0.end'{error = Err},
+                     #state{notify = Pid,
+                            connection_config = Cfg}) ->
+    Reason = case Cfg of
+                 #{notify_with_performative := true} ->
+                     Perf;
+                 _ ->
+                     reason(Err)
+             end,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     Pid ! amqp10_session_event({ended, Reason}),
     ok.
 
@@ -1166,11 +1257,16 @@ make_link_ref(Role, Session, Handle) ->
 translate_message_annotations(MA)
   when map_size(MA) > 0 ->
     {map, maps:fold(fun(K, V, Acc) ->
+<<<<<<< HEAD
                             [{sym(K), wrap_map_value(V)} | Acc]
+=======
+                            [{sym(K), amqp10_client_types:infer(V)} | Acc]
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                     end, [], MA)};
 translate_message_annotations(_MA) ->
     undefined.
 
+<<<<<<< HEAD
 wrap_map_value(true) ->
     {boolean, true};
 wrap_map_value(false) ->
@@ -1193,6 +1289,8 @@ wrap_map_value(TaggedValue) when is_atom(element(1, TaggedValue)) ->
 
 utf8(V) -> amqp10_client_types:utf8(V).
 
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 sym(B) when is_binary(B) -> {symbol, B};
 sym(B) when is_list(B) -> {symbol, list_to_binary(B)};
 sym(B) when is_atom(B) -> {symbol, atom_to_binary(B, utf8)}.

@@ -37,7 +37,13 @@ setup(#{feature_flags_file := FFFile}) ->
                       "Failed to initialize feature flags registry: ~tp",
                       [Reason],
                       #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
+<<<<<<< HEAD
                     throw({error, failed_to_initialize_feature_flags_registry})
+=======
+                    throw({error,
+                           {failed_to_initialize_feature_flags_registry,
+                            Reason}})
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             end;
         {error, Reason} ->
             ?LOG_ERROR(

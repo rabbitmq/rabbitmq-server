@@ -64,7 +64,11 @@ def all_srcs(name = "all_srcs"):
     )
     filegroup(
         name = "public_hdrs",
+<<<<<<< HEAD
         srcs = ["include/oauth2_client.hrl"],
+=======
+        srcs = ["include/oauth2_client.hrl", "include/types.hrl"],
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     )
     filegroup(
         name = "license_files",
@@ -88,7 +92,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/system_SUITE.erl"],
         outs = ["test/system_SUITE.beam"],
+<<<<<<< HEAD
         hdrs = ["include/oauth2_client.hrl"],
+=======
+        hdrs = ["include/oauth2_client.hrl", "include/types.hrl"],
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         app_name = "oauth2_client",
         erlc_opts = "//:test_erlc_opts",
     )
@@ -97,7 +105,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         testonly = True,
         srcs = ["test/unit_SUITE.erl"],
         outs = ["test/unit_SUITE.beam"],
+<<<<<<< HEAD
         hdrs = ["include/oauth2_client.hrl"],
+=======
+        hdrs = ["include/oauth2_client.hrl", "include/types.hrl"],
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         app_name = "oauth2_client",
         erlc_opts = "//:test_erlc_opts",
     )

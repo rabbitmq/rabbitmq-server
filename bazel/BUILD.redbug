@@ -49,12 +49,16 @@ filegroup(
     ],
 )
 
+<<<<<<< HEAD
 filegroup(
     name = "private_hdrs",
     srcs = [
         "src/redbug_dbg.hrl",
     ],
 )
+=======
+filegroup(name = "private_hdrs")
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 filegroup(name = "public_hdrs")
 

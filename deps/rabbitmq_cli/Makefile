@@ -117,7 +117,12 @@ rel:: $(ESCRIPTS)
 tests:: $(ESCRIPTS)
 	$(verbose) $(MAKE) -C ../../ install-cli
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
+<<<<<<< HEAD
 		PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
+=======
+		PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db")
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 	$(gen_verbose) $(MIX_TEST) \
 		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \
 		$(TEST_FILE); \

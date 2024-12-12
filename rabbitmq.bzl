@@ -290,12 +290,20 @@ def rabbitmq_integration_suite(
             "RABBITMQCTL": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmqctl".format(package),
             "RABBITMQ_PLUGINS": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-plugins".format(package),
             "RABBITMQ_QUEUES": "$TEST_SRCDIR/$TEST_WORKSPACE/{}/broker-for-tests-home/sbin/rabbitmq-queues".format(package),
+<<<<<<< HEAD
             "RABBITMQ_RUN_SECONDARY": "$(location @rabbitmq-server-generic-unix-3.13//:rabbitmq-run)",
+=======
+            "RABBITMQ_RUN_SECONDARY": "$(location @rabbitmq-server-generic-unix-4.0//:rabbitmq-run)",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             "LANG": "C.UTF-8",
         }.items() + test_env.items()),
         tools = [
             ":rabbitmq-for-tests-run",
+<<<<<<< HEAD
             "@rabbitmq-server-generic-unix-3.13//:rabbitmq-run",
+=======
+            "@rabbitmq-server-generic-unix-4.0//:rabbitmq-run",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         ] + tools,
         deps = assumed_deps + deps + runtime_deps,
         ct_run_extra_args = ["-kernel net_ticktime 5"],

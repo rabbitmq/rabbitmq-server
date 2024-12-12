@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Server port="-1">
+    <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+    <Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" />
+    <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+    <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+    <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+    <Service name="Catalina">
+    <Connector class="org.apache.coyote.http11.Http11NioProtocol" protocol="HTTP/1.1" connectionTimeout="20000"
+                scheme="https"
+                port="8443"
+                SSLEnabled="true"
+                sslEnabledProtocols="TLSv1.2"
+                ciphers="TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+                secure="true"
+                clientAuth="false"
+                sslProtocol="TLS"
+                keystoreFile="/uaa/server_uaa.jks"
+                keystoreType="PKCS12"
+                keyAlias="server-uaa-tls"
+                keystorePass="foobar"
+                bindOnInit="false"/>
+    <Connector protocol="org.apache.coyote.http11.Http11NioProtocol"
+                connectionTimeout="20000"
+                port="8989"
+                address="127.0.0.1"
+                bindOnInit="true"/>
+    <Engine name="Catalina" defaultHost="localhost">
+        <Host name="localhost"
+            appBase="webapps"
+            unpackWARs="true"
+            autoDeploy="false"
+            failCtxIfServletStartFails="true">
+        <Valve className="org.apache.catalina.valves.RemoteIpValve"
+                remoteIpHeader="x-forwarded-for"
+                protocolHeader="x-forwarded-proto"
+                internalProxies="10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.1[6-9]{1}\.\d{1,3}\.\d{1,3}|172\.2[0-9]{1}\.\d{1,3}\.\d{1,3}|172\.3[0-1]{1}\.\d{1,3}\.\d{1,3}"/>
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+                prefix="localhost_access" suffix=".log" rotatable="false" pattern="%h %l %u %t &quot;%r&quot; %s %b"/>
+        </Host>
+    </Engine>
+    </Service>
+</Server>

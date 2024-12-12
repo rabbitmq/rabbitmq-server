@@ -762,6 +762,13 @@ augment_declare_args(VHost, Durable, Exclusive, AutoDelete, Args0) ->
             end
     end.
 
+<<<<<<< HEAD
+=======
+-spec update_args_table_with_queue_type(
+    rabbit_queue_type:queue_type() | binary(),
+    boolean(), boolean(), boolean(),
+    rabbit_framing:amqp_table()) -> rabbit_framing:amqp_table().
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 update_args_table_with_queue_type(DefaultQueueType, Durable, Exclusive, AutoDelete, Args) ->
     Type = rabbit_queue_type:discover(DefaultQueueType),
     IsPermitted = is_queue_args_combination_permitted(
@@ -1834,8 +1841,13 @@ internal_delete(Queue, ActingUser, Reason) ->
         {error, timeout} = Err ->
             Err;
         Deletions ->
+<<<<<<< HEAD
             _ = rabbit_binding:process_deletions(Deletions),
             rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER),
+=======
+            ok = rabbit_binding:process_deletions(Deletions),
+            ok = rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
             rabbit_core_metrics:queue_deleted(QueueName),
             ok = rabbit_event:notify(queue_deleted,
                                      [{name, QueueName},
@@ -1958,6 +1970,7 @@ filter_transient_queues_to_delete(Node) ->
     end.
 
 notify_queue_binding_deletions(QueueDeletions) when is_list(QueueDeletions) ->
+<<<<<<< HEAD
     Deletions = rabbit_binding:process_deletions(
                   lists:foldl(fun rabbit_binding:combine_deletions/2,
                               rabbit_binding:new_deletions(),
@@ -1966,6 +1979,16 @@ notify_queue_binding_deletions(QueueDeletions) when is_list(QueueDeletions) ->
 notify_queue_binding_deletions(QueueDeletions) ->
     Deletions = rabbit_binding:process_deletions(QueueDeletions),
     rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER).
+=======
+    Deletions = lists:foldl(
+                  fun rabbit_binding:combine_deletions/2,
+                  rabbit_binding:new_deletions(), QueueDeletions),
+    ok = rabbit_binding:process_deletions(Deletions),
+    rabbit_binding:notify_deletions(Deletions, ?INTERNAL_USER);
+notify_queue_binding_deletions(QueueDeletions) ->
+    ok = rabbit_binding:process_deletions(QueueDeletions),
+    rabbit_binding:notify_deletions(QueueDeletions, ?INTERNAL_USER).
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 notify_transient_queues_deleted(QueueDeletions) ->
     lists:foreach(

@@ -42,6 +42,10 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
+<<<<<<< HEAD
+=======
+        "//deps/amqp10_common:erlang_app",
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
     ],

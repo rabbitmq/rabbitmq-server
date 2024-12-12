@@ -1,3 +1,9 @@
+<<<<<<< HEAD
+=======
+require_https: true
+https_port: 8443
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 logging:
   config: /uaa/log4j2.properties
 

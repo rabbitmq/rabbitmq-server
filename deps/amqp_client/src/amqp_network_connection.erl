@@ -137,7 +137,11 @@ do_connect({Addr, Family},
                          [Family | ?RABBIT_TCP_OPTS] ++ ExtraOpts,
                          Timeout) of
         {ok, Sock} ->
+<<<<<<< HEAD
             SslOpts = rabbit_ssl_options:fix(
+=======
+            SslOpts = rabbit_ssl_options:fix_client(
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                         orddict:to_list(
                           orddict:merge(fun (_, _A, B) -> B end,
                                         orddict:from_list(GlobalSslOpts),

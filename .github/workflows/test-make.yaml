@@ -3,7 +3,10 @@ on:
   push:
     branches:
     - main
+<<<<<<< HEAD
     - v4.0.x
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     paths:
     - deps/**
     - scripts/**

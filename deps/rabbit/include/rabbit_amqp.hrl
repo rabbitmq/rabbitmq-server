@@ -37,6 +37,10 @@
         [pid,
          frame_max,
          timeout,
+<<<<<<< HEAD
+=======
+         container_id,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
          vhost,
          user,
          node

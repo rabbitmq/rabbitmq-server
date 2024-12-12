@@ -8,7 +8,12 @@
 -module(rabbit_amqp_util).
 -include("rabbit_amqp.hrl").
 
+<<<<<<< HEAD
 -export([protocol_error/3]).
+=======
+-export([protocol_error/3,
+         capabilities/1]).
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 -spec protocol_error(term(), io:format(), [term()]) ->
     no_return().
@@ -17,3 +22,14 @@ protocol_error(Condition, Msg, Args) ->
     Reason = #'v1_0.error'{condition = Condition,
                            description = {utf8, Description}},
     exit(Reason).
+<<<<<<< HEAD
+=======
+
+-spec capabilities([binary()]) ->
+    undefined | {array, symbol, [{symbol, binary()}]}.
+capabilities([]) ->
+    undefined;
+capabilities(Capabilities) ->
+    Caps = [{symbol, C} || C <- Capabilities],
+    {array, symbol, Caps}.
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)

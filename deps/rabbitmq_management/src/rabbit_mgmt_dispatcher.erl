@@ -132,6 +132,10 @@ dispatcher() ->
      {"/connections/:connection",                              rabbit_mgmt_wm_connection, []},
      {"/connections/username/:username",                       rabbit_mgmt_wm_connection_user_name, []},
      {"/connections/:connection/channels",                     rabbit_mgmt_wm_connection_channels, []},
+<<<<<<< HEAD
+=======
+     {"/connections/:connection/sessions",                     rabbit_mgmt_wm_connection_sessions, []},
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
      {"/channels",                                             rabbit_mgmt_wm_channels, []},
      {"/channels/:channel",                                    rabbit_mgmt_wm_channel, []},
      {"/consumers",                                            rabbit_mgmt_wm_consumers, []},

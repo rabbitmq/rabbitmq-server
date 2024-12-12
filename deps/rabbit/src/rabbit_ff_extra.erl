@@ -2,7 +2,12 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
+<<<<<<< HEAD
 %% @copyright 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+=======
+%% @copyright 2019-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc.
+%% and/or its subsidiaries. All rights reserved.
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 %%
 %% @doc
 %% This module provides extra functions unused by the feature flags
@@ -23,6 +28,15 @@
 -type cli_info_entry() :: [{name, rabbit_feature_flags:feature_name()} |
                            {state, enabled | disabled | unavailable} |
                            {stability, rabbit_feature_flags:stability()} |
+<<<<<<< HEAD
+=======
+                           {require_level,
+                            rabbit_feature_flags:require_level()} |
+                           {experiment_level,
+                            rabbit_feature_flags:experiment_level()} |
+                           {callbacks,
+                            [rabbit_feature_flags:callback_name()]} |
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                            {provided_by, atom()} |
                            {desc, string()} |
                            {doc_url, string()}].
@@ -60,6 +74,14 @@ cli_info(FeatureFlags) ->
               FeatureProps = maps:get(FeatureName, FeatureFlags),
               State = rabbit_feature_flags:get_state(FeatureName),
               Stability = rabbit_feature_flags:get_stability(FeatureProps),
+<<<<<<< HEAD
+=======
+              RequireLevel = rabbit_feature_flags:get_require_level(
+                               FeatureProps),
+              ExperimentLevel = rabbit_feature_flags:get_experiment_level(
+                                  FeatureProps),
+              Callbacks = maps:keys(maps:get(callbacks, FeatureProps, #{})),
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
               App = maps:get(provided_by, FeatureProps),
               Desc = maps:get(desc, FeatureProps, ""),
               DocUrl = maps:get(doc_url, FeatureProps, ""),
@@ -68,6 +90,12 @@ cli_info(FeatureFlags) ->
                         {doc_url, unicode:characters_to_binary(DocUrl)},
                         {state, State},
                         {stability, Stability},
+<<<<<<< HEAD
+=======
+                        {require_level, RequireLevel},
+                        {experiment_level, ExperimentLevel},
+                        {callbacks, Callbacks},
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                         {provided_by, App}],
               [FFInfo | Acc]
       end, [], lists:sort(maps:keys(FeatureFlags))).
@@ -159,6 +187,11 @@ info(FeatureFlags, Options) ->
                      {State, Color} = case State0 of
                                           enabled ->
                                               {"Enabled", Green};
+<<<<<<< HEAD
+=======
+                                          state_changing ->
+                                              {"(Changing)", Yellow};
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
                                           disabled ->
                                               {"Disabled", Yellow};
                                           unavailable ->

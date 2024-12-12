@@ -70,6 +70,7 @@
       "read": ".*"
     },
     {
+<<<<<<< HEAD
       "user": "guest",
       "vhost": "other",
       "configure": ".*",
@@ -77,6 +78,8 @@
       "read": ".*"
     },
     {
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       "user": "management",
       "vhost": "/",
       "configure": ".*",
@@ -89,6 +92,23 @@
       "configure": ".*",
       "write": ".*",
       "read": ".*"
+<<<<<<< HEAD
+=======
+    },
+    {
+      "user": "rabbit_no_management",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "monitoring-only",
+      "vhost": "other",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     }
   ]
 

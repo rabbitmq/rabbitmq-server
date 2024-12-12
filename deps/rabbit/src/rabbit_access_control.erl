@@ -249,7 +249,11 @@ check_user_id0(ClaimedUserName, #user{username = ActualUserName,
     end.
 
 -spec update_state(User :: rabbit_types:user(), NewState :: term()) ->
+<<<<<<< HEAD
     {'ok', rabbit_types:auth_user()} |
+=======
+    {'ok', rabbit_types:user()} |
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     {'refused', string()} |
     {'error', any()}.
 

@@ -3,6 +3,10 @@
 -include("mc.hrl").
 
 -export([is_valid_shortstr/1,
+<<<<<<< HEAD
+=======
+         is_utf8_no_null_limited/1,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
          is_utf8_no_null/1,
          uuid_to_urn_string/1,
          urn_string_to_uuid/1,
@@ -12,12 +16,30 @@
          is_x_header/1
         ]).
 
+<<<<<<< HEAD
+=======
+-define(UTF8_SCAN_LIMIT, 4096).
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 -spec is_valid_shortstr(term()) -> boolean().
 is_valid_shortstr(Bin) when ?IS_SHORTSTR_LEN(Bin) ->
     is_utf8_no_null(Bin);
 is_valid_shortstr(_) ->
     false.
 
+<<<<<<< HEAD
+=======
+-spec is_utf8_no_null_limited(term()) -> boolean().
+is_utf8_no_null_limited(Bin)
+  when byte_size(Bin) =< ?UTF8_SCAN_LIMIT ->
+    is_utf8_no_null(Bin);
+is_utf8_no_null_limited(_Term) ->
+    %% If longer than 4096 bytes, just assume it's not UTF-8.
+    %% It _may_ still be valid UTF-8 but checking this
+    %% on the hot path is going to be excessively slow.
+    false.
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 -spec is_utf8_no_null(term()) -> boolean().
 is_utf8_no_null(Term) ->
     utf8_scan(Term, fun (C) -> C > 0 end).
@@ -61,7 +83,11 @@ utf8_string_is_ascii(UTF8String) ->
 amqp_map_get(Key, {map, List}, Default) ->
     amqp_map_get(Key, List, Default);
 amqp_map_get(Key, List, Default) when is_list(List) ->
+<<<<<<< HEAD
     case lists:search(fun ({{_, K}, _}) -> K == Key end, List) of
+=======
+    case lists:search(fun ({{_, K}, _}) -> K =:= Key end, List) of
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
         {value, {_K, V}} ->
             V;
         false ->

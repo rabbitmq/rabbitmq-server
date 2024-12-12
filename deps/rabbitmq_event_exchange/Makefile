@@ -1,12 +1,25 @@
 PROJECT = rabbitmq_event_exchange
 PROJECT_DESCRIPTION = Event Exchange Type
 
+<<<<<<< HEAD
+=======
+define PROJECT_ENV
+	  [
+		{protocol, amqp_0_9_1}
+	  ]
+endef
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 define PROJECT_APP_EXTRA_KEYS
 	{broker_version_requirements, []}
 endef
 
 DEPS = rabbit_common rabbit
+<<<<<<< HEAD
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
+=======
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client rabbitmq_amqp_client
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

@@ -30,7 +30,11 @@ do
   fi
   echo -e "=== $TEST_STATUS $SUITE ==========================================="
   echo " "
+<<<<<<< HEAD
 done <<< "$(cat $SCRIPT/$SUITE_FILE)"
+=======
+done <<< "$(cat $SCRIPT/$SUITE_FILE | sort)"
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 echo -e "=== Summary (${TOTAL_SUITES}/${GREEN}${#SUCCESSFUL_SUITES[@]}/${RED}${#FAILED_SUITES[@]}${NC}) ============================================"
 if [ ${#SUCCESSFUL_SUITES[@]} -gt 0 ]; then echo -e " > ${GREEN}Successful suites ${NC}"; fi

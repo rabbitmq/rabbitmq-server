@@ -301,6 +301,26 @@ function reset_timer() {
     }
 }
 
+<<<<<<< HEAD
+=======
+function pause_auto_refresh() {
+    if (typeof globalThis.rmq_webui_auto_refresh_paused == 'undefined')
+        globalThis.rmq_webui_auto_refresh_paused = 0;
+
+    globalThis.rmq_webui_auto_refresh_paused++;
+    if (timer != null) {
+        clearInterval(timer);
+    }
+}
+
+function resume_auto_refresh() {
+    globalThis.rmq_webui_auto_refresh_paused--;
+    if (globalThis.rmq_webui_auto_refresh_paused == 0) {
+        reset_timer();
+    }
+}
+
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 function update_manual(div, query) {
     var path;
     var template;

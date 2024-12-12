@@ -23,7 +23,11 @@ on:
       elixir_version:
         description: 'Elixir version to build with'
         required: true
+<<<<<<< HEAD
         default: "1.17"
+=======
+        default: "1.15"
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
       project_version:
         description: 'PROJECT_VERSION used for make'
         required: true

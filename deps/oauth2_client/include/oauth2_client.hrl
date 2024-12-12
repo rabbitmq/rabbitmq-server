@@ -5,6 +5,10 @@
 %% Copyright (c) 2020-2023 VMware, Inc. or its affiliates.  All rights reserved.
 %%
 
+<<<<<<< HEAD
+=======
+-include("types.hrl").
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
 
 % define access token request common constants
 
@@ -44,6 +48,7 @@
 -define(RESPONSE_END_SESSION_ENDPOINT, <<"end_session_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).
+<<<<<<< HEAD
 
 %% The closest we have to a type import in Erlang
 -type option(T) :: rabbit_types:option(T).
@@ -107,3 +112,5 @@
   }).
 
 -type refresh_token_request() :: #refresh_token_request{}.
+=======
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)

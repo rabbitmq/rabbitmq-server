@@ -965,7 +965,11 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
       exclusive_consume := ExclusiveConsume,
       args := Args,
       ok_msg := OkMsg,
+<<<<<<< HEAD
       acting_user :=  ActingUser} = Spec,
+=======
+      acting_user := ActingUser} = Spec,
+>>>>>>> 5086e283b (Allow building CLI with elixir 1.18.x)
     %% TODO: validate consumer arguments
     %% currently quorum queues do not support any arguments
     QName = amqqueue:get_name(Q),
