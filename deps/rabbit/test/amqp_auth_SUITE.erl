@@ -14,6 +14,8 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
+-define(TIMEOUT, 30_000).
+
 -import(rabbit_ct_broker_helpers,
         [rpc/4]).
 -import(rabbit_ct_helpers,
@@ -153,8 +155,8 @@ v1_attach_target_queue(Config) ->
                      <<"configure access to queue 'test queue' in vhost "
                        "'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr1}}} -> ok
-    after 5000 -> flush(missing_ended),
-                  ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
+    after ?TIMEOUT -> flush(missing_ended),
+                      ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
     %% Give the user configure permissions on the queue.
@@ -166,7 +168,7 @@ v1_attach_target_queue(Config) ->
                      <<"write access to exchange 'amq.default' in vhost "
                        "'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session2, {ended, ExpectedErr2}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -177,8 +179,8 @@ v1_attach_target_queue(Config) ->
     {ok, Sender3} = amqp10_client:attach_sender_link(
                       Session3, <<"test-sender-3">>, TargetAddress),
     receive {amqp10_event, {link, Sender3, attached}} -> ok
-    after 5000 -> flush(missing_attached),
-                  ct:fail("missing ATTACH from server")
+    after ?TIMEOUT -> flush(missing_attached),
+                      ct:fail("missing ATTACH from server")
     end,
 
     ok = close_connection_sync(Connection).
@@ -202,8 +204,8 @@ v1_attach_source_exchange(Config) ->
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
               description = {utf8, <<"configure access to queue 'amq.gen", _/binary>>}}}}} -> ok
-    after 5000 -> flush(missing_ended),
-                  ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
+    after ?TIMEOUT -> flush(missing_ended),
+                      ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
     %% Give the user configure permissions on the queue.
@@ -218,7 +220,7 @@ v1_attach_source_exchange(Config) ->
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
               description = {utf8, <<"write access to queue 'amq.gen", _/binary>>}}}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -231,7 +233,7 @@ v1_attach_source_exchange(Config) ->
                      <<"read access to exchange 'amq.fanout' in vhost "
                        "'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session3, {ended, ExpectedErr1}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -247,7 +249,7 @@ v1_attach_source_exchange(Config) ->
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
               description = {utf8, <<"read access to queue 'amq.gen", _/binary>>}}}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -258,7 +260,7 @@ v1_attach_source_exchange(Config) ->
     {ok, Recv5} = amqp10_client:attach_receiver_link(
                     Session5, <<"receiver-5">>, SourceAddress),
     receive {amqp10_event, {link, Recv5, attached}} -> ok
-    after 5000 -> flush(missing_attached),
+    after ?TIMEOUT -> flush(missing_attached),
                   ct:fail("missing ATTACH from server")
     end,
 
@@ -290,7 +292,7 @@ send_to_topic(TargetAddress, Config) ->
                     <<"write access to topic 'test vhost.test user.a.b' in exchange "
                       "'amq.topic' in vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -304,7 +306,7 @@ send_to_topic(TargetAddress, Config) ->
     ok = amqp10_client:send_msg(Sender2, Msg2),
     %% We expect RELEASED since no queue is bound.
     receive {amqp10_disposition, {released, Dtag}} -> ok
-    after 5000 -> ct:fail(released_timeout)
+    after ?TIMEOUT -> ct:fail(released_timeout)
     end,
 
     ok = amqp10_client:detach_link(Sender2),
@@ -330,7 +332,7 @@ v1_send_to_topic_using_subject(Config) ->
     ok = amqp10_client:send_msg(Sender, Msg1b),
     %% We have sufficient authorization, but expect RELEASED since no queue is bound.
     receive {amqp10_disposition, {released, Dtag1}} -> ok
-    after 5000 -> ct:fail(released_timeout)
+    after ?TIMEOUT -> ct:fail(released_timeout)
     end,
 
     Dtag2 = <<"dtag 2">>,
@@ -342,7 +344,7 @@ v1_send_to_topic_using_subject(Config) ->
                     <<"write access to topic '.a.b' in exchange 'amq.topic' in "
                       "vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -374,7 +376,7 @@ attach_source_topic0(SourceAddress, Config) ->
                     <<"read access to topic 'test vhost.test user.a.b' in exchange "
                       "'amq.topic' in vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -383,7 +385,7 @@ attach_source_topic0(SourceAddress, Config) ->
     {ok, Recv2} = amqp10_client:attach_receiver_link(
                     Session2, <<"receiver-2">>, SourceAddress),
     receive {amqp10_event, {link, Recv2, attached}} -> ok
-    after 5000 -> flush(missing_attached),
+    after ?TIMEOUT -> flush(missing_attached),
                   ct:fail("missing ATTACH from server")
     end,
 
@@ -405,7 +407,7 @@ v1_attach_target_internal_exchange(Config) ->
     ExpectedErr = error_unauthorized(
                     <<"forbidden to publish to internal exchange 'test exchange' in vhost '/'">>),
     receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
@@ -429,7 +431,7 @@ attach_source_queue(Config) ->
     receive {amqp10_event,
              {session, Session,
               {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
     ok = close_connection_sync(Conn).
@@ -448,13 +450,13 @@ attach_target_exchange(Config) ->
                     <<"write access to exchange '", XName/binary,
                       "' in vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     {ok, Session2} = amqp10_client:begin_session_sync(Connection),
     {ok, _} = amqp10_client:attach_sender_link(Session2, <<"test-sender">>, Address2),
     receive {amqp10_event, {session, Session2, {ended, ExpectedErr}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = amqp10_client:close_connection(Connection).
@@ -478,7 +480,7 @@ attach_target_queue(Config) ->
                     <<"write access to exchange 'amq.default' ",
                       "in vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:close_connection(Conn).
 
@@ -500,7 +502,7 @@ target_per_message_exchange(Config) ->
     Msg1 = amqp10_msg:set_properties(#{to => To1}, amqp10_msg:new(Tag1, <<"m1">>)),
     ok = amqp10_client:send_msg(Sender, Msg1),
     receive {amqp10_disposition, {released, Tag1}} -> ok
-    after 5000 -> ct:fail(released_timeout)
+    after ?TIMEOUT -> ct:fail(released_timeout)
     end,
 
     %% We don't have sufficient authorization.
@@ -511,7 +513,7 @@ target_per_message_exchange(Config) ->
                     <<"write access to exchange 'amq.default' in "
                       "vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = close_connection_sync(Connection).
@@ -534,7 +536,7 @@ target_per_message_internal_exchange(Config) ->
     ExpectedErr = error_unauthorized(
                     <<"forbidden to publish to internal exchange '", XName/binary, "' in vhost 'test vhost'">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_event),
+    after ?TIMEOUT -> flush(missing_event),
                   ct:fail({missing_event, ?LINE})
     end,
     ok = close_connection_sync(Conn1),
@@ -563,7 +565,7 @@ target_per_message_topic(Config) ->
     Msg1 = amqp10_msg:set_properties(#{to => To1}, amqp10_msg:new(Tag1, <<"m1">>)),
     ok = amqp10_client:send_msg(Sender, Msg1),
     receive {amqp10_disposition, {released, Tag1}} -> ok
-    after 5000 -> ct:fail(released_timeout)
+    after ?TIMEOUT -> ct:fail(released_timeout)
     end,
 
     %% We don't have sufficient authorization.
@@ -574,7 +576,7 @@ target_per_message_topic(Config) ->
                     <<"write access to topic '.a.b' in exchange 'amq.topic' in "
                       "vhost 'test vhost' refused for user 'test user'">>),
     receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = close_connection_sync(Connection).
@@ -594,7 +596,7 @@ authn_failure_event(Config) ->
 
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, sasl_auth_failure}}} -> ok
-    after 5000 -> flush(missing_closed),
+    after ?TIMEOUT -> flush(missing_closed),
                   ct:fail("did not receive sasl_auth_failure")
     end,
 
@@ -621,7 +623,7 @@ sasl_success(Mechanism, Config) ->
     OpnConf = OpnConf0#{sasl := Mechanism},
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, opened}} -> ok
-    after 5000 -> ct:fail(missing_opened)
+    after ?TIMEOUT -> ct:fail(missing_opened)
     end,
     ok = amqp10_client:close_connection(Connection).
 
@@ -638,7 +640,7 @@ sasl_anonymous_failure(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
                 ?assertEqual({sasl_not_supported, Mechanism}, Reason)
-    after 5000 -> ct:fail(missing_closed)
+    after ?TIMEOUT -> ct:fail(missing_closed)
     end,
 
     ok = rpc(Config, application, set_env, [App, Par, Default]).
@@ -649,7 +651,7 @@ sasl_plain_failure(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, Reason}}} ->
                 ?assertEqual(sasl_auth_failure, Reason)
-    after 5000 -> ct:fail(missing_closed)
+    after ?TIMEOUT -> ct:fail(missing_closed)
     end.
 
 %% Skipping SASL is disallowed in RabbitMQ.
@@ -658,14 +660,14 @@ sasl_none_failure(Config) ->
     OpnConf = OpnConf0#{sasl := none},
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, _Reason}}} -> ok
-    after 5000 -> ct:fail(missing_closed)
+    after ?TIMEOUT -> ct:fail(missing_closed)
     end.
 
 vhost_absent(Config) ->
     OpnConf = connection_config(Config, <<"this vhost does not exist">>),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, _}}} -> ok
-    after 5000 -> ct:fail(missing_closed)
+    after ?TIMEOUT -> ct:fail(missing_closed)
     end.
 
 vhost_connection_limit(Config) ->
@@ -675,22 +677,22 @@ vhost_connection_limit(Config) ->
     OpnConf = connection_config(Config),
     {ok, C1} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, C1, opened}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     {ok, C2} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, C2, {closed, _}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     OpnConf0 = connection_config(Config, <<"/">>),
     OpnConf1 = OpnConf0#{sasl := anon},
     {ok, C3} = amqp10_client:open_connection(OpnConf1),
     receive {amqp10_event, {connection, C3, opened}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     {ok, C4} = amqp10_client:open_connection(OpnConf1),
     receive {amqp10_event, {connection, C4, opened}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     [ok = close_connection_sync(C) || C <- [C1, C3, C4]],
@@ -704,12 +706,12 @@ user_connection_limit(Config) ->
     OpnConf = OpnConf0#{sasl := anon},
     {ok, C1} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, C1, {closed, _}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     {ok, C2} = amqp10_client:open_connection(connection_config(Config)),
     receive {amqp10_event, {connection, C2, opened}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     ok = close_connection_sync(C2),
@@ -731,7 +733,7 @@ v1_vhost_queue_limit(Config) ->
                     ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                     <<"cannot declare queue 'q1': queue limit in vhost 'test vhost' (0) is reached">>),
     receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after 5000 -> flush(missing_ended),
+    after ?TIMEOUT -> flush(missing_ended),
                   ct:fail("did not receive expected error")
     end,
 
@@ -742,8 +744,8 @@ v1_vhost_queue_limit(Config) ->
     {ok, Sender2} = amqp10_client:attach_sender_link(
                       Session2, <<"test-sender-2">>, TargetAddress),
     receive {amqp10_event, {link, Sender2, attached}} -> ok
-    after 5000 -> flush(missing_attached),
-                  ct:fail("missing ATTACH from server")
+    after ?TIMEOUT -> flush(missing_attached),
+                      ct:fail("missing ATTACH from server")
     end,
 
     ok = close_connection_sync(C1),

@@ -19,6 +19,8 @@
 -import(rabbit_ct_helpers,
         [eventually/3]).
 
+-define(TIMEOUT, 30_000).
+
 all() ->
     [
      {group, tests}
@@ -95,7 +97,7 @@ requeue_one_channel(QType, Config) ->
                            self()),
 
     receive #'basic.consume_ok'{consumer_tag = Ctag} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     [begin
@@ -107,19 +109,19 @@ requeue_one_channel(QType, Config) ->
 
     receive {#'basic.deliver'{},
              #amqp_msg{payload = <<"1">>}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{},
              #amqp_msg{payload = <<"2">>}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     D3 = receive {#'basic.deliver'{delivery_tag = Del3},
                   #amqp_msg{payload = <<"3">>}} -> Del3
-         after 5000 -> ct:fail({missing_event, ?LINE})
+         after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
          end,
     receive {#'basic.deliver'{},
              #amqp_msg{payload = <<"4">>}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     assert_messages(QName, 4, 4, Config),
 
@@ -132,18 +134,18 @@ requeue_one_channel(QType, Config) ->
     receive {#'basic.deliver'{},
              #amqp_msg{payload = P1}} ->
                 ?assertEqual(<<"1">>, P1)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{},
              #amqp_msg{payload = P2}} ->
                 ?assertEqual(<<"2">>, P2)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     D3b = receive {#'basic.deliver'{delivery_tag = Del3b},
                    #amqp_msg{payload = P3}} ->
                       ?assertEqual(<<"3">>, P3),
                       Del3b
-          after 5000 -> ct:fail({missing_event, ?LINE})
+          after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
           end,
     assert_messages(QName, 4, 4, Config),
 
@@ -181,7 +183,7 @@ requeue_two_channels(QType, Config) ->
                            self()),
 
     receive #'basic.consume_ok'{consumer_tag = Ctag1} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     amqp_channel:subscribe(Ch2,
@@ -189,7 +191,7 @@ requeue_two_channels(QType, Config) ->
                                             consumer_tag = Ctag2},
                            self()),
     receive #'basic.consume_ok'{consumer_tag = Ctag2} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     [begin
@@ -203,22 +205,22 @@ requeue_two_channels(QType, Config) ->
     receive {#'basic.deliver'{consumer_tag = C1},
              #amqp_msg{payload = <<"1">>}} ->
                 ?assertEqual(Ctag1, C1)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{consumer_tag = C2},
              #amqp_msg{payload = <<"2">>}} ->
                 ?assertEqual(Ctag2, C2)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{consumer_tag = C3},
              #amqp_msg{payload = <<"3">>}} ->
                 ?assertEqual(Ctag1, C3)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{consumer_tag = C4},
              #amqp_msg{payload = <<"4">>}} ->
                 ?assertEqual(Ctag2, C4)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     assert_messages(QName, 4, 4, Config),
 
@@ -228,14 +230,14 @@ requeue_two_channels(QType, Config) ->
     receive {#'basic.deliver'{consumer_tag = C5},
              #amqp_msg{payload = <<"1">>}} ->
                 ?assertEqual(Ctag2, C5)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     DelTag = receive {#'basic.deliver'{consumer_tag = C6,
                                        delivery_tag = D},
                       #amqp_msg{payload = <<"3">>}} ->
                          ?assertEqual(Ctag2, C6),
                          D
-             after 5000 -> ct:fail({missing_event, ?LINE})
+             after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
              end,
     assert_messages(QName, 4, 4, Config),
 

@@ -482,7 +482,7 @@ join_khepri_while_in_minority(Config) ->
             receive
                 #'basic.consume_ok'{consumer_tag = CTag} ->
                     ok
-            after 10000 ->
+            after 30_000 ->
                       exit(consume_ok_timeout)
             end,
 
@@ -490,7 +490,7 @@ join_khepri_while_in_minority(Config) ->
             receive
                 {#'basic.deliver'{consumer_tag = <<"ctag">>}, _} ->
                     ok
-            after 10000 ->
+            after 30_000 ->
                       exit(deliver_timeout)
             end,
 

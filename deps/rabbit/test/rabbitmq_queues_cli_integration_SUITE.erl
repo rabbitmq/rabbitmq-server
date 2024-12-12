@@ -161,6 +161,6 @@ publish_confirm(Ch, QName) ->
         #'basic.nack'{} ->
             ct:pal("NOT CONFIRMED! ~ts", [QName]),
             fail
-    after 10000 ->
+    after 30000 ->
             exit(confirm_timeout)
     end.

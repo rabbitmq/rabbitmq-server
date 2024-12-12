@@ -55,7 +55,7 @@ wait_for_credit(Sender) ->
     receive
         {amqp10_event, {link, Sender, credited}} ->
             ok
-    after 5000 ->
+    after 30_000 ->
               flush("wait_for_credit timed out"),
               ct:fail(credited_timeout)
     end.
@@ -66,7 +66,7 @@ wait_for_accepts(N) ->
     receive
         {amqp10_disposition, {accepted, _}} ->
             wait_for_accepts(N - 1)
-    after 5000 ->
+    after 30_000 ->
               ct:fail({missing_accepted, N})
     end.
 
@@ -108,9 +108,9 @@ wait_for_link_detach(Link) ->
         {amqp10_event, {link, Link, {detached, #'v1_0.detach'{}}}} ->
             flush(?FUNCTION_NAME),
             ok
-    after 5000 ->
-              flush("wait_for_link_detach timed out"),
-              ct:fail({link_detach_timeout, Link})
+    after 30_000 ->
+            flush("wait_for_link_detach timed out"),
+            ct:fail({link_detach_timeout, Link})
     end.
 
 end_session_sync(Session)
@@ -123,9 +123,9 @@ wait_for_session_end(Session) ->
         {amqp10_event, {session, Session, {ended, _}}} ->
             flush(?FUNCTION_NAME),
             ok
-    after 5000 ->
-              flush("wait_for_session_end timed out"),
-              ct:fail({session_end_timeout, Session})
+    after 30_000 ->
+            flush("wait_for_session_end timed out"),
+            ct:fail({session_end_timeout, Session})
     end.
 
 close_connection_sync(Connection)
@@ -138,7 +138,7 @@ wait_for_connection_close(Connection) ->
         {amqp10_event, {connection, Connection, {closed, normal}}} ->
             flush(?FUNCTION_NAME),
             ok
-    after 5000 ->
-              flush("wait_for_connection_close timed out"),
-              ct:fail({connection_close_timeout, Connection})
+    after 30_000 ->
+            flush("wait_for_connection_close timed out"),
+            ct:fail({connection_close_timeout, Connection})
     end.

@@ -81,7 +81,7 @@ message_size(Config) ->
     Address = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
     receive {amqp10_event, {link, Sender, credited}} -> ok
-    after 5000 -> ct:fail(credited_timeout)
+    after 30_000 -> ct:fail(credited_timeout)
     end,
 
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, Binary2B)),
@@ -149,6 +149,6 @@ wait_for_settlement(State, Tag) ->
     receive
         {amqp10_disposition, {State, Tag}} ->
             ok
-    after 5000 ->
-              ct:fail({disposition_timeout, Tag})
+    after 30_000 ->
+            ct:fail({disposition_timeout, Tag})
     end.

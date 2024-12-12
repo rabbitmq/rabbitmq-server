@@ -362,7 +362,7 @@ subscribe(Ch, QName) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
             ok
-    after 10000 ->
+    after 30000 ->
             exit(consume_ok_timeout)
     end.
 
@@ -372,6 +372,6 @@ consume(N) ->
     receive
         {#'basic.deliver'{consumer_tag = <<"ctag">>}, _} ->
             consume(N - 1)
-    after 10000 ->
+    after 30000 ->
             exit(deliver_timeout)
     end.

@@ -421,7 +421,7 @@ assert_confirm() ->
     receive
         #'basic.ack'{} ->
             ok
-    after 5000 ->
+    after 30_000 ->
               throw(missing_confirm)
     end.
 
@@ -429,7 +429,7 @@ assert_return() ->
     receive
         {#'basic.return'{}, _} ->
             ok
-    after 5000 ->
+    after 30_000 ->
               throw(missing_return)
     end.
 

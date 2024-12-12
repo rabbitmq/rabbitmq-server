@@ -6,6 +6,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+-define(TIMEOUT, 30_000).
+
 %%%===================================================================
 %%% Common Test callbacks
 %%%===================================================================
@@ -132,7 +134,7 @@ smoke(Config) ->
                           redelivered  = false},
          #amqp_msg{}} ->
             basic_ack(Ch, DeliveryTag)
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(),
               exit(basic_deliver_timeout)
     end,
@@ -151,7 +153,7 @@ smoke(Config) ->
          #amqp_msg{}} ->
             basic_cancel(Ch, ConsumerTag2),
             basic_nack(Ch, T)
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(basic_deliver_timeout)
     end,
     %% get and ack
@@ -255,7 +257,7 @@ stream(Config) ->
                               redelivered  = false},
              #amqp_msg{}} ->
                 basic_ack(SubCh, T)
-        after 5000 ->
+        after ?TIMEOUT ->
                   exit(basic_deliver_timeout)
         end
     catch
@@ -294,7 +296,7 @@ publish_and_confirm(Ch, Queue, Msg) ->
     ok = receive
              #'basic.ack'{}  -> ok;
              #'basic.nack'{} -> fail
-         after 2500 ->
+         after ?TIMEOUT ->
                    flush(),
                    exit(confirm_timeout)
          end.
@@ -318,7 +320,7 @@ subscribe(Ch, Queue, CTag) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
              ok
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(basic_consume_timeout)
     end.
 

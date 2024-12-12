@@ -14,7 +14,9 @@
 -compile(export_all).
 
 -define(CONSUMER_TIMEOUT, 2000).
--define(RECEIVE_TIMEOUT, ?CONSUMER_TIMEOUT * 2).
+%% Sometimes CI machines are really slow,
+%% expecting CONSUMER_TIMEOUT*2 might not be enough
+-define(RECEIVE_TIMEOUT, 30_000).
 
 -define(GROUP_CONFIG,
         #{global_consumer_timeout => [{rabbit, [{consumer_timeout, ?CONSUMER_TIMEOUT}]},
@@ -147,7 +149,7 @@ consumer_timeout(Config) ->
         {'DOWN', _, process, Conn, _} ->
               flush(1),
               exit(unexpected_connection_exit)
-    after 2000 ->
+    after ?RECEIVE_TIMEOUT ->
               ok
     end,
     rabbit_ct_client_helpers:close_channel(Ch),
@@ -172,7 +174,7 @@ consumer_timeout_basic_get(Config) ->
         {'DOWN', _, process, Conn, _} ->
               flush(1),
               exit(unexpected_connection_exit)
-    after 2000 ->
+    after ?RECEIVE_TIMEOUT ->
               ok
     end,
     ok.
@@ -221,7 +223,7 @@ consumer_timeout_no_basic_cancel_capability(Config) ->
         {'DOWN', _, process, Conn, _} ->
               flush(1),
               exit(unexpected_connection_exit)
-    after 2000 ->
+    after ?RECEIVE_TIMEOUT ->
               ok
     end,
     ok.

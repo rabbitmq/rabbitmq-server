@@ -111,7 +111,7 @@ amqp_x_cc_annotation(Config) ->
             ?assertEqual(
                <<"write access to topic 'x.1' in exchange 'amq.topic' in vhost '/' refused for user 'guest'">>,
                Description1)
-    after 5000 -> amqp_utils:flush(missing_ended),
+    after 30_000 -> amqp_utils:flush(missing_ended),
                   ct:fail({missing_event, ?LINE})
     end,
 
@@ -134,7 +134,7 @@ amqp_x_cc_annotation(Config) ->
             ?assertEqual(
                <<"write access to topic 'x.2' in exchange 'amq.topic' in vhost '/' refused for user 'guest'">>,
                Description2)
-    after 5000 -> amqp_utils:flush(missing_ended),
+    after 30_000 -> amqp_utils:flush(missing_ended),
                   ct:fail({missing_event, ?LINE})
     end,
 
@@ -178,7 +178,7 @@ amqpl_headers(Header, Config) ->
       #amqp_msg{payload = <<"m1">>,
                 props = #'P_basic'{headers = [{Header, array, [{longstr, <<"a.2">>}]}]}}),
     receive #'basic.ack'{} -> ok
-    after 5000 -> ct:fail({missing_confirm, ?LINE})
+    after 30_000 -> ct:fail({missing_confirm, ?LINE})
     end,
 
     monitor(process, Ch1),
@@ -412,6 +412,6 @@ assert_channel_down(Ch, Reason) ->
              {shutdown,
               {server_initiated_close, 403, Reason}}} ->
                 ok
-    after 5000 ->
+    after 30_000 ->
               ct:fail({did_not_receive, Reason})
     end.

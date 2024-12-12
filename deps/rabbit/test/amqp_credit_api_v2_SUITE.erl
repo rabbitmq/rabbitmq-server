@@ -80,10 +80,10 @@ credit_api_v2(Config) ->
     {ok, CQSender} = amqp10_client:attach_sender_link(Session, <<"cq sender">>, CQAddr),
     {ok, QQSender} = amqp10_client:attach_sender_link(Session, <<"qq sender">>, QQAddr),
     receive {amqp10_event, {link, CQSender, credited}} -> ok
-    after 5000 -> ct:fail(credited_timeout)
+    after 30_000 -> ct:fail(credited_timeout)
     end,
     receive {amqp10_event, {link, QQSender, credited}} -> ok
-    after 5000 -> ct:fail(credited_timeout)
+    after 30_000 -> ct:fail(credited_timeout)
     end,
 
     %% Send 40 messages to each queue.
@@ -146,7 +146,7 @@ credit_api_v2(Config) ->
     %% Draining should also work.
     ok = amqp10_client:flow_link_credit(CQReceiver3, 10, never, true),
     receive {amqp10_event, {link, CQReceiver3, credit_exhausted}} -> ok
-    after 5000 -> ct:fail({missing_credit_exhausted, ?LINE})
+    after 30_000 -> ct:fail({missing_credit_exhausted, ?LINE})
     end,
     receive Unexpected1 -> ct:fail({unexpected, ?LINE, Unexpected1})
     after 20 -> ok
@@ -154,7 +154,7 @@ credit_api_v2(Config) ->
 
     ok = amqp10_client:flow_link_credit(QQReceiver3, 10, never, true),
     receive {amqp10_event, {link, QQReceiver3, credit_exhausted}} -> ok
-    after 5000 -> ct:fail({missing_credit_exhausted, ?LINE})
+    after 30_000 -> ct:fail({missing_credit_exhausted, ?LINE})
     end,
     receive Unexpected2 -> ct:fail({unexpected, ?LINE, Unexpected2})
     after 20 -> ok
@@ -166,11 +166,11 @@ credit_api_v2(Config) ->
     ok = detach_sync(QQReceiver3),
     ok = amqp10_client:end_session(Session),
     receive {amqp10_event, {session, Session, {ended, _}}} -> ok
-    after 5000 -> ct:fail(missing_ended)
+    after 30_000 -> ct:fail(missing_ended)
     end,
     ok = amqp10_client:close_connection(Connection),
     receive {amqp10_event, {connection, Connection, {closed, normal}}} -> ok
-    after 5000 -> ct:fail(missing_closed)
+    after 30_000 -> ct:fail(missing_closed)
     end.
 
 consume_and_accept(NumMsgs, Receiver) ->
@@ -192,14 +192,14 @@ receive_messages0(Receiver, N, Acc) ->
     receive
         {amqp10_msg, Receiver, Msg} ->
             receive_messages0(Receiver, N - 1, [Msg | Acc])
-    after 5000 ->
+    after 30_000 ->
               exit({timeout, {num_received, length(Acc)}, {num_missing, N}})
     end.
 
 detach_sync(Receiver) ->
     ok = amqp10_client:detach_link(Receiver),
     receive {amqp10_event, {link, Receiver, {detached, normal}}} -> ok
-    after 5000 -> ct:fail({missing_detached, Receiver})
+    after 30_000 -> ct:fail({missing_detached, Receiver})
     end.
 
 flush(Prefix) ->

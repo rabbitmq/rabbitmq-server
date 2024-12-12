@@ -17,6 +17,8 @@
 
 -import(queue_utils, [wait_for_messages/2]).
 
+-define(TIMEOUT, 30_000).
+
 all() ->
     [
      {group, tests}
@@ -455,7 +457,7 @@ dead_letter_reject_many(Config) ->
     [begin
          receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, #amqp_msg{payload = P}} ->
                      amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag, requeue = false})
-         after 5000 ->
+         after ?TIMEOUT ->
                    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
                    exit(timeout)
          end
@@ -628,7 +630,7 @@ dead_letter_nack_requeue_nack_norequeue_basic_consume(Config) ->
                                             consumer_tag = Ctag1},
                            self()),
     receive #'basic.consume_ok'{consumer_tag = Ctag1} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     Ctag2 = <<"ctag 2">>,
@@ -637,20 +639,20 @@ dead_letter_nack_requeue_nack_norequeue_basic_consume(Config) ->
                                             consumer_tag = Ctag2},
                            self()),
     receive #'basic.consume_ok'{consumer_tag = Ctag2} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     receive {#'basic.deliver'{},
              #amqp_msg{payload = <<"m1">>}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     D2 = receive {#'basic.deliver'{delivery_tag = Del2},
                   #amqp_msg{payload = <<"m2">>}} -> Del2
-         after 5000 -> ct:fail({missing_event, ?LINE})
+         after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
          end,
     receive {#'basic.deliver'{},
              #amqp_msg{payload = <<"m3">>}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     wait_for_messages(Config, [[QName, <<"3">>, <<"0">>, <<"3">>]]),
 
@@ -663,13 +665,13 @@ dead_letter_nack_requeue_nack_norequeue_basic_consume(Config) ->
     receive {#'basic.deliver'{},
              #amqp_msg{payload = P1a}} ->
                 ?assertEqual(<<"m1">>, P1a)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     D5 = receive {#'basic.deliver'{delivery_tag = Del5},
                   #amqp_msg{payload = P2a}} ->
                      ?assertEqual(<<"m2">>, P2a),
                      Del5
-         after 5000 -> ct:fail({missing_event, ?LINE})
+         after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
          end,
 
     %% Nack all 3 without requeue
@@ -681,18 +683,18 @@ dead_letter_nack_requeue_nack_norequeue_basic_consume(Config) ->
     receive {#'basic.deliver'{},
              #amqp_msg{payload = P3b}} ->
                 ?assertEqual(<<"m3">>, P3b)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     receive {#'basic.deliver'{},
              #amqp_msg{payload = P1b}} ->
                 ?assertEqual(<<"m1">>, P1b)
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     LastD = receive {#'basic.deliver'{delivery_tag = LastDel},
                      #amqp_msg{payload = P2b}} ->
                         ?assertEqual(<<"m2">>, P2b),
                         LastDel
-            after 5000 -> ct:fail({missing_event, ?LINE})
+            after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
             end,
     wait_for_messages(Config, [[DLXQName, <<"3">>, <<"0">>, <<"3">>]]),
 
@@ -1726,7 +1728,7 @@ metric_rejected(Config) ->
     [begin
          receive {#'basic.deliver'{consumer_tag = CTag, delivery_tag = DTag}, #amqp_msg{payload = P}} ->
                      amqp_channel:cast(Ch, #'basic.reject'{delivery_tag = DTag, requeue = false})
-         after 5000 ->
+         after ?TIMEOUT ->
                    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
                    exit(timeout)
          end
@@ -1811,7 +1813,7 @@ stream(Config) ->
       self()),
     receive
         #'basic.consume_ok'{consumer_tag = Ctag} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
 
     Headers = receive {#'basic.deliver'{delivery_tag = DeliveryTag},

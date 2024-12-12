@@ -16,6 +16,8 @@
 
 -import(rabbit_ct_helpers, [eventually/1]).
 
+-define(TIMEOUT, 30_000).
+
 all() ->
     [
      {group, cluster_size_1},
@@ -116,7 +118,7 @@ trace(Config) ->
                                    correlation_id = CorrelationId},
                 payload = RequestPayload}),
     receive #'basic.ack'{} -> ok
-    after 5000 -> ct:fail(confirm_timeout)
+    after ?TIMEOUT -> ct:fail(confirm_timeout)
     end,
 
     %% Receive the request.
@@ -138,7 +140,7 @@ trace(Config) ->
              #amqp_msg{payload = ReplyPayload,
                        props = #'P_basic'{correlation_id = CorrelationId}}} ->
                 ok
-    after 5000 -> ct:fail(missing_reply)
+    after ?TIMEOUT -> ct:fail(missing_reply)
     end,
 
     %% 2 messages should have entered RabbitMQ:
@@ -217,7 +219,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
                                    correlation_id = CorrelationId},
                 payload = RequestPayload}),
     receive #'basic.ack'{} -> ok
-    after 5000 -> ct:fail(confirm_timeout)
+    after ?TIMEOUT -> ct:fail(confirm_timeout)
     end,
 
     ok = wait_for_queue_declared(RequestQueue, ResponderNode, Config),
@@ -239,7 +241,7 @@ rpc(RequesterNode, ResponderNode, Config) ->
              #amqp_msg{payload = ReplyPayload,
                        props = #'P_basic'{correlation_id = CorrelationId}}} ->
                 ok
-    after 5000 -> ct:fail(missing_reply)
+    after ?TIMEOUT -> ct:fail(missing_reply)
     end.
 
 wait_for_queue_declared(Queue, Node, Config) ->
