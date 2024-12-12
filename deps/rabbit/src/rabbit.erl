@@ -32,6 +32,7 @@
          motd_file/0,
          motd/0,
          pg_local_scope/1]).
+
 %% For CLI, testing and mgmt-agent.
 -export([set_log_level/1, log_locations/0, config_files/0]).
 -export([is_booted/1, is_booted/0, is_booting/1, is_booting/0]).
