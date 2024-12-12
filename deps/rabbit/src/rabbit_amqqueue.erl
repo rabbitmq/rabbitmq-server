@@ -1953,6 +1953,12 @@ delete_transient_queues_on_node(Node) ->
 
 filter_transient_queues_to_delete(Node) ->
     fun(Q) ->
+            rabbit_log:info("filter_transient_queues_to_delete: ~p: qnode: ~p, process_alive: ~p, dead_exclusive: ~p",
+                            [Q,
+                             amqqueue:qnode(Q),
+                             rabbit_process:is_process_alive(amqqueue:get_pid(Q)),
+                             is_dead_exclusive(Q)
+                            ]),
             amqqueue:qnode(Q) == Node andalso
                 not rabbit_process:is_process_alive(amqqueue:get_pid(Q))
                 andalso (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q))
