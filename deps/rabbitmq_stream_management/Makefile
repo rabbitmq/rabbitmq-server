@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_stream_management
 PROJECT_DESCRIPTION = RabbitMQ Stream Management
-PROJECT_MOD = rabbit_stream_management
 
 define PROJECT_ENV
 [
