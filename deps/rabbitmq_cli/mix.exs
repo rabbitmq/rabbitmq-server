@@ -20,8 +20,8 @@ defmodule RabbitMQCtl.MixfileBase do
         path: "escript/rabbitmqctl"
       ],
       prune_code_paths: false,
+      elixirc_options: [ignore_module_conflict: true],
       deps: deps(Mix.env()),
-      aliases: aliases(),
       xref: [
         exclude: [
           CSV,
@@ -142,6 +142,7 @@ defmodule RabbitMQCtl.MixfileBase do
     fake_cmd = "true"
     is_bazel = System.get_env("IS_BAZEL") != nil
 
+    # Note that normal deps will be fetched by Erlang.mk on build.
     [
       {
         :json,
@@ -195,30 +196,5 @@ defmodule RabbitMQCtl.MixfileBase do
         _ ->
           []
       end
-  end
-
-  defp aliases do
-    [
-      make_deps: [
-        "deps.get",
-        "deps.compile"
-      ],
-      make_app: [
-        "compile",
-        "escript.build"
-      ],
-      make_all: [
-        "deps.get",
-        "deps.compile",
-        "compile",
-        "escript.build"
-      ],
-      make_all_in_src_archive: [
-        "deps.get --only prod",
-        "deps.compile",
-        "compile",
-        "escript.build"
-      ]
-    ]
   end
 end

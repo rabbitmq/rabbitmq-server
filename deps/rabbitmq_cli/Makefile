@@ -1,7 +1,21 @@
-PROJECT = rabbitmq_cli
+PROJECT = rabbitmqctl
+
+define PROJECT_ENV
+[{scopes, #{
+    rabbitmqctl => ctl,
+    'rabbitmq-diagnostics' => diagnostics,
+    'rabbitmq-plugins' => plugins,
+    'rabbitmq-queues' => queues,
+    'rabbitmq-streams' => streams,
+    'rabbitmq-upgrade' => upgrade,
+    'vmware-rabbitmq' => vmware
+}}]
+endef
 
 BUILD_DEPS = rabbit_common
 DEPS = csv json stdout_formatter
+LOCAL_DEPS = elixir
+
 TEST_DEPS = amqp amqp_client temp x509 rabbit
 
 dep_amqp = hex 3.3.0
@@ -16,6 +30,11 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
 VERBOSE_TEST ?= true
 MAX_CASES ?= 1
 
+# Force enable Elixir in this project since
+# this is an Elixir application.
+ELIXIR = system
+
+# We are still using Mix for testing.
 MIX_TEST_OPTS ?= ""
 MIX_TEST = ERL_COMPILER_OPTIONS=deterministic MIX_ENV=test mix do compile --warnings-as-errors, test --max-cases=$(MAX_CASES) --warnings-as-errors
 
@@ -27,34 +46,37 @@ ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace
 endif
 
+EUNIT = disable
+
 export MAKE
+
+ESCRIPT_NAME = Elixir.RabbitMQCtl
+ESCRIPT_FILE = escript/rabbitmqctl
+
+.DEFAULT_GOAL = $(ESCRIPT_FILE)
+
+escript::
+	$(verbose) mkdir -p escript/
 
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-# rabbitmq-mix.mk is generated during the creation of the RabbitMQ
-# source archive. It sets some environment variables to allow
-# rabbitmq_cli to build offline, using the bundled sources only.
--include rabbitmq-mix.mk
+$(ESCRIPT_FILE): $(EX_FILES)
+	$(verbose) $(MAKE) escript
 
-ACTUAL_ESCRIPTS = escript/rabbitmqctl
+ESCRIPT_EMU_ARGS += -hidden
+
+escript-zip::
+	$(verbose) $(ESCRIPT_ZIP) $(ESCRIPT_ZIP_FILE) $(ELIXIR_LIBS)/*
+
 LINKED_ESCRIPTS = escript/rabbitmq-plugins \
-		  escript/rabbitmq-diagnostics \
-		  escript/rabbitmq-queues \
-		  escript/rabbitmq-streams \
-			escript/vmware-rabbitmq \
-      escript/rabbitmq-upgrade
-ESCRIPTS = $(ACTUAL_ESCRIPTS) $(LINKED_ESCRIPTS)
+	escript/rabbitmq-diagnostics \
+	escript/rabbitmq-queues \
+	escript/rabbitmq-streams \
+	escript/vmware-rabbitmq \
+	escript/rabbitmq-upgrade
 
-# Record the build and link dependency: the target files are linked to
-# their first dependency.
-rabbitmq-plugins = escript/rabbitmqctl
-rabbitmq-diagnostics = escript/rabbitmqctl
-rabbitmq-queues = escript/rabbitmqctl
-rabbitmq-streams = escript/rabbitmqctl
-rabbitmq-upgrade = escript/rabbitmqctl
-vmware-rabbitmq = escript/rabbitmqctl
-escript/rabbitmq-plugins escript/rabbitmq-diagnostics escript/rabbitmq-queues escript/rabbitmq-streams escript/rabbitmq-upgrade escript/vmware-rabbitmq: escript/rabbitmqctl
+escript:: $(LINKED_ESCRIPTS)
 
 # We use hardlinks or symlinks in the `escript` directory and
 # install's PREFIX when a single escript can have several names (eg.
@@ -76,17 +98,9 @@ else
 link_escript = ln -f "$(dir $(2))$(notdir $(1))" "$(2)"
 endif
 
-app:: $(ESCRIPTS)
-	@:
-
-rabbitmqctl_srcs := mix.exs \
-	$(call core_find,config/,*.exs) \
-	$(call core_find,lib/,*.ex)
-
-# Elixir dependencies are fetched and compiled as part of the alias
-# `mix make_all`. We do not fetch and build them in `make deps` because
-# mix(1) startup time is quite high. Thus we prefer to run it once, even
-# though it kind of breaks the Erlang.mk model.
+# Erlang.mk will fetch dependencies as it now has native Elixir support.
+# However we are still using Mix for tests and this means Mix will fetch
+# test dependencies.
 #
 # We write `y` on mix stdin because it asks approval to install Hex if
 # it's missing. Another way to do it is to use `mix local.hex` but it
@@ -100,24 +114,16 @@ rabbitmqctl_srcs := mix.exs \
 # we do to create the source archive, and we must do the same here,
 # otherwise mix(1) complains about missing dependencies (the non-prod
 # ones).
-$(ACTUAL_ESCRIPTS): $(rabbitmqctl_srcs)
-	$(gen_verbose) if test -d ../.hex; then \
-		echo y | ERL_COMPILER_OPTIONS=deterministic mix make_all_in_src_archive; \
-	else \
-		echo y | ERL_COMPILER_OPTIONS=deterministic mix make_all; \
-	fi
 
-$(LINKED_ESCRIPTS):
+$(LINKED_ESCRIPTS): $(ESCRIPT_FILE)
 	$(verbose) rm -f "$@"
 	$(gen_verbose) $(call link_escript,$<,$@)
 
-rel:: $(ESCRIPTS)
-	@:
-
-tests:: $(ESCRIPTS)
+tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
-		PLUGINS="rabbit rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client"
+		PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db")
 	$(gen_verbose) $(MIX_TEST) \
 		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \
 		$(TEST_FILE); \
@@ -127,26 +133,26 @@ tests:: $(ESCRIPTS)
 
 .PHONY: test
 
-test:: $(ESCRIPTS)
+test:: escript test-deps
 ifdef TEST_FILE
 	$(gen_verbose) $(MIX_TEST) $(TEST_FILE)
 else
 	$(verbose) echo "TEST_FILE must be set, e.g. TEST_FILE=./test/ctl" 1>&2; false
 endif
 
-dialyzer:: $(ESCRIPTS)
+dialyzer:: escript
 	MIX_ENV=test mix dialyzer
 
 .PHONY: install
 
-install: $(ESCRIPTS)
+install: $(ESCRIPT_FILE)
 ifdef PREFIX
 	$(gen_verbose) mkdir -p "$(DESTDIR)$(PREFIX)"
-	$(verbose) $(foreach script,$(ACTUAL_ESCRIPTS), \
-		cmp -s "$(script)" "$(DESTDIR)$(PREFIX)/$(notdir $(script))" || \
-		cp "$(script)" "$(DESTDIR)$(PREFIX)/$(notdir $(script))";)
+	$(verbose) \
+		cmp -s "$(ESCRIPT_FILE)" "$(DESTDIR)$(PREFIX)/$(notdir $(ESCRIPT_FILE))" || \
+		cp "$(ESCRIPT_FILE)" "$(DESTDIR)$(PREFIX)/$(notdir $(ESCRIPT_FILE))"
 	$(verbose) $(foreach script,$(LINKED_ESCRIPTS), \
-		$(call link_escript,$($(notdir $(script))),$(DESTDIR)$(PREFIX)/$(notdir $(script)));)
+		$(call link_escript,$(ESCRIPT_FILE),$(DESTDIR)$(PREFIX)/$(notdir $(script)));)
 else
 	$(verbose) echo "You must specify a PREFIX" 1>&2; false
 endif
@@ -154,7 +160,7 @@ endif
 clean:: clean-mix
 
 clean-mix:
-	$(gen_verbose) rm -f $(ESCRIPTS)
+	$(gen_verbose) rm -f $(ESCRIPT_FILE) $(LINKED_ESCRIPTS)
 	$(verbose) echo y | mix clean
 
 format:

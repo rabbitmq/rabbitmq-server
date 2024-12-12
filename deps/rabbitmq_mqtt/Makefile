@@ -44,7 +44,7 @@ LOCAL_DEPS = ssl
 DEPS = ranch rabbit amqp10_common
 TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream
 
-PLT_APPS += rabbitmqctl elixir
+PLT_APPS += rabbitmq_cli elixir
 
 dep_ct_helper = git https://github.com/extend/ct_helper.git master
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.11.0
@@ -143,6 +143,7 @@ tpl_parallel_ct_test_spec_set_$1 = $$(call tpl_parallel_ct_test_spec,$(PARALLEL_
 parallel-ct-set-$(1): test-build
 	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(verbose) $$(call core_render,tpl_parallel_ct_test_spec_set_$(1),ct.set-$(1).spec)
+	$$(eval ERL := erl -noinput -boot no_dot_erlang)
 	$$(call erlang,$$(call ct_master.erl,ct.set-$(1).spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
 endef
 
