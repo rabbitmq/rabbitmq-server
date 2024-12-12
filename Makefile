@@ -31,10 +31,6 @@ DISABLE_DISTCLEAN = 1
 
 XREF_SCOPE = app deps
 
-# We add all the applications that are in non-standard paths
-# so they are included in the analyses as well.
-XREF_EXTRA_APP_DIRS = $(filter-out deps/rabbitmq_cli/_build/dev/lib/rabbit_common/,$(wildcard deps/rabbitmq_cli/_build/dev/lib/*/)) deps/rabbitmq_prelaunch/
-
 # For Elixir protocols the right fix is to include the consolidated/
 # folders in addition to ebin/. However this creates conflicts because
 # some modules are duplicated. So instead we ignore warnings from
@@ -48,63 +44,11 @@ XREF_IGNORE = [ \
 # Include Elixir libraries in the Xref checks.
 xref: ERL_LIBS := $(ERL_LIBS):$(CURDIR)/apps:$(CURDIR)/deps:$(dir $(shell elixir --eval ":io.format '~s~n', [:code.lib_dir :elixir ]"))
 
-ifneq ($(wildcard deps/.hex/cache.erl),)
-deps:: restore-hex-cache-ets-file
-endif
-
 include rabbitmq-components.mk
 include erlang.mk
 include mk/github-actions.mk
 include mk/bazel.mk
 include mk/topic-branches.mk
-
-# --------------------------------------------------------------------
-# Mix Hex cache management.
-# --------------------------------------------------------------------
-
-# We restore the initial Hex cache.ets file from an Erlang term created
-# at the time the source archive was prepared.
-#
-# See the `$(SOURCE_DIST)` recipe for the reason behind this step.
-
-restore-hex-cache-ets-file: deps/.hex/cache.ets
-
-deps/.hex/cache.ets: deps/.hex/cache.erl
-	$(gen_verbose) $(call erlang,$(call restore_hex_cache_from_erl_term,$<,$@))
-
-define restore_hex_cache_from_erl_term
-  In = "$(1)",
-  Out = "$(2)",
-  {ok, [Props, Entries]} = file:consult(In),
-  Name = proplists:get_value(name, Props),
-  Type = proplists:get_value(type, Props),
-  Access = proplists:get_value(protection, Props),
-  NamedTable = proplists:get_bool(named_table, Props),
-  Keypos = proplists:get_value(keypos, Props),
-  Heir = proplists:get_value(heir, Props),
-  ReadConc = proplists:get_bool(read_concurrency, Props),
-  WriteConc = proplists:get_bool(write_concurrency, Props),
-  Compressed = proplists:get_bool(compressed, Props),
-  Options0 = [
-    Type,
-    Access,
-    {keypos, Keypos},
-    {heir, Heir},
-    {read_concurrency, ReadConc},
-    {write_concurrency, WriteConc}],
-  Options1 = case NamedTable of
-    true  -> [named_table | Options0];
-    false -> Options0
-  end,
-  Options2 = case Compressed of
-    true  -> [compressed | Options0];
-    false -> Options0
-  end,
-  Tab = ets:new(Name, Options2),
-  [true = ets:insert(Tab, Entry) || Entry <- Entries],
-  ok = ets:tab2file(Tab, Out),
-  init:stop().
-endef
 
 # --------------------------------------------------------------------
 # Distribution - common variables and generic functions.
@@ -248,14 +192,6 @@ $(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$$$|include ../../erlang.mk|" \
 		 $$@/deps/$$$$(basename $$$$dep)/Makefile && \
 		rm $$@/deps/$$$$(basename $$$$dep)/Makefile.bak; \
-		mix_exs=$$@/deps/$$$$(basename $$$$dep)/mix.exs; \
-		if test -f $$$$mix_exs; then \
-			(cd $$$$(dirname "$$$$mix_exs") && \
-			 (test -d $$@/deps/.hex || env DEPS_DIR=$$@/deps MIX_HOME=$$@/deps/.mix HEX_HOME=$$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
-			 env DEPS_DIR=$$@/deps MIX_HOME=$$@/deps/.mix HEX_HOME=$$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
-			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
-			 rm -rf _build deps); \
-		fi; \
 		if test -f "$$$$dep/license_info"; then \
 			cp "$$$$dep/license_info" "$$@/deps/licensing/license_info_$$$$(basename $$$$dep)"; \
 			cat "$$$$dep/license_info" >> $$@/LICENSE; \
@@ -280,7 +216,6 @@ $(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	done
 	$${verbose} echo "PLUGINS := $(PLUGINS)" > $$@/plugins.mk
 	$${verbose} sort -r < "$$@.git-times.txt" | head -n 1 > "$$@.git-time.txt"
-	$${verbose} $$(call erlang,$$(call dump_hex_cache_to_erl_term,$$(call core_native_path,$$@),$$(call core_native_path,$$@.git-time.txt)))
 	$${verbose} find $$@ -print0 | xargs -0 touch -t "$$$$(cat $$@.git-time.txt)"
 	$${verbose} rm "$$@.git-times.txt" "$$@.git-time.txt"
 
@@ -320,47 +255,6 @@ clean-$(1):
 
 # Add each clean target to the clean:: rule
 clean:: clean-$(1)
-endef
-
-# Mix Hex component requires a cache file, otherwise it refuses to build
-# offline... That cache is an ETS table with all the applications we
-# depend on, plus some versioning informations and checksums. There
-# are two problems with that: the table contains a date (`last_update`
-# field) and `ets:tab2file()` produces a different file each time it's
-# called.
-#
-# To make our source archive reproducible, we fix the time of the
-# `last_update` field to the last Git commit and dump the content of the
-# table as an Erlang term to a text file.
-#
-# The ETS file must be recreated before compiling RabbitMQ. See the
-# `restore-hex-cache-ets-file` Make target.
-define dump_hex_cache_to_erl_term
-  In = "$(1)/deps/.hex/cache.ets",
-  Out = "$(1)/deps/.hex/cache.erl",
-  {ok, DateStr} = file:read_file("$(2)"),
-  {match, Date} = re:run(DateStr,
-    "^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})\.([0-9]{2})",
-    [{capture, all_but_first, list}]),
-  [Year, Month, Day, Hour, Min, Sec] = [erlang:list_to_integer(V) || V <- Date],
-  {ok, Tab} = ets:file2tab(In),
-  true = ets:insert(Tab, {last_update, {{Year, Month, Day}, {Hour, Min, Sec}}}),
-  Props = [
-    Prop
-    || {Key, _} = Prop <- ets:info(Tab),
-    Key =:= name orelse
-    Key =:= type orelse
-    Key =:= protection orelse
-    Key =:= named_table orelse
-    Key =:= keypos orelse
-    Key =:= heir orelse
-    Key =:= read_concurrency orelse
-    Key =:= write_concurrency orelse
-    Key =:= compressed],
-  Entries = ets:tab2list(Tab),
-  ok = file:write_file(Out, io_lib:format("~w.~n~w.~n", [Props, Entries])),
-  ok = file:delete(In),
-  init:stop().
 endef
 
 # --------------------------------------------------------------------

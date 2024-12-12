@@ -1,6 +1,5 @@
 PROJECT = amqp10_client
-PROJECT_DESCRIPTION = AMQP 1.0 client from the RabbitMQ Project
-PROJECT_MOD = amqp10_client_app
+PROJECT_DESCRIPTION = AMQP 1.0 client
 
 define PROJECT_APP_EXTRA_KEYS
 %% Hex.pm package informations.
