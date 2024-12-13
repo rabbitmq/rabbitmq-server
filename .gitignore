@@ -103,6 +103,7 @@ extra_deps/
 .erlang.cookie
 erl_crash.dump
 MnesiaCore.*
+Mnesia.rmq-ct-*
 
 # RabbitMQ Makefiles temporary files and outputs.
 *.lock
