@@ -433,9 +433,9 @@ record_death(Reason, SourceQueue,
                                             [{Key, NewDeath} | Deaths0]
                                     end
                             end,
-                   Anns0#{<<"x-last-death-reason">> := ReasonBin,
-                          <<"x-last-death-queue">> := SourceQueue,
-                          <<"x-last-death-exchange">> := Exchange,
+                   Anns0#{<<"x-last-death-reason">> => ReasonBin,
+                          <<"x-last-death-queue">> => SourceQueue,
+                          <<"x-last-death-exchange">> => Exchange,
                           deaths := Deaths};
                _ ->
                    Deaths = case Env of
