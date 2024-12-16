@@ -17,8 +17,6 @@ on:
 jobs:
   test-rabbit:
     name: Test rabbit
-    env:
-      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
     strategy:
       fail-fast: false
       matrix:
