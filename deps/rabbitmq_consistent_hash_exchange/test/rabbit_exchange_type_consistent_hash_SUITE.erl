@@ -204,7 +204,6 @@ amqp_dead_letter(Config) ->
 
     ok = rabbitmq_amqp_client:declare_exchange(
            LinkPair, XName, #{type => <<"x-consistent-hash">>,
-                              durable => true,
                               auto_delete => true,
                               arguments => #{<<"hash-property">> => {utf8, <<"correlation_id">>}}}),
     {ok, #{type := <<"quorum">>}} = rabbitmq_amqp_client:declare_queue(

@@ -127,8 +127,7 @@ all_management_operations(Config) ->
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
 
     QName = <<"my 🐇"/utf8>>,
-    QProps = #{durable => true,
-               exclusive => false,
+    QProps = #{exclusive => false,
                auto_delete => false,
                arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>}}},
     {ok, QInfo} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
@@ -193,7 +192,6 @@ all_management_operations(Config) ->
 
     XName = <<"my fanout exchange 🥳"/utf8>>,
     XProps = #{type => <<"fanout">>,
-               durable => false,
                auto_delete => true,
                internal => false,
                arguments => #{<<"x-📥"/utf8>> => {utf8, <<"📮"/utf8>>}}},
@@ -202,7 +200,7 @@ all_management_operations(Config) ->
 
     {ok, Exchange} = rpc(Config, rabbit_exchange, lookup, [rabbit_misc:r(<<"/">>, exchange, XName)]),
     ?assertMatch(#exchange{type = fanout,
-                           durable = false,
+                           durable = true,
                            auto_delete = true,
                            internal = false,
                            arguments = [{<<"x-📥"/utf8>>, longstr, <<"📮"/utf8>>}]},
@@ -281,13 +279,12 @@ queue_defaults(Config) ->
 queue_properties(Config) ->
     Init = {_, LinkPair} = init(Config),
     QName = atom_to_binary(?FUNCTION_NAME),
-    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{durable => false,
-                                                                    exclusive => true,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{exclusive => true,
                                                                     auto_delete => true}),
     [Q] = rpc(Config, rabbit_amqqueue, list, []),
-    ?assertNot(rpc(Config, amqqueue, is_durable, [Q])),
     ?assert(rpc(Config, amqqueue, is_exclusive, [Q])),
     ?assert(rpc(Config, amqqueue, is_auto_delete, [Q])),
+    ?assert(rpc(Config, amqqueue, is_durable, [Q])),
 
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = cleanup(Init).
@@ -310,8 +307,7 @@ exchange_defaults(Config) ->
 queue_binding_args(Config) ->
     Init = {_, LinkPair = #link_pair{session = Session}} = init(Config),
     QName = <<"my queue ~!@#$%^&*()_+🙈`-=[]\;',./"/utf8>>,
-    Q = #{durable => false,
-          exclusive => true,
+    Q = #{exclusive => true,
           auto_delete => false,
           arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>}}},
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, Q),
@@ -589,8 +585,7 @@ declare_exchange_inequivalent_fields(Config) ->
 classic_queue_stopped(Config) ->
     Init2 = {_, LinkPair2} = init(Config, 2),
     QName = <<"👌"/utf8>>,
-    {ok, #{durable := true,
-           type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(LinkPair2, QName, #{}),
+    {ok, #{type := <<"classic">>}} = rabbitmq_amqp_client:declare_queue(LinkPair2, QName, #{}),
     ok = cleanup(Init2),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 2),
     %% Classic queue is now stopped.
