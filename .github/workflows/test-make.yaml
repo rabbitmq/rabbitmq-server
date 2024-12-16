@@ -10,7 +10,7 @@ on:
     - Makefile
     - plugins.mk
     - rabbitmq-components.mk
-    - .github/workflows/test-make.yaml
+    - .github/workflows/test-make*.yaml
   pull_request:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
