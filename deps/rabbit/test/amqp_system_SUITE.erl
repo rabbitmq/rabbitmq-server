@@ -90,8 +90,14 @@ end_per_testcase(Testcase, Config) ->
 build_dotnet_test_project(Config) ->
     TestProjectDir = filename:join(
                        [?config(data_dir, Config), "fsharp-tests"]),
+    Env = [
+        %% https://learn.microsoft.com/en-us/dotnet/core/runtime-config/globalization
+        %% https://github.com/dotnet/runtime/blob/main/docs/design/features/globalization-invariant-mode.md
+        {"DOTNET_SYSTEM_GLOBALIZATION_INVARIANT", "true"}
+    ],
     Ret = rabbit_ct_helpers:exec(["dotnet", "restore"],
-                                 [{cd, TestProjectDir}]),
+                                 [{cd, TestProjectDir},
+                                  {env, Env}]),
     case Ret of
         {ok, _} ->
             rabbit_ct_helpers:set_config(
