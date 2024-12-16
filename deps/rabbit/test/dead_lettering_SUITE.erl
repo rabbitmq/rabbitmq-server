@@ -1359,24 +1359,33 @@ dead_letter_headers_should_not_be_appended_for_republish(Config) ->
         amqp_channel:call(Ch0, #'basic.get'{queue = DlxName}),
     {array, [{table, Death1}]} = rabbit_misc:table_lookup(Headers1, <<"x-death">>),
     ?assertEqual({longstr, <<"rejected">>}, rabbit_misc:table_lookup(Death1, <<"reason">>)),
-
     amqp_channel:cast(Ch0, #'basic.ack'{delivery_tag = DTag1}),
-
     wait_for_messages(Config, [[DlxName, <<"0">>, <<"0">>, <<"0">>]]),
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch0, #'queue.delete'{queue = QName}),
     DeadLetterArgs1 = DeadLetterArgs ++ [{<<"x-message-ttl">>, long, 1}],
     #'queue.declare_ok'{} = amqp_channel:call(Ch0, #'queue.declare'{queue = QName, arguments = DeadLetterArgs1 ++ Args, durable = Durable}),
 
-    publish(Ch1, QName, [P], Headers1),
-
+    publish(Ch0, QName, [P], Headers1),
     wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
-    {#'basic.get_ok'{}, #amqp_msg{payload = P,
-                                  props = #'P_basic'{headers = Headers2}}} =
+    {#'basic.get_ok'{delivery_tag = DTag2},
+     #amqp_msg{payload = P,
+               props = #'P_basic'{headers = Headers2}}} =
         amqp_channel:call(Ch0, #'basic.get'{queue = DlxName}),
-
     {array, [{table, Death2}]} = rabbit_misc:table_lookup(Headers2, <<"x-death">>),
     ?assertEqual({longstr, <<"expired">>}, rabbit_misc:table_lookup(Death2, <<"reason">>)),
+    amqp_channel:cast(Ch0, #'basic.ack'{delivery_tag = DTag2}),
+    wait_for_messages(Config, [[DlxName, <<"0">>, <<"0">>, <<"0">>]]),
+
+    %% In 4.0/3.13 mixed version testing, the 3.13 node will interpret
+    %% the x-death header of the message we publish next.
+    publish(Ch1, QName, [P], Headers1),
+    %% Our expectation is no crash when this message is dead lettered on the 4.0 node, see
+    %% https://github.com/rabbitmq/rabbitmq-server/issues/12933
+    wait_for_messages(Config, [[DlxName, <<"1">>, <<"1">>, <<"0">>]]),
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = P}},
+                 amqp_channel:call(Ch0, #'basic.get'{queue = DlxName})),
+
     ok = rabbit_ct_client_helpers:close_connection(Conn0),
     ok = rabbit_ct_client_helpers:close_connection(Conn1).
 
