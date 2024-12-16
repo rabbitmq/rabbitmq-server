@@ -655,7 +655,10 @@ handle_tick(QName,
                                        [rabbit_misc:rs(QName), Err]),
                       ok
               end
-      end).
+      end);
+handle_tick(QName, Config, _Nodes) ->
+    rabbit_log:debug("~ts: handle tick received unexpected config format ~tp",
+                     [rabbit_misc:rs(QName), Config]).
 
 repair_leader_record(Q, Self) ->
     Node = node(),
