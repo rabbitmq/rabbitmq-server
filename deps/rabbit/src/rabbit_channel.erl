@@ -570,8 +570,10 @@ prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm,            _MsgSeqNos, _QPid} -> 5;
         {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        {queue_event, _, {confirm,            _MsgSeqNos, _QPid}} -> 5;
+        % {queue_event, _, {confirm,            _MsgSeqNos, _QPid}} -> 5;
         {queue_event, _, {reject_publish,     _MsgSeqNos, _QPid}} -> 5;
+        {method, #'basic.ack'{}, _Content, _Flow} -> 5;
+        % {queue_event, _, {delivery, _, _}} -> 0;
         _                                       -> 0
     end.
 
@@ -661,10 +663,14 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
     ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
-handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
+handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg},
+            #ch{consumer_mapping = CMap} = State)
+  when is_map_key(CTag, CMap) ->
     ok = send(Msg, State),
     noreply(consumer_monitor(CTag, State));
-
+handle_cast({command, #'basic.consume_ok'{}}, State) ->
+    %% a consumer was not found so just ignore this
+    noreply(State);
 handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);

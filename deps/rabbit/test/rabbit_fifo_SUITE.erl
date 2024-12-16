@@ -117,7 +117,7 @@ enq_enq_checkout_test(Config, Spec) ->
                next_msg_id := NextMsgId}, Effects} =
         checkout(Config, ?LINE, Cid, Spec, State2),
     ?ASSERT_EFF({monitor, _, _}, Effects),
-    ?ASSERT_EFF({log, [1, 2], _Fun, _Local}, Effects),
+    ?ASSERT_EFF({log_ext, [1, 2], _Fun, _Local}, Effects),
 
     {State4, _} = settle(Config, CKey, ?LINE,
                          [NextMsgId, NextMsgId+1], State3),
@@ -137,11 +137,11 @@ credit_enq_enq_checkout_settled_credit_v1_test(Config) ->
         checkout(Config, ?LINE, Cid, {auto, 0, credited}, State2),
     ?ASSERT_EFF({monitor, _, _}, Effects3),
     {State4, Effects4} = credit(Config, CKey, ?LINE, 1, 0, false, State3),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects4),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects4),
     %% settle the delivery this should _not_ result in further messages being
     %% delivered
     {State5, SettledEffects} = settle(Config, CKey, ?LINE, NextMsgId, State4),
-    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
                                           true;
                                       (_) ->
                                           false
@@ -149,9 +149,9 @@ credit_enq_enq_checkout_settled_credit_v1_test(Config) ->
     %% granting credit (3) should deliver the second msg if the receivers
     %% delivery count is (1)
     {State6, CreditEffects} = credit(Config, CKey, ?LINE, 1, 1, false, State5),
-    ?ASSERT_EFF({log, [2], _, _}, CreditEffects),
+    ?ASSERT_EFF({log_ext, [2], _, _}, CreditEffects),
     {_State, FinalEffects} = enq(Config, 6, 3, third, State6),
-    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
                                           true;
                                       (_) -> false
                                   end, FinalEffects)),
@@ -168,23 +168,23 @@ credit_enq_enq_checkout_settled_credit_v2_test(Config) ->
         checkout(Config, ?LINE, Cid, {auto, {credited, InitDelCnt}}, State2),
     ?ASSERT_EFF({monitor, _, _}, Effects3),
     {State4, Effects4} = credit(Config, CKey, ?LINE, 1, InitDelCnt, false, State3),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects4),
+    ?ASSERT_EFF({log_ext, [1], _Plan, _Local}, Effects4),
     %% Settling the delivery should not grant new credit.
     {State5, SettledEffects} = settle(Config, CKey, 4, NextMsgId, State4),
-    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
                                           true;
                                       (_) ->
                                           false
                                   end, SettledEffects)),
     {State6, CreditEffects} = credit(Config, CKey, ?LINE, 1, 0, false, State5),
-    ?ASSERT_EFF({log, [2], _, _}, CreditEffects),
+    ?ASSERT_EFF({log_ext, [2], _, _}, CreditEffects),
     %% The credit_reply should be sent **after** the delivery.
     ?assertEqual({send_msg, self(),
                   {credit_reply, Ctag, _DeliveryCount = 1, _Credit = 0, _Available = 0, _Drain = false},
                   ?DELIVERY_SEND_MSG_OPTS},
                  lists:last(CreditEffects)),
     {_State, FinalEffects} = enq(Config, 6, 3, third, State6),
-    ?assertEqual(false, lists:any(fun ({log, _, _, _}) ->
+    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
                                           true;
                                       (_) -> false
                                   end, FinalEffects)).
@@ -246,7 +246,7 @@ credit_and_drain_v1_test(Config) ->
         apply(meta(Config, 3), make_checkout(Cid, {auto, 0, credited}, #{}),
               State2),
 
-    ?ASSERT_NO_EFF({log, _, _, _}, CheckEffs),
+    ?ASSERT_NO_EFF({log_ext, _, _, _}, CheckEffs),
     {State4, {multi, [{send_credit_reply, 0},
                       {send_drained, {Ctag, 2}}]},
     Effects} = apply(meta(Config, 4), rabbit_fifo:make_credit(Cid, 4, 0, true), State3),
@@ -254,9 +254,9 @@ credit_and_drain_v1_test(Config) ->
                                                              delivery_count = 4}}},
                  State4),
 
-    ?ASSERT_EFF({log, [1, 2], _, _}, Effects),
+    ?ASSERT_EFF({log_ext, [1, 2], _, _}, Effects),
     {_State5, EnqEffs} = enq(Config, 5, 2, third, State4),
-    ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs),
+    ?ASSERT_NO_EFF({log_ext, _, _, _}, EnqEffs),
     ok.
 
 credit_and_drain_v2_test(Config) ->
@@ -267,14 +267,14 @@ credit_and_drain_v2_test(Config) ->
     {State3, #{key := CKey}, CheckEffs} = checkout(Config, ?LINE, Cid,
                                                    {auto, {credited, 16#ff_ff_ff_ff - 1}},
                                                    State2),
-    ?ASSERT_NO_EFF({log, _, _, _}, CheckEffs),
+    ?ASSERT_NO_EFF({log_ext, _, _, _}, CheckEffs),
 
     {State4, Effects} = credit(Config, CKey, ?LINE, 4, 16#ff_ff_ff_ff - 1,
                                true, State3),
     ?assertMatch(#rabbit_fifo{consumers = #{CKey := #consumer{credit = 0,
                                                               delivery_count = 2}}},
                  State4),
-    ?ASSERT_EFF({log, [1, 2], _, _}, Effects),
+    ?ASSERT_EFF({log_ext, [1, 2], _, _}, Effects),
     %% The credit_reply should be sent **after** the deliveries.
     ?assertEqual({send_msg, self(),
                   {credit_reply, Ctag, _DeliveryCount = 2, _Credit = 0,
@@ -283,7 +283,7 @@ credit_and_drain_v2_test(Config) ->
                  lists:last(Effects)),
 
     {_State5, EnqEffs} = enq(Config, 5, 2, third, State4),
-    ?ASSERT_NO_EFF({log, _, _, _}, EnqEffs),
+    ?ASSERT_NO_EFF({log_ext, _, _, _}, EnqEffs),
     ok.
 
 credit_and_drain_single_active_consumer_v2_test(Config) ->
@@ -330,7 +330,7 @@ credit_and_drain_single_active_consumer_v2_test(Config) ->
     % Drain the active consumer.
     {_State4, Effects1} = credit(Config, CK1, ?LINE, 1000, 16#ff_ff_ff_ff, true, State3),
     ?assertMatch([
-                  {log, [1], _Fun, _Local},
+                  {log_ext, [1], _Fun, _Local},
                   {send_msg, Self,
                    {credit_reply, Ctag1, _DeliveryCount = 999, _Credit = 0,
                     _Available = 0, _Drain = true},
@@ -343,14 +343,11 @@ enq_enq_deq_test(C) ->
     {State1, _} = enq(C, 1, 1, first, test_init(test)),
     {State2, _} = enq(C, 2, 2, second, State1),
     % get returns a reply value
-    % NumReady = 1,
-    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {_State3, _,
-     [{log, [1], Fun},
+     [{log, [1], _Fun},
       {monitor, _, _}]} =
         apply(meta(C, 3), make_checkout(Cid, {dequeue, unsettled}, #{}),
               State2),
-    ct:pal("Out ~tp", [Fun([Msg1])]),
     ok.
 
 enq_enq_deq_deq_settle_test(Config) ->
@@ -488,7 +485,7 @@ duplicate_enqueue_test(Config) ->
     {State2, Effects2} = enq(Config, 2, MsgSeq, first, State1),
     ?ASSERT_EFF({send_msg, _, {delivery, _, [{_, {_, first}}]}, _}, Effects2),
     {_State3, Effects3} = enq(Config, 3, MsgSeq, first, State2),
-    ?ASSERT_NO_EFF({log, [_], _, _}, Effects3),
+    ?ASSERT_NO_EFF({log_ext, [_], _, _}, Effects3),
     ok.
 
 return_test(Config) ->
@@ -516,7 +513,7 @@ return_multiple_test(Config) ->
      #{key := CKey,
        next_msg_id := NextMsgId},
      Effects0} = checkout(Config, ?LINE, Cid, 3, State2),
-    ?ASSERT_EFF({log, [1, 2, 3], _Fun, _Local}, Effects0),
+    ?ASSERT_EFF({log_ext, [1, 2, 3], _Fun, _Local}, Effects0),
 
     {_, _, Effects1} = apply(meta(Config, ?LINE),
                              rabbit_fifo:make_return(
@@ -525,7 +522,7 @@ return_multiple_test(Config) ->
                                [NextMsgId + 2, NextMsgId, NextMsgId + 1]),
                              State3),
     %% We expect messages to be re-delivered in the same order in which we previously returned.
-    ?ASSERT_EFF({log, [3, 1, 2], _Fun, _Local}, Effects1),
+    ?ASSERT_EFF({log_ext, [3, 1, 2], _Fun, _Local}, Effects1),
     ok.
 
 return_dequeue_delivery_limit_test(C) ->
@@ -564,11 +561,11 @@ return_checked_out_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId}, Effects1} =
         checkout(Config, ?LINE, Cid, 1, State0),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects1),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects1),
     % returning immediately checks out the same message again
     {_State, ok, Effects2} =
         apply(meta(Config, 3), rabbit_fifo:make_return(CKey, [MsgId]), State1),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects2),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects2),
     ok.
 
 return_checked_out_limit_test(Config) ->
@@ -584,11 +581,11 @@ return_checked_out_limit_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId}, Effects1} =
         checkout(Config, ?LINE, Cid, 1, State0),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects1),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects1),
     % returning immediately checks out the same message again
     {State2, ok, Effects2} =
         apply(meta(Config, 3), rabbit_fifo:make_return(CKey, [MsgId]), State1),
-    ?ASSERT_EFF({log, [1], _Fun, _Local}, Effects2),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects2),
 
     {#rabbit_fifo{} = State, ok, _} =
         apply(meta(Config, 4), rabbit_fifo:make_return(Cid, [MsgId + 1]), State2),
@@ -597,52 +594,56 @@ return_checked_out_limit_test(Config) ->
 
 return_auto_checked_out_test(Config) ->
     Cid = {<<"cid">>, self()},
-    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State00, _} = enq(Config, 1, 1, first, test_init(test)),
     {State0, _} = enq(Config, 2, 2, second, State00),
     % it first active then inactive as the consumer took on but cannot take
     % any more
     {State1, #{key := CKey,
                next_msg_id := MsgId},
-     [_Monitor, {log, [1], Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
-    [{send_msg, _, {delivery, _, [{MsgId, _}]}, _}] = Fun1([Msg1]),
+     [_Monitor, {log_ext, [1], _Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
     % return should include another delivery
     {State2, _, Effects} = apply(meta(Config, 3),
                                   rabbit_fifo:make_return(CKey, [MsgId]), State1),
-    [{log, [1], Fun2, _} | _] = Effects,
-    [{send_msg, _, {delivery, _, [{_MsgId2, {#{acquired_count := 1}, first}}]}, _}]
-    = Fun2([Msg1]),
+    [{log_ext, [1], _Fun2, _} | _] = Effects,
+
+    MsgId2 = MsgId+1,
+    [{_MsgId2, {_, #{acquired_count := 1}}}]
+        = rabbit_fifo:get_checked_out(CKey, MsgId2, MsgId2, State2),
 
     %% a down does not increment the return_count
     {State3, _, _} = apply(meta(Config, ?LINE), {down, self(), noproc}, State2),
 
-    {_State4, #{key := _CKey2,
-                next_msg_id := _},
-     [_, {log, [1], Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
+    {State4, #{key := CKey2,
+                next_msg_id := MsgId3},
+     [_, {log_ext, [1], _Fun3, _} ]} = checkout(Config, ?LINE, Cid, 1, State3),
 
-    [{send_msg, _, {delivery, _, [{_, {#{delivery_count := 1,
-                                         acquired_count := 2}, first}}]}, _}]
-    = Fun3([Msg1]),
+    [{_, {_, #{delivery_count := 1,
+               acquired_count := 2}}}]
+        = rabbit_fifo:get_checked_out(CKey2, MsgId3, MsgId3, State4),
     ok.
 
 requeue_test(Config) ->
-    Cid = {<<"cid">>, self()},
+    Cid = {<<"cid">>, test_util:fake_pid(n1@banana)},
     Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, _} = enq(Config, 1, 1, first, test_init(test)),
     % it first active then inactive as the consumer took on but cannot take
     % any more
     {State1, #{key := CKey,
                next_msg_id := MsgId},
-     [_Monitor, {log, [1], Fun1, _} ]} = checkout(Config, ?LINE, Cid, 1, State0),
-    [{send_msg, _, {delivery, _, [{MsgId, {H1, _}}]}, _}] = Fun1([Msg1]),
-    % return should include another delivery
+     [_Monitor, {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
+
+    [{MsgId, {H1, _}}] = rabbit_fifo:get_checked_out(CKey, MsgId, MsgId, State1),
+    ct:pal("query consumers ~p", [rabbit_fifo:query_consumers(State1)]),
+
     [{append, Requeue, _}] = rabbit_fifo:make_requeue(CKey, {notify, 1, self()},
                                                       [{MsgId, 1, H1, Msg1}], []),
-    {_State2, _, Effects} = apply(meta(Config, 3), Requeue, State1),
-    [{log, [_], Fun2, _} | _] = Effects,
-    [{send_msg, _,
-      {delivery, _, [{_MsgId2, {#{acquired_count := 1}, first}}]}, _}]
-    = Fun2([Msg1]),
+    {State2, _, Effects} = apply(meta(Config, 3), Requeue, State1),
+    [{log_ext, [_], _Fun2, _} | _] = Effects,
+
+    %%
+    NextMsgId = MsgId + 1,
+    [{_MsgId2, {_RaftIdx, #{acquired_count := 1}}}] =
+        rabbit_fifo:get_checked_out(CKey, NextMsgId , NextMsgId, State2),
     ok.
 
 cancelled_checkout_empty_queue_test(Config) ->
@@ -771,10 +772,10 @@ discarded_message_without_dead_letter_handler_is_removed_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId}, Effects1} =
         checkout(Config, ?LINE, Cid, 10, State0),
-    ?ASSERT_EFF({log, [1], _Fun, _}, Effects1),
+    ?ASSERT_EFF({log_ext, [1], _Fun, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(Config, 1),
                                    rabbit_fifo:make_discard(CKey, [MsgId]), State1),
-    ?ASSERT_NO_EFF({log, [1], _Fun, _}, Effects2),
+    ?ASSERT_NO_EFF({log_ext, [1], _Fun, _}, Effects2),
     ok.
 
 discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
@@ -791,10 +792,11 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
     {State1, #{key := CKey,
                next_msg_id := MsgId}, Effects1} =
         checkout(Config, ?LINE, Cid, 10, State0),
-    ?ASSERT_EFF({log, [1], _, _}, Effects1),
+    ?ASSERT_EFF({log_ext, [1], _, _}, Effects1),
     {_State2, _, Effects2} = apply(meta(Config, 1),
                                    rabbit_fifo:make_discard(CKey, [MsgId]), State1),
     % assert mod call effect with appended reason and message
+    % dlx still uses log effects
     {value, {log, [1], Fun}} = lists:search(fun (E) -> element(1, E) == log end,
                                             Effects2),
     [{mod_call, somemod, somefun, [somearg, rejected, [McOut]]}] = Fun([Msg1]),
@@ -832,6 +834,10 @@ get_log_eff(Effs) ->
     {value, Log} = lists:search(fun (E) -> element(1, E) == log end, Effs),
     Log.
 
+get_log_ext_eff(Effs) ->
+    {value, Log} = lists:search(fun (E) -> element(1, E) == log_ext end, Effs),
+    Log.
+
 mixed_send_msg_and_log_effects_are_correctly_ordered_test(Config) ->
     Cid = {cid(?FUNCTION_NAME), self()},
     State00 = init(#{name => test,
@@ -841,15 +847,13 @@ mixed_send_msg_and_log_effects_are_correctly_ordered_test(Config) ->
                      {at_most_once,
                       {somemod, somefun, [somearg]}}}),
     %% enqueue two messages
-    Msg1 = rabbit_fifo:make_enqueue(self(), 1, first),
     {State0, _} = enq(Config, 1, 1, first, State00),
-    Msg2 = rabbit_fifo:make_enqueue(self(), 2, snd),
     {State1, _} = enq(Config, 2, 2, snd, State0),
 
-    {_State2, _, Effects1} = checkout(Config, ?LINE, Cid, 10, State1),
-    {log, [1, 2], Fun, _} = get_log_eff(Effects1),
-    [{send_msg, _, {delivery, _Cid, [{0,{0,first}},{1,{0,snd}}]},
-      [local,ra_event]}] = Fun([Msg1, Msg2]),
+    {State2, _, Effects1} = checkout(Config, ?LINE, Cid, 10, State1),
+    {log_ext, [1, 2], _Fun, _} = get_log_ext_eff(Effects1),
+
+    [{0,{_, 0}},{1,{_, 0}}] = rabbit_fifo:get_checked_out(Cid, 0, 1, State2),
     %% in this case we expect no send_msg effect as any in memory messages
     %% should be weaved into the send_msg effect emitted by the log effect
     %% later. hence this is all we can assert on
@@ -2277,9 +2281,9 @@ deq(Config, Idx, Cid, Settlement, Msg, State0) ->
         apply(meta(Config, Idx),
               rabbit_fifo:make_checkout(Cid, {dequeue, Settlement}, #{}),
               State0),
-    {value, {log, [_Idx], Fun}} = lists:search(fun(E) ->
-                                                       element(1, E) == log
-                                               end, Effs),
+        {value, {log, [_Idx], Fun}} = lists:search(fun(E) ->
+                                                           element(1, E) == log
+                                                   end, Effs),
     [{reply, _From,
       {wrap_reply, {dequeue, {MsgId, _}, _}}}] = Fun([Msg]),
 
