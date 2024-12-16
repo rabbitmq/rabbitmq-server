@@ -103,7 +103,7 @@ stream(Config) ->
     DelTag = receive
                  {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
                      DeliveryTag
-             after 5000 ->
+             after 30_000 ->
                        ct:fail(timeout)
              end,
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DelTag,

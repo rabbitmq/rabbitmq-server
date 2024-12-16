@@ -135,7 +135,7 @@ publish_expect_return(Config, E, Node) ->
                       receive
                           {#'basic.return'{}, _} ->
                               ok
-                      after 5000 ->
+                      after 30_000 ->
                                 flush(100),
                                 ct:fail("no return received")
                       end

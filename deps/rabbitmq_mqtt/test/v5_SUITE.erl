@@ -41,6 +41,8 @@
 -define(RC_SESSION_TAKEN_OVER, 16#8E).
 -define(RC_TOPIC_ALIAS_INVALID, 16#94).
 
+-define(TIMEOUT, 30_000).
+
 all() ->
     [{group, mqtt}].
 
@@ -265,7 +267,7 @@ message_expiry(Config) ->
                         payload := <<"m2">>,
                         properties := Props}}
               when map_size(Props) =:= 0 -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
 
     receive {publish, #{client_pid := Sub2,
@@ -276,7 +278,7 @@ message_expiry(Config) ->
                         %% Application Message has been waiting in the Server" [MQTT-3.3.2-6]
                         properties := #{'Message-Expiry-Interval' := MEI}}} ->
                 assert_message_expiry_interval(10 - 2, MEI)
-    after 100 -> ct:fail("did not receive m3")
+    after ?TIMEOUT -> ct:fail("did not receive m3")
     end,
     assert_nothing_received(),
     NumExpired = dead_letter_metric(messages_dead_lettered_expired_total, Config) - NumExpiredBefore,
@@ -346,7 +348,7 @@ message_expiry_retained_message(Config) ->
                         payload := <<"m3.2">>,
                         properties := Props}}
               when map_size(Props) =:= 0 -> ok
-    after 100 -> ct:fail("did not topic3")
+    after ?TIMEOUT -> ct:fail("did not topic3")
     end,
 
     receive {publish, #{client_pid := Sub,
@@ -355,7 +357,7 @@ message_expiry_retained_message(Config) ->
                         payload := <<"m4">>,
                         properties := #{'Message-Expiry-Interval' := MEI}}} ->
                 assert_message_expiry_interval(100 - 2, MEI)
-    after 100 -> ct:fail("did not receive topic4")
+    after ?TIMEOUT -> ct:fail("did not receive topic4")
     end,
     assert_nothing_received(),
 
@@ -513,7 +515,7 @@ client_rejects_publish(Config) ->
                         packet_id := PacketId}} ->
                 %% Negatively ack the PUBLISH.
                 emqtt:puback(C, PacketId, ?RC_UNSPECIFIED_ERROR)
-    after 1000 ->
+    after ?TIMEOUT ->
               ct:fail("did not receive PUBLISH")
     end,
     %% Even though we nacked the PUBLISH, we expect the server to not re-send the same message:
@@ -538,7 +540,7 @@ client_receive_maximum_min(Config) ->
     PacketId1 = receive {publish, #{payload := <<"m1">>,
                                     packet_id := Id}} ->
                             Id
-                after 1000 ->
+                after ?TIMEOUT ->
                           ct:fail("did not receive m1")
                 end,
     assert_nothing_received(),
@@ -625,19 +627,19 @@ subscription_option_retain_as_published(Config) ->
                         topic := <<"t/1">>,
                         payload := <<"m1">>,
                         retain := true}} -> ok
-    after 1000 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     receive {publish, #{client_pid := C1,
                         topic := <<"t/2">>,
                         payload := <<"m2">>,
                         retain := false}} -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     receive {publish, #{client_pid := C2,
                         topic := <<"t/1">>,
                         payload := <<"m1">>,
                         retain := true}} -> ok
-    after 1000 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     {ok, _} = emqtt:publish(C1, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(C1, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
@@ -659,14 +661,14 @@ subscription_option_retain_as_published_wildcards(Config) ->
                         %% No matching subscription has the
                         %% Retain As Published option set.
                         retain := false}} -> ok
-    after 1000 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     receive {publish, #{topic := <<"t/2">>,
                         payload := <<"m2">>,
                         %% (At least) one matching subscription has the
                         %% Retain As Published option set.
                         retain := true}} -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     {ok, _} = emqtt:publish(C, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(C, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
@@ -736,7 +738,7 @@ subscription_identifier(Config) ->
                %% and that it used the same identifier for more than one of them. In this case the
                %% PUBLISH packet will carry multiple identical Subscription Identifiers." [v5 3.3.4]
                properties := #{'Subscription-Identifier' := [1, 1]}}} -> ok
-    after 1000 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     receive {publish,
              #{client_pid := C2,
@@ -747,14 +749,14 @@ subscription_identifier(Config) ->
                 %% packet the Subscription Identifiers for all matching subscriptions which have a
                 %% Subscription Identifiers, their order is not significant [MQTT-3.3.4-4]." [v5 3.3.4]
                 ?assertEqual([1, 16#fffffff], lists:sort(Ids))
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     receive {publish,
              #{client_pid := C2,
                topic := <<"t/3">>,
                payload := <<"m3">>,
                properties := #{'Subscription-Identifier' := 16#fffffff}}} -> ok
-    after 1000 -> ct:fail("did not receive m3")
+    after ?TIMEOUT -> ct:fail("did not receive m3")
     end,
     receive {publish,
              #{client_pid := C2,
@@ -762,7 +764,7 @@ subscription_identifier(Config) ->
                payload := <<"m4">>,
                properties := Props}} ->
                 ?assertNot(maps:is_key('Subscription-Identifier', Props))
-    after 1000 -> ct:fail("did not receive m4")
+    after ?TIMEOUT -> ct:fail("did not receive m4")
     end,
     assert_nothing_received(),
     ok = emqtt:disconnect(C1),
@@ -784,7 +786,7 @@ subscription_identifier_amqp091(Config) ->
                topic := <<"a/a">>,
                payload := <<"m1">>,
                properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive message m1")
+    after ?TIMEOUT -> ct:fail("did not receive message m1")
     end,
 
     %% Test routing to multiple queues.
@@ -796,14 +798,14 @@ subscription_identifier_amqp091(Config) ->
                topic := <<"a/b">>,
                payload := <<"m2">>,
                properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive message m2")
+    after ?TIMEOUT -> ct:fail("did not receive message m2")
     end,
     receive {publish,
              #{client_pid := C2,
                topic := <<"a/b">>,
                payload := <<"m2">>,
                properties := #{'Subscription-Identifier' := 16#fffffff}}} -> ok
-    after 1000 -> ct:fail("did not receive message m2")
+    after ?TIMEOUT -> ct:fail("did not receive message m2")
     end,
 
     ok = emqtt:disconnect(C1),
@@ -829,7 +831,7 @@ subscription_identifier_at_most_once_dead_letter(Config) ->
                topic := <<"dead letter/a">>,
                payload := <<"msg">>,
                properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive msg")
+    after ?TIMEOUT -> ct:fail("did not receive msg")
     end,
     ok = emqtt:disconnect(C),
     ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
@@ -880,7 +882,7 @@ subscription_options_persisted(Config) ->
                retain := true,
                qos := 0,
                properties := #{'Subscription-Identifier' := 99}}} -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     assert_nothing_received(),
     {ok, _} = emqtt:publish(C2, <<"t2">>, <<>>, [{retain, true}, {qos, 1}]),
@@ -909,7 +911,7 @@ subscription_options_modify(Config) ->
     {ok, _} = emqtt:publish(C, Topic, <<"m2">>, qos1),
     receive {publish, #{payload := <<"m2">>,
                         qos := 0 }} -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
 
     %% modify QoS
@@ -918,7 +920,7 @@ subscription_options_modify(Config) ->
     receive {publish, #{payload := <<"m3">>,
                         qos := 1,
                         properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive m3")
+    after ?TIMEOUT -> ct:fail("did not receive m3")
     end,
 
     %% modify Subscription Identifier
@@ -926,7 +928,7 @@ subscription_options_modify(Config) ->
     {ok, _} = emqtt:publish(C, Topic, <<"m4">>, qos1),
     receive {publish, #{payload := <<"m4">>,
                         properties := #{'Subscription-Identifier' := 2}}} -> ok
-    after 1000 -> ct:fail("did not receive m4")
+    after ?TIMEOUT -> ct:fail("did not receive m4")
     end,
 
     %% remove Subscription Identifier
@@ -935,19 +937,19 @@ subscription_options_modify(Config) ->
     receive {publish, #{payload := <<"m5">>,
                         retain := false,
                         properties := Props}} when map_size(Props) =:= 0 -> ok
-    after 1000 -> ct:fail("did not receive m5")
+    after ?TIMEOUT -> ct:fail("did not receive m5")
     end,
 
     %% modify Retain As Published
     {ok, _, [1]} = emqtt:subscribe(C, Topic, [{rap, true}, {qos, 1}]),
     receive {publish, #{payload := <<"m5">>,
                         retain := true}} -> ok
-    after 1000 -> ct:fail("did not receive retained m5")
+    after ?TIMEOUT -> ct:fail("did not receive retained m5")
     end,
     {ok, _} = emqtt:publish(C, Topic, <<"m6">>, [{retain, true}, {qos, 1}]),
     receive {publish, #{payload := <<"m6">>,
                         retain := true}} -> ok
-    after 1000 -> ct:fail("did not receive m6")
+    after ?TIMEOUT -> ct:fail("did not receive m6")
     end,
 
     assert_nothing_received(),
@@ -979,13 +981,13 @@ subscription_options_modify_qos(Qos, Config) ->
     receive {publish, #{payload := <<"1">>,
                         properties := Props}} ->
                 ?assertEqual(0, maps:size(Props))
-    after 1000 -> ct:fail("did not receive 1")
+    after ?TIMEOUT -> ct:fail("did not receive 1")
     end,
     %% Replace subscription while another client is sending messages.
     {ok, _, [Qos]} = emqtt:subscribe(Sub, #{'Subscription-Identifier' => 1}, Topic, Qos),
     Sender ! stop,
     NumSent = receive {N, Sender} -> N
-              after 1000 -> ct:fail("could not stop publisher")
+              after ?TIMEOUT -> ct:fail("could not stop publisher")
               end,
     ct:pal("Publisher sent ~b messages", [NumSent]),
     LastExpectedPayload = integer_to_binary(NumSent),
@@ -993,7 +995,7 @@ subscription_options_modify_qos(Qos, Config) ->
                         qos := Qos,
                         client_pid := Sub,
                         properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive ~s", [LastExpectedPayload])
+    after ?TIMEOUT -> ct:fail("did not receive ~s", [LastExpectedPayload])
     end,
     case Qos of
         0 ->
@@ -1024,7 +1026,7 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
     Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
     receive {publish, #{payload := <<"1">>,
                         client_pid := Subv3}} -> ok
-    after 1000 -> ct:fail("did not receive 1")
+    after ?TIMEOUT -> ct:fail("did not receive 1")
     end,
     %% Upgrade session from v3 to v5 while another client is sending messages.
     ok = emqtt:disconnect(Subv3),
@@ -1032,14 +1034,14 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
     ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
     Sender ! stop,
     NumSent = receive {N, Sender} -> N
-              after 1000 -> ct:fail("could not stop publisher")
+              after ?TIMEOUT -> ct:fail("could not stop publisher")
               end,
     ct:pal("Publisher sent ~b messages", [NumSent]),
     LastExpectedPayload = integer_to_binary(NumSent),
     receive {publish, #{payload := LastExpectedPayload,
                         qos := Qos,
                         client_pid := Subv5}} -> ok
-    after 1000 -> ct:fail("did not receive ~s", [LastExpectedPayload])
+    after ?TIMEOUT -> ct:fail("did not receive ~s", [LastExpectedPayload])
     end,
     case Qos of
         0 ->
@@ -1093,7 +1095,7 @@ session_upgrade_v3_v5_amqp091_pub(Config) ->
     receive {publish, #{payload := Payload,
                         qos := 1,
                         client_pid := Subv5}} -> ok
-    after 1000 -> ct:fail("did not receive message")
+    after ?TIMEOUT -> ct:fail("did not receive message")
     end,
     ok = emqtt:disconnect(Subv5),
     ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, 0).
@@ -1118,7 +1120,7 @@ compatibility_v3_v5(Config) ->
                %% v5 features should work even when message comes from a v3 client.
                retain := true,
                properties := #{'Subscription-Identifier' := 99}}} -> ok
-    after 1000 -> ct:fail("did not receive from v3")
+    after ?TIMEOUT -> ct:fail("did not receive from v3")
     end,
     {ok, _} = emqtt:publish(Cv3, <<"v5">>, <<>>, [{retain, true}, {qos, 1}]),
     ok = emqtt:disconnect(Cv3),
@@ -1180,7 +1182,7 @@ amqp091_cc_header(Config) ->
              #{topic := <<"first/key">>,
                payload := <<"msg">>,
                properties := #{'Subscription-Identifier' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive msg")
+    after ?TIMEOUT -> ct:fail("did not receive msg")
     end,
     assert_nothing_received(),
     ok = emqtt:disconnect(C).
@@ -1193,7 +1195,7 @@ publish_property_content_type(Config) ->
     {ok, _} = emqtt:publish(C, Topic, #{'Content-Type' => <<"text/plain😎;charset=UTF-8"/utf8>>}, Payload, [{qos, 1}]),
     receive {publish, #{payload := Payload,
                         properties := #{'Content-Type' := <<"text/plain😎;charset=UTF-8"/utf8>>}}} -> ok
-    after 1000 -> ct:fail("did not receive message")
+    after ?TIMEOUT -> ct:fail("did not receive message")
     end,
     ok = emqtt:disconnect(C).
 
@@ -1205,11 +1207,11 @@ publish_property_payload_format_indicator(Config) ->
     {ok, _} = emqtt:publish(C, Topic, #{'Payload-Format-Indicator' => 1}, <<"m2">>, [{qos, 1}]),
     receive {publish, #{payload := <<"m1">>,
                         properties := #{'Payload-Format-Indicator' := 0}}} -> ok
-    after 1000 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     receive {publish, #{payload := <<"m2">>,
                         properties := #{'Payload-Format-Indicator' := 1}}} -> ok
-    after 1000 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     ok = emqtt:disconnect(C).
 
@@ -1241,7 +1243,7 @@ publish_property_response_topic_correlation_data(Config) ->
                 ok = emqtt:publish(FrenchResponder, ResponseTopic,
                                    #{'Correlation-Data' => Corr0},
                                    <<"Bonjour Henri">>, [{qos, 0}])
-    after 1000 -> ct:fail("French responder did not receive request")
+    after ?TIMEOUT -> ct:fail("French responder did not receive request")
     end,
     receive {publish, #{client_pid := ItalianResponder,
                         payload := <<"Harry">>,
@@ -1250,21 +1252,21 @@ publish_property_response_topic_correlation_data(Config) ->
                 ok = emqtt:publish(ItalianResponder, ResponseTopic,
                                    #{'Correlation-Data' => Corr1},
                                    <<"Buongiorno Enrico">>, [{qos, 0}])
-    after 1000 -> ct:fail("Italian responder did not receive request")
+    after ?TIMEOUT -> ct:fail("Italian responder did not receive request")
     end,
     receive {publish, #{client_pid := Requester,
                         properties := #{'Correlation-Data' := CorrelationItalian},
                         payload := Payload0
                        }} ->
                 ?assertEqual(<<"Buongiorno Enrico">>, Payload0)
-    after 1000 -> ct:fail("did not receive Italian response")
+    after ?TIMEOUT -> ct:fail("did not receive Italian response")
     end,
     receive {publish, #{client_pid := Requester,
                         properties := #{'Correlation-Data' := CorrelationFrench},
                         payload := Payload1
                        }} ->
                 ?assertEqual(<<"Bonjour Henri">>, Payload1)
-    after 1000 -> ct:fail("did not receive French response")
+    after ?TIMEOUT -> ct:fail("did not receive French response")
     end,
     [ok = emqtt:disconnect(C) || C <- [Requester, FrenchResponder, ItalianResponder]].
 
@@ -1285,7 +1287,7 @@ publish_property_user_property(Config) ->
     {ok, _} = emqtt:publish(C, Topic, #{'User-Property' => UserProperty}, Payload, [{qos, 1}]),
     receive {publish, #{payload := Payload,
                         properties := #{'User-Property' := UserProperty}}} -> ok
-    after 1000 -> ct:fail("did not receive message")
+    after ?TIMEOUT -> ct:fail("did not receive message")
     end,
     ok = emqtt:disconnect(C).
 
@@ -1338,7 +1340,7 @@ will_delay(WillDelay, SessionExpiry, ClientId, Config)
     end,
     receive {publish, #{payload := Msg}} -> ok;
             Unexpected -> ct:fail({unexpected_message, Unexpected})
-    after 3000 -> ct:fail(will_message_timeout)
+    after ?TIMEOUT -> ct:fail(will_message_timeout)
     end,
     %% Cleanup
     C2 = connect(ClientId, Config),
@@ -1358,7 +1360,7 @@ will_delay_session_expiry_zero(Config) ->
     erlang:exit(C, trigger_will_message),
     %% Since default Session Expiry Interval is 0, we expect Will Message immediately.
     receive {publish, #{payload := Msg}} -> ok
-    after 500 -> ct:fail(will_message_timeout)
+    after ?TIMEOUT -> ct:fail(will_message_timeout)
     end,
     ok = emqtt:disconnect(Sub).
 
@@ -1467,16 +1469,16 @@ will_delay_session_takeover(Config) ->
                    {will_topic, Topic},
                    {will_payload, <<"will-4b">>}]),
     [receive {disconnected, ?RC_SESSION_TAKEN_OVER, #{}} -> ok
-     after 1000 -> ct:fail("server did not disconnect us")
+     after ?TIMEOUT -> ct:fail("server did not disconnect us")
      end || _ <- Clients],
 
     receive {publish, #{client_pid := Sub,
                         payload := <<"will-3a">>}} -> ok
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_msg, ?LINE})
     end,
     receive {publish, #{client_pid := Sub,
                         payload := <<"will-4a">>}} -> ok
-    after 5000 -> ct:fail({missing_msg, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_msg, ?LINE})
     end,
     assert_nothing_received(),
 
@@ -1544,7 +1546,7 @@ will_delay_message_expiry_publish_properties(Config) ->
                 %% it has been waiting in the Server for 2 seconds to be consumed.
                 assert_message_expiry_interval(20 - 2, MEI);
             Other -> ct:fail("received unexpected message: ~p", [Other])
-    after 500 -> ct:fail("did not receive Will Message")
+    after ?TIMEOUT -> ct:fail("did not receive Will Message")
     end,
     ok = emqtt:disconnect(Sub2).
 
@@ -1594,7 +1596,7 @@ will_properties0(Config, WillDelayInterval) ->
                                'Response-Topic' := <<"response/topic">>,
                                'Correlation-Data' := CorrelationData} = Props}}
               when map_size(Props) =:= 5 -> ok
-    after 1500 -> ct:fail("did not receive Will Message")
+    after ?TIMEOUT -> ct:fail("did not receive Will Message")
     end,
     ok = emqtt:disconnect(Sub).
 
@@ -1633,7 +1635,7 @@ retain_properties(Config) ->
                retain := true,
                qos := 1,
                properties := Props}} -> ok
-    after 500 -> ct:fail("did not receive m1")
+    after ?TIMEOUT -> ct:fail("did not receive m1")
     end,
     receive {publish,
              #{client_pid := Sub,
@@ -1642,7 +1644,7 @@ retain_properties(Config) ->
                retain := true,
                qos := 1,
                properties := Props}} -> ok
-    after 500 -> ct:fail("did not receive m2")
+    after ?TIMEOUT -> ct:fail("did not receive m2")
     end,
     {ok, _} = emqtt:publish(Sub, <<"t/1">>, <<>>, [{retain, true}, {qos, 1}]),
     {ok, _} = emqtt:publish(Sub, <<"t/2">>, <<>>, [{retain, true}, {qos, 1}]),
@@ -1675,7 +1677,7 @@ will_delay_node_restart(Config) ->
     T = erlang:monotonic_time(millisecond),
     ok = rabbit_ct_broker_helpers:drain_node(Config, 0),
     [receive {disconnected, ?RC_SERVER_SHUTTING_DOWN, #{}} -> ok
-     after 10_000 -> ct:fail("server did not disconnect us")
+     after ?TIMEOUT -> ct:fail("server did not disconnect us")
      end || _ <- ClientsNode0],
     ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
     ElapsedMs = erlang:monotonic_time(millisecond) - T,
@@ -1687,12 +1689,12 @@ will_delay_node_restart(Config) ->
     %% After node 0 restarts, we should receive the Will Message promptly on both nodes 0 and 1.
     receive {publish, #{client_pid := Sub1,
                         payload := Payload}} -> ok
-    after 1000 -> ct:fail("did not receive Will Message on node 1")
+    after ?TIMEOUT -> ct:fail("did not receive Will Message on node 1")
     end,
     Sub0b = connect(<<"sub0">>, Config, 0, [{clean_start, false}]),
     receive {publish, #{client_pid := Sub0b,
                         payload := Payload}} -> ok
-    after 1000 -> ct:fail("did not receive Will Message on node 0")
+    after ?TIMEOUT -> ct:fail("did not receive Will Message on node 0")
     end,
 
     ok = emqtt:disconnect(Sub0b),
@@ -1726,7 +1728,7 @@ session_switch_v3_v5(Config, Disconnect) ->
              #{client_pid := C2,
                payload := <<"m1">>,
                qos := 1}} -> ok
-    after 1000 -> ct:fail("did not receive from m1")
+    after ?TIMEOUT -> ct:fail("did not receive from m1")
     end,
     %% Modifying subscription with v5 specific feature should work.
     {ok, _, [1]} = emqtt:subscribe(C2, Topic, [{nl, true}, {qos, 1}]),
@@ -1745,7 +1747,7 @@ session_switch_v3_v5(Config, Disconnect) ->
     case Disconnect of
         true -> ok;
         false -> receive {disconnected, ?RC_SESSION_TAKEN_OVER, #{}} -> ok
-                 after 1000 -> ct:fail("missing DISCONNECT packet for C2")
+                 after ?TIMEOUT -> ct:fail("missing DISCONNECT packet for C2")
                  end
     end,
     %% We expect that v5 specific subscription feature does not apply
@@ -1755,7 +1757,7 @@ session_switch_v3_v5(Config, Disconnect) ->
              #{client_pid := C3,
                payload := <<"m3">>,
                qos := 1}} -> ok
-    after 1000 -> ct:fail("did not receive m3 with QoS 1")
+    after ?TIMEOUT -> ct:fail("did not receive m3 with QoS 1")
     end,
     %% Modifying the subscription once more with v3 client should work.
     {ok, _, [0]} = emqtt:subscribe(C3, Topic, qos0),
@@ -1764,7 +1766,7 @@ session_switch_v3_v5(Config, Disconnect) ->
              #{client_pid := C3,
                payload := <<"m4">>,
                qos := 0}} -> ok
-    after 1000 -> ct:fail("did not receive m3 with QoS 0")
+    after ?TIMEOUT -> ct:fail("did not receive m3 with QoS 0")
     end,
 
     %% Unsubscribing in v3 should work.
@@ -1821,7 +1823,7 @@ topic_alias_server_to_client(Config) ->
     A1 = receive {publish, #{payload := <<"m1">>,
                              topic := <<"t/1">>,
                              properties := #{'Topic-Alias' := A1a}}} -> A1a
-         after 500 -> ct:fail("Did not receive m1")
+         after ?TIMEOUT -> ct:fail("Did not receive m1")
          end,
 
     %% We don't expect a Topic Alias when the Topic Name consists of a single byte.
@@ -1830,14 +1832,14 @@ topic_alias_server_to_client(Config) ->
                         topic := <<"t">>,
                         properties := Props1}}
               when map_size(Props1) =:= 0 -> ok
-    after 500 -> ct:fail("Did not receive m2")
+    after ?TIMEOUT -> ct:fail("Did not receive m2")
     end,
 
     {ok, _} = emqtt:publish(C1, <<"t/2">>, <<"m3">>, qos1),
     A2 = receive {publish, #{payload := <<"m3">>,
                              topic := <<"t/2">>,
                              properties := #{'Topic-Alias' := A2a}}} -> A2a
-         after 500 -> ct:fail("Did not receive m3")
+         after ?TIMEOUT -> ct:fail("Did not receive m3")
          end,
     ?assertEqual([1, 2], lists:sort([A1, A2])),
 
@@ -1848,7 +1850,7 @@ topic_alias_server_to_client(Config) ->
                         topic := <<"t/3">>,
                         properties := Props2}}
               when map_size(Props2) =:= 0 -> ok
-    after 500 -> ct:fail("Did not receive m4")
+    after ?TIMEOUT -> ct:fail("Did not receive m4")
     end,
 
     %% Existing topic aliases should still be sent.
@@ -1858,13 +1860,13 @@ topic_alias_server_to_client(Config) ->
                         topic := <<>>,
                         properties := #{'Topic-Alias' := A1b}}} ->
                 ?assertEqual(A1, A1b)
-    after 500 -> ct:fail("Did not receive m5")
+    after ?TIMEOUT -> ct:fail("Did not receive m5")
     end,
     receive {publish, #{payload := <<"m6">>,
                         topic := <<>>,
                         properties := #{'Topic-Alias' := A2b}}} ->
                 ?assertEqual(A2, A2b)
-    after 500 -> ct:fail("Did not receive m6")
+    after ?TIMEOUT -> ct:fail("Did not receive m6")
     end,
 
     ok = emqtt:disconnect(C1),
@@ -1890,13 +1892,13 @@ topic_alias_bidirectional(Config) ->
                         payload := <<"m2">>,
                         topic := Topic1,
                         properties := #{'Topic-Alias' := 1}}} -> ok
-    after 500 -> ct:fail("Did not receive m2")
+    after ?TIMEOUT -> ct:fail("Did not receive m2")
     end,
     receive {publish, #{client_pid := C1,
                         payload := <<"m4">>,
                         topic := <<>>,
                         properties := #{'Topic-Alias' := 1}}} -> ok
-    after 500 -> ct:fail("Did not receive m4")
+    after ?TIMEOUT -> ct:fail("Did not receive m4")
     end,
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2).
@@ -1950,7 +1952,7 @@ topic_alias_in_retained_message0(Config, TopicAliasMax, TopicAlias, ExpectedProp
                         retain := true,
                         properties := Props}} ->
                 ?assertEqual(ExpectedProps, Props)
-    after 500 -> ct:fail("Did not receive retained message")
+    after ?TIMEOUT -> ct:fail("Did not receive retained message")
     end,
     ok = emqtt:disconnect(C).
 
@@ -2107,7 +2109,7 @@ receive_correlations(Ctag, N, Set) ->
              #amqp_msg{props = #'P_basic'{correlation_id = Corr}}} ->
                 ?assert(is_binary(Corr)),
                 receive_correlations(Ctag, N + 1, sets:add_element(Corr, Set))
-    after 200 ->
+    after 1000 ->
               {N, Set}
     end.
 

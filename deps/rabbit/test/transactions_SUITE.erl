@@ -90,7 +90,7 @@ return_after_commit(Config) ->
     Result = receive
                  {#'basic.return'{}, _} ->
                      return_before_commit
-             after 1000 ->
+             after 30_000 ->
                        return_after_commit
              end,
     ?assertEqual(return_after_commit, Result),

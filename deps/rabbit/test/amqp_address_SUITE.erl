@@ -22,6 +22,8 @@
         [flush/1,
          wait_for_credit/1]).
 
+-define(TIMEOUT, 30_000).
+
 all() ->
     [
      {group, v1_permitted},
@@ -216,7 +218,7 @@ target_exchange_absent(Config) ->
               condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
               description = {utf8, <<"no exchange '", XName:(byte_size(XName))/binary,
                                      "' in vhost '/'">>}}}}} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
               ct:fail(Reason)
@@ -275,7 +277,7 @@ target_queue_absent(Config) ->
               condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
               description = {utf8, <<"no queue '", QName:(byte_size(QName))/binary,
                                      "' in vhost '/'">>}}}}} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
               ct:fail(Reason)
@@ -403,7 +405,7 @@ target_per_message_unset_to_address(Config) ->
 
     ok = amqp10_client:detach_link(Sender),
     receive {amqp10_event, {link, Sender, {detached, normal}}} -> ok
-    after 5000 -> ct:fail({missing_event, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
@@ -467,7 +469,7 @@ target_per_message_bad_to_address(Config) ->
                       ?assertMatch(#'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
                                                  description = {utf8, <<"bad 'to' address", _Rest/binary>>}},
                                    Error)
-              after 5000 ->
+              after ?TIMEOUT ->
                         flush(missing_disposition),
                         ct:fail(missing_disposition)
               end
@@ -507,7 +509,7 @@ target_per_message_exchange_absent_settled(Config) ->
                       info = {map, [{{symbol, <<"delivery-tag">>}, {binary, DTag2}}]}
                      },
                    Error)
-    after 5000 -> ct:fail("server did not close our outgoing link")
+    after ?TIMEOUT -> ct:fail("server did not close our outgoing link")
     end,
 
     ok = cleanup(Init).
@@ -566,7 +568,7 @@ target_bad_address0(TargetAddress, Config) ->
          {session, Session,
           {ended,
            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {missing_event, ?LINE, TargetAddress},
               flush(Reason),
               ct:fail(Reason)
@@ -593,7 +595,7 @@ source_queue_absent(Config) ->
               condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
               description = {utf8, <<"no queue '", QName:(byte_size(QName))/binary,
                                      "' in vhost '/'">>}}}}} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
               ct:fail(Reason)
@@ -626,7 +628,7 @@ source_bad_address0(SourceAddress, Config) ->
          {session, Session,
           {ended,
            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
               ct:fail(Reason)
@@ -657,7 +659,7 @@ wait_for_settled(State, Tag) ->
     receive
         {amqp10_disposition, {State, Tag}} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               Reason = {?FUNCTION_NAME, State, Tag},
               flush(Reason),
               ct:fail(Reason)

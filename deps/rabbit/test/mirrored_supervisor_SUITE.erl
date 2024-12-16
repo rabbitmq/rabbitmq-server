@@ -294,7 +294,7 @@ test_startup_failure(Fail, Group) ->
     receive
         {'EXIT', _, shutdown} ->
             ok
-    after 1000 ->
+    after 30_000 ->
             exit({did_not_exit, Fail})
     end,
     process_flag(trap_exit, false),

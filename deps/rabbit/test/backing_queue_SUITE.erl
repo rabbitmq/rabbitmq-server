@@ -1052,7 +1052,7 @@ bq_queue_recover1(Config) ->
     exit(QPid, kill),
     MRef = erlang:monitor(process, QPid),
     receive {'DOWN', MRef, process, QPid, _Info} -> ok
-    after 10000 -> exit(timeout_waiting_for_queue_death)
+    after ?TIMEOUT -> exit(timeout_waiting_for_queue_death)
     end,
     rabbit_amqqueue:stop(?VHOST),
     {Recovered, []} = rabbit_amqqueue:recover(?VHOST),

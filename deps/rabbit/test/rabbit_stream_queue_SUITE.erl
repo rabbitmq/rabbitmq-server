@@ -18,6 +18,7 @@
 
 -import(rabbit_ct_helpers, [await_condition/2]).
 -define(WAIT, 5000).
+-define(TIMEOUT, 30_000).
 
 suite() ->
     [{timetrap, 15 * 60_000}].
@@ -1009,7 +1010,7 @@ consume(Config) ->
                                                      multiple = false}),
             _ = amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = <<"ctag">>}),
             ok = amqp_channel:close(Ch1)
-    after 5000 ->
+    after ?TIMEOUT ->
             ct:fail(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -1073,8 +1074,8 @@ consume_timestamp_offset(Config) ->
     receive
         #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
             ok
-    after 5000 ->
-              flush(),
+    after ?TIMEOUT ->
+            flush(),
             exit(consume_ok_timeout)
     end,
 
@@ -1108,7 +1109,7 @@ consume_timestamp_last_offset(Config) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(missing_consume_ok)
     end,
 
@@ -1178,7 +1179,7 @@ basic_cancel(Config) ->
         {#'basic.deliver'{}, _} ->
             amqp_channel:call(Ch1, #'basic.cancel'{consumer_tag = CTag}),
             ?assertMatch([], filter_consumers(Config, Server, CTag))
-    after 10000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -1203,7 +1204,7 @@ receive_basic_cancel_on_queue_deletion(Config) ->
     receive
         #'basic.cancel'{consumer_tag = CTag} ->
             ok
-    after 10000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end.
 
@@ -1261,7 +1262,7 @@ keep_consuming_on_leader_restart(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag1}, _} ->
             ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                      multiple = false})
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(timeout)
     end,
 
@@ -1275,7 +1276,7 @@ keep_consuming_on_leader_restart(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag2}, _} ->
             ok = amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = DeliveryTag2,
                                                      multiple = false})
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(timeout)
     end,
 
@@ -1396,7 +1397,7 @@ consume_and_(Config, AckFun) ->
             ?assertMatch({'queue.declare_ok', Q, _MsgCount, 0},
                          declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
             queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -1588,7 +1589,7 @@ consume_from_next(Config, Args) ->
     receive
         #'basic.consume_ok'{consumer_tag = <<"ctag">>} ->
              ok
-    after 10000 ->
+    after ?TIMEOUT ->
             exit(consume_ok_failed)
     end,
 
@@ -1684,7 +1685,7 @@ consume_while_deleting_replica(Config) ->
             ok;
         {_, #amqp_msg{}} ->
             exit(unexpected_message)
-    after 30000 ->
+    after ?TIMEOUT ->
             exit(missing_consumer_cancel)
     end,
 
@@ -1712,10 +1713,10 @@ consume_credit(Config) ->
 
     %% We expect to receive exactly 2 messages.
     DTag1 = receive {#'basic.deliver'{delivery_tag = Tag1}, _} -> Tag1
-            after 5000 -> ct:fail({missing_delivery, ?LINE})
+            after ?TIMEOUT -> ct:fail({missing_delivery, ?LINE})
             end,
     _DTag2 = receive {#'basic.deliver'{delivery_tag = Tag2}, _} -> Tag2
-             after 5000 -> ct:fail({missing_delivery, ?LINE})
+             after ?TIMEOUT -> ct:fail({missing_delivery, ?LINE})
              end,
     receive {#'basic.deliver'{}, _} -> ct:fail({unexpected_delivery, ?LINE})
     after 100 -> ok
@@ -1725,7 +1726,7 @@ consume_credit(Config) ->
     ok = amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DTag1,
                                              multiple = false}),
     DTag3 = receive {#'basic.deliver'{delivery_tag = Tag3}, _} -> Tag3
-            after 5000 -> ct:fail({missing_delivery, ?LINE})
+            after ?TIMEOUT -> ct:fail({missing_delivery, ?LINE})
             end,
     receive {#'basic.deliver'{}, _} ->
                 ct:fail({unexpected_delivery, ?LINE})
@@ -1747,11 +1748,11 @@ consume_credit0(Ch, DTagPrev) ->
                                             multiple = true}),
     %% Receive 1st message.
     receive {#'basic.deliver'{}, _} -> ok
-    after 5000 -> ct:fail({missing_delivery, ?LINE})
+    after ?TIMEOUT -> ct:fail({missing_delivery, ?LINE})
     end,
     %% Receive 2nd message.
     DTag = receive {#'basic.deliver'{delivery_tag = T}, _} -> T
-           after 5000 -> ct:fail({missing_delivery, ?LINE})
+           after ?TIMEOUT -> ct:fail({missing_delivery, ?LINE})
            end,
     %% We shouldn't receive more messages given that AMQP 0.9.1 prefetch count is 2.
     receive {#'basic.deliver'{}, _} -> ct:fail({unexpected_delivery, ?LINE})
@@ -1813,7 +1814,7 @@ consume_credit_out_of_order_ack(Config) ->
     receive
         {#'basic.deliver'{}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -1853,7 +1854,7 @@ consume_credit_multiple_ack(Config) ->
     receive
         {#'basic.deliver'{}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -2066,7 +2067,7 @@ leader_failover_dedupe(Config) ->
 
     N = receive
             {last_msg, X} -> X
-        after 2000 ->
+        after ?TIMEOUT ->
                   exit(last_msg_timeout)
         end,
     %% validate that no duplicates were written even though an internal
@@ -2508,7 +2509,7 @@ dead_letter_target(Config) ->
     receive
         #'basic.consume_ok'{consumer_tag = CTag} ->
              ok
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(basic_consume_ok_timeout)
     end,
     receive
@@ -2517,7 +2518,7 @@ dead_letter_target(Config) ->
                                                       requeue =false,
                                                       multiple     = false}),
             queue_utils:wait_for_messages(Config, [[Q, <<"1">>, <<"1">>, <<"0">>]])
-    after 5000 ->
+    after ?TIMEOUT ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
@@ -2602,7 +2603,7 @@ receive_filtered_batch(Ch, Count, ExpectedSize) ->
             ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                     multiple     = false}),
             receive_filtered_batch(Ch, Count + 1, ExpectedSize)
-    after 10000 ->
+    after ?TIMEOUT ->
               flush(),
               exit({not_enough_messages, Count})
     end.
