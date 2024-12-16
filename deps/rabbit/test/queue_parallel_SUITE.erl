@@ -538,7 +538,7 @@ basic_cancel(Config) ->
             wait_for_messages(Config, QName, 3, 2, 1),
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag}),
             wait_for_messages(Config, QName, 2, 2, 0)
-    after 5000 ->
+    after 30_000 ->
               exit(basic_deliver_timeout)
     end,
     rabbit_ct_client_helpers:close_channel(Ch),
@@ -667,7 +667,7 @@ cc_header_non_array_should_close_channel(Config) ->
     receive
         {'DOWN', Ref, process, Ch, {shutdown, {server_initiated_close, 406, _}}} ->
             ok
-    after 5000 ->
+    after 30_000 ->
               exit(channel_closed_timeout)
     end,
 

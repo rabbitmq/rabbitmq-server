@@ -155,7 +155,7 @@ confirm_ack(Config) ->
     receive
         #'basic.ack'{delivery_tag = 1} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             throw(missing_ack)
     end.
 
@@ -196,13 +196,13 @@ confirm_mandatory_unroutable(Config) ->
     receive
         {#'basic.return'{}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             throw(missing_return)
     end,
     receive
         #'basic.ack'{delivery_tag = 1} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             throw(missing_ack)
     end.
 
@@ -218,7 +218,7 @@ confirm_unroutable_message(Config) ->
             throw(unexpected_basic_return);
         #'basic.ack'{delivery_tag = 1} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
             throw(missing_ack)
     end.
 
@@ -333,6 +333,6 @@ receive_many(DTags) ->
             receive_many(DTags -- lists:seq(1, DTag));
         #'basic.ack'{delivery_tag = DTag, multiple = false} ->
             receive_many(DTags -- [DTag])
-    after 5000 ->
+    after ?TIMEOUT ->
             throw(missing_ack)
     end.

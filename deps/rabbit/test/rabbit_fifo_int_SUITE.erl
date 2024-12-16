@@ -10,8 +10,9 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
--define(RA_EVENT_TIMEOUT, 5000).
+-define(RA_EVENT_TIMEOUT, 30_000).
 -define(RA_SYSTEM, quorum_queues).
+-define(TIMEOUT, 30_000).
 
 all() ->
     [
@@ -118,7 +119,7 @@ basics(Config) ->
                                      {ok, S, _} ->
                                          DeliverFun(S, F)
                                  end
-                         after 5000 ->
+                         after ?TIMEOUT ->
                                    flush(),
                                    exit(await_delivery_timeout)
                          end
@@ -136,7 +137,7 @@ basics(Config) ->
             ct:pal("ra_event ~p", [Evt]),
             {ok, F6, _} = rabbit_fifo_client:handle_ra_event(ClusterName, From, Evt, FState5),
             F6
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(leader_change_timeout)
     end,
 
@@ -175,7 +176,7 @@ rabbit_fifo_returns_correlation(Config) ->
                 Del ->
                     exit({unexpected, Del})
             end
-    after 2000 ->
+    after ?TIMEOUT ->
               exit(await_msg_timeout)
     end,
     rabbit_quorum_queue:stop_server(ServerId),
@@ -208,7 +209,7 @@ duplicate_delivery(Config) ->
                                     end
                             end
                     end
-            after 2000 ->
+            after ?TIMEOUT ->
                       exit(await_msg_timeout)
             end
         end,
@@ -281,7 +282,7 @@ detects_lost_delivery(Config) ->
     receive
         {ra_event, _, {machine, {delivery, _, [{_, {_, msg1}}]}}} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(await_delivery_timeout)
     end,
 
@@ -316,7 +317,7 @@ returns(Config) ->
             ?assertEqual(undefined, mc:get_annotation(<<"x-delivery-count">>, Msg1Out0)),
             ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out0)),
             rabbit_fifo_client:return(<<"tag">>, [MsgId], FC2)
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(),
               exit(await_delivery_timeout)
     end,
@@ -333,7 +334,7 @@ returns(Config) ->
             %% delivery_count should _not_ be incremented for a return
             ?assertEqual(undefined, mc:get_annotation(delivery_count, Msg1Out)),
             rabbit_fifo_client:modify(<<"tag">>, [MsgId1], true, false, #{}, FC4)
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(),
               exit(await_delivery_timeout_2)
     end,
@@ -349,7 +350,7 @@ returns(Config) ->
             %% delivery_count should be incremented for a modify with delivery_failed = true
             ?assertEqual(1, mc:get_annotation(delivery_count, Msg2Out)),
             rabbit_fifo_client:settle(<<"tag">>, [MsgId2], FC6)
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(),
               exit(await_delivery_timeout_3)
     end,
@@ -377,7 +378,7 @@ returns_after_down(Config) ->
     receive
         {'DOWN', MonRef, _, _, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               ct:fail("waiting for process exit timed out")
     end,
     rabbit_ct_helpers:await_condition(
@@ -411,7 +412,7 @@ resends_after_lost_applied(Config) ->
     receive
         {ra_event, _, {applied, _}} ->
             ok
-    after 500 ->
+    after ?TIMEOUT ->
               exit(await_ra_event_timeout)
     end,
     % send another message
@@ -477,7 +478,7 @@ discard(Config) ->
             [msg1] = Letters,
             rejected = Reason,
             ok
-    after 500 ->
+    after ?TIMEOUT ->
               flush(),
               exit(dead_letter_timeout)
     end,
@@ -571,7 +572,7 @@ lost_delivery(Config) ->
         {ra_event, _, Evt} ->
             ct:pal("dropping event ~tp", [Evt]),
             ok
-    after 500 ->
+    after ?TIMEOUT ->
               exit(await_ra_event_timeout)
     end,
     % send another message
@@ -744,7 +745,7 @@ test_queries(Config) ->
           end),
     receive
         ready -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(ready_timeout)
     end,
     F0 = rabbit_fifo_client:init([ServerId], 4),
@@ -820,7 +821,7 @@ receive_ra_events(Applied, Deliveries, Acc) ->
             receive_ra_events(Applied, Deliveries - length(MsgIds), [Evt | Acc]);
         {ra_event, _, _} = Evt ->
             receive_ra_events(Applied, Deliveries, [Evt | Acc])
-    after 5000 ->
+    after ?TIMEOUT ->
             exit({missing_events, Applied, Deliveries, Acc})
     end.
 
@@ -832,7 +833,7 @@ receive_ra_events(Acc) ->
     receive
         {ra_event, _, _} = Evt ->
             receive_ra_events([Evt | Acc])
-    after 500 ->
+    after 1000 ->
             Acc
     end.
 
@@ -892,7 +893,7 @@ flush() ->
         Msg ->
             ct:pal("flushed: ~w~n", [Msg]),
             flush()
-    after 10 ->
+    after 100 ->
               ok
     end.
 

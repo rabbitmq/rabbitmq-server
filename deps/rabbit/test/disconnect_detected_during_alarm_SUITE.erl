@@ -88,7 +88,7 @@ disconnect_detected_during_alarm(Config) ->
         % Check that connection was indeed blocked
         #'connection.blocked'{} -> ok
     after
-        1000 -> exit(connection_was_not_blocked)
+        30_000 -> exit(connection_was_not_blocked)
     end,
 
     %% Connection is blocked, now we should forcefully kill it

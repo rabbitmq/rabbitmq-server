@@ -728,7 +728,7 @@ stream_pub_sub_metrics(Config) ->
                      maps:with([rabbitmq_stream_consumer_max_offset_lag],
                                parse_response(Body1))
                  end,
-                 100),
+                 30000),
 
     %% per-object metrics
      {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",

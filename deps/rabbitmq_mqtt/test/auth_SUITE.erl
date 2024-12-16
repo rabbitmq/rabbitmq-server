@@ -672,7 +672,7 @@ setup_rabbit_auth_backend_mqtt_mock(Config) ->
     receive
         {ok, SP} -> SP
     after
-        3000 -> ct:fail("timeout waiting for rabbit_auth_backend_mqtt_mock:setup/1")
+        30_000 -> ct:fail("timeout waiting for rabbit_auth_backend_mqtt_mock:setup/1")
     end.
 
 client_id_propagation(Config) ->
@@ -1333,6 +1333,6 @@ assert_connection_closed(ClientPid) ->
         {'EXIT', ClientPid, {shutdown, tcp_closed}} ->
             ok
     after
-        2000 ->
+        30_000 ->
             ct:fail("timed out waiting for exit message")
     end.

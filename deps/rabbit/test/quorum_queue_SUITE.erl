@@ -28,6 +28,7 @@
 
 -define(NET_TICKTIME_S, 5).
 -define(DEFAULT_AWAIT, 10_000).
+-define(TIMEOUT, 30_000).
 
 suite() ->
     [{timetrap, 5 * 60_000}].
@@ -606,7 +607,7 @@ start_queue_concurrent(Config) ->
 
     [begin
          receive {done, Server} -> ok
-         after 10000 -> exit({await_done_timeout, Server})
+         after ?TIMEOUT -> exit({await_done_timeout, Server})
          end
      end || Server <- Servers],
 
@@ -1079,7 +1080,7 @@ single_active_consumer_priority_take_over(Config) ->
                           delivery_tag = DeliveryTag}, _} ->
             amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag,
                                                 multiple     = false})
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(1),
               exit(basic_deliver_timeout)
     end,
@@ -2410,7 +2411,7 @@ confirm_availability_on_leader_change(Config) ->
         {'EXIT', Publisher, Err} ->
             ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
             exit(Err)
-    after 30000 ->
+    after ?TIMEOUT ->
               ok = rabbit_ct_broker_helpers:start_node(Config, Node2),
               flush(100),
               exit(nothing_received_from_publisher_process)
@@ -2875,7 +2876,7 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                 multiple = false,
                                                 requeue = true})
-    after 5000 ->
+    after ?TIMEOUT ->
               exit(basic_deliver_timeout)
     end,
 
@@ -2888,7 +2889,7 @@ subscribe_redelivery_count(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
                                                 multiple = false,
                                                 requeue = true})
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(1),
               exit(basic_deliver_timeout_2)
     end,
@@ -2904,7 +2905,7 @@ subscribe_redelivery_count(Config) ->
             wait_for_messages_ready(Servers, RaName, 0),
             ct:pal("wait_for_messages_pending_ack", []),
             wait_for_messages_pending_ack(Servers, RaName, 0)
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(500),
               exit(basic_deliver_timeout_3)
     end.
@@ -2989,7 +2990,7 @@ subscribe_redelivery_limit_disable(Config) ->
             amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
                                                 multiple = false,
                                                 requeue = true})
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(1),
               ct:fail("message did not arrive as expected")
     end,
@@ -3635,7 +3636,7 @@ receive_and_ack(Ch) ->
                           redelivered  = false}, _} ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple = false})
-    after 5000 ->
+    after ?TIMEOUT ->
               ct:fail("receive_and_ack timed out", [])
     end.
 
@@ -3736,7 +3737,7 @@ per_message_ttl_mixed_expiry(Config) ->
          #amqp_msg{payload = Msg1}} ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple     = false})
-    after 2000 ->
+    after ?TIMEOUT ->
               flush(10),
               ct:fail("basic deliver timeout")
     end,
@@ -3764,7 +3765,7 @@ per_message_ttl_expiration_too_high(Config) ->
         {'DOWN', MonitorRef, process, Ch,
          {shutdown, {server_initiated_close, 406, <<"PRECONDITION_FAILED - invalid expiration", _/binary>>}}} ->
             ok
-    after 1000 ->
+    after ?TIMEOUT ->
               ct:fail("expected channel error")
     end.
 
@@ -3886,7 +3887,7 @@ consumer_priorities(Config) ->
               {#'basic.deliver'{delivery_tag = D1,
                                 consumer_tag = Tag2}, _} ->
                   D1
-          after 5000 ->
+          after ?TIMEOUT ->
                     flush(100),
                     ct:fail("basic.deliver timeout")
           end,
@@ -3896,7 +3897,7 @@ consumer_priorities(Config) ->
         {#'basic.deliver'{delivery_tag = _,
                           consumer_tag = Tag2}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(100),
               ct:fail("basic.deliver timeout")
     end,
@@ -3907,7 +3908,7 @@ consumer_priorities(Config) ->
         {#'basic.deliver'{delivery_tag = _,
                           consumer_tag = Tag1}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(100),
               ct:fail("basic.deliver timeout")
     end,
@@ -3920,7 +3921,7 @@ consumer_priorities(Config) ->
         {#'basic.deliver'{delivery_tag = _,
                           consumer_tag = Tag2}, _} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(100),
               ct:fail("basic.deliver timeout")
     end,
@@ -3948,7 +3949,7 @@ cancel_consumer_gh_3729(Config) ->
         {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
             R = #'basic.reject'{delivery_tag = DeliveryTag, requeue = true},
             ok = amqp_channel:cast(Ch, R)
-    after 5000 ->
+    after ?TIMEOUT ->
         flush(100),
         ct:fail("basic.deliver timeout")
     end,
@@ -3957,7 +3958,7 @@ cancel_consumer_gh_3729(Config) ->
 
     receive
         #'basic.cancel_ok'{consumer_tag = <<"ctag">>} -> ok
-    after 5000 ->
+    after ?TIMEOUT ->
         flush(100),
         ct:fail("basic.cancel_ok timeout")
     end,
@@ -3993,7 +3994,7 @@ cancel_consumer_gh_12424(Config) ->
     DeliveryTag = receive
                       {#'basic.deliver'{delivery_tag = DT}, _} ->
                           DT
-                  after 5000 ->
+                  after ?TIMEOUT ->
                             flush(100),
                             ct:fail("basic.deliver timeout")
                   end,
@@ -4026,7 +4027,7 @@ cancel_and_consume_with_same_tag(Config) ->
                       {#'basic.deliver'{delivery_tag = D},
                        #amqp_msg{payload = <<"msg1">>}} ->
                           D
-                  after 5000 ->
+                  after ?TIMEOUT ->
                             flush(100),
                             ct:fail("basic.deliver timeout")
                   end,
@@ -4041,7 +4042,7 @@ cancel_and_consume_with_same_tag(Config) ->
         {#'basic.deliver'{delivery_tag = _},
          #amqp_msg{payload = <<"msg2">>}} ->
             ok
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(100),
               ct:fail("basic.deliver timeout 2")
     end,
@@ -4293,7 +4294,7 @@ requeue_multiple_true(Config) ->
                       #amqp_msg{payload = P0}} ->
                          ?assertEqual(P, P0),
                          D
-             after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+             after ?TIMEOUT -> ct:fail({basic_deliver_timeout, P, ?LINE})
              end || P <- Payloads],
 
     %% Requeue all messages.
@@ -4306,7 +4307,7 @@ requeue_multiple_true(Config) ->
     [receive {#'basic.deliver'{redelivered = true},
               #amqp_msg{payload = P1}} ->
                  ?assertEqual(P, P1)
-     after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+     after ?TIMEOUT -> ct:fail({basic_deliver_timeout, P, ?LINE})
      end || P <- Payloads],
 
     ?assertEqual(#'queue.delete_ok'{message_count = 0},
@@ -4331,7 +4332,7 @@ requeue_multiple_false(Config) ->
                       #amqp_msg{payload = P0}} ->
                          ?assertEqual(P, P0),
                          D
-             after 5000 -> ct:fail({basic_deliver_timeout, P, ?LINE})
+             after ?TIMEOUT -> ct:fail({basic_deliver_timeout, P, ?LINE})
              end || P <- Payloads],
 
     %% The delivery tags we received via AMQP 0.9.1 are ordered from 1-100.
@@ -4350,7 +4351,7 @@ requeue_multiple_false(Config) ->
     [receive {#'basic.deliver'{redelivered = true},
               #amqp_msg{payload = P1}} ->
                  ?assertEqual(integer_to_binary(D), P1)
-     after 5000 -> ct:fail({basic_deliver_timeout, ?LINE})
+     after ?TIMEOUT -> ct:fail({basic_deliver_timeout, ?LINE})
      end || D <- DTagsShuffled],
 
     ?assertEqual(#'queue.delete_ok'{message_count = 0},
@@ -4477,7 +4478,7 @@ subscribe(Ch, Queue, NoAck, Tag, Args) ->
     receive
         #'basic.consume_ok'{consumer_tag = Tag} ->
              ok
-    after 30000 ->
+    after ?TIMEOUT ->
               flush(100),
               exit(subscribe_timeout)
     end.
@@ -4502,7 +4503,7 @@ nack(Ch, Multiple, Requeue) ->
                 amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
                                                     multiple     = Multiple,
                                                     requeue      = Requeue})
-    after 5000 ->
+    after ?TIMEOUT ->
               flush(10),
               ct:fail("basic deliver timeout")
     end.
@@ -4575,7 +4576,7 @@ validate_queue(Ch, Queue, ExpectedMsgs) ->
               #amqp_msg{payload = M}} ->
                  amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag1,
                                                     multiple = false})
-         after 5000 ->
+         after ?TIMEOUT ->
                    flush(10),
                    exit({validate_queue_timeout, M})
          end

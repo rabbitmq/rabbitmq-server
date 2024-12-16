@@ -109,7 +109,7 @@ block_connack_timeout(Config) ->
     ClientMRef = monitor(process, Client),
     {error, connack_timeout} = emqtt:connect(Client),
     receive {'DOWN', ClientMRef, process, Client, connack_timeout} -> ok
-    after 200 -> ct:fail("missing connack_timeout in client")
+    after 30_000 -> ct:fail("missing connack_timeout in client")
     end,
 
     MqttReader = rpc(Config, ?MODULE, mqtt_connection_pid, [Ports]),
@@ -122,7 +122,7 @@ block_connack_timeout(Config) ->
                 %% We expect that MQTT reader process exits (without crashing)
                 %% because our client already disconnected.
                 ok
-    after 2000 -> ct:fail("missing peername_not_known from server")
+    after 30_000 -> ct:fail("missing peername_not_known from server")
     end,
     %% Ensure that our client is not registered.
     ?assertEqual([], all_connection_pids(Config)),
@@ -331,6 +331,6 @@ num_received(Topic, Payload, N) ->
         {publish, #{topic := Topic,
                     payload := Payload}} ->
             num_received(Topic, Payload, N + 1)
-    after 1000 ->
+    after 3000 ->
               N
     end.

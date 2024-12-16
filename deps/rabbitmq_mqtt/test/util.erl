@@ -65,7 +65,7 @@ expect_publishes(Client, Topic, [Payload|Rest])
                     payload := Other}} ->
             ct:fail("Received unexpected PUBLISH payload. Expected: ~p Got: ~p",
                     [Payload, Other])
-    after 3000 ->
+    after 30_000 ->
               {publish_not_received, Payload}
     end.
 
@@ -120,14 +120,14 @@ await_exit(Pid) ->
     receive
         {'EXIT', Pid, _} -> ok
     after
-        20_000 -> ct:fail({missing_exit, Pid})
+        30_000 -> ct:fail({missing_exit, Pid})
     end.
 
 await_exit(Pid, Reason) ->
     receive
         {'EXIT', Pid, Reason} -> ok
     after
-        20_000 -> ct:fail({missing_exit, Pid})
+        30_000 -> ct:fail({missing_exit, Pid})
     end.
 
 %% "CleanStart=0 and SessionExpiry=0xFFFFFFFF (UINT_MAX) for

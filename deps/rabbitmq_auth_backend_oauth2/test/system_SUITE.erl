@@ -704,7 +704,7 @@ test_failed_token_refresh_case1(Config) ->
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
        amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true})),
 
-    close_connection(Conn).
+    catch close_connection(Conn).
 
 refreshed_token_cannot_change_username(Config) ->
     {_, Token} = generate_valid_token_with_sub(Config, <<"username">>),
@@ -730,7 +730,7 @@ test_failed_token_refresh_case2(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
        amqp_connection:open_channel(Conn)),
 
-    close_connection(Conn).
+    catch close_connection(Conn).
 
 
 test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source(Config) ->

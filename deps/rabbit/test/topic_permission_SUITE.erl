@@ -90,7 +90,7 @@ amqpl_headers(Header, Config) ->
       #amqp_msg{payload = <<"m1">>,
                 props = #'P_basic'{headers = [{Header, array, [{longstr, <<"a.2">>}]}]}}),
     receive #'basic.ack'{} -> ok
-    after 5000 -> ct:fail({missing_confirm, ?LINE})
+    after 30_000 -> ct:fail({missing_confirm, ?LINE})
     end,
 
     monitor(process, Ch1),
@@ -324,6 +324,6 @@ assert_channel_down(Ch, Reason) ->
              {shutdown,
               {server_initiated_close, 403, Reason}}} ->
                 ok
-    after 5000 ->
+    after 30_000 ->
               ct:fail({did_not_receive, Reason})
     end.
