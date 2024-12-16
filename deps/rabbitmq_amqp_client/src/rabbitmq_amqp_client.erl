@@ -50,13 +50,11 @@
                         replicas => [binary()],
                         leader => binary()}.
 
--type queue_properties() :: #{durable => boolean(),
-                              exclusive => boolean(),
+-type queue_properties() :: #{exclusive => boolean(),
                               auto_delete => boolean(),
                               arguments => arguments()}.
 
 -type exchange_properties() :: #{type => binary(),
-                                 durable => boolean(),
                                  auto_delete => boolean(),
                                  internal => boolean(),
                                  arguments => arguments()}.
@@ -161,9 +159,7 @@ get_queue(LinkPair, QueueName) ->
     {ok, queue_info()} | {error, term()}.
 declare_queue(LinkPair, QueueName, QueueProperties) ->
     Body0 = maps:fold(
-              fun(durable, V, L) when is_boolean(V) ->
-                      [{{utf8, <<"durable">>}, {boolean, V}} | L];
-                 (exclusive, V, L) when is_boolean(V) ->
+              fun(exclusive, V, L) when is_boolean(V) ->
                       [{{utf8, <<"exclusive">>}, {boolean, V}} | L];
                  (auto_delete, V, L) when is_boolean(V) ->
                       [{{utf8, <<"auto_delete">>}, {boolean, V}} | L];
@@ -341,8 +337,6 @@ declare_exchange(LinkPair, ExchangeName, ExchangeProperties) ->
     Body0 = maps:fold(
               fun(type, V, L) when is_binary(V) ->
                       [{{utf8, <<"type">>}, {utf8, V}} | L];
-                 (durable, V, L) when is_boolean(V) ->
-                      [{{utf8, <<"durable">>}, {boolean, V}} | L];
                  (auto_delete, V, L) when is_boolean(V) ->
                       [{{utf8, <<"auto_delete">>}, {boolean, V}} | L];
                  (internal, V, L) when is_boolean(V) ->
