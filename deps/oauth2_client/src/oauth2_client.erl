@@ -592,39 +592,35 @@ append_extra_parameters(Request, QueryList) ->
 map_ssl_options_to_httpc_option(SslOptions) ->
     case SslOptions of
         undefined -> [];
-        Options ->  [{ssl, Options}]
+        Options   -> [{ssl, Options}]
     end.
 
 map_timeout_to_httpc_option(Timeout) ->
     case Timeout of
         undefined -> [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
-        Timeout -> [{timeout, Timeout}]
+        Timeout   -> [{timeout, Timeout}]
     end.
 
 map_proxy_to_httpc_option(ProxyOptions) ->
     case ProxyOptions of
-        undefined -> 
-            []; 
-        Proxy -> case {Proxy#proxy_options.host, Proxy#proxy_options.port} of 
+        undefined -> []; 
+        Proxy     -> case {Proxy#proxy_options.host, Proxy#proxy_options.port} of 
             {undefined, 0} -> [];
-            {_, 0} -> [];
+            {_, 0}         -> [];
             {undefined, _} -> [];
-            {Host, Port} ->
-                P = {{Host, Port},[]},
-                [{proxy, P}]                
+            {Host, Port}   -> P = {{Host, Port},[]},
+                              [{proxy, P}]                
             end
     end.
 
 map_proxy_auth_to_httpc_option(ProxyOptions) ->
     case ProxyOptions of
-        undefined -> 
-            []; 
-        Proxy -> 
-            case {Proxy#proxy_options.username, Proxy#proxy_options.password} of 
-                {undefined, _} -> [];
-                {_, undefined} -> [];
-                {_, _} = Auth -> [{proxy_auth, Auth}]
-            end
+        undefined -> []; 
+        Proxy     -> case {Proxy#proxy_options.username, Proxy#proxy_options.password} of 
+                        {undefined, _} -> [];
+                        {_, undefined} -> [];
+                        {_, _} = Auth  -> [{proxy_auth, Auth}]
+                    end
     end.
 
 is_json(?CONTENT_JSON) -> true;
@@ -637,10 +633,8 @@ is_json(_) -> false.
 decode_body(_, []) -> [];
 decode_body(?CONTENT_JSON, Body) ->
     case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body)) of
-        {ok, Value} ->
-            Value;
-        {error, _} = Error  ->
-            Error
+        {ok, Value}        -> Value;
+        {error, _} = Error -> Error
     end;
 decode_body(MimeType, Body) ->
     Items = string:split(MimeType, ";"),
@@ -688,10 +682,8 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
-        {error, {error, InternalError}} ->
-            {error, InternalError};
-        {error, _} = Error ->
-            Error;
+        {error, {error, InternalError}} -> {error, InternalError};
+        {error, _} = Error -> Error;
         Value ->
             case Code of
                 200 -> {ok, map_to_successful_access_token_response(Value)};
