@@ -33,7 +33,8 @@ start_forward-proxy() {
   mkdir -p $MOUNT_HTTPD_CONFIG_DIR
   ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
   print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
-
+  cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
+  
   docker run \
     --detach \
     --name forward-proxy \
