@@ -1840,8 +1840,13 @@ enable_dependencies1(
                 rabbit_deprecated_features:is_feature_used_callback_ret() |
                 run_callback_error()}.
 
-run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
-    FeatureProps = rabbit_ff_registry_wrapper:get(FeatureName),
+run_callback([FirstNode | _] = Nodes, FeatureName, Command, Extra, Timeout) ->
+    %% We need to take the callback definition from a node in the `Nodes' list
+    %% because the local node may not know this feature flag and thus does not
+    %% have the callback definition.
+    FeatureProps = erpc:call(
+                     FirstNode,
+                     rabbit_ff_registry_wrapper, get, [FeatureName]),
     Callbacks = maps:get(callbacks, FeatureProps, #{}),
     case Callbacks of
         #{Command := {CallbackMod, CallbackFun}}

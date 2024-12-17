@@ -45,7 +45,8 @@
          clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes/1,
          clustering_ok_with_supported_required_ff/1,
          activating_plugin_with_new_ff_disabled/1,
-         activating_plugin_with_new_ff_enabled/1
+         activating_plugin_with_new_ff_enabled/1,
+         enable_plugin_feature_flag_after_deactivating_plugin/1
         ]).
 
 suite() ->
@@ -95,7 +96,8 @@ groups() ->
      {activating_plugin, [],
       [
        activating_plugin_with_new_ff_disabled,
-       activating_plugin_with_new_ff_enabled
+       activating_plugin_with_new_ff_enabled,
+       enable_plugin_feature_flag_after_deactivating_plugin
       ]}
     ],
 
@@ -1254,6 +1256,36 @@ activating_plugin_with_new_ff_enabled(Config) ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, plugin_ff)),
             ?assertEqual([true, false],
+                         is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+    ok.
+
+enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
+    FFSubsysOk = is_feature_flag_subsystem_available(Config),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            ?assertEqual([false, false],
+                         is_feature_flag_supported(Config, plugin_ff)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+
+    rabbit_ct_broker_helpers:enable_plugin(Config, 1, "my_plugin"),
+    rabbit_ct_broker_helpers:disable_plugin(Config, 1, "my_plugin"),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            enable_feature_flag_on(Config, 0, plugin_ff),
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, plugin_ff)),
+            ?assertEqual([false, true],
                          is_feature_flag_enabled(Config, plugin_ff));
         false ->
             ok
