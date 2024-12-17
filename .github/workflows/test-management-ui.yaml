@@ -11,14 +11,9 @@ on:
       - 'deps/rabbitmq_management/src/**'
       - 'deps/rabbitmq_management/priv/**'
       - 'deps/rabbitmq_web_dispatch/src/**'
-      - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
+      - 'scripts/**'      
       - 'selenium/**'
-      - .github/workflows/test-management-ui.yaml
+      - '.github/workflows/test-management-ui.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -57,23 +52,10 @@ jobs:
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
 
-    - name: Configure Bazel
+   - name: Build & Load RabbitMQ OCI
       run: |
-        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
-        cat << EOF >> user.bazelrc
-          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
-          build --google_default_credentials
-
-          build --remote_download_toplevel
-        EOF
-        fi
-        cat << EOF >> user.bazelrc
-          build --color=yes
-        EOF
-
-    - name: Build & Load RabbitMQ OCI
-      run: |
-        bazelisk run packaging/docker-image:rabbitmq-amd64
+        make package-generic-unix
+        make docker-image
 
     - name: Configure Docker Network
       run: |
@@ -86,22 +68,19 @@ jobs:
 
     - name: Run short ui suite on a 3-node rabbitmq cluster
       run: |
-        RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq-amd64 \
-            ADDON_PROFILES=cluster ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
+        IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
+        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
+          ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
         mkdir -p /tmp/full-suite
         mv /tmp/selenium/* /tmp/full-suite
-        mkdir -p /tmp/full-suite/logs
-        mv ${SELENIUM_DIR}/logs/* /tmp/full-suite/logs
-        mkdir -p /tmp/full-suite/screens
-        mv ${SELENIUM_DIR}/screens/* /tmp/full-suite/screens
-
+        
     - name: Upload Test Artifacts
       if: always()
       uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          /tmp/short-suite
+          /tmp/full-suite          
 
   summary-selenium:
     needs:
