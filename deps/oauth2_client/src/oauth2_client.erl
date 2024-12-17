@@ -8,7 +8,7 @@
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
-        get_openid_configuration/3,
+        get_openid_configuration/2,get_openid_configuration/3,
         build_openid_discovery_endpoint/3,         
         merge_openid_configuration/2,
         merge_oauth_provider/2,
@@ -121,6 +121,11 @@ drop_trailing_path_separator(Path) when is_list(Path) ->
         "/" -> lists:droplast(Path);
         _ -> Path
     end.
+
+-spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
+    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
+get_openid_configuration(DiscoverEndpoint, TLSOptions) ->    
+    get_openid_configuration(DiscoverEndpoint, TLSOptions, undefined).
 
 -spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
     ssl:tls_option() | [], proxy_options() | undefined | 'none') -> 
