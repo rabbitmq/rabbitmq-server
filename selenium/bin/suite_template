@@ -397,7 +397,8 @@ profiles_with_local_or_docker() {
 generate_env_file() {
     begin "Generating env file ..."
     mkdir -p $CONF_DIR
-    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE    
+    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR ${ENV_FILE}.tmp    
+    grep -v '^#' ${ENV_FILE}.tmp > $ENV_FILE
     source $ENV_FILE    
     end "Finished generating env file."
 }
