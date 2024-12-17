@@ -27,35 +27,32 @@ describe('management user with vhosts permissions', function () {
   it('can access overview tab', async function () {
     await overview.clickOnOverviewTab()
     await overview.waitForOverviewTab()
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
   it('can access connections tab', async function () {
     await overview.clickOnConnectionsTab()
     await overview.waitForConnectionsTab()
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
   it('can access channels tab', async function () {
     await overview.clickOnChannelsTab()
     await overview.waitForChannelsTab()
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
   it('can access exchanges tab', async function () {
     await overview.clickOnExchangesTab()
     await overview.waitForExchangesTab()
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
   it('can access queues and streams tab', async function () {
     await overview.clickOnQueuesTab()
     await overview.waitForQueuesTab()
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
   it('can access limited options in admin tab', async function () {
-    console.log("before clickOnAdminTab")
     await overview.clickOnAdminTab()
-    console.log("before waitForAdminTab")
     await overview.waitForAdminTab()
-    console.log("after waitForAdminTab")
-    assert.ok(!await overview.isPopupWarningDisplayed())
+    assert.ok(await overview.isPopupWarningNotDisplayed())
   })
 
   it('cannot add/update user limits', async function () {

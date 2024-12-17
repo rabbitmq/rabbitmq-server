@@ -173,6 +173,7 @@ get_algorithms(OAuthProviderId) ->
         V -> proplists:get_value(algorithms, V, undefined)
     end.
 
+
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).
 get_env(Par, Def) ->
