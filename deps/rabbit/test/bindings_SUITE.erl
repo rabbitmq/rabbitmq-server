@@ -72,7 +72,7 @@ end_per_suite(Config) ->
 %     init_per_group_common(Group, Config, 1);
 init_per_group(khepri_migration = Group, Config) ->
     case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, _} ->
+        khepri ->
             {skip, "skip khepri migration test when khepri already configured"};
         mnesia ->
             init_per_group_common(Group, Config, 1)
