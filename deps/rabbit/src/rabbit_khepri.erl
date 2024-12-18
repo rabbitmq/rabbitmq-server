@@ -174,10 +174,6 @@
 
 -export([force_shrink_member_to_current_member/0]).
 
-%% Helpers for working with the Khepri API / types.
--export([collect_payloads/1,
-         collect_payloads/2]).
-
 -ifdef(TEST).
 -export([force_metadata_store/1,
          clear_forced_metadata_store/0]).
@@ -1020,12 +1016,14 @@ delete(Path, Options0) ->
 
 delete_or_fail(Path) ->
     case khepri_adv:delete(?STORE_ID, Path, ?DEFAULT_COMMAND_OPTIONS) of
-        {ok, Result} ->
-            case maps:size(Result) of
+        {ok, #{Path := NodeProps}} ->
+            case maps:size(NodeProps) of
                 0 -> {error, {node_not_found, #{}}};
                 _ -> ok
             end;
-        Error ->
+        {ok, #{} = NodePropsMap} when NodePropsMap =:= #{} ->
+            {error, {node_not_found, #{}}};
+        {error, _} = Error ->
             Error
     end.
 
@@ -1071,48 +1069,6 @@ handle_async_ret(RaEvent) ->
 
 fence(Timeout) ->
     khepri:fence(?STORE_ID, Timeout).
-
-%% -------------------------------------------------------------------
-%% collect_payloads().
-%% -------------------------------------------------------------------
-
--spec collect_payloads(Props) -> Ret when
-      Props :: khepri:node_props(),
-      Ret :: [Payload],
-      Payload :: term().
-
-%% @doc Collects all payloads from a node props map.
-%%
-%% This is the same as calling `collect_payloads(Props, [])'.
-%%
-%% @private
-
-collect_payloads(Props) when is_map(Props) ->
-    collect_payloads(Props, []).
-
--spec collect_payloads(Props, Acc0) -> Ret when
-      Props :: khepri:node_props(),
-      Acc0 :: [Payload],
-      Ret :: [Payload],
-      Payload :: term().
-
-%% @doc Collects all payloads from a node props map into the accumulator list.
-%%
-%% This is meant to be used with the `khepri_adv' API to easily collect the
-%% payloads from the return value of `khepri_adv:delete_many/4' for example.
-%%
-%% @returns all payloads in the node props map collected into a list, with
-%% `Acc0' as the tail.
-%%
-%% @private
-
-collect_payloads(Props, Acc0) when is_map(Props) andalso is_list(Acc0) ->
-    maps:fold(
-      fun (_Path, #{data := Payload}, Acc) ->
-              [Payload | Acc];
-          (_Path, _NoPayload, Acc) ->
-              Acc
-      end, Acc0, Props).
 
 -spec unregister_legacy_projections() -> Ret when
       Ret :: ok | timeout_error().

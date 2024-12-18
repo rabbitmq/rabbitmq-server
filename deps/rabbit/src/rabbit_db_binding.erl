@@ -837,17 +837,25 @@ delete_all_for_exchange_in_khepri(X = #exchange{name = XName}, OnlyDurable, Remo
                end,
     {deleted, X, Bindings, delete_for_destination_in_khepri(XName, OnlyDurable)}.
 
-delete_for_source_in_khepri(#resource{virtual_host = VHost, name = Name}) ->
-    Path = khepri_route_path(
-             VHost,
-             Name,
-             _Kind = ?KHEPRI_WILDCARD_STAR,
-             _DstName = ?KHEPRI_WILDCARD_STAR,
-             _RoutingKey = #if_has_data{}),
-    {ok, Bindings} = khepri_tx_adv:delete_many(Path),
-    maps:fold(fun(_P, #{data := Set}, Acc) ->
-                      sets:to_list(Set) ++ Acc
-              end, [], Bindings).
+delete_for_source_in_khepri(#resource{virtual_host = VHost, name = SrcName}) ->
+    Pattern = khepri_route_path(
+                VHost,
+                SrcName,
+                ?KHEPRI_WILDCARD_STAR, %% Kind
+                ?KHEPRI_WILDCARD_STAR, %% DstName
+                #if_has_data{}), %% RoutingKey
+    {ok, Bindings} = khepri_tx_adv:delete_many(Pattern),
+    maps:fold(
+      fun(Path, Props, Acc) ->
+              case {Path, Props} of
+                  {?RABBITMQ_KHEPRI_ROUTE_PATH(
+                     VHost, SrcName, _Kind, _Name, _RoutingKey),
+                   #{data := Set}} ->
+                      sets:to_list(Set) ++ Acc;
+                  {_, _} ->
+                      Acc
+              end
+      end, [], Bindings).
 
 %% -------------------------------------------------------------------
 %% delete_for_destination_in_mnesia().
@@ -892,14 +900,22 @@ delete_for_destination_in_mnesia(DstName, OnlyDurable, Fun) ->
 delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, name = Name}, OnlyDurable) ->
     Pattern = khepri_route_path(
                 VHost,
-                _SrcName = ?KHEPRI_WILDCARD_STAR,
+                ?KHEPRI_WILDCARD_STAR, %% SrcName
                 Kind,
                 Name,
-                _RoutingKey = ?KHEPRI_WILDCARD_STAR),
+                ?KHEPRI_WILDCARD_STAR), %% RoutingKey
     {ok, BindingsMap} = khepri_tx_adv:delete_many(Pattern),
-    Bindings = maps:fold(fun(_, #{data := Set}, Acc) ->
-                                 sets:to_list(Set) ++ Acc
-                         end, [], BindingsMap),
+    Bindings = maps:fold(
+                 fun(Path, Props, Acc) ->
+                         case {Path, Props} of
+                             {?RABBITMQ_KHEPRI_ROUTE_PATH(
+                                VHost, _SrcName, Kind, Name, _RoutingKey),
+                              #{data := Set}} ->
+                                 sets:to_list(Set) ++ Acc;
+                             {_, _} ->
+                                 Acc
+                         end
+                 end, [], BindingsMap),
     rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
 

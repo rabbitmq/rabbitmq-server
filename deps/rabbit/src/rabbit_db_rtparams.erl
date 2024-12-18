@@ -59,7 +59,7 @@ set_in_khepri(Key, Term) ->
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
     case rabbit_khepri:adv_put(Path, Record) of
-        {ok, #{data := Params}} ->
+        {ok, #{Path := #{data := Params}}} ->
             {old, Params#runtime_parameters.value};
         {ok, _} ->
             new
@@ -113,8 +113,16 @@ set_in_khepri_tx(Key, Term) ->
     Path = khepri_rp_path(Key),
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
+    UsesUniformWriteRet = try
+                              khepri_tx:does_api_comply_with(uniform_write_ret)
+                          catch
+                              error:undef ->
+                                  false
+                          end,
     case khepri_tx_adv:put(Path, Record) of
-        {ok, #{data := Params}} ->
+        {ok, #{Path := #{data := Params}}} when UsesUniformWriteRet ->
+            {old, Params#runtime_parameters.value};
+        {ok, #{data := Params}} when not UsesUniformWriteRet ->
             {old, Params#runtime_parameters.value};
         {ok, _} ->
             new
@@ -347,11 +355,23 @@ delete_vhost_in_mnesia_tx(VHostName) ->
         <- mnesia:match_object(?MNESIA_TABLE, Match, read)].
 
 delete_vhost_in_khepri(VHostName) ->
-    Path = khepri_vhost_rp_path(
-             VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:adv_delete_many(Path) of
-        {ok, Props} ->
-            {ok, rabbit_khepri:collect_payloads(Props)};
+    Pattern = khepri_vhost_rp_path(
+                VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:adv_delete_many(Pattern) of
+        {ok, NodePropsMap} ->
+            RTParams =
+            maps:fold(
+              fun(Path, Props, Acc) ->
+                      case {Path, Props} of
+                          {?RABBITMQ_KHEPRI_VHOST_RUNTIME_PARAM_PATH(
+                             VHostName, _, _),
+                           #{data := RTParam}} ->
+                              [RTParam | Acc];
+                          {_, _} ->
+                              Acc
+                      end
+              end, [], NodePropsMap),
+            {ok, RTParams};
         {error, _} = Err ->
             Err
     end.
