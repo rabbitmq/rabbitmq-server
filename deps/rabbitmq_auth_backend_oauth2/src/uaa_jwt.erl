@@ -42,8 +42,10 @@ add_signing_key(KeyId, Type, Value) ->
     end.
 
 -spec update_jwks_signing_keys(oauth_provider()) -> ok | {error, term()}.
-update_jwks_signing_keys(#oauth_provider{id = Id} = OAuthProvider) ->
-    rabbit_log:debug("Downloading signing keys from OauthProvider: ~tp", [Id]),
+update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
+        ssl_options = SslOptions, proxy_options = ProxyOptions} = OAuthProvider) ->
+    rabbit_log:debug("Downloading signing keys from OauthProvider: ~tp",
+        [Id]),
     case oauth2_client:get_jwks(OAuthProvider) of
         {ok, {_, _, JwksBody}} ->
             KeyList = maps:get(<<"keys">>,
