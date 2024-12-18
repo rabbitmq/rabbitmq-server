@@ -18,7 +18,6 @@
 %% API
 -export([start_link/2,
          set_connection/2,
-         close/1,
          register_session/3,
          unregister_session/4]).
 
@@ -28,11 +27,6 @@
          handle_event/4,
          code_change/4,
          terminate/3]).
-
--define(RABBIT_TCP_OPTS, [binary,
-                          {packet, 0},
-                          {active, false},
-                          {nodelay, true}]).
 
 -type frame_type() ::  amqp | sasl.
 
@@ -44,7 +38,7 @@
 
 -record(state,
         {connection_sup :: pid(),
-         socket :: amqp10_client_connection:amqp10_socket() | undefined,
+         socket :: amqp10_client_socket:socket() | closed,
          buffer = <<>> :: binary(),
          frame_state :: #frame_state{} | undefined,
          connection :: pid() | undefined,
@@ -72,9 +66,6 @@ start_link(Sup, Config) ->
 set_connection(Reader, Connection) ->
     gen_statem:cast(Reader, {set_connection, Connection}).
 
-close(Reader) ->
-    gen_statem:cast(Reader, close).
-
 register_session(Reader, Session, OutgoingChannel) ->
     gen_statem:cast(Reader, {register_session, Session, OutgoingChannel}).
 
@@ -97,44 +88,29 @@ init([Sup, ConnConfig]) when is_map(ConnConfig) ->
                      Address   -> Addresses0 ++ [Address]
                  end,
     case connect_any(Addresses, Port, ConnConfig) of
-        {error, Reason} ->
-            {stop, Reason};
-        Socket ->
-            State = #state{connection_sup = Sup, socket = Socket,
+        {ok, Socket} ->
+            State = #state{connection_sup = Sup,
+                           socket = Socket,
                            connection_config = ConnConfig},
-            {ok, expecting_connection_pid, State}
-    end.
-
-connect(Address, Port, #{tls_opts := {secure_port, Opts0}}) ->
-    Opts = rabbit_ssl_options:fix_client(Opts0),
-    case ssl:connect(Address, Port, ?RABBIT_TCP_OPTS ++ Opts) of
-      {ok, S} ->
-          {ssl, S};
-      Err ->
-        Err
-    end;
-connect(Address, Port, _) ->
-    case gen_tcp:connect(Address, Port, ?RABBIT_TCP_OPTS) of
-      {ok, S} ->
-          {tcp, S};
-    Err ->
-        Err
+            {ok, expecting_connection_pid, State};
+        {error, Reason} ->
+            {stop, Reason}
     end.
 
 connect_any([Address], Port, ConnConfig) ->
-  connect(Address, Port, ConnConfig);
+    amqp10_client_socket:connect(Address, Port, ConnConfig);
 connect_any([Address | Addresses], Port, ConnConfig) ->
-  case connect(Address, Port, ConnConfig) of
-    {error, _} ->
-      connect_any(Addresses, Port, ConnConfig);
-    R ->
-      R
-  end.
+    case amqp10_client_socket:connect(Address, Port, ConnConfig) of
+        {error, _} ->
+            connect_any(Addresses, Port, ConnConfig);
+        R ->
+            R
+    end.
 
 handle_event(cast, {set_connection, ConnectionPid}, expecting_connection_pid,
              State=#state{socket = Socket}) ->
     ok = amqp10_client_connection:socket_ready(ConnectionPid, Socket),
-    set_active_once(State),
+    amqp10_client_socket:set_active_once(Socket),
     State1 = State#state{connection = ConnectionPid},
     {next_state, expecting_frame_header, State1};
 handle_event(cast, {register_session, Session, OutgoingChannel}, _StateName,
@@ -151,41 +127,47 @@ handle_event(cast, {unregister_session, _Session, OutgoingChannel, IncomingChann
     State1 = State#state{outgoing_channels = OutgoingChannels1,
                          incoming_channels = IncomingChannels1},
     {keep_state, State1};
-handle_event(cast, close, _StateName, State = #state{socket = Socket}) ->
-    _ = close_socket(Socket),
-    {stop, normal, State#state{socket = undefined}};
 
 handle_event({call, From}, _Action, _State, _Data) ->
     {keep_state_and_data, [{reply, From, ok}]};
 
-handle_event(info, {Tcp, _, Packet}, StateName, #state{buffer = Buffer} = State)
+handle_event(info, {Tcp, _Sock, Packet}, StateName, State)
   when Tcp == tcp orelse Tcp == ssl ->
-    Data = <<Buffer/binary, Packet/binary>>,
-    case handle_input(StateName, Data, State) of
-        {ok, NextState, Remaining, NewState0} ->
-            NewState = defer_heartbeat_timer(NewState0),
-            set_active_once(NewState),
-            {next_state, NextState, NewState#state{buffer = Remaining}};
-        {error, Reason, NewState} ->
-            {stop, Reason, NewState}
+    handle_socket_input(Packet, StateName, State);
+handle_event(info, {gun_ws, WsPid, StreamRef, WsFrame}, StateName,
+             #state{socket = {ws, WsPid, StreamRef}} = State) ->
+    case WsFrame of
+        {binary, Bin} ->
+            handle_socket_input(Bin, StateName, State);
+        close ->
+            logger:info("peer closed AMQP over WebSocket connection in state '~s'",
+                        [StateName]),
+            {stop, normal, socket_closed(State)};
+        {close, ReasonStatusCode, ReasonUtf8} ->
+            logger:info("peer closed AMQP over WebSocket connection in state '~s', reason: ~b ~ts",
+                        [StateName, ReasonStatusCode, ReasonUtf8]),
+            {stop, {shutdown, {ReasonStatusCode, ReasonUtf8}}, socket_closed(State)}
     end;
-
-handle_event(info, {TcpError, _, Reason}, StateName, State)
+handle_event(info, {TcpError, _Sock, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
     logger:warning("AMQP 1.0 connection socket errored, connection state: '~ts', reason: '~tp'",
-                    [StateName, Reason]),
-    State1 = State#state{socket = undefined,
-                         buffer = <<>>,
-                         frame_state = undefined},
-    {stop, {error, Reason}, State1};
+                   [StateName, Reason]),
+    {stop, {error, Reason}, socket_closed(State)};
 handle_event(info, {TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
-    logger:warning("AMQP 1.0 connection socket was closed, connection state: '~ts'",
-                    [StateName]),
-    State1 = State#state{socket = undefined,
-                         buffer = <<>>,
-                         frame_state = undefined},
-    {stop, normal, State1};
+    logger:info("AMQP 1.0 connection socket was closed, connection state: '~ts'",
+                [StateName]),
+    {stop, normal, socket_closed(State)};
+handle_event(info, {gun_down, WsPid, _Proto, Reason, _Streams}, StateName,
+             #state{socket = {ws, WsPid, _StreamRef}} = State) ->
+    logger:warning("AMQP over WebSocket process ~p lost connection in state: '~s': ~p",
+                   [WsPid, StateName, Reason]),
+    {stop, Reason, socket_closed(State)};
+handle_event(info, {'DOWN', _Mref, process, WsPid, Reason}, StateName,
+             #state{socket = {ws, WsPid, _StreamRef}} = State) ->
+    logger:warning("AMQP over WebSocket process ~p terminated in state: '~s': ~p",
+                   [WsPid, StateName, Reason]),
+    {stop, Reason, socket_closed(State)};
 
 handle_event(info, heartbeat, _StateName, #state{connection = Connection}) ->
     amqp10_client_connection:close(Connection,
@@ -193,10 +175,8 @@ handle_event(info, heartbeat, _StateName, #state{connection = Connection}) ->
     % do not stop as may want to read the peer's close frame
     keep_state_and_data.
 
-terminate(normal, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
-    maybe_close_socket(Socket);
-terminate(_Reason, _StateName, #state{connection_sup = _Sup, socket = Socket}) ->
-    maybe_close_socket(Socket).
+terminate(_Reason, _StateName, #state{socket = Socket}) ->
+    close_socket(Socket).
 
 code_change(_Vsn, State, Data, _Extra) ->
     {ok, State, Data}.
@@ -205,20 +185,27 @@ code_change(_Vsn, State, Data, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-maybe_close_socket(undefined) ->
+socket_closed(State) ->
+    State#state{socket = closed,
+                buffer = <<>>,
+                frame_state = undefined}.
+
+close_socket(closed) ->
     ok;
-maybe_close_socket(Socket) ->
-    close_socket(Socket).
+close_socket(Socket) ->
+    amqp10_client_socket:close(Socket).
 
-close_socket({tcp, Socket}) ->
-    gen_tcp:close(Socket);
-close_socket({ssl, Socket}) ->
-    ssl:close(Socket).
-
-set_active_once(#state{socket = {tcp, Socket}}) ->
-    ok = inet:setopts(Socket, [{active, once}]);
-set_active_once(#state{socket = {ssl, Socket}}) ->
-    ok = ssl:setopts(Socket, [{active, once}]).
+handle_socket_input(Input, StateName, #state{socket = Socket,
+                                             buffer = Buffer} = State0) ->
+    Data = <<Buffer/binary, Input/binary>>,
+    case handle_input(StateName, Data, State0) of
+        {ok, NextStateName, Remaining, State1} ->
+            State = defer_heartbeat_timer(State1),
+            amqp10_client_socket:set_active_once(Socket),
+            {next_state, NextStateName, State#state{buffer = Remaining}};
+        {error, Reason, State} ->
+            {stop, Reason, State}
+    end.
 
 handle_input(expecting_frame_header,
              <<"AMQP", Protocol/unsigned, Maj/unsigned, Min/unsigned,
