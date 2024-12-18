@@ -146,7 +146,7 @@
          remote_outgoing_window = 0 :: non_neg_integer(),
 
          reader :: pid(),
-         socket :: amqp10_client_connection:amqp10_socket() | undefined,
+         socket :: amqp10_client_socket:socket() | undefined,
          links = #{} :: #{output_handle() => #link{}},
          link_index = #{} :: #{{link_role(), link_name()} => output_handle()},
          link_handle_index = #{} :: #{input_handle() => output_handle()},
@@ -222,7 +222,7 @@ disposition(#link_ref{role = receiver,
 start_link(From, Channel, Reader, ConnConfig) ->
     gen_statem:start_link(?MODULE, [From, Channel, Reader, ConnConfig], []).
 
--spec socket_ready(pid(), amqp10_client_connection:amqp10_socket()) -> ok.
+-spec socket_ready(pid(), amqp10_client_socket:socket()) -> ok.
 socket_ready(Pid, Socket) ->
     gen_statem:cast(Pid, {socket_ready, Socket}).
 
@@ -1163,8 +1163,9 @@ amqp10_session_event(Evt) ->
     {amqp10_event, {session, self(), Evt}}.
 
 socket_send(Sock, Data) ->
-    case socket_send0(Sock, Data) of
-        ok -> ok;
+    case amqp10_client_socket:send(Sock, Data) of
+        ok ->
+            ok;
         {error, _Reason} ->
             throw({stop, normal})
     end.
@@ -1174,12 +1175,6 @@ notify_credit_exhausted(Link = #link{auto_flow = never}) ->
     ok = notify_link(Link, credit_exhausted);
 notify_credit_exhausted(_Link) ->
     ok.
-
--dialyzer({no_fail_call, socket_send0/2}).
-socket_send0({tcp, Socket}, Data) ->
-    gen_tcp:send(Socket, Data);
-socket_send0({ssl, Socket}, Data) ->
-    ssl:send(Socket, Data).
 
 -spec make_link_ref(link_role(), pid(), output_handle()) ->
     link_ref().

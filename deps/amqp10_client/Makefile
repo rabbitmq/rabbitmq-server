@@ -29,7 +29,7 @@ endef
 PACKAGES_DIR ?= $(abspath PACKAGES)
 
 BUILD_DEPS = rabbit_common elvis_mk
-DEPS = amqp10_common credentials_obfuscation
+DEPS = amqp10_common credentials_obfuscation gun
 TEST_DEPS = rabbit rabbitmq_ct_helpers
 LOCAL_DEPS = ssl inets crypto public_key
 
