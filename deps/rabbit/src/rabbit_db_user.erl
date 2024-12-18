@@ -628,19 +628,41 @@ clear_all_permissions_for_vhost_in_mnesia(VHostName) ->
 clear_all_permissions_for_vhost_in_khepri(VHostName) ->
     rabbit_khepri:transaction(
       fun() ->
-              UserPermissionsPath = khepri_user_permission_path(
-                                      ?KHEPRI_WILDCARD_STAR, VHostName),
-              TopicPermissionsPath = khepri_topic_permission_path(
-                                       ?KHEPRI_WILDCARD_STAR, VHostName,
-                                       ?KHEPRI_WILDCARD_STAR),
-              {ok, UserProps} = khepri_tx_adv:delete_many(UserPermissionsPath),
-              {ok, TopicProps} = khepri_tx_adv:delete_many(
-                                   TopicPermissionsPath),
-              Deletions = rabbit_khepri:collect_payloads(
-                            TopicProps,
-                            rabbit_khepri:collect_payloads(UserProps)),
-              {ok, Deletions}
+              clear_all_permissions_for_vhost_in_khepri_tx(VHostName)
       end, rw, #{timeout => infinity}).
+
+clear_all_permissions_for_vhost_in_khepri_tx(VHostName) ->
+    UserPermissionsPattern = khepri_user_permission_path(
+                               ?KHEPRI_WILDCARD_STAR, VHostName),
+    TopicPermissionsPattern = khepri_topic_permission_path(
+                                ?KHEPRI_WILDCARD_STAR, VHostName,
+                                ?KHEPRI_WILDCARD_STAR),
+    {ok, UserNodePropsMap} = khepri_tx_adv:delete_many(UserPermissionsPattern),
+    {ok, TopicNodePropsMap} = khepri_tx_adv:delete_many(
+                                TopicPermissionsPattern),
+    Deletions0 =
+    maps:fold(
+      fun(Path, Props, Acc) ->
+              case {Path, Props} of
+                  {?RABBITMQ_KHEPRI_USER_PERMISSION_PATH(VHostName, _),
+                   #{data := Permission}} ->
+                      [Permission | Acc];
+                  {_, _} ->
+                      Acc
+              end
+      end, [], UserNodePropsMap),
+    Deletions1 =
+    maps:fold(
+      fun(Path, Props, Acc) ->
+              case {Path, Props} of
+                  {?RABBITMQ_KHEPRI_TOPIC_PERMISSION_PATH(VHostName, _, _),
+                   #{data := Permission}} ->
+                      [Permission | Acc];
+                  {_, _} ->
+                      Acc
+              end
+      end, Deletions0, TopicNodePropsMap),
+    {ok, Deletions1}.
 
 %% -------------------------------------------------------------------
 %% get_topic_permissions().
