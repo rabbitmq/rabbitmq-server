@@ -725,13 +725,26 @@ maybe_deliver_or_enqueue(Delivery = #delivery{message = Message},
             {IsDuplicate, BQS1} = BQ:is_duplicate(Message, BQS),
             State1 = State#q{backing_queue_state = BQS1},
             case IsDuplicate of
-                true -> State1;
-                {true, drop} -> State1;
-                %% Drop publish and nack to publisher
-                {true, reject} ->
+                true ->
+                    %% Publish to DLX
+                    _ = with_dlx(
+                          DLX,
+                          fun (X) ->
+                                  rabbit_global_counters:messages_dead_lettered(maxlen,
+                                                                                rabbit_classic_queue,
+                                                                                at_most_once, 1),
+                                  QName = qname(State1),
+                                  rabbit_dead_letter:publish(Message, maxlen, X, RK, QName)
+                          end,
+                          fun () ->
+                                  rabbit_global_counters:messages_dead_lettered(maxlen,
+                                                                                rabbit_classic_queue,
+                                                                                disabled, 1)
+                          end),
+                    %% Drop publish and nack to publisher
                     send_reject_publish(Delivery, State1);
-                %% Enqueue and maybe drop head later
                 false ->
+                    %% Enqueue and maybe drop head later
                     deliver_or_enqueue(Delivery, Delivered, State1)
             end
     end.
