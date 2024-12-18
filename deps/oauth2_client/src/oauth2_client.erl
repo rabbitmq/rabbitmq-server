@@ -7,6 +7,7 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
+        get_jwks/2, get_jwks/3,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,get_openid_configuration/3,
         build_openid_discovery_endpoint/3,         
@@ -139,6 +140,22 @@ get_openid_configuration(DiscoverEndpoint, TLSOptions, ProxyOptions) ->
     Response = http_get(DiscoverEndpoint, HTTPOptions, ProxyOptions),
     parse_openid_configuration_response(Response).
     
+-spec get_jwks(JWKSEndpoint :: uri_string:uri_string(),
+    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
+get_jwks(JWKSEndpoint, TLSOptions) ->
+    get_jwks(JWKSEndpoint, TLSOptions, undefined).
+
+-spec get_jwks(JWKSEndpoint :: uri_string:uri_string(),
+    ssl:tls_option() | [], proxy_options() | undefined | 'none')
+         -> {ok, openid_configuration()} | {error, term()}.
+get_jwks(JWKSEndpoint, TLSOptions, ProxyOptions) ->
+    rabbit_log:debug("get_jwks from ~p (~p) [~p]", [JWKSEndpoint,
+        format_ssl_options(TLSOptions), format_proxy_options(ProxyOptions)]),
+    HTTPOptions = 
+        map_ssl_options_to_httpc_option(TLSOptions) ++
+        map_timeout_to_httpc_option(?DEFAULT_HTTP_TIMEOUT),
+    http_get(JWKSEndpoint, HTTPOptions, ProxyOptions).    
+
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
 merge_openid_configuration(OpenId, OAuthProvider0) ->    
