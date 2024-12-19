@@ -57,36 +57,54 @@ refresh_access_token(OAuthProvider, Request) ->
         OAuthProvider#oauth_provider.proxy_options),
     parse_access_token_response(Response).
 
-ensure_http_client_started(Id) ->
+ensure_http_client_started(Id, ProxyOptions) ->
     Profile = case Id of 
         root -> root;
         _ -> binary_to_atom(Id)
     end,
+    rabbit_log:debug("Starting http client ~p", [Profile]),
     case inets:start(httpc, [{profile, Profile}]) of 
-        ok -> {ok, Profile};
-        {error, {already_started, _}} -> {ok, Profile};
+        ok -> 
+            HttpProxyOptions = map_proxy_to_httpc_option(ProxyOptions),
+            case ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) of 
+                ok -> {ok, Profile};  
+                {error, _} = Error -> Error
+            end;   
+        {error, {already_started, _}} -> 
+            rabbit_log:debug("Already started http client ~p", [Profile]),
+            {ok, Profile};
         Error -> Error
+    end.
+ensure_http_proxy_options_if_any(_Profile, []) ->
+    ok;
+ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) ->
+    case httpc:get_options([proxy]) of 
+        {ok, _} -> ok;
+        {error, _} ->
+            rabbit_log:debug("Setting Proxy options to http client ~p", [Profile]),             
+            case httpc:set_options(HttpProxyOptions, Profile) of
+                ok -> 
+                    rabbit_log:debug("SetOptions ~p on http client ~p", 
+                        [HttpProxyOptions, Profile]),
+                    ok;
+                {error, _} = Error -> Error
+            end
     end.
 http_post(Id, URL, Header, Type, Body, HTTPOptions, ProxyOptions) ->
     http_request(Id, post, {URL, Header, Type, Body}, HTTPOptions, ProxyOptions).
 http_get(Id, URL, HTTPOptions, ProxyOptions) ->
     http_request(Id, get, {URL, []}, HTTPOptions, ProxyOptions).
 http_request(Id, Method, Payload, HTTPOptions, ProxyOptions) ->
-    case ensure_http_client_started(Id) of
+    case ensure_http_client_started(Id, ProxyOptions) of
         {ok, Profile} ->
             case ProxyOptions of
                 undefined ->
                     httpc:request(Method, Payload, HTTPOptions, [], Profile);
-                _ ->
-                    case httpc:set_options(map_proxy_to_httpc_option(ProxyOptions),
-                                            Profile) of
-                        ok ->
-                            httpc:request(Method, Payload,
-                                HTTPOptions ++ map_proxy_auth_to_httpc_option(ProxyOptions),
-                                [],
-                                Profile);
-                        {error, _} = Error -> Error
-                    end
+                _ ->                    
+                    httpc:request(Method, Payload,
+                        HTTPOptions ++ map_proxy_auth_to_httpc_option(ProxyOptions),
+                        [],
+                        Profile)                
             end;
         {error, _} = Error -> Error
     end.
