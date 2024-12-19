@@ -638,9 +638,7 @@ map_proxy_to_httpc_option(ProxyOptions) ->
     case ProxyOptions of
         undefined -> []; 
         Proxy     -> case {Proxy#proxy_options.host, Proxy#proxy_options.port} of 
-            {undefined, 0} -> [];
             {_, 0}         -> [];
-            {undefined, _} -> [];
             {Host, Port}   -> P = {{Host, Port},[]},
                               [{proxy, P}]                
             end
