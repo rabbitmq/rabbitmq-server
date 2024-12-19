@@ -844,9 +844,9 @@ handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
     MsgIntIds = [Id || {Id, _} <- IdMsgs],
     {State1, Deliveries} = return(Tag, MsgIntIds, State0),
     {ok, State1, Deliveries};
-handle_delivery(QName, Leader, {delivery, Tag, ReadState, Msgs},
+handle_delivery(QName, Leader, {delivery, Tag, ReadPlan, Msgs},
                 #state{cached_segments = Cached0} = State) ->
-    {MsgIds, Cached} = rabbit_fifo:exec_read(Cached0, ReadState, Msgs),
+    {MsgIds, Cached} = rabbit_fifo:exec_read(Cached0, ReadPlan, Msgs),
     handle_delivery(QName, Leader, {delivery, Tag, MsgIds},
                     State#state{cached_segments = Cached}).
 
