@@ -33,9 +33,7 @@ describe('When basic authentication is enabled but both Idps are down', function
 
   it('should not be presented oauth2 section', async function () {
     await homePage.isLoaded()
-    if (await homePage.isOAuth2SectionVisible()) {
-      throw new Error('OAuth2 section should not be present')
-    }
+    assert.ok(await homePage.isOAuth2SectionNotVisible())
   })
 
   after(async function () {

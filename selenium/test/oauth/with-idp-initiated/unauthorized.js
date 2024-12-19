@@ -24,12 +24,10 @@ describe('A user who accesses the /login URL with a token without scopes for the
   })
 
   it('should get a warning message', async function () {
-    const message = await homePage.getWarning()
-    assert.equal('Not_Authorized', message)
+    assert.equal(await homePage.getWarning(), 'Not_Authorized')
   })
   it('should be presented with a login button to log in', async function () {
-    const value = await homePage.getLoginButton()
-    assert.equal(value, 'Click here to log in')
+    assert.equal(await homePage.getLoginButton(), 'Click here to log in')
   })
 
   after(async function () {

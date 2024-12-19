@@ -221,6 +221,26 @@
  end}.
 
 {mapping,
+ "auth_oauth2.proxy.host",
+ "rabbitmq_auth_backend_oauth2.proxy.host",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.proxy.port",
+ "rabbitmq_auth_backend_oauth2.proxy.port",
+ [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.proxy.username",
+ "rabbitmq_auth_backend_oauth2.proxy.username",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.proxy.password",
+ "rabbitmq_auth_backend_oauth2.proxy.password",
+ [{datatype, string}]}.
+
+{mapping,
  "auth_oauth2.https.peer_verification",
  "rabbitmq_auth_backend_oauth2.key_config.peer_verification",
  [{datatype, {enum, [verify_peer, verify_none]}}]}.
@@ -321,6 +341,26 @@
  "auth_oauth2.oauth_providers.$name.https.depth",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.proxy.host",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.proxy.port",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, integer}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.proxy.username",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
+
+{mapping,
+ "auth_oauth2.oauth_providers.$name.proxy.password",
+ "rabbitmq_auth_backend_oauth2.oauth_providers",
+ [{datatype, string}]}.
 
 {mapping,
  "auth_oauth2.oauth_providers.$name.https.hostname_verification",

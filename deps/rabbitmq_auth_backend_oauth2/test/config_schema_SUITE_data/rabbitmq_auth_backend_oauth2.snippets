@@ -316,5 +316,37 @@
             }            
         ]}
        ], []
+  },
+  {proxy, 
+     "auth_oauth2.proxy.host = localproxy
+      auth_oauth2.proxy.port = 8080
+      auth_oauth2.proxy.username = proxyuser
+      auth_oauth2.proxy.password = proxypwd
+      auth_oauth2.oauth_providers.keycloak.proxy.host = localproxy2
+      auth_oauth2.oauth_providers.keycloak.proxy.port = 8080
+      auth_oauth2.oauth_providers.keycloak.proxy.username = proxyuser2
+      auth_oauth2.oauth_providers.keycloak.proxy.password = proxypwd2",
+      [
+      {rabbitmq_auth_backend_oauth2, [
+          {proxy, [
+              {host, "localproxy"},
+              {password, "proxypwd"},
+              {port, 8080},
+              {username, "proxyuser"}
+          ]},
+          {oauth_providers,
+              #{
+                <<"keycloak">> => [
+                  {proxy, [
+                    {password, "proxypwd2"},
+                    {username, "proxyuser2"},
+                    {port, 8080},
+                    {host, "localproxy2"}                    
+                  ]}                  
+                ]
+              }
+          }
+      ]}
+      ], []
   }
 ].

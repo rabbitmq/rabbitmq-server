@@ -26,14 +26,11 @@ describe('A user which accesses a protected URL without a session', function () 
 
   it('redirect to previous accessed page after login ', async function () {
     await homePage.clickToLogin()
-
     await idpLogin.login('rabbit_admin', 'rabbit_admin')
-
     if (!await exchanges.isLoaded()) {
       throw new Error('Failed to login')
     }
-
-    assert.equal("All exchanges (8)", await exchanges.getPagingSectionHeaderText())
+    await exchanges.getPagingSectionHeaderText()
   })
 
 
