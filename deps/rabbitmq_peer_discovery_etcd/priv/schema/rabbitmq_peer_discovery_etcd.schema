@@ -182,9 +182,6 @@ end}.
 {mapping, "cluster_formation.etcd.ssl_options.verify", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.verify", [
     {datatype, {enum, [verify_peer, verify_none]}}]}.
 
-{mapping, "cluster_formation.etcd.ssl_options.fail_if_no_peer_cert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.fail_if_no_peer_cert", [
-    {datatype, {enum, [true, false]}}]}.
-
 {mapping, "cluster_formation.etcd.ssl_options.cacertfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacertfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
@@ -213,17 +210,6 @@ end}.
 
 {mapping, "cluster_formation.etcd.ssl_options.depth", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.depth",
     [{datatype, integer}, {validators, ["byte"]}]}.
-
-{mapping, "cluster_formation.etcd.ssl_options.dh", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dh",
-    [{datatype, string}]}.
-
-{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dh",
-fun(Conf) ->
-    list_to_binary(cuttlefish:conf_get("cluster_formation.etcd.ssl_options.dh", Conf))
-end}.
-
-{mapping, "cluster_formation.etcd.ssl_options.dhfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.dhfile",
-    [{datatype, string}, {validators, ["file_accessible"]}]}.
 
 {mapping, "cluster_formation.etcd.ssl_options.key.RSAPrivateKey", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.key",
     [{datatype, string}]}.

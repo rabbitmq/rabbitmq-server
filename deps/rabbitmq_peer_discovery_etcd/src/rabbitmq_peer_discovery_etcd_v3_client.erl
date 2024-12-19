@@ -140,18 +140,12 @@ recover(internal, start, Data = #statem_data{endpoints = Endpoints, connection_m
     rabbit_log:debug("etcd v3 API client will attempt to connect, endpoints: ~ts",
                      [string:join(Endpoints, ",")]),
     maybe_demonitor(Ref),
-    {Transport, TransportOpts} = pick_transport(Data),
-    case Transport of
-        tcp -> rabbit_log:info("etcd v3 API client is configured to connect over plain TCP, without using TLS");
-        tls -> rabbit_log:info("etcd v3 API client is configured to use TLS")
-    end,
-    ConnName = ?ETCD_CONN_NAME,
-    case connect(ConnName, Endpoints, Transport, TransportOpts, Data) of
+    case connect(?ETCD_CONN_NAME, Endpoints, Data) of
         {ok, Pid} ->
             rabbit_log:debug("etcd v3 API client connection: ~tp", [Pid]),
             rabbit_log:debug("etcd v3 API client: total number of connections to etcd is ~tp", [length(eetcd_conn_sup:info())]),
             {next_state, connected, Data#statem_data{
-                connection_name = ConnName,
+                connection_name = ?ETCD_CONN_NAME,
                 connection_pid = Pid,
                 connection_monitor = monitor(process, Pid)
             }};
@@ -213,8 +207,12 @@ connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_n
 connected({call, From}, register, Data = #statem_data{connection_name = Conn}) ->
     Ctx = registration_context(Conn, Data),
     Key = node_key(Data),
-    eetcd_kv:put(Ctx, Key, registration_value(Data)),
-    rabbit_log:debug("etcd peer discovery: put key ~tp, done with registration", [Key]),
+    case eetcd_kv:put(Ctx, Key, registration_value(Data)) of
+        {ok, _} ->
+            rabbit_log:debug("etcd peer discovery: put key ~tp, done with registration", [Key]);
+        {error, Reason} ->
+            rabbit_log:error("etcd peer discovery: put key ~tp failed: ~p", [Key, Reason])
+    end,
     gen_statem:reply(From, ok),
     keep_state_and_data;
 connected({call, From}, unregister, Data = #statem_data{connection_name = Conn}) ->
@@ -320,20 +318,21 @@ error_is_already_started({_Endpoint, already_started}) ->
 error_is_already_started({_Endpoint, _}) ->
     false.
 
-connect(Name, Endpoints, Transport, TransportOpts, Data) ->
+connect(Name, Endpoints, Data) ->
     case eetcd_conn:lookup(Name) of
         {ok, Pid} when is_pid(Pid) ->
             {ok, Pid};
         {error, eetcd_conn_unavailable} ->
-            do_connect(Name, Endpoints, Transport, TransportOpts, Data)
+            do_connect(Name, Endpoints, Data)
     end.
 
-do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{username = Username}) ->
+do_connect(Name, Endpoints, Data = #statem_data{username = Username}) ->
+    Opts = connection_options(Data),
     case Username of
         undefined -> rabbit_log:info("etcd peer discovery: will connect to etcd without authentication (no credentials configured)");
         _         -> rabbit_log:info("etcd peer discovery: will connect to etcd as user '~ts'", [Username])
     end,
-    case eetcd:open(Name, Endpoints, connection_options(Data), Transport, TransportOpts) of
+    case eetcd:open(Name, Endpoints, Opts) of
         {ok, Pid} -> {ok, Pid};
         {error, Errors0} ->
             Errors = case is_list(Errors0) of
@@ -354,16 +353,6 @@ do_connect(Name, Endpoints, Transport, TransportOpts, Data = #statem_data{userna
             end
     end.
 
-connection_options(#statem_data{username = Username, obfuscated_password = Password}) ->
-    SharedOpts = [{mode, random}],
-    case {Username, Password} of
-        {undefined, _} -> SharedOpts;
-        {_, undefined} -> SharedOpts;
-        {UVal, PVal}   ->
-            [{name, UVal}, {password, to_list(deobfuscate(PVal))}] ++ SharedOpts
-    end.
-
-
 obfuscate(undefined) -> undefined;
 obfuscate(Password) ->
     credentials_obfuscation:encrypt(to_binary(Password)).
@@ -379,9 +368,9 @@ disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
 unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_keepalive_pid = KAPid}) ->
     Ctx = unregistration_context(Conn, Data),
     Key = node_key(Data),
-    eetcd_kv:delete(Ctx, Key),
+    _ = eetcd_kv:delete(Ctx, Key),
     rabbit_log:debug("etcd peer discovery: deleted key ~ts, done with unregistration", [Key]),
-    eetcd_lease:revoke(Ctx, LeaseID),
+    _ = eetcd_lease:revoke(Ctx, LeaseID),
     exit(KAPid, normal),
     rabbit_log:debug("etcd peer discovery: revoked a lease ~tp for node key ~ts", [LeaseID, Key]),
     ok.
@@ -429,7 +418,24 @@ normalize_settings(Map) when is_map(Map) ->
     maps:merge(maps:without([etcd_prefix, lock_wait_time], Map),
                #{endpoints => AllEndpoints}).
 
-pick_transport(#statem_data{tls_options = []}) ->
-    {tcp, []};
-pick_transport(#statem_data{tls_options = Opts}) ->
-    {tls, Opts}.
+connection_options(#statem_data{tls_options = TlsOpts,
+                                username = Username,
+                                obfuscated_password = Password}) ->
+    Opts0 = case TlsOpts of
+                [] ->
+                    rabbit_log:info("etcd v3 API client is configured to use plain TCP (without TLS)"),
+                    [{transport, tcp}];
+                _ ->
+                    rabbit_log:info("etcd v3 API client is configured to use TLS"),
+                    [{transport, tls},
+                     {tls_opts, TlsOpts}]
+            end,
+    Opts = [{mode, random} | Opts0],
+    case Username =:= undefined orelse
+         Password =:= undefined of
+        true ->
+            Opts;
+        false ->
+            [{name, Username},
+             {password, to_list(deobfuscate(Password))}] ++ Opts
+    end.
