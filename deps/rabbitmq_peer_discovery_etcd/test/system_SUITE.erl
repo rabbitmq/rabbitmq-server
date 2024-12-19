@@ -200,11 +200,7 @@ start_etcd(Config) ->
            "--initial-cluster-state", "new",
            "--initial-cluster-token", "test-token",
            "--log-level", "debug", "--log-outputs", "stdout"],
-<<<<<<< HEAD
-    EtcdPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
-=======
     EtcdPid = spawn(fun() -> do_start_etcd(Cmd) end),
->>>>>>> d54b2bff3 (rabbitmq_peer_discovery_etcd: Wait for etcd start in system_SUITE)
 
     EtcdEndpoints = [rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort])],
     Config1 = rabbit_ct_helpers:set_config(
