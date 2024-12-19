@@ -45,8 +45,7 @@ describe('Given two oauth resources and basic auth enabled, an unauthenticated u
   })
 
   it('should not have a warning message', async function () {
-    const visible = await homePage.isWarningVisible()
-    assert.ok(!visible)
+    assert.ok(await homePage.isWarningNotVisible())
   })
 
 

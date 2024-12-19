@@ -20,6 +20,14 @@
 }).
 -type openid_configuration() :: #openid_configuration{}.
 
+-record(proxy_options, {
+    host :: string(),
+    port :: integer(),
+    username :: option(string() | binary()),
+    password :: option(string() | binary())
+}).
+-type proxy_options() :: #proxy_options{}.
+
 -record(oauth_provider, {
     id :: oauth_provider_id(),
     issuer :: option(uri_string:uri_string()),
@@ -28,7 +36,8 @@
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
     jwks_uri :: option(uri_string:uri_string()),
-    ssl_options :: option(list())
+    ssl_options :: option(list()),
+    proxy_options :: option(proxy_options())
 }).
 
 -type query_list() :: [{unicode:chardata(), unicode:chardata() | true}].

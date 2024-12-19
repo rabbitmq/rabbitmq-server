@@ -3,15 +3,17 @@ const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 const fsp = fs.promises
 const path = require('path')
 const { By, Key, until, Builder, logging, Capabilities } = require('selenium-webdriver')
+const proxy = require('selenium-webdriver/proxy')
 require('chromedriver')
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
 const assert = require('assert')
 
+const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
 const baseUrl = randomly_pick_baseurl(process.env.RABBITMQ_URL) || 'http://localhost:15672/'
+//const proxyUrl = calculateProxyUrl(baseUrl)
 const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
-const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
 const profiles = process.env.PROFILES || ''
@@ -23,6 +25,19 @@ function randomly_pick_baseurl(baseUrl) {
 function getRandomInt(max) {
   return Math.floor(Math.random() * max);
 }
+/*
+function calculateProxyUrl(baseUrl) {
+  if (baseUrl.includes("localhost")) {
+    return undefined
+  }
+  if (process.env.FORWARD_PROXY_HOST && process.env.FORWARD_PROXY_PORT) {
+    return 'http://' + process.env.FORWARD_PROXY_HOST + ':' + process.env.FORWARD_PROXY_PORT
+  }else {
+    console.log("There are no proxy setup : " + JSON.stringify(process.env))
+    return undefined
+  }
+}
+*/
 class CaptureScreenshot {
   driver
   test
@@ -64,10 +79,19 @@ module.exports = {
           "--disable-search-engine-choice-screen"
       ]
     });
-    driver = builder
+    
+    builder = builder
       .forBrowser('chrome')
       .withCapabilities(chromeCapabilities)
-      .build()
+/*      
+    if (proxyUrl) {
+      console.log("Using proxy " + proxyUrl)
+      builder = builder.setProxy(proxy.manual({https: proxyUrl}))      
+    }else {
+      console.log("Not Using proxy . runLocal: " + runLocal)
+    }
+*/      
+    driver = builder.build()
     driver.manage().setTimeouts( { pageLoad: 35000 } )
     return driver
   },

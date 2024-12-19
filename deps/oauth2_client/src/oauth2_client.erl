@@ -7,13 +7,18 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
+        get_jwks/1,
         get_oauth_provider/1, get_oauth_provider/2,
-        get_openid_configuration/2,
+        get_openid_configuration/1,
         build_openid_discovery_endpoint/3,         
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
-        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1
+        map_proxy_auth_to_httpc_option/1,
+        map_proxy_to_httpc_option/1,
+        map_ssl_options_to_httpc_option/1,
+        map_timeout_to_httpc_option/1,
+        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1        
         ]).
 
 -include("oauth2_client.hrl").
@@ -25,29 +30,82 @@ get_access_token(OAuthProvider, Request) ->
     rabbit_log:debug("get_access_token using OAuthProvider:~p and client_id:~p",
         [OAuthProvider, Request#access_token_request.client_id]),
         URL = OAuthProvider#oauth_provider.token_endpoint,
+    Id = OAuthProvider#oauth_provider.id,
     Header = [],
     Type = ?CONTENT_URLENCODED,
     Body = build_access_token_request_body(Request),
-    HTTPOptions = get_ssl_options_if_any(OAuthProvider) ++
-        get_timeout_of_default(Request#access_token_request.timeout),
-    Options = [],
-    Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
+    HTTPOptions = 
+        map_ssl_options_to_httpc_option(OAuthProvider#oauth_provider.ssl_options) ++
+        map_timeout_to_httpc_option(Request#access_token_request.timeout),
+    Response = http_post(Id, URL, Header, Type, Body, HTTPOptions, 
+        OAuthProvider#oauth_provider.proxy_options),
     parse_access_token_response(Response).
 
 -spec refresh_access_token(oauth_provider(), refresh_token_request()) ->
     {ok, successful_access_token_response()} | 
     {error, unsuccessful_access_token_response() | any()}.
 refresh_access_token(OAuthProvider, Request) ->
+    Id = OAuthProvider#oauth_provider.id,
     URL = OAuthProvider#oauth_provider.token_endpoint,
     Header = [],
     Type = ?CONTENT_URLENCODED,
     Body = build_refresh_token_request_body(Request),
-    HTTPOptions = get_ssl_options_if_any(OAuthProvider) ++
-        get_timeout_of_default(Request#refresh_token_request.timeout),
-    Options = [],
-    Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
+    HTTPOptions = 
+        map_ssl_options_to_httpc_option(OAuthProvider#oauth_provider.ssl_options) ++
+        map_timeout_to_httpc_option(Request#refresh_token_request.timeout),
+    Response = http_post(Id, URL, Header, Type, Body, HTTPOptions, 
+        OAuthProvider#oauth_provider.proxy_options),
     parse_access_token_response(Response).
 
+ensure_http_client_started(Id, ProxyOptions) ->
+    Profile = case Id of 
+        root -> root;
+        _ -> binary_to_atom(Id)
+    end,
+    rabbit_log:debug("Starting http client ~p ...", [Profile]),
+    case inets:start(httpc, [{profile, Profile}]) of 
+        {ok, _} -> 
+            HttpProxyOptions = map_proxy_to_httpc_option(ProxyOptions),
+            case ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) of 
+                ok -> {ok, Profile};  
+                {error, _} = Error -> Error
+            end;   
+        {error, {already_started, _}} -> 
+            {ok, Profile};
+        Error -> 
+            rabbit_log:error("Failed to start httpc client: ~p", [Error]),
+            Error
+    end.
+ensure_http_proxy_options_if_any(_Profile, []) ->
+    ok;
+ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) ->    
+    case httpc:set_options(HttpProxyOptions, Profile) of
+        ok -> 
+            rabbit_log:debug("Successfully set_options ~p on http client ~p", 
+                [HttpProxyOptions, Profile]),
+            ok;
+        {error, _} = Error -> Error
+    end.
+        
+http_post(Id, URL, Header, Type, Body, HTTPOptions, ProxyOptions) ->
+    http_request(Id, post, {URL, Header, Type, Body}, HTTPOptions, ProxyOptions).
+http_get(Id, URL, HTTPOptions, ProxyOptions) ->
+    http_request(Id, get, {URL, []}, HTTPOptions, ProxyOptions).
+http_request(Id, Method, Payload, HTTPOptions, ProxyOptions) ->
+    case ensure_http_client_started(Id, ProxyOptions) of
+        {ok, Profile} ->
+            case ProxyOptions of
+                undefined ->
+                    httpc:request(Method, Payload, HTTPOptions, [], Profile);
+                _ ->                    
+                    httpc:request(Method, Payload,
+                        HTTPOptions ++ map_proxy_auth_to_httpc_option(ProxyOptions),
+                        [],
+                        Profile)                
+            end;
+        {error, _} = Error -> Error
+    end.
+        
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
 
@@ -93,14 +151,27 @@ drop_trailing_path_separator(Path) when is_list(Path) ->
         _ -> Path
     end.
 
--spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
-    ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(DiscoverEndpoint, TLSOptions) ->    
-    rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
-        format_ssl_options(TLSOptions)]),
-    Options = [],
-    Response = httpc:request(get, {DiscoverEndpoint, []}, TLSOptions, Options),
+-spec get_openid_configuration(oauth_provider()) -> {ok, openid_configuration()} | {error, term()}.
+get_openid_configuration(#oauth_provider{id = Id, discovery_endpoint = Endpoint,
+        ssl_options = SslOptions, proxy_options = ProxyOptions}) ->       
+    rabbit_log:debug("get_openid_configuration from ~p (~p) [~p]", [Endpoint,
+        format_ssl_options(SslOptions), format_proxy_options(ProxyOptions)]),
+    HTTPOptions = 
+        map_ssl_options_to_httpc_option(SslOptions) ++
+        map_timeout_to_httpc_option(?DEFAULT_HTTP_TIMEOUT),
+
+    Response = http_get(Id, Endpoint, HTTPOptions, ProxyOptions),
     parse_openid_configuration_response(Response).
+    
+-spec get_jwks(oauth_provider()) -> {ok, term()} | {error, term()}.
+get_jwks(#oauth_provider{id = Id, jwks_uri = JwksUrl,
+        ssl_options = SslOptions, proxy_options = ProxyOptions}) ->    
+    rabbit_log:debug("get_jwks from ~p (~p) [~p]", [JwksUrl,
+        format_ssl_options(SslOptions), format_proxy_options(ProxyOptions)]),
+    HTTPOptions = 
+        map_ssl_options_to_httpc_option(SslOptions) ++
+        map_timeout_to_httpc_option(?DEFAULT_HTTP_TIMEOUT),
+    http_get(Id, JwksUrl, HTTPOptions, ProxyOptions).    
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
@@ -283,7 +354,7 @@ download_oauth_provider(OAuthProvider) ->
         undefined -> {error, {missing_oauth_provider_attributes, [issuer]}};
         URL ->
             rabbit_log:debug("Downloading oauth_provider using ~p ", [URL]),
-            case get_openid_configuration(URL, get_ssl_options_if_any(OAuthProvider)) of
+            case get_openid_configuration(OAuthProvider) of
                 {ok, OpenIdConfiguration} ->
                     {ok, update_oauth_provider_endpoints_configuration(
                         merge_openid_configuration(OpenIdConfiguration, OAuthProvider))};
@@ -341,7 +412,6 @@ get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes)
                 [OAuthProviderId, Error0]),
             Error0;
         Config ->
-            rabbit_log:debug("Found oauth_provider configuration ~p", [Config]),
             OAuthProvider = map_to_oauth_provider(Config),
             rabbit_log:debug("Resolved oauth_provider ~p", [format_oauth_provider(OAuthProvider)]),
             case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
@@ -395,8 +465,36 @@ lookup_root_oauth_provider() ->
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
-        ssl_options = extract_ssl_options_as_list(Map)
+        ssl_options = extract_ssl_options_as_list(Map),
+        proxy_options = extract_proxy_options(get_env(proxy, []))
     }.
+  
+-spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options() | undefined.
+extract_proxy_options(List) when is_list(List) ->
+    case {proplists:get_value(host, List, undefined),
+        proplists:get_value(port, List, 0)} of 
+        {undefined, _} -> undefined;
+        {_, 0} -> undefined;
+        {H, P} ->
+            #proxy_options{
+                host = H,
+                port = P,
+                username = proplists:get_value(username, List, undefined),
+                password = proplists:get_value(password, List, undefined)
+            }
+    end;
+extract_proxy_options(Map) ->
+    case {maps:get(host, Map, undefined), maps:get(port, Map, 0)} of
+        {undefined, _} -> undefined;
+        {_, 0} -> undefined;
+        {H, P} ->
+            #proxy_options{
+                host = H,
+                port = P,
+                username = maps:get(username, Map, undefined),
+                password = maps:get(password, Map, undefined)
+            }
+    end.
 
 -spec extract_ssl_options_as_list(#{atom() => any()}) -> proplists:proplist().
 extract_ssl_options_as_list(Map) ->
@@ -522,15 +620,36 @@ append_extra_parameters(Request, QueryList) ->
         Params -> Params ++ QueryList
     end.
 
-get_ssl_options_if_any(OAuthProvider) ->
-    case OAuthProvider#oauth_provider.ssl_options of
+map_ssl_options_to_httpc_option(SslOptions) ->
+    case SslOptions of
         undefined -> [];
-        Options ->  [{ssl, Options}]
+        Options   -> [{ssl, Options}]
     end.
-get_timeout_of_default(Timeout) ->
+
+map_timeout_to_httpc_option(Timeout) ->
     case Timeout of
         undefined -> [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
-        Timeout -> [{timeout, Timeout}]
+        Timeout   -> [{timeout, Timeout}]
+    end.
+
+map_proxy_to_httpc_option(ProxyOptions) ->
+    case ProxyOptions of
+        undefined -> []; 
+        Proxy     -> case {Proxy#proxy_options.host, Proxy#proxy_options.port} of 
+            {_, 0}         -> [];
+            {Host, Port}   -> P = {{Host, Port},[]},
+                              [{proxy, P}]                
+            end
+    end.
+
+map_proxy_auth_to_httpc_option(ProxyOptions) ->
+    case ProxyOptions of
+        undefined -> []; 
+        Proxy     -> case {Proxy#proxy_options.username, Proxy#proxy_options.password} of 
+                        {undefined, _} -> [];
+                        {_, undefined} -> [];
+                        {_, _} = Auth  -> [{proxy_auth, Auth}]
+                    end
     end.
 
 is_json(?CONTENT_JSON) -> true;
@@ -543,10 +662,8 @@ is_json(_) -> false.
 decode_body(_, []) -> [];
 decode_body(?CONTENT_JSON, Body) ->
     case rabbit_json:try_decode(rabbit_data_coercion:to_binary(Body)) of
-        {ok, Value} ->
-            Value;
-        {error, _} = Error  ->
-            Error
+        {ok, Value}        -> Value;
+        {error, _} = Error -> Error
     end;
 decode_body(MimeType, Body) ->
     Items = string:split(MimeType, ";"),
@@ -588,14 +705,14 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options = 
             extract_ssl_options_as_list(maps:from_list(
-                proplists:get_value(https, PropList, [])))
+                proplists:get_value(https, PropList, []))),
+        proxy_options = 
+            extract_proxy_options(proplists:get_value(proxy, PropList, []))
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
-        {error, {error, InternalError}} ->
-            {error, InternalError};
-        {error, _} = Error ->
-            Error;
+        {error, {error, InternalError}} -> {error, InternalError};
+        {error, _} = Error -> Error;
         Value ->
             case Code of
                 200 -> {ok, map_to_successful_access_token_response(Value)};
@@ -626,6 +743,18 @@ format_ssl_options(TlsOptions) ->
         proplists:get_value(cacertfile, TlsOptions),
         CaCertsCount])).
 
+-spec format_proxy_options(proxy_options()|undefined) -> string().
+format_proxy_options(undefined) ->
+    lists:flatten(io_lib:format("{no proxy}", []));
+
+format_proxy_options(ProxyOptions) ->
+    lists:flatten(io_lib:format("{host: ~p, port: ~p, username: ~p, " ++
+        "password: ~p }", [
+        ProxyOptions#proxy_options.host,
+        ProxyOptions#proxy_options.port,
+        ProxyOptions#proxy_options.username,
+        ProxyOptions#proxy_options.password])).
+
 format_oauth_provider_id(root) -> "<from keyconfig>";
 format_oauth_provider_id(Id) -> binary_to_list(Id).
 
@@ -634,7 +763,7 @@ format_oauth_provider(OAuthProvider) ->
     lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
         " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "jwks_uri: ~p, ssl_options: ~p }", [
+        "jwks_uri: ~p, ssl_options: ~p, proxy_options: ~p}", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.discovery_endpoint,
@@ -642,7 +771,8 @@ format_oauth_provider(OAuthProvider) ->
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
         OAuthProvider#oauth_provider.jwks_uri,
-        format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
+        format_ssl_options(OAuthProvider#oauth_provider.ssl_options),
+        format_proxy_options(OAuthProvider#oauth_provider.proxy_options)])).
 
 get_env(Par) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, undefined).

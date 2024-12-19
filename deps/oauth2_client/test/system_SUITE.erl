@@ -322,13 +322,25 @@ build_openid_discovery_endpoint(Issuer, Path) ->
 
 get_openid_configuration(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
-    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, ActualOpenId} = oauth2_client:get_openid_configuration(
-        build_openid_discovery_endpoint(build_issuer("https")),
-        SslOptions),
+        ensure_discovery_endpoint(ExpectedOAuthProvider)),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, ActualOpenId).
 
+ensure_issuer(OAuthProvider, IssuerURL) ->
+    OAuthProvider#oauth_provider{
+        issuer = IssuerURL
+    }.
+ensure_discovery_endpoint(OAuthProvider) ->
+    OAuthProvider#oauth_provider{
+        discovery_endpoint = build_openid_discovery_endpoint(OAuthProvider#oauth_provider.issuer)
+    }. 
+ensure_discovery_endpoint(OAuthProvider, DiscoveryEndpointPath) ->
+    OAuthProvider#oauth_provider{
+                discovery_endpoint = build_openid_discovery_endpoint(
+                    OAuthProvider#oauth_provider.issuer, 
+                    DiscoveryEndpointPath)
+    }.
 map_oauth_provider_to_openid_configuration(OAuthProvider) ->
     #openid_configuration{
         issuer = OAuthProvider#oauth_provider.issuer,
@@ -344,35 +356,30 @@ get_openid_configuration_returns_partial_payload(Config) ->
         token_endpoint = ExpectedOAuthProvider0#oauth_provider.token_endpoint,
         jwks_uri = ExpectedOAuthProvider0#oauth_provider.jwks_uri},
 
-    SslOptions = [{ssl, ExpectedOAuthProvider0#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_openid_discovery_endpoint(build_issuer("https")),
-        SslOptions),
+        ensure_discovery_endpoint(ExpectedOAuthProvider0)),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 
 get_openid_configuration_using_path(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
-    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
-    {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH)),
-        SslOptions),
+    {ok, Actual} = oauth2_client:get_openid_configuration(        
+        ensure_discovery_endpoint(
+            ensure_issuer(ExpectedOAuthProvider, build_issuer("https", ?ISSUER_PATH)))),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId,Actual).
 get_openid_configuration_using_path_and_custom_endpoint(Config) ->
-    ExpectedOAuthProvider = ?config(oauth_provider, Config),
-    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
+    ExpectedOAuthProvider = ?config(oauth_provider, Config),    
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_openid_discovery_endpoint(build_issuer("https", ?ISSUER_PATH),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
+        ensure_discovery_endpoint(
+            ensure_issuer(ExpectedOAuthProvider, build_issuer("https", ?ISSUER_PATH)),
+            ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT)),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 get_openid_configuration_using_custom_endpoint(Config) ->
     ExpectedOAuthProvider = ?config(oauth_provider, Config),
-    SslOptions = [{ssl, ExpectedOAuthProvider#oauth_provider.ssl_options}],
     {ok, Actual} = oauth2_client:get_openid_configuration(
-        build_openid_discovery_endpoint(build_issuer("https"),
-        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT), SslOptions),
+        ensure_discovery_endpoint(ExpectedOAuthProvider, ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT)),
     ExpectedOpenId = map_oauth_provider_to_openid_configuration(ExpectedOAuthProvider),
     assertOpenIdConfiguration(ExpectedOpenId, Actual).
 

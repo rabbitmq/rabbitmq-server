@@ -158,6 +158,7 @@ translate_oauth_providers(Conf) ->
             Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
+        extract_oauth_providers_proxy(Settings),
         extract_oauth_providers_signing_keys(Settings)
         ]).
 
@@ -264,6 +265,15 @@ mapOauthProviderProperty({Key, Value}) ->
         _ -> Value
     end}.
 
+extract_oauth_providers_proxy(Settings) ->
+    ExtractProviderNameFun = fun extract_key_as_binary/1,
+    AttributesPerProvider = [{Name, mapProxyProperty({list_to_atom(Key), V})} ||
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "proxy", Key], V} <- Settings ],
+
+    maps:map(fun(_K,V)-> [{proxy, V}] end,
+        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, 
+            AttributesPerProvider)).
+
 extract_oauth_providers_https(Settings) ->
     ExtractProviderNameFun = fun extract_key_as_binary/1,
 
@@ -279,6 +289,9 @@ mapHttpProperty({Key, Value}) ->
         cacertfile -> validator_file_exists(Key, Value);
         _ -> Value
     end}.
+
+mapProxyProperty({Key, Value}) ->
+    {Key, Value}.
 
 extract_oauth_providers_algorithm(Settings) ->
     KeyFun = fun extract_key_as_binary/1,

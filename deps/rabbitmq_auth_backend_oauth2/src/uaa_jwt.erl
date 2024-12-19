@@ -42,11 +42,10 @@ add_signing_key(KeyId, Type, Value) ->
     end.
 
 -spec update_jwks_signing_keys(oauth_provider()) -> ok | {error, term()}.
-update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
-        ssl_options = SslOptions}) ->
-    rabbit_log:debug("Downloading signing keys from ~tp (TLS options: ~p)",
-        [JwksUrl, format_ssl_options(SslOptions)]),
-    case uaa_jwks:get(JwksUrl, SslOptions) of
+update_jwks_signing_keys(#oauth_provider{id = Id} = OAuthProvider) ->
+    rabbit_log:debug("Downloading signing keys from OauthProvider: ~tp",
+        [Id]),
+    case oauth2_client:get_jwks(OAuthProvider) of
         {ok, {_, _, JwksBody}} ->
             KeyList = maps:get(<<"keys">>,
                 jose:decode(erlang:iolist_to_binary(JwksBody)), []),

@@ -39,11 +39,11 @@ describe('Given three oauth resources but only two enabled, an unauthenticated u
   })
 
   it('should not be presented with a login button to log in using Basic Auth', async function () {
-    assert.ok(!await homePage.isBasicAuthSectionVisible())
+    assert.ok(await homePage.isBasicAuthSectionNotVisible())
   })
 
   it('should not have a warning message', async function () {
-    assert.ok(!await homePage.isWarningVisible())
+    assert.ok(await homePage.isWarningNotVisible())
   })
 
 

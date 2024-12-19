@@ -214,20 +214,37 @@ wait_for_oidc_endpoint_docker() {
 calculate_rabbitmq_url() {
   echo "${RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
 }
-
+calculate_forward_proxy_url() {
+  PROXIED_URL=$1
+  PROXY_HOSTNAME=$2
+  PROXY_PORT=$3
+  SCHEME=$(echo "$PROXIED_URL" | cut -d: -f1)
+  PATH=$(echo "$PROXIED_URL" | cut -d/ -f4-)
+  echo "$SCHEME://$PROXY_HOSTNAME:$PROXY_PORT/$PATH"
+}
 wait_for_url() {
-  BASE_URL=$1
+  BASE_URL=$1  
   if [[ $BASE_URL == *"localhost"** ]]; then
-    wait_for_url_local $BASE_URL
+    wait_for_url_local $@ 
   else
-    wait_for_url_docker $BASE_URL
+    wait_for_url_docker $@
   fi
 }
 wait_for_url_local() {
   url=$1
+  proxy=${2:-none}
+  proxy_user=${3:-none}
+  proxy_pass=$4
+  curl_args="-L -f -v"
   max_retry=10
   counter=0
-  until (curl -L -f -v $url >/dev/null 2>&1)
+  if [[ "$proxy" != "none" && "$proxy" != ""  ]]; then 
+    curl_args="--proxy ${proxy} ${curl_args}"
+  fi 
+  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
+    curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
+  fi 
+  until (curl $curl_args $url >/dev/null 2>&1)
   do
     print "Waiting for $url to start (local)"
     sleep 5
@@ -240,7 +257,14 @@ wait_for_url_docker() {
   url=$1
   max_retry=10
   counter=0
-  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
+  curl_args="-L -f -v"
+  if [[ "$proxy" != "none"  && "$proxy" != "" ]]; then 
+    curl_args="--proxy ${proxy} ${curl_args}"
+  fi 
+  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
+    curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
+  fi 
+  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 $curl_args $url >/dev/null 2>&1)
   do
     print "Waiting for $url to start (docker)"
     sleep 5
@@ -373,7 +397,8 @@ profiles_with_local_or_docker() {
 generate_env_file() {
     begin "Generating env file ..."
     mkdir -p $CONF_DIR
-    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE    
+    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR ${ENV_FILE}.tmp    
+    grep -v '^#' ${ENV_FILE}.tmp > $ENV_FILE
     source $ENV_FILE    
     end "Finished generating env file."
 }
@@ -541,7 +566,7 @@ run_on_docker_with() {
   build_mocha_image
   start_selenium
 
-  trap teardown_components EXIT
+  trap "teardown_components" EXIT
 
   start_components
   test
@@ -622,7 +647,6 @@ start_components() {
     $start
   done
 }
-
 teardown_components() {
   skip_rabbitmq=${1:-false}
 

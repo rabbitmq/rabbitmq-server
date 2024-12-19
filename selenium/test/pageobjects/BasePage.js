@@ -146,18 +146,12 @@ module.exports = class BasePage {
       return element.isDisplayed()
     } catch(e) {
       return Promise.resolve(false)
-    }
-    /*
-    let element = await driver.findElement(FORM_POPUP)
-    return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
-      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling / 2).then(function onWarningVisible(e) {
-          return Promise.resolve(true)
-      }, function onError(e) {
-          return Promise.resolve(false)
-      })
-      */
+    }    
   }
+  async isPopupWarningNotDisplayed() {
+    return this.waitForNotDisplayed(FORM_POPUP)        
+  }
+  
   async getPopupWarning() {
     let element = await driver.findElement(FORM_POPUP)
     return this.driver.wait(until.elementIsVisible(element), this.timeout,
@@ -208,14 +202,37 @@ module.exports = class BasePage {
 
   async waitForDisplayed (locator) {
     if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
-    try {
-      return this.waitForVisible(await this.waitForLocated(locator))
-    }catch(error) {
-      if (!error.name.includes("NoSuchSessionError")) {
-        console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+    let times = 1
+    do {
+      try {
+        return this.waitForVisible(await this.waitForLocated(locator))
+      }catch(error) {
+        if (!error.name.includes("NoSuchSessionError")) {
+          console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+        }
+        if (times > 0 && error.name.includes("StaleElementReference")) {
+          times--
+          this.driver.sleep(50)
+        } else {
+          throw error
+        }
       }
-      throw error
-    }
+    } while (true)
+    
+  }
+
+  async waitForNotDisplayed (locator) {
+    let times = 5
+    do {
+      try {
+        await driver.findElement(locator)
+        times--
+        this.driver.sleep(50)
+      }catch(error) {
+        return Promise.resolve(true)  
+      }
+    } while(times > 0)
+    return Promise.resolve(false)  
   }
 
   async getText (locator) {

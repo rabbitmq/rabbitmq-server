@@ -29,14 +29,12 @@ describe('A user which accesses any protected URL without a session', function (
     assert.equal("rabbit_x", resources[2].value)
     assert.equal("RabbitMQ X_Idp", resources[2].text)
 
-    const value = await homePage.getLoginButton()
-    assert.equal(value, 'Click here to log in')
+    assert.equal(await homePage.getLoginButton(), 'Click here to log in')
   })
 
   it('should not have a warning message', async function () {
     await homePage.isLoaded()
-    const visible = await homePage.isWarningVisible()
-    assert.ok(!visible)
+    assert.ok(await homePage.isWarningNotVisible())
   })
 
   after(async function () {
