@@ -154,19 +154,19 @@ init_per_group(with_resource_server_id, Config) ->
 
 init_per_group(oauth_provider_with_proxy, Config) ->
     Proxy = [
-        {proxy_host, "idp"},
-        {proxy_port, 8080},
-        {proxy_username, <<"user1">>},
-        {proxy_password, <<"pwd1">>}
+        {host, "idp"},
+        {port, 8080},
+        {username, <<"user1">>},
+        {password, <<"pwd1">>}
     ],
     case ?config(oauth_provider_id, Config) of 
         root -> 
-            KeyConfig = get_env(key_config, []),
-            set_env(key_config, KeyConfig ++ Proxy);
+            set_env(proxy, Proxy);
         Id -> 
             OAuthProviders = get_env(oauth_providers, #{}),
-            OAuthProvider = maps:get(Id, OAuthProviders, []),
-            set_env(oauth_providers, maps:put(Id, Proxy ++ OAuthProvider, OAuthProviders))
+            OAuthProvider = maps:get(Id, OAuthProviders, []),            
+            set_env(oauth_providers, maps:put(Id, 
+                [{proxy, Proxy}] ++ OAuthProvider, OAuthProviders))
     end,
     [{proxy_hostname, "idp"},
      {proxy_port, 8080}, 
@@ -217,15 +217,10 @@ end_per_group(with_rabbitmq_node, Config) ->
 end_per_group(oauth_provider_with_proxy, Config) ->
     case ?config(oauth_provider_id, Config) of 
         root -> 
-            KeyConfig = get_env(key_config, []),    
-            KeyConfig0 = proplists:delete(proxy_host, KeyConfig),
-            KeyConfig1 = proplists:delete(proxy_port, KeyConfig0),
-            KeyConfig2 = proplists:delete(proxy_username, KeyConfig1),
-            KeyConfig3 = proplists:delete(proxy_password, KeyConfig2),
-            set_env(key_config, KeyConfig3);
+            unset_env(proxy);
         Id -> 
             unset_oauth_provider_properties(Id, 
-                [proxy_host, proxy_port, proxy_username, proxy_password])
+                [host, port, username, password])
     end,
     Config;
 
