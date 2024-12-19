@@ -213,8 +213,12 @@ connected({call, From}, {unlock, GeneratedKey}, Data = #statem_data{connection_n
 connected({call, From}, register, Data = #statem_data{connection_name = Conn}) ->
     Ctx = registration_context(Conn, Data),
     Key = node_key(Data),
-    eetcd_kv:put(Ctx, Key, registration_value(Data)),
-    rabbit_log:debug("etcd peer discovery: put key ~tp, done with registration", [Key]),
+    case eetcd_kv:put(Ctx, Key, registration_value(Data)) of
+        {ok, _} ->
+            rabbit_log:debug("etcd peer discovery: put key ~tp, done with registration", [Key]);
+        {error, Reason} ->
+            rabbit_log:error("etcd peer discovery: put key ~tp failed: ~p", [Key, Reason])
+    end,
     gen_statem:reply(From, ok),
     keep_state_and_data;
 connected({call, From}, unregister, Data = #statem_data{connection_name = Conn}) ->
@@ -379,9 +383,9 @@ disconnect(ConnName, #statem_data{connection_monitor = Ref}) ->
 unregister(Conn, Data = #statem_data{node_key_lease_id = LeaseID, node_lease_keepalive_pid = KAPid}) ->
     Ctx = unregistration_context(Conn, Data),
     Key = node_key(Data),
-    eetcd_kv:delete(Ctx, Key),
+    _ = eetcd_kv:delete(Ctx, Key),
     rabbit_log:debug("etcd peer discovery: deleted key ~ts, done with unregistration", [Key]),
-    eetcd_lease:revoke(Ctx, LeaseID),
+    _ = eetcd_lease:revoke(Ctx, LeaseID),
     exit(KAPid, normal),
     rabbit_log:debug("etcd peer discovery: revoked a lease ~tp for node key ~ts", [LeaseID, Key]),
     ok.
