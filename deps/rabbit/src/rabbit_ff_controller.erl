@@ -582,7 +582,7 @@ virtually_reset_inventory(
                        fun(FeatureName, _FeatureState) ->
                                FeatureProps = maps:get(
                                                 FeatureName, FeatureFlags),
-                               state_after_virtual_state(
+                               state_after_virtual_reset(
                                  FeatureName, FeatureProps)
                        end, FeatureStates0),
     StatesPerNode1 = maps:map(
@@ -596,14 +596,14 @@ virtually_reset_inventory(
   false = _NodeAsVirgin) ->
     Inventory.
 
-state_after_virtual_state(_FeatureName, FeatureProps)
+state_after_virtual_reset(_FeatureName, FeatureProps)
   when ?IS_FEATURE_FLAG(FeatureProps) ->
     Stability = rabbit_feature_flags:get_stability(FeatureProps),
     case Stability of
         required -> true;
         _        -> false
     end;
-state_after_virtual_state(FeatureName, FeatureProps)
+state_after_virtual_reset(FeatureName, FeatureProps)
   when ?IS_DEPRECATION(FeatureProps) ->
     not rabbit_deprecated_features:should_be_permitted(
           FeatureName, FeatureProps).
