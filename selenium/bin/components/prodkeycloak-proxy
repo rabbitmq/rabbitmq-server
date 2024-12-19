@@ -1,30 +1,29 @@
 
 HTTPD_DOCKER_IMAGE=httpd:latest
 
-ensure_forward-proxy() {
-  if docker ps | grep forward-proxy &> /dev/null; then
-     print "forward-proxy already running ..."
+ensure_prodkeycloak-proxy() {
+  if docker ps | grep prodkeycloak-proxy &> /dev/null; then
+     print "prodkeycloak-proxy already running ..."
  else
-   start_forward-proxy
+   start_prodkeycloak-proxy
  fi
 }
-init_forward-proxy() {
-  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/forward-proxy
-  PROXY_HOSTNAME=forward-proxy 
-  PROXY_PORT=9092 
+init_prodkeycloak-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/prodkeycloak-proxy
+  PROXY_HOSTNAME=prodkeycloak-proxy 
+  PROXY_PORT=9091
 
   print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
-  print "> OAUTH_PROVIDER_URL: ${OAUTH_PROVIDER_URL}"
   print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
   print "> PROXY_PORT: ${PROXY_PORT}"
   
 }
 
-start_forward-proxy() {
-  begin "Starting forward-proxy ..."
+start_prodkeycloak-proxy() {
+  begin "Starting prodkeycloak-proxy ..."
 
-  init_forward-proxy
-  kill_container_if_exist forward-proxy
+  init_prodkeycloak-proxy
+  kill_container_if_exist prodkeycloak-proxy
 
   MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
 
@@ -35,12 +34,11 @@ start_forward-proxy() {
   
   docker run \
     --detach \
-    --name forward-proxy \
+    --name prodkeycloak-proxy \
     --net ${DOCKER_NETWORK} \
-    --publish 9092:9092 \
+    --publish 9091:9092 \
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
-  #wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
-  end "forward-proxy is ready"
+  end "prodkeycloak-proxy is ready"
 }

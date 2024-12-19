@@ -184,7 +184,6 @@ get_openid_configuration_http_expectation(TestCaseAtom) ->
         nomatch ->  ?DEFAULT_OPENID_CONFIGURATION_PATH;
         _ ->        ?CUSTOM_OPENID_CONFIGURATION_ENDPOINT
     end,
-    ct:log("Expect path: ~p and endpoint: ~p", [Path, Endpoint]),
     build_http_mock_behaviour(build_http_get_openid_configuration_request(Endpoint, Path),
         build_http_200_json_response(Payload)).
 

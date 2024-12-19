@@ -70,7 +70,6 @@ ensure_http_client_started(Id) ->
 http_post(Id, URL, Header, Type, Body, HTTPOptions, ProxyOptions) ->
     http_request(Id, post, {URL, Header, Type, Body}, HTTPOptions, ProxyOptions).
 http_get(Id, URL, HTTPOptions, ProxyOptions) ->
-    ct:log("~p ~p", [Id, URL]),
     http_request(Id, get, {URL, []}, HTTPOptions, ProxyOptions).
 http_request(Id, Method, Payload, HTTPOptions, ProxyOptions) ->
     case ensure_http_client_started(Id) of
