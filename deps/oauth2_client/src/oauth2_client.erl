@@ -71,7 +71,6 @@ ensure_http_client_started(Id, ProxyOptions) ->
                 {error, _} = Error -> Error
             end;   
         {error, {already_started, _}} -> 
-            rabbit_log:debug("Already started http client ~p", [Profile]),
             {ok, Profile};
         Error -> 
             rabbit_log:error("Failed to start httpc client: ~p", [Error]),
