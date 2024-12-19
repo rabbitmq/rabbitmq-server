@@ -12,11 +12,6 @@ on:
       - 'deps/rabbitmq_management/priv/**'
       - 'deps/rabbitmq_web_dispatch/src/**'
       - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
       - 'selenium/**'
       - .github/workflows/test-management-ui.yaml
 

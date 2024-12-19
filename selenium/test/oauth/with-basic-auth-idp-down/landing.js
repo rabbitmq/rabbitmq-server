@@ -20,15 +20,13 @@ describe('When basic authentication is enabled but UAA is down', function () {
   it('should display warning message that UAA is down', async function () {
     await homePage.isLoaded()
     const message = await homePage.getWarning()
-    assert.equal(true, message.startsWith('OAuth resource [rabbitmq] not available'))
-    assert.equal(true, message.endsWith(' not reachable'))
+    assert.ok(message.startsWith('OAuth resource [rabbitmq] not available'))
+    assert.ok(message.endsWith(' not reachable'))
   })
 
   it('should not be presented oauth2 section', async function () {
     await homePage.isLoaded()
-    if (await homePage.isOAuth2SectionVisible()) {
-      throw new Error('OAuth2 section should not be present')
-    }
+    assert.ok(await homePage.isOAuth2SectionNotVisible())
   })
 
   after(async function () {

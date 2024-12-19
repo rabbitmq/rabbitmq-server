@@ -1,0 +1,45 @@
+
+HTTPD_DOCKER_IMAGE=httpd:latest
+
+ensure_prodkeycloak-proxy() {
+  if docker ps | grep prodkeycloak-proxy &> /dev/null; then
+     print "prodkeycloak-proxy already running ..."
+ else
+   start_prodkeycloak-proxy
+ fi
+}
+init_prodkeycloak-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/prodkeycloak-proxy
+  PROXY_HOSTNAME=prodkeycloak-proxy 
+  PROXY_PORT=9091
+
+  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
+  print "> PROXY_PORT: ${PROXY_PORT}"
+  
+}
+
+start_prodkeycloak-proxy() {
+  begin "Starting prodkeycloak-proxy ..."
+
+  init_prodkeycloak-proxy
+  kill_container_if_exist prodkeycloak-proxy
+
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+  cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
+  
+  docker run \
+    --detach \
+    --name prodkeycloak-proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 9091:9091 \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+  wait_for_message prodkeycloak-proxy "initializing worker proxy:forward local"
+  end "prodkeycloak-proxy is ready"
+}
