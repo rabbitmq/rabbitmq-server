@@ -5,6 +5,7 @@ authnz-mgt/multi-oauth-with-basic-auth-when-idps-down.sh
 authnz-mgt/multi-oauth-with-basic-auth.sh
 authnz-mgt/multi-oauth-without-basic-auth-and-resource-label-and-scopes.sh
 authnz-mgt/multi-oauth-without-basic-auth.sh
+authnz-mgt/multi-oauth-via-proxies.sh
 authnz-mgt/oauth-and-basic-auth.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix-via-proxy.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
