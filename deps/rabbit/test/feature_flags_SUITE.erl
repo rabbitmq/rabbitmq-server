@@ -46,7 +46,8 @@
          clustering_ok_with_supported_required_ff/1,
          activating_plugin_with_new_ff_disabled/1,
          activating_plugin_with_new_ff_enabled/1,
-         enable_plugin_feature_flag_after_deactivating_plugin/1
+         enable_plugin_feature_flag_after_deactivating_plugin/1,
+         restart_node_with_unknown_enabled_feature_flag/1
         ]).
 
 suite() ->
@@ -97,7 +98,8 @@ groups() ->
       [
        activating_plugin_with_new_ff_disabled,
        activating_plugin_with_new_ff_enabled,
-       enable_plugin_feature_flag_after_deactivating_plugin
+       enable_plugin_feature_flag_after_deactivating_plugin,
+       restart_node_with_unknown_enabled_feature_flag
       ]}
     ],
 
@@ -1286,6 +1288,53 @@ enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, plugin_ff)),
             ?assertEqual([false, true],
+                         is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+    ok.
+
+restart_node_with_unknown_enabled_feature_flag(Config) ->
+    FFSubsysOk = is_feature_flag_subsystem_available(Config),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            ?assertEqual([false, false],
+                         is_feature_flag_supported(Config, plugin_ff)),
+            ?assertEqual([false, false],
+                         is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+
+    rabbit_ct_broker_helpers:enable_plugin(Config, 0, "my_plugin"),
+    rabbit_ct_broker_helpers:enable_plugin(Config, 1, "my_plugin"),
+    rabbit_ct_broker_helpers:disable_plugin(Config, 0, "my_plugin"),
+    rabbit_ct_broker_helpers:disable_plugin(Config, 1, "my_plugin"),
+
+    enable_feature_flag_on(Config, 0, plugin_ff),
+    case FFSubsysOk of
+        true ->
+            enable_feature_flag_on(Config, 0, plugin_ff),
+            ?assertEqual([true, true],
+                         is_feature_flag_supported(Config, plugin_ff)),
+            ?assertEqual([true, true],
+                         is_feature_flag_enabled(Config, plugin_ff));
+        false ->
+            ok
+    end,
+
+    rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_broker_helpers:restart_node(Config, 1),
+
+    log_feature_flags_of_all_nodes(Config),
+    case FFSubsysOk of
+        true ->
+            enable_feature_flag_on(Config, 0, plugin_ff),
+            ?assertEqual([false, false],
+                         is_feature_flag_supported(Config, plugin_ff)),
+            ?assertEqual([false, false],
                          is_feature_flag_enabled(Config, plugin_ff));
         false ->
             ok
