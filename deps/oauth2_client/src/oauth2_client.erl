@@ -62,9 +62,9 @@ ensure_http_client_started(Id, ProxyOptions) ->
         root -> root;
         _ -> binary_to_atom(Id)
     end,
-    rabbit_log:debug("Starting http client ~p", [Profile]),
+    rabbit_log:debug("Starting http client ~p ...", [Profile]),
     case inets:start(httpc, [{profile, Profile}]) of 
-        ok -> 
+        {ok, _} -> 
             HttpProxyOptions = map_proxy_to_httpc_option(ProxyOptions),
             case ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) of 
                 ok -> {ok, Profile};  
@@ -73,23 +73,21 @@ ensure_http_client_started(Id, ProxyOptions) ->
         {error, {already_started, _}} -> 
             rabbit_log:debug("Already started http client ~p", [Profile]),
             {ok, Profile};
-        Error -> Error
+        Error -> 
+            rabbit_log:error("Failed to start httpc client: ~p", [Error]),
+            Error
     end.
 ensure_http_proxy_options_if_any(_Profile, []) ->
     ok;
-ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) ->
-    case httpc:get_options([proxy]) of 
-        {ok, _} -> ok;
-        {error, _} ->
-            rabbit_log:debug("Setting Proxy options to http client ~p", [Profile]),             
-            case httpc:set_options(HttpProxyOptions, Profile) of
-                ok -> 
-                    rabbit_log:debug("SetOptions ~p on http client ~p", 
-                        [HttpProxyOptions, Profile]),
-                    ok;
-                {error, _} = Error -> Error
-            end
+ensure_http_proxy_options_if_any(Profile, HttpProxyOptions) ->    
+    case httpc:set_options(HttpProxyOptions, Profile) of
+        ok -> 
+            rabbit_log:debug("Successfully set_options ~p on http client ~p", 
+                [HttpProxyOptions, Profile]),
+            ok;
+        {error, _} = Error -> Error
     end.
+        
 http_post(Id, URL, Header, Type, Body, HTTPOptions, ProxyOptions) ->
     http_request(Id, post, {URL, Header, Type, Body}, HTTPOptions, ProxyOptions).
 http_get(Id, URL, HTTPOptions, ProxyOptions) ->
@@ -470,33 +468,33 @@ lookup_root_oauth_provider() ->
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
         ssl_options = extract_ssl_options_as_list(Map),
-        proxy_options = extract_proxy_options(Map)
+        proxy_options = extract_proxy_options(get_env(proxy, []))
     }.
   
 -spec extract_proxy_options(#{atom() => any()}|list()) -> proxy_options() | undefined.
 extract_proxy_options(List) when is_list(List) ->
-    case {proplists:get_value(proxy_host, List, undefined),
-        proplists:get_value(proxy_port, List, 0)} of 
+    case {proplists:get_value(host, List, undefined),
+        proplists:get_value(port, List, 0)} of 
         {undefined, _} -> undefined;
         {_, 0} -> undefined;
         {H, P} ->
             #proxy_options{
                 host = H,
                 port = P,
-                username = proplists:get_value(proxy_username, List, undefined),
-                password = proplists:get_value(proxy_password, List, undefined)
+                username = proplists:get_value(username, List, undefined),
+                password = proplists:get_value(password, List, undefined)
             }
     end;
 extract_proxy_options(Map) ->
-    case {maps:get(proxy_host, Map, undefined), maps:get(proxy_port, Map, 0)} of
+    case {maps:get(host, Map, undefined), maps:get(port, Map, 0)} of
         {undefined, _} -> undefined;
         {_, 0} -> undefined;
         {H, P} ->
             #proxy_options{
                 host = H,
                 port = P,
-                username = maps:get(proxy_username, Map, undefined),
-                password = maps:get(proxy_password, Map, undefined)
+                username = maps:get(username, Map, undefined),
+                password = maps:get(password, Map, undefined)
             }
     end.
 
@@ -713,7 +711,7 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             extract_ssl_options_as_list(maps:from_list(
                 proplists:get_value(https, PropList, []))),
         proxy_options = 
-            extract_proxy_options(PropList)
+            extract_proxy_options(proplists:get_value(proxy, PropList, []))
     }.
 map_to_access_token_response(Code, Reason, Headers, Body) ->
     case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of

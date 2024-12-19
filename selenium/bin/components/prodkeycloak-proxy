@@ -36,9 +36,10 @@ start_prodkeycloak-proxy() {
     --detach \
     --name prodkeycloak-proxy \
     --net ${DOCKER_NETWORK} \
-    --publish 9091:9092 \
+    --publish 9091:9091 \
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
     ${HTTPD_DOCKER_IMAGE}
 
+  wait_for_message prodkeycloak-proxy "initializing worker proxy:forward local"
   end "prodkeycloak-proxy is ready"
 }

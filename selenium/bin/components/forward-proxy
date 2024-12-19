@@ -42,5 +42,6 @@ start_forward-proxy() {
     ${HTTPD_DOCKER_IMAGE}
 
   #wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
+  wait_for_message forward-proxy "initializing worker proxy:forward local"
   end "forward-proxy is ready"
 }
