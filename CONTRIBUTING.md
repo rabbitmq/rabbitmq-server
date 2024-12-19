@@ -64,6 +64,21 @@ gmake ct-rabbit_mgmt_http t="all_tests_with_prefix:users_test"
 gmake ct-rabbit_mgmt_http t="all_tests_with_prefix:queues_test"
 ```
 
+### Running Tests with a Specific Schema Data Store
+
+Set `RABBITMQ_METADATA_STORE` to either `khepri` or `mnesia` to make the Common Test suites
+use a specific [schema data store]() (metadata store):
+
+``` shell
+RABBITMQ_METADATA_STORE=khepri gmake ct-quorum_queue
+```
+
+Or, with Nu shell:
+
+```nu
+with-env {'RABBITMQ_METADATA_STORE': 'khepri'} { gmake ct-quorum_queue }
+```
+
 
 ## Running Single Nodes from Source
 
