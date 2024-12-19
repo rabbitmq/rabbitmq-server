@@ -203,6 +203,8 @@ start_etcd(Config) ->
            "--initial-cluster-token", "test-token",
            "--log-level", "debug", "--log-outputs", "stdout"],
     EtcdPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+    %% Wait for etcd to start its listeners.
+    timer:sleep(2000),
 
     EtcdEndpoint = rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort]),
     rabbit_ct_helpers:set_config(
