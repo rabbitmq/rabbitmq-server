@@ -21,7 +21,21 @@ def _impl(ctx):
         path_join(rabbitmq_home_path, "plugins"),
     ])
 
-    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+    if ctx.attr.otp != None:
+        info = ctx.attr.otp[platform_common.ToolchainInfo].otpinfo
+        runfiles = ctx.runfiles([
+            info.release_dir_tar,
+            info.version_file,
+        ])
+        erlang_home = info.erlang_home
+        release_dir_tar = info.release_dir_tar
+        release_dir_tar_path = path_join(
+            ctx.attr.otp.label.workspace_root,
+            release_dir_tar.short_path,
+        )
+    else:
+        (erlang_home, release_dir_tar, runfiles) = erlang_dirs(ctx)
+        release_dir_tar_path = "/dev/null"
 
     if not ctx.attr.is_windows:
         output = ctx.actions.declare_file(ctx.label.name)
@@ -31,6 +45,7 @@ def _impl(ctx):
             substitutions = {
                 "{RABBITMQ_HOME}": rabbitmq_home_path,
                 "{ERL_LIBS}": erl_libs,
+                "{ERLANG_TAR}": release_dir_tar_path,
                 "{ERLANG_HOME}": erlang_home,
             },
             is_executable = True,
@@ -43,7 +58,8 @@ def _impl(ctx):
             substitutions = {
                 "{RABBITMQ_HOME}": windows_path(rabbitmq_home_path),
                 "{ERL_LIBS}": erl_libs,
-                "{ERLANG_HOME}": windows_path(erlang_home),
+                "{ERLANG_TAR}": windows_path(release_dir_tar_path),
+                "{ERLANG_HOME}": windows_path(erlang_home.short_path),
             },
             is_executable = True,
         )
@@ -68,6 +84,7 @@ rabbitmq_run_private = rule(
         ),
         "is_windows": attr.bool(mandatory = True),
         "home": attr.label(providers = [RabbitmqHomeInfo]),
+        "otp": attr.label(),  # Optional. e.g. @erlang_config//25_3:erlang_25_3_toolchain
     },
     toolchains = ["@rules_erlang//tools:toolchain_type"],
     executable = True,
