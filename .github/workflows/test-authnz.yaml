@@ -10,13 +10,8 @@ on:
       - 'deps/rabbitmq_auth_**'
       - 'deps/rabbitmq_management/src/**'
       - 'deps/rabbitmq_management/priv/**'
-      - 'deps/rabbitmq_management/selenium/**'
+      - 'selenium/**'
       - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
       - .github/workflows/test-authnz.yaml
   pull_request:
     paths:
