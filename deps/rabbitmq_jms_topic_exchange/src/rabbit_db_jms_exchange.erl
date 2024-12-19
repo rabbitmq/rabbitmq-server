@@ -24,6 +24,10 @@
          khepri_jms_topic_exchange_path/2
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [update_in_khepri/4]}).
+
 -rabbit_mnesia_tables_to_khepri_db(
      [{?JMS_TOPIC_TABLE, rabbit_db_jms_exchange_m2k_converter}]).
 
@@ -108,9 +112,21 @@ create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun) ->
 update_in_khepri(XName, BindingKeyAndFun, UpdateFun, ErrorFun) ->
     Path = khepri_jms_topic_exchange_path(XName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := BindingFuns, payload_version := DVersion}} ->
+        {ok, QueryRet} ->
+            {BindingFuns, Vsn} = case QueryRet of
+                                     %% Khepri 0.16 and below returned
+                                     %% `khepri:node_props()' for adv queries
+                                     %% and commands targeting one node:
+                                     #{data := Data, payload_version := V} ->
+                                         {Data, V};
+                                     %% Khepri 0.17+ returns
+                                     %% `khepri_adv:node_props_map()` instead.
+                                     #{Path := #{data := Data,
+                                                 payload_version := V}} ->
+                                         {Data, V}
+                                 end,
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             Ret = rabbit_khepri:put(Path1, UpdateFun(BindingFuns, BindingKeyAndFun)),
             case Ret of
                 ok -> ok;
