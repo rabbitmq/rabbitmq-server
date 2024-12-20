@@ -1,6 +1,5 @@
 PROJECT = oauth2_client
 PROJECT_DESCRIPTION = OAuth2 client from the RabbitMQ Project
-PROJECT_MOD = oauth2_client_app
 
 BUILD_DEPS = rabbit
 DEPS = rabbit_common jose
