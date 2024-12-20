@@ -22,6 +22,11 @@
          khepri_global_rp_path/1
         ]).
 
+%% Ignored because of changes in the Khepri adv API. See comments within
+%% these functions.
+-dialyzer({nowarn_function, [set_in_khepri/2,
+                             set_in_khepri_tx/2]}).
+
 -define(MNESIA_TABLE, rabbit_runtime_parameters).
 -define(KHEPRI_GLOBAL_PROJECTION, rabbit_khepri_global_rtparam).
 -define(KHEPRI_VHOST_PROJECTION, rabbit_khepri_per_vhost_rtparam).
@@ -59,7 +64,12 @@ set_in_khepri(Key, Term) ->
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
     case rabbit_khepri:adv_put(Path, Record) of
+        %% Khepri 0.16 and below returned `khepri:node_props()' for adv queries
+        %% and commands targeting one node:
         {ok, #{data := Params}} ->
+            {old, Params#runtime_parameters.value};
+        %% Khepri 0.17+ returns `khepri_adv:node_props_map()` instead.
+        {ok, #{Path := #{data := Params}}} ->
             {old, Params#runtime_parameters.value};
         {ok, _} ->
             new
@@ -114,7 +124,12 @@ set_in_khepri_tx(Key, Term) ->
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
     case khepri_tx_adv:put(Path, Record) of
+        %% Khepri 0.16 and below returned `khepri:node_props()' for adv
+        %% queries and commands targeting one node:
         {ok, #{data := Params}} ->
+            {old, Params#runtime_parameters.value};
+        %% Khepri 0.17+ returns `khepri_adv:node_props_map()` instead.
+        {ok, #{Path := #{data := Params}}} ->
             {old, Params#runtime_parameters.value};
         {ok, _} ->
             new
@@ -347,11 +362,23 @@ delete_vhost_in_mnesia_tx(VHostName) ->
         <- mnesia:match_object(?MNESIA_TABLE, Match, read)].
 
 delete_vhost_in_khepri(VHostName) ->
-    Path = khepri_vhost_rp_path(
-             VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:adv_delete_many(Path) of
-        {ok, Props} ->
-            {ok, rabbit_khepri:collect_payloads(Props)};
+    Pattern = khepri_vhost_rp_path(
+                VHostName, ?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
+    case rabbit_khepri:adv_delete_many(Pattern) of
+        {ok, NodePropsMap} ->
+            RTParams =
+            maps:fold(
+              fun(Path, Props, Acc) ->
+                      case {Path, Props} of
+                          {?RABBITMQ_KHEPRI_VHOST_RUNTIME_PARAM_PATH(
+                             VHostName, _, _),
+                           #{data := RTParam}} ->
+                              [RTParam | Acc];
+                          {_, _} ->
+                              Acc
+                      end
+              end, [], NodePropsMap),
+            {ok, RTParams};
         {error, _} = Err ->
             Err
     end.
