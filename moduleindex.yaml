@@ -349,6 +349,7 @@ khepri:
 - khepri_path
 - khepri_pattern_tree
 - khepri_payload
+- khepri_prefix_tree
 - khepri_projection
 - khepri_sproc
 - khepri_sup
