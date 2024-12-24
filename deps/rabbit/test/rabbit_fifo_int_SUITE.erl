@@ -280,9 +280,10 @@ detects_lost_delivery(Config) ->
     {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
     % lose first delivery
     receive
-        {ra_event, _, {machine, {delivery, _, [{_, {_, msg1}}]}}} ->
+        {ra_event, _, {machine, {delivery, _, _, _}}} ->
             ok
     after ?TIMEOUT ->
+              flush(),
               exit(await_delivery_timeout)
     end,
 
@@ -308,7 +309,7 @@ returns(Config) ->
 
     {FC3, _} =
     receive
-        {ra_event, Qname, {machine, {delivery, _, [{MsgId, {_, _}}]}} = Evt1} ->
+        {ra_event, Qname, {machine, {delivery, _, _, [{MsgId, _}]}} = Evt1} ->
             {ok, FC2, Actions1} =
                 rabbit_fifo_client:handle_ra_event(Qname, Qname, Evt1, FC1),
             [{deliver, _, true,
@@ -324,7 +325,7 @@ returns(Config) ->
     {FC5, _} =
     receive
         {ra_event, Qname2,
-         {machine, {delivery, _, [{MsgId1, {_, _Msg1Out}}]}} = Evt2} ->
+         {machine, {delivery, _, _, [{MsgId1, _}]}} = Evt2} ->
             {ok, FC4, Actions2} =
                 rabbit_fifo_client:handle_ra_event(Qname2, Qname2, Evt2, FC3),
             [{deliver, _tag, true,
@@ -340,7 +341,7 @@ returns(Config) ->
     end,
     receive
         {ra_event, Qname3,
-         {machine, {delivery, _, [{MsgId2, {_, _Msg2Out}}]}} = Evt3} ->
+         {machine, {delivery, _, _, [{MsgId2, _}]}} = Evt3} ->
             {ok, FC6, Actions3} =
                 rabbit_fifo_client:handle_ra_event(Qname3, Qname3, Evt3, FC5),
             [{deliver, _, true,
@@ -818,6 +819,8 @@ receive_ra_events(Applied, Deliveries, Acc) ->
         {ra_event, _, {applied, Seqs}} = Evt ->
             receive_ra_events(Applied - length(Seqs), Deliveries, [Evt | Acc]);
         {ra_event, _, {machine, {delivery, _, MsgIds}}} = Evt ->
+            receive_ra_events(Applied, Deliveries - length(MsgIds), [Evt | Acc]);
+        {ra_event, _, {machine, {delivery, _, _Plan, MsgIds}}} = Evt ->
             receive_ra_events(Applied, Deliveries - length(MsgIds), [Evt | Acc]);
         {ra_event, _, _} = Evt ->
             receive_ra_events(Applied, Deliveries, [Evt | Acc])

@@ -108,7 +108,10 @@ groups() ->
                                             quorum_cluster_size_7,
                                             node_removal_is_not_quorum_critical,
                                             select_nodes_with_least_replicas,
-                                            select_nodes_with_least_replicas_node_down
+                                            select_nodes_with_least_replicas_node_down,
+                                            subscribe_from_each
+
+
                                            ]},
                       {clustered_with_partitions, [],
                        [
@@ -188,7 +191,8 @@ all_tests() ->
      priority_queue_fifo,
      priority_queue_2_1_ratio,
      requeue_multiple_true,
-     requeue_multiple_false
+     requeue_multiple_false,
+     subscribe_from_each
     ].
 
 memory_tests() ->
@@ -1463,6 +1467,43 @@ policy_repair(Config) ->
             consume_all(Ch, QQ)
     end.
 
+subscribe_from_each(Config) ->
+
+    [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    [begin
+         publish_confirm(Ch, QQ)
+     end || _ <- Servers],
+    timer:sleep(100),
+    %% roll the wal to force consumer messages to be read from disk
+    [begin
+         ok = rpc:call(S, ra_log_wal, force_roll_over, [ra_log_wal])
+     end || S <- Servers],
+
+    [begin
+         ct:pal("NODE ~p", [S]),
+         C = rabbit_ct_client_helpers:open_channel(Config, S),
+         qos(C, 1, false),
+         subscribe(C, QQ, false),
+         receive
+             {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+                 amqp_channel:call(C, #'basic.ack'{delivery_tag = DeliveryTag})
+         after 5000 ->
+                   flush(1),
+                   ct:fail("basic.deliver timeout")
+         end,
+         timer:sleep(256),
+         rabbit_ct_client_helpers:close_channel(C),
+         flush(1)
+
+     end || S <- Servers],
+
+    ok.
 
 gh_12635(Config) ->
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
@@ -3634,6 +3675,7 @@ receive_and_ack(Ch) ->
             amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                                multiple = false})
     after ?TIMEOUT ->
+              flush(1),
               ct:fail("receive_and_ack timed out", [])
     end.
 
