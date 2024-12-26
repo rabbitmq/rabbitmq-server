@@ -12,48 +12,49 @@ main(Args) ->
 run_cli(Args) ->
     maybe
         Progname = escript:script_name(),
-        add_rabbitmq_code_path(Progname),
+        ok ?= add_rabbitmq_code_path(Progname),
 
+        {ok, IO} ?= rabbit_cli_io:start_link(Progname),
+
+        try
+            parse_command_pass1(Progname, Args, IO)
+        after
+            rabbit_cli_io:stop(IO)
+        end
+    end.
+
+parse_command_pass1(Progname, Args, IO) ->
+    maybe
         PartialArgparseDef = argparse_def(),
         {ok,
          PartialArgMap,
          PartialCmdPath,
          PartialCommand} ?= initial_parse(Progname, Args, PartialArgparseDef),
 
-        %% Get remote node name and prepare Erlang distribution.
-        Nodename = lookup_rabbitmq_nodename(PartialArgMap),
-        {ok, _} ?= net_kernel:start(
-                     undefined, #{name_domain => shortnames}),
+        case rabbit_cli_transport:connect(PartialArgMap) of
+            {ok, Connection} ->
+                %% We can query the argparse definition from the remote node
+                %% to know the commands it supports and proceed with the
+                %% execution.
+                maybe
+                    ArgparseDef = get_final_argparse_def(Connection),
+                    {ok,
+                     ArgMap,
+                     CmdPath,
+                     Command} ?= final_parse(Progname, Args, ArgparseDef),
 
-        {ok, IO} ?= rabbit_cli_io:start_link(Progname),
-        try
-            %% Can we reach the remote node?
-            case net_kernel:connect_node(Nodename) of
-                true ->
-                    maybe
-                        %% We can query the argparse definition from the
-                        %% remote node to know the commands it supports and
-                        %% proceed with the execution.
-                        ArgparseDef = get_final_argparse_def(Nodename),
-                        {ok,
-                         ArgMap,
-                         CmdPath,
-                         Command} ?= final_parse(Progname, Args, ArgparseDef),
-                        run_command(
-                          Nodename, ArgparseDef,
-                          Progname, ArgMap, CmdPath, Command,
-                          IO)
-                    end;
-                false ->
-                    %% We can't reach the remote node. Let's fallback
-                    %% to a local execution.
-                    run_command(
-                      undefined, PartialArgparseDef,
-                      Progname, PartialArgMap, PartialCmdPath,
-                      PartialCommand, IO)
-            end
-        after
-            rabbit_cli_io:stop(IO)
+                    run_remote_command(
+                      Connection, ArgparseDef,
+                      Progname, ArgMap, CmdPath, Command,
+                      IO)
+                end;
+            {error, _} ->
+                %% We can't reach the remote node. Let's fallback
+                %% to a local execution.
+                run_local_command(
+                  PartialArgparseDef,
+                  Progname, PartialArgMap, PartialCmdPath,
+                  PartialCommand, IO)
         end
     end.
 
@@ -123,9 +124,10 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
             Error
     end.
 
-get_final_argparse_def(Nodename) ->
+get_final_argparse_def(Connection) ->
     ArgparseDef1 = argparse_def(),
-    ArgparseDef2 = erpc:call(Nodename, rabbit_cli_commands, argparse_def, []),
+    ArgparseDef2 = rabbit_cli_transport:rpc(
+                     Connection, rabbit_cli_commands, argparse_def, []),
     ArgparseDef = maps:merge(ArgparseDef1, ArgparseDef2),
     ArgparseDef.
 
@@ -133,48 +135,20 @@ final_parse(Progname, Args, ArgparseDef) ->
     Options = #{progname => Progname},
     argparse:parse(Args, ArgparseDef, Options).
 
-lookup_rabbitmq_nodename(#{node := Nodename}) ->
-    Nodename1 = complete_nodename(Nodename),
-    Nodename1;
-lookup_rabbitmq_nodename(_) ->
-    GuessedNodename0 = guess_rabbitmq_nodename(),
-    GuessedNodename1 = complete_nodename(GuessedNodename0),
-    GuessedNodename1.
-
-guess_rabbitmq_nodename() ->
-    case net_adm:names() of
-        {ok, NamesAndPorts} ->
-            Names0 = [Name || {Name, _Port} <- NamesAndPorts],
-            Names1 = lists:sort(Names0),
-            Names2 = lists:filter(
-                       fun
-                           ("rabbit" ++ _) -> true;
-                           (_) ->             false
-                       end, Names1),
-            case Names2 of
-                [First | _] ->
-                    First;
-                [] ->
-                    "rabbit"
-            end;
-        {error, address} ->
-            "rabbit"
-    end.
-
-complete_nodename(Nodename) ->
-    case re:run(Nodename, "@", [{capture, none}]) of
-        nomatch ->
-            {ok, ThisHost} = inet:gethostname(),
-            list_to_atom(Nodename ++ "@" ++ ThisHost);
-        match ->
-            list_to_atom(Nodename)
-    end.
-
-run_command(
+run_remote_command(
   _Nodename, ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
     rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
-run_command(Nodename, _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
-    erpc:call(
-      Nodename,
+run_remote_command(
+  Connection, _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
+    rabbit_cli_transport:rpc(
+      Connection,
       rabbit_cli_commands, run_command,
       [Progname, ArgMap, CmdPath, Command, IO]).
+
+run_local_command(
+  ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
+    rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
+run_local_command(
+  _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
+    rabbit_cli_commands:run_command(
+      Progname, ArgMap, CmdPath, Command, IO).
