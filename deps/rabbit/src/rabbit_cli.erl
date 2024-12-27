@@ -17,13 +17,13 @@ run_cli(Args) ->
         {ok, IO} ?= rabbit_cli_io:start_link(Progname),
 
         try
-            parse_command_pass1(Progname, Args, IO)
+            do_run_cli(Progname, Args, IO)
         after
             rabbit_cli_io:stop(IO)
         end
     end.
 
-parse_command_pass1(Progname, Args, IO) ->
+do_run_cli(Progname, Args, IO) ->
     maybe
         PartialArgparseDef = argparse_def(),
         {ok,
@@ -37,7 +37,8 @@ parse_command_pass1(Progname, Args, IO) ->
                 %% to know the commands it supports and proceed with the
                 %% execution.
                 maybe
-                    ArgparseDef = get_final_argparse_def(Connection),
+                    ArgparseDef = get_final_argparse_def(
+                                    Connection, PartialArgparseDef),
                     {ok,
                      ArgMap,
                      CmdPath,
@@ -71,6 +72,15 @@ add_rabbitmq_code_path(Progname) ->
     ok.
 
 argparse_def() ->
+    Aliases0 = #{"lx" => "list_exchanges -v",
+                 "list_exchanges" => "list exchanges"},
+    Aliases1 = maps:map(
+                 fun(Alias, CommandStr) ->
+                         #{help => <<"alias">>,
+                           handler => fun(ArgMap) ->
+                                              handle_alias(Alias, CommandStr, ArgMap)
+                                      end}
+                 end, Aliases0),
     #{arguments =>
       [
        #{name => help,
@@ -97,7 +107,7 @@ argparse_def() ->
          "Display version and exit"}
       ],
 
-      commands => #{}}.
+      commands => Aliases1}.
 
 initial_parse(Progname, Args, ArgparseDef) ->
     Options = #{progname => Progname},
@@ -124,17 +134,41 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
             Error
     end.
 
-get_final_argparse_def(Connection) ->
-    ArgparseDef1 = argparse_def(),
+get_final_argparse_def(Connection, PartialArgparseDef) ->
+    ArgparseDef1 = PartialArgparseDef,
     ArgparseDef2 = rabbit_cli_transport:rpc(
                      Connection, rabbit_cli_commands, argparse_def, []),
-    ArgparseDef = maps:merge(ArgparseDef1, ArgparseDef2),
+    ArgparseDef = merge_argparse_def(ArgparseDef1, ArgparseDef2),
     ArgparseDef.
+
+merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
+    Args1 = maps:get(arguments, ArgparseDef1, []),
+    Args2 = maps:get(arguments, ArgparseDef2, []),
+    Args = merge_arguments(Args1, Args2),
+    Cmds1 = maps:get(commands, ArgparseDef1, #{}),
+    Cmds2 = maps:get(commands, ArgparseDef2, #{}),
+    Cmds = merge_commands(Cmds1, Cmds2),
+    maps:merge(ArgparseDef1, ArgparseDef2#{arguments => Args, commands => Cmds}).
+
+merge_arguments(Args1, Args2) ->
+    Args1 ++ Args2.
+
+merge_commands(Cmds1, Cmds2) ->
+    maps:merge(Cmds1, Cmds2).
 
 final_parse(Progname, Args, ArgparseDef) ->
     Options = #{progname => Progname},
     argparse:parse(Args, ArgparseDef, Options).
 
+run_remote_command(
+  Connection, ArgparseDef, Progname, ArgMap, _CmdPath,
+  #{help := <<"alias">>} = Command,
+  IO) ->
+    {ok, ArgMap1, CmdPath1, Command1} = expand_alias(
+                                          ArgparseDef, Progname, ArgMap,
+                                          Command),
+    run_remote_command(
+      Connection, ArgparseDef, Progname, ArgMap1, CmdPath1, Command1, IO);
 run_remote_command(
   _Nodename, ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
     rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
@@ -152,3 +186,18 @@ run_local_command(
   _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
     rabbit_cli_commands:run_command(
       Progname, ArgMap, CmdPath, Command, IO).
+
+handle_alias(Alias, CommandStr, ArgMap) ->
+    {alias, Alias, CommandStr, ArgMap}.
+
+expand_alias(ArgparseDef, Progname, ArgMap, #{handler := Fun} = _Command) ->
+    {alias, _Alias, CommandStr, ArgMap} = Fun(ArgMap),
+    Args = string:lexemes(CommandStr, " "),
+    Options = #{progname => Progname},
+    case argparse:parse(Args, ArgparseDef, Options) of
+        {ok, ArgMap1, CmdPath1, Command1} ->
+            ArgMap2 = maps:merge(ArgMap1, ArgMap),
+            {ok, ArgMap2, CmdPath1, Command1};
+        {error, _} = Error ->
+            Error
+    end.
