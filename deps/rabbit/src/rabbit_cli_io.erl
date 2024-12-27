@@ -53,15 +53,22 @@ argparse_def(record_stream) ->
 display_help(IO, CmdPath, Command) ->
     gen_server:cast(IO, {?FUNCTION_NAME, CmdPath, Command}).
 
+start_record_stream({transport, Transport}, Name, Fields, ArgMap) ->
+    Transport ! {io_call, self(), {?FUNCTION_NAME, Name, Fields, ArgMap}},
+    receive Ret -> Ret end;
 start_record_stream(IO, Name, Fields, ArgMap)
   when is_pid(IO) andalso
        is_atom(Name) andalso
        is_map(ArgMap) ->
     gen_server:call(IO, {?FUNCTION_NAME, Name, Fields, ArgMap}).
 
+push_new_record({transport, Transport}, #{name := Name}, Record) ->
+    Transport ! {io_cast, {?FUNCTION_NAME, Name, Record}};
 push_new_record(IO, #{name := Name}, Record) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Name, Record}).
 
+end_record_stream({transport, Transport}, #{name := Name}) ->
+    Transport ! {io_cast, {?FUNCTION_NAME, Name}};
 end_record_stream(IO, #{name := Name}) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Name}).
 
