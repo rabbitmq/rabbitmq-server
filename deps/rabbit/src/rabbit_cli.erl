@@ -31,7 +31,7 @@ parse_command_pass1(Progname, Args, IO) ->
          PartialCmdPath,
          PartialCommand} ?= initial_parse(Progname, Args, PartialArgparseDef),
 
-        case rabbit_cli_transport:connect(PartialArgMap) of
+        case rabbit_cli_transport:connect(PartialArgMap, IO) of
             {ok, Connection} ->
                 %% We can query the argparse definition from the remote node
                 %% to know the commands it supports and proceed with the
@@ -139,11 +139,11 @@ run_remote_command(
   _Nodename, ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
     rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
 run_remote_command(
-  Connection, _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
-    rabbit_cli_transport:rpc(
+  Connection, _ArgparseDef, Progname, ArgMap, CmdPath, Command, _IO) ->
+    rabbit_cli_transport:rpc_with_io(
       Connection,
       rabbit_cli_commands, run_command,
-      [Progname, ArgMap, CmdPath, Command, IO]).
+      [Progname, ArgMap, CmdPath, Command]).
 
 run_local_command(
   ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
