@@ -6000,7 +6000,7 @@ receive_all_messages0(Receiver, Accept, Acc) ->
                     false -> ok
                 end,
                 receive_all_messages0(Receiver, Accept, [Msg | Acc])
-    after 5000 ->
+    after 2000 ->
               lists:reverse(Acc)
     end.
 
@@ -6152,7 +6152,7 @@ count_received_messages0(Receiver, Count) ->
     receive
         {amqp10_msg, Receiver, _Msg} ->
             count_received_messages0(Receiver, Count + 1)
-    after 5000 ->
+    after 2000 ->
               Count
     end.
 
@@ -6216,7 +6216,11 @@ assert_link_credit_runs_out(Sender, Left) ->
             receive {amqp10_event, {link, Sender, credited}} ->
                         ct:pal("credited with ~b messages left", [Left]),
                         assert_link_credit_runs_out(Sender, Left - 1)
+<<<<<<< HEAD
             after 500 ->
+=======
+            after 1000 ->
+>>>>>>> 42ede4a25 (Speed up tests)
                       ct:pal("insufficient link credit with ~b messages left", [Left]),
                       ok
             end
