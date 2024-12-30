@@ -29,7 +29,7 @@ groups() ->
 sub_groups() ->
     [
      {dets, [shuffle], tests()},
-     {ets, [shuffle], tests()},
+     {ets, [shuffle], tests() ++ wildcard_tests()},
      {noop, [shuffle], [does_not_retain]}
     ].
 
@@ -42,6 +42,12 @@ tests() ->
      recover,
      recover_with_message_expiry_interval
     ].
+
+%% Only run wildcard tests for ETS store
+wildcard_tests() ->
+    [retained_wildcard_single_level,
+     retained_wildcard_multi_level,
+     retained_wildcard_mixed].
 
 suite() ->
     [{timetrap, {minutes, 2}}].
@@ -230,3 +236,44 @@ recover_with_message_expiry_interval(Config) ->
     end,
 
     ok = emqtt:disconnect(C2).
+
+
+%% -------------------------------------------------------------------
+%% If a client publishes a retained message to devices/sensor1/temperature and another
+%% client subscribes to devices/+/temperature the client should be
+%% sent retained message for the translated topic (devices/sensor1/temperature)
+%% -------------------------------------------------------------------
+%%
+retained_wildcard_single_level(Config) ->
+    Topic = <<"devices/sensor1/temperature">>,
+    Pattern = <<"devices/+/temperature">>,
+    Payload = <<"23.5">>,
+    C = connect(<<"wildcardClientRetainer">>, Config, [{ack_timeout, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, #{}, Payload, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C, Pattern, qos1),
+    ok = expect_publishes(C, Topic, [Payload]),
+    ok = emqtt:disconnect(C).
+
+%% Test multi-level wildcard (#)
+retained_wildcard_multi_level(Config) ->
+    Topic = <<"devices/sensor1/readings/temperature">>,
+    Pattern = <<"devices/#">>,
+    Payload = <<"23.5">>,
+
+    C = connect(<<"wildcardClientRetainer">>, Config, [{ack_timeout, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, #{}, Payload, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C, Pattern, qos1),
+    ok = expect_publishes(C, Topic, [Payload]),
+    ok = emqtt:disconnect(C).
+
+% %% Test mixed wildcards (+/#)
+retained_wildcard_mixed(Config) ->
+    Topic = <<"devices/sensor1/readings/temperature">>,
+    Pattern = <<"devices/+/readings/#">>,
+    Payload = <<"23.5">>,
+
+    C = connect(<<"wildcardClientRetainer">>, Config, [{ack_timeout, 1}]),
+    {ok, _} = emqtt:publish(C, Topic, #{}, Payload, [{retain, true}, {qos, 1}]),
+    {ok, _, _} = emqtt:subscribe(C, Pattern, qos1),
+    ok = expect_publishes(C, Topic, [Payload]),
+    ok = emqtt:disconnect(C).
