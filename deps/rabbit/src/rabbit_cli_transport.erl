@@ -1,9 +1,9 @@
 -module(rabbit_cli_transport).
 -behaviour(gen_server).
 
--export([connect/2,
+-export([connect/1,
          rpc/4,
-         rpc_with_io/4]).
+         run_command/2]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -19,37 +19,37 @@
                io :: pid()
               }).
 
-connect(#{node := NodenameOrUri} = ArgMap, IO) ->
+connect(#{arg_map := #{node := NodenameOrUri}} = Context) ->
     case re:run(NodenameOrUri, "://", [{capture, none}]) of
         nomatch ->
-            connect_using_erldist(ArgMap, IO);
+            connect_using_erldist(Context);
         match ->
-            connect_using_transport(ArgMap, IO)
+            connect_using_transport(Context)
     end;
-connect(ArgMap, IO) ->
-    connect_using_erldist(ArgMap, IO).
+connect(Context) ->
+    connect_using_erldist(Context).
 
-rpc({Nodename, _IO} = Connection, Mod, Func, Args) when is_atom(Nodename) ->
-    rpc_using_erldist(Connection, Mod, Func, Args);
+rpc(Nodename, Mod, Func, Args) when is_atom(Nodename) ->
+    rpc_using_erldist(Nodename, Mod, Func, Args);
 rpc(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
     rpc_using_transport(TransportPid, Mod, Func, Args).
 
-rpc_with_io({Nodename, _IO} = Connection, Mod, Func, Args) when is_atom(Nodename) ->
-    rpc_with_io_using_erldist(Connection, Mod, Func, Args);
-rpc_with_io(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
-    rpc_with_io_using_transport(TransportPid, Mod, Func, Args).
+run_command(Nodename, Context) when is_atom(Nodename) ->
+    run_command_using_erldist(Nodename, Context);
+run_command(TransportPid, Context) when is_pid(TransportPid) ->
+    run_command_using_transport(TransportPid, Context).
 
 %% -------------------------------------------------------------------
 %% Erlang distribution.
 %% -------------------------------------------------------------------
 
-connect_using_erldist(#{node := Nodename}, IO) ->
-    do_connect_using_erldist(Nodename, IO);
-connect_using_erldist(_ArgMap, IO) ->
+connect_using_erldist(#{arg_map := #{node := Nodename}}) ->
+    do_connect_using_erldist(Nodename);
+connect_using_erldist(_Context) ->
     GuessedNodename = guess_rabbitmq_nodename(),
-    do_connect_using_erldist(GuessedNodename, IO).
+    do_connect_using_erldist(GuessedNodename).
 
-do_connect_using_erldist(Nodename, IO) ->
+do_connect_using_erldist(Nodename) ->
     maybe
         Nodename1 = complete_nodename(Nodename),
         {ok, _} ?= net_kernel:start(
@@ -58,7 +58,7 @@ do_connect_using_erldist(Nodename, IO) ->
         %% Can we reach the remote node?
         case net_kernel:connect_node(Nodename1) of
             true ->
-                {ok, {Nodename1, IO}};
+                {ok, Nodename1};
             false ->
                 {error, noconnection}
         end
@@ -93,26 +93,26 @@ complete_nodename(Nodename) ->
             list_to_atom(Nodename)
     end.
 
-rpc_using_erldist({Nodename, _IO}, Mod, Func, Args) ->
+rpc_using_erldist(Nodename, Mod, Func, Args) ->
     erpc:call(Nodename, Mod, Func, Args).
 
-rpc_with_io_using_erldist({Nodename, IO}, Mod, Func, Args) ->
-    erpc:call(Nodename, Mod, Func, Args ++ [IO]).
+run_command_using_erldist(Nodename, Context) ->
+    erpc:call(Nodename, rabbit_cli_commands, run_command, [Context]).
 
 %% -------------------------------------------------------------------
 %% HTTP(S) transport.
 %% -------------------------------------------------------------------
 
-connect_using_transport(ArgMap, IO) ->
-    gen_server:start_link(?MODULE, {ArgMap, IO}, []).
+connect_using_transport(Context) ->
+    gen_server:start_link(?MODULE, Context, []).
 
 rpc_using_transport(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
-    gen_server:call(TransportPid, {rpc, {Mod, Func, Args}, #{io => false}}).
+    gen_server:call(TransportPid, {rpc, {Mod, Func, Args}}).
 
-rpc_with_io_using_transport(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
-    gen_server:call(TransportPid, {rpc, {Mod, Func, Args}, #{io => true}}).
+run_command_using_transport(TransportPid, Context) when is_pid(TransportPid) ->
+    gen_server:call(TransportPid, {run_command, Context}).
 
-init({#{node := Uri}, IO}) ->
+init(#{arg_map := #{node := Uri}, io := IO}) ->
     maybe
         {ok, _} ?= application:ensure_all_started(gun),
         #{host := Host, port := Port} = UriMap = uri_string:parse(Uri),

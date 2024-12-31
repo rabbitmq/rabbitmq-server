@@ -7,7 +7,7 @@
 -export([start_link/1,
          stop/1,
          argparse_def/1,
-         display_help/3,
+         display_help/1,
          start_record_stream/4,
          push_new_record/3,
          end_record_stream/2]).
@@ -50,8 +50,8 @@ argparse_def(record_stream) ->
       ]
      }.
 
-display_help(IO, CmdPath, Command) ->
-    gen_server:cast(IO, {?FUNCTION_NAME, CmdPath, Command}).
+display_help(#{io := IO} = Context) ->
+    gen_server:cast(IO, {?FUNCTION_NAME, Context}).
 
 start_record_stream({transport, Transport}, Name, Fields, ArgMap) ->
     Transport ! {io_call, self(), {?FUNCTION_NAME, Name, Fields, ArgMap}},
@@ -98,7 +98,7 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast(
-  {display_help, CmdPath, ArgparseDef},
+  {display_help, #{cmd_path := CmdPath, argparse_def := ArgparseDef}},
   #?MODULE{progname = Progname} = State) ->
     Options = #{progname => Progname,
                 %% Work around bug in argparse;

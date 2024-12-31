@@ -3,6 +3,7 @@
 -define(DEFINE_RMQLOG_DOMAIN(Domain), [?RMQLOG_SUPER_DOMAIN_NAME, Domain]).
 
 -define(RMQLOG_DOMAIN_CHAN,       ?DEFINE_RMQLOG_DOMAIN(channel)).
+-define(RMQLOG_DOMAIN_CMD,        ?DEFINE_RMQLOG_DOMAIN(commands)).
 -define(RMQLOG_DOMAIN_CONN,       ?DEFINE_RMQLOG_DOMAIN(connection)).
 -define(RMQLOG_DOMAIN_DB,         ?DEFINE_RMQLOG_DOMAIN(db)).
 -define(RMQLOG_DOMAIN_FEAT_FLAGS, ?DEFINE_RMQLOG_DOMAIN(feature_flags)).

@@ -2,7 +2,10 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export([main/1]).
+-export([main/1,
+         merge_argparse_def/2,
+         handle_alias/1,
+         noop/1]).
 
 main(Args) ->
     Ret = run_cli(Args),
@@ -24,39 +27,40 @@ run_cli(Args) ->
     end.
 
 do_run_cli(Progname, Args, IO) ->
+    PartialArgparseDef = argparse_def(),
+    Context0 = #{progname => Progname,
+                 args => Args,
+                 io => IO,
+                 argparse_def => PartialArgparseDef},
     maybe
-        PartialArgparseDef = argparse_def(),
         {ok,
          PartialArgMap,
          PartialCmdPath,
-         PartialCommand} ?= initial_parse(Progname, Args, PartialArgparseDef),
+         PartialCommand} ?= initial_parse(Context0),
+        Context1 = Context0#{arg_map => PartialArgMap,
+                             cmd_path => PartialCmdPath,
+                             command => PartialCommand},
 
-        case rabbit_cli_transport:connect(PartialArgMap, IO) of
-            {ok, Connection} ->
-                %% We can query the argparse definition from the remote node
-                %% to know the commands it supports and proceed with the
-                %% execution.
-                maybe
-                    ArgparseDef = get_final_argparse_def(
-                                    Connection, PartialArgparseDef),
-                    {ok,
-                     ArgMap,
-                     CmdPath,
-                     Command} ?= final_parse(Progname, Args, ArgparseDef),
+        Context2 = case rabbit_cli_transport:connect(Context1) of
+                       {ok, Connection} ->
+                           Context1#{connection => Connection};
+                       {error, _} ->
+                           Context1
+                   end,
 
-                    run_remote_command(
-                      Connection, ArgparseDef,
-                      Progname, ArgMap, CmdPath, Command,
-                      IO)
-                end;
-            {error, _} ->
-                %% We can't reach the remote node. Let's fallback
-                %% to a local execution.
-                run_local_command(
-                  PartialArgparseDef,
-                  Progname, PartialArgMap, PartialCmdPath,
-                  PartialCommand, IO)
-        end
+        %% We can query the argparse definition from the remote node to know
+        %% the commands it supports and proceed with the execution.
+        ArgparseDef = get_final_argparse_def(Context2),
+        Context3 = Context2#{argparse_def => ArgparseDef},
+        {ok,
+         ArgMap,
+         CmdPath,
+         Command} ?= final_parse(Context3),
+        Context4 = Context3#{arg_map => ArgMap,
+                             cmd_path => CmdPath,
+                             command => Command},
+
+        run_command(Context4)
     end.
 
 add_rabbitmq_code_path(Progname) ->
@@ -75,11 +79,11 @@ argparse_def() ->
     Aliases0 = #{"lx" => "list_exchanges -v",
                  "list_exchanges" => "list exchanges"},
     Aliases1 = maps:map(
-                 fun(Alias, CommandStr) ->
-                         #{help => <<"alias">>,
-                           handler => fun(ArgMap) ->
-                                              handle_alias(Alias, CommandStr, ArgMap)
-                                      end}
+                 fun(_Alias, CommandStr) ->
+                         Args = string:lexemes(CommandStr, " "),
+                         #{alias => Args,
+                           help => hidden,
+                           handler => {?MODULE, handle_alias}}
                  end, Aliases0),
     #{arguments =>
       [
@@ -107,9 +111,11 @@ argparse_def() ->
          "Display version and exit"}
       ],
 
-      commands => Aliases1}.
+      commands => Aliases1,
+      handler => {?MODULE, noop}}.
 
-initial_parse(Progname, Args, ArgparseDef) ->
+initial_parse(
+  #{progname := Progname, args := Args, argparse_def := ArgparseDef}) ->
     Options = #{progname => Progname},
     case partial_parse(Args, ArgparseDef, Options) of
         {ok, ArgMap, CmdPath, Command, _RemainingArgs} ->
@@ -119,7 +125,8 @@ initial_parse(Progname, Args, ArgparseDef) ->
     end.
 
 partial_parse(Args, ArgparseDef, Options) ->
-    partial_parse(Args, ArgparseDef, Options, []).
+    ArgparseDef1 = maps:remove(commands, ArgparseDef),
+    partial_parse(Args, ArgparseDef1, Options, []).
 
 partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
     case argparse:parse(Args, ArgparseDef, Options) of
@@ -134,7 +141,8 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
             Error
     end.
 
-get_final_argparse_def(Connection, PartialArgparseDef) ->
+get_final_argparse_def(
+  #{connection := Connection, argparse_def := PartialArgparseDef}) ->
     ArgparseDef1 = PartialArgparseDef,
     ArgparseDef2 = rabbit_cli_transport:rpc(
                      Connection, rabbit_cli_commands, argparse_def, []),
@@ -148,7 +156,9 @@ merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
     Cmds1 = maps:get(commands, ArgparseDef1, #{}),
     Cmds2 = maps:get(commands, ArgparseDef2, #{}),
     Cmds = merge_commands(Cmds1, Cmds2),
-    maps:merge(ArgparseDef1, ArgparseDef2#{arguments => Args, commands => Cmds}).
+    maps:merge(
+      ArgparseDef1,
+      ArgparseDef2#{arguments => Args, commands => Cmds}).
 
 merge_arguments(Args1, Args2) ->
     Args1 ++ Args2.
@@ -156,48 +166,34 @@ merge_arguments(Args1, Args2) ->
 merge_commands(Cmds1, Cmds2) ->
     maps:merge(Cmds1, Cmds2).
 
-final_parse(Progname, Args, ArgparseDef) ->
+final_parse(
+  #{progname := Progname, args := Args, argparse_def := ArgparseDef}) ->
     Options = #{progname => Progname},
     argparse:parse(Args, ArgparseDef, Options).
 
-run_remote_command(
-  Connection, ArgparseDef, Progname, ArgMap, _CmdPath,
-  #{help := <<"alias">>} = Command,
-  IO) ->
-    {ok, ArgMap1, CmdPath1, Command1} = expand_alias(
-                                          ArgparseDef, Progname, ArgMap,
-                                          Command),
-    run_remote_command(
-      Connection, ArgparseDef, Progname, ArgMap1, CmdPath1, Command1, IO);
-run_remote_command(
-  _Nodename, ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
-    rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
-run_remote_command(
-  Connection, _ArgparseDef, Progname, ArgMap, CmdPath, Command, _IO) ->
-    rabbit_cli_transport:rpc_with_io(
-      Connection,
-      rabbit_cli_commands, run_command,
-      [Progname, ArgMap, CmdPath, Command]).
+run_command(#{arg_map := #{help := true}} = Context) ->
+    rabbit_cli_io:display_help(Context);
+run_command(#{connection := Connection} = Context) ->
+    rabbit_cli_transport:run_command(Connection, Context);
+run_command(Context) ->
+    rabbit_cli_commands:run_command(Context).
 
-run_local_command(
-  ArgparseDef, _Progname, #{help := true}, CmdPath, _Command, IO) ->
-    rabbit_cli_io:display_help(IO, CmdPath, ArgparseDef);
-run_local_command(
-  _ArgparseDef, Progname, ArgMap, CmdPath, Command, IO) ->
-    rabbit_cli_commands:run_command(
-      Progname, ArgMap, CmdPath, Command, IO).
+noop(_Context) ->
+    ok.
 
-handle_alias(Alias, CommandStr, ArgMap) ->
-    {alias, Alias, CommandStr, ArgMap}.
-
-expand_alias(ArgparseDef, Progname, ArgMap, #{handler := Fun} = _Command) ->
-    {alias, _Alias, CommandStr, ArgMap} = Fun(ArgMap),
-    Args = string:lexemes(CommandStr, " "),
+handle_alias(
+  #{progname := Progname,
+    argparse_def := ArgparseDef,
+    arg_map := ArgMap,
+    command := #{alias := Args}} = Context) ->
     Options = #{progname => Progname},
     case argparse:parse(Args, ArgparseDef, Options) of
         {ok, ArgMap1, CmdPath1, Command1} ->
             ArgMap2 = maps:merge(ArgMap1, ArgMap),
-            {ok, ArgMap2, CmdPath1, Command1};
+            Context1 = Context#{arg_map => ArgMap2,
+                                cmd_path => CmdPath1,
+                                command => Command1},
+            rabbit_cli_commands:do_run_command(Context1);
         {error, _} = Error ->
             Error
     end.
