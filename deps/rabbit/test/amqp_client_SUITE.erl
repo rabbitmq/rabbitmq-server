@@ -6216,11 +6216,7 @@ assert_link_credit_runs_out(Sender, Left) ->
             receive {amqp10_event, {link, Sender, credited}} ->
                         ct:pal("credited with ~b messages left", [Left]),
                         assert_link_credit_runs_out(Sender, Left - 1)
-<<<<<<< HEAD
-            after 500 ->
-=======
             after 1000 ->
->>>>>>> 42ede4a25 (Speed up tests)
                       ct:pal("insufficient link credit with ~b messages left", [Left]),
                       ok
             end
