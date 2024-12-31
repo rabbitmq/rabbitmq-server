@@ -2,40 +2,114 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export([argparse_def/0, run_command/5]).
--export([list_exchanges/5]).
+-include_lib("rabbit_common/include/logging.hrl").
+
+-export([argparse_def/0, run_command/1, do_run_command/1]).
+-export([cmd_list_exchanges/1]).
+
+-rabbitmq_command(
+   {#{cli => ["declare", "exchange"],
+      http => {put, ["exchanges", vhost, exchange]}},
+    #{help => "Declare new exchange",
+      arguments => [
+                    #{name => vhost,
+                      long => "-vhost",
+                      type => binary,
+                      default => <<"/">>,
+                      help => "Name of the vhost owning the new exchange"},
+                    #{name => exchange,
+                      type => binary,
+                      help => "Name of the exchange to declare"}
+                   ],
+      handler => {?MODULE, cmd_declare_exchange}}}).
+
+-rabbitmq_command(
+   {#{cli => ["list", "exchanges"],
+      http => {get, ["exchanges"]}},
+    [argparse_def_record_stream,
+     #{help => "List exchanges",
+       handler => {?MODULE, cmd_list_exchanges}}]}).
 
 argparse_def() ->
+    #{argparse_def := ArgparseDef} = get_discovered_commands(),
+    ArgparseDef.
+
+get_discovered_commands() ->
+    Key = {?MODULE, discovered_commands},
+    try
+        persistent_term:get(Key)
+    catch
+        error:badarg ->
+            Commands = discover_commands(),
+            ArgparseDef = commands_to_cli_argparse_def(Commands),
+            Cache = #{commands => Commands,
+                      argparse_def => ArgparseDef},
+            persistent_term:put(Key, Cache),
+            Cache
+    end.
+
+discover_commands() ->
     %% Extract the commands from module attributes like feature flags and boot
     %% steps.
-    #{commands =>
-      #{"list" =>
-       #{help => "List entities",
-         commands =>
-         #{"exchanges" =>
-           maps:merge(
-             rabbit_cli_io:argparse_def(record_stream),
-             #{help => "List exchanges",
-               handler => {?MODULE, list_exchanges}})
-          }
-        }
-      }
-     }.
+    ?LOG_DEBUG(
+      "Commands: query commands in loaded applications",
+      #{domain => ?RMQLOG_DOMAIN_CMD}),
+    T0 = erlang:monotonic_time(),
+    ScannedApps = rabbit_misc:rabbitmq_related_apps(),
+    AttrsPerApp = rabbit_misc:module_attributes_from_apps(
+                    rabbitmq_command, ScannedApps),
+    T1 = erlang:monotonic_time(),
+    ?LOG_DEBUG(
+      "Commands: time to find supported commands: ~tp us",
+      [erlang:convert_time_unit(T1 - T0, native, microsecond)],
+      #{domain => ?RMQLOG_DOMAIN_CMD}),
+    AttrsPerApp.
 
-run_command(Progname, ArgMap, CmdPath, Command, IO) ->
+commands_to_cli_argparse_def(Commands) ->
+    lists:foldl(
+      fun({_App, _Mod, Entries}, Acc0) ->
+              lists:foldl(
+                fun
+                    ({#{cli := Path}, Def}, Acc1) ->
+                        Def1 = expand_argparse_def(Def),
+                        M1 = lists:foldr(
+                               fun
+                                   (Cmd, undefined) ->
+                                       #{commands => #{Cmd => Def1}};
+                                   (Cmd, M0) ->
+                                       #{commands => #{Cmd => M0}}
+                               end, undefined, Path),
+                        rabbit_cli:merge_argparse_def(Acc1, M1);
+                    (_, Acc1) ->
+                        Acc1
+                end, Acc0, Entries)
+      end, #{}, Commands).
+
+expand_argparse_def(Def) when is_map(Def) ->
+    Def;
+expand_argparse_def(Defs) when is_list(Defs) ->
+    lists:foldl(
+      fun(argparse_def_record_stream, Acc) ->
+              Def = rabbit_cli_io:argparse_def(record_stream),
+              rabbit_cli:merge_argparse_def(Acc, Def);
+         (Def, Acc) ->
+              Def1 = expand_argparse_def(Def),
+              rabbit_cli:merge_argparse_def(Acc, Def1)
+      end, #{}, Defs).
+
+run_command(Context) ->
     %% TODO: Put both processes under the rabbit supervision tree.
-    RunnerPid = command_runner(Progname, ArgMap, CmdPath, Command, IO),
+    RunnerPid = spawn_link(fun() -> do_run_command(Context) end),
     RunnerMRef = erlang:monitor(process, RunnerPid),
     receive
         {'DOWN', RunnerMRef, _, _, Reason} ->
             {ok, Reason}
     end.
 
-command_runner(
-  Progname, ArgMap, CmdPath, #{handler := {Mod, Fun}} = Command, IO) ->
-    spawn_link(Mod, Fun, [Progname, ArgMap, CmdPath, Command, IO]).
+do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
+    erlang:apply(Mod, Fun, [Context]).
 
-list_exchanges(_Progname, ArgMap, _CmdPath, _Command, IO) ->
+cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
     InfoKeys = rabbit_exchange:info_keys(),
     Fields = lists:map(
                fun

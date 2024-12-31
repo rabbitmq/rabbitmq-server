@@ -25,16 +25,25 @@ handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
 handle_cast(
-  {{rpc, {Mod, Func, Args}, Options}, From},
+  {{rpc, {Mod, Func, Args}}, From},
+  #{ws := WS} = State) ->
+    try
+        Ret = erlang:apply(Mod, Func, Args),
+        logger:alert("Runner(rpc): ~p", [Ret]),
+        WS ! {reply, Ret, From},
+        {noreply, State}
+    catch
+        Class:Reason:Stacktrace ->
+            Ex = {exception, Class, Reason, Stacktrace},
+            WS ! {reply, Ex, From},
+            {noreply, State}
+    end;
+handle_cast(
+  {{run_command, Context}, From},
   #{ws := WS, io := IO} = State) ->
     try
-        Args1 = case Options of
-                    #{io := true} ->
-                        Args ++ [IO];
-                    _ ->
-                        Args
-                end,
-        Ret = erlang:apply(Mod, Func, Args1),
+        Context1 = Context#{io => IO},
+        Ret = erlang:apply(rabbit_cli_commands, run_command, [Context1]),
         logger:alert("Runner(rpc): ~p", [Ret]),
         WS ! {reply, Ret, From},
         {noreply, State}
