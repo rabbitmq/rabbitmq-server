@@ -171,8 +171,6 @@ final_parse(
     Options = #{progname => Progname},
     argparse:parse(Args, ArgparseDef, Options).
 
-run_command(#{arg_map := #{help := true}} = Context) ->
-    rabbit_cli_io:display_help(Context);
 run_command(#{connection := Connection} = Context) ->
     rabbit_cli_transport:run_command(Connection, Context);
 run_command(Context) ->

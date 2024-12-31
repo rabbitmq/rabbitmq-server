@@ -50,6 +50,8 @@ argparse_def(record_stream) ->
       ]
      }.
 
+display_help(#{io := {transport, Transport}} = Context) ->
+    Transport ! {io_cast, {?FUNCTION_NAME, Context}};
 display_help(#{io := IO} = Context) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Context}).
 
