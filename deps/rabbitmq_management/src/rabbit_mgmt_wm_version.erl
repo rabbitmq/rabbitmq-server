@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_version).
@@ -18,7 +18,7 @@
 
 init(Req, _State) ->
     {cowboy_rest, rabbit_mgmt_headers:set_no_cache_headers(
-        rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), ?MODULE), 
+        rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), ?MODULE),
         #context{}}.
 
 variances(Req, Context) ->
@@ -27,7 +27,7 @@ variances(Req, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-to_json(ReqData, Context) ->   
+to_json(ReqData, Context) ->
     Version = case rabbit:product_info() of
         #{product_version := Value} -> Value;
         #{product_base_version := Base} -> Base

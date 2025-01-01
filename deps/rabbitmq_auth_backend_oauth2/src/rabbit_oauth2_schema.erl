@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_oauth2_schema).
@@ -34,49 +34,49 @@ extract_key_as_binary({Name,_}) -> list_to_binary(Name).
 extract_value({_Name,V}) -> V.
 
 -spec translate_scope_aliases([{list(), binary()}]) -> map().
-translate_scope_aliases(Conf) ->   
+translate_scope_aliases(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix(
         ?AUTH_OAUTH2_SCOPE_ALIASES, Conf),
-    maps:merge(extract_scope_alias_as_map(Settings), 
+    maps:merge(extract_scope_alias_as_map(Settings),
         extract_scope_aliases_as_list_of_alias_scope_props(Settings)).
-    
+
 convert_space_separated_string_to_list_of_binaries(String) ->
     [ list_to_binary(V) || V <- string:tokens(String, " ")].
 
 extract_scope_alias_as_map(Settings) ->
     maps:from_list([{
-        list_to_binary(Alias), 
+        list_to_binary(Alias),
         convert_space_separated_string_to_list_of_binaries(Scope)
         }
         || {[?AUTH_OAUTH2, ?SCOPE_ALIASES, Alias], Scope} <- Settings ]).
 
-extract_scope_aliases_as_list_of_alias_scope_props(Settings) ->    
+extract_scope_aliases_as_list_of_alias_scope_props(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
     List0 = [{Index, {list_to_atom(Attr), V}}
         || {[?AUTH_OAUTH2, ?SCOPE_ALIASES, Index, Attr], V} <- Settings ],
-    List1 = maps:to_list(maps:groups_from_list(KeyFun, ValueFun, List0)),    
+    List1 = maps:to_list(maps:groups_from_list(KeyFun, ValueFun, List0)),
     List2 = [extract_scope_alias_mapping(Proplist) || {_, Proplist} <- List1],
     maps:from_list([ V || V <- List2, V =/= {}]).
-    
+
 extract_scope_alias_mapping(Proplist) ->
-    Alias = 
-        case proplists:get_value(alias, Proplist) of 
+    Alias =
+        case proplists:get_value(alias, Proplist) of
             undefined -> {error, missing_alias_attribute};
             A -> list_to_binary(A)
         end,
-    Scope = 
-        case proplists:get_value(scope, Proplist) of 
+    Scope =
+        case proplists:get_value(scope, Proplist) of
             undefined -> {error, missing_scope_attribute};
             S -> convert_space_separated_string_to_list_of_binaries(S)
         end,
     case {Alias, Scope} of
-        {{error, _}, _} -> 
+        {{error, _}, _} ->
             cuttlefish:warn(
                 "Skipped scope_aliases due to missing alias attribute"),
             {};
-        {_, {error, _}} -> 
+        {_, {error, _}} ->
             cuttlefish:warn(
                 "Skipped scope_aliases due to missing scope attribute"),
             {};
@@ -89,44 +89,44 @@ extract_resource_server_scope_aliases_as_list_of_props(Settings) ->
 
     List0 = [
         {
-            Name, 
+            Name,
             {Index, {list_to_atom(Attr), V}}
-        } || 
+        } ||
         {[
-            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES, 
+            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES,
             Index, Attr
          ], V
         } <- Settings ],
     Map0 = maps:groups_from_list(KeyFun, ValueFun, List0),
-     
-    Map4 = maps:map(fun (_, L) -> 
-        Map2 = maps:map(fun (_, L2) -> extract_scope_alias_mapping(L2) end, 
+
+    Map4 = maps:map(fun (_, L) ->
+        Map2 = maps:map(fun (_, L2) -> extract_scope_alias_mapping(L2) end,
             maps:groups_from_list(KeyFun, ValueFun, L)),
         Map3 = maps:filter(fun (_,V) -> V =/= {} end, Map2),
         [{scope_aliases, maps:from_list([ V || {_, V} <- maps:to_list(Map3)])}]
         end, Map0),
-       
+
     Map4.
- 
+
 extract_resource_server_scope_aliases_as_map(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
     List0 = [
         {
-            Name, 
+            Name,
             {
-                list_to_binary(Alias), 
+                list_to_binary(Alias),
                 convert_space_separated_string_to_list_of_binaries(Scope)
-            }         
-        } || 
+            }
+        } ||
         {[
-            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES, 
+            ?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, ?SCOPE_ALIASES,
             Alias
          ], Scope
         } <- Settings ],
     Map0 = maps:groups_from_list(KeyFun, ValueFun, List0),
-    maps:map(fun (_, L) -> [{scope_aliases, maps:from_list(L)}] end, Map0).    
+    maps:map(fun (_, L) -> [{scope_aliases, maps:from_list(L)}] end, Map0).
 
 -spec translate_resource_servers([{list(), binary()}]) -> map().
 translate_resource_servers(Conf) ->
@@ -144,7 +144,7 @@ translate_resource_servers(Conf) ->
             _ -> V
         end end, Map),
     ResourceServers = maps:values(Map0),
-    lists:foldl(fun(Elem,AccMap)-> maps:put(proplists:get_value(id, Elem), 
+    lists:foldl(fun(Elem,AccMap)-> maps:put(proplists:get_value(id, Elem),
         Elem, AccMap) end, #{}, ResourceServers).
 
 -spec translate_oauth_providers([{list(), binary()}]) -> map().
@@ -154,7 +154,7 @@ translate_oauth_providers(Conf) ->
 
     merge_list_of_maps([
         extract_oauth_providers_properties(Settings),
-        extract_oauth_providers_endpoint_params(discovery_endpoint_params, 
+        extract_oauth_providers_endpoint_params(discovery_endpoint_params,
             Settings),
         extract_oauth_providers_algorithm(Settings),
         extract_oauth_providers_https(Settings),
@@ -182,13 +182,13 @@ translate_list_of_signing_keys(ListOfKidPath) ->
                         [Path]))
             end
         end,
-    maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end, 
+    maps:map(fun(_K, Path) -> {pem, TryReadingFileFun(Path)} end,
         maps:from_list(ListOfKidPath)).
 
--spec translate_endpoint_params(list(), [{list(), binary()}]) -> 
+-spec translate_endpoint_params(list(), [{list(), binary()}]) ->
         [{binary(), binary()}].
 translate_endpoint_params(Variable, Conf) ->
-    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable, 
+    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2." ++ Variable,
         Conf),
     [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V}
          <- Params0].
@@ -235,7 +235,7 @@ extract_oauth_providers_properties(Settings) ->
 
     OAuthProviders = [{Name, mapOauthProviderProperty(
         {
-            list_to_atom(Key), 
+            list_to_atom(Key),
             list_to_binary(V)})
         } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
@@ -259,7 +259,7 @@ mapOauthProviderProperty({Key, Value}) ->
         discovery_endpoint_path -> validator_uri(Key, Value);
         discovery_endpoint_params ->
             cuttlefish:invalid(io_lib:format(
-                "Invalid attribute (~p) value: should be a map of Key,Value pairs", 
+                "Invalid attribute (~p) value: should be a map of Key,Value pairs",
                     [Key]));
         _ -> Value
     end}.
@@ -271,7 +271,7 @@ extract_oauth_providers_https(Settings) ->
         {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "https", Key], V} <- Settings ],
 
     maps:map(fun(_K,V)-> [{https, V}] end,
-        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end, 
+        maps:groups_from_list(ExtractProviderNameFun, fun({_, V}) -> V end,
             AttributesPerProvider)).
 
 mapHttpProperty({Key, Value}) ->
@@ -284,9 +284,9 @@ extract_oauth_providers_algorithm(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedAlgorithms = [{Name, {Index, list_to_binary(V)}} ||
-        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "algorithms", Index], V} 
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, "algorithms", Index], V}
             <- Settings ],
-    SortedAlgorithms = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
+    SortedAlgorithms = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end,
         IndexedAlgorithms),
     Algorithms = [{Name, V} || {Name, {_I, V}} <- SortedAlgorithms],
     maps:map(fun(_K,V)-> [{algorithms, V}] end,
@@ -296,9 +296,9 @@ extract_resource_server_preferred_username_claims(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedClaims = [{Name, {Index, list_to_binary(V)}} ||
-        {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, "preferred_username_claims", 
+        {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, "preferred_username_claims",
             Index], V} <- Settings ],
-    SortedClaims = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end, 
+    SortedClaims = lists:sort(fun({_,{AI,_}},{_,{BI,_}}) -> AI < BI end,
         IndexedClaims),
     Claims = [{Name, V} || {Name, {_I, V}} <- SortedClaims],
     maps:map(fun(_K,V)-> [{preferred_username_claims, V}] end,
@@ -317,7 +317,7 @@ extract_oauth_providers_signing_keys(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
 
     IndexedSigningKeys = [{Name, {list_to_binary(Kid), list_to_binary(V)}} ||
-        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, ?SIGNING_KEYS, Kid], V} 
+        {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, ?SIGNING_KEYS, Kid], V}
             <- Settings ],
     maps:map(fun(_K,V)-> [{signing_keys, translate_list_of_signing_keys(V)}] end,
         maps:groups_from_list(KeyFun, fun({_, V}) -> V end, IndexedSigningKeys)).

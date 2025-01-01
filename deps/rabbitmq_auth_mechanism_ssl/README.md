@@ -7,7 +7,7 @@ instead of credentials (username/password pairs).
 
 ## How it Works
 
-When a client connects and performs TLS upgrade, 
+When a client connects and performs TLS upgrade,
 the username is obtained from the client's
 TLS (x509) certificate. The user's password is not checked.
 
@@ -122,6 +122,6 @@ backends if so configured.
 
 ## Copyright & License
 
-(c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+(c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
 
 Released under the same license as RabbitMQ.

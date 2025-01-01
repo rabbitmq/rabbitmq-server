@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -41,7 +41,7 @@ groups() ->
         jwks_url_is_used_in_absense_of_jwks_uri
     ]},
     {without_all_oauth_providers_settings, [], [
-        {group, verify_get_oauth_provider}        
+        {group, verify_get_oauth_provider}
     ]},
     {verify_openid_configuration, [], [
         get_openid_configuration,
@@ -60,7 +60,7 @@ groups() ->
         expiration_time_in_token
     ]},
     {verify_get_oauth_provider, [], [
-        get_oauth_provider,        
+        get_oauth_provider,
         {with_default_oauth_provider, [], [
             get_oauth_provider
         ]},
@@ -83,13 +83,13 @@ init_per_suite(Config) ->
     [
         {jwks_url, build_jwks_uri("https", "/certs4url")},
         {jwks_uri, build_jwks_uri("https")},
-        {denies_access_token, [ 
+        {denies_access_token, [
             {token_endpoint, denies_access_token_expectation()} ]},
-        {auth_server_error, [ 
+        {auth_server_error, [
             {token_endpoint, auth_server_error_when_access_token_request_expectation()} ]},
-        {non_json_payload, [ 
+        {non_json_payload, [
             {token_endpoint, non_json_payload_when_access_token_request_expectation()} ]},
-        {grants_refresh_token, [ 
+        {grants_refresh_token, [
             {token_endpoint, grants_refresh_token_expectation()} ]}
       | Config].
 
@@ -207,7 +207,7 @@ configure_all_oauth_provider_settings(Config) ->
         OAuthProvider#oauth_provider.end_session_endpoint),
     application:set_env(rabbitmq_auth_backend_oauth2, authorization_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint),
-    KeyConfig0 = 
+    KeyConfig0 =
         case OAuthProvider#oauth_provider.ssl_options of
             undefined ->
                 [];
@@ -218,19 +218,19 @@ configure_all_oauth_provider_settings(Config) ->
                         OAuthProvider#oauth_provider.ssl_options) }
                 ]
         end,
-    KeyConfig = 
-        case ?config(jwks_uri_type_of_config, Config) of 
+    KeyConfig =
+        case ?config(jwks_uri_type_of_config, Config) of
             undefined ->
                 application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
                     OAuthProvider#oauth_provider.jwks_uri),
                 KeyConfig0;
-            only_jwks_uri -> 
+            only_jwks_uri ->
                 application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
                     OAuthProvider#oauth_provider.jwks_uri),
-                KeyConfig0; 
-            only_jwks_url -> 
+                KeyConfig0;
+            only_jwks_url ->
                 [ { jwks_url, ?config(jwks_url, Config) } | KeyConfig0 ];
-            both -> 
+            both ->
                 application:set_env(rabbitmq_auth_backend_oauth2, jwks_uri,
                     OAuthProvider#oauth_provider.jwks_uri),
                 [ { jwks_url, ?config(jwks_url, Config) } | KeyConfig0 ]
@@ -261,12 +261,12 @@ configure_minimum_oauth_provider_settings(Config) ->
 init_per_testcase(TestCase, Config0) ->
     application:set_env(rabbitmq_auth_backend_oauth2, use_global_locks, false),
 
-    Config = [case TestCase of 
-        jwks_url_is_used_in_absense_of_jwks_uri -> 
+    Config = [case TestCase of
+        jwks_url_is_used_in_absense_of_jwks_uri ->
             {jwks_uri_type_of_config, only_jwks_url};
-        jwks_uri_takes_precedence_over_jwks_url -> 
+        jwks_uri_takes_precedence_over_jwks_url ->
             {jwks_uri_type_of_config, both};
-        _ -> 
+        _ ->
             {jwks_uri_type_of_config, only_jwks_uri}
         end | Config0],
 
@@ -600,9 +600,9 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
 
 jwks_url_is_used_in_absense_of_jwks_uri(Config) ->
     {ok, #oauth_provider{
-        jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),                
+        jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
     ?assertEqual(
-        proplists:get_value(jwks_url, get_env(key_config, []), undefined), 
+        proplists:get_value(jwks_url, get_env(key_config, []), undefined),
         Jwks_uri).
 
 jwks_uri_takes_precedence_over_jwks_url(Config) ->

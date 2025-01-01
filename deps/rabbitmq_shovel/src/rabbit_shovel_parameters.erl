@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_shovel_parameters).
@@ -336,11 +336,11 @@ parse_amqp091_dest({VHost, Name}, ClusterName, Def, SourceHeaders) ->
     DestQArgs = pget(<<"dest-queue-args">>,   Def, #{}),
     GlobalPredeclared = proplists:get_value(predeclared, application:get_env(?APP, topology, []), false),
     Predeclared = pget(<<"dest-predeclared">>, Def, GlobalPredeclared),
-    DestDeclFun = case Predeclared of 
+    DestDeclFun = case Predeclared of
         true -> {?MODULE, dest_check, [DestQ, DestQArgs]};
         false -> {?MODULE, dest_decl, [DestQ, DestQArgs]}
     end,
-    
+
     {X, Key} = case DestQ of
                    none -> {DestX, DestXKey};
                    _    -> {<<>>,  DestQ}
@@ -438,8 +438,8 @@ parse_amqp091_source(Def) ->
         none -> {{?MODULE, src_decl_exchange, [SrcX, SrcXKey]}, <<>>,
                  [{<<"src-exchange">>,     SrcX},
                   {<<"src-exchange-key">>, SrcXKey}]};
-        _ -> case Predeclared of 
-                false -> 
+        _ -> case Predeclared of
+                false ->
                     {{?MODULE, src_decl_queue, [SrcQ, SrcQArgs]},
                         SrcQ, [{<<"src-queue">>, SrcQ}]};
                 true ->

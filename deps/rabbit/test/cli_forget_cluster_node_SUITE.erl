@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(cli_forget_cluster_node_SUITE).
@@ -103,7 +103,7 @@ forget_cluster_node_with_quorum_queues(Config) ->
     QQ2 = <<"quorum-queue-2">>,
     declare(Ch, QQ1, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
     declare(Ch, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    
+
     ?awaitMatch(Members when length(Members) == 3, get_quorum_members(Rabbit, QQ1), 30000),
     ?awaitMatch(Members when length(Members) == 3, get_quorum_members(Rabbit, QQ2), 30000),
 

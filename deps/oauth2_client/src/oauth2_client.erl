@@ -2,14 +2,14 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
-        build_openid_discovery_endpoint/3,         
+        build_openid_discovery_endpoint/3,
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
@@ -19,7 +19,7 @@
 -include("oauth2_client.hrl").
 
 -spec get_access_token(oauth_provider(), access_token_request()) ->
-    {ok, successful_access_token_response()} | 
+    {ok, successful_access_token_response()} |
     {error, unsuccessful_access_token_response() | any()}.
 get_access_token(OAuthProvider, Request) ->
     rabbit_log:debug("get_access_token using OAuthProvider:~p and client_id:~p",
@@ -35,7 +35,7 @@ get_access_token(OAuthProvider, Request) ->
     parse_access_token_response(Response).
 
 -spec refresh_access_token(oauth_provider(), refresh_token_request()) ->
-    {ok, successful_access_token_response()} | 
+    {ok, successful_access_token_response()} |
     {error, unsuccessful_access_token_response() | any()}.
 refresh_access_token(OAuthProvider, Request) ->
     URL = OAuthProvider#oauth_provider.token_endpoint,
@@ -57,30 +57,30 @@ append_paths(Path1, Path2) ->
 
 build_openid_discovery_endpoint(undefined, _, _) -> undefined;
 build_openid_discovery_endpoint(Issuer, undefined, Params) ->
-    build_openid_discovery_endpoint(Issuer, ?DEFAULT_OPENID_CONFIGURATION_PATH, 
+    build_openid_discovery_endpoint(Issuer, ?DEFAULT_OPENID_CONFIGURATION_PATH,
         Params);
 build_openid_discovery_endpoint(Issuer, OpenIdConfigurationPath, Params) ->
-    URLMap0 = uri_string:parse(Issuer),    
+    URLMap0 = uri_string:parse(Issuer),
     OpenIdPath = ensure_leading_path_separator(OpenIdConfigurationPath),
     URLMap1 = URLMap0#{
         path := case maps:get(path, URLMap0) of
                     [] -> OpenIdPath;
-                    P -> append_paths(drop_trailing_path_separator(P), OpenIdPath)                         
+                    P -> append_paths(drop_trailing_path_separator(P), OpenIdPath)
                 end
     },
     uri_string:recompose(
-        case {Params, maps:get(query, URLMap1, undefined)} of 
-            {undefined, undefined} -> 
+        case {Params, maps:get(query, URLMap1, undefined)} of
+            {undefined, undefined} ->
                 URLMap1;
-            {_, undefined} -> 
-                URLMap1#{query => uri_string:compose_query(Params)};                                
-            {_, Q} -> 
+            {_, undefined} ->
+                URLMap1#{query => uri_string:compose_query(Params)};
+            {_, Q} ->
                 URLMap1#{query => uri_string:compose_query(Q ++ Params)}
         end).
 ensure_leading_path_separator(Path) when is_binary(Path) ->
     ensure_leading_path_separator(binary:bin_to_list(Path));
 ensure_leading_path_separator(Path) when is_list(Path) ->
-    case string:slice(Path, 0, 1) of 
+    case string:slice(Path, 0, 1) of
         "/" -> Path;
         _ -> "/" ++ Path
     end.
@@ -88,14 +88,14 @@ drop_trailing_path_separator(Path) when is_binary(Path) ->
     drop_trailing_path_separator(binary:bin_to_list(Path));
 drop_trailing_path_separator("") -> "";
 drop_trailing_path_separator(Path) when is_list(Path) ->
-    case string:slice(Path, string:len(Path)-1, 1) of 
+    case string:slice(Path, string:len(Path)-1, 1) of
         "/" -> lists:droplast(Path);
         _ -> Path
     end.
 
 -spec get_openid_configuration(DiscoveryEndpoint :: uri_string:uri_string(),
     ssl:tls_option() | []) -> {ok, openid_configuration()} | {error, term()}.
-get_openid_configuration(DiscoverEndpoint, TLSOptions) ->    
+get_openid_configuration(DiscoverEndpoint, TLSOptions) ->
     rabbit_log:debug("get_openid_configuration from ~p (~p)", [DiscoverEndpoint,
         format_ssl_options(TLSOptions)]),
     Options = [],
@@ -104,7 +104,7 @@ get_openid_configuration(DiscoverEndpoint, TLSOptions) ->
 
 -spec merge_openid_configuration(openid_configuration(), oauth_provider()) ->
     oauth_provider().
-merge_openid_configuration(OpenId, OAuthProvider0) ->    
+merge_openid_configuration(OpenId, OAuthProvider0) ->
     OAuthProvider1 = case OpenId#openid_configuration.token_endpoint of
         undefined -> OAuthProvider0;
         TokenEndpoint ->
@@ -155,7 +155,7 @@ parse_openid_configuration_response({error, Reason}) ->
 parse_openid_configuration_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_response_to_openid_configuration(Code, Reason, Headers, Body).
 map_response_to_openid_configuration(Code, Reason, Headers, Body) ->
-    case decode_body(proplists:get_value("content-type", Headers, 
+    case decode_body(proplists:get_value("content-type", Headers,
             ?CONTENT_JSON), Body) of
         {error, {error, InternalError}} ->
             {error, InternalError};
@@ -172,15 +172,15 @@ map_to_openid_configuration(Map) ->
     #openid_configuration{
         issuer = maps:get(?RESPONSE_ISSUER, Map),
         token_endpoint = maps:get(?RESPONSE_TOKEN_ENDPOINT, Map, undefined),
-        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT, 
+        authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
-        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT, 
+        end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT,
             Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     }.
 
 -spec get_expiration_time(successful_access_token_response()) ->
-    {ok, [{expires_in, integer() }| {exp, integer() }]} | 
+    {ok, [{expires_in, integer() }| {exp, integer() }]} |
     {error, missing_exp_field}.
 get_expiration_time(#successful_access_token_response{expires_in = ExpiresInSec,
         access_token = AccessToken}) ->
@@ -201,7 +201,7 @@ update_oauth_provider_endpoints_configuration(OAuthProvider) ->
         unlock(LockId)
     end.
 
-do_update_oauth_provider_endpoints_configuration(OAuthProvider) when 
+do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
         OAuthProvider#oauth_provider.id == root ->
     case OAuthProvider#oauth_provider.token_endpoint of
         undefined -> do_nothing;
@@ -219,7 +219,7 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
         undefined -> do_nothing;
         JwksUri -> set_env(jwks_uri, JwksUri)
     end,
-    rabbit_log:debug("Updated oauth_provider details: ~p ", 
+    rabbit_log:debug("Updated oauth_provider details: ~p ",
         [format_oauth_provider(OAuthProvider)]),
     OAuthProvider;
 
@@ -247,7 +247,7 @@ lock() ->
           false -> undefined
         end;
       {Nodes, Retries} ->
-        case global:set_lock({oauth2_config_lock, rabbitmq_auth_backend_oauth2}, 
+        case global:set_lock({oauth2_config_lock, rabbitmq_auth_backend_oauth2},
             Nodes, Retries) of
           true  -> rabbitmq_auth_backend_oauth2;
           false -> undefined
@@ -259,9 +259,9 @@ unlock(LockId) ->
         undefined -> ok;
         Value ->
             case use_global_locks_on_all_nodes() of
-                {} -> 
+                {} ->
                     global:del_lock({oauth2_config_lock, Value});
-                {Nodes, _Retries} -> 
+                {Nodes, _Retries} ->
                     global:del_lock({oauth2_config_lock, Value}, Nodes)
             end
     end.
@@ -271,12 +271,12 @@ get_oauth_provider(ListOfRequiredAttributes) ->
     case get_env(default_oauth_provider) of
         undefined -> get_root_oauth_provider(ListOfRequiredAttributes);
         DefaultOauthProviderId ->
-            rabbit_log:debug("Using default_oauth_provider ~p", 
+            rabbit_log:debug("Using default_oauth_provider ~p",
                 [DefaultOauthProviderId]),
             get_oauth_provider(DefaultOauthProviderId, ListOfRequiredAttributes)
     end.
 
--spec download_oauth_provider(oauth_provider()) -> {ok, oauth_provider()} | 
+-spec download_oauth_provider(oauth_provider()) -> {ok, oauth_provider()} |
     {error, any()}.
 download_oauth_provider(OAuthProvider) ->
     case OAuthProvider#oauth_provider.discovery_endpoint of
@@ -294,7 +294,7 @@ download_oauth_provider(OAuthProvider) ->
 ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
-            rabbit_log:debug("Resolved oauth_provider ~p", 
+            rabbit_log:debug("Resolved oauth_provider ~p",
                     [format_oauth_provider(OAuthProvider)]),
             {ok, OAuthProvider};
         _ = Attrs ->
@@ -303,19 +303,19 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
 
 get_root_oauth_provider(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_root_oauth_provider(),
-    rabbit_log:debug("Using root oauth_provider ~p", 
+    rabbit_log:debug("Using root oauth_provider ~p",
         [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             {ok, OAuthProvider};
         _ = MissingAttributes ->
-            rabbit_log:debug("Looking up missing attributes ~p ...", 
+            rabbit_log:debug("Looking up missing attributes ~p ...",
                 [MissingAttributes]),
             case download_oauth_provider(OAuthProvider) of
-                {ok, OAuthProvider2} -> 
+                {ok, OAuthProvider2} ->
                     ensure_oauth_provider_has_attributes(OAuthProvider2,
-                        ListOfRequiredAttributes);                    
-                {error, _} = Error3 -> 
+                        ListOfRequiredAttributes);
+                {error, _} = Error3 ->
                     Error3
             end
   end.
@@ -326,14 +326,14 @@ get_root_oauth_provider(ListOfRequiredAttributes) ->
 get_oauth_provider(root, ListOfRequiredAttributes) ->
     get_oauth_provider(ListOfRequiredAttributes);
 
-get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes) 
+get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes)
         when is_list(OAuth2ProviderId) ->
-    get_oauth_provider(list_to_binary(OAuth2ProviderId), 
+    get_oauth_provider(list_to_binary(OAuth2ProviderId),
         ListOfRequiredAttributes);
 
-get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes) 
+get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes)
         when is_binary(OAuthProviderId) ->
-    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p", 
+    rabbit_log:debug("get_oauth_provider ~p with at least these attributes: ~p",
         [OAuthProviderId, ListOfRequiredAttributes]),
     case lookup_oauth_provider_config(OAuthProviderId) of
         {error, _} = Error0 ->
@@ -353,7 +353,7 @@ get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes)
                         {ok, OAuthProvider2} ->
                             ensure_oauth_provider_has_attributes(OAuthProvider2,
                                 ListOfRequiredAttributes);
-                        {error, _} = Error3 -> 
+                        {error, _} = Error3 ->
                             Error3
                     end
             end
@@ -385,7 +385,7 @@ find_missing_attributes(#oauth_provider{} = OAuthProvider, RequiredAttributes) -
 lookup_root_oauth_provider() ->
     Map = maps:from_list(get_env(key_config, [])),
     Issuer = get_env(issuer),
-    DiscoverEndpoint = build_openid_discovery_endpoint(Issuer, 
+    DiscoverEndpoint = build_openid_discovery_endpoint(Issuer,
         get_env(discovery_endpoint_path), get_env(discovery_endpoint_params)),
     #oauth_provider{
         id = root,
@@ -435,7 +435,7 @@ extract_ssl_options_as_list(Map) ->
     ++
     case maps:get(hostname_verification, Map, none) of
         wildcard ->
-            [{customize_hostname_check, [{match_fun, 
+            [{customize_hostname_check, [{match_fun,
                 public_key:pkix_verify_hostname_match_fun(https)}]}];
         none ->
             []
@@ -444,7 +444,7 @@ extract_ssl_options_as_list(Map) ->
 % Replace peer_verification with verify to make it more consistent with other
 % ssl_options in RabbitMQ and Erlang's ssl options
 % Eventually, peer_verification will be removed. For now, both are allowed
--spec get_verify_or_peer_verification(#{atom() => 
+-spec get_verify_or_peer_verification(#{atom() =>
     any()}, verify_none | verify_peer ) -> verify_none | verify_peer.
 get_verify_or_peer_verification(Ssl_options, Default) ->
     case maps:get(verify, Ssl_options, undefined) of
@@ -464,7 +464,7 @@ lookup_oauth_provider_config(OAuth2ProviderId) ->
                 undefined ->
                     {error, {oauth_provider_not_found, OAuth2ProviderId}};
                 OAuthProvider ->
-                    ensure_oauth_provider_has_id_property(OAuth2ProviderId, 
+                    ensure_oauth_provider_has_id_property(OAuth2ProviderId,
                         OAuthProvider)
             end;
         _ ->  {error, invalid_oauth_provider_configuration}
@@ -477,7 +477,7 @@ ensure_oauth_provider_has_id_property(OAuth2ProviderId, OAuth2Provider) ->
 
 build_access_token_request_body(Request) ->
     uri_string:compose_query(
-        append_extra_parameters(Request, 
+        append_extra_parameters(Request,
             append_scope_request_parameter(Request#access_token_request.scope, [
                 grant_type_request_parameter(?CLIENT_CREDENTIALS_GRANT_TYPE),
                 client_id_request_parameter(
@@ -498,11 +498,11 @@ grant_type_request_parameter(Type) ->
     {?REQUEST_GRANT_TYPE, Type}.
 
 client_id_request_parameter(ClientId) ->
-    {?REQUEST_CLIENT_ID, 
+    {?REQUEST_CLIENT_ID,
         binary_to_list(ClientId)}.
 
 client_secret_request_parameter(ClientSecret) ->
-    {?REQUEST_CLIENT_SECRET, 
+    {?REQUEST_CLIENT_SECRET,
         binary_to_list(ClientSecret)}.
 
 refresh_token_request_parameter(Request) ->
@@ -536,8 +536,8 @@ get_timeout_of_default(Timeout) ->
 is_json(?CONTENT_JSON) -> true;
 is_json(_) -> false.
 
--spec decode_body(string(), string() | binary() | term()) -> 
-    'false' | 'null' | 'true' | binary() | [any()] | number() | map() | 
+-spec decode_body(string(), string() | binary() | term()) ->
+    'false' | 'null' | 'true' | binary() | [any()] | number() | map() |
     {error, term()}.
 
 decode_body(_, []) -> [];
@@ -568,25 +568,25 @@ map_to_unsuccessful_access_token_response(Map) ->
     }.
 map_to_oauth_provider(PropList) when is_list(PropList) ->
     Issuer = proplists:get_value(issuer, PropList),
-    DiscoveryEndpoint = build_openid_discovery_endpoint(Issuer, 
+    DiscoveryEndpoint = build_openid_discovery_endpoint(Issuer,
         proplists:get_value(discovery_endpoint_path, PropList),
         proplists:get_value(discovery_endpoint_params, PropList)),
     #oauth_provider{
-        id = 
+        id =
             proplists:get_value(id, PropList),
-        issuer = 
+        issuer =
             Issuer,
-        discovery_endpoint = 
+        discovery_endpoint =
             DiscoveryEndpoint,
-        token_endpoint = 
+        token_endpoint =
             proplists:get_value(token_endpoint, PropList),
-        authorization_endpoint = 
+        authorization_endpoint =
             proplists:get_value(authorization_endpoint, PropList, undefined),
-        end_session_endpoint = 
+        end_session_endpoint =
             proplists:get_value(end_session_endpoint, PropList, undefined),
-        jwks_uri = 
+        jwks_uri =
             proplists:get_value(jwks_uri, PropList, undefined),
-        ssl_options = 
+        ssl_options =
             extract_ssl_options_as_list(maps:from_list(
                 proplists:get_value(https, PropList, [])))
     }.

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(auth_SUITE).
 -compile([export_all,
@@ -68,19 +68,19 @@ sub_groups() ->
        ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
        ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping
       ]},
-     {ssl_user_with_client_id_in_cert_san_dns, [], 
+     {ssl_user_with_client_id_in_cert_san_dns, [],
        [client_id_from_cert_san_dns,
         invalid_client_id_from_cert_san_dns
        ]},
-     {ssl_user_with_client_id_in_cert_san_dns_1, [], 
-       [client_id_from_cert_san_dns_1        
+     {ssl_user_with_client_id_in_cert_san_dns_1, [],
+       [client_id_from_cert_san_dns_1
        ]},
-     {ssl_user_with_client_id_in_cert_san_email, [], 
-       [client_id_from_cert_san_email     
-       ]},            
-     {ssl_user_with_client_id_in_cert_dn, [], 
+     {ssl_user_with_client_id_in_cert_san_email, [],
+       [client_id_from_cert_san_email
+       ]},
+     {ssl_user_with_client_id_in_cert_dn, [],
        [client_id_from_cert_dn
-       ]},  
+       ]},
      {no_ssl_user, [shuffle],
       [anonymous_auth_failure,
        user_credentials_auth,
@@ -209,29 +209,29 @@ mqtt_config(client_id_propagation) ->
                      {allow_anonymous, true}]};
 mqtt_config(ssl_user_with_client_id_in_cert_san_dns) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
-                     {allow_anonymous, false}, 
+                     {allow_anonymous, false},
                      {ssl_cert_client_id_from, subject_alternative_name},
                      {ssl_cert_login_san_type, dns}]};
 mqtt_config(ssl_user_with_client_id_in_cert_san_dns_1) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
-                     {allow_anonymous, false}, 
+                     {allow_anonymous, false},
                      {ssl_cert_client_id_from, subject_alternative_name},
                      {ssl_cert_login_san_type, dns},
-                     {ssl_cert_login_san_index, 1}]}; 
+                     {ssl_cert_login_san_index, 1}]};
 mqtt_config(ssl_user_with_client_id_in_cert_san_email) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
-                     {allow_anonymous, false}, 
+                     {allow_anonymous, false},
                      {ssl_cert_client_id_from, subject_alternative_name},
-                     {ssl_cert_login_san_type, email}]};                                       
+                     {ssl_cert_login_san_type, email}]};
 mqtt_config(ssl_user_with_client_id_in_cert_dn) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
-                     {allow_anonymous, false}, 
+                     {allow_anonymous, false},
                      {ssl_cert_client_id_from, distinguished_name}
                      ]};
 mqtt_config(_) ->
     undefined.
 
-auth_config(T) when T == client_id_propagation; 
+auth_config(T) when T == client_id_propagation;
                     T == ssl_user_with_client_id_in_cert_san_dns;
                     T == ssl_user_with_client_id_in_cert_san_dns_1;
                     T == ssl_user_with_client_id_in_cert_san_email;
@@ -331,7 +331,7 @@ init_per_testcase(T, Config)
         v4 -> {skip, "Will Delay Interval is an MQTT 5.0 feature"};
         v5 -> testcase_started(Config, T)
     end;
-init_per_testcase(T, Config) 
+init_per_testcase(T, Config)
   when T =:= client_id_propagation;
        T =:= invalid_client_id_from_cert_san_dns;
        T =:= client_id_from_cert_san_dns;
@@ -340,7 +340,7 @@ init_per_testcase(T, Config)
        T =:= client_id_from_cert_dn ->
     SetupProcess = setup_rabbit_auth_backend_mqtt_mock(Config),
     rabbit_ct_helpers:set_config(Config, {mock_setup_process, SetupProcess});
-       
+
 init_per_testcase(Testcase, Config) ->
     testcase_started(Config, Testcase).
 
@@ -350,7 +350,7 @@ get_client_cert_subject(Config) ->
     {ok, CertBin} = file:read_file(CertFile),
     [{'Certificate', Cert, not_encrypted}] = public_key:pem_decode(CertBin),
     iolist_to_binary(rpc(Config, 0, rabbit_ssl, peer_cert_subject, [Cert])).
-    
+
 set_cert_user_on_default_vhost(Config) ->
     CertsDir = ?config(rmq_certsdir, Config),
     CertFile = filename:join([CertsDir, "client", "cert.pem"]),
@@ -470,7 +470,7 @@ end_per_testcase(T, Config) when T == queue_bind_permission;
 
     rabbit_ct_helpers:testcase_finished(Config, T);
 
-end_per_testcase(T, Config) 
+end_per_testcase(T, Config)
    when T =:= client_id_propagation;
        T =:= invalid_client_id_from_cert_san_dns;
        T =:= client_id_from_cert_san_dns;
@@ -480,7 +480,7 @@ end_per_testcase(T, Config)
     SetupProcess = ?config(mock_setup_process, Config),
     SetupProcess ! stop,
     close_all_connections(Config);
-    
+
 end_per_testcase(Testcase, Config) ->
     close_all_connections(Config),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
@@ -537,8 +537,8 @@ user_credentials_auth(Config) ->
         fun(Conf) -> connect_user(<<"non-existing-vhost:guest">>, <<"guest">>, Conf) end,
         Config).
 
-client_id_from_cert_san_dns(Config) ->    
-    ExpectedClientId = <<"rabbit_client_id">>, % Found in the client's certificate as SAN type DNS 
+client_id_from_cert_san_dns(Config) ->
+    ExpectedClientId = <<"rabbit_client_id">>, % Found in the client's certificate as SAN type DNS
     MqttClientId = ExpectedClientId,
     {ok, C} = connect_ssl(MqttClientId, Config),
     {ok, _} = emqtt:connect(C),
@@ -549,7 +549,7 @@ client_id_from_cert_san_dns(Config) ->
     ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
     ok = emqtt:disconnect(C).
 
-client_id_from_cert_san_dns_1(Config) ->    
+client_id_from_cert_san_dns_1(Config) ->
     ExpectedClientId = <<"rabbit_client_id_ext">>, % Found in the client's certificate as SAN type DNS
     MqttClientId = ExpectedClientId,
     {ok, C} = connect_ssl(MqttClientId, Config),
@@ -561,7 +561,7 @@ client_id_from_cert_san_dns_1(Config) ->
     ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
     ok = emqtt:disconnect(C).
 
-client_id_from_cert_san_email(Config) ->    
+client_id_from_cert_san_email(Config) ->
     ExpectedClientId = <<"rabbit_client@localhost">>, % Found in the client's certificate as SAN type email
     MqttClientId = ExpectedClientId,
     {ok, C} = connect_ssl(MqttClientId, Config),
@@ -573,7 +573,7 @@ client_id_from_cert_san_email(Config) ->
     ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
     ok = emqtt:disconnect(C).
 
-client_id_from_cert_dn(Config) ->    
+client_id_from_cert_dn(Config) ->
     ExpectedClientId = get_client_cert_subject(Config), % subject = distinguished_name
     MqttClientId = ExpectedClientId,
     {ok, C} = connect_ssl(MqttClientId, Config),
@@ -585,7 +585,7 @@ client_id_from_cert_dn(Config) ->
     ?assertEqual(ExpectedClientId, proplists:get_value(client_id, AuthProps)),
     ok = emqtt:disconnect(C).
 
-invalid_client_id_from_cert_san_dns(Config) ->    
+invalid_client_id_from_cert_san_dns(Config) ->
     MqttClientId = <<"other_client_id">>,
     {ok, C} = connect_ssl(MqttClientId, Config),
     ?assertMatch({error, _}, emqtt:connect(C)),
@@ -707,7 +707,7 @@ client_id_propagation(Config) ->
     ?assertEqual(ClientId, maps:get(<<"client_id">>, VariableMap)),
 
     emqtt:disconnect(C).
-    
+
 
 %% These tests try to cover all operations that are listed in the
 %% table in https://www.rabbitmq.com/access-control.html#authorisation

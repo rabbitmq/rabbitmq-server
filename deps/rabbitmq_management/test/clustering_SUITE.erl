@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(clustering_SUITE).
@@ -363,7 +363,7 @@ queue(Config) ->
                 maps:get(deliveries,
                          http_get(Config, "/queues/%2F/some-queue")),
                 30000),
-    
+
     amqp_channel:close(Chan),
     amqp_channel:close(Chan2),
     http_delete(Config, "/queues/%2F/some-queue", ?NO_CONTENT),
@@ -489,7 +489,7 @@ channel(Config) ->
     [{_, ChData}] = rabbit_ct_broker_helpers:rpc(Config, 0, ets, tab2list, [channel_created]),
 
     ChName = uri_string:recompose(#{path => binary_to_list(pget(name, ChData))}),
-    
+
     eventually(?_assertMatch(
                   #{},
                   begin

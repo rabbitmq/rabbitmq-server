@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(rabbit_mgmt_wm_consumers).
 
@@ -39,7 +39,7 @@ to_json(ReqData, Context = #context{user = User}) ->
             Arg = case rabbit_mgmt_util:vhost(ReqData) of
                       none  -> all;
                       VHost -> VHost
-                  end,            
+                  end,
             Consumers = rabbit_mgmt_format:strip_pids(rabbit_mgmt_db:get_all_consumers(Arg)),
             Formatted = [rabbit_mgmt_format:format_consumer_arguments(C) || C <- Consumers],
             rabbit_mgmt_util:reply_list(

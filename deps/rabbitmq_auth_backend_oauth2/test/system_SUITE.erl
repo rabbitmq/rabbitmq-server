@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(system_SUITE).
@@ -325,7 +325,7 @@ preconfigure_node(Config) ->
     rabbit_ct_helpers:set_config(Config, {fixture_jwk, Jwk}).
 
 generate_valid_token_with_sub(Config, Sub) ->
-    generate_valid_token(Config, 
+    generate_valid_token(Config,
         ?UTIL_MOD:full_permission_scopes(), undefined, Sub).
 
 generate_valid_token(Config) ->
@@ -344,13 +344,13 @@ generate_valid_token(Config, Scopes, Audience, Sub) ->
           end,
     Token0 = case Audience of
         undefined -> ?UTIL_MOD:fixture_token_with_scopes(Scopes);
-        DefinedAudience -> maps:put(<<"aud">>, DefinedAudience, 
+        DefinedAudience -> maps:put(<<"aud">>, DefinedAudience,
             ?UTIL_MOD:fixture_token_with_scopes(Scopes))
     end,
-    Token = case Sub of 
+    Token = case Sub of
         undefined -> Token0;
         _ -> maps:put(<<"sub">>, Sub, Token0)
-    end,    
+    end,
     ?UTIL_MOD:sign_token_hs(Token, Jwk).
 
 generate_valid_token_with_extra_fields(Config, ExtraFields) ->
@@ -933,7 +933,7 @@ refreshed_token_cannot_change_username(Config) ->
 
     %% the error is communicated asynchronously via a connection-level error
     ?assertException(exit, {{nodedown,not_allowed},_}, amqp_connection:update_secret(Conn, RefreshedToken, <<"token refresh">>)).
-    
+
 
 test_failed_token_refresh_case2(Config) ->
     {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost4/*">>,
