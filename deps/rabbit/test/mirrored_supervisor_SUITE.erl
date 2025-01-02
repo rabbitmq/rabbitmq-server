@@ -51,7 +51,8 @@ end_per_suite(Config) ->
 init_per_group(Group, Config) ->
     Config1 = rabbit_ct_helpers:set_config(Config, [
         {rmq_nodename_suffix, Group},
-        {rmq_nodes_count, 1}
+        {rmq_nodes_count, 1},
+        {find_crashes, false}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -63,7 +64,10 @@ end_per_group(_Group, Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [{sup_prefix, Testcase}]),
+    Config1 = rabbit_ct_helpers:set_config(Config, [
+        {sup_prefix, Testcase},
+        {find_crashes, false}
+    ]),
     rabbit_ct_helpers:testcase_started(Config1, Testcase).
 
 end_per_testcase(Testcase, Config) ->
