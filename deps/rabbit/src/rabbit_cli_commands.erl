@@ -3,6 +3,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
+-include_lib("rabbit_common/include/resource.hrl").
 
 -export([argparse_def/0, run_command/1, do_run_command/1]).
 -export([cmd_list_exchanges/1]).
@@ -89,10 +90,11 @@ expand_argparse_def(Def) when is_map(Def) ->
     Def;
 expand_argparse_def(Defs) when is_list(Defs) ->
     lists:foldl(
-      fun(argparse_def_record_stream, Acc) ->
+      fun
+          (argparse_def_record_stream, Acc) ->
               Def = rabbit_cli_io:argparse_def(record_stream),
               rabbit_cli:merge_argparse_def(Acc, Def);
-         (Def, Acc) ->
+          (Def, Acc) ->
               Def1 = expand_argparse_def(Def),
               rabbit_cli:merge_argparse_def(Acc, Def1)
       end, #{}, Defs).
@@ -129,11 +131,11 @@ do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
     erlang:apply(Mod, Fun, [Context]).
 
 cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
-    InfoKeys = rabbit_exchange:info_keys(),
+    InfoKeys = rabbit_exchange:info_keys() -- [user_who_performed_action],
     Fields = lists:map(
                fun
                    (name = Key) ->
-                       #{name => Key, type => resource};
+                       #{name => Key, type => string};
                    (type = Key) ->
                        #{name => Key, type => string};
                    (durable = Key) ->
@@ -146,8 +148,6 @@ cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
                        #{name => Key, type => term};
                    (policy = Key) ->
                        #{name => Key, type => string};
-                   (user_who_performed_action = Key) ->
-                       #{name => Key, type => string};
                    (Key) ->
                        #{name => Key, type => term}
                end, InfoKeys),
@@ -156,9 +156,14 @@ cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
             Exchanges = rabbit_exchange:list(),
             lists:foreach(
               fun(Exchange) ->
-                      Record0 = rabbit_exchange:info(Exchange),
+                      Record0 = rabbit_exchange:info(Exchange, InfoKeys),
                       Record1 = lists:sublist(Record0, length(Fields)),
-                      Record2 = [Value || {_Key, Value} <- Record1],
+                      Record2 = [case Value of
+                                     #resource{name = N} ->
+                                         N;
+                                     _ ->
+                                         Value
+                                 end || {_Key, Value} <- Record1],
                       rabbit_cli_io:push_new_record(IO, Stream, Record2)
               end, Exchanges),
             rabbit_cli_io:end_record_stream(IO, Stream),
