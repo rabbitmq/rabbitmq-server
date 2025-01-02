@@ -1,9 +1,11 @@
 -module(rabbit_cli).
 
 -include_lib("kernel/include/logger.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([main/1,
          merge_argparse_def/2,
+         translate_aliases/1,
          handle_alias/1,
          noop/1]).
 
@@ -41,27 +43,34 @@ do_run_cli(Progname, Args, IO) ->
                              cmd_path => PartialCmdPath,
                              command => PartialCommand},
 
-        Context2 = case rabbit_cli_transport:connect(Context1) of
+        {ok, Config} ?= read_config_file(Context1),
+        Context2 = Context1#{config => Config},
+
+        Context3 = case rabbit_cli_transport:connect(Context2) of
                        {ok, Connection} ->
-                           Context1#{connection => Connection};
+                           Context2#{connection => Connection};
                        {error, _} ->
-                           Context1
+                           Context2
                    end,
 
         %% We can query the argparse definition from the remote node to know
         %% the commands it supports and proceed with the execution.
-        ArgparseDef = get_final_argparse_def(Context2),
-        Context3 = Context2#{argparse_def => ArgparseDef},
+        {ok, ArgparseDef} ?= get_final_argparse_def(Context3),
+        Context4 = Context3#{argparse_def => ArgparseDef},
         {ok,
          ArgMap,
          CmdPath,
-         Command} ?= final_parse(Context3),
-        Context4 = Context3#{arg_map => ArgMap,
+         Command} ?= final_parse(Context4),
+        Context5 = Context4#{arg_map => ArgMap,
                              cmd_path => CmdPath,
                              command => Command},
 
-        run_command(Context4)
+        run_command(Context5)
     end.
+
+%% -------------------------------------------------------------------
+%% RabbitMQ code directory.
+%% -------------------------------------------------------------------
 
 add_rabbitmq_code_path(Progname) ->
     ScriptDir = filename:dirname(Progname),
@@ -75,16 +84,11 @@ add_rabbitmq_code_path(Progname) ->
     lists:foreach(fun code:add_path/1, AppDirs),
     ok.
 
+%% -------------------------------------------------------------------
+%% Arguments definition and parsing.
+%% -------------------------------------------------------------------
+
 argparse_def() ->
-    Aliases0 = #{"lx" => "list_exchanges -v",
-                 "list_exchanges" => "list exchanges"},
-    Aliases1 = maps:map(
-                 fun(_Alias, CommandStr) ->
-                         Args = string:lexemes(CommandStr, " "),
-                         #{alias => Args,
-                           help => hidden,
-                           handler => {?MODULE, handle_alias}}
-                 end, Aliases0),
     #{arguments =>
       [
        #{name => help,
@@ -107,11 +111,11 @@ argparse_def() ->
        #{name => version,
          long => "-version",
          short => $V,
+         type => boolean,
          help =>
          "Display version and exit"}
       ],
 
-      commands => Aliases1,
       handler => {?MODULE, noop}}.
 
 initial_parse(
@@ -125,8 +129,7 @@ initial_parse(
     end.
 
 partial_parse(Args, ArgparseDef, Options) ->
-    ArgparseDef1 = maps:remove(commands, ArgparseDef),
-    partial_parse(Args, ArgparseDef1, Options, []).
+    partial_parse(Args, ArgparseDef, Options, []).
 
 partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
     case argparse:parse(Args, ArgparseDef, Options) of
@@ -141,13 +144,31 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
             Error
     end.
 
-get_final_argparse_def(
-  #{connection := Connection, argparse_def := PartialArgparseDef}) ->
-    ArgparseDef1 = PartialArgparseDef,
-    ArgparseDef2 = rabbit_cli_transport:rpc(
-                     Connection, rabbit_cli_commands, argparse_def, []),
-    ArgparseDef = merge_argparse_def(ArgparseDef1, ArgparseDef2),
-    ArgparseDef.
+get_final_argparse_def(#{argparse_def := PartialArgparseDef} = Context) ->
+    maybe
+        {ok, Aliases} ?= get_aliases(Context),
+        {ok, FullArgparseDef} ?= get_full_argparse_def(Context),
+        ArgparseDef1 = merge_argparse_def(PartialArgparseDef, Aliases),
+        ArgparseDef2 = merge_argparse_def(ArgparseDef1, FullArgparseDef),
+        {ok, ArgparseDef2}
+    end.
+
+get_aliases(#{config := Config}) ->
+    Aliases = maps:get(aliases, Config, #{}),
+    case Aliases =:= #{} of
+        true ->
+            {ok, #{}};
+        false ->
+            {ok, #{commands => Aliases}}
+    end.
+
+get_full_argparse_def(#{connection := Connection}) ->
+    RemoteArgparseDef = rabbit_cli_transport:rpc(
+                          Connection, rabbit_cli_commands, argparse_def, []),
+    {ok, RemoteArgparseDef};
+get_full_argparse_def(_) ->
+    LocalArgparseDef = rabbit_cli_commands:argparse_def(),
+    {ok, LocalArgparseDef}.
 
 merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
     Args1 = maps:get(arguments, ArgparseDef1, []),
@@ -171,13 +192,75 @@ final_parse(
     Options = #{progname => Progname},
     argparse:parse(Args, ArgparseDef, Options).
 
-run_command(#{connection := Connection} = Context) ->
-    rabbit_cli_transport:run_command(Connection, Context);
-run_command(Context) ->
-    rabbit_cli_commands:run_command(Context).
+%% -------------------------------------------------------------------
+%% Configuation file.
+%% -------------------------------------------------------------------
 
-noop(_Context) ->
-    ok.
+read_config_file(_Context) ->
+    ConfigFilename = get_config_filename(),
+    case filelib:is_regular(ConfigFilename) of
+        true ->
+            SchemaFilename = get_config_schema_filename(),
+            Schema = cuttlefish_schema:files([SchemaFilename]),
+            case cuttlefish_conf:files([ConfigFilename]) of
+                {errorlist, Errors} ->
+                    io:format(standard_error, "Errors1 = ~p~n", [Errors]),
+                    {error, config};
+                Config0 ->
+                    case cuttlefish_generator:map(Schema, Config0) of
+                        {error, _Phase, {errorlist, Errors}} ->
+                            io:format(
+                              standard_error, "Errors2 = ~p~n", [Errors]),
+                            {error, config};
+                        Config1 ->
+                            Config2 = proplists:get_value(
+                                        rabbitmqctl, Config1, []),
+                            Config3 = maps:from_list(Config2),
+                            {ok, Config3}
+                    end
+            end;
+        false ->
+            {ok, #{}}
+    end.
+
+get_config_schema_filename() ->
+    ok = application:load(rabbit),
+    RabbitPrivDir = code:priv_dir(rabbit),
+    RabbitmqctlSchema = filename:join(
+                          [RabbitPrivDir, "schema", "rabbitmqctl.schema"]),
+    RabbitmqctlSchema.
+
+get_config_filename() ->
+    {OsFamily, _} = os:type(),
+    get_config_filename(OsFamily).
+
+get_config_filename(unix) ->
+    XdgConfigHome = case os:getenv("XDG_CONFIG_HOME") of
+                        false ->
+                            HomeDir = os:getenv("HOME"),
+                            ?assertNotEqual(false, HomeDir),
+                            filename:join([HomeDir, ".config"]);
+                        Value ->
+                            Value
+                    end,
+    ConfigFilename = filename:join(
+                       [XdgConfigHome, "rabbitmq", "rabbitmqctl.conf"]),
+    ConfigFilename.
+
+%% -------------------------------------------------------------------
+%% Aliases handling.
+%% -------------------------------------------------------------------
+
+translate_aliases(Aliases) ->
+    Aliases1 = maps:from_list(Aliases),
+    Aliases2 = maps:map(
+                 fun(_Alias, CommandStr) ->
+                         Args = string:lexemes(CommandStr, " "),
+                         #{alias => Args,
+                           help => hidden,
+                           handler => {?MODULE, handle_alias}}
+                 end, Aliases1),
+    Aliases2.
 
 handle_alias(
   #{progname := Progname,
@@ -195,3 +278,15 @@ handle_alias(
         {error, _} = Error ->
             Error
     end.
+
+%% -------------------------------------------------------------------
+%% Command execution.
+%% -------------------------------------------------------------------
+
+run_command(#{connection := Connection} = Context) ->
+    rabbit_cli_transport:run_command(Connection, Context);
+run_command(Context) ->
+    rabbit_cli_commands:run_command(Context).
+
+noop(_Context) ->
+    ok.
