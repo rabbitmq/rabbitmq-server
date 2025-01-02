@@ -99,16 +99,32 @@ expand_argparse_def(Defs) when is_list(Defs) ->
 
 run_command(Context) ->
     %% TODO: Put both processes under the rabbit supervision tree.
-    RunnerPid = spawn_link(fun() -> do_run_command(Context) end),
+    Parent = self(),
+    RunnerPid = spawn_link(
+                  fun() ->
+                          Ret = do_run_command(Context),
+                          case Ret of
+                              ok ->
+                                  ok;
+                              {ok, _} ->
+                                  ok;
+                              Other ->
+                                  erlang:unlink(Parent),
+                                  erlang:error(Other)
+                          end
+                  end),
     RunnerMRef = erlang:monitor(process, RunnerPid),
     receive
+        {'DOWN', RunnerMRef, _, _, normal} ->
+            ok;
         {'DOWN', RunnerMRef, _, _, Reason} ->
-            {ok, Reason}
+            Reason
     end.
 
 do_run_command(#{command := Command, arg_map := #{help := true}} = Context)
   when not is_map_key(alias, Command) ->
-    rabbit_cli_io:display_help(Context);
+    rabbit_cli_io:display_help(Context),
+    ok;
 do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
     erlang:apply(Mod, Fun, [Context]).
 
@@ -145,7 +161,8 @@ cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
                       Record2 = [Value || {_Key, Value} <- Record1],
                       rabbit_cli_io:push_new_record(IO, Stream, Record2)
               end, Exchanges),
-            rabbit_cli_io:end_record_stream(IO, Stream);
+            rabbit_cli_io:end_record_stream(IO, Stream),
+            ok;
         {error, _} = Error ->
             Error
     end.
