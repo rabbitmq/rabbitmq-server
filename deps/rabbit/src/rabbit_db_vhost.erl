@@ -23,6 +23,8 @@
          count_all/0,
          list/0,
          update/2,
+         enable_protection_from_deletion/1,
+         disable_protection_from_deletion/1,
          with_fun_in_mnesia_tx/2,
          with_fun_in_khepri_tx/2,
          delete/1,
@@ -223,6 +225,36 @@ do_set_tags(VHost, Tags) when ?is_vhost(VHost) andalso is_list(Tags) ->
 set_tags_in_khepri(VHostName, Tags) ->
     UpdateFun = fun(VHost) -> do_set_tags(VHost, Tags) end,
     update_in_khepri(VHostName, UpdateFun).
+
+%% -------------------------------------------------------------------
+%% Deletion protection
+%% -------------------------------------------------------------------
+
+-spec enable_protection_from_deletion(VHostName) -> Ret when
+    VHostName :: vhost:name(),
+    Ret :: {ok, VHost} |
+    {error, {no_such_vhost, VHostName}} |
+    rabbit_khepri:timeout_error(),
+    VHost :: vhost:vhost().
+enable_protection_from_deletion(VHostName) ->
+    MetadataPatch = #{
+        protected_from_deletion => true
+    },
+    rabbit_log:info("Enabling deletion protection for virtual host '~ts'", [VHostName]),
+    merge_metadata(VHostName, MetadataPatch).
+
+-spec disable_protection_from_deletion(VHostName) -> Ret when
+    VHostName :: vhost:name(),
+    Ret :: {ok, VHost} |
+    {error, {no_such_vhost, VHostName}} |
+    rabbit_khepri:timeout_error(),
+    VHost :: vhost:vhost().
+disable_protection_from_deletion(VHostName) ->
+    MetadataPatch = #{
+        protected_from_deletion => false
+    },
+    rabbit_log:info("Disabling deletion protection for virtual host '~ts'", [VHostName]),
+    merge_metadata(VHostName, MetadataPatch).
 
 %% -------------------------------------------------------------------
 %% exists().
