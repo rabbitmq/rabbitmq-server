@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_web_stomp_listener).
@@ -58,7 +58,7 @@ stop(State) ->
 list_connections() ->
     PlainPids = connection_pids_of_protocol(?TCP_PROTOCOL),
     TLSPids   = connection_pids_of_protocol(?TLS_PROTOCOL),
-    
+
     PlainPids ++ TLSPids.
 
 -spec close_all_client_connections(string()) -> {'ok', non_neg_integer()}.
@@ -66,7 +66,7 @@ close_all_client_connections(Reason) ->
     Connections = list_connections(),
     [rabbit_web_stomp_handler:close_connection(Pid, Reason) || Pid <- Connections],
     {ok, length(Connections)}.
-    
+
 
 %%
 %% Implementation

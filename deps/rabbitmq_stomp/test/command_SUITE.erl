@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(command_SUITE).
@@ -92,7 +92,7 @@ run(Config) ->
     %% There are still just two connections
     [[{session_id, _}], [{session_id, _}]] =
         'Elixir.Enum':to_list(?COMMAND:run([<<"session_id">>], Opts)),
-    
+
     start_amqp_connection(direct, Node, Port),
 
     %% Still two MQTT connections, one direct AMQP 0-9-1 connection

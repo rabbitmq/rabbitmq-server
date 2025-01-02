@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_exchange_publish).
@@ -106,7 +106,7 @@ is_authorized(ReqData, Context) ->
 
 raise_not_found(ReqData, Context) ->
     ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> 
+        not_found ->
             "vhost_not_found";
         _ ->
             "exchange_not_found"

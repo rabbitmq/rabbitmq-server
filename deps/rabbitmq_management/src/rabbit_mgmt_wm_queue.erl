@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_queue).
@@ -124,7 +124,7 @@ queue_with_totals(ReqData) ->
     case rabbit_mgmt_util:vhost(ReqData) of
         not_found -> not_found;
         VHost     -> queue_with_totals(VHost, rabbit_mgmt_util:id(queue, ReqData))
-    end. 
+    end.
 
 queue_with_totals(VHost, QName) ->
     Name = rabbit_misc:r(VHost, queue, QName),

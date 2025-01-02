@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_ssl).
@@ -109,20 +109,20 @@ peer_cert_subject_alternative_names(Cert, Type) ->
 peer_cert_validity(Cert) ->
     rabbit_cert_info:validity(Cert).
 
--type ssl_cert_login_type() :: 
-    {subject_alternative_name | subject_alt_name, atom(), integer()} | 
+-type ssl_cert_login_type() ::
+    {subject_alternative_name | subject_alt_name, atom(), integer()} |
     {distinguished_name | common_name, undefined, undefined }.
 
 -spec extract_ssl_cert_login_settings() -> none | ssl_cert_login_type().
 extract_ssl_cert_login_settings() ->
-    case application:get_env(rabbit, ssl_cert_login_from) of 
+    case application:get_env(rabbit, ssl_cert_login_from) of
         {ok, Mode} ->
-            case Mode of 
+            case Mode of
                 subject_alternative_name -> extract_san_login_type(Mode);
                 subject_alt_name -> extract_san_login_type(Mode);
                 _ -> {Mode, undefined, undefined}
             end;
-        undefined -> none 
+        undefined -> none
     end.
 
 extract_san_login_type(Mode) ->
@@ -134,9 +134,9 @@ extract_san_login_type(Mode) ->
 %% Extract a username from the certificate
 -spec peer_cert_auth_name(certificate()) -> binary() | 'not_found' | 'unsafe'.
 peer_cert_auth_name(Cert) ->
-    case extract_ssl_cert_login_settings() of 
+    case extract_ssl_cert_login_settings() of
         none -> 'not_found';
-        Settings -> peer_cert_auth_name(Settings, Cert)        
+        Settings -> peer_cert_auth_name(Settings, Cert)
     end.
 
 -spec peer_cert_auth_name(ssl_cert_login_type(), certificate()) -> binary() | 'not_found' | 'unsafe'.

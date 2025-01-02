@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(amqp_client_SUITE).
@@ -1453,7 +1453,7 @@ message_headers_conversion(Config) ->
     ok = delete_queue(Session, QName),
     ok = amqp10_client:close_connection(Connection).
 
-amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) -> 
+amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
     {ok, Sender} = create_amqp10_sender(Session, Address),
 
     OutMsg1 = amqp10_msg:new(<<"my-tag">>, <<"my-body">>, false),
@@ -1499,8 +1499,8 @@ amqp10_to_amqp091_header_conversion(Session,Ch, QName, Address) ->
     ?assertEqual(7, Priority),
     ?assertEqual(<<"88000">>, Expiration).
 
-amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) -> 
-    Amqp091Headers = [{<<"x-forwarding">>, array, 
+amqp091_to_amqp10_header_conversion(Session, Ch, QName, Address) ->
+    Amqp091Headers = [{<<"x-forwarding">>, array,
                        [{table, [{<<"uri">>, longstr,
                                   <<"amqp://localhost/%2F/upstream">>}]}]},
                       {<<"x-string">>, longstr, "my-string"},
@@ -6279,7 +6279,7 @@ delete_queue(Session, QName) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair).
 
-create_amqp10_sender(Session, Address) -> 
+create_amqp10_sender(Session, Address) ->
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
@@ -6306,7 +6306,7 @@ receive_messages0(_Receiver, 0, Acc) ->
     lists:reverse(Acc);
 receive_messages0(Receiver, N, Acc) ->
     receive
-        {amqp10_msg, Receiver, Msg} -> 
+        {amqp10_msg, Receiver, Msg} ->
             receive_messages0(Receiver, N - 1, [Msg | Acc])
     after 30000  ->
               ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})

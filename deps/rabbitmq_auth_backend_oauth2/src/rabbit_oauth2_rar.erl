@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 % Rich Authorization Request
@@ -24,24 +24,24 @@
 -define(RAR_EXCHANGE_LOCATION_ATTRIBUTE, <<"exchange">>).
 -define(RAR_ROUTING_KEY_LOCATION_ATTRIBUTE, <<"routing-key">>).
 -define(RAR_LOCATION_ATTRIBUTES, [
-        ?RAR_CLUSTER_LOCATION_ATTRIBUTE, 
+        ?RAR_CLUSTER_LOCATION_ATTRIBUTE,
         ?RAR_VHOST_LOCATION_ATTRIBUTE,
-        ?RAR_QUEUE_LOCATION_ATTRIBUTE, 
-        ?RAR_EXCHANGE_LOCATION_ATTRIBUTE, 
+        ?RAR_QUEUE_LOCATION_ATTRIBUTE,
+        ?RAR_EXCHANGE_LOCATION_ATTRIBUTE,
         ?RAR_ROUTING_KEY_LOCATION_ATTRIBUTE]).
 
 -define(RAR_ALLOWED_TAG_VALUES, [
-        <<"monitoring">>, 
-        <<"administrator">>, 
-        <<"management">>, 
+        <<"monitoring">>,
+        <<"administrator">>,
+        <<"management">>,
         <<"policymaker">> ]).
 -define(RAR_ALLOWED_ACTION_VALUES, [
-        <<"read">>, 
-        <<"write">>, 
-        <<"configure">>, 
+        <<"read">>,
+        <<"write">>,
+        <<"configure">>,
         <<"monitoring">>,
-        <<"administrator">>, 
-        <<"management">>, 
+        <<"administrator">>,
+        <<"management">>,
         <<"policymaker">> ]).
 
 -spec has_rich_auth_request_scopes(Payload::map()) -> boolean().
