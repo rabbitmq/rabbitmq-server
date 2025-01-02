@@ -137,17 +137,28 @@ queue_declare_method(#'queue.declare'{} = Method, Type, Params) ->
                   false -> Method#'queue.declare'{auto_delete = true,
                                                   exclusive   = true}
               end,
+
     %% set the rest of queue.declare fields from Params
     Method2 = lists:foldl(fun (F, Acc) -> F(Acc, Params) end,
                 Method1, [fun update_queue_declare_arguments/2,
                           fun update_queue_declare_exclusive/2,
                           fun update_queue_declare_auto_delete/2,
                           fun update_queue_declare_nowait/2]),
+
+    Arguments = proplists:get_value(arguments, Params, []),
+    QueueType = rabbit_amqqueue:get_queue_type(Arguments),
+
+    Method3 = case QueueType of
+                  rabbit_stream_queue -> Method2#'queue.declare'{durable   = true,
+                                                                 exclusive = false};
+                  _ -> Method2
+              end,
+
     case  {Type, proplists:get_value(subscription_queue_name_gen, Params)} of
         {topic, SQNG} when is_function(SQNG) ->
-            Method2#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         {exchange, SQNG} when is_function(SQNG) ->
-            Method2#'queue.declare'{queue = SQNG()};
+            Method3#'queue.declare'{queue = SQNG()};
         _ ->
-            Method2
+            Method3
     end.
