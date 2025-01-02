@@ -1,0 +1,12 @@
+%% vim:ft=erlang:sw=4:et:
+
+{mapping, "alias.$alias", "rabbitmqctl.aliases",
+ [{datatype, string}]}.
+
+{translation, "rabbitmqctl.aliases",
+ fun(Conf) ->
+         Aliases0 = cuttlefish_variable:filter_by_prefix("alias", Conf),
+         Aliases1 = [{Alias, Value} || {["alias", Alias], Value} <- Aliases0],
+         Aliases2 = rabbit_cli:translate_aliases(Aliases1),
+         Aliases2
+ end}.
