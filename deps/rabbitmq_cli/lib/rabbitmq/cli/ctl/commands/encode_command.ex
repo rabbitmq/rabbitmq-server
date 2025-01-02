@@ -149,7 +149,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncodeCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
+  def description(),
+    do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
 
   #
   # Implementation

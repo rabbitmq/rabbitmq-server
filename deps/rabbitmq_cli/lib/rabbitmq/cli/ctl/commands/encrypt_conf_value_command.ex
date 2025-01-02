@@ -125,7 +125,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncryptConfValueCommand do
   end
 
   def usage,
-    do: "encrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+    do:
+      "encrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [
@@ -145,7 +146,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.EncryptConfValueCommand do
 
   def help_section(), do: :configuration
 
-  def description(), do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
+  def description(),
+    do: "Encrypts a sensitive configuration value to be used in the advanced.config file"
 
   #
   # Implementation

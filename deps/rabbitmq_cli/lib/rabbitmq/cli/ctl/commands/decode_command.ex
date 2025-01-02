@@ -87,6 +87,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
         catch
           _, _ ->
             IO.inspect(__STACKTRACE__)
+
             {:error,
              "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
         end
@@ -111,6 +112,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecodeCommand do
     catch
       _, _ ->
         IO.inspect(__STACKTRACE__)
+
         {:error,
          "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end

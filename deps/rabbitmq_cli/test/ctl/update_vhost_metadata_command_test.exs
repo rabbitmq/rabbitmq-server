@@ -84,7 +84,12 @@ defmodule UpdateVhostMetadataCommandTest do
   test "run: enabling and disabling deletion protection succeeds", context do
     add_vhost(@vhost)
 
-    opts = Map.merge(context[:opts], %{description: "Protected from deletion", protected_from_deletion: true})
+    opts =
+      Map.merge(context[:opts], %{
+        description: "Protected from deletion",
+        protected_from_deletion: true
+      })
+
     assert @command.run([@vhost], opts) == :ok
     vh = find_vhost(@vhost)
     assert vh[:tags] == [:my_tag]
@@ -112,7 +117,6 @@ defmodule UpdateVhostMetadataCommandTest do
     opts = %{node: :jake@thedog, timeout: 200, description: "does not matter"}
     assert match?({:badrpc, _}, @command.run(["na"], opts))
   end
-
 
   test "banner", context do
     assert @command.banner([@vhost], context[:opts]) =~

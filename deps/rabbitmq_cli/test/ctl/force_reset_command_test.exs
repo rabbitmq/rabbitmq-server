@@ -46,6 +46,7 @@ defmodule ForceResetCommandTest do
     assert vhost_exists?("some_vhost")
     node = get_rabbit_hostname()
     ret = @command.run([], context[:opts])
+
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
         assert match?({:error, :rabbitmq_unexpectedly_running}, ret)
@@ -53,6 +54,7 @@ defmodule ForceResetCommandTest do
       false ->
         assert match?({:error, :mnesia_unexpectedly_running}, ret)
     end
+
     assert vhost_exists?("some_vhost")
   end
 
