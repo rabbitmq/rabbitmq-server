@@ -19,7 +19,7 @@
 -rabbit_deprecated_feature(
    {amqp_address_v1,
     #{deprecation_phase => permitted_by_default,
-      doc_url => "https://www.rabbitmq.com/docs/next/amqp#address",
+      doc_url => "https://www.rabbitmq.com/docs/amqp#addresses",
       messages =>
       #{when_permitted =>
         "RabbitMQ AMQP address version 1 is deprecated. "
