@@ -582,7 +582,7 @@ virtually_reset_inventory(
                        fun(FeatureName, _FeatureState) ->
                                FeatureProps = maps:get(
                                                 FeatureName, FeatureFlags),
-                               state_after_virtual_state(
+                               state_after_virtual_reset(
                                  FeatureName, FeatureProps)
                        end, FeatureStates0),
     StatesPerNode1 = maps:map(
@@ -596,14 +596,14 @@ virtually_reset_inventory(
   false = _NodeAsVirgin) ->
     Inventory.
 
-state_after_virtual_state(_FeatureName, FeatureProps)
+state_after_virtual_reset(_FeatureName, FeatureProps)
   when ?IS_FEATURE_FLAG(FeatureProps) ->
     Stability = rabbit_feature_flags:get_stability(FeatureProps),
     case Stability of
         required -> true;
         _        -> false
     end;
-state_after_virtual_state(FeatureName, FeatureProps)
+state_after_virtual_reset(FeatureName, FeatureProps)
   when ?IS_DEPRECATION(FeatureProps) ->
     not rabbit_deprecated_features:should_be_permitted(
           FeatureName, FeatureProps).
@@ -1840,8 +1840,13 @@ enable_dependencies1(
                 rabbit_deprecated_features:is_feature_used_callback_ret() |
                 run_callback_error()}.
 
-run_callback(Nodes, FeatureName, Command, Extra, Timeout) ->
-    FeatureProps = rabbit_ff_registry_wrapper:get(FeatureName),
+run_callback([FirstNode | _] = Nodes, FeatureName, Command, Extra, Timeout) ->
+    %% We need to take the callback definition from a node in the `Nodes' list
+    %% because the local node may not know this feature flag and thus does not
+    %% have the callback definition.
+    FeatureProps = erpc:call(
+                     FirstNode,
+                     rabbit_ff_registry_wrapper, get, [FeatureName]),
     Callbacks = maps:get(callbacks, FeatureProps, #{}),
     case Callbacks of
         #{Command := {CallbackMod, CallbackFun}}

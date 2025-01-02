@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(priority_queue_SUITE).
@@ -466,7 +466,7 @@ unknown_info_key(Config) ->
     Q = <<"info-priority-queue">>,
     declare(Ch, Q, 3),
     publish(Ch, Q, [1, 2, 3]),
-    
+
     {ok, [{pid, _Pid}, {unknown_key, ''}]} = info(Config, Q, [pid, unknown_key]),
 
     delete(Ch, Q),
@@ -600,7 +600,7 @@ queue_pid(Config, Nodename, Q) ->
     [Pid] = [P || [{name, Q1}, {pid, P}] <- Info, Q =:= Q1],
     Pid.
 
-info(Config, Q, InfoKeys) -> 
+info(Config, Q, InfoKeys) ->
     Nodename = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     {ok, Amq} = rabbit_ct_broker_helpers:rpc(
             Config, Nodename,

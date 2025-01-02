@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% This test suite contains test cases that are shared between (i.e. executed across):
 %% 1. plugins rabbitmq_mqtt and rabbitmq_web_mqtt
@@ -1252,7 +1252,7 @@ management_plugin_connection(Config) ->
          lists:filter(FilterFun, http_get(Config, "/connections"))),
       1000, 10),
     eventually(?_assertEqual([], all_connection_pids(Config)), 500, 3),
-    
+
     C2 = connect(ClientId, Config, [{keepalive, KeepaliveSecs}]),
     eventually(
       ?_assertMatch(

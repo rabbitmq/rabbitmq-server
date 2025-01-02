@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_auth_backend_oauth2).
@@ -124,13 +124,13 @@ update_state(AuthUser, NewToken) ->
                     CurToken = AuthUser#auth_user.impl,
                     case ensure_same_username(
                             ResourceServer#resource_server.preferred_username_claims,
-                            CurToken(), DecodedToken) of 
+                            CurToken(), DecodedToken) of
                         ok ->
                             Tags = tags_from(DecodedToken),
                             {ok, AuthUser#auth_user{tags = Tags,
                                                     impl = fun() -> DecodedToken end}};
-                        {error, mismatch_username_after_token_refresh} -> 
-                            {refused, 
+                        {error, mismatch_username_after_token_refresh} ->
+                            {refused,
                                 "Not allowed to change username on refreshed token"}
                     end
             end
@@ -201,10 +201,10 @@ auth_user_from_token(Token0, ResourceServer) ->
 
 ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedToken) ->
     CurUsername = username_from(PreferredUsernameClaims, CurrentDecodedToken),
-    case {CurUsername, username_from(PreferredUsernameClaims, NewDecodedToken)} of 
+    case {CurUsername, username_from(PreferredUsernameClaims, NewDecodedToken)} of
         {CurUsername, CurUsername} -> ok;
         _ -> {error, mismatch_username_after_token_refresh}
-    end. 
+    end.
 
 validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Now = os:system_time(seconds),

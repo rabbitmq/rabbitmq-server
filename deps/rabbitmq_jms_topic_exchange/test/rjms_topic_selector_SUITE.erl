@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rjms_topic_selector_SUITE).
@@ -56,7 +56,7 @@ init_per_group(mnesia_store = Group, Config0) ->
 init_per_group(khepri_store = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(
                Config0,
-               [{metadata_store, {khepri, [khepri_db]}}]),
+               [{metadata_store, khepri}]),
     init_per_group_common(Group, Config);
 init_per_group(khepri_migration = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),

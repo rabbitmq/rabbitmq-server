@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_auth_backend_http).
@@ -205,7 +205,7 @@ do_http_req(Path0, Query) ->
 ssl_options() ->
     case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
         {ok, Opts0} when is_list(Opts0) ->
-            Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],            
+            Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],
             case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
                 {ok, wildcard} ->
                     rabbit_log:debug("Enabling wildcard-aware hostname verification for HTTP client connections"),

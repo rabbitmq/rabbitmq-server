@@ -57,7 +57,7 @@ jobs:
       uses: dsaltares/fetch-gh-release-asset@master
       if: inputs.mixed_clusters
       with:
-        version: 'tags/v4.0.3'
+        version: 'tags/v4.0.5'
         regex: true
         file: "rabbitmq-server-generic-unix-\\d.+\\.tar\\.xz"
         target: ./
@@ -75,12 +75,6 @@ jobs:
         tar xf $archive_name
 
         echo "SECONDARY_DIST=${GITHUB_WORKSPACE}/rabbitmq_server-$archive_version" >> $GITHUB_ENV
-
-    - name: SETUP DOTNET (rabbit)
-      uses: actions/setup-dotnet@v4
-      if: inputs.plugin == 'rabbit'
-      with:
-        dotnet-version: '8.0'
 
     - name: SETUP SLAPD (rabbitmq_auth_backend_ldap)
       if: inputs.plugin == 'rabbitmq_auth_backend_ldap'

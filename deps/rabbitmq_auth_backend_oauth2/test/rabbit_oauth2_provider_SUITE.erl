@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_oauth2_provider_SUITE).
@@ -237,26 +237,26 @@ call_get_env(Config, Par, Def) ->
         [rabbitmq_auth_backend_oauth2, Par, Def]).
 
 call_add_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider,
         add_signing_key, Args).
 
 call_get_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider,
         get_signing_keys, Args).
 
 call_get_signing_keys(Config) ->
     call_get_signing_keys(Config, []).
 
 call_get_signing_key(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider,
         get_signing_key, Args).
 
 call_add_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider,
         add_signing_keys, Args).
 
 call_replace_signing_keys(Config, Args) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_oauth2_provider,
         replace_signing_keys, Args).
 
 %% ----- Test cases

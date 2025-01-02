@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_auth_SUITE).
@@ -99,7 +99,7 @@ groups() ->
                   should_return_mgt_oauth_metadata_url_url1,
                   {with_mgt_oauth_resource_server_rabbit_with_oauth_metadata_url_url1, [], [
                     should_return_oauth_resource_server_rabbit_with_oauth_metadata_url_url1
-                  ]}                 
+                  ]}
                 ]}
               ]}
             ]}
@@ -205,7 +205,7 @@ groups() ->
                     should_return_oauth_resource_server_a_with_oauth_metadata_url_url1,
                     {with_mgt_oauth_resource_server_a_with_oauth_provider_url_url1, [], [
                       should_return_oauth_resource_server_rabbit_with_oauth_provider_url_url0,
-                      should_return_oauth_resource_server_a_with_oauth_provider_url_url1                      
+                      should_return_oauth_resource_server_a_with_oauth_provider_url_url1
                     ]}
                   ]}
                 ]}

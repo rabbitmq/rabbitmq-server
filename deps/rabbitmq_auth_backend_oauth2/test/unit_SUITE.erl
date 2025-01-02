@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(unit_SUITE).
 
@@ -654,7 +654,7 @@ test_successful_access_with_a_token(_) ->
     assert_resource_access_granted(User, VHost, <<"bar">>, read),
     assert_resource_access_granted(User, VHost, custom, <<"bar">>, read),
 
-    assert_topic_access_granted(User, VHost, <<"bar">>, read, 
+    assert_topic_access_granted(User, VHost, <<"bar">>, read,
         #{routing_key => <<"#/foo">>}).
 
 successful_access_with_a_token_with_variables_in_scopes(_) ->
@@ -674,7 +674,7 @@ successful_access_with_a_token_with_variables_in_scopes(_) ->
     {ok, #auth_user{username = Username} = User} =
       user_login_authentication(Username, #{password => Token}),
 
-    assert_topic_access_granted(User, VHost, <<"bar">>, read, 
+    assert_topic_access_granted(User, VHost, <<"bar">>, read,
         #{routing_key => Username}).
 
 successful_access_with_a_parsed_token(_) ->
@@ -699,7 +699,7 @@ test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(
         ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(
-            [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>]), 
+            [<<"rabbitmq.tag:management">>, <<"rabbitmq.tag:policymaker">>]),
                 Username), Jwk),
 
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
@@ -812,7 +812,7 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_fi
     VHost = <<"vhost">>,
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
-    ?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]), 
+    ?UTIL_MOD:token_with_scope_alias_in_scope_field([Role1, Role2, Role3]),
         Username), Jwk),
 
     {ok, #auth_user{username = Username}  = AuthUser} =
@@ -933,7 +933,7 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_sc
     Username = <<"username">>,
     Claims   = [Role1, Role2, Role3],
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
-        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]), 
+        ?UTIL_MOD:token_with_scope_alias_in_claim_field(Claims, [<<"unrelated">>]),
             Username), Jwk),
 
     {ok, AuthUser} = user_login_authentication(Username, [{password, Token}]),
@@ -972,7 +972,7 @@ test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_sco
     VHost = <<"vhost">>,
     Username = <<"username">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
-      ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]), 
+      ?UTIL_MOD:token_with_scope_alias_in_claim_field(Alias, [<<"unrelated">>]),
         Username), Jwk),
 
     {ok, AuthUser} = user_login_authentication(Username, [{password, Token}]),
@@ -1000,7 +1000,7 @@ test_unsuccessful_access_with_a_bogus_token(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     set_env(key_config, UaaEnv),
 
-    ?assertMatch({refused, _, _}, user_login_authentication(Username, 
+    ?assertMatch({refused, _, _}, user_login_authentication(Username,
         [{password, <<"not a token">>}])).
 
 unsuccessful_access_without_scopes(_) ->
@@ -1013,7 +1013,7 @@ unsuccessful_access_without_scopes(_) ->
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
     set_env(key_config, UaaEnv),
 
-    {ok, #auth_user{username = Username, tags = [], impl = _CredentialsFun } 
+    {ok, #auth_user{username = Username, tags = [], impl = _CredentialsFun }
         = AuthUser} = user_login_authentication(Username, [{password, Token}]),
 
     assert_vhost_access_denied(AuthUser, <<"vhost">>).
@@ -1052,7 +1052,7 @@ test_insufficient_permissions_in_a_valid_token(_) ->
     %% access to these resources is not granted
     assert_resource_access_denied(User, VHost, <<"foo1">>, configure),
     assert_resource_access_denied(User, VHost, <<"bar">>, write),
-    assert_topic_access_refused(User, VHost, <<"bar">>, read, 
+    assert_topic_access_refused(User, VHost, <<"bar">>, read,
         #{routing_key => <<"foo/#">>}).
 
 test_invalid_signature(_) ->
@@ -1102,10 +1102,10 @@ test_incorrect_kid(_) ->
     unset_env(key_config),
     set_env(resource_server_id, <<"rabbitmq">>),
     Token = ?UTIL_MOD:sign_token_hs(
-        ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk, 
+        ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk,
             AltKid, true),
     ?assertMatch(
-        {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", 
+        {refused, "Authentication using an OAuth 2/JWT token failed: ~tp",
             [{error,{missing_oauth_provider_attributes, [issuer]}}]},
                  user_login_authentication(Username, #{password => Token})).
 
@@ -1122,11 +1122,11 @@ test_command_json(Config) ->
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
-        #{node => rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename), 
+        #{node => rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
             json => Json}),
     Token = ?UTIL_MOD:sign_token_hs(
         ?UTIL_MOD:token_with_sub(?UTIL_MOD:fixture_token(), Username), Jwk),
-    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE,
         login_and_check_vhost_access, [Username, Token, none]).
 
 test_username_from(_) ->
@@ -1185,9 +1185,9 @@ test_command_pem_file(Config) ->
         #{node => rabbit_ct_broker_helpers:get_node_config(
             Config, 0, nodename), pem_file => PublicKeyFile}),
 
-    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(), 
+    Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:fixture_token(),
         Jwk, <<"token-key">>),
-    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE,
         login_and_check_vhost_access, [Username, Token, none]).
 
 
@@ -1206,7 +1206,7 @@ test_command_pem(Config) ->
 
     Token = ?UTIL_MOD:sign_token_rsa(?UTIL_MOD:token_with_sub(
         ?UTIL_MOD:fixture_token(), Username), Jwk, <<"token-key">>),
-    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE, 
+    rabbit_ct_broker_helpers:rpc(Config, 0, unit_SUITE,
         login_and_check_vhost_access, [Username, Token, none]).
 
 test_command_pem_no_kid(Config) ->
@@ -1219,12 +1219,12 @@ test_command_pem_no_kid(Config) ->
 
     'Elixir.RabbitMQ.CLI.Ctl.Commands.AddUaaKeyCommand':run(
         [<<"token-key">>],
-        #{node => rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename), 
+        #{node => rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
             pem => Pem}),
 
     Token = ?UTIL_MOD:sign_token_no_kid(?UTIL_MOD:token_with_sub(
         ?UTIL_MOD:fixture_token(), Username), Jwk),
-    rabbit_ct_broker_helpers:rpc(Config,  0, unit_SUITE, 
+    rabbit_ct_broker_helpers:rpc(Config,  0, unit_SUITE,
         login_and_check_vhost_access, [Username, Token, none]).
 
 
@@ -1306,19 +1306,19 @@ assert_vhost_access_response(ExpectedResult, AuthUser, VHost) ->
         check_vhost_access(AuthUser, VHost, none)).
 
 assert_resource_access_granted(AuthUser, VHost, ResourceName, PermissionKind) ->
-    assert_resource_access_response(true, AuthUser, VHost, ResourceName, 
+    assert_resource_access_response(true, AuthUser, VHost, ResourceName,
         PermissionKind).
 
 assert_resource_access_denied(AuthUser, VHost, ResourceName, PermissionKind) ->
     assert_resource_access_response(false, AuthUser, VHost, ResourceName,
          PermissionKind).
 
-assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceName, 
+assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceName,
         PermissionKind) ->
     assert_resource_access_response({error, ExpectedError}, AuthUser, VHost,
          ResourceName, PermissionKind).
 
-assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceName, 
+assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceName,
         PermissionKind) ->
     ?assertEqual(ExpectedResult,
             rabbit_auth_backend_oauth2:check_resource_access(
@@ -1326,19 +1326,19 @@ assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceName,
                           rabbit_misc:r(VHost, queue, ResourceName),
                           PermissionKind, #{})).
 
-assert_resource_access_granted(AuthUser, VHost, ResourceKind, ResourceName, 
+assert_resource_access_granted(AuthUser, VHost, ResourceKind, ResourceName,
         PermissionKind) ->
-    assert_resource_access_response(true, AuthUser, VHost, ResourceKind, 
+    assert_resource_access_response(true, AuthUser, VHost, ResourceKind,
         ResourceName, PermissionKind).
 
-assert_resource_access_denied(AuthUser, VHost, ResourceKind, ResourceName, 
+assert_resource_access_denied(AuthUser, VHost, ResourceKind, ResourceName,
         PermissionKind) ->
-    assert_resource_access_response(false, AuthUser, VHost, ResourceKind, 
+    assert_resource_access_response(false, AuthUser, VHost, ResourceKind,
         ResourceName, PermissionKind).
 
-assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceKind, 
+assert_resource_access_errors(ExpectedError, AuthUser, VHost, ResourceKind,
         ResourceName, PermissionKind) ->
-    assert_resource_access_response({error, ExpectedError}, AuthUser, VHost, 
+    assert_resource_access_response({error, ExpectedError}, AuthUser, VHost,
         ResourceKind, ResourceName, PermissionKind).
 
 assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceKind,
@@ -1349,19 +1349,19 @@ assert_resource_access_response(ExpectedResult, AuthUser, VHost, ResourceKind,
                           rabbit_misc:r(VHost, ResourceKind, ResourceName),
                           PermissionKind, #{})).
 
-assert_topic_access_granted(AuthUser, VHost, ResourceName, PermissionKind, 
+assert_topic_access_granted(AuthUser, VHost, ResourceName, PermissionKind,
         AuthContext) ->
-    assert_topic_access_response(true, AuthUser, VHost, ResourceName, 
+    assert_topic_access_response(true, AuthUser, VHost, ResourceName,
         PermissionKind, AuthContext).
 
-assert_topic_access_refused(AuthUser, VHost, ResourceName, PermissionKind, 
+assert_topic_access_refused(AuthUser, VHost, ResourceName, PermissionKind,
         AuthContext) ->
-    assert_topic_access_response(false, AuthUser, VHost, ResourceName, 
+    assert_topic_access_response(false, AuthUser, VHost, ResourceName,
         PermissionKind, AuthContext).
 
-assert_topic_access_response(ExpectedResult, AuthUser, VHost, ResourceName, 
+assert_topic_access_response(ExpectedResult, AuthUser, VHost, ResourceName,
     PermissionKind, AuthContext) ->
-    ?assertEqual(ExpectedResult, 
+    ?assertEqual(ExpectedResult,
         rabbit_auth_backend_oauth2:check_topic_access(
                          AuthUser,
                          #resource{virtual_host = VHost,

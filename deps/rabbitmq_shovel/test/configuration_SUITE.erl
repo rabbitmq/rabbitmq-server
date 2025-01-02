@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(configuration_SUITE).
@@ -228,7 +228,7 @@ valid_configuration(Config) ->
 
 valid_configuration_with_predefined_resources(Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, setup_shovels2, [Config]),
-    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_terminated_shovel, [test_shovel]),    
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_terminated_shovel, [test_shovel]),
     declare_queue(Config),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE,  await_running_shovel, [test_shovel]).
 
@@ -297,7 +297,7 @@ run_valid_test(Config) ->
 declare_queue(Config) ->
     Chan = rabbit_ct_client_helpers:open_channel(Config, 0),
     amqp_channel:call(Chan, #'queue.declare'{queue   = ?QUEUE,
-                                             durable = true}),             
+                                             durable = true}),
     rabbit_ct_client_helpers:close_channel(Chan).
 
 setup_legacy_shovels(Config) ->
@@ -404,7 +404,7 @@ setup_shovels2(Config) ->
          {ack_mode, on_confirm}]}],
       infinity),
 
-    ok = application:start(rabbitmq_shovel).    
+    ok = application:start(rabbitmq_shovel).
 
 await_running_shovel(Name) ->
     case [N || {N, _, {running, _}, _}

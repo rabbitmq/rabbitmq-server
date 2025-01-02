@@ -26,7 +26,6 @@
          init_per_testcase/2,
          end_per_testcase/2,
 
-         etcd_connection_sanity_check_test/1,
          init_opens_a_connection_test/1,
          registration_with_locking_test/1,
          start_one_member_at_a_time/1,
@@ -41,7 +40,6 @@ all() ->
 groups() ->
     [
      {v3_client, [], [
-                    etcd_connection_sanity_check_test,
                     init_opens_a_connection_test,
                     registration_with_locking_test
                 ]},
@@ -202,13 +200,57 @@ start_etcd(Config) ->
            "--initial-cluster-state", "new",
            "--initial-cluster-token", "test-token",
            "--log-level", "debug", "--log-outputs", "stdout"],
-    EtcdPid = spawn(fun() -> rabbit_ct_helpers:exec(Cmd) end),
+    EtcdPid = spawn(fun() -> do_start_etcd(Cmd) end),
 
-    EtcdEndpoint = rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort]),
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{etcd_pid, EtcdPid},
-       {etcd_endpoints, [EtcdEndpoint]}]).
+    EtcdEndpoints = [rabbit_misc:format("~s:~b", [EtcdHost, EtcdClientPort])],
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{etcd_pid, EtcdPid},
+                 {etcd_endpoints, EtcdEndpoints}]),
+
+    #{level := Level} = logger:get_primary_config(),
+    logger:set_primary_config(level, critical),
+    try
+        wait_for_etcd(EtcdEndpoints),
+        Config1
+    catch
+        exit:{test_case_failed, _} ->
+            stop_etcd(Config1),
+            {skip, "Failed to start etcd"}
+    after
+        logger:set_primary_config(level, Level)
+    end.
+
+do_start_etcd(Cmd) ->
+    case rabbit_ct_helpers:exec(Cmd) of
+        {ok, Stdout} ->
+            ct:pal("etcd daemon exited:~n~s", [Stdout]);
+        {error, Reason, Stdout} ->
+            ct:pal(
+              "etcd daemon exited with error ~0p:~n~s",
+              [Reason, Stdout])
+    end.
+
+wait_for_etcd(EtcdEndpoints) ->
+    application:ensure_all_started(eetcd),
+
+    Timeout = 60000,
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              case eetcd:open(test, EtcdEndpoints) of
+                  {ok, _Pid} -> true;
+                  _          -> false
+              end
+      end, Timeout),
+
+    Condition1 = fun() -> 1 =:= length(eetcd_conn_sup:info()) end,
+    try
+        rabbit_ct_helpers:await_condition(Condition1, Timeout)
+    after
+        eetcd:close(test)
+    end,
+    Condition2 = fun() -> 0 =:= length(eetcd_conn_sup:info()) end,
+    rabbit_ct_helpers:await_condition(Condition2, Timeout).
 
 stop_etcd(Config) ->
     case rabbit_ct_helpers:get_config(Config, etcd_pid) of
@@ -225,24 +267,6 @@ stop_etcd(Config) ->
 %%
 %% Test cases
 %%
-
-etcd_connection_sanity_check_test(Config) ->
-    application:ensure_all_started(eetcd),
-    Endpoints = ?config(etcd_endpoints, Config),
-    ?assertMatch({ok, _Pid}, eetcd:open(test, Endpoints)),
-
-    Condition1 = fun() ->
-                    1 =:= length(eetcd_conn_sup:info())
-                end,
-    try
-        rabbit_ct_helpers:await_condition(Condition1, 60000)
-    after
-        eetcd:close(test)
-    end,
-    Condition2 = fun() ->
-                    0 =:= length(eetcd_conn_sup:info())
-                end,
-    rabbit_ct_helpers:await_condition(Condition2, 60000).
 
 init_opens_a_connection_test(Config) ->
     Endpoints = ?config(etcd_endpoints, Config),

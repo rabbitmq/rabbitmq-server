@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 -module(quorum_queue_SUITE).
 
@@ -1326,16 +1326,16 @@ policy_repair(Config) ->
             Priority1 = 1,
             ok = rabbit_ct_broker_helpers:rpc(
                 Config,
-                0, 
-                rabbit_policy, 
-                set, 
+                0,
+                rabbit_policy,
+                set,
                 [
-                    <<"/">>, 
+                    <<"/">>,
                     <<QQ/binary, "_1">>,
-                    QQ, 
-                    [{<<"max-length">>, ExpectedMaxLength1}, {<<"overflow">>, <<"reject-publish">>}], 
-                    Priority1, 
-                    <<"quorum_queues">>, 
+                    QQ,
+                    [{<<"max-length">>, ExpectedMaxLength1}, {<<"overflow">>, <<"reject-publish">>}],
+                    Priority1,
+                    <<"quorum_queues">>,
                     <<"acting-user">>
                 ]),
 
@@ -1346,12 +1346,12 @@ policy_repair(Config) ->
                         ?DEFAULT_AWAIT),
 
             % Check the policy has been applied
-            %   Insert MaxLength1 + some messages but after consuming all messages only 
+            %   Insert MaxLength1 + some messages but after consuming all messages only
             %   MaxLength1 are retrieved.
             %   Checking twice to ensure consistency
             publish_confirm_many(Ch, QQ, ExpectedMaxLength1 + 1),
             % +1 because QQs let one pass
-            wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1), 
+            wait_for_messages_ready(Servers, RaName, ExpectedMaxLength1 + 1),
             fail = publish_confirm(Ch, QQ),
             fail = publish_confirm(Ch, QQ),
             consume_all(Ch, QQ),
@@ -1361,16 +1361,16 @@ policy_repair(Config) ->
             Priority2 = 2,
             ok = rabbit_ct_broker_helpers:rpc(
                 Config,
-                0, 
-                rabbit_policy, 
-                set, 
+                0,
+                rabbit_policy,
+                set,
                 [
-                    <<"/">>, 
+                    <<"/">>,
                     <<QQ/binary, "_2">>,
-                    QQ, 
-                    [{<<"max-length">>, ExpectedMaxLength2}, {<<"overflow">>, <<"reject-publish">>}], 
+                    QQ,
+                    [{<<"max-length">>, ExpectedMaxLength2}, {<<"overflow">>, <<"reject-publish">>}],
                     Priority2,
-                    <<"quorum_queues">>, 
+                    <<"quorum_queues">>,
                     <<"acting-user">>
                 ]),
 
@@ -1380,7 +1380,7 @@ policy_repair(Config) ->
                         ?DEFAULT_AWAIT),
 
             % Check the policy has been applied
-            %   Insert MaxLength2 + some messages but after consuming all messages only 
+            %   Insert MaxLength2 + some messages but after consuming all messages only
             %   MaxLength2 are retrieved.
             %   Checking twice to ensure consistency.
             % + 1 because QQs let one pass
@@ -1398,26 +1398,26 @@ policy_repair(Config) ->
             Priority3 = 3,
             ok = rabbit_ct_broker_helpers:rpc(
                 Config,
-                0, 
-                rabbit_policy, 
-                set, 
+                0,
+                rabbit_policy,
+                set,
                 [
-                    <<"/">>, 
+                    <<"/">>,
                     <<QQ/binary, "_3">>,
-                    QQ, 
-                    [{<<"max-length">>, ExpectedMaxLength3}, {<<"overflow">>, <<"reject-publish">>}], 
-                    Priority3, 
-                    <<"quorum_queues">>, 
+                    QQ,
+                    [{<<"max-length">>, ExpectedMaxLength3}, {<<"overflow">>, <<"reject-publish">>}],
+                    Priority3,
+                    <<"quorum_queues">>,
                     <<"acting-user">>
                 ]),
 
             % Restart the queue process.
-            {ok, Queue} = 
+            {ok, Queue} =
                 rabbit_ct_broker_helpers:rpc(
                     Config,
                     0,
                     rabbit_amqqueue,
-                    lookup, 
+                    lookup,
                     [{resource, <<"/">>, queue, QQ}]),
             lists:foreach(
                 fun(Srv) ->
@@ -1431,11 +1431,11 @@ policy_repair(Config) ->
                 end,
                 Servers),
 
-            % Wait for the queue to be available again. 
+            % Wait for the queue to be available again.
             lists:foreach(fun(Srv) ->
                 rabbit_ct_helpers:await_condition(
                     fun () ->
-                        is_pid( 
+                        is_pid(
                             rabbit_ct_broker_helpers:rpc(
                                 Config,
                                 Srv,
@@ -1452,7 +1452,7 @@ policy_repair(Config) ->
                         ?DEFAULT_AWAIT),
 
             % Check the policy has been applied
-            %   Insert MaxLength3 + some messages but after consuming all messages only 
+            %   Insert MaxLength3 + some messages but after consuming all messages only
             %   MaxLength3 are retrieved.
             %   Checking twice to ensure consistency.
             % + 1 because QQs let one pass

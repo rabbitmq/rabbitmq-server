@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_format).
@@ -263,10 +263,10 @@ internal_user(User) ->
      {tags,              tags_as_binaries(internal_user:get_tags(User))},
      {limits,            internal_user:get_limits(User)}].
 
-user(User) ->    
+user(User) ->
     [{name, User#user.username},
      {tags, tags_as_binaries(User#user.tags)},
-     {is_internal_user, lists:any(fun({Module,_}) -> Module == rabbit_auth_backend_internal  end, 
+     {is_internal_user, lists:any(fun({Module,_}) -> Module == rabbit_auth_backend_internal  end,
                                     User#user.authz_backends)}].
 
 tags_as_binaries(Tags) ->

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(bindings_SUITE).
@@ -72,7 +72,7 @@ end_per_suite(Config) ->
 %     init_per_group_common(Group, Config, 1);
 init_per_group(khepri_migration = Group, Config) ->
     case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
-        {khepri, _} ->
+        khepri ->
             {skip, "skip khepri migration test when khepri already configured"};
         mnesia ->
             init_per_group_common(Group, Config, 1)

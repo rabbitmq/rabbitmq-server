@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(jwks_SUITE).
@@ -14,9 +14,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_ct_client_helpers, [
-    close_connection/1, 
+    close_connection/1,
     close_channel/1,
-    open_unmanaged_connection/4, 
+    open_unmanaged_connection/4,
     open_unmanaged_connection/5,
     close_connection_and_channel/2
 ]).
@@ -24,7 +24,7 @@
     set_config/2,
     get_config/2, get_config/3
 ]).
--import(rabbit_ct_broker_helpers, [    
+-import(rabbit_ct_broker_helpers, [
     rpc/5
 ]).
 -import(rabbit_mgmt_test_util, [
@@ -135,7 +135,7 @@ groups() ->
                                 {without_kid, [], [
                                     test_unsuccessful_connection_for_rabbitmq1_signed_by_provider_A,
                                     {with_oauth_providers_A_with_default_key, [], [
-                                        test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A                                    
+                                        test_successful_connection_for_rabbitmq1_audience_signed_by_provider_A
                                     ]}
                                 ]}
                             ]}
@@ -174,7 +174,7 @@ end_per_suite(Config) ->
 
 init_per_group(no_peer_verification, Config) ->
     KeyConfig = set_config(?config(key_config, Config), [
-            {jwks_url, ?config(non_strict_jwks_uri, Config)}, 
+            {jwks_url, ?config(non_strict_jwks_uri, Config)},
             {peer_verification, verify_none}
     ]),
     ok = rpc_set_env(Config, key_config, KeyConfig),
@@ -183,9 +183,9 @@ init_per_group(without_kid, Config) ->
     set_config(Config, [{include_kid, false}]);
 init_per_group(with_resource_servers_rabbitmq1_with_oauth_provider_A, Config) ->
     ResourceServersConfig0 = rpc_get_env(Config, resource_servers, #{}),
-    Resource0 = maps:get(<<"rabbitmq1">>, ResourceServersConfig0, 
+    Resource0 = maps:get(<<"rabbitmq1">>, ResourceServersConfig0,
         [{id, <<"rabbitmq1">>}]),
-    ResourceServersConfig1 = maps:put(<<"rabbitmq1">>, 
+    ResourceServersConfig1 = maps:put(<<"rabbitmq1">>,
         [{oauth_provider_id, <<"A">>} | Resource0], ResourceServersConfig0),
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
 init_per_group(with_oauth_providers_A_B_and_C, Config) ->
@@ -211,7 +211,7 @@ init_per_group(with_oauth_providers_A_with_default_key, Config) ->
     {ok, OAuthProviders0} = rpc_get_env(Config, oauth_providers),
     OAuthProvider = maps:get(<<"A">>, OAuthProviders0, []),
     OAuthProviders1 = maps:put(<<"A">>, [
-        {default_key, ?UTIL_MOD:token_key(?config(fixture_jwksA, Config))} 
+        {default_key, ?UTIL_MOD:token_key(?config(fixture_jwksA, Config))}
         | OAuthProvider], OAuthProviders0),
     ok = rpc_set_env(Config, oauth_providers, OAuthProviders1),
     Config;
@@ -225,9 +225,9 @@ init_per_group(with_oauth_provider_A_with_jwks_with_one_signing_key, Config) ->
     Config;
 init_per_group(with_resource_servers_rabbitmq2, Config) ->
     ResourceServersConfig0 = rpc_get_env(Config, resource_servers, #{}),
-    Resource0 = maps:get(<<"rabbitmq2">>, ResourceServersConfig0, 
+    Resource0 = maps:get(<<"rabbitmq2">>, ResourceServersConfig0,
         [{id, <<"rabbitmq2">>}]),
-    ResourceServersConfig1 = maps:put(<<"rabbitmq2">>, Resource0, 
+    ResourceServersConfig1 = maps:put(<<"rabbitmq2">>, Resource0,
         ResourceServersConfig0),
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1),
     Config;
@@ -269,14 +269,14 @@ init_per_group(with_root_oauth_provider_with_two_static_keys_and_one_jwks_key, C
 init_per_group(with_root_oauth_provider_with_default_key_1, Config) ->
     KeyConfig = rpc_get_env(Config, key_config, []),
     KeyConfig1 = [
-        {default_key, ?UTIL_MOD:token_key(?config(fixture_static_1, Config))} 
+        {default_key, ?UTIL_MOD:token_key(?config(fixture_static_1, Config))}
         | KeyConfig],
     ok = rpc_set_env(Config, key_config, KeyConfig1),
     Config;
 init_per_group(with_root_oauth_provider_with_default_jwks_key, Config) ->
     KeyConfig = rpc_get_env(Config, key_config, []),
     KeyConfig1 = [
-        {default_key, ?UTIL_MOD:token_key(?config(fixture_jwk, Config))} 
+        {default_key, ?UTIL_MOD:token_key(?config(fixture_jwk, Config))}
         | KeyConfig],
     ok = rpc_set_env(Config, key_config, KeyConfig1),
     Config;
@@ -298,7 +298,7 @@ init_per_group(with_resource_servers_rabbitmq3_with_oauth_provider_C, Config) ->
     ResourceServersConfig0 = rpc_get_env(Config, resource_servers, #{}),
     Resource0 = maps:get(<<"rabbitmq3">>, ResourceServersConfig0, [
         {id, <<"rabbitmq3">>},{oauth_provider_id, <<"C">>}]),
-    ResourceServersConfig1 = maps:put(<<"rabbitmq3">>, Resource0, 
+    ResourceServersConfig1 = maps:put(<<"rabbitmq3">>, Resource0,
         ResourceServersConfig0),
     ok = rpc_set_env(Config, resource_servers, ResourceServersConfig1);
 init_per_group(with_oauth_providers_C_with_default_key_static_key_1, Config) ->
@@ -319,7 +319,7 @@ end_per_group(without_kid, Config) ->
 
 end_per_group(no_peer_verification, Config) ->
     KeyConfig = set_config(?config(key_config, Config), [
-        {jwks_uri, ?config(strict_jwks_uri, Config)}, 
+        {jwks_uri, ?config(strict_jwks_uri, Config)},
         {peer_verification, verify_peer}]),
     ok = rpc_set_env(Config, key_config, KeyConfig),
     set_config(Config, {key_config, KeyConfig});
@@ -343,32 +343,32 @@ end_per_group(_Group, Config) ->
 
 add_vhosts(Config) ->
     %% The broker is managed by {init,end}_per_testcase().
-    lists:foreach(fun(Value) -> 
+    lists:foreach(fun(Value) ->
         rabbit_ct_broker_helpers:add_vhost(Config, Value) end,
         [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]).
     %rabbit_ct_helpers:set_config(Config, []).
 
 delete_vhosts(Config) ->
     %% The broker is managed by {init,end}_per_testcase().
-    lists:foreach(fun(Value) -> 
+    lists:foreach(fun(Value) ->
         rabbit_ct_broker_helpers:delete_vhost(Config, Value) end,
         [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]).
 
-init_per_testcase(Testcase, Config) when 
+init_per_testcase(Testcase, Config) when
         Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
         Testcase =:= test_successful_token_refresh ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
-init_per_testcase(Testcase, Config) when 
+init_per_testcase(Testcase, Config) when
         Testcase =:= test_failed_token_refresh_case1 orelse
         Testcase =:= test_failed_token_refresh_case2 ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
-init_per_testcase(Testcase, Config) when 
+init_per_testcase(Testcase, Config) when
         Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
@@ -376,14 +376,14 @@ init_per_testcase(Testcase, Config) when
   rabbit_ct_helpers:testcase_started(Config, Testcase),
   Config;
 
-init_per_testcase(Testcase, Config) when 
+init_per_testcase(Testcase, Config) when
         Testcase =:= test_successful_connection_with_algorithm_restriction ->
     KeyConfig = ?config(key_config, Config),
     ok = rpc_set_env(Config, key_config, [{algorithms, [<<"HS256">>]} | KeyConfig]),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
-init_per_testcase(Testcase, Config) when 
+init_per_testcase(Testcase, Config) when
         Testcase =:= test_failed_connection_with_algorithm_restriction ->
     KeyConfig = ?config(key_config, Config),
     ok = rpc_set_env(Config, key_config, [{algorithms, [<<"RS256">>]} | KeyConfig]),
@@ -394,14 +394,14 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
 
-end_per_testcase(Testcase, Config) when 
+end_per_testcase(Testcase, Config) when
         Testcase =:= test_failed_token_refresh_case1 orelse
         Testcase =:= test_failed_token_refresh_case2 ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
-end_per_testcase(Testcase, Config) when 
+end_per_testcase(Testcase, Config) when
         Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
@@ -411,7 +411,7 @@ end_per_testcase(Testcase, Config) when
   rabbit_ct_helpers:testcase_started(Config, Testcase),
   Config;
 
-end_per_testcase(Testcase, Config) when 
+end_per_testcase(Testcase, Config) when
         Testcase =:= test_successful_connection_with_algorithm_restriction orelse
         Testcase =:= test_failed_connection_with_algorithm_restriction ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
@@ -503,7 +503,7 @@ generate_valid_token(Config, Scopes) ->
     generate_valid_token(Config, Scopes, undefined).
 
 generate_valid_token(Config, Scopes, Audience) ->
-    Jwk = 
+    Jwk =
         case get_config(Config, fixture_jwk) of
             undefined -> ?UTIL_MOD:fixture_jwk();
             Value     -> Value
@@ -511,12 +511,12 @@ generate_valid_token(Config, Scopes, Audience) ->
     generate_valid_token(Config, Jwk, Scopes, Audience).
 
 generate_valid_token(Config, Jwk, Scopes, Audience) ->
-    Token = 
+    Token =
         case Audience of
-            undefined -> 
+            undefined ->
                 ?UTIL_MOD:fixture_token_with_scopes(Scopes);
-            DefinedAudience -> 
-                maps:put(<<"aud">>, DefinedAudience, 
+            DefinedAudience ->
+                maps:put(<<"aud">>, DefinedAudience,
                     ?UTIL_MOD:fixture_token_with_scopes(Scopes))
     end,
     IncludeKid = rabbit_ct_helpers:get_config(Config, include_kid, true),
@@ -528,20 +528,20 @@ generate_valid_token_with_sub(Config, Jwk, Scopes, Sub) ->
     ?UTIL_MOD:sign_token_hs(Token, Jwk, IncludeKid).
 
 generate_valid_token_with_extra_fields(Config, ExtraFields) ->
-    Jwk = 
+    Jwk =
         case rabbit_ct_helpers:get_config(Config, fixture_jwk) of
             undefined -> ?UTIL_MOD:fixture_jwk();
             Value     -> Value
         end,
     Token = maps:merge(?UTIL_MOD:fixture_token_with_scopes([]), ExtraFields),
-    ?UTIL_MOD:sign_token_hs(Token, Jwk, 
+    ?UTIL_MOD:sign_token_hs(Token, Jwk,
         rabbit_ct_helpers:get_config(Config, include_kid, true)).
 
 generate_expired_token(Config) ->
     generate_expired_token(Config, ?UTIL_MOD:full_permission_scopes()).
 
 generate_expired_token(Config, Scopes) ->
-    Jwk = 
+    Jwk =
         case get_config(Config, fixture_jwk) of
             undefined -> ?UTIL_MOD:fixture_jwk();
             Value     -> Value
@@ -553,7 +553,7 @@ generate_expirable_token(Config, Seconds) ->
     generate_expirable_token(Config, ?UTIL_MOD:full_permission_scopes(), Seconds).
 
 generate_expirable_token(Config, Scopes, Seconds) ->
-    Jwk = 
+    Jwk =
         case get_config(Config, fixture_jwk) of
             undefined -> ?UTIL_MOD:fixture_jwk();
             Value     -> Value
@@ -738,7 +738,7 @@ test_successful_connection_with_a_full_permission_token_and_explicitly_configure
                         <<"rabbitmq.configure:vhost1/*">>,
                         <<"rabbitmq.write:vhost1/*">>,
                         <<"rabbitmq.read:vhost1/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>,
                 Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
@@ -763,7 +763,7 @@ test_successful_connection_with_complex_claim_as_a_map(Config) ->
         #{<<"additional_rabbitmq_scopes">> => #{
             <<"rabbitmq">> => [
                                 <<"configure:*/*">>,
-                                <<"read:*/*">>, 
+                                <<"read:*/*">>,
                                 <<"write:*/*">>
             ]}
         }
@@ -778,8 +778,8 @@ test_successful_connection_with_complex_claim_as_a_list(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
         #{<<"additional_rabbitmq_scopes">> => [
-            <<"rabbitmq.configure:*/*">>, 
-            <<"rabbitmq.read:*/*">>, 
+            <<"rabbitmq.configure:*/*">>,
+            <<"rabbitmq.read:*/*">>,
             <<"rabbitmq.write:*/*">>
         ]}
     ),
@@ -792,7 +792,7 @@ test_successful_connection_with_complex_claim_as_a_list(Config) ->
 test_successful_connection_with_complex_claim_as_a_binary(Config) ->
     {_Algo, Token} = generate_valid_token_with_extra_fields(
         Config,
-        #{<<"additional_rabbitmq_scopes">> => 
+        #{<<"additional_rabbitmq_scopes">> =>
             <<"rabbitmq.configure:*/* rabbitmq.read:*/* rabbitmq.write:*/*">>}
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
@@ -833,7 +833,7 @@ test_successful_token_refresh(Config) ->
             <<"rabbitmq.write:vhost1/*">>,
             <<"rabbitmq.read:vhost1/*">>
         ], Duration),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>,
                 <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
 
@@ -842,13 +842,13 @@ test_successful_token_refresh(Config) ->
         <<"rabbitmq.write:vhost1/*">>,
         <<"rabbitmq.read:vhost1/*">>]),
     ?UTIL_MOD:wait_for_token_to_expire(timer:seconds(Duration)),
-    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, 
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2,
         <<"token refresh">>)),
     {ok, Ch2} = amqp_connection:open_channel(Conn),
 
-    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch, 
+    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch,
                                         #'queue.declare'{exclusive = true}),
-    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch2, 
+    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch2,
                                         #'queue.declare'{exclusive = true}),
 
     amqp_channel:close(Ch2),
@@ -858,7 +858,7 @@ test_successful_connection_with_algorithm_restriction(Config) ->
     {_Algo, Token} = get_config(Config, fixture_jwt),
     Conn = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
-    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch, 
+    #'queue.declare_ok'{queue = _} = amqp_channel:call(Ch,
                                         #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
@@ -868,12 +868,12 @@ test_failed_connection_with_expired_token(Config) ->
         <<"rabbitmq.write:vhost1/*">>,
         <<"rabbitmq.read:vhost1/*">>]),
     ?assertMatch({error, {auth_failure, _}},
-                 open_unmanaged_connection(Config, 0, <<"vhost1">>, 
+                 open_unmanaged_connection(Config, 0, <<"vhost1">>,
                     <<"username">>, Token)).
 
 test_failed_connection_with_a_non_token(Config) ->
     ?assertMatch({error, {auth_failure, _}},
-                 open_unmanaged_connection(Config, 0, <<"vhost1">>, 
+                 open_unmanaged_connection(Config, 0, <<"vhost1">>,
                     <<"username">>, <<"a-non-token-value">>)).
 
 test_failed_connection_with_a_token_with_insufficient_vhost_permission(Config) ->
@@ -882,7 +882,7 @@ test_failed_connection_with_a_token_with_insufficient_vhost_permission(Config) -
         <<"rabbitmq.write:alt-vhost/*">>,
         <<"rabbitmq.read:alt-vhost/*">>]),
     ?assertEqual({error, not_allowed},
-                 open_unmanaged_connection(Config, 0, <<"off-limits-vhost">>, 
+                 open_unmanaged_connection(Config, 0, <<"off-limits-vhost">>,
                     <<"username">>, Token)).
 
 test_failed_connection_with_a_token_with_insufficient_resource_permission(Config) ->
@@ -890,11 +890,11 @@ test_failed_connection_with_a_token_with_insufficient_resource_permission(Config
         <<"rabbitmq.configure:vhost2/jwt*">>,
         <<"rabbitmq.write:vhost2/jwt*">>,
         <<"rabbitmq.read:vhost2/jwt*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>,
                 Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
-       amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>, 
+       amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>,
             exclusive = true})),
     close_connection(Conn).
 
@@ -903,7 +903,7 @@ test_failed_token_refresh_case1(Config) ->
         <<"rabbitmq.configure:vhost4/*">>,
         <<"rabbitmq.write:vhost4/*">>,
         <<"rabbitmq.read:vhost4/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>,
                 Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
@@ -914,7 +914,7 @@ test_failed_token_refresh_case1(Config) ->
         <<"rabbitmq.write:vhost4/*">>,
         <<"rabbitmq.read:vhost4/*">>]),
     %% the error is communicated asynchronously via a connection-level error
-    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2, 
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, Token2,
         <<"token refresh">>)),
 
     {ok, Ch2} = amqp_connection:open_channel(Conn),
@@ -928,14 +928,14 @@ test_failed_token_refresh_case2(Config) ->
         <<"rabbitmq.configure:vhost4/*">>,
         <<"rabbitmq.write:vhost4/*">>,
         <<"rabbitmq.read:vhost4/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>,
                 <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
 
     %% the error is communicated asynchronously via a connection-level error
-    ?assertEqual(ok, amqp_connection:update_secret(Conn, <<"not-a-token-^^^^5%">>, 
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, <<"not-a-token-^^^^5%">>,
         <<"token refresh">>)),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
@@ -944,7 +944,7 @@ test_failed_token_refresh_case2(Config) ->
     close_connection(Conn).
 
 cannot_change_username_on_refreshed_token(Config) ->
-    Jwk = 
+    Jwk =
         case get_config(Config, fixture_jwk) of
             undefined -> ?UTIL_MOD:fixture_jwk();
             Value     -> Value
@@ -953,9 +953,9 @@ cannot_change_username_on_refreshed_token(Config) ->
         <<"rabbitmq.configure:vhost4/*">>,
         <<"rabbitmq.write:vhost4/*">>,
         <<"rabbitmq.read:vhost4/*">>]),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, 
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>,
                 <<"oldUsername">>, CurToken),
-   
+
     {_, RefreshToken} = generate_valid_token_with_sub(Config, Jwk, <<"newUsername">>,
         [<<"rabbitmq.configure:vhost4/*">>,
          <<"rabbitmq.write:vhost4/*">>,
@@ -976,7 +976,7 @@ rpc_unset_env(Config, Par) ->
     rpc(Config, 0, application, unset_env,
         [rabbitmq_auth_backend_oauth2, Par]).
 rpc_set_env(Config, Par, Val) ->
-    rpc(Config, 0, application, set_env, 
+    rpc(Config, 0, application, set_env,
         [rabbitmq_auth_backend_oauth2, Par, Val]).
 rpc_get_env(Config, Par) ->
     rpc(Config, 0, application, get_env,

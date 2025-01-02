@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(cluster_minority_SUITE).
@@ -272,7 +272,7 @@ delete_policy(Config) ->
 add_node(Config) ->
     [A, B, C, D, _E] = rabbit_ct_broker_helpers:get_node_configs(
                          Config, nodename),
-    
+
     %% Three node cluster: A, B, C
     ok = rabbit_control_helper:command(stop_app, B),
     ok = rabbit_control_helper:command(join_cluster, B, [atom_to_list(A)], []),
@@ -281,7 +281,7 @@ add_node(Config) ->
     ok = rabbit_control_helper:command(stop_app, C),
     ok = rabbit_control_helper:command(join_cluster, C, [atom_to_list(A)], []),
     rabbit_control_helper:command(start_app, C),
-    
+
     %% Minority partition: A
     Cluster = [A, B, C],
     partition_3_node_cluster(Config),
@@ -298,7 +298,7 @@ add_node(Config) ->
 remove_node(Config) ->
     [A, B, C | _] = rabbit_ct_broker_helpers:get_node_configs(
                       Config, nodename),
-    
+
     %% Three node cluster: A, B, C
     ok = rabbit_control_helper:command(stop_app, B),
     ok = rabbit_control_helper:command(join_cluster, B, [atom_to_list(A)], []),
@@ -307,7 +307,7 @@ remove_node(Config) ->
     ok = rabbit_control_helper:command(stop_app, C),
     ok = rabbit_control_helper:command(join_cluster, C, [atom_to_list(A)], []),
     rabbit_control_helper:command(start_app, C),
-    
+
     %% Minority partition: A
     partition_3_node_cluster(Config),
     Cluster = [A, B, C],
