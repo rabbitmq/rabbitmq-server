@@ -20,11 +20,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
   end
 
   def output({:error, :protected_from_deletion}, %{formatter: "json", node: node_name}) do
-    {:error, %{"result" => "error", "node" => node_name, "reason" => @protected_from_deletion_err}}
+    {:error,
+     %{"result" => "error", "node" => node_name, "reason" => @protected_from_deletion_err}}
   end
+
   def output({:error, :protected_from_deletion}, _opts) do
     {:error, ExitCodes.exit_dataerr(), @protected_from_deletion_err}
   end
+
   use RabbitMQ.CLI.DefaultOutput
 
   def usage, do: "delete_vhost <vhost>"

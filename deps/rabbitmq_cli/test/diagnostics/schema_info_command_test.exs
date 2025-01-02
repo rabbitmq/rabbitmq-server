@@ -64,6 +64,7 @@ defmodule SchemaInfoCommandTest do
 
   test "run: can filter info keys", context do
     node = context[:opts][:node]
+
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
         :ok
@@ -72,9 +73,9 @@ defmodule SchemaInfoCommandTest do
         wanted_keys = ~w(name access_mode)
 
         assert match?(
-          [[name: _, access_mode: _] | _],
-          run_command_to_list(@command, [wanted_keys, context[:opts]])
-        )
+                 [[name: _, access_mode: _] | _],
+                 run_command_to_list(@command, [wanted_keys, context[:opts]])
+               )
     end
   end
 
