@@ -11,7 +11,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListVhostsCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  @info_keys ~w(name description tags default_queue_type tracing cluster_state)a
+  @info_keys ~w(name description tags default_queue_type protected_from_deletion tracing cluster_state metadata)a
 
   def info_keys(), do: @info_keys
 

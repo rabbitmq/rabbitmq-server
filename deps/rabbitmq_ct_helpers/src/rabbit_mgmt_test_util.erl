@@ -68,6 +68,10 @@ http_post(Config, Path, List, CodeExp) ->
 http_post(Config, Path, List, User, Pass, CodeExp) ->
     http_post_raw(Config, Path, format_for_upload(List), User, Pass, CodeExp).
 
+http_post_json(Config, Path, Body, Assertion) ->
+    http_upload_raw(Config,  post, Path, Body, "guest", "guest",
+        Assertion, [{"content-type", "application/json"}]).
+
 http_post_accept_json(Config, Path, List, CodeExp) ->
     http_post_accept_json(Config, Path, List, "guest", "guest", CodeExp).
 

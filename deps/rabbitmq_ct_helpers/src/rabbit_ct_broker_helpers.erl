@@ -112,6 +112,8 @@
     add_vhost/3,
     add_vhost/4,
     update_vhost_metadata/3,
+    enable_vhost_protection_from_deletion/2,
+    disable_vhost_protection_from_deletion/2,
     delete_vhost/2,
     delete_vhost/3,
     delete_vhost/4,
@@ -1605,6 +1607,18 @@ add_vhost(Config, Node, VHost, Username) ->
 
 update_vhost_metadata(Config, VHost, Meta) ->
     catch rpc(Config, 0, rabbit_vhost, update_metadata, [VHost, Meta, <<"acting-user">>]).
+
+enable_vhost_protection_from_deletion(Config, VHost) ->
+    MetadataPatch = #{
+        protected_from_deletion => true
+    },
+    update_vhost_metadata(Config, VHost, MetadataPatch).
+
+disable_vhost_protection_from_deletion(Config, VHost) ->
+    MetadataPatch = #{
+        protected_from_deletion => false
+    },
+    update_vhost_metadata(Config, VHost, MetadataPatch).
 
 delete_vhost(Config, VHost) ->
     delete_vhost(Config, 0, VHost).

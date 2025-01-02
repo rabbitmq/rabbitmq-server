@@ -292,7 +292,7 @@ dump_table(Config, Table) ->
     Data0 = rabbit_ct_broker_helpers:rpc(Config, 1, ets, tab2list, [Table]),
     ct:pal(?LOW_IMPORTANCE, "Node 1: Dump of table ~tp:~n~tp~n", [Table, Data0]).
 
-retry_for(Fun, 0) ->
+retry_for(_Fun, 0) ->
     false;
 retry_for(Fun, Retries) ->
     case Fun() of

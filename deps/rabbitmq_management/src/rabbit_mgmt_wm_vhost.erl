@@ -95,15 +95,20 @@ delete_resource(ReqData, Context = #context{user = #user{username = Username}}) 
     case rabbit_vhost:delete(VHost, Username) of
         ok ->
             {true, ReqData, Context};
+        {error, protected_from_deletion} ->
+            Msg = "Refusing to delete virtual host '~ts' because it is protected from deletion",
+            Reason = iolist_to_binary(io_lib:format(Msg, [VHost])),
+            rabbit_log:error(Msg, [VHost]),
+            rabbit_mgmt_util:precondition_failed(Reason, ReqData, Context);
         {error, timeout} ->
             rabbit_mgmt_util:internal_server_error(
               timeout,
-              "Timed out waiting for the vhost to be deleted",
+              "Timed out waiting for the virtual host to be deleted",
               ReqData, Context);
         {error, E} ->
             Reason = iolist_to_binary(
                        io_lib:format(
-                         "Error occurred while deleting vhost: ~tp",
+                         "Error occurred while deleting virtual host '~tp'",
                          [E])),
             rabbit_mgmt_util:internal_server_error(
               Reason, ReqData, Context)
