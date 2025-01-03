@@ -273,7 +273,7 @@ import_case16(Config) ->
         Val when is_tuple(Val) ->
             ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
             ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
-            ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec))
+            ?assertEqual([<<"multi_dc_replication">>,<<"ab">>,<<"cde">>], vhost:get_tags(VHostRec))
     end,
 
     ok.

@@ -253,6 +253,20 @@ declare_default_exchanges(VHostName, ActingUser) ->
       end, DefaultExchanges).
 
 -spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, undefined, _ActingUser) ->
+    case rabbit_db_vhost:exists(Name) of
+        true ->
+            ok;
+        false ->
+            {error, {no_such_vhost, Name}}
+    end;
+update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map_size(Metadata0) =:= 0 ->
+    case rabbit_db_vhost:exists(Name) of
+        true ->
+            ok;
+        false ->
+            {error, {no_such_vhost, Name}}
+    end;
 update_metadata(Name, Metadata0, ActingUser) ->
     KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
     Metadata = maps:with(KnownKeys, Metadata0),
