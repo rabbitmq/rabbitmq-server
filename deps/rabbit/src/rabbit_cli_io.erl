@@ -8,9 +8,11 @@
          stop/1,
          argparse_def/1,
          display_help/1,
+         format/3,
          start_record_stream/4,
          push_new_record/3,
-         end_record_stream/2]).
+         end_record_stream/2,
+         read_file/2]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -48,12 +50,28 @@ argparse_def(record_stream) ->
          default => plain,
          help => "Format output acccording to <FORMAT>"}
       ]
+     };
+argparse_def(file_input) ->
+    #{arguments =>
+      [
+       #{name => input,
+         long => "-input",
+         short => $i,
+         type => string,
+         nargs => 1,
+         help => "Read input from file <FILE>"}
+      ]
      }.
 
 display_help(#{io := {transport, Transport}} = Context) ->
     Transport ! {io_cast, {?FUNCTION_NAME, Context}};
 display_help(#{io := IO} = Context) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Context}).
+
+format({transport, Transport}, Format, Args) ->
+    Transport ! {io_cast, {?FUNCTION_NAME, Format, Args}};
+format(IO, Format, Args) ->
+    gen_server:cast(IO, {?FUNCTION_NAME, Format, Args}).
 
 start_record_stream({transport, Transport}, Name, Fields, ArgMap) ->
     Transport ! {io_call, self(), {?FUNCTION_NAME, Name, Fields, ArgMap}},
@@ -74,6 +92,14 @@ end_record_stream({transport, Transport}, #{name := Name}) ->
 end_record_stream(IO, #{name := Name}) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Name}).
 
+read_file({transport, Transport}, ArgMap) ->
+    Transport ! {io_call, self(), {?FUNCTION_NAME, ArgMap}},
+    receive Ret -> Ret end;
+read_file(IO, ArgMap)
+  when is_pid(IO) andalso
+       is_map(ArgMap) ->
+    gen_server:call(IO, {?FUNCTION_NAME, ArgMap}).
+
 init(#{progname := Progname}) ->
     process_flag(trap_exit, true),
     State = #?MODULE{progname = Progname},
@@ -91,6 +117,9 @@ handle_call(
     {ok, State2} = format_record_stream_start(Name, State1),
 
     {noreply, State2};
+handle_call({read_file, ArgMap}, From, State) ->
+    {ok, State1} = do_read_file(ArgMap, From, State),
+    {noreply, State1};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
@@ -105,6 +134,9 @@ handle_cast(
                 command => tl(CmdPath)},
     Help = argparse:help(ArgparseDef, Options),
     io:format("~s~n", [Help]),
+    {noreply, State};
+handle_cast({format, Format, Args}, State) ->
+    io:format(Format, Args),
     {noreply, State};
 handle_cast({push_new_record, Name, Record}, State) ->
     {ok, State1} = format_record(Name, Record, State),
@@ -248,4 +280,24 @@ isatty(IoDevice) ->
             true;
         _ ->
             false
+    end.
+
+do_read_file(#{input := "-"}, From, State) ->
+    Ret = read_stdin(<<>>),
+    gen:reply(From, Ret),
+    {ok, State};
+do_read_file(#{input := Filename}, From, State) ->
+    Ret = file:read_file(Filename),
+    gen:reply(From, Ret),
+    {ok, State}.
+
+read_stdin(Buf) ->
+    case file:read(standard_io, 4096) of
+        {ok, Data} ->
+            Buf1 = [Buf, Data],
+            read_stdin(Buf1);
+        eof ->
+            {ok, Buf};
+        {error, _} = Error ->
+            Error
     end.

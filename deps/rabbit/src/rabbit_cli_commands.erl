@@ -6,7 +6,8 @@
 -include_lib("rabbit_common/include/resource.hrl").
 
 -export([argparse_def/0, run_command/1, do_run_command/1]).
--export([cmd_list_exchanges/1]).
+-export([cmd_list_exchanges/1,
+         cmd_import_definitions/1]).
 
 -rabbitmq_command(
    {#{cli => ["declare", "exchange"],
@@ -30,6 +31,12 @@
     [argparse_def_record_stream,
      #{help => "List exchanges",
        handler => {?MODULE, cmd_list_exchanges}}]}).
+
+-rabbitmq_command(
+   {#{cli => ["import", "definitions"]},
+    [argparse_def_file_input,
+     #{help => "Import definitions",
+       handler => {?MODULE, cmd_import_definitions}}]}).
 
 argparse_def() ->
     #{argparse_def := ArgparseDef} = get_discovered_commands(),
@@ -93,6 +100,9 @@ expand_argparse_def(Defs) when is_list(Defs) ->
       fun
           (argparse_def_record_stream, Acc) ->
               Def = rabbit_cli_io:argparse_def(record_stream),
+              rabbit_cli:merge_argparse_def(Acc, Def);
+          (argparse_def_file_input, Acc) ->
+              Def = rabbit_cli_io:argparse_def(file_input),
               rabbit_cli:merge_argparse_def(Acc, Def);
           (Def, Acc) ->
               Def1 = expand_argparse_def(Def),
@@ -163,6 +173,15 @@ cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
                       rabbit_cli_io:push_new_record(IO, Stream, Record2)
               end, Exchanges),
             rabbit_cli_io:end_record_stream(IO, Stream),
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+cmd_import_definitions(#{arg_map := ArgMap, io := IO}) ->
+    case rabbit_cli_io:read_file(IO, ArgMap) of
+        {ok, Data} ->
+            rabbit_cli_io:format(IO, "Import definitions:~n  ~s~n", [Data]),
             ok;
         {error, _} = Error ->
             Error
