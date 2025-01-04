@@ -31,7 +31,8 @@ groups() ->
 
 all_tests() -> [
                 protected_virtual_host_cannot_be_deleted,
-                virtual_host_can_be_deleted_after_protection_removal
+                virtual_host_can_be_deleted_after_protection_removal,
+                protected_virtual_host_is_marked_as_such_in_definition_export
                ].
 
 %% -------------------------------------------------------------------
@@ -130,5 +131,40 @@ virtual_host_can_be_deleted_after_protection_removal(Config) ->
     http_delete(Config, Path, {group, '2xx'}),
     %% subsequent deletion responds with a 404 Not Found
     http_delete(Config, Path, ?NOT_FOUND),
+
+    passed.
+
+protected_virtual_host_is_marked_as_such_in_definition_export(Config) ->
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+
+    %% extra care needs to be taken to a delete a potentially protected virtual host
+    rabbit_ct_broker_helpers:disable_vhost_protection_from_deletion(Config, Name),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Name),
+
+    rabbit_ct_broker_helpers:add_vhost(Config, Name),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, Name),
+
+    %% protect the virtual host from deletion
+    rabbit_ct_broker_helpers:enable_vhost_protection_from_deletion(Config, Name),
+
+    %% Get the definitions
+    Definitions = http_get(Config, "/definitions", ?OK),
+    ct:pal("Exported definitions:~n~tp~tn", [Definitions]),
+
+    %% Check if vhost definition is correct
+    VHosts = maps:get(vhosts, Definitions),
+    {value, VHost} = lists:search(fun(VHost) ->
+                        maps:get(name, VHost) =:= Name
+                     end, VHosts),
+
+    Metadata = maps:get(metadata, VHost),
+    ?assertEqual(Name, maps:get(name, VHost)),
+    ?assertEqual(Metadata, #{
+        protected_from_deletion => true,
+        default_queue_type      => <<"classic">>
+    }),
+
+    rabbit_ct_broker_helpers:disable_vhost_protection_from_deletion(Config, Name),
+    rabbit_ct_broker_helpers:delete_vhost(Config, Name),
 
     passed.
