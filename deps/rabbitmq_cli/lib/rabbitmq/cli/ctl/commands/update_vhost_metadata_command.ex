@@ -9,9 +9,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
-  @metadata_keys [:description, :tags, :default_queue_type]
+  @metadata_keys [:description, :tags, :default_queue_type, :protected_from_deletion]
 
-  def switches(), do: [description: :string, tags: :string, default_queue_type: :string]
+  def switches(), do: [description: :string, tags: :string, default_queue_type: :string, protected_from_deletion: :boolean]
   def aliases(), do: [d: :description]
 
   def merge_defaults(args, opts) do
@@ -86,7 +86,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
 
   def usage,
     do:
-      "update_vhost_metadata <vhost> [--description <description>] [--tags \"<tag1>,<tag2>,<...>\"] [--default-queue-type <quorum|classic|stream>]"
+      "update_vhost_metadata <vhost> [--description=<description>] [--tags=\"<tag1>,<tag2>,<...>\"] [--default-queue-type=<quorum|classic|stream>] [--protected-from-deletion=<true|false>]"
 
   def usage_additional() do
     [
@@ -96,7 +96,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
       [
         "--default-queue-type <quorum|classic|stream>",
         "Queue type to use if no type is explicitly provided by the client"
-      ]
+      ],
+      ["--protected-from-deletion", "When set to true, will make it impossible to delete a virtual host until the protection is removed"]
     ]
   end
 
@@ -108,7 +109,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.UpdateVhostMetadataCommand do
 
   def help_section(), do: :virtual_hosts
 
-  def description(), do: "Updates metadata (tags, description, default queue type) a virtual host"
+  def description(), do: "Updates metadata (tags, description, default queue type, protection from deletion) a virtual host"
 
   def banner([vhost], _), do: "Updating metadata of vhost \"#{vhost}\" ..."
 end

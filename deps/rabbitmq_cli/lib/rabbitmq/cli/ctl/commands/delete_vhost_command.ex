@@ -5,9 +5,11 @@
 ## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
-  alias RabbitMQ.CLI.Core.{DocGuide, Helpers}
+  alias RabbitMQ.CLI.Core.{DocGuide, Helpers, ExitCodes}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
+
+  @protected_from_deletion_err "Cannot delete this virtual host: it is protected from deletion. To lift the protection, inspect and update its metadata"
 
   use RabbitMQ.CLI.Core.MergesNoDefaults
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
@@ -15,6 +17,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteVhostCommand do
 
   def run([arg], %{node: node_name}) do
     :rabbit_misc.rpc_call(node_name, :rabbit_vhost, :delete, [arg, Helpers.cli_acting_user()])
+  end
+
+  def output({:error, :protected_from_deletion}, %{formatter: "json", node: node_name}) do
+    {:error,
+     %{"result" => "error", "node" => node_name, "reason" => @protected_from_deletion_err}}
+  end
+
+  def output({:error, :protected_from_deletion}, _opts) do
+    {:error, ExitCodes.exit_dataerr(), @protected_from_deletion_err}
   end
 
   use RabbitMQ.CLI.DefaultOutput

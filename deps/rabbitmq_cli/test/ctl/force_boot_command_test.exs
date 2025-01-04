@@ -38,6 +38,7 @@ defmodule ForceBootCommandTest do
 
   test "run: sets a force boot marker file on target node", context do
     node = get_rabbit_hostname()
+
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
         :ok

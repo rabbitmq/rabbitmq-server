@@ -30,6 +30,11 @@
   set_limits/2,
   set_metadata/2,
   merge_metadata/2,
+
+  is_protected_from_deletion/1,
+  enable_protection_from_deletion/1,
+  disable_protection_from_deletion/1,
+
   new_metadata/3,
   is_tagged_with/2,
 
@@ -89,6 +94,8 @@
               vhost_pattern/0,
               vhost_v2_pattern/0]).
 
+-define(DELETION_PROTECTION_KEY, protected_from_deletion).
+
 -spec new(name(), limits()) -> vhost().
 new(Name, Limits) ->
     #vhost{virtual_host = Name, limits = Limits}.
@@ -123,6 +130,7 @@ info_keys() ->
      description,
      tags,
      default_queue_type,
+     protected_from_deletion,
      metadata,
      tracing,
      cluster_state].
@@ -186,6 +194,23 @@ metadata_merger(default_queue_type, _, NewVHostDefaultQueueType) ->
 %% This is the case for all other VHost metadata keys.
 metadata_merger(_, _, NewMetadataValue) ->
     NewMetadataValue.
+
+-spec is_protected_from_deletion(vhost()) -> boolean().
+is_protected_from_deletion(VHost) ->
+    case get_metadata(VHost) of
+        Map when map_size(Map) =:= 0 -> false;
+        #{?DELETION_PROTECTION_KEY := true} -> true;
+        #{?DELETION_PROTECTION_KEY := false} -> false;
+        _ -> false
+    end.
+
+-spec enable_protection_from_deletion(vhost()) -> vhost().
+enable_protection_from_deletion(VHost) ->
+    merge_metadata(VHost, #{?DELETION_PROTECTION_KEY => true}).
+
+-spec disable_protection_from_deletion(vhost()) -> vhost().
+disable_protection_from_deletion(VHost) ->
+    merge_metadata(VHost, #{?DELETION_PROTECTION_KEY => false}).
 
 -spec new_metadata(binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined') -> metadata().
 new_metadata(Description, Tags, undefined) ->

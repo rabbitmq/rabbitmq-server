@@ -91,6 +91,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
         catch
           _, _ ->
             IO.inspect(__STACKTRACE__)
+
             {:error,
              "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
         end
@@ -118,6 +119,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
     catch
       _, _ ->
         IO.inspect(__STACKTRACE__)
+
         {:error,
          "Failed to decrypt the value. Things to check: is the passphrase correct? Are the cipher and hash algorithms the same as those used for encryption?"}
     end
@@ -130,7 +132,8 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
   end
 
   def usage,
-    do: "decrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
+    do:
+      "decrypt_conf_value value passphrase [--cipher <cipher>] [--hash <hash>] [--iterations <iterations>]"
 
   def usage_additional() do
     [
@@ -166,6 +169,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DecryptConfValueCommand do
 
     {:encrypted, untagged_val}
   end
+
   defp tag_input_value_with_encrypted(value) do
     {:encrypted, value}
   end

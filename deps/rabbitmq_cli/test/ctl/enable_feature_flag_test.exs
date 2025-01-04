@@ -79,20 +79,24 @@ defmodule EnableFeatureFlagCommandTest do
 
   test "run: enabling an experimental flag requires '--opt-in'", context do
     experimental_flag = Atom.to_string(context[:experimental_flag])
+
     assert match?(
              {:error, @usage_exit_code, _},
              @command.run([experimental_flag], context[:opts])
            )
+
     opts = Map.put(context[:opts], :opt_in, true)
     assert @command.run([experimental_flag], opts) == :ok
   end
 
   test "run: enabling an experimental flag accepts '--experimental'", context do
     experimental_flag = Atom.to_string(context[:experimental_flag])
+
     assert match?(
              {:error, @usage_exit_code, _},
              @command.run([experimental_flag], context[:opts])
            )
+
     opts = Map.put(context[:opts], :experimental, true)
     assert @command.run([experimental_flag], opts) == :ok
   end

@@ -27,6 +27,7 @@
                                 http_get_no_decode/5,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
+                                http_post_json/4,
                                 http_upload_raw/8,
                                 http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
@@ -3463,7 +3464,7 @@ check_cors_all_endpoints(Config) ->
     Endpoints = get_all_http_endpoints(),
 
     [begin
-        ct:pal("Options for ~tp~n", [EP]),
+        ct:pal("Verifying CORS for module ~tp using an OPTIONS request~n", [EP]),
         {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
     end
      || EP <- Endpoints].
@@ -4207,10 +4208,6 @@ publish(Ch) ->
     after 20 ->
         publish(Ch)
     end.
-
-http_post_json(Config, Path, Body, Assertion) ->
-    http_upload_raw(Config,  post, Path, Body, "guest", "guest",
-                    Assertion, [{"content-type", "application/json"}]).
 
 %% @doc encode fields and file for HTTP post multipart/form-data.
 %% @reference Inspired by <a href="http://code.activestate.com/recipes/146306/">Python implementation</a>.
