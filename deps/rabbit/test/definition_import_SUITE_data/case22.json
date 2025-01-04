@@ -1,0 +1,66 @@
+{
+  "bindings": [],
+  "exchanges": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "rabbitmq@localhost"
+    }
+  ],
+  "parameters": [],
+  "permissions": [
+    {
+      "configure": ".*",
+      "read": ".*",
+      "user": "guest",
+      "vhost": "/",
+      "write": ".*"
+    }
+  ],
+  "policies": [],
+  "queues": [],
+  "rabbit_version": "4.0.5",
+  "rabbitmq_version": "4.0.5",
+  "topic_permissions": [],
+  "users": [
+    {
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "limits": {"max-connections" : 2},
+      "name": "limited_guest",
+      "password_hash": "wS4AT3B4Z5RpWlFn1FA30osf2C75D7WA3gem591ACDZ6saO6",
+      "tags": [
+        "administrator"
+      ]
+    }
+  ],
+  "vhosts": [
+    {
+      "limits": [],
+      "name": "non-protected",
+      "description": "",
+      "metadata": {
+        "description": "",
+        "tags": [],
+        "default_queue_type": "classic"
+      },
+      "tags": [],
+      "default_queue_type": "classic"
+    },
+    {
+      "name": "protected",
+      "description": "protected, DQT = quorum",
+      "metadata": {
+        "description": "DQT = quorum",
+        "tags": [],
+        "default_queue_type": "quorum",
+        "protected_from_deletion": true
+      },
+      "tags": [],
+      "default_queue_type": "quorum"
+    },
+    {
+      "limits": [],
+      "name": "tagged"
+    }
+  ]
+}
