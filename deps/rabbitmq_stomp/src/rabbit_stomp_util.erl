@@ -333,7 +333,7 @@ default_params({exchange, _}) ->
     [{exclusive, true}, {auto_delete, true}];
 
 default_params({topic, _}) ->
-    [{exclusive, true}, {auto_delete, true}];
+    [{exclusive, false}, {auto_delete, true}];
 
 default_params(_) ->
     [{exclusive, true},
