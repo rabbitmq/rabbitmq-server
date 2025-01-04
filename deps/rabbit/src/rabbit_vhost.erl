@@ -11,11 +11,11 @@
 -include("vhost.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
--export([add/2, add/3, add/4, delete/2, exists/1, assert/1,
+-export([add/2, add/3, add/4, delete/2, delete_ignoring_protection/2, exists/1, assert/1,
          set_limits/2, vhost_cluster_state/1, is_running_on_all_nodes/1, await_running_on_all_nodes/2,
         list/0, count/0, list_names/0, all/0, all_tagged_with/1]).
 -export([parse_tags/1, update_tags/3]).
--export([update_metadata/3]).
+-export([update_metadata/3, enable_protection_from_deletion/1, disable_protection_from_deletion/1]).
 -export([lookup/1, default_name/0]).
 -export([info/1, info/2, info_all/0, info_all/1, info_all/2, info_all/3]).
 -export([dir/1, msg_store_dir_path/1, msg_store_dir_wildcard/0, msg_store_dir_base/0, config_file_path/1, ensure_config_file/1]).
@@ -253,20 +253,37 @@ declare_default_exchanges(VHostName, ActingUser) ->
       end, DefaultExchanges).
 
 -spec update_metadata(vhost:name(), vhost:metadata(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+update_metadata(Name, undefined, _ActingUser) ->
+    case rabbit_db_vhost:exists(Name) of
+        true ->
+            ok;
+        false ->
+            {error, {no_such_vhost, Name}}
+    end;
+update_metadata(Name, Metadata0, _ActingUser) when is_map(Metadata0) andalso map_size(Metadata0) =:= 0 ->
+    case rabbit_db_vhost:exists(Name) of
+        true ->
+            ok;
+        false ->
+            {error, {no_such_vhost, Name}}
+    end;
 update_metadata(Name, Metadata0, ActingUser) ->
-    Metadata = maps:with([description, tags, default_queue_type], Metadata0),
+    KnownKeys = [description, tags, default_queue_type, protected_from_deletion],
+    Metadata = maps:with(KnownKeys, Metadata0),
 
     case rabbit_db_vhost:merge_metadata(Name, Metadata) of
         {ok, VHost} ->
             Description = vhost:get_description(VHost),
             Tags = vhost:get_tags(VHost),
             DefaultQueueType = vhost:get_default_queue_type(VHost),
+            IsProtected = vhost:is_protected_from_deletion(VHost),
             rabbit_event:notify(
               vhost_updated,
               info(VHost) ++ [{user_who_performed_action, ActingUser},
                               {description, Description},
                               {tags, Tags},
-                              {default_queue_type, DefaultQueueType}]),
+                              {default_queue_type, DefaultQueueType},
+                              {deletion_protection, IsProtected}]),
             ok;
         {error, _} = Error ->
             Error
@@ -278,45 +295,61 @@ update(Name, Description, Tags, DefaultQueueType, ActingUser) ->
     update_metadata(Name, Metadata, ActingUser).
 
 -spec delete(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
-delete(VHost, ActingUser) ->
+delete(Name, ActingUser) ->
+    case rabbit_db_vhost:get(Name) of
+        %% preserve the original behavior for backwards compatibility
+        undefined -> delete_ignoring_protection(Name, ActingUser);
+        VHost ->
+            case vhost:is_protected_from_deletion(VHost) of
+                true ->
+                    Msg = "Refusing to delete virtual host '~ts' because it is protected from deletion",
+                    rabbit_log:debug(Msg, [Name]),
+                    {error, protected_from_deletion};
+                false ->
+                    delete_ignoring_protection(Name, ActingUser)
+            end
+    end.
+
+-spec delete_ignoring_protection(vhost:name(), rabbit_types:username()) -> rabbit_types:ok_or_error(any()).
+delete_ignoring_protection(Name, ActingUser) ->
     %% FIXME: We are forced to delete the queues and exchanges outside
     %% the TX below. Queue deletion involves sending messages to the queue
     %% process, which in turn results in further database actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~ts'", [VHost]),
+    rabbit_log:info("Deleting vhost '~ts'", [Name]),
     %% TODO: This code does a lot of "list resources, walk through the list to
     %% delete each resource". This feature should be provided by each called
     %% modules, like `rabbit_amqqueue:delete_all_for_vhost(VHost)'. These new
     %% calls would be responsible for the atomicity, not this code.
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
-    rabbit_log:info("Clearing permissions in vhost '~ts' because it's being deleted", [VHost]),
-    ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(VHost, ActingUser),
-    rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [VHost]),
+    rabbit_log:info("Clearing permissions in vhost '~ts' because it's being deleted", [Name]),
+    ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(Name, ActingUser),
+    rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [Name]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
-         Name = amqqueue:get_name(Q),
-         assert_benign(rabbit_amqqueue:with(Name, QDelFun), ActingUser)
-     end || Q <- rabbit_amqqueue:list(VHost)],
-    rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [VHost]),
-    ok = rabbit_exchange:delete_all(VHost, ActingUser),
-    rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [VHost]),
-    _ = rabbit_runtime_parameters:clear_vhost(VHost, ActingUser),
-    rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [VHost]),
-    Ret = case rabbit_db_vhost:delete(VHost) of
+         QName = amqqueue:get_name(Q),
+         assert_benign(rabbit_amqqueue:with(QName, QDelFun), ActingUser)
+     end || Q <- rabbit_amqqueue:list(Name)],
+    rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [Name]),
+    ok = rabbit_exchange:delete_all(Name, ActingUser),
+    rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [Name]),
+    _ = rabbit_runtime_parameters:clear_vhost(Name, ActingUser),
+    rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [Name]),
+    Ret = case rabbit_db_vhost:delete(Name) of
              true ->
                  ok = rabbit_event:notify(
                         vhost_deleted,
-                        [{name, VHost},
+                        [{name, Name},
                          {user_who_performed_action, ActingUser}]);
              false ->
-                 {error, {no_such_vhost, VHost}};
+                 {error, {no_such_vhost, Name}};
              {error, _} = Err ->
                  Err
          end,
     %% After vhost was deleted from the database, we try to stop vhost
     %% supervisors on all the nodes.
-    rabbit_vhost_sup_sup:delete_on_all_nodes(VHost),
+    rabbit_vhost_sup_sup:delete_on_all_nodes(Name),
     Ret.
 
 -spec put_vhost(vhost:name(),
@@ -530,6 +563,14 @@ lookup(VHostName) ->
         VHost     -> VHost
     end.
 
+-spec enable_protection_from_deletion(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
+enable_protection_from_deletion(VHostName) ->
+    rabbit_db_vhost:enable_protection_from_deletion(VHostName).
+
+-spec disable_protection_from_deletion(vhost:name()) -> vhost:vhost() | rabbit_types:ok_or_error(any()).
+disable_protection_from_deletion(VHostName) ->
+    rabbit_db_vhost:disable_protection_from_deletion(VHostName).
+
 -spec assert(vhost:name()) -> 'ok'.
 assert(VHostName) ->
     case exists(VHostName) of
@@ -624,6 +665,7 @@ i(cluster_state, VHost) -> vhost_cluster_state(vhost:get_name(VHost));
 i(description, VHost) -> vhost:get_description(VHost);
 i(tags, VHost) -> vhost:get_tags(VHost);
 i(default_queue_type, VHost) -> rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost)));
+i(protected_from_deletion, VHost) -> vhost:is_protected_from_deletion(VHost);
 i(metadata, VHost) ->
     DQT = rabbit_queue_type:short_alias_of(default_queue_type(vhost:get_name(VHost))),
     case vhost:get_metadata(VHost) of

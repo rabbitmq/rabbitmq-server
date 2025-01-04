@@ -69,5 +69,5 @@ augmented(ReqData, #context{user = User}) ->
 basic() ->
     Maps = lists:map(
             fun maps:from_list/1,
-            rabbit_vhost:info_all([name, description, tags, default_queue_type, metadata])),
+            rabbit_vhost:info_all([name, description, tags, default_queue_type, metadata, protected_from_deletion])),
     rabbit_queue_type:vhosts_with_dqt(Maps).

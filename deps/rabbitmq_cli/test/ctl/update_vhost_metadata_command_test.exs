@@ -81,6 +81,43 @@ defmodule UpdateVhostMetadataCommandTest do
     assert vh[:tags] == [:a1, :b2, :c3]
   end
 
+  test "run: enabling deletion protection succeeds", context do
+    add_vhost(@vhost)
+
+    opts =
+      Map.merge(context[:opts], %{
+        description: "Protected from deletion",
+        protected_from_deletion: true
+      })
+
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert vh[:protected_from_deletion]
+  end
+
+  test "run: disabling deletion protection succeeds", context do
+    add_vhost(@vhost)
+
+    opts =
+      Map.merge(context[:opts], %{
+        description: "Protected from deletion",
+        protected_from_deletion: false
+      })
+
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert !vh[:protected_from_deletion]
+  end
+
+  test "run: vhost tags are coerced to a list", context do
+    add_vhost(@vhost)
+
+    opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert vh[:tags] == [:my_tag]
+  end
+
   test "run: attempt to use a non-existent virtual host fails", context do
     vh = "a-non-existent-3882-vhost"
 
@@ -93,15 +130,6 @@ defmodule UpdateVhostMetadataCommandTest do
   test "run: attempt to use an unreachable node returns a nodedown" do
     opts = %{node: :jake@thedog, timeout: 200, description: "does not matter"}
     assert match?({:badrpc, _}, @command.run(["na"], opts))
-  end
-
-  test "run: vhost tags are coerced to a list", context do
-    add_vhost(@vhost)
-
-    opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
-    assert @command.run([@vhost], opts) == :ok
-    vh = find_vhost(@vhost)
-    assert vh[:tags] == [:my_tag]
   end
 
   test "banner", context do

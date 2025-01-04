@@ -53,7 +53,8 @@ groups() ->
                                import_case18,
                                import_case19,
                                import_case20,
-                               import_case21
+                               import_case21,
+                               import_case22
                               ]},
 
         {boot_time_import_using_classic_source, [], [
@@ -273,7 +274,7 @@ import_case16(Config) ->
         Val when is_tuple(Val) ->
             ?assertEqual(<<"A case16 description">>, vhost:get_description(VHostRec)),
             ?assertEqual(<<"quorum">>, vhost:get_default_queue_type(VHostRec)),
-            ?assertEqual([multi_dc_replication,ab,cde], vhost:get_tags(VHostRec))
+            ?assertEqual([<<"multi_dc_replication">>,<<"ab">>,<<"cde">>], vhost:get_tags(VHostRec))
     end,
 
     ok.
@@ -314,6 +315,25 @@ import_case20(Config) ->
     end.
 
 import_case21(Config) -> import_invalid_file_case(Config, "failing_case21").
+
+import_case22(Config) ->
+    import_file_case(Config, "case22"),
+    Name = <<"protected">>,
+    VirtualHostIsImported =
+        fun () ->
+            case vhost_lookup(Config, Name) of
+                {error, not_found} -> false;
+                _       -> true
+            end
+        end,
+    rabbit_ct_helpers:await_condition(VirtualHostIsImported, 20000),
+    VHost = vhost_lookup(Config, Name),
+    ?assertEqual(true, vhost:is_protected_from_deletion(VHost)),
+
+    VHost2 = vhost_lookup(Config, <<"non-protected">>),
+    ?assertEqual(false, vhost:is_protected_from_deletion(VHost2)),
+
+    ok.
 
 export_import_round_trip_case1(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of

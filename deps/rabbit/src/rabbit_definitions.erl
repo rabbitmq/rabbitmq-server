@@ -786,8 +786,17 @@ add_vhost(VHost, ActingUser) ->
     case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
         ok ->
             ok;
-        {error, _} = Err ->
-            throw(Err)
+        {error, _} = Err1 ->
+            throw(Err1)
+    end,
+
+    %% The newly created virtual host won't have all the metadata keys. Rather than
+    %% changing the functions above, simply update the metadata as a separate step.
+    case rabbit_vhost:update_metadata(Name, Metadata, ActingUser) of
+        ok ->
+            ok;
+        {error, _} = Err2 ->
+            throw(Err2)
     end.
 
 add_permission(Permission, ActingUser) ->

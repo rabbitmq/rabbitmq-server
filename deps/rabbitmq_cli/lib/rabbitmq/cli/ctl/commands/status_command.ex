@@ -69,6 +69,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
 
   def output(result, %{node: node_name, unit: unit}) when is_list(result) do
     m = result_map(result)
+
     product_name_section =
       case m do
         %{:product_name => product_name} when product_name != "" ->
@@ -142,14 +143,15 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
         end
 
     IO.inspect(m[:tags])
+
     tags_section =
       [
         "\n#{bright("Tags")}\n"
       ] ++
         case m[:tags] do
           nil -> ["(none)"]
-          []  -> ["(none)"]
-          xs  -> tag_lines(xs)
+          [] -> ["(none)"]
+          xs -> tag_lines(xs)
         end
 
     breakdown = compute_relative_values(m[:memory])

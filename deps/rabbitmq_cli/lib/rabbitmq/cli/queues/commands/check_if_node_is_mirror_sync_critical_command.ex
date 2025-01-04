@@ -49,5 +49,4 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsMirrorSyncCriticalCommand do
   def banner([], _) do
     "This command is DEPRECATED and is a no-op. It will be removed in a future version."
   end
-
 end

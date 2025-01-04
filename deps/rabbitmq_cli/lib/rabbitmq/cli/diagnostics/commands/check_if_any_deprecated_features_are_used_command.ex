@@ -15,25 +15,29 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    deprecated_features_list = :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_deprecated_features,
-      :list,
-      [:used],
-      timeout
-    )
+    deprecated_features_list =
+      :rabbit_misc.rpc_call(
+        node_name,
+        :rabbit_deprecated_features,
+        :list,
+        [:used],
+        timeout
+      )
 
     # health checks return true if they pass
     case deprecated_features_list do
       {:badrpc, _} = err ->
         err
+
       {:error, _} = err ->
         err
+
       _ ->
         names = Enum.sort(Map.keys(deprecated_features_list))
+
         case names do
           [] -> true
-          _  -> {false, names}
+          _ -> {false, names}
         end
     end
   end
