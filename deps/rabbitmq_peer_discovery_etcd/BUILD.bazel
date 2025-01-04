@@ -73,15 +73,13 @@ plt(
         "//deps/rabbit:erlang_app",  # keep
         "//deps/rabbit_common:erlang_app",  # keep
         "//deps/rabbitmq_peer_discovery_common:erlang_app",  # keep
+        "@eetcd//:erlang_app",  #keep
     ],
 )
 
 dialyze(
     name = "dialyze",
-    dialyzer_opts = without(
-        "-Wunknown",  # also because of `eetcd'
-        RABBITMQ_DIALYZER_OPTS,
-    ),
+    dialyzer_opts = RABBITMQ_DIALYZER_OPTS,
     plt = ":deps_plt",
     target = ":erlang_app",
 )
