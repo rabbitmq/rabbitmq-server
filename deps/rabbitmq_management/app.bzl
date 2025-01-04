@@ -114,6 +114,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mgmt_wm_users_bulk_delete.erl",
             "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_vhost.erl",
+            "src/rabbit_mgmt_wm_vhost_deletion_protection.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
@@ -248,6 +249,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mgmt_wm_users_bulk_delete.erl",
             "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_vhost.erl",
+            "src/rabbit_mgmt_wm_vhost_deletion_protection.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
@@ -473,6 +475,7 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mgmt_wm_users_bulk_delete.erl",
             "src/rabbit_mgmt_wm_version.erl",
             "src/rabbit_mgmt_wm_vhost.erl",
+            "src/rabbit_mgmt_wm_vhost_deletion_protection.erl",
             "src/rabbit_mgmt_wm_vhost_restart.erl",
             "src/rabbit_mgmt_wm_vhosts.erl",
             "src/rabbit_mgmt_wm_whoami.erl",
@@ -632,4 +635,14 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_management",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "rabbit_mgmt_http_vhost_deletion_protection_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_mgmt_http_vhost_deletion_protection_SUITE.erl"],
+        outs = ["test/rabbit_mgmt_http_vhost_deletion_protection_SUITE.beam"],
+        hdrs = ["include/rabbit_mgmt.hrl"],
+        app_name = "rabbitmq_management",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
