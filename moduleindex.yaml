@@ -1017,6 +1017,7 @@ rabbitmq_management:
 - rabbit_mgmt_wm_users_bulk_delete
 - rabbit_mgmt_wm_version
 - rabbit_mgmt_wm_vhost
+- rabbit_mgmt_wm_vhost_deletion_protection
 - rabbit_mgmt_wm_vhost_restart
 - rabbit_mgmt_wm_vhosts
 - rabbit_mgmt_wm_whoami
