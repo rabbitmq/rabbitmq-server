@@ -8,7 +8,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.TimeUnit, as: TU
 
-  import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
   import RabbitMQ.CLI.Core.Listeners
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
