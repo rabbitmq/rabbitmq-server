@@ -300,6 +300,8 @@
 %% 100 ms
 -define(BOOT_STATUS_CHECK_INTERVAL, 100).
 
+-define(DEFAULT_CREDIT, {400, 200}).
+
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -1754,6 +1756,21 @@ persist_static_configuration() ->
        incoming_message_interceptors,
        credit_flow_default_credit
       ]),
+
+    %% Disallow the following two cases:
+    %% 1. Negative value
+    %% 2. MoreCreditAfter larger than InitialCredit.
+    CREDIT_FLOW_DEFAULT_CREDIT = case application:get_env(?MODULE, credit_flow_default_credit) of
+                     {ok, {InitialCredit, _MoreCreditAfter}}
+                       when is_integer(InitialCredit) andalso
+                       is_integer(_MoreCreditAfter) andalso
+                       _MoreCreditAfter < InitialCredit ->
+                         {InitialCredit, _MoreCreditAfter};
+                     _ ->
+                       rabbit_log:warning("Invalid value for credit_flow_default_credit, changing to the default value."),
+                       ?DEFAULT_CREDIT
+               end,
+    ok = persistent_term:put(credit_flow_default_credit, CREDIT_FLOW_DEFAULT_CREDIT),
 
     %% Disallow 0 as it means unlimited:
     %% "If this field is zero or unset, there is no maximum
