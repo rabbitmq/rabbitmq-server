@@ -7,9 +7,10 @@
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   alias RabbitMQ.CLI.TimeUnit, as: TU
-  @behaviour RabbitMQ.CLI.CommandBehaviour
 
   import RabbitMQ.CLI.Core.Listeners
+
+  @behaviour RabbitMQ.CLI.CommandBehaviour
 
   def switches(), do: [unit: :string, within: :integer]
 
@@ -102,9 +103,10 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckCertificateExpirationCommand do
 
   def help_section(), do: :observability_and_health_checks
 
-  def description(),
-    do: "Checks the expiration date on the certificates for every listener configured to use TLS"
+  def description() do
+    "Checks the expiration date of every certificate (leaf, intermediary or any CA) in every certificate bundle file used by the node"
+  end
 
   def banner(_, %{node: node_name}),
-    do: "Checking certificate expiration on node #{node_name} ..."
+    do: "Checking certificate expiration for all certificates on node #{node_name} ..."
 end
