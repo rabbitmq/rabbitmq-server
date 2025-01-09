@@ -835,6 +835,12 @@ can_use_discovered_nodes(_DiscoveredNodes, []) ->
 %%
 %% @private
 
+select_node_to_join([]) ->
+    ?LOG_INFO(
+       "Peer discovery: no nodes available for auto-clustering; waiting before retrying...",
+       [],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    false;
 select_node_to_join([{Node, _Members, _StartTime, _IsReady} | _])
   when Node =:= node() ->
     ?LOG_INFO(
