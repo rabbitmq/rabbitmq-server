@@ -11,9 +11,6 @@ def all_beam_files(name = "all_beam_files"):
         srcs = [
             "src/rabbit_peer_discovery_k8s.erl",
             "src/rabbitmq_peer_discovery_k8s.erl",
-            "src/rabbitmq_peer_discovery_k8s_app.erl",
-            "src/rabbitmq_peer_discovery_k8s_node_monitor.erl",
-            "src/rabbitmq_peer_discovery_k8s_sup.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_peer_discovery_k8s",
@@ -37,9 +34,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
         srcs = [
             "src/rabbit_peer_discovery_k8s.erl",
             "src/rabbitmq_peer_discovery_k8s.erl",
-            "src/rabbitmq_peer_discovery_k8s_app.erl",
-            "src/rabbitmq_peer_discovery_k8s_node_monitor.erl",
-            "src/rabbitmq_peer_discovery_k8s_sup.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
         app_name = "rabbitmq_peer_discovery_k8s",
@@ -73,9 +67,6 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/rabbit_peer_discovery_k8s.erl",
             "src/rabbitmq_peer_discovery_k8s.erl",
-            "src/rabbitmq_peer_discovery_k8s_app.erl",
-            "src/rabbitmq_peer_discovery_k8s_node_monitor.erl",
-            "src/rabbitmq_peer_discovery_k8s_sup.erl",
         ],
     )
     filegroup(

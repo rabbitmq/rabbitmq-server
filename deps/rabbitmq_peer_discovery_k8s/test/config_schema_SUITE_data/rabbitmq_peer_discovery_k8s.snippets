@@ -6,6 +6,70 @@
 %%
 
 [
+
+  {k8s_discovery_mechanism_as_module,
+      "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+       cluster_formation.k8s.ordinal_start = 42", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {ordinal_start, 42}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+
+  {k8s_discovery_mechanism_as_alias1,
+      "cluster_formation.peer_discovery_backend = k8s
+       cluster_formation.k8s.ordinal_start = 42", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {ordinal_start, 42}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+
+  {k8s_discovery_mechanism_as_alias2,
+      "cluster_formation.peer_discovery_backend = kubernetes
+       cluster_formation.k8s.ordinal_start = 42", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {ordinal_start, 42}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+
+  {k8s_discovery_mechanism_as_module,
+      "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
+       cluster_formation.k8s.seed_node = seed-node-hostname", [
+          {rabbit, [
+              {cluster_formation, [
+                  {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                  {peer_discovery_k8s, [
+                      {seed_node, "seed-node-hostname"}
+                  ]}
+              ]}
+          ]}
+      ], [rabbitmq_peer_discovery_k8s]
+  },
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% All configuration options below are deprecated as of version 2 of this plugin (first shipped in 4.1).
+%% Test cases are kept to ensure we still accept the old config, but it is completely ignored.
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
   {k8s_discovery_mechanism_as_module,
       "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_k8s
        cluster_formation.k8s.host = k8s.eng.megacorp.local", [
