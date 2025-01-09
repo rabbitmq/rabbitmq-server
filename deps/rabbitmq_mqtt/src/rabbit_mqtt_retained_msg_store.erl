@@ -22,7 +22,7 @@
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
 -export([start/1, insert/3, lookup/2, delete/2, terminate/1]).
--export([expire/2]).
+-export([expire/2, has_wildcards/1]).
 -export_type([state/0, expire/0]).
 
 -define(STATE, ?MODULE).
@@ -88,6 +88,11 @@ lookup(Topic, #?STATE{store_mod = Mod,
         Other ->
             Other
     end.
+
+-spec has_wildcards(topic()) -> boolean().
+has_wildcards(Pattern) ->
+    Parts = binary:split(Pattern, <<"/">>, [global]),
+    lists:member(<<"#">>, Parts) orelse lists:member(<<"+">>, Parts).
 
 -spec delete(topic(), state()) -> ok.
 delete(Topic, #?STATE{store_mod = Mod,
