@@ -19,6 +19,7 @@ def all_beam_files(name = "all_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
+            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
@@ -65,6 +66,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
+            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
@@ -118,6 +120,7 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
+            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
