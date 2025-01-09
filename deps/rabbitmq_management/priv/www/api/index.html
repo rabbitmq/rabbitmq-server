@@ -226,7 +226,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td class="path">/api/nodes/<i>name</i>/memory</td>
         <td>
-          Returns a <a href="https://rabbitmq.com/memory-use.html">memory usage breakdown</a> of an individual node in the RabbitMQ cluster.
+          Returns a <a href="https://rabbitmq.com/docs/memory-use">memory usage breakdown</a> of an individual node in the RabbitMQ cluster.
         </td>
       </tr>
       <tr>
@@ -246,36 +246,42 @@ vary: accept, accept-encoding, origin</pre>
                          /api/all-configuration <em>(deprecated)</em>
         </td>
         <td>
-          The server definitions - exchanges, queues, bindings, users,
-          virtual hosts, permissions, topic permissions, and parameters. Everything apart from
-          messages. POST to upload an existing set of definitions. Note
-          that:
-          <ul>
-            <li>
-              The definitions are merged. Anything already existing on
-              the server but not in the uploaded definitions is
-              untouched.
-            </li>
-            <li>
-              Conflicting definitions on immutable objects (exchanges,
-              queues and bindings) will be ignored. The existing definition
-              will be preserved.
-            </li>
-            <li>
-              Conflicting definitions on mutable objects will cause
-              the object in the server to be overwritten with the
-              object from the definitions.
-            </li>
-            <li>
-              In the event of an error you will be left with a
-              part-applied set of definitions.
-            </li>
-          </ul>
-          For convenience you may upload a file from a browser to this
-          URI (i.e. you can use <code>multipart/form-data</code> as
-          well as <code>application/json</code>) in which case the
-          definitions should be uploaded as a form field named
-          "file".
+          <p>
+            The server definitions: exchanges, queues, bindings, users,
+            virtual hosts, permissions, topic permissions, and parameters. Everything apart from
+            messages. POST to upload an existing set of definitions. Note
+            that:
+
+            <ul>
+              <li>
+                The definitions are merged. Anything already existing on
+                the server but not in the uploaded definitions is
+                untouched.
+              </li>
+              <li>
+                Conflicting definitions on immutable objects (exchanges,
+                queues and bindings) will be ignored. The existing definition
+                will be preserved.
+              </li>
+              <li>
+                Conflicting definitions on mutable objects will cause
+                the object in the server to be overwritten with the
+                object from the definitions.
+              </li>
+              <li>
+                In the event of an error you will be left with a
+                part-applied set of definitions.
+              </li>
+            </ul>
+          </p>
+          <p>
+            This endpoint supports <code>multipart/form-data</code> as
+            well as the standard <code>application/json</code> content types for uploads.
+            In the former case, the definitions file should be uploaded as a form field named "file".
+          </p>
+          <p>
+            Relevant documentation guide: <a href="https://www.rabbitmq.com/docs/definitions">Definition Export and Import</a>
+          </p>
         </td>
       </tr>
       <tr>
@@ -286,35 +292,41 @@ vary: accept, accept-encoding, origin</pre>
         <td class="path">/api/definitions/<i>vhost</i><br/>
         </td>
         <td>
-          The server definitions for a given virtual host -
-          exchanges, queues, bindings and policies.
-          POST to upload an existing set of definitions. Note that:
-          <ul>
-            <li>
-              The definitions are merged. Anything already existing on
-              the server but not in the uploaded definitions is
-              untouched.
-            </li>
-            <li>
-              Conflicting definitions on immutable objects (exchanges,
-              queues and bindings) will be ignored. The existing definition
-              will be preserved.
-            </li>
-            <li>
-              Conflicting definitions on mutable objects will cause
-              the object in the server to be overwritten with the
-              object from the definitions.
-            </li>
-            <li>
-              In the event of an error you will be left with a
-              part-applied set of definitions.
-            </li>
-          </ul>
-          For convenience you may upload a file from a browser to this
-          URI (i.e. you can use <code>multipart/form-data</code> as
-          well as <code>application/json</code>) in which case the
-          definitions should be uploaded as a form field named
-          "file".
+          <p>
+            The server definitions for a given virtual host:
+            exchanges, queues, bindings and policies.
+            POST to upload an existing set of definitions. Note that:
+
+            <ul>
+              <li>
+                The definitions are merged. Anything already existing on
+                the server but not in the uploaded definitions is
+                untouched.
+              </li>
+              <li>
+                Conflicting definitions on immutable objects (exchanges,
+                queues and bindings) will be ignored. The existing definition
+                will be preserved.
+              </li>
+              <li>
+                Conflicting definitions on mutable objects will cause
+                the object in the server to be overwritten with the
+                object from the definitions.
+              </li>
+              <li>
+                In the event of an error you will be left with a
+                part-applied set of definitions.
+              </li>
+            </ul>
+          </p>
+          <p>
+            This endpoint supports <code>multipart/form-data</code> as
+            well as the standard <code>application/json</code> content types for uploads.
+            In the former case, the definitions file should be uploaded as a form field named "file".
+          </p>
+          <p>
+            Relevant documentation guide: <a href="https://www.rabbitmq.com/docs/definitions">Definition Export and Import</a>
+          </p>
         </td>
       </tr>
       <tr>
@@ -323,7 +335,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/connections</td>
-        <td>A list of all open connections. Use <a href="#pagination">pagination parameters</a> to filter connections.</td>
+        <td>
+          <p>
+            A list of all open connections. Use <a href="#pagination">pagination parameters</a> to list connections.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list connections,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -331,7 +352,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/vhosts/<i>vhost</i>/connections</td>
-        <td>A list of all open connections in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to filter connections.</td>
+        <td>
+          <p>
+            A list of all open connections in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to list connections.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list connections,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -352,7 +382,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td class="path">/api/connections/username/<i>username</i></td>
         <td>
-          A list of all open connections for a specific username. Use pagination parameters to filter connections.
+          A list of all open connections for a specific username. Use pagination parameters to list connections.
           DELETEing a resource will close all the connections for a username. Optionally set the
           "X-Reason" header when DELETEing to provide a reason.
         </td>
@@ -364,7 +394,14 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td class="path">/api/connections/<i>name</i>/channels</td>
         <td>
-          List of all channels for a given connection.
+          <p>
+            List of all channels for a given connection.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list channels,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
         </td>
       </tr>
       <tr>
@@ -373,7 +410,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/channels</td>
-        <td>A list of all open channels. Use <a href="#pagination">pagination parameters</a> to filter channels.</td>
+        <td>
+          <p>
+            A list of all open channels.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list channels,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -381,7 +427,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/vhosts/<i>vhost</i>/channels</td>
-        <td>A list of all open channels in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to filter channels.</td>
+        <td>
+          <p>
+            A list of all open channels in a specific virtual host. Use <a href="#pagination">pagination parameters</a> to list channels.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list channels,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -397,7 +452,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/consumers</td>
-        <td>A list of all consumers.</td>
+        <td>
+          <p>
+            A list of all consumers.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list consumers,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -413,7 +477,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/exchanges</td>
-        <td>A list of all exchanges. Use <a href="#pagination">pagination parameters</a> to filter exchanges.</td>
+        <td>A list of all exchanges. Use <a href="#pagination">pagination parameters</a> to list exchanges.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -421,7 +485,7 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/exchanges/<i>vhost</i></td>
-        <td>A list of all exchanges in a given virtual host. Use <a href="#pagination">pagination parameters</a> to filter exchanges.</td>
+        <td>A list of all exchanges in a given virtual host. Use <a href="#pagination">pagination parameters</a> to list exchanges.</td>
       </tr>
       <tr>
         <td>X</td>
@@ -497,8 +561,9 @@ vary: accept, accept-encoding, origin</pre>
             A list of all queues across all virtual hosts returning a reduced set of fields.
           </p>
           <p>
-            Use <a href="#pagination">pagination parameters</a> to filter queues,
+            Use <a href="#pagination">pagination parameters</a> to list queues,
             otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
           </p>
           <p>
             The parameter <code>enable_queue_totals=true</code> can be used in combination with the
@@ -519,8 +584,9 @@ vary: accept, accept-encoding, origin</pre>
             A list of all queues containing all available information about the queues (over 50 fields per queue).
           </p>
           <p>
-            Use <a href="#pagination">pagination parameters</a> to filter queues,
+            Use <a href="#pagination">pagination parameters</a> to list queues,
             otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
           </p>
         </td>
       </tr>
@@ -535,8 +601,9 @@ vary: accept, accept-encoding, origin</pre>
             A list of all queues in the given virtual host containing all available information about the queues (over 50 fields per queue)..
           </p>
           <p>
-            Use <a href="#pagination">pagination parameters</a> to filter queues,
+            Use <a href="#pagination">pagination parameters</a> to list queues,
             otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
           </p>
         </td>
       </tr>
@@ -626,7 +693,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/bindings</td>
-        <td>A list of all bindings.</td>
+        <td>
+          <p>
+            A list of all bindings.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list bindings,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -634,7 +710,16 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/bindings/<i>vhost</i></td>
-        <td>A list of all bindings in a given virtual host.</td>
+        <td>
+          <p>
+            A list of all bindings in a given virtual host.
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list bindings,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -714,7 +799,14 @@ vary: accept, accept-encoding, origin</pre>
         <td></td>
         <td></td>
         <td class="path">/api/vhosts</td>
-        <td>A list of all vhosts.</td>
+        <td>
+          <p>
+            A list of all vhosts.
+          </p>
+          <p>
+            Pagination: default page size is 100, maximum supported page size is 500.
+          </p>
+        </td>
       </tr>
       <tr>
         <td>X</td>
@@ -1079,7 +1171,7 @@ or:
             will be the next two months.
           </p>
           <p>
-            Relevant documentation guides: <a href="https://www.rabbitmq.com/docs/tls">TLS</a>, <a href="https://www.rabbitmq.com/docs/clustering-ssl">Encrypted Inter-node Communication</a></li>
+            Relevant documentation guides: <a href="https://www.rabbitmq.com/docs/ssl">TLS</a>, <a href="https://www.rabbitmq.com/docs/clustering-ssl">Encrypted Inter-node Communication</a></li>
           </p>
         </td>
       </tr>
@@ -1243,10 +1335,17 @@ or:
         <td></td>
         <td class="path">/api/stream/connections</td>
         <td>
-            A list of all open stream connections.
-            Use <a href="#pagination">pagination parameters</a> to filter connections.
-            <br />
-            Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+            <p>
+              A list of all open stream connections.
+            </p>
+            <p>
+              Use <a href="#pagination">pagination parameters</a> to list connections,
+              otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+              Default page size is 100, maximum supported page size is 500.
+            </p>
+            <p>
+              Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+            </p>
         </td>
       </tr>
       <tr>
@@ -1256,9 +1355,17 @@ or:
         <td></td>
         <td class="path">/api/stream/connections/<i>vhost</i></td>
         <td>
+          <p>
             A list of all open stream connections in a specific virtual host.
-            <br />
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list connections,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+          <p>
             Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+          </p>
         </td>
       </tr>
       <tr>
@@ -1294,9 +1401,17 @@ or:
         <td></td>
         <td class="path">/api/stream/connections/<i>vhost</i>/<i>name</i>/consumers</td>
         <td>
+          <p>
             The list of consumers of a given stream connection.
-            <br />
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list consumers,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+          <p>
             Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+          </p>
         </td>
       </tr>
       <tr>
@@ -1342,9 +1457,17 @@ or:
         <td></td>
         <td class="path">/api/stream/consumers</td>
         <td>
+          <p>
             The list of stream consumers.
-            <br />
+          </p>
+          <p>
+            Use <a href="#pagination">pagination parameters</a> to list consumers,
+            otherwise this endpoint can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+            Default page size is 100, maximum supported page size is 500.
+          </p>
+          <p>
             Requires the <code>rabbitmq_stream_management</code> plugin to be enabled.
+          </p>
         </td>
       </tr>
       <tr>
@@ -1884,94 +2007,6 @@ or:
         </td>
       </tr>
       <tr>
-        <td><code>fd_total</code></td>
-        <td>
-          File descriptors available.
-        </td>
-      </tr>
-      <tr>
-        <td><code>fd_used</code></td>
-        <td>
-          Used file descriptors.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_read_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each disk read operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_read_bytes</code></td>
-        <td>
-          Total number of bytes read from disk by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_read_count</code></td>
-        <td>
-          Total number of read operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_reopen_count</code></td>
-        <td>
-          Total number of times the persister has needed to recycle
-          file handles between queues. In an ideal world this number
-          will be zero; if the number is large, performance might be
-          improved by increasing the number of file handles available
-          to RabbitMQ.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_seek_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each seek operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      </tr>
-      <tr>
-        <td><code>io_seek_count</code></td>
-        <td>
-          Total number of seek operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_sync_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each fsync() operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      </tr>
-      <tr>
-        <td><code>io_sync_count</code></td>
-        <td>
-          Total number of fsync() operations by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_write_avg_time</code></td>
-        <td>
-          Average wall time (milliseconds) for each disk write operation in
-          the last statistics interval.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_write_bytes</code></td>
-        <td>
-          Total number of bytes written to disk by the persister.
-        </td>
-      </tr>
-      <tr>
-        <td><code>io_write_count</code></td>
-        <td>
-          Total number of write operations by the persister.
-        </td>
-      </tr>
-      <tr>
         <td><code>log_files</code></td>
         <td>
           List of log files used by the node. If the node also sends
@@ -1995,36 +2030,6 @@ or:
         <td><code>mem_limit</code></td>
         <td>
           Point at which the memory alarm will go off.
-        </td>
-      </tr>
-      <tr>
-        <td><code>mnesia_disk_tx_count</code></td>
-        <td>
-          Number of Mnesia transactions which have been performed that
-          required writes to disk. (e.g. creating a durable
-          queue). Only transactions which originated on this node are
-          included.
-        </td>
-      </tr>
-      <tr>
-        <td><code>mnesia_ram_tx_count</code></td>
-        <td>
-          Number of Mnesia transactions which have been performed that
-          did not require writes to disk. (e.g. creating a transient
-          queue). Only transactions which originated on this node are
-          included.
-        </td>
-      </tr>
-      <tr>
-        <td><code>msg_store_read_count</code></td>
-        <td>
-          Number of messages which have been read from the message store.
-        </td>
-      </tr>
-      <tr>
-        <td><code>msg_store_write_count</code></td>
-        <td>
-          Number of messages which have been written to the message store.
         </td>
       </tr>
       <tr>
@@ -2065,27 +2070,6 @@ or:
         </td>
       </tr>
       <tr>
-        <td><code>queue_index_journal_write_count</code></td>
-        <td>
-          Number of records written to the queue index journal. Each
-          record represents a message being published to a queue,
-          being delivered from a queue, and being acknowledged in a
-          queue.
-        </td>
-      </tr>
-      <tr>
-        <td><code>queue_index_read_count</code></td>
-        <td>
-          Number of records read from the queue index.
-        </td>
-      </tr>
-      <tr>
-        <td><code>queue_index_write_count</code></td>
-        <td>
-          Number of records written to the queue index.
-        </td>
-      </tr>
-      <tr>
         <td><code>rates_mode</code></td>
         <td>
           'none', 'basic' or 'detailed'.
@@ -2102,12 +2086,6 @@ or:
         <td>
           Boolean for whether this node is up. Obviously if this is
           false, most other stats will be missing.
-        </td>
-      </tr>
-      <tr>
-        <td><code>sasl_log_file</code></td>
-        <td>
-          Location of <a href="https://www.erlang.org/doc/man/sasl_app.html">sasl</a> log file.
         </td>
       </tr>
       <tr>
@@ -2420,23 +2398,23 @@ or:
     <section id="pagination">
       <h2> Pagination Parameters</h2>
 
-      The pagination can be applied to the endpoints that list
+      <p>
+        The pagination can be applied to the endpoints that list
 
-      <ul>
-        <li>
-          queues
-        </li>
-        <li>
-          exchanges
-        </li>
-        <li>
-          connections
-        </li>
-        <li>
-          channels
-        </li>
-      </ul>
+        <ul>
+          <li>queues</li>
+          <li>exchanges</li>
+          <li>connections</li>
+          <li>channels</li>
+        </ul>
+      </p>
 
+      <p>
+        Without pagination, these endpoints can produce very large JSON responses and waste a lot of bandwidth and CPU resources.
+      </p>
+      <p>
+        Default page size is 100, maximum supported page size is 500.
+      </p>
       <p>
         Below are the query parameters that can be used.
 
@@ -2457,14 +2435,14 @@ or:
             <td><code>page_size</code></td>
             <td>Positive integer</td>
             <td>
-              Number of elements for page (default value: 100)
+              Number of elements for page (default value: 100, maximum supported value: 500)
             </td>
           </tr>
           <tr>
             <td><code>name</code></td>
             <td>String</td>
             <td>
-              Filter by name, for example queue name, exchange name etc..
+              Filter by name, for example queue name, exchange name etc.
             </td>
           </tr>
           <tr>
