@@ -1761,11 +1761,11 @@ persist_static_configuration() ->
     %% 1. Negative value
     %% 2. MoreCreditAfter larger than InitialCredit.
     CREDIT_FLOW_DEFAULT_CREDIT = case application:get_env(?MODULE, credit_flow_default_credit) of
-                     {ok, {InitialCredit, _MoreCreditAfter}}
+                     {ok, {InitialCredit, MoreCreditAfter}}
                        when is_integer(InitialCredit) andalso
-                       is_integer(_MoreCreditAfter) andalso
-                       _MoreCreditAfter < InitialCredit ->
-                         {InitialCredit, _MoreCreditAfter};
+                       is_integer(MoreCreditAfter) andalso
+                       MoreCreditAfter < InitialCredit ->
+                         {InitialCredit, MoreCreditAfter};
                      _ ->
                        rabbit_log:warning("Invalid value for credit_flow_default_credit, changing to the default value."),
                        ?DEFAULT_CREDIT
