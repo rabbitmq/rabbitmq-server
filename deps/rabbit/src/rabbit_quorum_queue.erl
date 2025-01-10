@@ -2179,7 +2179,9 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
                         []
                 end
             end || Q <- Qs, amqqueue:get_type(Q) == ?MODULE]),
-    wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []).
+    Result = wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []),
+    _ = spawn(fun() -> maybe_log_leader_health_check_result(Result) end),
+    Result.
 
 run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     Leader = ra_leaderboard:lookup_leader(ClusterName),
@@ -2215,3 +2217,8 @@ check_process_limit_safety(QCount, ProcessLimitThreshold) ->
         false ->
             ok
     end.
+
+maybe_log_leader_health_check_result([]) -> ok;
+maybe_log_leader_health_check_result(Result) ->
+    Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
+    rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~ts", [Qs]).
