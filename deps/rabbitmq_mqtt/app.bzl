@@ -143,6 +143,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "public_hdrs",
         srcs = [
+            "include/rabbit_globber.hrl",
             "include/rabbit_mqtt.hrl",
             "include/rabbit_mqtt_packet.hrl",
         ],
@@ -331,4 +332,13 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "globber_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/globber_SUITE.erl"],
+        outs = ["test/globber_SUITE.beam"],
+        hdrs = ["include/rabbit_globber.hrl"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
     )
