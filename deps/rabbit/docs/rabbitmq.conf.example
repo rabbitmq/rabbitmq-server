@@ -381,7 +381,7 @@
 ## If set, the 'x-queue-type' header will be ignored (not compared for equivalence)
 ## for queue redeclaration. This can simplify upgrades of applications that explicitly
 ## set 'x-queue-type' to 'classic' for historical reasons but do not set any other
-## properties that may conflict or significant change queue behavior and semantics, such as the 'exclusive' field.
+## properties that may conflict or significantly change queue behavior and semantics, such as the 'exclusive' field.
 # quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true
 
 ## Changes classic queue storage implementation version.
