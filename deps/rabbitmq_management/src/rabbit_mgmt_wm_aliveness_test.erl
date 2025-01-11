@@ -35,37 +35,15 @@ resource_exists(ReqData, Context) ->
         end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
+    %% This health check is deprecated and is now a no-op.
+    %% More specific health checks under GET /api/health/checks/* should be used instead.
+    %% https://www.rabbitmq.com/docs/monitoring#health-checks
     rabbit_mgmt_util:with_channel(
         rabbit_mgmt_util:vhost(ReqData),
         ReqData,
         Context,
-        fun(Ch) ->
-            #'queue.declare_ok'{queue = ?QUEUE} = amqp_channel:call(Ch, #'queue.declare'{
-                queue = ?QUEUE
-            }),
-            ok = amqp_channel:call(Ch, #'basic.publish'{routing_key = ?QUEUE}, #amqp_msg{
-                payload = <<"test_message">>
-            }),
-            case amqp_channel:call(Ch, #'basic.get'{queue = ?QUEUE, no_ack = true}) of
-                {#'basic.get_ok'{}, _} ->
-                    %% Don't delete the queue. If this is pinged every few
-                    %% seconds we don't want to create a mnesia transaction
-                    %% each time.
-                    rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
-                #'basic.get_empty'{} ->
-                    Reason = <<"aliveness-test queue is empty">>,
-                    failure(Reason, ReqData, Context);
-                Error ->
-                    Reason = rabbit_data_coercion:to_binary(Error),
-                    failure(Reason, ReqData, Context)
-            end
-        end
+        fun(_Ch) -> rabbit_mgmt_util:reply([{status, ok}], ReqData, Context) end
     ).
-
-failure(Reason, ReqData0, Context0) ->
-    Body = #{status => failed, reason => Reason},
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData0, Context0),
-    {stop, cowboy_req:reply(?HEALTH_CHECK_FAILURE_STATUS, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
