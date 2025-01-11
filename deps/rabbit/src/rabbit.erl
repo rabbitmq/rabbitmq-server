@@ -300,8 +300,6 @@
 %% 100 ms
 -define(BOOT_STATUS_CHECK_INTERVAL, 100).
 
--define(DEFAULT_CREDIT, {400, 200}).
-
 %%----------------------------------------------------------------------------
 
 -type restart_type() :: 'permanent' | 'transient' | 'temporary'.
@@ -1767,8 +1765,8 @@ persist_static_configuration() ->
                        MoreCreditAfter < InitialCredit ->
                          {InitialCredit, MoreCreditAfter};
                      _ ->
-                       rabbit_log:warning("Invalid value for credit_flow_default_credit, changing to the default value."),
-                       ?DEFAULT_CREDIT
+                       rabbit_log:error("Failed to boot due to invalid setting of credit_flow_default_credit."),
+                       throw({error,invalid_credit_flow_default_credit_value})
                end,
     ok = persistent_term:put(credit_flow_default_credit, CREDIT_FLOW_DEFAULT_CREDIT),
 
