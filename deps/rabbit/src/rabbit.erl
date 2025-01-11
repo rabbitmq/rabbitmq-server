@@ -1764,8 +1764,8 @@ persist_static_configuration() ->
                        MoreCreditAfter < InitialCredit ->
                          {InitialCredit, MoreCreditAfter};
                      _ ->
-                       rabbit_log:error("Failed to boot due to invalid setting of credit_flow_default_credit."),
-                       throw({error,invalid_credit_flow_default_credit_value})
+                       rabbit_log:error("Failed to start due to invalid value of credit_flow_default_credit."),
+                       throw({error, invalid_credit_flow_default_credit_value})
                end,
     ok = persistent_term:put(credit_flow_default_credit, CREDIT_FLOW_DEFAULT_CREDIT),
 
