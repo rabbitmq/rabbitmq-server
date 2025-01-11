@@ -1757,7 +1757,7 @@ persist_static_configuration() ->
     %% Disallow the following two cases:
     %% 1. Negative value
     %% 2. MoreCreditAfter larger than InitialCredit.
-    CREDIT_FLOW_DEFAULT_CREDIT = case application:get_env(?MODULE, credit_flow_default_credit) of
+    CreditFlowDefaultCredit = case application:get_env(?MODULE, credit_flow_default_credit) of
                      {ok, {InitialCredit, MoreCreditAfter}}
                        when is_integer(InitialCredit) andalso
                        is_integer(MoreCreditAfter) andalso
@@ -1767,7 +1767,7 @@ persist_static_configuration() ->
                        rabbit_log:error("Failed to start due to invalid value of credit_flow_default_credit."),
                        throw({error, invalid_credit_flow_default_credit_value})
                end,
-    ok = persistent_term:put(credit_flow_default_credit, CREDIT_FLOW_DEFAULT_CREDIT),
+    ok = persistent_term:put(credit_flow_default_credit, CreditFlowDefaultCredit),
 
     %% Disallow 0 as it means unlimited:
     %% "If this field is zero or unset, there is no maximum
