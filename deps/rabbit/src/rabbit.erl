@@ -1763,7 +1763,7 @@ persist_static_configuration() ->
                             is_integer(MoreCreditAfter) andalso
                             InitialCredit > 0 andalso
                             MoreCreditAfter > 0 andalso
-                            MoreCreditAfter < InitialCredit ->
+                            MoreCreditAfter =< InitialCredit ->
                          {InitialCredit, MoreCreditAfter};
                      Other ->
                        rabbit_log:error("Refusing to boot due to an invalid value of 'rabbit.credit_flow_default_credit'"),
