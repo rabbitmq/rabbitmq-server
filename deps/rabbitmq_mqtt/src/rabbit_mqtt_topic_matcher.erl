@@ -1,9 +1,15 @@
--module(rabbit_globber).
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+
+-module(rabbit_mqtt_topic_matcher).
 
 -export([new/0, new/3, add/2, add/3, remove/2, remove/3, test/2, match/2, match_iter/2,
          clear/1]).
 
--include_lib("rabbit_globber.hrl").
+-include_lib("rabbit_mqtt_topic_matcher.hrl").
 
 -spec new() -> globber().
 new() ->
