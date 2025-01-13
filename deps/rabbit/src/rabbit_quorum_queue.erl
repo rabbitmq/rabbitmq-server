@@ -259,11 +259,16 @@ start_cluster(Q) ->
     NewQ1 = amqqueue:set_type_state(NewQ0,
                                     #{nodes => [LeaderNode | FollowerNodes]}),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum ~ts with leader on node '~ts'",
-                     [QuorumSize, rabbit_misc:rs(QName), LeaderNode]),
+    Versions = [V || {ok, V} <- erpc:multicall(FollowerNodes,
+                                               rabbit_fifo, version, [])],
+    MinVersion = lists:min([rabbit_fifo:version() | Versions]),
+
+    rabbit_log:debug("Will start up to ~w replicas for quorum queue ~ts with "
+                     "leader on node '~ts', initial machine version ~b",
+                     [QuorumSize, rabbit_misc:rs(QName), LeaderNode, MinVersion]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
         {created, NewQ} ->
-            RaConfs = [make_ra_conf(NewQ, ServerId)
+            RaConfs = [make_ra_conf(NewQ, ServerId, voter, MinVersion)
                        || ServerId <- members(NewQ)],
 
             %% khepri projections on remote nodes are eventually consistent
@@ -544,6 +549,10 @@ spawn_deleter(QName) ->
                   delete(Q, false, false, <<"expired">>)
           end).
 
+spawn_notify_decorators(QName, startup = Fun, Args) ->
+    spawn(fun() ->
+                  notify_decorators(QName, Fun, Args)
+          end);
 spawn_notify_decorators(QName, Fun, Args) ->
     %% run in ra process for now
     catch notify_decorators(QName, Fun, Args).
@@ -860,7 +869,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
             notify_decorators(QName, shutdown),
             case delete_queue_data(Q, ActingUser) of
                 ok ->
-                    _ = erpc:call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
+                    _ = erpc_call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
                                   ?RPC_TIMEOUT),
                     {ok, ReadyMsgs};
                 {error, timeout} = Err ->
@@ -1339,7 +1348,9 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q),
-    Conf = make_ra_conf(Q, ServerId, Membership),
+
+    MachineVersion = erpc_call(Node, rabbit_fifo, version, [], infinity),
+    Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             ServerIdSpec  =
@@ -1383,8 +1394,9 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
                     E
             end;
         E ->
-          rabbit_log:warning("Could not add a replica of quorum ~ts on node ~ts: ~p", [rabbit_misc:rs(QName), Node, E]),
-          E
+            rabbit_log:warning("Could not add a replica of quorum ~ts on node ~ts: ~p",
+                               [rabbit_misc:rs(QName), Node, E]),
+            E
     end.
 
 delete_member(VHost, Name, Node) ->
@@ -1912,9 +1924,10 @@ format_ra_event(ServerId, Evt, QRef) ->
     {'$gen_cast', {queue_event, QRef, {ServerId, Evt}}}.
 
 make_ra_conf(Q, ServerId) ->
-    make_ra_conf(Q, ServerId, voter).
+    make_ra_conf(Q, ServerId, voter, rabbit_fifo:version()).
 
-make_ra_conf(Q, ServerId, Membership) ->
+make_ra_conf(Q, ServerId, Membership, MacVersion)
+  when is_integer(MacVersion) ->
     TickTimeout = application:get_env(rabbit, quorum_tick_interval,
                                       ?TICK_INTERVAL),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
@@ -1923,10 +1936,12 @@ make_ra_conf(Q, ServerId, Membership) ->
                                              quorum_min_checkpoint_interval,
                                              ?MIN_CHECKPOINT_INTERVAL),
     make_ra_conf(Q, ServerId, TickTimeout,
-                 SnapshotInterval, CheckpointInterval, Membership).
+                 SnapshotInterval, CheckpointInterval,
+                 Membership, MacVersion).
 
 make_ra_conf(Q, ServerId, TickTimeout,
-             SnapshotInterval, CheckpointInterval, Membership) ->
+             SnapshotInterval, CheckpointInterval,
+             Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
@@ -1947,6 +1962,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
                                   log_init_args => LogCfg,
                                   tick_timeout => TickTimeout,
                                   machine => RaMachine,
+                                  initial_machine_version => MacVersion,
                                   ra_event_formatter => Formatter}).
 
 make_mutable_config(Q) ->
