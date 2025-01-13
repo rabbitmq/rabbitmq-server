@@ -76,6 +76,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler, fun (_, _) -> ok end),
     meck:new(rabbit_feature_flags, []),
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_, _) -> true end),
     ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
@@ -941,10 +942,16 @@ discard_next_delivery(ClusterName, State0, Wait) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM,
-                                        ClusterName#resource.name,
-                                        {module, rabbit_fifo, RaFifoConfig},
-                                        ServerIds),
+    UId = ra:new_uid(ra_lib:to_binary(ClusterName#resource.name)),
+    Confs = [#{id => Id,
+               uid => UId,
+               cluster_name => ClusterName#resource.name,
+               log_init_args => #{uid => UId},
+               initial_members => ServerIds,
+               initial_machine_version => rabbit_fifo:version(),
+               machine => {module, rabbit_fifo, RaFifoConfig}}
+             || Id <- ServerIds],
+    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM, Confs),
     ?assertEqual(length(Started), length(ServerIds)),
     ok.
 

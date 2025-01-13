@@ -3,7 +3,6 @@
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
-%%
 
 -module(rabbit_stream_coordinator).
 
@@ -493,9 +492,17 @@ locally_known_members() ->
 
 start_coordinator_cluster() ->
     Nodes = rabbit_nodes:list_reachable(),
-    rabbit_log:debug("Starting stream coordinator on nodes: ~w", [Nodes]),
     true = Nodes =/= [],
-    case ra:start_cluster(?RA_SYSTEM, [make_ra_conf(Node, Nodes) || Node <-  Nodes]) of
+
+    Versions = [V || {ok, V} <- erpc:multicall(Nodes,
+                                               ?MODULE, version, [])],
+    MinVersion = lists:min([version() | Versions]),
+    rabbit_log:debug("Starting stream coordinator on nodes: ~w, "
+                     "initial machine version ~b",
+                     [Nodes, MinVersion]),
+    case ra:start_cluster(?RA_SYSTEM,
+                          [make_ra_conf(Node, Nodes, MinVersion)
+                           || Node <- Nodes]) of
         {ok, Started, _} ->
             rabbit_log:debug("Started stream coordinator on ~w", [Started]),
             Started;
@@ -813,7 +820,8 @@ maybe_resize_coordinator_cluster() ->
           end).
 
 add_member(Members, Node) ->
-    Conf = make_ra_conf(Node, [N || {_, N} <- Members]),
+    MinMacVersion = erpc:call(Node, ?MODULE, version, []),
+    Conf = make_ra_conf(Node, [N || {_, N} <- Members], MinMacVersion),
     ServerId = {?MODULE, Node},
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
@@ -1255,7 +1263,7 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
 format_ra_event(ServerId, Evt) ->
     {stream_coordinator_event, ServerId, Evt}.
 
-make_ra_conf(Node, Nodes) ->
+make_ra_conf(Node, Nodes, MinMacVersion) ->
     UId = ra:new_uid(ra_lib:to_binary(?MODULE)),
     Formatter = {?MODULE, format_ra_event, []},
     Members = [{?MODULE, N} || N <- Nodes],
@@ -1270,6 +1278,7 @@ make_ra_conf(Node, Nodes) ->
       log_init_args => #{uid => UId},
       tick_timeout => TickTimeout,
       machine => {module, ?MODULE, #{}},
+      initial_machine_version => MinMacVersion,
       ra_event_formatter => Formatter}.
 
 filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamId,
