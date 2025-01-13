@@ -1056,6 +1056,7 @@ rabbitmq_mqtt:
 - rabbit_mqtt_retainer
 - rabbit_mqtt_retainer_sup
 - rabbit_mqtt_sup
+- rabbit_mqtt_topic_matcher
 - rabbit_mqtt_util
 rabbitmq_peer_discovery_aws:
 - rabbit_peer_discovery_aws

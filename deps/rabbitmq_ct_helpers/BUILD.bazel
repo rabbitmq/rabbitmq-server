@@ -39,6 +39,12 @@ rabbitmq_app(
     hdrs = [":public_hdrs"],
     app_name = "rabbitmq_ct_helpers",
     beam_files = [":beam_files"],
+    extra_apps = [
+        "common_test",
+        "eunit",
+        "inet_tcp_proxy",
+        "inets",
+    ],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [

@@ -303,7 +303,7 @@ rabbitmq_suite(
 
 rabbitmq_suite(
     name = "globber_SUITE",
-    size = "small"
+    size = "small",
 )
 
 assert_suites()

@@ -39,10 +39,10 @@ rabbitmq_app(
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [
+        "//deps/khepri:erlang_app",
+        "//deps/khepri_mnesia_migration:erlang_app",
         "//deps/rabbit:erlang_app",
         "//deps/rabbit_common:erlang_app",
-        "@khepri//:erlang_app",
-        "@khepri_mnesia_migration//:erlang_app",
     ],
 )
 

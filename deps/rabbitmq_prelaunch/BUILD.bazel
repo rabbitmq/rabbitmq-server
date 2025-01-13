@@ -42,6 +42,10 @@ rabbitmq_app(
     app_name = APP_NAME,
     app_version = APP_VERSION,
     beam_files = [":beam_files"],
+    extra_apps = [
+        "osiris",
+        "systemd",
+    ],
     license_files = [":license_files"],
     priv = [":priv"],
     deps = [

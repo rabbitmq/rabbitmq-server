@@ -232,7 +232,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rolling_upgrade_SUITE.beam"],
         app_name = "rabbitmq_shovel",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/amqp_client:erlang_app", "@khepri//:erlang_app"],
+        deps = ["//deps/amqp_client:erlang_app", "//deps/khepri:erlang_app"],
     )
     erlang_bytecode(
         name = "shovel_status_command_SUITE_beam_files",

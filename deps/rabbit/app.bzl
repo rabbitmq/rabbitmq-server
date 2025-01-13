@@ -248,9 +248,9 @@ def all_beam_files(name = "all_beam_files"):
         erlc_opts = "//:erlc_opts",
         deps = [
             "//deps/amqp10_common:erlang_app",
+            "//deps/khepri:erlang_app",
+            "//deps/khepri_mnesia_migration:erlang_app",
             "//deps/rabbit_common:erlang_app",
-            "@khepri//:erlang_app",
-            "@khepri_mnesia_migration//:erlang_app",
             "@ra//:erlang_app",
             "@ranch//:erlang_app",
             "@stdout_formatter//:erlang_app",
@@ -507,9 +507,9 @@ def all_test_beam_files(name = "all_test_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = [
             "//deps/amqp10_common:erlang_app",
+            "//deps/khepri:erlang_app",
+            "//deps/khepri_mnesia_migration:erlang_app",
             "//deps/rabbit_common:erlang_app",
-            "@khepri//:erlang_app",
-            "@khepri_mnesia_migration//:erlang_app",
             "@ra//:erlang_app",
             "@ranch//:erlang_app",
             "@stdout_formatter//:erlang_app",
@@ -2021,7 +2021,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/metadata_store_phase1_SUITE.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app", "@khepri//:erlang_app"],
+        deps = ["//deps/khepri:erlang_app", "//deps/rabbit_common:erlang_app"],
     )
     erlang_bytecode(
         name = "mc_unit_SUITE_beam_files",

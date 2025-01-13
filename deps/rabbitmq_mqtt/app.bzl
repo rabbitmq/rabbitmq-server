@@ -19,7 +19,6 @@ def all_beam_files(name = "all_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
@@ -35,6 +34,7 @@ def all_beam_files(name = "all_beam_files"):
             "src/rabbit_mqtt_retainer.erl",
             "src/rabbit_mqtt_retainer_sup.erl",
             "src/rabbit_mqtt_sup.erl",
+            "src/rabbit_mqtt_topic_matcher.erl",
             "src/rabbit_mqtt_util.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -66,7 +66,6 @@ def all_test_beam_files(name = "all_test_beam_files"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
@@ -82,6 +81,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
             "src/rabbit_mqtt_retainer.erl",
             "src/rabbit_mqtt_retainer_sup.erl",
             "src/rabbit_mqtt_sup.erl",
+            "src/rabbit_mqtt_topic_matcher.erl",
             "src/rabbit_mqtt_util.erl",
         ],
         hdrs = [":public_and_private_hdrs"],
@@ -120,7 +120,6 @@ def all_srcs(name = "all_srcs"):
         srcs = [
             "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ListMqttConnectionsCommand.erl",
             "src/mc_mqtt.erl",
-            "src/rabbit_globber.erl",
             "src/rabbit_mqtt.erl",
             "src/rabbit_mqtt_confirms.erl",
             "src/rabbit_mqtt_ff.erl",
@@ -137,15 +136,16 @@ def all_srcs(name = "all_srcs"):
             "src/rabbit_mqtt_retainer.erl",
             "src/rabbit_mqtt_retainer_sup.erl",
             "src/rabbit_mqtt_sup.erl",
+            "src/rabbit_mqtt_topic_matcher.erl",
             "src/rabbit_mqtt_util.erl",
         ],
     )
     filegroup(
         name = "public_hdrs",
         srcs = [
-            "include/rabbit_globber.hrl",
             "include/rabbit_mqtt.hrl",
             "include/rabbit_mqtt_packet.hrl",
+            "include/rabbit_mqtt_topic_matcher.hrl",
         ],
     )
     filegroup(
@@ -334,11 +334,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
     erlang_bytecode(
-        name = "globber_SUITE_beam_files",
+        name = "rabbit_mqtt_topic_matcher_SUITE_beam_files",
         testonly = True,
-        srcs = ["test/globber_SUITE.erl"],
-        outs = ["test/globber_SUITE.beam"],
-        hdrs = ["include/rabbit_globber.hrl"],
+        srcs = ["test/rabbit_mqtt_topic_matcher_SUITE.erl"],
+        outs = ["test/rabbit_mqtt_topic_matcher_SUITE.beam"],
+        hdrs = ["include/rabbit_mqtt_topic_matcher.hrl"],
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
