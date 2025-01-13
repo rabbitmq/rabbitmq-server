@@ -53,7 +53,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
   end
 
   def output({:error, unhealthy_queues}, %{node: node_name, formatter: "json"}) when is_list(unhealthy_queues) do
-    {:error, :check_failed,
+    {:ok, :check_passed,
      %{
        "result" => "error",
        "queues" => unhealthy_queues,
@@ -62,13 +62,13 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
   end
 
   def output({:error, unhealthy_queues}, %{silent: true}) when is_list(unhealthy_queues) do
-    {:error, :check_failed}
+    {:ok, :check_passed}
   end
 
   def output({:error, unhealthy_queues}, %{vhost: _vhost}) when is_list(unhealthy_queues) do
     lines = queue_lines(unhealthy_queues)
 
-    {:error, :check_failed, Enum.join(lines, line_separator())}
+    {:ok, :check_passed, Enum.join(lines, line_separator())}
   end
 
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
