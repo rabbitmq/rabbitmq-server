@@ -329,7 +329,7 @@ consume(Q, Spec, #stream_client{} = QState0)
                     AckRequired = not NoAck,
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, ConsumerPrefetchCount, false, up, Args),
+                      QName, ConsumerPrefetchCount, true, up, Args),
                     %% reply needs to be sent before the stream
                     %% begins sending
                     maybe_send_reply(ChPid, OkMsg),
