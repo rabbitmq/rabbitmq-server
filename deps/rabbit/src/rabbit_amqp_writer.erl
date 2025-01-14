@@ -16,7 +16,7 @@
          send_command/4,
          send_command_sync/3,
          send_command_and_notify/5,
-         internal_send_command/3]).
+         assemble_frame/3]).
 
 %% gen_server callbacks
 -export([init/1,
@@ -26,7 +26,7 @@
          format_status/1]).
 
 -record(state, {
-          sock :: rabbit_net:socket(),
+          sock :: rabbit_net:socket() | websocket,
           reader :: rabbit_types:connection(),
           pending :: iolist(),
           %% This field is just an optimisation to minimize the cost of erlang:iolist_size/1
@@ -85,13 +85,6 @@ send_command_and_notify(Writer, QueuePid, ChannelNum, Performative, Payload) ->
     Request = {send_command_and_notify, QueuePid, self(), ChannelNum, Performative, Payload},
     maybe_send(Writer, Request).
 
--spec internal_send_command(rabbit_net:socket(),
-                            performative(),
-                            amqp10_framing | rabbit_amqp_sasl) -> ok.
-internal_send_command(Sock, Performative, Protocol) ->
-    Data = assemble_frame(0, Performative, Protocol),
-    ok = tcp_send(Sock, Data).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% gen_server callbacks %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -125,13 +118,16 @@ handle_call({send_command, ChannelNum, Performative}, _From, State0) ->
     State = flush(State1),
     {reply, ok, State}.
 
+handle_info(timeout, State0) ->
+    State = flush(State0),
+    {noreply, State};
+handle_info({bump_credit, Msg}, State) ->
+    credit_flow:handle_bump_msg(Msg),
+    no_reply(State);
 handle_info(emit_stats, State0 = #state{reader = ReaderPid}) ->
     ReaderPid ! ensure_stats_timer,
     State = rabbit_event:reset_stats_timer(State0, #state.stats_timer),
     no_reply(State);
-handle_info(timeout, State0) ->
-    State = flush(State0),
-    {noreply, State};
 handle_info({{'DOWN', session}, _MRef, process, SessionPid, _Reason},
             State0 = #state{monitored_sessions = Sessions}) ->
     credit_flow:peer_down(SessionPid),
@@ -203,6 +199,9 @@ internal_send_command_async(Channel, Performative, Payload,
 assemble_frame(Channel, Performative) ->
     assemble_frame(Channel, Performative, amqp10_framing).
 
+-spec assemble_frame(rabbit_types:channel_number(),
+                     performative(),
+                     amqp10_framing | rabbit_amqp_sasl) -> iolist().
 assemble_frame(Channel, Performative, amqp10_framing) ->
     ?TRACE("channel ~b <-~n ~tp",
            [Channel, amqp10_framing:pprint(Performative)]),
@@ -220,11 +219,6 @@ assemble_frame_with_payload(Channel, Performative, Payload) ->
     PerfIoData = amqp10_framing:encode_bin(Performative),
     amqp10_binary_generator:build_frame(Channel, [PerfIoData, Payload]).
 
-tcp_send(Sock, Data) ->
-    rabbit_misc:throw_on_error(
-      inet_error,
-      fun() -> rabbit_net:send(Sock, Data) end).
-
 %% Flush when more than 2.5 * 1460 bytes (TCP over Ethernet MSS) = 3650 bytes of data
 %% has accumulated. The idea is to get the TCP data sections full (i.e. fill 1460 bytes)
 %% as often as possible to reduce the overhead of TCP/IP headers.
@@ -238,6 +232,13 @@ maybe_flush(State = #state{pending_size = PendingSize}) ->
 
 flush(State = #state{pending = []}) ->
     State;
+flush(State = #state{sock = websocket,
+                     reader = Reader,
+                     pending = Pending}) ->
+    credit_flow:send(Reader),
+    Reader ! {send_ws, self(), lists:reverse(Pending)},
+    State#state{pending = [],
+                pending_size = 0};
 flush(State0 = #state{sock = Sock,
                       pending = Pending}) ->
     case rabbit_net:send(Sock, lists:reverse(Pending)) of

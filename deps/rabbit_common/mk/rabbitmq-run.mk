@@ -164,6 +164,9 @@ $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(RABBITMQ_NODE_PORT)]}
   {rabbitmq_management, [
 $(if $(RABBITMQ_NODE_PORT),      {listener$(comma) [{port$(comma) $(shell echo "$$(($(RABBITMQ_NODE_PORT) + 10000))")}]},)
     ]},
+  {rabbitmq_web_amqp, [
+$(if $(RABBITMQ_NODE_PORT),      {tcp_config$(comma) [{port$(comma) $(shell echo "$$((15678 + $(RABBITMQ_NODE_PORT) - 5672))")}]},)
+    ]},
   {rabbitmq_mqtt, [
 $(if $(RABBITMQ_NODE_PORT),      {tcp_listeners$(comma) [$(shell echo "$$((1883 + $(RABBITMQ_NODE_PORT) - 5672))")]},)
     ]},

@@ -23,8 +23,8 @@ new(WsUrl, PPid, AuthInfo, Protocols) ->
     new(WsUrl, PPid, AuthInfo, Protocols, <<>>).
 
 new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
-    crypto:start(),
-    application:ensure_all_started(ssl),
+    _ = crypto:start(),
+    _ = application:ensure_all_started(ssl),
     {Transport, Url} = case WsUrl of
         "ws://" ++ Rest -> {gen_tcp, Rest};
         "wss://" ++ SslRest -> {ssl, SslRest}
@@ -113,7 +113,7 @@ start_conn(State = #state{transport = Transport}, AuthInfo, Protocols, TcpPrefac
             {ok, Socket0} = gen_tcp:connect(State#state.host, State#state.port,
                                             [binary,
                                              {packet, 0}]),
-            gen_tcp:send(Socket0, TcpPreface),
+            ok = gen_tcp:send(Socket0, TcpPreface),
             case Transport of
                 gen_tcp -> {ok, Socket0};
                 ssl -> Transport:connect(Socket0, [{verify, verify_none}])
@@ -173,7 +173,7 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, transport = 
             <<F:1, _:3, O:4, 0:1, 127:7, L2:64, Payload:L2/binary, Rest/binary>> ->
                 {F, O, Payload, Rest};
 
-            <<_:1, _:3, _:4, 1:1, _/binary>> ->
+            <<_:1, _:3, _:4, 1:1, _/bitstring>> ->
                 %% According o rfc6455 5.1 the server must not mask any frames.
                 die(Socket, Transport, PPid, {1006, "Protocol error"}, normal);
             _ ->
@@ -200,7 +200,7 @@ do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid, transport =
                        end,
             case Phase of
                 open -> %% echo
-                    do_close(State, WsReason),
+                    _ = do_close(State, WsReason),
                     Transport:close(Socket);
                 closing ->
                     ok
@@ -260,7 +260,7 @@ loop(State = #state{socket = Socket, transport = Transport, ppid = PPid, data = 
             error({unknown_message, Other, Socket})
     end.
 
-
+-spec die(any(), any(), pid(), any(), any()) -> no_return().
 die(Socket, Transport, PPid, WsReason, Reason) ->
     Transport:shutdown(Socket, read_write),
     PPid ! {rfc6455, close, self(), WsReason},
@@ -284,9 +284,6 @@ split(SubStr, Str, Limit, Acc, Default) ->
              end,
     split(SubStr, R, Limit-1, [L | Acc], Default).
 
-
-apply_mask(Mask, Data) when is_number(Mask) ->
-    apply_mask(<<Mask:32>>, Data);
 
 apply_mask(<<0:32>>, Data) ->
     Data;

@@ -35,10 +35,13 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Conn = conn(ReqData),
-    case proplists:get_value(protocol, Conn) of
-        {1, 0} ->
+    Vsn = {1, 0},
+    Protocol = proplists:get_value(protocol, Conn),
+    case Protocol =:= Vsn orelse
+         Protocol =:= {'Web AMQP', Vsn} of
+        true ->
             ConnPid = proplists:get_value(pid, Conn),
-            try rabbit_amqp_reader:info(ConnPid, [session_pids]) of
+            try rabbit_reader:info(ConnPid, [session_pids]) of
                 [{session_pids, Pids}] ->
                     rabbit_mgmt_util:reply_list(session_infos(Pids),
                                                 ["channel_number"],
@@ -52,7 +55,7 @@ to_json(ReqData, Context) ->
                                      [ConnPid, Type, Reason0]))),
                       rabbit_mgmt_util:internal_server_error(Reason, ReqData, Context)
             end;
-        _ ->
+        false ->
             rabbit_mgmt_util:bad_request(<<"connection does not use AMQP 1.0">>,
                                          ReqData,
                                          Context)

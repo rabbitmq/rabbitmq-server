@@ -5,13 +5,14 @@
 [RabbitMQ](https://rabbitmq.com) is a [feature rich](https://www.rabbitmq.com/docs),
 multi-protocol messaging and streaming broker. It supports:
 
- * AMQP 0-9-1
  * AMQP 1.0
+ * AMQP 0-9-1
  * [RabbitMQ Stream Protocol](https://www.rabbitmq.com/docs/streams)
  * MQTT 3.1, 3.1.1, and 5.0
  * STOMP 1.0 through 1.2
- * [MQTT over WebSockets](https://www.rabbitmq.com/docs/web-mqtt)
- * [STOMP over WebSockets](https://www.rabbitmq.com/docs/web-stomp)
+ * [MQTT over WebSocket](https://www.rabbitmq.com/docs/web-mqtt)
+ * [STOMP over WebSocket](https://www.rabbitmq.com/docs/web-stomp)
+ * AMQP 1.0 over WebSocket (supported in [VMware Tanzu RabbitMQ](https://www.vmware.com/products/app-platform/tanzu-rabbitmq))
 
 
 ## Installation
