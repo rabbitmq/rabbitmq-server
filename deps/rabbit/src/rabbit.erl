@@ -291,8 +291,6 @@
 
 -define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
 
--define(DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD, 10).
-
 %% 1 minute
 -define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
 %% 12 hours
@@ -1433,14 +1431,6 @@ warn_if_kernel_config_dubious() ->
                            "Throughput and CPU utilization may worsen.",
                            #{domain => ?RMQLOG_DOMAIN_GLOBAL})
             end
-    end,
-    DirtyIOSchedulers = erlang:system_info(dirty_io_schedulers),
-    case DirtyIOSchedulers < ?DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD of
-        true  -> ?LOG_WARNING(
-                   "Erlang VM is running with ~b dirty I/O schedulers, "
-                   "file I/O performance may worsen", [DirtyIOSchedulers],
-                   #{domain => ?RMQLOG_DOMAIN_GLOBAL});
-        false -> ok
     end,
     IDCOpts = case application:get_env(kernel, inet_default_connect_options) of
                   undefined -> [];
