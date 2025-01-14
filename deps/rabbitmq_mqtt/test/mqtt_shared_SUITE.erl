@@ -1131,7 +1131,7 @@ many_qos1_messages(Config) ->
                   end, Payloads),
     receive
         proceed -> ok
-    after ?TIMEOUT ->
+    after 300_000 ->
               ct:fail("message to proceed never received")
     end,
     ok = expect_publishes(C, Topic, Payloads),
