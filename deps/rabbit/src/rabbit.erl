@@ -1761,8 +1761,8 @@ persist_static_configuration() ->
                      {ok, {InitialCredit, MoreCreditAfter}}
                        when is_integer(InitialCredit) andalso
                             is_integer(MoreCreditAfter) andalso
-                            InitialCredit > 0 andalso
-                            MoreCreditAfter > 0 andalso
+                            InitialCredit >= 0 andalso
+                            MoreCreditAfter >= 0 andalso
                             MoreCreditAfter =< InitialCredit ->
                          {InitialCredit, MoreCreditAfter};
                      Other ->
