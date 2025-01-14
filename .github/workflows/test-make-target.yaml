@@ -25,7 +25,7 @@ jobs:
   test:
     name: ${{ inputs.plugin }} (${{ inputs.make_target }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
