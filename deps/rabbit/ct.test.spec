@@ -60,7 +60,6 @@
 ,   metadata_store_phase1_SUITE
 ,   metrics_SUITE
 ,   mirrored_supervisor_SUITE
-,   msg_store_SUITE
 ,   peer_discovery_classic_config_SUITE
 ]}.
 

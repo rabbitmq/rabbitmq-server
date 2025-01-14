@@ -78,7 +78,6 @@ define PROJECT_ENV
 	    %% writing to the queue index. See the setting
 	    %% queue_index_embed_msgs_below above.
 	    {msg_store_credit_disc_bound, {4000, 800}},
-	    {msg_store_io_batch_size, 4096},
 	    %% see rabbitmq-server#143,
 	    %% rabbitmq-server#949, rabbitmq-server#1098
 	    {credit_flow_default_credit, {400, 200}},
@@ -192,7 +191,6 @@ SLOW_CT_SUITES := backing_queue \
 		  health_check \
 		  many_node_ha \
 		  metrics \
-		  msg_store \
 		  partitions \
 		  per_user_connection_tracking \
 		  per_vhost_connection_limit \
@@ -272,7 +270,7 @@ PARALLEL_CT_SET_2_D = queue_length_limits queue_parallel quorum_queue_member_rec
 PARALLEL_CT_SET_3_A = definition_import per_user_connection_channel_limit_partitions per_vhost_connection_limit_partitions policy priority_queue_recovery rabbit_fifo_prop rabbit_fifo_v0 rabbit_stream_sac_coordinator unit_credit_flow unit_queue_consumers unit_queue_location unit_quorum_queue
 PARALLEL_CT_SET_3_B = cluster_upgrade list_consumers_sanity_check list_queues_online_and_offline logging lqueue maintenance_mode rabbit_fifo_q
 PARALLEL_CT_SET_3_C = cli_forget_cluster_node feature_flags_v2 mc_unit message_containers_deaths_v2 message_size_limit metadata_store_migration
-PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor msg_store peer_discovery_classic_config proxy_protocol runtime_parameters unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor
+PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor peer_discovery_classic_config proxy_protocol runtime_parameters unit_stats_and_metrics unit_supervisor2 unit_vm_memory_monitor
 
 PARALLEL_CT_SET_4_A = clustering_events rabbit_local_random_exchange rabbit_message_interceptor rabbitmq_4_0_deprecations unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue
 PARALLEL_CT_SET_4_B = per_user_connection_tracking per_vhost_connection_limit rabbit_fifo_dlx_integration rabbit_fifo_int
