@@ -55,7 +55,8 @@ dispatcher_add(function(sammy) {
             };
             // First, get the connection details to check the protocol
             var connectionDetails = JSON.parse(sync_get(connectionPath));
-            if (connectionDetails.protocol === 'AMQP 1-0') {
+            if (connectionDetails.protocol === 'AMQP 1-0' ||
+                connectionDetails.protocol === 'Web AMQP 1-0') {
                 reqs['sessions'] = connectionPath + '/sessions';
             } else {
                 reqs['channels'] = connectionPath + '/channels';

@@ -33,9 +33,7 @@
 %%
 %% Grepping the project files for `credit_flow` will reveal the places
 %% where this module is currently used, with extra comments on what's
-%% going on at each instance. Note that credit flow between mirrors
-%% synchronization has not been documented, since this doesn't affect
-%% client publishes.
+%% going on at each instance.
 
 -define(DEFAULT_CREDIT, persistent_term:get(credit_flow_default_credit)).
 
@@ -116,18 +114,18 @@ send(From) -> send(From, ?DEFAULT_CREDIT).
 
 send(From, {InitialCredit, _MoreCreditAfter}) ->
     ?UPDATE({credit_from, From}, InitialCredit, C,
-            if C == 1 -> block(From),
-                         0;
-               true   -> C - 1
+            if C =:= 1 -> block(From),
+                          0;
+               true    -> C - 1
             end).
 
 ack(To) -> ack(To, ?DEFAULT_CREDIT).
 
 ack(To, {_InitialCredit, MoreCreditAfter}) ->
     ?UPDATE({credit_to, To}, MoreCreditAfter, C,
-            if C == 1 -> grant(To, MoreCreditAfter),
-                         MoreCreditAfter;
-               true   -> C - 1
+            if C =:= 1 -> grant(To, MoreCreditAfter),
+                          MoreCreditAfter;
+               true    -> C - 1
             end).
 
 handle_bump_msg({From, MoreCredit}) ->
@@ -193,10 +191,15 @@ unblock(From) ->
     ?TRACE_UNBLOCKED(self(), From),
     ?UPDATE(credit_blocked, [], Blocks, Blocks -- [From]),
     case blocked() of
-        false -> case erase(credit_deferred) of
-                     undefined -> ok;
-                     Credits   -> _ = [To ! Msg || {To, Msg} <- Credits],
-                                  ok
-                 end;
-        true  -> ok
+        false ->
+            case erase(credit_deferred) of
+                undefined ->
+                    ok;
+                Credits ->
+                    lists:foreach(fun({To, Msg}) ->
+                                          To ! Msg
+                                  end, Credits)
+            end;
+        true ->
+            ok
     end.

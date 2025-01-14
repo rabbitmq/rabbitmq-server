@@ -11,6 +11,7 @@
 
 -export([init/1, init/2,
          connection_config/1, connection_config/2,
+         web_amqp/1,
          flush/1,
          wait_for_credit/1,
          wait_for_accepts/1,
@@ -35,11 +36,21 @@ connection_config(Config) ->
 
 connection_config(Node, Config) ->
     Host = proplists:get_value(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
-    #{address => Host,
-      port => Port,
-      container_id => <<"my container">>,
-      sasl => {plain, <<"guest">>, <<"guest">>}}.
+    Cfg = #{address => Host,
+            container_id => <<"my container">>,
+            sasl => {plain, <<"guest">>, <<"guest">>}},
+    case web_amqp(Config) of
+        true ->
+            Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_web_amqp),
+            Cfg#{port => Port,
+                 ws_path => "/ws"};
+        false ->
+            Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
+            Cfg#{port => Port}
+    end.
+
+web_amqp(Config) ->
+    proplists:get_value(web_amqp, Config, false).
 
 flush(Prefix) ->
     receive

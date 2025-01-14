@@ -223,7 +223,7 @@ connection_string(Sock, Direction) ->
     end.
 
 socket_ends(Sock, Direction) when ?IS_SSL(Sock);
-    is_port(Sock) ->
+                                  is_port(Sock) ->
     {From, To} = sock_funs(Direction),
     case {From(Sock), To(Sock)} of
         {{ok, {FromAddress, FromPort}}, {ok, {ToAddress, ToPort}}} ->

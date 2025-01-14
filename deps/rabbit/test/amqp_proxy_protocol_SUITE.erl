@@ -101,10 +101,10 @@ v2_local(Config) ->
 %% use wireshark with one of the Java tests to record those
 amqp_1_0_frame(header_sasl) ->
     hex_frame_to_binary("414d515003010000");
-amqp_1_0_frame(header_amqp) ->
-    hex_frame_to_binary("414d515000010000");
 amqp_1_0_frame(sasl_init) ->
     hex_frame_to_binary("0000001902010000005341c00c01a309414e4f4e594d4f5553");
+amqp_1_0_frame(header_amqp) ->
+    hex_frame_to_binary("414d515000010000");
 amqp_1_0_frame(open) ->
     hex_frame_to_binary("0000003f02000000005310c03202a12438306335323662332d653530662d343835352d613564302d336466643738623537633730a1096c6f63616c686f7374").
 

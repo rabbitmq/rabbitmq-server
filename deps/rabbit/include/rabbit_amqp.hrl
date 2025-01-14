@@ -43,14 +43,6 @@
          node
         ] ++ ?AUTH_EVENT_KEYS).
 
--define(INFO_ITEMS,
-        [connection_state,
-         recv_oct,
-         recv_cnt,
-         send_oct,
-         send_cnt
-        ] ++ ?ITEMS).
-
 %% for rabbit_event connection_created
 -define(CONNECTION_EVENT_KEYS,
         [type,

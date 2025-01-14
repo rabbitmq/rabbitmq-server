@@ -84,7 +84,8 @@
 </div>
 </div>
 
-<% if (connection.protocol === 'AMQP 1-0') { %>
+<% if (connection.protocol === 'AMQP 1-0' ||
+       connection.protocol === 'Web AMQP 1-0') { %>
 
 <div class="section" id="connection-sessions-section">
   <h2 class="updatable" >Sessions (<%=(sessions.length)%>)</h2>

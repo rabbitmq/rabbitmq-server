@@ -42,7 +42,7 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
--include("rabbit_amqp_reader.hrl").
+-include("rabbit_amqp_metrics.hrl").
 
 -export([start_link/2, info/2, force_event_refresh/2,
          shutdown/2]).
@@ -146,10 +146,9 @@ start_link(HelperSups, Ref) ->
     Pid = proc_lib:spawn_link(?MODULE, init, [self(), HelperSups, Ref]),
     {ok, Pid}.
 
--spec shutdown(pid(), string()) -> 'ok'.
-
+-spec shutdown(pid(), string()) -> ok.
 shutdown(Pid, Explanation) ->
-    gen_server:call(Pid, {shutdown, Explanation}, infinity).
+    gen_call(Pid, {shutdown, Explanation}, infinity).
 
 -spec init(pid(), {pid(), pid()}, ranch:ref()) ->
     no_return().
@@ -176,11 +175,10 @@ system_code_change(Misc, _Module, _OldVsn, _Extra) ->
     {ok, Misc}.
 
 -spec info(pid(), rabbit_types:info_keys()) -> rabbit_types:infos().
-
 info(Pid, Items) ->
-    case gen_server:call(Pid, {info, Items}, infinity) of
-        {ok, Res}      -> Res;
-        {error, Error} -> throw(Error)
+    case gen_call(Pid, {info, Items}, infinity) of
+        {ok, InfoList} -> InfoList;
+        {error, Reason} -> throw(Reason)
     end.
 
 -spec force_event_refresh(pid(), reference()) -> 'ok'.
@@ -296,7 +294,7 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
     {PeerHost, PeerPort, Host, Port} =
         socket_op(Sock, fun (S) -> rabbit_net:socket_ends(S, inbound) end),
     ?store_proc_name(Name),
-    ConnectedAt = os:system_time(milli_seconds),
+    ConnectedAt = os:system_time(millisecond),
     State = #v1{parent              = Parent,
                 ranch_ref           = RanchRef,
                 sock                = RealSocket,
@@ -604,18 +602,21 @@ handle_other(heartbeat_timeout,
              State = #v1{connection = #connection{timeout_sec = T}}) ->
     maybe_emit_stats(State),
     throw({heartbeat_timeout, T});
-handle_other({'$gen_call', From, {shutdown, Explanation}}, State) ->
+handle_other({rabbit_call, From, {shutdown, Explanation}}, State) ->
     {ForceTermination, NewState} = terminate(Explanation, State),
     gen_server:reply(From, ok),
     case ForceTermination of
         force  -> stop;
         normal -> NewState
     end;
-handle_other({'$gen_call', From, {info, Items}}, State) ->
+handle_other({rabbit_call, From, {info, Items}}, State) ->
     gen_server:reply(From, try {ok, infos(Items, State)}
                            catch Error -> {error, Error}
                            end),
     State;
+handle_other({'$gen_call', From, Req}, State) ->
+    %% Delete this function clause when feature flag 'rabbitmq_4.1.0' becomes required.
+    handle_other({rabbit_call, From, Req}, State);
 handle_other({'$gen_cast', {force_event_refresh, Ref}}, State)
   when ?IS_RUNNING(State) ->
     rabbit_event:notify(
@@ -1841,4 +1842,20 @@ connection_duration(ConnectedAt) ->
             end;
         true ->
             io_lib:format("~Bms", [DurationMillis])
+    end.
+
+gen_call(Pid, Req, Timeout) ->
+    case rabbit_feature_flags:is_enabled('rabbitmq_4.1.0') of
+        true ->
+            %% We use gen:call/4 with label rabbit_call instead of gen_server:call/3 with label '$gen_call'
+            %% because cowboy_websocket does not let rabbit_web_amqp_handler handle '$gen_call' messages:
+            %% https://github.com/ninenines/cowboy/blob/2.12.0/src/cowboy_websocket.erl#L427-L430
+            case catch gen:call(Pid, rabbit_call, Req, Timeout) of
+                {ok, Res} ->
+                    Res;
+                {'EXIT', Reason} ->
+                    exit({Reason, {?MODULE, ?FUNCTION_NAME, [Pid, Req, Timeout]}})
+            end;
+        false ->
+            gen_server:call(Pid, Req, Timeout)
     end.

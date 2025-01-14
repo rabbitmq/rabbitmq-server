@@ -19,7 +19,8 @@
 -import(rabbit_ct_helpers,
         [eventually/1]).
 -import(amqp_utils,
-        [flush/1,
+        [connection_config/1,
+         flush/1,
          wait_for_credit/1]).
 
 -define(TIMEOUT, 30_000).
@@ -646,14 +647,6 @@ cleanup({Connection, LinkPair = #link_pair{session = Session}}) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
-
-connection_config(Config) ->
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    #{address => Host,
-      port => Port,
-      container_id => <<"my container">>,
-      sasl => {plain, <<"guest">>, <<"guest">>}}.
 
 wait_for_settled(State, Tag) ->
     receive

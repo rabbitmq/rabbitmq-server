@@ -93,7 +93,9 @@ classic_queue_flow_control_enabled(Config) ->
                 ?assertMatch({0, _}, gen_server2_queue(QPid)),
 
                 %% The connection gets into flow state
-                ?assertEqual([{state, flow}], rabbit_reader:info(ConnPid, [state])),
+                ?assertEqual(
+                   [{state, flow}],
+                   rabbit_ct_broker_helpers:rpc(Config, rabbit_reader, info, [ConnPid, [state]])),
 
                 Dict = proc_info(ConnPid, dictionary),
                 ?assertMatch([_|_], proplists:get_value(credit_blocked, Dict)),
@@ -111,7 +113,9 @@ classic_queue_flow_control_disabled(Config) ->
                 ?assertMatch({0, _}, gen_server2_queue(QPid)),
 
                 %% The connection dos not get into flow state
-                ?assertEqual([{state, running}], rabbit_reader:info(ConnPid, [state])),
+                ?assertEqual(
+                   [{state, running}],
+                   rabbit_ct_broker_helpers:rpc(Config, rabbit_reader, info, [ConnPid, [state]])),
 
                 Dict = proc_info(ConnPid, dictionary),
                 ?assertMatch([], proplists:get_value(credit_blocked, Dict, []))

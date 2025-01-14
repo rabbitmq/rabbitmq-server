@@ -17,8 +17,8 @@
                                    open_unmanaged_connection/1]).
 -import(rabbit_ct_broker_helpers, [rpc/4]).
 -import(rabbit_ct_helpers,
-        [eventually/3,
-         eventually/1]).
+        [eventually/1,
+         eventually/3]).
 -import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
                                 assert_keys/2, assert_no_keys/2,
                                 decode_body/1,

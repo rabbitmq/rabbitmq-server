@@ -271,10 +271,7 @@ application_properties_section(Config) ->
     {ok, Receiver0} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 0">>, Address,
                         unsettled, configuration, Filter0),
-    %% Wait for the attach so the detach command won't fail
-    receive {amqp10_event,
-             {link, Receiver0, {attached, #'v1_0.attach'{}}}} ->
-            ok
+    receive {amqp10_event, {link, Receiver0, {attached, #'v1_0.attach'{}}}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:flow_link_credit(Receiver0, 10, never),
@@ -597,6 +594,9 @@ string_modifier(Config) ->
     {ok, Receiver2} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 2">>, Address,
                         settled, configuration, Filter2),
+    receive {amqp10_event, {link, Receiver2, attached}} -> ok
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
     ok = amqp10_client:flow_link_credit(Receiver2, 10, never),
     ok = assert_no_msg_received(?LINE),
     ok = detach_link_sync(Receiver2),

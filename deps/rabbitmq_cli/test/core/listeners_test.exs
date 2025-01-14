@@ -37,8 +37,8 @@ defmodule CoreListenersTest do
     assert protocol_label(:"stomp/ssl") == "STOMP over TLS"
     assert protocol_label(:http) == "HTTP API"
     assert protocol_label(:https) == "HTTP API over TLS (HTTPS)"
-    assert protocol_label(:"https/web-stomp") == "STOMP over WebSockets and TLS (HTTPS)"
-    assert protocol_label(:"https/web-mqtt") == "MQTT over WebSockets and TLS (HTTPS)"
+    assert protocol_label(:"https/web-stomp") == "STOMP over WebSocket and TLS (HTTPS)"
+    assert protocol_label(:"https/web-mqtt") == "MQTT over WebSocket and TLS (HTTPS)"
 
     assert protocol_label(:"http/prometheus") == "Prometheus exporter API over HTTP"
     assert protocol_label(:"https/prometheus") == "Prometheus exporter API over TLS (HTTPS)"

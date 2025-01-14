@@ -30,6 +30,7 @@
 -import(amqp_utils,
         [init/1, init/2,
          connection_config/1, connection_config/2,
+         web_amqp/1,
          flush/1,
          wait_for_credit/1,
          wait_for_accepts/1,
@@ -1898,17 +1899,20 @@ events(Config) ->
     ok = event_recorder:stop(Config),
     ct:pal("Recorded events: ~p", [Events]),
 
-    Protocol = {protocol, {1, 0}},
+    Proto = case web_amqp(Config) of
+                true -> {'Web AMQP', {1, 0}};
+                false -> {1, 0}
+            end,
     AuthProps = [{name, <<"guest">>},
                  {auth_mechanism, <<"PLAIN">>},
                  {ssl, false},
-                 Protocol],
+                 {protocol, Proto}],
     ?assertMatch(
        {value, _},
        find_event(user_authentication_success, AuthProps, Events)),
 
     Node = get_node_config(Config, 0, nodename),
-    ConnectionCreatedProps = [Protocol,
+    ConnectionCreatedProps = [{protocol, Proto},
                               {node, Node},
                               {vhost, <<"/">>},
                               {user, <<"guest">>},
@@ -3969,7 +3973,7 @@ leader_transfer_send(QName, QType, Config) ->
     end.
 
 %% rabbitmqctl list_connections
-%% should list both AMQP 1.0 and AMQP 0.9.1 connections.
+%% should list both (Web) AMQP 1.0 and AMQP 0.9.1 connections.
 list_connections(Config) ->
     %% Close any open AMQP 0.9.1 connections from previous test cases.
     [ok = rabbit_ct_client_helpers:close_channels_and_connection(Config, Node) || Node <- [0, 1, 2]],
@@ -3993,10 +3997,13 @@ list_connections(Config) ->
     %% Remove any whitespaces.
     Protocols1 = [binary:replace(Subject, <<" ">>, <<>>, [global]) || Subject <- Protocols0],
     Protocols = lists:sort(Protocols1),
-    ?assertEqual([<<"{0,9,1}">>,
-                  <<"{1,0}">>,
-                  <<"{1,0}">>],
-                 Protocols),
+    Expected = case web_amqp(Config) of
+                   true ->
+                       [<<"{'WebAMQP',{1,0}}">>, <<"{'WebAMQP',{1,0}}">>, <<"{0,9,1}">>];
+                   false ->
+                       [<<"{0,9,1}">>, <<"{1,0}">>, <<"{1,0}">>]
+               end,
+    ?assertEqual(Expected, Protocols),
 
     %% CLI should list AMQP 1.0 container-id
     {ok, StdOut1} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "container_id"]),
@@ -4640,7 +4647,12 @@ idle_time_out_on_server(Config) ->
     rabbit_ct_broker_helpers:setup_meck(Config),
     Mod = rabbit_net,
     ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
-    ok = rpc(Config, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]}]),
+    ok = rpc(Config, meck, expect, [Mod, getstat, fun(_Sock, [recv_oct]) ->
+                                                          {ok, [{recv_oct, 999}]};
+                                                     (Sock, Opts) ->
+                                                          meck:passthrough([Sock, Opts])
+                                                  end]),
+
     %% The server "SHOULD try to gracefully close the connection using a close
     %% frame with an error explaining why" [2.4.5].
     %% Since we chose a heartbeat value of 1 second, the server should easily
@@ -4677,13 +4689,15 @@ idle_time_out_on_client(Config) ->
     %% All good, the server sent us frames every second.
 
     %% Mock the server to not send anything.
+    %% Mocking gen_tcp:send/2 allows this test to work for
+    %% * AMQP: https://github.com/rabbitmq/rabbitmq-server/blob/v4.1.0-beta.3/deps/rabbit_common/src/rabbit_net.erl#L174
+    %% * AMQP over WebSocket: https://github.com/ninenines/ranch/blob/2.1.0/src/ranch_tcp.erl#L191
     rabbit_ct_broker_helpers:setup_meck(Config),
-    Mod = rabbit_net,
-    ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
+    Mod = gen_tcp,
+    ok = rpc(Config, meck, new, [Mod, [unstick, no_link, passthrough]]),
     ok = rpc(Config, meck, expect, [Mod, send, 2, ok]),
 
-    %% Our client should time out within less than 5 seconds given that the
-    %% idle-time-out is 1 second.
+    %% Our client should time out soon given that the idle-time-out is 1 second.
     receive
         {amqp10_event,
          {connection, Connection,
@@ -4709,9 +4723,19 @@ handshake_timeout(Config) ->
     Par = ?FUNCTION_NAME,
     {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
     ok = rpc(Config, application, set_env, [App, Par, 200]),
-    Port = get_node_config(Config, 0, tcp_port_amqp),
-    {ok, Socket} = gen_tcp:connect("localhost", Port, [{active, false}]),
-    ?assertEqual({error, closed}, gen_tcp:recv(Socket, 0, 400)),
+    case web_amqp(Config) of
+        true ->
+            Port = get_node_config(Config, 0, tcp_port_web_amqp),
+            Uri = "ws://127.0.0.1:" ++ integer_to_list(Port) ++ "/ws",
+            Ws = rfc6455_client:new(Uri, self(), undefined, ["amqp"]),
+            {ok, [{http_response, Resp}]} = rfc6455_client:open(Ws),
+            ?assertNotEqual(nomatch, string:prefix(Resp, "HTTP/1.1 101 Switching Protocols")),
+            ?assertMatch({close, _}, rfc6455_client:recv(Ws, 1000));
+        false ->
+            Port = get_node_config(Config, 0, tcp_port_amqp),
+            {ok, Socket} = gen_tcp:connect("localhost", Port, [{active, false}]),
+            ?assertEqual({error, closed}, gen_tcp:recv(Socket, 0, 1000))
+    end,
     ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
 
 credential_expires(Config) ->
@@ -5905,20 +5929,35 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     end,
     flush(receiver_attached),
 
-    {_GenStatemState,
-     #{reader := ReaderPid,
-       socket := {tcp, Socket}}} = formatted_state(Session),
+    {_GenStatemStateSession, StateSession} = formatted_state(Session),
+    Socket = case web_amqp(Config) of
+                 true ->
+                     #{socket := {ws, GunPid, _GunStreamRef}} = StateSession,
+                     {_GenStatemStateGun, StateGun} = formatted_state(GunPid),
+                     %% https://github.com/ninenines/gun/blob/2.1.0/src/gun.erl#L315
+                     element(12, StateGun);
+                 false ->
+                     #{socket := {tcp, Sock}} = StateSession,
+                     Sock
+             end,
+    ?assert(is_port(Socket)),
 
-    %% Provoke TCP back-pressure from client to server by using very small buffers.
+    %% Provoke TCP back-pressure from client to server by:
+    %% 1. using very small buffers
     ok = inet:setopts(Socket, [{recbuf, 256},
                                {buffer, 256}]),
-    %% Suspend the receiving client such that it stops reading from its socket
-    %% causing TCP back-pressure to the server being applied.
-    true = erlang:suspend_process(ReaderPid),
+    %% 2. stopping reading from the socket
+    Mod = inet,
+    ok = meck:new(Mod, [unstick, no_link, passthrough]),
+    ok = meck:expect(Mod, setopts, fun(_Sock, [{active, once}]) ->
+                                           ok;
+                                      (Sock, Opts) ->
+                                           meck:passthrough([Sock, Opts])
+                                   end),
 
     ok = amqp10_client:flow_link_credit(Receiver, Num, never),
     %% We give the queue time to send messages to the session proc and writer proc.
-    timer:sleep(1000),
+    timer:sleep(2000),
 
     %% Here, we do a bit of white box testing: We assert that RabbitMQ has some form of internal
     %% flow control by checking that the queue sent some but, more importantly, not all its
@@ -5932,7 +5971,9 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = inet:setopts(Socket, [{recbuf, 65536},
                                {buffer, 65536}]),
     %% When we resume the receiving client, we expect to receive all messages.
-    true = erlang:resume_process(ReaderPid),
+    ?assert(meck:validate(Mod)),
+    ok = meck:unload(Mod),
+    ok = Mod:setopts(Socket, [{active, once}]),
     receive_messages(Receiver, Num),
 
     ok = detach_link_sync(Receiver),

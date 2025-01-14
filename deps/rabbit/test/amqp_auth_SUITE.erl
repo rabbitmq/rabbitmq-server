@@ -24,7 +24,8 @@
         [assert_event_type/2,
          assert_event_prop/2]).
 -import(amqp_utils,
-        [flush/1,
+        [web_amqp/1,
+         flush/1,
          wait_for_credit/1,
          close_connection_sync/1]).
 
@@ -584,15 +585,9 @@ target_per_message_topic(Config) ->
 authn_failure_event(Config) ->
     ok = event_recorder:start(Config),
 
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    Vhost = ?config(test_vhost, Config),
     User = ?config(test_user, Config),
-    OpnConf = #{address => Host,
-                port => Port,
-                container_id => <<"my container">>,
-                sasl => {plain, User, <<"wrong password">>},
-                hostname => <<"vhost:", Vhost/binary>>},
+    OpnConf0 = connection_config(Config),
+    OpnConf = maps:update(sasl, {plain, User, <<"wrong password">>}, OpnConf0),
 
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     receive {amqp10_event, {connection, Connection, {closed, sasl_auth_failure}}} -> ok
@@ -603,11 +598,15 @@ authn_failure_event(Config) ->
     [E | _] = event_recorder:get_events(Config),
     ok = event_recorder:stop(Config),
 
+    Proto = case web_amqp(Config) of
+                true -> {'Web AMQP', {1, 0}};
+                false -> {1, 0}
+            end,
     assert_event_type(user_authentication_failure, E),
     assert_event_prop([{name, <<"test user">>},
                        {auth_mechanism, <<"PLAIN">>},
                        {ssl, false},
-                       {protocol, {1, 0}}],
+                       {protocol, Proto}],
                       E).
 
 sasl_anonymous_success(Config) ->
@@ -1037,14 +1036,10 @@ connection_config(Config) ->
     connection_config(Config, Vhost).
 
 connection_config(Config, Vhost) ->
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Cfg = amqp_utils:connection_config(Config),
     User = Password = ?config(test_user, Config),
-    #{address => Host,
-      port => Port,
-      container_id => <<"my container">>,
-      sasl => {plain, User, Password},
-      hostname => <<"vhost:", Vhost/binary>>}.
+    Cfg#{hostname => <<"vhost:", Vhost/binary>>,
+         sasl := {plain, User, Password}}.
 
 set_permissions(Config, ConfigurePerm, WritePerm, ReadPerm) ->
     ok = rabbit_ct_broker_helpers:set_permissions(Config,
