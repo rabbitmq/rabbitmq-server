@@ -249,7 +249,10 @@ tcp_connected(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+tcp_connected({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 peer_properties_exchanged(enter, _OldState,
                           #statem_data{config =
@@ -282,7 +285,10 @@ peer_properties_exchanged(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+peer_properties_exchanged({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 authenticating(enter, _OldState,
                #statem_data{config =
@@ -323,7 +329,10 @@ authenticating(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+authenticating({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 tuning(enter, _OldState,
        #statem_data{config =
@@ -360,7 +369,10 @@ tuning(info, Msg, StateData) ->
                                               ?FUNCTION_NAME,
                                               NextConnectionStep)
                    end
-                end).
+                end);
+tuning({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 tuned(enter, _OldState,
       #statem_data{config =
@@ -390,7 +402,10 @@ tuned(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+tuned({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 state_timeout(State, Transport, Socket) ->
     rabbit_log_connection:warning("Closing connection because of timeout in state "
@@ -1185,7 +1200,11 @@ close_sent(info, {resource_alarm, IsThereAlarm},
 close_sent(info, Msg, _StatemData) ->
     rabbit_log_connection:warning("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
-    keep_state_and_data.
+    keep_state_and_data;
+close_sent({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, returning no information
+    {keep_state_and_data, {reply, From, []}}.
+
 
 handle_inbound_data_pre_auth(Transport, Connection, State, Data) ->
     handle_inbound_data(Transport,
@@ -3761,8 +3780,14 @@ ensure_stats_timer(Connection = #stream_connection{}) ->
     rabbit_event:ensure_stats_timer(Connection,
                                     #stream_connection.stats_timer, emit_stats).
 
-in_vhost(_Pid, undefined) ->
-    true;
+in_vhost(Pid, undefined) ->
+    %% no vhost filter, but check the connection is in open state and can return information
+    case info(Pid, [vhost]) of
+        [{vhost, _}] ->
+            true;
+        _ ->
+            false
+    end;
 in_vhost(Pid, VHost) ->
     case info(Pid, [vhost]) of
         [{vhost, VHost}] ->
