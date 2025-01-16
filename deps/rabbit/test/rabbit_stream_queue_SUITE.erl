@@ -143,6 +143,7 @@ all_tests_3() ->
      consume_credit_out_of_order_ack,
      consume_credit_multiple_ack,
      basic_cancel,
+     consumer_metrics_cleaned_on_connection_close,
      receive_basic_cancel_on_queue_deletion,
      keep_consuming_on_leader_restart,
      max_length_bytes,
@@ -1183,6 +1184,33 @@ basic_cancel(Config) ->
             exit(timeout)
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+consumer_metrics_cleaned_on_connection_close(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    Conn = rabbit_ct_client_helpers:open_connection(Config, Server),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    qos(Ch, 10, false),
+    CTag = <<"consumer_metrics_cleaned_on_connection_close">>,
+    subscribe(Ch, Q, false, 0, CTag),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              1 == length(filter_consumers(Config, Server, CTag))
+      end, 30000),
+
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              0 == length(filter_consumers(Config, Server, CTag))
+      end, 30000),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
 
 receive_basic_cancel_on_queue_deletion(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

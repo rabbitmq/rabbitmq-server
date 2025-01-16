@@ -969,9 +969,15 @@ init(Q) when ?is_amqqueue(Q) ->
             E
     end.
 
-close(#stream_client{readers = Readers}) ->
-    maps:foreach(fun (_, #stream{log = Log}) ->
-                         osiris_log:close(Log)
+close(#stream_client{readers = Readers,
+                     name = QName}) ->
+    maps:foreach(fun (CTag, #stream{log = Log}) ->
+                         close_log(Log),
+                         rabbit_core_metrics:consumer_deleted(self(), CTag, QName),
+                         rabbit_event:notify(consumer_deleted,
+                                             [{consumer_tag, CTag},
+                                              {channel, self()},
+                                              {queue, QName}])
                  end, Readers).
 
 update(Q, State)
