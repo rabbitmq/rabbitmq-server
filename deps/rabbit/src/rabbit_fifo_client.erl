@@ -644,20 +644,24 @@ handle_ra_event(_QName, _, {machine, {queue_status, Status}},
     %% just set the queue status
     {ok, State#state{queue_status = Status}, []};
 handle_ra_event(_QName, Leader, {machine, leader_change},
-                #state{leader = OldLeader} = State0) ->
+                #state{leader = OldLeader,
+                       pending = Pending} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
-    rabbit_log:debug("~ts: Detected QQ leader change from ~w to ~w",
-                     [?MODULE, OldLeader, Leader]),
+    rabbit_log:debug("~ts: Detected QQ leader change from ~w to ~w, "
+                     "resending ~b pending commands",
+                     [?MODULE, OldLeader, Leader, maps:size(Pending)]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, State, []};
 handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = Leader} = State) ->
     {ok, State, []};
 handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
-                #state{leader = OldLeader} = State0) ->
-    rabbit_log:debug("~ts: Detected QQ leader change (rejection) from ~w to ~w",
-                     [?MODULE, OldLeader, Leader]),
+                #state{leader = OldLeader,
+                       pending = Pending} = State0) ->
+    rabbit_log:debug("~ts: Detected QQ leader change (rejection) from ~w to ~w, "
+                     "resending ~b pending commands",
+                     [?MODULE, OldLeader, Leader, maps:size(Pending)]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
 handle_ra_event(_QName, _From, {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
