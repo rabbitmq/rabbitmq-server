@@ -973,11 +973,7 @@ close(#stream_client{readers = Readers,
                      name = QName}) ->
     maps:foreach(fun (CTag, #stream{log = Log}) ->
                          close_log(Log),
-                         rabbit_core_metrics:consumer_deleted(self(), CTag, QName),
-                         rabbit_event:notify(consumer_deleted,
-                                             [{consumer_tag, CTag},
-                                              {channel, self()},
-                                              {queue, QName}])
+                         rabbit_core_metrics:consumer_deleted(self(), CTag, QName)
                  end, Readers).
 
 update(Q, State)
