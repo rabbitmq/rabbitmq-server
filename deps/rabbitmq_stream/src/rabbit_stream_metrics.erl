@@ -22,7 +22,7 @@
 -export([init/0]).
 -export([consumer_created/9,
          consumer_updated/9,
-         consumer_cancelled/3]).
+         consumer_cancelled/4]).
 -export([publisher_created/4,
          publisher_updated/7,
          publisher_deleted/3]).
@@ -104,16 +104,20 @@ consumer_updated(Connection,
 
     ok.
 
-consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
+consumer_cancelled(Connection, StreamResource, SubscriptionId, Notify) ->
     ets:delete(?TABLE_CONSUMER,
                {StreamResource, Connection, SubscriptionId}),
     rabbit_global_counters:consumer_deleted(stream),
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
-    rabbit_event:notify(consumer_deleted,
-                        [{consumer_tag, consumer_tag(SubscriptionId)},
-                         {channel, self()}, {queue, StreamResource}]),
+    case Notify of
+        true ->
+            rabbit_event:notify(consumer_deleted,
+                                [{consumer_tag, consumer_tag(SubscriptionId)},
+                                 {channel, self()}, {queue, StreamResource}]);
+        _ -> ok
+    end,
     ok.
 
 publisher_created(Connection,

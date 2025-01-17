@@ -9,7 +9,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved.
+%% Copyright (c) 2020-2025 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -2249,7 +2249,7 @@ handle_frame_post_auth(Transport,
             {Connection, State};
         true ->
             {Connection1, State1} =
-                remove_subscription(SubscriptionId, Connection, State),
+                remove_subscription(SubscriptionId, Connection, State, true),
             response_ok(Transport, Connection, unsubscribe, CorrelationId),
             {Connection1, State1}
     end;
@@ -3081,7 +3081,7 @@ evaluate_state_after_secret_update(Transport,
                           _ ->
                               {C1, S1} =
                               lists:foldl(fun(SubId, {Conn, St}) ->
-                                                  remove_subscription(SubId, Conn, St)
+                                                  remove_subscription(SubId, Conn, St, false)
                                           end, {C0, S0}, Subs),
                               {Acc#{Str => ok}, C1, S1}
                       end
@@ -3216,7 +3216,8 @@ notify_connection_closed(#statem_data{connection =
                                               ConnectionState}) ->
     rabbit_core_metrics:connection_closed(self()),
     [rabbit_stream_metrics:consumer_cancelled(self(),
-                                              stream_r(S, Connection), SubId)
+                                              stream_r(S, Connection),
+                                              SubId, false)
      || #consumer{configuration =
                       #consumer_configuration{stream = S,
                                               subscription_id = SubId}}
@@ -3304,7 +3305,8 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                               rabbit_stream_metrics:consumer_cancelled(self(),
                                                                                        stream_r(Stream,
                                                                                                 C0),
-                                                                                       SubId),
+                                                                                       SubId,
+                                                                                       false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
                                                 single_active_consumer(Consumer),
@@ -3314,7 +3316,8 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                               rabbit_stream_metrics:consumer_cancelled(self(),
                                                                                        stream_r(Stream,
                                                                                                 C0),
-                                                                                       SubId),
+                                                                                       SubId,
+                                                                                       false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
                                                 single_active_consumer(Consumer),
@@ -3431,7 +3434,8 @@ remove_subscription(SubscriptionId,
                                        stream_subscriptions =
                                            StreamSubscriptions} =
                         Connection,
-                    #stream_connection_state{consumers = Consumers} = State) ->
+                    #stream_connection_state{consumers = Consumers} = State,
+                    Notify) ->
     #{SubscriptionId := Consumer} = Consumers,
     #consumer{log = Log,
               configuration = #consumer_configuration{stream = Stream, member_pid = MemberPid}} =
@@ -3457,7 +3461,8 @@ remove_subscription(SubscriptionId,
     Connection2 = maybe_clean_connection_from_stream(MemberPid, Stream, Connection1),
     rabbit_stream_metrics:consumer_cancelled(self(),
                                              stream_r(Stream, Connection2),
-                                             SubscriptionId),
+                                             SubscriptionId,
+                                             Notify),
 
     Requests1 = maybe_unregister_consumer(
                   VirtualHost, Consumer,
