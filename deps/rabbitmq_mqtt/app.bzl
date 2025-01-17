@@ -342,3 +342,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
     )
+    erlang_bytecode(
+        name = "rabbit_mqtt_retained_msg_store_ets_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_mqtt_retained_msg_store_ets_SUITE.erl"],
+        outs = ["test/rabbit_mqtt_retained_msg_store_ets_SUITE.beam"],
+        app_name = "rabbitmq_mqtt",
+        erlc_opts = "//:test_erlc_opts",
+    )
