@@ -1074,15 +1074,6 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
     )
     erlang_bytecode(
-        name = "msg_store_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/msg_store_SUITE.erl"],
-        outs = ["test/msg_store_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
-    erlang_bytecode(
         name = "peer_discovery_classic_config_SUITE_beam_files",
         testonly = True,
         srcs = ["test/peer_discovery_classic_config_SUITE.erl"],
