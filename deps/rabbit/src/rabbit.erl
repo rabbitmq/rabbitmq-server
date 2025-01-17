@@ -42,9 +42,6 @@
          pg_local_amqp_session/0,
          pg_local_amqp_connection/0]).
 
-%% for tests
--export([validate_msg_store_io_batch_size_and_credit_disc_bound/2]).
-
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
 
 -rabbit_boot_step({codec_correctness_check,
@@ -290,8 +287,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(APPS, [os_mon, mnesia, rabbit_common, rabbitmq_prelaunch, ra, sysmon_handler, rabbit, osiris]).
-
--define(DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD, 10).
 
 %% 1 minute
 -define(BOOT_START_TIMEOUT,     1 * 60 * 1000).
@@ -971,7 +966,6 @@ start(normal, []) ->
         print_banner(),
         log_banner(),
         warn_if_kernel_config_dubious(),
-        warn_if_disc_io_options_dubious(),
 
         ?LOG_DEBUG(""),
         ?LOG_DEBUG("== Plugins (prelaunch phase) =="),
@@ -1434,14 +1428,6 @@ warn_if_kernel_config_dubious() ->
                            #{domain => ?RMQLOG_DOMAIN_GLOBAL})
             end
     end,
-    DirtyIOSchedulers = erlang:system_info(dirty_io_schedulers),
-    case DirtyIOSchedulers < ?DIRTY_IO_SCHEDULERS_WARNING_THRESHOLD of
-        true  -> ?LOG_WARNING(
-                   "Erlang VM is running with ~b dirty I/O schedulers, "
-                   "file I/O performance may worsen", [DirtyIOSchedulers],
-                   #{domain => ?RMQLOG_DOMAIN_GLOBAL});
-        false -> ok
-    end,
     IDCOpts = case application:get_env(kernel, inet_default_connect_options) of
                   undefined -> [];
                   {ok, Val} -> Val
@@ -1451,87 +1437,6 @@ warn_if_kernel_config_dubious() ->
                               "network I/O latency will be higher",
                               #{domain => ?RMQLOG_DOMAIN_GLOBAL});
         true  -> ok
-    end.
-
-warn_if_disc_io_options_dubious() ->
-    %% if these values are not set, it doesn't matter since
-    %% rabbit_variable_queue will pick up the values defined in the
-    %% IO_BATCH_SIZE and CREDIT_DISC_BOUND constants.
-    CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
-                                          undefined),
-    IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
-                                      undefined),
-    case catch validate_msg_store_io_batch_size_and_credit_disc_bound(
-                 CreditDiscBound, IoBatchSize) of
-        ok -> ok;
-        {error, {Reason, Vars}} ->
-            ?LOG_WARNING(Reason, Vars,
-                         #{domain => ?RMQLOG_DOMAIN_GLOBAL})
-    end.
-
-validate_msg_store_io_batch_size_and_credit_disc_bound(CreditDiscBound,
-                                                       IoBatchSize) ->
-    case IoBatchSize of
-        undefined ->
-            ok;
-        IoBatchSize when is_integer(IoBatchSize) ->
-            if IoBatchSize < ?IO_BATCH_SIZE ->
-                    throw({error,
-                     {"io_batch_size of ~b lower than recommended value ~b, "
-                      "paging performance may worsen",
-                      [IoBatchSize, ?IO_BATCH_SIZE]}});
-               true ->
-                    ok
-            end;
-        IoBatchSize ->
-            throw({error,
-             {"io_batch_size should be an integer, but ~b given",
-              [IoBatchSize]}})
-    end,
-
-    %% CreditDiscBound = {InitialCredit, MoreCreditAfter}
-    {RIC, RMCA} = ?CREDIT_DISC_BOUND,
-    case CreditDiscBound of
-        undefined ->
-            ok;
-        {IC, MCA} when is_integer(IC), is_integer(MCA) ->
-            if IC < RIC; MCA < RMCA ->
-                    throw({error,
-                     {"msg_store_credit_disc_bound {~b, ~b} lower than"
-                      "recommended value {~b, ~b},"
-                      " paging performance may worsen",
-                      [IC, MCA, RIC, RMCA]}});
-               true ->
-                    ok
-            end;
-        {IC, MCA} ->
-            throw({error,
-             {"both msg_store_credit_disc_bound values should be integers, but ~tp given",
-              [{IC, MCA}]}});
-        CreditDiscBound ->
-            throw({error,
-             {"invalid msg_store_credit_disc_bound value given: ~tp",
-              [CreditDiscBound]}})
-    end,
-
-    case {CreditDiscBound, IoBatchSize} of
-        {undefined, undefined} ->
-            ok;
-        {_CDB, undefined} ->
-            ok;
-        {undefined, _IBS} ->
-            ok;
-        {{InitialCredit, _MCA}, IoBatchSize} ->
-            if IoBatchSize < InitialCredit ->
-                    throw(
-                      {error,
-                       {"msg_store_io_batch_size ~b should be bigger than the initial "
-                        "credit value from msg_store_credit_disc_bound ~b,"
-                        " paging performance may worsen",
-                        [IoBatchSize, InitialCredit]}});
-               true ->
-                    ok
-            end
     end.
 
 -spec product_name() -> string().
