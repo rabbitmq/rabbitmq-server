@@ -9,11 +9,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-<<<<<<< HEAD
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved.
-=======
 %% Copyright (c) 2020-2025 Broadcom. All Rights Reserved.
->>>>>>> 69d0382dd (Emit cancellation event only when stream consumer is cancelled)
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
