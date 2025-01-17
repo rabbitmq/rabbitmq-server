@@ -586,26 +586,50 @@ update_machine_state(Server, Conf) ->
                       ra_server_proc:ra_event_body(), state()) ->
     {internal, Correlators :: [term()], rabbit_queue_type:actions(), state()} |
     {rabbit_fifo:client_msg(), state()} | {eol, rabbit_queue_type:actions()}.
-handle_ra_event(QName, From, {applied, Seqs},
-                #state{cfg = #cfg{soft_limit = SftLmt}} = State0) ->
+handle_ra_event(QName, Leader, {applied, Seqs},
+                #state{leader = OldLeader,
+                       cfg = #cfg{soft_limit = SftLmt}} = State0) ->
 
     {Corrs, ActionsRev, State1} = lists:foldl(fun seq_applied/2,
-                                              {[], [], State0#state{leader = From}},
+                                              {[], [], State0#state{leader = Leader}},
                                               Seqs),
+
+    %% if the leader has changed we need to resend any pending commands remaining
+    %% after the applied processing
+    State2 = if OldLeader =/= Leader ->
+                    %% double check before resending as applied notifications
+                    %% can arrive from old leaders in any order
+                    case ra:members(Leader) of
+                        {ok, _, ActualLeader}
+                          when ActualLeader =/= OldLeader ->
+                            %% there is a new leader
+                            rabbit_log:debug("~ts: Detected QQ leader change (applied) "
+                                             "from ~w to ~w, "
+                                             "resending ~b pending commands",
+                                             [?MODULE, OldLeader, ActualLeader,
+                                              maps:size(State1#state.pending)]),
+                            resend_all_pending(State1#state{leader = ActualLeader});
+                        _ ->
+                            State1
+                    end;
+                true ->
+                    State1
+             end,
+
     Actions0 = lists:reverse(ActionsRev),
     Actions = case Corrs of
                   [] ->
                       Actions0;
                   _ ->
-                      %%TODO consider using lists:foldr/3 above because
+                      %%TODO: consider using lists:foldr/3 above because
                       %% Corrs is returned in the wrong order here.
                       %% The wrong order does not matter much because the channel sorts the
                       %% sequence numbers before confirming to the client. But rabbit_fifo_client
                       %% is sequence numer agnostic: it handles any correlation terms.
                       [{settled, QName, Corrs} | Actions0]
               end,
-    case map_size(State1#state.pending) < SftLmt of
-        true when State1#state.slow == true ->
+    case map_size(State2#state.pending) < SftLmt of
+        true when State2#state.slow == true ->
             % we have exited soft limit state
             % send any unsent commands and cancel the time as
             % TODO: really the timer should only be cancelled when the channel
@@ -613,7 +637,7 @@ handle_ra_event(QName, From, {applied, Seqs},
             % channel is interacting with)
             % but the fact the queue has just applied suggests
             % it's ok to cancel here anyway
-            State2 = cancel_timer(State1#state{slow = false,
+            State3 = cancel_timer(State2#state{slow = false,
                                                unsent_commands = #{}}),
             % build up a list of commands to issue
             Commands = maps:fold(
@@ -622,16 +646,16 @@ handle_ra_event(QName, From, {applied, Seqs},
                                              add_command(Cid, return, Returns,
                                                          add_command(Cid, discard,
                                                                      Discards, Acc)))
-                         end, [], State1#state.unsent_commands),
-            ServerId = pick_server(State2),
+                         end, [], State2#state.unsent_commands),
+            ServerId = pick_server(State3),
             %% send all the settlements and returns
             State = lists:foldl(fun (C, S0) ->
                                         send_command(ServerId, undefined, C,
                                                      normal, S0)
-                                end, State2, Commands),
+                                end, State3, Commands),
             {ok, State, [{unblock, cluster_name(State)} | Actions]};
         _ ->
-            {ok, State1, Actions}
+            {ok, State2, Actions}
     end;
 handle_ra_event(QName, From, {machine, {delivery, _ConsumerTag, _} = Del}, State0) ->
     handle_delivery(QName, From, Del, State0);
