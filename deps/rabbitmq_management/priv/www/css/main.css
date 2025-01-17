@@ -420,3 +420,11 @@ input.toggle:checked + label.toggle:after {
     left: calc(100% - 2px);
     transform: translateX(-100%);
 }
+
+.grey-background {
+  background-color: #f0f0f0;
+}
+
+.yellow-background {
+  background-color: #ffff7b;
+}
