@@ -52,7 +52,7 @@ jobs:
       with:
         credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
 
-   - name: Build & Load RabbitMQ OCI
+    - name: Build & Load RabbitMQ OCI
       run: |
         make package-generic-unix
         make docker-image
