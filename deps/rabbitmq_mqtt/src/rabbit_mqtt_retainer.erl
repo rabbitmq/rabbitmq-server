@@ -34,7 +34,7 @@ retain(Pid, Topic, Msg = #mqtt_msg{retain = true}) ->
     gen_server:cast(Pid, {retain, Topic, Msg}).
 
 -spec fetch(pid(), topic()) ->
-    undefined | mqtt_msg().
+    undefined | mqtt_msg() | [mqtt_msg()].
 fetch(Pid, Topic) ->
     gen_server:call(Pid, {fetch, Topic}, ?TIMEOUT).
 
@@ -87,6 +87,7 @@ handle_cast({clear, Topic}, State = #?STATE{store_state = StoreState,
     ok = rabbit_mqtt_retained_msg_store:delete(Topic, StoreState),
     {noreply, State#?STATE{expire = Expire}}.
 
+% TODO: handle listof messages
 handle_call({fetch, Topic}, _From, State = #?STATE{store_state = StoreState}) ->
     Reply = case rabbit_mqtt_retained_msg_store:lookup(Topic, StoreState) of
                 #mqtt_msg{props = #{'Message-Expiry-Interval' := Expiry0} = Props,

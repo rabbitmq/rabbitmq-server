@@ -956,43 +956,51 @@ send_retained_messages(Subscriptions, State) ->
 
 -spec send_retained_message(topic_filter(), qos(), state()) -> state().
 send_retained_message(TopicFilter0, SubscribeQos,
-                      State0 = #state{packet_id = PacketId0,
-                                      cfg = #cfg{retainer_pid = RPid}}) ->
+                     State0 = #state{cfg = #cfg{retainer_pid = RPid}}) ->
     TopicFilter = amqp_to_mqtt(TopicFilter0),
     case rabbit_mqtt_retainer:fetch(RPid, TopicFilter) of
         undefined ->
             State0;
-        #mqtt_msg{qos = MsgQos,
-                  retain = Retain,
-                  payload = Payload,
-                  props = Props0} ->
-            Qos = effective_qos(MsgQos, SubscribeQos),
-            %% Wildcards are currently not supported when fetching retained
-            %% messages. Therefore, TopicFilter must must be a topic name.
-            {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props0, State0),
-            {PacketId, State} = case Qos of
-                                    ?QOS_0 ->
-                                        {undefined, State1};
-                                    ?QOS_1 ->
-                                        {PacketId0,
-                                         State1#state{packet_id = increment_packet_id(PacketId0)}}
-                                end,
-            Packet = #mqtt_packet{
-                        fixed = #mqtt_packet_fixed{
-                                   type = ?PUBLISH,
-                                   qos  = Qos,
-                                   dup  = false,
-                                   retain = Retain
-                                  },
-                        variable = #mqtt_packet_publish{
-                                      packet_id = PacketId,
-                                      topic_name = Topic,
-                                      props = Props
-                                     },
-                        payload = Payload},
-            _ = send(Packet, State),
-            State
+        Msgs when is_list(Msgs) ->
+            lists:foldl(
+              fun(Msg, S) ->
+                  send_retained_message_to_client(Msg, TopicFilter, SubscribeQos, S)
+              end, State0, Msgs);
+        #mqtt_msg{} = SingleMsg ->
+            send_retained_message_to_client(SingleMsg, TopicFilter, SubscribeQos, State0)
     end.
+
+send_retained_message_to_client(#mqtt_msg{qos = MsgQos,
+                                        retain = Retain,
+                                        payload = Payload,
+                                        props = Props0},
+                               TopicFilter,
+                               SubscribeQos,
+                               State0 = #state{packet_id = PacketId0}) ->
+    Qos = effective_qos(MsgQos, SubscribeQos),
+    {Topic, Props, State1} = process_topic_alias_outbound(TopicFilter, Props0, State0),
+    {PacketId, State} = case Qos of
+                           ?QOS_0 ->
+                               {undefined, State1};
+                           ?QOS_1 ->
+                               {PacketId0,
+                                State1#state{packet_id = increment_packet_id(PacketId0)}}
+                       end,
+    Packet = #mqtt_packet{
+               fixed = #mqtt_packet_fixed{
+                        type = ?PUBLISH,
+                        qos  = Qos,
+                        dup  = false,
+                        retain = Retain
+                       },
+               variable = #mqtt_packet_publish{
+                          packet_id = PacketId,
+                          topic_name = Topic,
+                          props = Props
+                         },
+               payload = Payload},
+    _ = send(Packet, State),
+    State.
 
 clear_will_msg(#state{cfg = #cfg{vhost = Vhost,
                                  client_id = ClientId}} = State) ->

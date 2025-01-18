@@ -45,7 +45,7 @@
     ok.
 
 -callback lookup(topic(), State :: any()) ->
-    mqtt_msg() | mqtt_msg_v0() | undefined.
+    [mqtt_msg()] | mqtt_msg() | mqtt_msg_v0() | undefined.
 
 -callback delete(topic(), State :: any()) ->
     ok.
