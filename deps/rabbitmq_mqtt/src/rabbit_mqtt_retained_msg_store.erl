@@ -22,7 +22,7 @@
 -include("rabbit_mqtt_packet.hrl").
 -include_lib("kernel/include/logger.hrl").
 -export([start/1, insert/3, lookup/2, delete/2, terminate/1]).
--export([expire/2, has_wildcards/1]).
+-export([expire/2]).
 -export_type([state/0, expire/0]).
 
 -define(STATE, ?MODULE).
@@ -78,8 +78,9 @@ insert(Topic, Msg, #?STATE{store_mod = Mod,
                            store_state = StoreState}) ->
     ok = Mod:insert(Topic, Msg, StoreState).
 
+% TODO: only return list of retained messages
 -spec lookup(topic(), state()) ->
-    mqtt_msg() | undefined.
+    mqtt_msg() | [mqtt_msg()] | undefined.
 lookup(Topic, #?STATE{store_mod = Mod,
                       store_state = StoreState}) ->
     case Mod:lookup(Topic, StoreState) of
@@ -88,11 +89,6 @@ lookup(Topic, #?STATE{store_mod = Mod,
         Other ->
             Other
     end.
-
--spec has_wildcards(topic()) -> boolean().
-has_wildcards(Pattern) ->
-    Parts = binary:split(Pattern, <<"/">>, [global]),
-    lists:member(<<"#">>, Parts) orelse lists:member(<<"+">>, Parts).
 
 -spec delete(topic(), state()) -> ok.
 delete(Topic, #?STATE{store_mod = Mod,
@@ -104,24 +100,45 @@ terminate(#?STATE{store_mod = Mod,
                   store_state = StoreState}) ->
     ok = Mod:terminate(StoreState).
 
+% TODO: refactor when DETS also supports the new ETS trie structure
 -spec expire(ets | dets, ets:tid() | dets:tab_name()) -> expire().
 expire(Mod, Tab) ->
     Now = os:system_time(second),
-    Mod:foldl(
-      fun(#retained_message{topic = Topic,
-                            mqtt_msg = #mqtt_msg{props = #{'Message-Expiry-Interval' := Expiry},
-                                                 timestamp = Timestamp}}, Acc)
-            when is_integer(Expiry) andalso
-                 is_integer(Timestamp) ->
-              if Now - Timestamp >= Expiry ->
-                     Mod:delete(Tab, Topic),
-                     Acc;
-                 true ->
-                     maps:put(Topic, {Timestamp, Expiry}, Acc)
-              end;
-         (_, Acc) ->
-              Acc
-      end, #{}, Tab).
+    case Mod of
+        dets ->
+            % Original code for DETS
+            Mod:foldl(
+              fun(#retained_message{topic = Topic,
+                                  mqtt_msg = #mqtt_msg{props = #{'Message-Expiry-Interval' := Expiry},
+                                                     timestamp = Timestamp}}, Acc)
+                  when is_integer(Expiry) andalso
+                       is_integer(Timestamp) ->
+                    if Now - Timestamp >= Expiry ->
+                           Mod:delete(Tab, Topic),
+                           Acc;
+                       true ->
+                           maps:put(Topic, {Timestamp, Expiry}, Acc)
+                    end;
+                 (_, Acc) ->
+                    Acc
+              end, #{}, Tab);
+        ets ->
+            % New code for ETS trie structure
+            Mod:foldl(
+              fun({_NodeId, Topic, #mqtt_msg{props = #{'Message-Expiry-Interval' := Expiry},
+                                           timestamp = Timestamp}}, Acc)
+                  when is_integer(Expiry) andalso
+                       is_integer(Timestamp) ->
+                    if Now - Timestamp >= Expiry ->
+                           Mod:delete_object(Tab, {_NodeId, Topic, '_'}),
+                           Acc;
+                       true ->
+                           maps:put(Topic, {Timestamp, Expiry}, Acc)
+                    end;
+                 (_, Acc) ->
+                    Acc
+              end, #{}, Tab)
+    end.
 
 %% Retained messages written in 3.12 (or earlier) are converted when read in 3.13 (or later).
 -spec convert_mqtt_msg(mqtt_msg_v0()) -> mqtt_msg().
