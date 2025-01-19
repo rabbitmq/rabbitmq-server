@@ -137,7 +137,7 @@ delete(Topic, State) ->
   Words = split_topic(Topic),
   case follow_path(Words, State) of
     {ok, NodeId} ->
-      ets:delete_object(State#store_state.msg_table, {NodeId, Topic, '_'}),
+      ets:match_delete(State#store_state.msg_table, {NodeId, Topic, '_'}),
       % If no more messages at this node, mark as non-topic
       case ets:lookup(State#store_state.msg_table, NodeId) of
         [] ->
