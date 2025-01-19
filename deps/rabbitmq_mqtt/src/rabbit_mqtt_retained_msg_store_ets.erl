@@ -11,7 +11,9 @@
 
 -include("rabbit_mqtt_packet.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
+-include_lib("kernel/include/logger.hrl").
+
+-export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1, get_tables/1]).
 
 % TODO: -define(DEFAULT_MATCH_LIMIT, 1000).
 
@@ -27,18 +29,16 @@
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-  BaseTableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-
   % Clean up any existing files
   delete_table_files(Dir, VHost),
 
   % Node table - will store tuples of {node_id, edge_count, is_topic}
-  NodeTable = ets:new(append_suffix(BaseTableName, "_nodes"), [set, public]),
+  NodeTable = ets:new(get_table_name(VHost, <<"nodes">>), [set, public]),
   % Edge table - will store {{from_id, word}, to_id}
-  EdgeTable = ets:new(append_suffix(BaseTableName, "_edges"), [ordered_set, public]),
+  EdgeTable = ets:new(get_table_name(VHost, <<"edges">>), [ordered_set, public]),
   % Topic table - will store {node_id, topic, value}
   % TODO: consider whether, set might still be the best option here
-  MsgTable = ets:new(append_suffix(BaseTableName, "_msgs"), [bag, public]),
+  MsgTable = ets:new(get_table_name(VHost, <<"msgs">>), [bag, public]),
 
   RootId = make_node_id(),
   ets:insert(NodeTable, {RootId, 0, false}),
@@ -54,13 +54,24 @@ new(Dir, VHost) ->
                {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
                {error, uninitialized}.
 recover(Dir, VHost) ->
+  io:format("Recovering MQTT retained message store from ~s~n", [Dir]),
   try
-    {ok, NodeTable} = recover_table(Dir, VHost, "nodes"),
-    {ok, EdgeTable} = recover_table(Dir, VHost, "edges"),
-    {ok, MsgTable} = recover_table(Dir, VHost, "msgs"),
+    {ok, MsgTable} = recover_table(Dir, VHost, <<"msgs">>),
+    Expire = rabbit_mqtt_retained_msg_store:expire(ets, MsgTable),
+    {ok, NodeTable} = recover_table(Dir, VHost, <<"nodes">>),
+    {ok, EdgeTable} = recover_table(Dir, VHost, <<"edges">>),
 
-    % Find root node (should be the only node with no incoming edges)
-    [{RootId, 0, false}] = ets:match_object(NodeTable, {'$1', 0, false}),
+    RootId =
+      case find_root_node(NodeTable, EdgeTable) of
+        {ok, Id} ->
+          io:format("Recovered existing RootId: ~p~n", [Id]),
+          Id;
+        error ->
+          NewId = make_node_id(),
+          io:format("Creating new RootId: ~p~n", [NewId]),
+          ets:insert(NodeTable, {NewId, 0, false}),
+          NewId
+      end,
 
     State =
       #store_state{node_table = NodeTable,
@@ -69,13 +80,10 @@ recover(Dir, VHost) ->
                    root_id = RootId,
                    dir = Dir,
                    vhost = VHost},
-
-    delete_table_files(Dir, VHost),
-
-    % ? should we expire all tables here?
-    {ok, State, rabbit_mqtt_retained_msg_store:expire(ets, MsgTable)}
+    {ok, State, Expire}
   catch
-    _:_ ->
+    error:Reason ->
+      ?LOG_ERROR("~s failed to recover MQTT retained message store: ~p", [?MODULE, Reason]),
       {error, uninitialized}
   end.
 
@@ -84,20 +92,20 @@ terminate(#store_state{node_table = NodeTable,
                        edge_table = EdgeTable,
                        msg_table = MsgTable,
                        dir = Dir,
-                       vhost = VHost} =
-            _State) ->
+                       vhost = VHost}) ->
   ok =
     ets:tab2file(NodeTable,
-                 get_table_path(Dir, VHost, "nodes"),
+                 get_table_path(Dir, VHost, <<"nodes">>),
                  [{extended_info, [object_count]}]),
   ok =
     ets:tab2file(EdgeTable,
-                 get_table_path(Dir, VHost, "edges"),
+                 get_table_path(Dir, VHost, <<"edges">>),
                  [{extended_info, [object_count]}]),
   ok =
     ets:tab2file(MsgTable,
-                 get_table_path(Dir, VHost, "msgs"),
-                 [{extended_info, [object_count]}]).
+                 get_table_path(Dir, VHost, <<"msgs">>),
+                 [{extended_info, [object_count]}]),
+  ok.
 
 -spec insert(topic(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{} = State) ->
@@ -129,7 +137,6 @@ delete(Topic, State) ->
   Words = split_topic(Topic),
   case follow_path(Words, State) of
     {ok, NodeId} ->
-      % Remove message
       ets:delete_object(State#store_state.msg_table, {NodeId, Topic, '_'}),
       % If no more messages at this node, mark as non-topic
       case ets:lookup(State#store_state.msg_table, NodeId) of
@@ -145,30 +152,62 @@ delete(Topic, State) ->
   end,
   ok.
 
+-spec get_tables(store_state()) -> {ets:tid(), ets:tid(), ets:tid()}.
+get_tables(#store_state{node_table = NodeTable,
+                        edge_table = EdgeTable,
+                        msg_table = MsgTable}) ->
+  {NodeTable, EdgeTable, MsgTable}.
+
 %% Internal setup/teardown functions
+-spec get_table_name(rabbit_types:vhost(), binary()) -> atom().
+get_table_name(VHost, Type) ->
+  TableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
+  Suffix = iolist_to_binary([<<"_">>, Type]),
+  list_to_atom(atom_to_list(TableName) ++ binary_to_list(Suffix)).
 
-append_suffix(TableName, Suffix) ->
-  list_to_atom(atom_to_list(TableName) ++ Suffix).
+-spec get_table_path(file:name_all(), rabbit_types:vhost(), binary()) -> file:name_all().
+get_table_path(Dir, VHost, Type) ->
+  rabbit_mqtt_util:path_for(Dir, iolist_to_binary([VHost, Type])).
 
+-spec delete_table_files(file:name_all(), rabbit_types:vhost()) -> ok.
 delete_table_files(Dir, VHost) ->
   Types = ["nodes", "edges", "msgs"],
   lists:foreach(fun(Type) -> delete_table(Dir, VHost, Type) end, Types),
   ok.
 
+-spec delete_table(file:name_all(), rabbit_types:vhost(), binary()) -> ok.
 delete_table(Dir, VHost, Type) ->
   Path = get_table_path(Dir, VHost, Type),
   file:delete(Path).
 
+-spec recover_table(file:name_all(), rabbit_types:vhost(), binary()) -> {ok, ets:tid()}.
 recover_table(Dir, VHost, Type) ->
   Path = get_table_path(Dir, VHost, Type),
-  ets:file2tab(Path).
-
-get_table_path(Dir, VHost, Type) ->
-  rabbit_mqtt_util:path_for(Dir, iolist_to_binary([VHost, Type])).
+  case ets:file2tab(Path) of
+    {ok, Tid} ->
+      _ = file:delete(Path),
+      {ok, Tid}
+  end.
 
 % Internal trie methods
 split_topic(Topic) ->
   binary:split(Topic, <<"/">>, [global]).
+
+% This might not be the most efficient way to find the root node, but the following options:
+% Store root ID separately need additional storage/persistence and could get out of sync
+% First node in table, requires ordered_set which could bring performance hit during lookup
+find_root_node(NodeTable, EdgeTable) ->
+  NodeIds = ets:match(NodeTable, {'$1', '_', '_'}),
+  DestNodeIds = ets:match(EdgeTable, {'_', '$1'}),
+  % Find the node that doesn't appear as a destination in any edge
+  case lists:flatten(NodeIds) -- lists:flatten(DestNodeIds) of
+    [RootId] ->
+      {ok, RootId};
+    [] ->
+      error;
+    _ ->
+      error  % Multiple root nodes would indicate corruption
+  end.
 
 follow_or_create_path(Words, State) ->
   follow_or_create_path(Words, State#store_state.root_id, State).
