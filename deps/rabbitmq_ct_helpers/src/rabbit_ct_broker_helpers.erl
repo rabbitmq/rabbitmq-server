@@ -1051,31 +1051,38 @@ configured_metadata_store(Config) ->
     end.
 
 configure_metadata_store(Config) ->
-    case skip_metadata_store_configuration(Config) of
-        true ->
-            ct:log("Skipping metadata store configuration as requested"),
-            Config;
-        false ->
-            ct:log("Configuring metadata store..."),
-            MetadataStore = configured_metadata_store(Config),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, {metadata_store, MetadataStore}),
-            FeatureNames0 = case MetadataStore of
-                                mnesia ->
-                                    ct:log("Enabling Mnesia metadata store"),
-                                    ?REQUIRED_FEATURE_FLAGS;
-                                khepri ->
-                                    ct:log("Enabling Khepri metadata store"),
-                                    [khepri_db | ?REQUIRED_FEATURE_FLAGS]
-                            end,
-            OtherFeatureNames = rabbit_ct_helpers:get_app_env(
-                                  Config,
-                                  rabbit, forced_feature_flags_on_init, []),
-            FeatureNames1 = lists:usort(FeatureNames0 ++ OtherFeatureNames),
-            rabbit_ct_helpers:merge_app_env(
-              Config1,
-              {rabbit, [{forced_feature_flags_on_init, FeatureNames1}]})
-    end.
+    {Config2,
+     FeatureNames0} = case skip_metadata_store_configuration(Config) of
+                          true ->
+                              ct:log(
+                                "Skipping metadata store configuration as "
+                                "requested"),
+                              {Config, ?REQUIRED_FEATURE_FLAGS};
+                          false ->
+                              ct:log("Configuring metadata store..."),
+                              MetadataStore = configured_metadata_store(
+                                                Config),
+                              Config1 = rabbit_ct_helpers:set_config(
+                                          Config,
+                                          {metadata_store, MetadataStore}),
+                              case MetadataStore of
+                                  mnesia ->
+                                      ct:log("Enabling Mnesia metadata store"),
+                                      {Config1,
+                                       ?REQUIRED_FEATURE_FLAGS};
+                                  khepri ->
+                                      ct:log("Enabling Khepri metadata store"),
+                                      {Config1,
+                                       [khepri_db | ?REQUIRED_FEATURE_FLAGS]}
+                              end
+                      end,
+    OtherFeatureNames = rabbit_ct_helpers:get_app_env(
+                          Config2,
+                          rabbit, forced_feature_flags_on_init, []),
+    FeatureNames1 = lists:usort(FeatureNames0 ++ OtherFeatureNames),
+    rabbit_ct_helpers:merge_app_env(
+      Config2,
+      {rabbit, [{forced_feature_flags_on_init, FeatureNames1}]}).
 
 skip_metadata_store_configuration(Config) ->
     Skip = rabbit_ct_helpers:get_config(
