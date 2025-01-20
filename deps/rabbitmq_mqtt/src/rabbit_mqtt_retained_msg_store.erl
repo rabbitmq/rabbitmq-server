@@ -41,8 +41,7 @@
 -callback recover(Directory :: file:name_all(), rabbit_types:vhost()) ->
                      {ok, State :: any(), expire()} | {error, uninitialized}.
 -callback insert(topic(), mqtt_msg(), State :: any()) -> ok.
--callback lookup(topic(), State :: any()) ->
-                    [mqtt_msg()] | [mqtt_msg_v0()] | [].
+-callback lookup(topic(), State :: any()) -> [mqtt_msg()] | [mqtt_msg_v0()] | [].
 -callback delete(topic(), State :: any()) -> ok.
 -callback terminate(State :: any()) -> ok.
 
@@ -106,7 +105,7 @@ expire(Mod, Tab) ->
              Acc)
                 when is_integer(Expiry) andalso is_integer(Timestamp) ->
                 if Now - Timestamp >= Expiry ->
-                       Mod:match_delete(Tab, {NodeId, Topic, '_'}),
+                       Mod:delete(Tab, NodeId),
                        Acc;
                    true ->
                        maps:put(Topic, {Timestamp, Expiry}, Acc)

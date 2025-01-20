@@ -30,7 +30,7 @@ new(Dir, VHost) ->
   % delete_table_files(Dir, VHost),
   {ok, NodeTable} = open_table(Dir, VHost, <<"nodes">>, set),
   {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
-  {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, bag),
+  {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, set),
   RootId = make_node_id(),
   ok = dets:insert(NodeTable, {RootId, 0, false}),
 
@@ -46,7 +46,7 @@ new(Dir, VHost) ->
                {error, uninitialized}.
 recover(Dir, VHost) ->
   try
-    {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, bag),
+    {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, set),
     Expire = rabbit_mqtt_retained_msg_store:expire(dets, MsgTable),
     {ok, NodeTable} = open_table(Dir, VHost, <<"nodes">>, set),
     {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
@@ -85,8 +85,6 @@ insert(Topic, Msg, #store_state{} = State) ->
        NodeId = follow_or_create_path(Words, State),
        % Mark node as topic end and store message
        update_node(NodeId, true, State),
-       % Replace any existing message for this topic
-       dets:match_delete(State#store_state.msg_table, {NodeId, Topic, '_'}),
        dets:insert(State#store_state.msg_table, {NodeId, Topic, Msg})
     end,
   Insert(),

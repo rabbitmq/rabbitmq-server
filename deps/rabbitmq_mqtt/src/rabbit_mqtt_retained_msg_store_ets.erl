@@ -37,8 +37,7 @@ new(Dir, VHost) ->
   % Edge table - will store {{from_id, word}, to_id}
   EdgeTable = ets:new(get_table_name(VHost, <<"edges">>), [ordered_set, public]),
   % Topic table - will store {node_id, topic, value}
-  % TODO: consider whether, set might still be the best option here
-  MsgTable = ets:new(get_table_name(VHost, <<"msgs">>), [bag, public]),
+  MsgTable = ets:new(get_table_name(VHost, <<"msgs">>), [set, public]),
 
   RootId = make_node_id(),
   ets:insert(NodeTable, {RootId, 0, false}),
@@ -113,8 +112,6 @@ insert(Topic, Msg, #store_state{} = State) ->
   NodeId = follow_or_create_path(Words, State),
   % Mark node as topic end and store message
   update_node(NodeId, true, State),
-  % Replace any existing message for this topic
-  ets:delete_object(State#store_state.msg_table, {NodeId, Topic, '_'}),
   ets:insert(State#store_state.msg_table, {NodeId, Topic, Msg}),
   ok.
 
