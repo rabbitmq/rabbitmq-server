@@ -159,7 +159,8 @@ init_per_suite(Config) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config, {rabbit, [
                                   {quorum_tick_interval, 1000},
-                                  {stream_tick_interval, 1000}
+                                  {stream_tick_interval, 1000},
+                                  {forced_feature_flags_on_init, []}
                                  ]}),
     rabbit_ct_helpers:run_setup_steps(Config1).
 

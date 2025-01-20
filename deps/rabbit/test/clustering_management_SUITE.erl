@@ -144,9 +144,15 @@ init_per_group(mnesia_store, Config) ->
             Config
     end;
 init_per_group(unclustered_2_nodes, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, false}]),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
 init_per_group(unclustered_3_nodes, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_clustered, false}]),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
 init_per_group(clustered_2_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(clustered_3_nodes, Config) ->
