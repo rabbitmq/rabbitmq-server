@@ -11,7 +11,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved.
+%% Copyright (c) 2020-2025 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -66,7 +66,8 @@ groups() ->
        unauthorized_vhost_access_should_close_with_delay,
        sasl_anonymous,
        test_publisher_with_too_long_reference_errors,
-       test_consumer_with_too_long_reference_errors
+       test_consumer_with_too_long_reference_errors,
+       subscribe_unsubscribe_should_create_events
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -489,7 +490,8 @@ test_gc_consumers(Config) ->
                                   0,
                                   0,
                                   true,
-                                  #{}]),
+                                  #{},
+                                  <<"guest">>]),
     ?awaitMatch(0, consumer_count(Config), ?WAIT),
     ok.
 
@@ -1010,6 +1012,57 @@ test_consumer_with_too_long_reference_errors(Config) ->
   test_delete_stream(T, S, Stream, C),
   test_close(T, S, C),
   ok.
+
+subscribe_unsubscribe_should_create_events(Config) ->
+    HandlerMod = rabbit_list_test_event_handler,
+    rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, HandlerMod),
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 gen_event,
+                                 add_handler,
+                                 [rabbit_event, HandlerMod, []]),
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    Transport = gen_tcp,
+    Port = get_stream_port(Config),
+    Opts = get_opts(Transport),
+    {ok, S} = Transport:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(Transport, S, C0),
+    C2 = test_authenticate(Transport, S, C1),
+    C3 = test_create_stream(Transport, S, Stream, C2),
+
+    ?assertEqual([], filtered_events(Config, consumer_created)),
+    ?assertEqual([], filtered_events(Config, consumer_deleted)),
+
+    SubscriptionId = 42,
+    C4 = test_subscribe(Transport, S, SubscriptionId, Stream, C3),
+
+    ?awaitMatch([{event, consumer_created, _, _, _}], filtered_events(Config, consumer_created), ?WAIT),
+    ?assertEqual([], filtered_events(Config, consumer_deleted)),
+
+    C5 = test_unsubscribe(Transport, S, SubscriptionId, C4),
+
+    ?awaitMatch([{event, consumer_deleted, _, _, _}], filtered_events(Config, consumer_deleted), ?WAIT),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 gen_event,
+                                 delete_handler,
+                                 [rabbit_event, HandlerMod, []]),
+
+    C6 = test_delete_stream(Transport, S, Stream, C5, false),
+    _C7 = test_close(Transport, S, C6),
+    closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
+filtered_events(Config, EventType) ->
+    Events = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                          gen_event,
+                                          call,
+                                          [rabbit_event, rabbit_list_test_event_handler, get_events]),
+    lists:filter(fun({event, Type, _, _, _}) when Type =:= EventType ->
+                         true;
+                    (_) ->
+                         false
+                 end, Events).
 
 consumer_offset_info(Config, ConnectionName) ->
     [[{offset, Offset},
