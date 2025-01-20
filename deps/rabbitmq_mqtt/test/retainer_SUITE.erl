@@ -22,7 +22,7 @@ groups() ->
 
 sub_groups() ->
     [{dets, [shuffle], tests()},
-     {ets, [shuffle], tests() ++ wildcard_tests()},
+     {ets, [shuffle], tests()},
      {noop, [shuffle], [does_not_retain]}].
 
 tests() ->
@@ -31,11 +31,8 @@ tests() ->
      should_translate_amqp2mqtt_on_retention,
      should_translate_amqp2mqtt_on_retention_search,
      recover,
-     recover_with_message_expiry_interval].
-
-%% Only run wildcard tests for ETS store
-wildcard_tests() ->
-    [retained_wildcard_single_level, retained_wildcard_multi_level, retained_wildcard_mixed].
+     recover_with_message_expiry_interval,
+    retained_wildcard_single_level, retained_wildcard_multi_level, retained_wildcard_mixed].
 
 suite() ->
     [{timetrap, {minutes, 2}}].

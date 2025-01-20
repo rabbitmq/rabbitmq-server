@@ -329,12 +329,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         erlc_opts = "//:test_erlc_opts",
         deps = ["//deps/amqp_client:erlang_app", "//deps/rabbitmq_ct_helpers:erlang_app"],
     )
-
     erlang_bytecode(
-        name = "rabbit_mqtt_retained_msg_store_ets_SUITE_beam_files",
+        name = "rabbit_mqtt_retained_msg_store_SUITE_beam_files",
         testonly = True,
-        srcs = ["test/rabbit_mqtt_retained_msg_store_ets_SUITE.erl"],
-        outs = ["test/rabbit_mqtt_retained_msg_store_ets_SUITE.beam"],
+        srcs = ["test/rabbit_mqtt_retained_msg_store_SUITE.erl"],
+        outs = ["test/rabbit_mqtt_retained_msg_store_SUITE.beam"],
         hdrs = ["include/rabbit_mqtt_packet.hrl"],
         app_name = "rabbitmq_mqtt",
         erlc_opts = "//:test_erlc_opts",
