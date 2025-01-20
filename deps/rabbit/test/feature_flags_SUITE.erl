@@ -192,7 +192,9 @@ init_per_group(clustering, Config) ->
                 [{rmq_nodes_count, 2},
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
-    rabbit_ct_helpers:run_setup_steps(Config1, [fun prepare_my_plugin/1]);
+    Config2 = rabbit_ct_helpers:merge_app_env(
+                Config1, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    rabbit_ct_helpers:run_setup_steps(Config2, [fun prepare_my_plugin/1]);
 init_per_group(activating_plugin, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
@@ -206,7 +208,17 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
+init_per_testcase(enable_feature_flag_when_ff_file_is_unwritable = Testcase, Config) ->
+    case erlang:system_info(otp_release) of
+        "26" ->
+            {skip, "Hits a crash in Mnesia fairly frequently"};
+        _ ->
+            do_init_per_testcase(Testcase, Config)
+    end;
 init_per_testcase(Testcase, Config) ->
+    do_init_per_testcase(Testcase, Config).
+
+do_init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, Testcase),
     Config1 = case Testcase of
@@ -885,7 +897,7 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
             ok
     end,
 
-    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
+    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
@@ -981,7 +993,7 @@ clustering_denied_with_new_ff_enabled(Config) ->
         false -> ok
     end,
 
-    ?assertMatch({skip, _}, rabbit_ct_broker_helpers:cluster_nodes(Config)),
+    ?assertMatch({skip, _}, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
@@ -1043,7 +1055,7 @@ clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes(Config) ->
         false -> ok
     end,
 
-    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config)),
+    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of

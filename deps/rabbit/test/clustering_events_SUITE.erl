@@ -87,10 +87,10 @@ configure_cluster_essentials(Config, Group, Clustered) ->
 
 node_added_event(Config) ->
     [Server1, Server2, _Server3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ok = event_recorder:start(Config),
-    join_cluster(Server2, Server1),
-    E = event_recorder:get_events(Config),
-    ok = event_recorder:stop(Config),
+    ok = event_recorder:start(Config, Server2),
+    join_cluster(Server1, Server2),
+    E = event_recorder:get_events(Config, Server2),
+    ok = event_recorder:stop(Config, Server2),
     ?assert(lists:any(fun(#event{type = node_added}) ->
                               true;
                          (_) ->

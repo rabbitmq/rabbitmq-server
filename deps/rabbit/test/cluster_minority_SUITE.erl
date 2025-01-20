@@ -133,7 +133,9 @@ init_per_group(Group, Config0) ->
                                                     {rmq_nodes_clustered, false},
                                                     {tcp_ports_base},
                                                     {net_ticktime, 5}]),
-    rabbit_ct_helpers:run_steps(Config,
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    rabbit_ct_helpers:run_steps(Config1,
                                 rabbit_ct_broker_helpers:setup_steps() ++
                                     rabbit_ct_client_helpers:setup_steps()).
 

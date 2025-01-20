@@ -50,10 +50,12 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_consul/1]).
 
 init_per_group(clustering, Config) ->
-    rabbit_ct_helpers:set_config(
-      Config,
-      [{rmq_nodes_count, 3},
-       {rmq_nodes_clustered, false}]);
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodes_count, 3},
+                 {rmq_nodes_clustered, false}]),
+    rabbit_ct_helpers:merge_app_env(
+      Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
 init_per_group(_Group, Config) ->
     Config.
 
