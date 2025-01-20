@@ -13,7 +13,7 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1, get_tables/1]).
+-export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
 % TODO: -define(DEFAULT_MATCH_LIMIT, 1000).
 
@@ -118,7 +118,7 @@ insert(Topic, Msg, #store_state{} = State) ->
   ets:insert(State#store_state.msg_table, {NodeId, Topic, Msg}),
   ok.
 
--spec lookup(topic(), store_state()) -> [mqtt_msg()] | [mqtt_msg_v0()] | undefined.
+-spec lookup(topic(), store_state()) -> [mqtt_msg()] | [mqtt_msg_v0()] | [].
 lookup(Topic, #store_state{} = State) ->
   Words = split_topic(Topic),
   Matches = match_pattern_words(Words, State#store_state.root_id, State, []),
@@ -152,22 +152,16 @@ delete(Topic, State) ->
   end,
   ok.
 
--spec get_tables(store_state()) -> {ets:tid(), ets:tid(), ets:tid()}.
-get_tables(#store_state{node_table = NodeTable,
-                        edge_table = EdgeTable,
-                        msg_table = MsgTable}) ->
-  {NodeTable, EdgeTable, MsgTable}.
-
 %% Internal setup/teardown functions
 -spec get_table_name(rabbit_types:vhost(), binary()) -> atom().
 get_table_name(VHost, Type) ->
   TableName = rabbit_mqtt_util:vhost_name_to_table_name(VHost),
-  Suffix = iolist_to_binary([<<"_">>, Type]),
-  list_to_atom(atom_to_list(TableName) ++ binary_to_list(Suffix)).
+  Suffix = erlang:iolist_to_binary([<<"_">>, Type]),
+  erlang:list_to_atom(erlang:atom_to_list(TableName) ++ erlang:binary_to_list(Suffix)).
 
 -spec get_table_path(file:name_all(), rabbit_types:vhost(), binary()) -> file:name_all().
 get_table_path(Dir, VHost, Type) ->
-  rabbit_mqtt_util:path_for(Dir, iolist_to_binary([VHost, Type])).
+  rabbit_mqtt_util:path_for(Dir, erlang:iolist_to_binary([VHost, Type]), ".ets").
 
 -spec delete_table_files(file:name_all(), rabbit_types:vhost()) -> ok.
 delete_table_files(Dir, VHost) ->

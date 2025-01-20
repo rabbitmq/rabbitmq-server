@@ -21,7 +21,7 @@ insert(_Topic, _Msg, _State) ->
   ok.
 
 lookup(_Topic, _State) ->
-  undefined.
+  [].
 
 delete(_Topic, _State) ->
   ok.
