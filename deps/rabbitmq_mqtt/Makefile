@@ -43,7 +43,7 @@ export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
 DEPS = ranch rabbit amqp10_common
-TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream
+TEST_DEPS = emqtt ct_helper rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management amqp_client rabbitmq_consistent_hash_exchange rabbitmq_amqp_client rabbitmq_stomp rabbitmq_stream rabbitmq_federation
 
 PLT_APPS += rabbitmqctl elixir
 
@@ -94,7 +94,7 @@ define ct_master.erl
 	halt(0)
 endef
 
-PARALLEL_CT_SET_1_A = auth retainer
+PARALLEL_CT_SET_1_A = auth retainer federation feature_flag
 PARALLEL_CT_SET_1_B = cluster command config config_schema mc_mqtt packet_prop \
     processor protocol_interop proxy_protocol rabbit_mqtt_confirms reader util
 PARALLEL_CT_SET_1_C = java v5

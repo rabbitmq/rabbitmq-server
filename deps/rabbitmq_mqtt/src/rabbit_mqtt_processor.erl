@@ -88,8 +88,13 @@
          send_fun :: send_fun(),
          %% Maximum MQTT packet size in bytes for packets sent from server to client.
          max_packet_size_outbound :: max_packet_size(),
-         topic_alias_maximum_outbound :: non_neg_integer()
-         }).
+         topic_alias_maximum_outbound :: non_neg_integer(),
+         %% https://github.com/rabbitmq/rabbitmq-server/issues/13040
+         %% The database stores the MQTT subscription options in the binding arguments for:
+         %% * v1 as Erlang record #mqtt_subscription_opts{}
+         %% * v2 as AMQP 0.9.1 table
+         binding_args_v2 :: boolean()
+        }).
 
 -record(state,
         {cfg :: #cfg{},
@@ -207,6 +212,9 @@ process_connect(
         {TraceState, ConnName} = init_trace(VHost, ConnName0),
         ok = rabbit_mqtt_keepalive:start(KeepaliveSecs, Socket),
         Exchange = rabbit_misc:r(VHost, exchange, persistent_term:get(?PERSISTENT_TERM_EXCHANGE)),
+        %% To simplify logic, we decide at connection establishment time to stick
+        %% with either binding args v1 or v2 for the lifetime of the connection.
+        BindingArgsV2 = rabbit_feature_flags:is_enabled('rabbitmq_4.1.0'),
         S = #state{
                cfg = #cfg{socket = Socket,
                           proto_ver = proto_integer_to_atom(ProtoVer),
@@ -229,7 +237,8 @@ process_connect(
                           user_prop = maps:get('User-Property', ConnectProps, []),
                           will_msg = WillMsg,
                           max_packet_size_outbound = MaxPacketSize,
-                          topic_alias_maximum_outbound = TopicAliasMaxOutbound},
+                          topic_alias_maximum_outbound = TopicAliasMaxOutbound,
+                          binding_args_v2 = BindingArgsV2},
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx}},
@@ -432,7 +441,8 @@ process_request(?SUBSCRIBE,
                                  packet_id  = SubscribePktId,
                                  subscriptions = Subscriptions},
                    payload = undefined},
-                #state{cfg = #cfg{proto_ver = ProtoVer}} = State0) ->
+                State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
+                                           binding_args_v2 = BindingArgsV2}}) ->
     ?LOG_DEBUG("Received a SUBSCRIBE with subscription(s) ~p", [Subscriptions]),
     {ResultRev, RetainedRev, State1} =
     lists:foldl(
@@ -460,7 +470,7 @@ process_request(?SUBSCRIBE,
                       maybe
                           {ok, Q} ?= ensure_queue(QoS, S0),
                           QName = amqqueue:get_name(Q),
-                          BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
+                          BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts, BindingArgsV2),
                           ok ?= add_subscription(TopicFilter, BindingArgs, QName, S0),
                           ok ?= maybe_delete_old_subscription(TopicFilter, Opts, S0),
                           Subs = maps:put(TopicFilter, Opts, S0#state.subscriptions),
@@ -508,10 +518,11 @@ process_request(?UNSUBSCRIBE,
     {ReasonCodes, State} =
     lists:foldl(
       fun(TopicFilter, {L, #state{subscriptions = Subs0,
-                                  cfg = #cfg{proto_ver = ProtoVer}} = S0}) ->
+                                  cfg = #cfg{proto_ver = ProtoVer,
+                                             binding_args_v2 = BindingArgsV2}} = S0}) ->
               case maps:take(TopicFilter, Subs0) of
                   {Opts, Subs} ->
-                      BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
+                      BindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts, BindingArgsV2),
                       case delete_subscription(
                              TopicFilter, BindingArgs, Opts#mqtt_subscription_opts.qos, S0) of
                           ok ->
@@ -872,14 +883,19 @@ init_subscriptions(_SessionPresent = _SubscriptionsPresent = true,
 init_subscriptions(_, State) ->
     {ok, State}.
 
+%% We suppress a warning because rabbit_misc:table_lookup/2 declares the correct spec and
+%% we must handle binding args v1 where binding arguments are not a valid AMQP 0.9.1 table.
+-dialyzer({no_match, init_subscriptions0/2}).
+
 -spec init_subscriptions0(qos(), state()) ->
     {ok, subscriptions()} | {error, reason_code()}.
-init_subscriptions0(QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
-                                                    exchange = Exchange}}) ->
+init_subscriptions0(QoS, State = #state{cfg = #cfg{proto_ver = ProtoVer,
+                                                   exchange = Exchange,
+                                                   binding_args_v2 = BindingArgsV2}}) ->
     Bindings =
     rabbit_binding:list_for_source_and_destination(
       Exchange,
-      queue_name(QoS, State0),
+      queue_name(QoS, State),
       %% Querying table rabbit_route is catastrophic for CPU usage.
       %% Querying table rabbit_reverse_route is acceptable because
       %% the source exchange is always the same in the MQTT plugin whereas
@@ -887,37 +903,56 @@ init_subscriptions0(QoS, State0 = #state{cfg = #cfg{proto_ver = ProtoVer,
       %% rabbit_reverse_route is sorted by destination queue.
       _Reverse = true),
     try
-        Subs = lists:foldl(
+        Subs = lists:map(
                  fun(#binding{key = Key,
-                              args = Args = []},
-                     Acc) ->
+                              args = Args = []}) ->
                          Opts = #mqtt_subscription_opts{qos = QoS},
                          TopicFilter = amqp_to_mqtt(Key),
                          case ProtoVer of
                              ?MQTT_PROTO_V5 ->
                                  %% session upgrade
-                                 NewBindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts),
-                                 ok = recreate_subscription(TopicFilter, Args, NewBindingArgs, QoS, State0);
+                                 NewBindingArgs = binding_args_for_proto_ver(ProtoVer, TopicFilter, Opts, BindingArgsV2),
+                                 ok = recreate_subscription(TopicFilter, Args, NewBindingArgs, QoS, State);
                              _ ->
                                  ok
                          end,
-                         maps:put(TopicFilter, Opts, Acc);
+                         {TopicFilter, Opts};
                     (#binding{key = Key,
-                              args = Args},
-                     Acc) ->
-                         Opts0 = #mqtt_subscription_opts{} = lists:keyfind(mqtt_subscription_opts, 1, Args),
+                              args = Args}) ->
                          TopicFilter = amqp_to_mqtt(Key),
                          Opts = case ProtoVer of
                                     ?MQTT_PROTO_V5 ->
-                                        Opts0;
+                                        case rabbit_misc:table_lookup(Args, <<"x-mqtt-subscription-opts">>) of
+                                            {table, Table} ->
+                                                %% binding args v2
+                                                subscription_opts_from_table(Table);
+                                            undefined ->
+                                                %% binding args v1
+                                                Opts0 = #mqtt_subscription_opts{} = lists:keyfind(
+                                                                                      mqtt_subscription_opts, 1, Args),
+                                                case BindingArgsV2 of
+                                                    true ->
+                                                        %% Migrate v1 to v2.
+                                                        %% Note that this migration must be in place even for some versions
+                                                        %% (jump upgrade) after feature flag 'rabbitmq_4.1.0' has become
+                                                        %% required since enabling the feature flag doesn't migrate binding
+                                                        %% args for existing connections.
+                                                        NewArgs = binding_args_for_proto_ver(
+                                                                    ProtoVer, TopicFilter, Opts0, BindingArgsV2),
+                                                        ok = recreate_subscription(TopicFilter, Args, NewArgs, QoS, State);
+                                                    false ->
+                                                        ok
+                                                end,
+                                                Opts0
+                                        end;
                                     _ ->
                                         %% session downgrade
-                                        ok = recreate_subscription(TopicFilter, Args, [], QoS, State0),
+                                        ok = recreate_subscription(TopicFilter, Args, [], QoS, State),
                                         #mqtt_subscription_opts{qos = QoS}
                                 end,
-                         maps:put(TopicFilter, Opts, Acc)
-                 end, #{}, Bindings),
-        {ok, Subs}
+                         {TopicFilter, Opts}
+                 end, Bindings),
+        {ok, maps:from_list(Subs)}
     catch throw:{error, Reason} ->
               Rc = case Reason of
                        access_refused -> ?RC_NOT_AUTHORIZED;
@@ -1482,13 +1517,51 @@ consume(Q, QoS, #state{
             Err
     end.
 
-binding_args_for_proto_ver(?MQTT_PROTO_V3, _, _) ->
+binding_args_for_proto_ver(?MQTT_PROTO_V3, _, _, _) ->
     [];
-binding_args_for_proto_ver(?MQTT_PROTO_V4, _, _) ->
+binding_args_for_proto_ver(?MQTT_PROTO_V4, _, _, _) ->
     [];
-binding_args_for_proto_ver(?MQTT_PROTO_V5, TopicFilter, SubOpts) ->
+binding_args_for_proto_ver(?MQTT_PROTO_V5, TopicFilter, SubOpts0, V2) ->
+    SubOpts = case V2 of
+                  true ->
+                      Table = subscription_opts_to_table(SubOpts0),
+                      {<<"x-mqtt-subscription-opts">>, table, Table};
+                  false ->
+                      SubOpts0
+              end,
     BindingKey = mqtt_to_amqp(TopicFilter),
     [SubOpts, {<<"x-binding-key">>, longstr, BindingKey}].
+
+subscription_opts_to_table(#mqtt_subscription_opts{
+                              qos = Qos,
+                              no_local = NoLocal,
+                              retain_as_published = RetainAsPublished,
+                              retain_handling = RetainHandling,
+                              id = Id}) ->
+    Table0 = [{<<"qos">>, unsignedbyte, Qos},
+              {<<"no-local">>, bool, NoLocal},
+              {<<"retain-as-published">>, bool, RetainAsPublished},
+              {<<"retain-handling">>, unsignedbyte, RetainHandling}],
+    Table = case Id of
+                undefined ->
+                    Table0;
+                _ ->
+                    [{<<"id">>, unsignedint, Id} | Table0]
+            end,
+    rabbit_misc:sort_field_table(Table).
+
+subscription_opts_from_table(Table) ->
+    #{<<"qos">> := Qos,
+      <<"no-local">> := NoLocal,
+      <<"retain-as-published">> := RetainAsPublished,
+      <<"retain-handling">> := RetainHandling
+     } = Map = rabbit_misc:amqp_table(Table),
+    #mqtt_subscription_opts{
+       qos = Qos,
+       no_local = NoLocal,
+       retain_as_published = RetainAsPublished,
+       retain_handling = RetainHandling,
+       id = maps:get(<<"id">>, Map, undefined)}.
 
 add_subscription(TopicFilter, BindingArgs, Qos, State)
   when is_integer(Qos) ->
@@ -1506,12 +1579,13 @@ delete_subscription(TopicFilter, BindingArgs, Qos, State) ->
 %% Subscription will be identical to that in the previous Subscription, although its
 %% Subscription Options could be different." [v5 3.8.4]
 maybe_delete_old_subscription(TopicFilter, Opts, State = #state{subscriptions = Subs,
-                                                                cfg = #cfg{proto_ver = ProtoVer}}) ->
+                                                                cfg = #cfg{proto_ver = ProtoVer,
+                                                                           binding_args_v2 = BindingArgsV2}}) ->
     case Subs of
         #{TopicFilter := OldOpts}
           when OldOpts =/= Opts ->
             delete_subscription(TopicFilter,
-                                binding_args_for_proto_ver(ProtoVer, TopicFilter, OldOpts),
+                                binding_args_for_proto_ver(ProtoVer, TopicFilter, OldOpts, BindingArgsV2),
                                 OldOpts#mqtt_subscription_opts.qos,
                                 State);
         _ ->

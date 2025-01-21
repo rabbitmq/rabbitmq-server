@@ -205,3 +205,10 @@
       stability     => stable,
       depends_on    => [message_containers]
      }}).
+
+-rabbit_feature_flag(
+   {'rabbitmq_4.1.0',
+    #{desc          => "Allows rolling upgrades to 4.1.x",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.0.0']
+     }}).
