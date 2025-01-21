@@ -40,10 +40,23 @@ connect(Config, Node) ->
     {{response, 3, {open, _, _ConnectionProperties}}, C5} = receive_stream_commands(Sock, C4),
     {ok, Sock, C5}.
 
+close(Sock, C0) ->
+    CloseReason = <<"OK">>,
+    CloseFrame = rabbit_stream_core:frame({request, 1, {close, ?RESPONSE_CODE_OK, CloseReason}}),
+    ok = gen_tcp:send(Sock, CloseFrame),
+    {{response, 1, {close, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
+    {ok, C1}.
+
 create_stream(Sock, C0, Stream) ->
     CreateStreamFrame = rabbit_stream_core:frame({request, 1, {create_stream, Stream, #{}}}),
     ok = gen_tcp:send(Sock, CreateStreamFrame),
     {{response, 1, {create_stream, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
+    {ok, C1}.
+
+delete_stream(Sock, C0, Stream) ->
+    DeleteStreamFrame = rabbit_stream_core:frame({request, 1, {delete_stream, Stream}}),
+    ok = gen_tcp:send(Sock, DeleteStreamFrame),
+    {{response, 1, {delete_stream, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
 declare_publisher(Sock, C0, Stream, PublisherId) ->
@@ -52,10 +65,22 @@ declare_publisher(Sock, C0, Stream, PublisherId) ->
     {{response, 1, {declare_publisher, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
+delete_publisher(Sock, C0, PublisherId) ->
+    DeletePublisherFrame = rabbit_stream_core:frame({request, 1, {delete_publisher, PublisherId}}),
+    ok = gen_tcp:send(Sock, DeletePublisherFrame),
+    {{response, 1, {delete_publisher, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
+    {ok, C1}.
+
 subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit) ->
     SubscribeFrame = rabbit_stream_core:frame({request, 1, {subscribe, SubscriptionId, Stream, _OffsetSpec = first, InitialCredit, _Props = #{}}}),
     ok = gen_tcp:send(Sock, SubscribeFrame),
     {{response, 1, {subscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
+    {ok, C1}.
+
+unsubscribe(Sock, C0, SubscriptionId) ->
+    UnsubscribeFrame = rabbit_stream_core:frame({request, 1, {unsubscribe, SubscriptionId}}),
+    ok = gen_tcp:send(Sock, UnsubscribeFrame),
+    {{response, 1, {unsubscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
 publish(Sock, C0, PublisherId, Sequence0, Payloads) ->
@@ -68,8 +93,17 @@ publish(Sock, C0, PublisherId, Sequence0, Payloads) ->
 publish_entries(Sock, C0, PublisherId, MsgCount, Messages) ->
     PublishFrame1 = rabbit_stream_core:frame({publish, PublisherId, MsgCount, Messages}),
     ok = gen_tcp:send(Sock, PublishFrame1),
-    {{publish_confirm, PublisherId, SeqIds}, C1} = receive_stream_commands(Sock, C0),
-    {ok, SeqIds, C1}.
+    wait_for_confirms(Sock, C0, PublisherId, [], MsgCount).
+
+wait_for_confirms(_, C, _, Acc, 0) ->
+    {ok, Acc, C};
+wait_for_confirms(S, C0, PublisherId, Acc, Remaining) ->
+    case receive_stream_commands(S, C0) of
+        {{publish_confirm, PublisherId, SeqIds}, C1} ->
+            wait_for_confirms(S, C1, PublisherId, Acc ++ SeqIds, Remaining - length(SeqIds));
+        {Frame, C1} ->
+            {unexpected_frame, Frame, C1}
+    end.
 
 %% Streams contain AMQP 1.0 encoded messages.
 %% In this case, the AMQP 1.0 encoded message contains a single data section.
