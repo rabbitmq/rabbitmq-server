@@ -2924,9 +2924,8 @@ consumer_name(_Properties) ->
 maybe_dispatch_on_subscription(Transport,
                                State,
                                ConsumerState,
-                               #stream_connection{deliver_version =
-                                                      DeliverVersion} =
-                                   Connection,
+                               #stream_connection{deliver_version = DeliverVersion,
+                                                  user = #user{username = Username}} = Connection,
                                Consumers,
                                Stream,
                                SubscriptionId,
@@ -2970,13 +2969,14 @@ maybe_dispatch_on_subscription(Transport,
                                                    ConsumerOffset,
                                                    ConsumerOffsetLag,
                                                    true,
-                                                   SubscriptionProperties),
+                                                   SubscriptionProperties,
+                                                   Username),
             State#stream_connection_state{consumers = Consumers1}
     end;
 maybe_dispatch_on_subscription(_Transport,
                                State,
                                ConsumerState,
-                               Connection,
+                               #stream_connection{user = #user{username = Username}} = Connection,
                                Consumers,
                                Stream,
                                SubscriptionId,
@@ -3000,7 +3000,8 @@ maybe_dispatch_on_subscription(_Transport,
                                            Offset,
                                            0, %% offset lag
                                            Active,
-                                           SubscriptionProperties),
+                                           SubscriptionProperties,
+                                           Username),
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
     State#stream_connection_state{consumers = Consumers1}.
 
@@ -3205,19 +3206,15 @@ partition_index(VirtualHost, Stream, Properties) ->
             -1
     end.
 
-notify_connection_closed(#statem_data{connection =
-                                          #stream_connection{name = Name,
-                                                             publishers =
-                                                                 Publishers} =
-                                              Connection,
-                                      connection_state =
-                                          #stream_connection_state{consumers =
-                                                                       Consumers} =
-                                              ConnectionState}) ->
+notify_connection_closed(#statem_data{
+                            connection = #stream_connection{name = Name,
+                                                            user = #user{username = Username},
+                                                            publishers = Publishers} = Connection,
+                            connection_state = #stream_connection_state{consumers = Consumers} = ConnectionState}) ->
     rabbit_core_metrics:connection_closed(self()),
     [rabbit_stream_metrics:consumer_cancelled(self(),
                                               stream_r(S, Connection),
-                                              SubId, false)
+                                              SubId, Username, false)
      || #consumer{configuration =
                       #consumer_configuration{stream = S,
                                               subscription_id = SubId}}
@@ -3275,24 +3272,15 @@ clean_state_after_super_stream_deletion(Partitions, Connection, State, Transport
                 end, {Connection, State}, Partitions).
 
 clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
-                                             #stream_connection{virtual_host =
-                                                                    VirtualHost,
-                                                                stream_subscriptions
-                                                                    =
-                                                                    StreamSubscriptions,
-                                                                publishers =
-                                                                    Publishers,
-                                                                publisher_to_ids
-                                                                    =
-                                                                    PublisherToIds,
-                                                                stream_leaders =
-                                                                    Leaders,
-                                                                outstanding_requests = Requests0} =
-                                                 C0,
-                                             #stream_connection_state{consumers
-                                                                          =
-                                                                          Consumers} =
-                                                 S0) ->
+                                             #stream_connection{
+                                                user = #user{username = Username},
+                                                virtual_host = VirtualHost,
+                                                stream_subscriptions = StreamSubscriptions,
+                                                publishers = Publishers,
+                                                publisher_to_ids = PublisherToIds,
+                                                stream_leaders = Leaders,
+                                                outstanding_requests = Requests0} = C0,
+                                             #stream_connection_state{consumers = Consumers} = S0) ->
     {SubscriptionsCleaned, C1, S1} =
         case stream_has_subscriptions(Stream, C0) of
             true ->
@@ -3306,6 +3294,7 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                                                                        stream_r(Stream,
                                                                                                 C0),
                                                                                        SubId,
+                                                                                       Username,
                                                                                        false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
@@ -3317,6 +3306,7 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                                                                        stream_r(Stream,
                                                                                                 C0),
                                                                                        SubId,
+                                                                                       Username,
                                                                                        false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
@@ -3429,11 +3419,11 @@ lookup_leader_from_manager(VirtualHost, Stream) ->
     rabbit_stream_manager:lookup_leader(VirtualHost, Stream).
 
 remove_subscription(SubscriptionId,
-                    #stream_connection{virtual_host = VirtualHost,
-                                       outstanding_requests = Requests0,
-                                       stream_subscriptions =
-                                           StreamSubscriptions} =
-                        Connection,
+                    #stream_connection{
+                       user = #user{username = Username},
+                       virtual_host = VirtualHost,
+                       outstanding_requests = Requests0,
+                       stream_subscriptions = StreamSubscriptions} = Connection,
                     #stream_connection_state{consumers = Consumers} = State,
                     Notify) ->
     #{SubscriptionId := Consumer} = Consumers,
@@ -3462,6 +3452,7 @@ remove_subscription(SubscriptionId,
     rabbit_stream_metrics:consumer_cancelled(self(),
                                              stream_r(Stream, Connection2),
                                              SubscriptionId,
+                                             Username,
                                              Notify),
 
     Requests1 = maybe_unregister_consumer(
