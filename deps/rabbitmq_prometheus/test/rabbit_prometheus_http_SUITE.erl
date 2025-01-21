@@ -713,10 +713,10 @@ exchange_names_metric(Config) ->
 stream_pub_sub_metrics(Config) ->
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
     MsgPerBatch1 = 2,
-    publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),
+    {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),
     Stream2 = atom_to_list(?FUNCTION_NAME) ++ "2",
     MsgPerBatch2 = 3,
-    publish_via_stream_protocol(list_to_binary(Stream2), MsgPerBatch2, Config),
+    {ok, S2, C2} = publish_via_stream_protocol(list_to_binary(Stream2), MsgPerBatch2, Config),
 
     %% aggregated metrics
 
@@ -739,6 +739,8 @@ stream_pub_sub_metrics(Config) ->
     ?assertEqual([{#{vhost => "/", queue => Stream1}, [2]},
                   {#{vhost => "/", queue => Stream2}, [3]}],
                  lists:sort(maps:to_list(MaxOffsetLag))),
+    dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
+    dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
     ok.
 
 core_metrics_special_chars(Config) ->
@@ -808,8 +810,13 @@ publish_via_stream_protocol(Stream, MsgPerBatch, Config) ->
     SubscriptionId = 97,
     {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 1),
     %% delivery of first batch of messages
-    {{deliver, SubscriptionId, _Bin1}, _C7} = stream_test_utils:receive_stream_commands(S, C6),
-    ok.
+    {{deliver, SubscriptionId, _Bin1}, C7} = stream_test_utils:receive_stream_commands(S, C6),
+    {ok, S, C7}.
+
+dispose_stream_connection(Sock, C0, Stream) ->
+    {ok, C1} = stream_test_utils:delete_stream(Sock, C0, Stream),
+    {_MetadataUpdateFrame, C2} = stream_test_utils:receive_stream_commands(Sock, C1),
+    {ok, _} = stream_test_utils:close(Sock, C2).
 
 http_get(Config, ReqHeaders, CodeExp) ->
     Path = proplists:get_value(prometheus_path, Config, "/metrics"),
