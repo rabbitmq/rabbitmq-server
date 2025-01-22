@@ -67,7 +67,8 @@ groups() ->
        sasl_anonymous,
        test_publisher_with_too_long_reference_errors,
        test_consumer_with_too_long_reference_errors,
-       subscribe_unsubscribe_should_create_events
+       subscribe_unsubscribe_should_create_events,
+       test_stream_test_utils
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -1051,6 +1052,21 @@ subscribe_unsubscribe_should_create_events(Config) ->
     C6 = test_delete_stream(Transport, S, Stream, C5, false),
     _C7 = test_close(Transport, S, C6),
     closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
+test_stream_test_utils(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PublisherId = 42,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PublisherId),
+    MsgPerBatch = 100,
+    Payloads = lists:duplicate(MsgPerBatch, <<"m1">>),
+    SequenceFrom1 = 1,
+    {ok, C3} = stream_test_utils:publish(S, C2, PublisherId, SequenceFrom1, Payloads),
+    {ok, C4} = stream_test_utils:delete_publisher(S, C3, PublisherId),
+    {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
+    {ok, _} = stream_test_utils:close(S, C5),
     ok.
 
 filtered_events(Config, EventType) ->

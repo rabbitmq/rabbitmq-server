@@ -290,15 +290,16 @@ publish_via_stream_protocol(Stream, Config) ->
     {ok, _, C3} = stream_test_utils:publish_entries(S, C2, PublisherId, length(Messages1), Messages1),
 
     UncompressedSubbatch = stream_test_utils:sub_batch_entry_uncompressed(4, [<<"m4">>, <<"m5">>, <<"m6">>]),
-    {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PublisherId, 3, UncompressedSubbatch),
+    {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PublisherId, 1, UncompressedSubbatch),
 
     CompressedSubbatch = stream_test_utils:sub_batch_entry_compressed(5, [<<"m7">>, <<"m8">>, <<"m9">>]),
-    {ok, _, C5} = stream_test_utils:publish_entries(S, C4, PublisherId, 3, CompressedSubbatch),
+    {ok, _, C5} = stream_test_utils:publish_entries(S, C4, PublisherId, 1, CompressedSubbatch),
 
     M10 = stream_test_utils:simple_entry(6, <<"m10">>),
     M11 = stream_test_utils:simple_entry(7, <<"m11">>),
     Messages2 = [M10, M11],
-    {ok, _, _C6} = stream_test_utils:publish_entries(S, C5, PublisherId, length(Messages2), Messages2).
+    {ok, _, C6} = stream_test_utils:publish_entries(S, C5, PublisherId, length(Messages2), Messages2),
+    {ok, _} = stream_test_utils:close(S, C6).
 
 connection_config(Config) ->
     Host = ?config(rmq_hostname, Config),
