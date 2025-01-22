@@ -97,6 +97,7 @@ dialyze(
 
 eunit(
     name = "eunit",
+    compiled_suites = [":test_rabbit_list_test_event_handler_beam"],
     target = ":test_erlang_app",
 )
 
