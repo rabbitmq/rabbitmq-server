@@ -15,21 +15,19 @@
 
 -export([new/2, recover/2, insert/3, lookup/2, delete/2, terminate/1]).
 
-% TODO: -define(DEFAULT_MATCH_LIMIT, 1000).
-
 -record(store_state,
         {node_table :: ets:tid(),    % Stores {node_id, edge_count, is_topic}
          edge_table :: ets:tid(),    % Stores {{from_id, word}, to_id}
          msg_table :: ets:tid(),    % Stores {node_id, topic, mqtt_msg}
          root_id :: binary(),     % Root node ID
          dir :: file:filename_all(),
-         vhost :: rabbit_types:vhost()}).
+         vhost :: rabbit_types:vhost(),
+         max_retained_messages_count :: pos_integer()}).
 
 -type store_state() :: #store_state{}.
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-  % Clean up any existing files
   delete_table_files(Dir, VHost),
 
   % Node table - will store tuples of {node_id, edge_count, is_topic}
@@ -42,12 +40,15 @@ new(Dir, VHost) ->
   RootId = make_node_id(),
   ets:insert(NodeTable, {RootId, 0, false}),
 
+  MaxRetainedMessagesCount =
+    rabbit_mqtt_retained_msg_store:get_max_retained_messages_count(),
   #store_state{node_table = NodeTable,
                edge_table = EdgeTable,
                msg_table = MsgTable,
                root_id = RootId,
                dir = Dir,
-               vhost = VHost}.
+               vhost = VHost,
+               max_retained_messages_count = MaxRetainedMessagesCount}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
                {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
@@ -71,14 +72,16 @@ recover(Dir, VHost) ->
           ets:insert(NodeTable, {NewId, 0, false}),
           NewId
       end,
-
+    MaxRetainedMessagesCount =
+      rabbit_mqtt_retained_msg_store:get_max_retained_messages_count(),
     State =
       #store_state{node_table = NodeTable,
                    edge_table = EdgeTable,
                    msg_table = MsgTable,
                    root_id = RootId,
                    dir = Dir,
-                   vhost = VHost},
+                   vhost = VHost,
+                   max_retained_messages_count = MaxRetainedMessagesCount},
     {ok, State, Expire}
   catch
     error:Reason ->
@@ -116,21 +119,25 @@ insert(Topic, Msg, #store_state{} = State) ->
   ok.
 
 -spec lookup(topic(), store_state()) -> [mqtt_msg()] | [mqtt_msg_v0()] | [].
-lookup(Topic, #store_state{} = State) ->
+lookup(Topic,
+       #store_state{max_retained_messages_count = Limit,
+                    msg_table = MsgTable,
+                    root_id = RootId} =
+         State) ->
   Words = split_topic(Topic),
-  Matches = match_pattern_words(Words, State#store_state.root_id, State, []),
-  Values =
-    lists:flatmap(fun(NodeId) ->
-                     case ets:lookup(State#store_state.msg_table, NodeId) of
-                       [] -> [];
-                       [{_NodeId, _Topic, Value} | _] -> [Value];
-                       {error, _Reason} ->
-                         ?LOG_ERROR("Failed to lookup MQTT retained message for node ~p", [NodeId]),
-                         []
-                     end
-                  end,
-                  Matches),
-  Values.
+  % limiting the length of the list of matches to avoid performance issues
+  % it is simpler and in most cases more efficient to use sublist after the fact than to try to limit the number of matches in the match_pattern_words function
+  Matches = lists:sublist(match_pattern_words(Words, RootId, State, []), Limit),
+  lists:flatmap(fun(NodeId) ->
+                   case ets:lookup(MsgTable, NodeId) of
+                     [] -> [];
+                     [{_NodeId, _Topic, Value} | _] -> [Value];
+                     {error, _Reason} ->
+                       ?LOG_ERROR("Failed to lookup MQTT retained message for node ~p", [NodeId]),
+                       []
+                   end
+                end,
+                Matches).
 
 -spec delete(topic(), store_state()) -> ok.
 delete(Topic, State) ->

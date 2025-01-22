@@ -24,7 +24,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([start/1, insert/3, lookup/2, delete/2, terminate/1]).
--export([expire/2]).
+-export([expire/2, get_max_retained_messages_count/0]).
 
 -export_type([state/0, expire/0]).
 
@@ -122,3 +122,9 @@ convert_mqtt_msg({mqtt_msg, Retain, Qos, Topic, Dup, PacketId, Payload}) ->
               packet_id = PacketId,
               payload = Payload,
               props = #{}}.
+
+-spec get_max_retained_messages_count() -> pos_integer().
+get_max_retained_messages_count() ->
+    rabbit_misc:get_env(rabbit_mqtt,
+                        retained_message_store_max_retained_messages_count,
+                        2000).

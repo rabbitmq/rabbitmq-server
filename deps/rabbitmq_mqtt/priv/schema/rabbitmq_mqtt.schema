@@ -87,6 +87,10 @@ end}.
 {mapping, "mqtt.retained_message_store_dets_sync_interval", "rabbitmq_mqtt.retained_message_store_dets_sync_interval",
     [{datatype, integer}]}.
 
+%% Limit how many messages are returned by MQTT plugin retained messages store
+{mapping, "mqtt.retained_message_store_max_retained_messages_count", "rabbitmq_mqtt.retained_message_store_max_retained_messages_count",
+    [{datatype, integer}]}.
+
 %% Whether or not to enable proxy protocol support.
 %%
 %% {proxy_protocol, false}

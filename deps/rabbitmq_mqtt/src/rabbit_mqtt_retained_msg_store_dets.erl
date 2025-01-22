@@ -21,7 +21,8 @@
          msg_table :: dets:tab_name(),     % Stores {node_id, topic, mqtt_msg}
          root_id :: binary(),              % Root node ID
          dir :: file:filename_all(),
-         vhost :: rabbit_types:vhost()}).
+         vhost :: rabbit_types:vhost(),
+         max_retained_messages_count :: pos_integer()}).
 
 -type store_state() :: #store_state{}.
 
@@ -31,13 +32,15 @@ new(Dir, VHost) ->
   {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
   {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, set),
   {ok, RootId} = find_or_insert_root_node(NodeTable, EdgeTable),
-
+  MaxRetainedMessagesCount =
+    rabbit_mqtt_retained_msg_store:get_max_retained_messages_count(),
   #store_state{node_table = NodeTable,
                edge_table = EdgeTable,
                msg_table = MsgTable,
                root_id = RootId,
                dir = Dir,
-               vhost = VHost}.
+               vhost = VHost,
+               max_retained_messages_count = MaxRetainedMessagesCount}.
 
 -spec recover(file:name_all(), rabbit_types:vhost()) ->
                {ok, store_state(), rabbit_mqtt_retained_msg_store:expire()} |
@@ -49,14 +52,16 @@ recover(Dir, VHost) ->
     {ok, NodeTable} = open_table(Dir, VHost, <<"nodes">>, set),
     {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
     {ok, RootId} = find_or_insert_root_node(NodeTable, EdgeTable),
-
+    MaxRetainedMessagesCount =
+      rabbit_mqtt_retained_msg_store:get_max_retained_messages_count(),
     State =
       #store_state{node_table = NodeTable,
                    edge_table = EdgeTable,
                    msg_table = MsgTable,
                    root_id = RootId,
                    dir = Dir,
-                   vhost = VHost},
+                   vhost = VHost,
+                   max_retained_messages_count = MaxRetainedMessagesCount},
     {ok, State, Expire}
   catch
     error:Reason ->
@@ -74,12 +79,16 @@ insert(Topic, Msg, #store_state{} = State) ->
   ok.
 
 -spec lookup(topic(), store_state()) -> [mqtt_msg()] | [mqtt_msg_v0()] | [].
-lookup(Topic, #store_state{} = State) ->
+lookup(Topic,
+       #store_state{root_id = RootId,
+                    msg_table = MsgTable,
+                    max_retained_messages_count = Limit} =
+         State) ->
   Words = split_topic(Topic),
-  Matches = match_pattern_words(Words, State#store_state.root_id, State, []),
+  Matches = lists:sublist(match_pattern_words(Words, RootId, State, []), Limit),
   Values =
     lists:flatmap(fun(NodeId) ->
-                     case dets:lookup(State#store_state.msg_table, NodeId) of
+                     case dets:lookup(MsgTable, NodeId) of
                        [] -> [];
                        [{_NodeId, _Topic, Value} | _] -> [Value];
                        {error, _Reason} ->
