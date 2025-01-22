@@ -122,8 +122,11 @@ lookup(Topic, #store_state{} = State) ->
   Values =
     lists:flatmap(fun(NodeId) ->
                      case ets:lookup(State#store_state.msg_table, NodeId) of
+                       [] -> [];
                        [{_NodeId, _Topic, Value} | _] -> [Value];
-                       [] -> []
+                       {error, _Reason} ->
+                         ?LOG_ERROR("Failed to lookup MQTT retained message for node ~p", [NodeId]),
+                         []
                      end
                   end,
                   Matches),

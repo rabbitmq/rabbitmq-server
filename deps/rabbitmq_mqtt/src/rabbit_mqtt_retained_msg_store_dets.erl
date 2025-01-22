@@ -27,12 +27,10 @@
 
 -spec new(file:name_all(), rabbit_types:vhost()) -> store_state().
 new(Dir, VHost) ->
-  % delete_table_files(Dir, VHost),
   {ok, NodeTable} = open_table(Dir, VHost, <<"nodes">>, set),
   {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
   {ok, MsgTable} = open_table(Dir, VHost, <<"msgs">>, set),
-  RootId = make_node_id(),
-  ok = dets:insert(NodeTable, {RootId, 0, false}),
+  {ok, RootId} = find_or_insert_root_node(NodeTable, EdgeTable),
 
   #store_state{node_table = NodeTable,
                edge_table = EdgeTable,
@@ -50,18 +48,7 @@ recover(Dir, VHost) ->
     Expire = rabbit_mqtt_retained_msg_store:expire(dets, MsgTable),
     {ok, NodeTable} = open_table(Dir, VHost, <<"nodes">>, set),
     {ok, EdgeTable} = open_table(Dir, VHost, <<"edges">>, set),
-
-    RootId =
-      case find_root_node(NodeTable, EdgeTable) of
-        {ok, Id} ->
-          ?LOG_INFO("Recovered existing RootId: ~p", [Id]),
-          Id;
-        error ->
-          NewId = make_node_id(),
-          ?LOG_INFO("Creating new RootId: ~p", [NewId]),
-          ok = dets:insert(NodeTable, {NewId, 0, false}),
-          NewId
-      end,
+    {ok, RootId} = find_or_insert_root_node(NodeTable, EdgeTable),
 
     State =
       #store_state{node_table = NodeTable,
@@ -80,15 +67,10 @@ recover(Dir, VHost) ->
 -spec insert(topic(), mqtt_msg(), store_state()) -> ok.
 insert(Topic, Msg, #store_state{} = State) ->
   Words = split_topic(Topic),
-  Insert =
-    fun() ->
-       NodeId = follow_or_create_path(Words, State),
-       % Mark node as topic end and store message
-       update_node(NodeId, true, State),
-       dets:insert(State#store_state.msg_table, {NodeId, Topic, Msg})
-    end,
-  Insert(),
-  %? TODO: Wrap in transaction since we're modifying multiple tables
+  NodeId = follow_or_create_path(Words, State),
+  % Mark node as topic end and store message
+  update_node(NodeId, true, State),
+  dets:insert(State#store_state.msg_table, {NodeId, Topic, Msg}),
   ok.
 
 -spec lookup(topic(), store_state()) -> [mqtt_msg()] | [mqtt_msg_v0()] | [].
@@ -98,8 +80,11 @@ lookup(Topic, #store_state{} = State) ->
   Values =
     lists:flatmap(fun(NodeId) ->
                      case dets:lookup(State#store_state.msg_table, NodeId) of
+                       [] -> [];
                        [{_NodeId, _Topic, Value} | _] -> [Value];
-                       [] -> []
+                       {error, _Reason} ->
+                         ?LOG_ERROR("Failed to lookup MQTT retained message for node ~p", [NodeId]),
+                         []
                      end
                   end,
                   Matches),
@@ -108,24 +93,19 @@ lookup(Topic, #store_state{} = State) ->
 -spec delete(topic(), store_state()) -> ok.
 delete(Topic, State) ->
   Words = split_topic(Topic),
-  % Wrap in transaction since we're modifying multiple tables
-  Delete =
-    fun() ->
-       case follow_path(Words, State) of
-         {ok, NodeId} ->
-           dets:match_delete(State#store_state.msg_table, {NodeId, Topic, '_'}),
-           case dets:lookup(State#store_state.msg_table, NodeId) of
-             [] ->
-               update_node(NodeId, false, State),
-               maybe_clean_path(NodeId, State);
-             _ -> ok
-           end;
-         error -> ok
-       end
-    end,
-  Delete(),
-  %? TODO: Wrap in transaction since we're modifying multiple tables
-  % rabbit_mnesia:execute_mnesia_transaction(Delete),
+  case follow_path(Words, State) of
+    {ok, NodeId} ->
+      dets:match_delete(State#store_state.msg_table, {NodeId, Topic, '_'}),
+      case dets:lookup(State#store_state.msg_table, NodeId) of
+        [] ->
+          update_node(NodeId, false, State),
+          maybe_clean_path(NodeId, State);
+        _ ->
+          ok
+      end;
+    error ->
+      ok
+  end,
   ok.
 
 -spec terminate(store_state()) -> ok.
@@ -165,6 +145,16 @@ find_root_node(NodeTable, EdgeTable) ->
       error;
     _ ->
       error  % Multiple root nodes would indicate corruption
+  end.
+
+find_or_insert_root_node(NodeTable, EdgeTable) ->
+  case find_root_node(NodeTable, EdgeTable) of
+    {ok, Id} ->
+      {ok, Id};
+    error ->
+      NewId = make_node_id(),
+      ok = dets:insert(NodeTable, {NewId, 0, false}),
+      {ok, NewId}
   end.
 
 follow_or_create_path(Words, State) ->
@@ -287,21 +277,12 @@ remove_edge(FromId, Word, State) ->
 
 open_table(Dir, VHost, Type, TableType) ->
   Tab = get_table_name(VHost, Type),
-  % Path = get_table_path(Dir, VHost, Type),
+  Path = get_table_path(Dir, VHost, Type),
   AutoSave =
     rabbit_misc:get_env(rabbit_mqtt, retained_message_store_dets_sync_interval, 2000),
   dets:open_file(Tab,
                  [{type, TableType},
-                  % {file, Path},
+                  {file, Path},
                   {ram_file, true},
                   {repair, true},
                   {auto_save, AutoSave}]).
-
-delete_table_files(Dir, VHost) ->
-  Types = [<<"nodes">>, <<"edges">>, <<"msgs">>],
-  lists:foreach(fun(Type) ->
-                   Path = get_table_path(Dir, VHost, Type),
-                   file:delete(Path)
-                end,
-                Types),
-  ok.

@@ -70,9 +70,6 @@ insert(Topic, Msg, #?STATE{store_mod = Mod, store_state = StoreState}) ->
 -spec lookup(topic(), state()) -> [mqtt_msg()] | [].
 lookup(Topic, #?STATE{store_mod = Mod, store_state = StoreState}) ->
     case Mod:lookup(Topic, StoreState) of
-        % Handle single old message format (legacy case)
-        OldMsg when is_record(OldMsg, mqtt_msg, 7) ->
-            [convert_mqtt_msg(OldMsg)];
         % Handle list of messages - convert any old format ones
         Messages when is_list(Messages) ->
             lists:map(fun (Msg) when is_record(Msg, mqtt_msg, 7) ->
