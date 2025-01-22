@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_oauth2_schema_SUITE).
 
@@ -13,7 +13,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(rabbit_oauth2_schema, [
-    translate_endpoint_params/2, 
+    translate_endpoint_params/2,
     translate_oauth_providers/1,
     translate_resource_servers/1,
     translate_scope_aliases/1
@@ -80,11 +80,11 @@ test_invalid_oauth_providers_endpoint_params(_) ->
 
 test_without_oauth_providers_with_endpoint_params(_) ->
     Conf = [
-        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param1"], 
+        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param1"],
             "some-value1"},
-        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param2"], 
+        {["auth_oauth2","oauth_providers", "A", "discovery_endpoint_params","param2"],
             "some-value2"},
-        {["auth_oauth2","oauth_providers", "B", "discovery_endpoint_params","param3"], 
+        {["auth_oauth2","oauth_providers", "B", "discovery_endpoint_params","param3"],
             "some-value3"}
     ],
     #{
@@ -270,9 +270,9 @@ test_oauth_providers_signing_keys(Conf) ->
     CuttlefishConf = [
         {["auth_oauth2","oauth_providers","keycloak","issuer"],
             "https://keycloak"},
-        {["auth_oauth2","oauth_providers","keycloak","signing_keys","2"], 
+        {["auth_oauth2","oauth_providers","keycloak","signing_keys","2"],
             cert_filename(Conf)},
-        {["auth_oauth2","oauth_providers","keycloak","signing_keys","1"], 
+        {["auth_oauth2","oauth_providers","keycloak","signing_keys","1"],
             cert_filename(Conf)}
     ],
     #{<<"keycloak">> := [{issuer, "https://keycloak"},
@@ -288,18 +288,18 @@ test_scope_aliases_configured_as_list_of_properties(_) ->
     CuttlefishConf = [
         {["auth_oauth2","scope_aliases","1","alias"],
             "admin"},
-        {["auth_oauth2","scope_aliases","1","scope"], 
+        {["auth_oauth2","scope_aliases","1","scope"],
             "rabbitmq.tag:administrator"},
         {["auth_oauth2","scope_aliases","2","alias"],
             "developer"},
-        {["auth_oauth2","scope_aliases","2","scope"], 
-            "rabbitmq.tag:management rabbitmq.read:*/*"}        
+        {["auth_oauth2","scope_aliases","2","scope"],
+            "rabbitmq.tag:management rabbitmq.read:*/*"}
     ],
     #{
         <<"admin">> := [<<"rabbitmq.tag:administrator">>],
-        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
+        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]
     } = translate_scope_aliases(CuttlefishConf).
-    
+
 test_scope_aliases_configured_as_list_of_missing_properties(_) ->
     CuttlefishConf = [
         {["auth_oauth2","scope_aliases","1","alias"],
@@ -313,24 +313,24 @@ test_scope_aliases_configured_as_list_of_missing_properties(_) ->
     ],
     #{} = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf2).
 
-        
+
 test_scope_aliases_configured_as_map(_) ->
     CuttlefishConf = [
-        {["auth_oauth2","scope_aliases","admin"], 
+        {["auth_oauth2","scope_aliases","admin"],
             "rabbitmq.tag:administrator"},
-        {["auth_oauth2","scope_aliases","developer"], 
-            "rabbitmq.tag:management rabbitmq.read:*/*"}        
+        {["auth_oauth2","scope_aliases","developer"],
+            "rabbitmq.tag:management rabbitmq.read:*/*"}
     ],
     #{
         <<"admin">> := [<<"rabbitmq.tag:administrator">>],
-        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]                         
+        <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]
     } = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf).
-    
+
 
 cert_filename(Conf) ->
     string:concat(?config(data_dir, Conf), "certs/cert.pem").
 
 sort_settings(MapOfListOfSettings) ->
     maps:map(fun(_K,List) ->
-        lists:sort(fun({K1,_}, {K2,_}) -> K1 < K2 end, List) end, 
+        lists:sort(fun({K1,_}, {K2,_}) -> K1 < K2 end, List) end,
             MapOfListOfSettings).

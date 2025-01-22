@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.MetadataStoreStatusCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -17,8 +17,9 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MetadataStoreStatusCommand do
     case :rabbit_misc.rpc_call(node_name, :rabbit_feature_flags, :is_enabled, [:khepri_db]) do
       true ->
         :rabbit_misc.rpc_call(node_name, :rabbit_khepri, :status, [])
+
       false ->
-         [[{<<"Metadata Store">>, "mnesia"}]]
+        [[{<<"Metadata Store">>, "mnesia"}]]
     end
   end
 

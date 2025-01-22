@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(clustering_recovery_SUITE).
@@ -122,7 +122,7 @@ end_per_testcase(Testcase, Config) ->
 
 force_shrink_all_quorum_queues(Config) ->
     [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    
+
     QName1 = quorum_queue_name(1),
     QName2 = quorum_queue_name(2),
     QName3 = quorum_queue_name(3),
@@ -140,7 +140,7 @@ force_shrink_all_quorum_queues(Config) ->
        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName1,
                                                    consumer_tag = <<"ctag">>},
                               self())),
-    
+
     ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_all_queues_shrink_member_to_current_member, []),
 
     ok = consume_from_queue(Config, Rabbit, QName1),
@@ -151,7 +151,7 @@ force_shrink_all_quorum_queues(Config) ->
 
 force_shrink_quorum_queue(Config) ->
     [Rabbit, Hare, Bunny] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    
+
     QName1 = quorum_queue_name(1),
     Args = [{<<"x-queue-type">>, longstr, <<"quorum">>}],
     declare_and_publish_to_queue(Config, Rabbit, QName1, Args),
@@ -165,7 +165,7 @@ force_shrink_quorum_queue(Config) ->
        amqp_channel:subscribe(Ch, #'basic.consume'{queue = QName1,
                                                    consumer_tag = <<"ctag">>},
                               self())),
-    
+
     ok = rabbit_ct_broker_helpers:rpc(Config, Rabbit, rabbit_quorum_queue, force_shrink_member_to_current_member, [<<"/">>, QName1]),
 
     ok = consume_from_queue(Config, Rabbit, QName1).

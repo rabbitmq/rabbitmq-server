@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_amqp091_shovel).
@@ -607,10 +607,10 @@ parse_declaration({[Method | Rest], Acc}) ->
     parse_declaration({[{Method, []} | Rest], Acc}).
 
 decl_fun({source, Endpoint}) ->
-    case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of 
-        [] -> 
+    case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of
+        [] ->
             case proplists:get_value(predeclared, application:get_env(?APP, topology, []), false) of
-                true -> case proplists:get_value(queue, Endpoint) of 
+                true -> case proplists:get_value(queue, Endpoint) of
                             <<>> -> fail({invalid_parameter_value, declarations, {require_non_empty}});
                             Queue -> {?MODULE, check_fun, [Queue]}
                         end;
@@ -621,7 +621,7 @@ decl_fun({source, Endpoint}) ->
 decl_fun({destination, Endpoint}) ->
     Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []), []}),
     {?MODULE, decl_fun, [Decl]}.
-    
+
 decl_fun(Decl, _Conn, Ch) ->
     [begin
          amqp_channel:call(Ch, M)

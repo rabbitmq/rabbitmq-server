@@ -12,8 +12,8 @@
 ##
 ## See https://www.rabbitmq.com/docs/documentation for the rest of RabbitMQ documentation.
 ##
-## In case you have questions, please use RabbitMQ community Slack and the rabbitmq-users Google group
-## instead of GitHub issues.
+## In case you have questions, please use rabbitmq/rabbitmq-server Discussions and the RabbitMQ community Discord server
+## for questions.
 
 # ======================================
 # Core broker section
@@ -373,6 +373,22 @@
 # tcp_listen_options.buffer = 196608
 # tcp_listen_options.sndbuf = 196608
 # tcp_listen_options.recbuf = 196608
+
+##
+## Queues
+##
+
+## If set, the 'x-queue-type' header will be ignored (not compared for equivalence)
+## for queue redeclaration. This can simplify upgrades of applications that explicitly
+## set 'x-queue-type' to 'classic' for historical reasons but do not set any other
+## properties that may conflict or significantly change queue behavior and semantics, such as the 'exclusive' field.
+# quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true
+
+## Changes classic queue storage implementation version.
+## In 4.0.x, version 2 is the default and this is a forward compatibility setting,
+## that is, it will be useful when a new version is developed.
+##
+# classic_queue.default_version = 2
 
 ##
 ## Resource Limits & Flow Control

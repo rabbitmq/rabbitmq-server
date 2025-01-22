@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%%  Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%  Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_priority_queue).
@@ -187,7 +187,9 @@ delete_crashed(Q) ->
     BQ = bq(),
     case priorities(Q) of
         none -> BQ:delete_crashed(Q);
-        Ps   -> [BQ:delete_crashed(mutate_name(P, Q)) || P <- Ps]
+        Ps   ->
+            [ok = BQ:delete_crashed(mutate_name(P, Q)) || P <- Ps],
+            ok
     end.
 
 purge(State = #state{bq = BQ}) ->

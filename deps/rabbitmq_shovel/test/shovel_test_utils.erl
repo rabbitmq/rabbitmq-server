@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(shovel_test_utils).
@@ -10,7 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -export([set_param/3, set_param/4, set_param/5, set_param_nowait/3,
          await_shovel/2, await_shovel/3, await_shovel/4, await_shovel1/3,
-         shovels_from_status/0, shovels_from_status/1, 
+         shovels_from_status/0, shovels_from_status/1,
          get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
          await/1, await/2, clear_param/2, clear_param/3, make_uri/2]).
@@ -54,13 +54,13 @@ await_shovel(Config, Node, Name, ExpectedState) ->
       ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
 
 await_shovel1(_Config, Name, ExpectedState) ->
-    Ret = await(fun() -> 
+    Ret = await(fun() ->
                   Status = shovels_from_status(ExpectedState),
                   lists:member(Name, Status)
-          end, 30_000), 
+          end, 30_000),
     Ret.
 
-shovels_from_status() ->    
+shovels_from_status() ->
     shovels_from_status(running).
 
 shovels_from_status(ExpectedState) ->

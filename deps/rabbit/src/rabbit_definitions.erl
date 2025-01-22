@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 
@@ -786,8 +786,17 @@ add_vhost(VHost, ActingUser) ->
     case rabbit_vhost:put_vhost(Name, Description, Tags, DefaultQueueType, IsTracingEnabled, ActingUser) of
         ok ->
             ok;
-        {error, _} = Err ->
-            throw(Err)
+        {error, _} = Err1 ->
+            throw(Err1)
+    end,
+
+    %% The newly created virtual host won't have all the metadata keys. Rather than
+    %% changing the functions above, simply update the metadata as a separate step.
+    case rabbit_vhost:update_metadata(Name, Metadata, ActingUser) of
+        ok ->
+            ok;
+        {error, _} = Err2 ->
+            throw(Err2)
     end.
 
 add_permission(Permission, ActingUser) ->

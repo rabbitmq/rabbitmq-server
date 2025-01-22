@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_auth).
@@ -33,22 +33,22 @@ merge_property(Key, List, MapIn) ->
 
 extract_oauth_provider_info_props_as_map(ManagementProps) ->
     lists:foldl(fun(K, Acc) ->
-        merge_property(K, ManagementProps, Acc) end, #{}, 
+        merge_property(K, ManagementProps, Acc) end, #{},
         [oauth_provider_url,
          oauth_metadata_url,
          oauth_authorization_endpoint_params,
          oauth_token_endpoint_params]).
 
-merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, 
+merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer,
         ManagementProps) ->
-    OAuthProviderResult = 
+    OAuthProviderResult =
         case proplists:get_value(oauth_provider_id, OAuthResourceServer) of
-            undefined -> 
+            undefined ->
                 oauth2_client:get_oauth_provider([issuer]);
-            OauthProviderId -> 
+            OauthProviderId ->
                 oauth2_client:get_oauth_provider(OauthProviderId, [issuer])
         end,
-    OAuthProviderInfo0 = 
+    OAuthProviderInfo0 =
         case OAuthProviderResult of
             {ok, OAuthProvider} -> oauth_provider_to_map(OAuthProvider);
             {error, _} -> #{}
@@ -58,15 +58,15 @@ merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer,
     maps:merge(OAuthProviderInfo1, proplists:to_map(MgtResourceServer)).
 
 oauth_provider_to_map(OAuthProvider) ->
-    % only include issuer and end_session_endpoint for now. 
+    % only include issuer and end_session_endpoint for now.
     % The other endpoints are resolved by oidc-client library
     Map0 = case OAuthProvider#oauth_provider.issuer of
-        undefined -> 
+        undefined ->
             #{};
-        Issuer -> 
-            #{  
+        Issuer ->
+            #{
                 oauth_provider_url => Issuer,
-                oauth_metadata_url => 
+                oauth_metadata_url =>
                     OAuthProvider#oauth_provider.discovery_endpoint
             }
     end,
@@ -76,11 +76,11 @@ oauth_provider_to_map(OAuthProvider) ->
     end.
 
 skip_unknown_mgt_resource_servers(ManagementProps, OAuth2Resources) ->
-    maps:filter(fun(Key, _Value) -> maps:is_key(Key, OAuth2Resources) end, 
+    maps:filter(fun(Key, _Value) -> maps:is_key(Key, OAuth2Resources) end,
         proplists:get_value(oauth_resource_servers, ManagementProps, #{})).
 skip_disabled_mgt_resource_servers(MgtOauthResources) ->
-    maps:filter(fun(_Key, Value) -> 
-        not proplists:get_value(disabled, Value, false) end, 
+    maps:filter(fun(_Key, Value) ->
+        not proplists:get_value(disabled, Value, false) end,
         MgtOauthResources).
 
 extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
@@ -102,19 +102,19 @@ extract_oauth2_and_mgt_resources(OAuth2BackendProps, ManagementProps) ->
     end.
 
 getAllDeclaredOauth2Resources(OAuth2BackendProps) ->
-    OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps, 
+    OAuth2Resources = proplists:get_value(resource_servers, OAuth2BackendProps,
         #{}),
     case proplists:get_value(resource_server_id, OAuth2BackendProps) of
-        undefined -> 
+        undefined ->
             OAuth2Resources;
-        Id -> 
+        Id ->
             maps:put(Id, buildRootResourceServerIfAny(Id, OAuth2BackendProps),
                 OAuth2Resources)
     end.
 buildRootResourceServerIfAny(Id, Props) ->
-    [ 
+    [
         {id, Id},
-        {oauth_provider_id, proplists:get_value(oauth_provider_id, Props)}       
+        {oauth_provider_id, proplists:get_value(oauth_provider_id, Props)}
     ].
 
 authSettings() ->
@@ -126,42 +126,42 @@ authSettings() ->
         true ->
             case extract_oauth2_and_mgt_resources(OAuth2BackendProps,
                     ManagementProps) of
-                {MgtResources} -> 
+                {MgtResources} ->
                     produce_auth_settings(MgtResources, ManagementProps);
-                {} -> 
+                {} ->
                     [{oauth_enabled, false}]
             end
   end.
 
-% invalid -> those resources that dont have an oauth_client_id and 
+% invalid -> those resources that dont have an oauth_client_id and
 %            their login_type is sp_initiated
 skip_invalid_mgt_resource_servers(MgtResourceServers, ManagementProps) ->
     DefaultOauthInitiatedLogonType = proplists:get_value(
         oauth_initiated_logon_type, ManagementProps, sp_initiated),
     maps:filter(fun(_K,ResourceServer) ->
-        SpInitiated = 
-            case maps:get(oauth_initiated_logon_type, ResourceServer, 
+        SpInitiated =
+            case maps:get(oauth_initiated_logon_type, ResourceServer,
                     DefaultOauthInitiatedLogonType) of
                 sp_initiated -> true;
                 _ -> false
             end,
-        not SpInitiated or not is_invalid([maps:get(oauth_client_id, 
-            ResourceServer, undefined)]) 
+        not SpInitiated or not is_invalid([maps:get(oauth_client_id,
+            ResourceServer, undefined)])
         end, MgtResourceServers).
 
-% filter -> include only those resources with an oauth_client_id 
-%           or those whose logon type is not sp_initiated 
+% filter -> include only those resources with an oauth_client_id
+%           or those whose logon type is not sp_initiated
 filter_out_invalid_mgt_resource_servers(MgtResourceServers, ManagementProps) ->
     case is_invalid([proplists:get_value(oauth_client_id, ManagementProps)]) of
-        true -> 
-            skip_invalid_mgt_resource_servers(MgtResourceServers, 
+        true ->
+            skip_invalid_mgt_resource_servers(MgtResourceServers,
                 ManagementProps);
-        false -> 
+        false ->
             MgtResourceServers
     end.
 
 filter_mgt_resource_servers_without_oauth_provider_url(MgtResourceServers) ->
-    maps:filter(fun(_K1,V1) -> maps:is_key(oauth_provider_url, V1) end, 
+    maps:filter(fun(_K1,V1) -> maps:is_key(oauth_provider_url, V1) end,
         MgtResourceServers).
 
 ensure_oauth_resource_server_properties_are_binaries(Key, Value) ->
@@ -172,39 +172,39 @@ ensure_oauth_resource_server_properties_are_binaries(Key, Value) ->
     end.
 
 produce_auth_settings(MgtResourceServers, ManagementProps) ->
-    ConvertValuesToBinary = fun(_K,V) -> 
+    ConvertValuesToBinary = fun(_K,V) ->
         [
-            {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)} 
-            || {K1,V1} <- maps:to_list(V) 
+            {K1, ensure_oauth_resource_server_properties_are_binaries(K1, V1)}
+            || {K1,V1} <- maps:to_list(V)
         ] end,
-    FilteredMgtResourceServers = 
+    FilteredMgtResourceServers =
         filter_mgt_resource_servers_without_oauth_provider_url(
-            filter_out_invalid_mgt_resource_servers(MgtResourceServers, 
+            filter_out_invalid_mgt_resource_servers(MgtResourceServers,
                 ManagementProps)),
 
     case maps:size(FilteredMgtResourceServers) of
-        0 -> 
+        0 ->
             [{oauth_enabled, false}];
         _ ->
             filter_empty_properties([
                 {oauth_enabled, true},
-                {oauth_resource_servers, 
+                {oauth_resource_servers,
                     maps:map(ConvertValuesToBinary, FilteredMgtResourceServers)},
-                to_tuple(oauth_disable_basic_auth, ManagementProps, 
+                to_tuple(oauth_disable_basic_auth, ManagementProps,
                     fun to_binary/1, true),
                 to_tuple(oauth_client_id, ManagementProps),
                 to_tuple(oauth_client_secret, ManagementProps),
                 to_tuple(oauth_scopes, ManagementProps),
-                case proplists:get_value(oauth_initiated_logon_type, 
+                case proplists:get_value(oauth_initiated_logon_type,
                     ManagementProps, sp_initiated) of
-                    sp_initiated -> 
+                    sp_initiated ->
                         {};
-                    idp_initiated -> 
+                    idp_initiated ->
                         {oauth_initiated_logon_type, <<"idp_initiated">>}
                 end,
-                to_tuple(oauth_authorization_endpoint_params, ManagementProps, 
+                to_tuple(oauth_authorization_endpoint_params, ManagementProps,
                     undefined, undefined),
-                to_tuple(oauth_token_endpoint_params, ManagementProps, 
+                to_tuple(oauth_token_endpoint_params, ManagementProps,
                     undefined, undefined)
             ])
   end.

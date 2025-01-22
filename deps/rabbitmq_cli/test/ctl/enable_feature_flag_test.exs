@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 defmodule EnableFeatureFlagCommandTest do
   use ExUnit.Case, async: false
@@ -79,20 +79,24 @@ defmodule EnableFeatureFlagCommandTest do
 
   test "run: enabling an experimental flag requires '--opt-in'", context do
     experimental_flag = Atom.to_string(context[:experimental_flag])
+
     assert match?(
              {:error, @usage_exit_code, _},
              @command.run([experimental_flag], context[:opts])
            )
+
     opts = Map.put(context[:opts], :opt_in, true)
     assert @command.run([experimental_flag], opts) == :ok
   end
 
   test "run: enabling an experimental flag accepts '--experimental'", context do
     experimental_flag = Atom.to_string(context[:experimental_flag])
+
     assert match?(
              {:error, @usage_exit_code, _},
              @command.run([experimental_flag], context[:opts])
            )
+
     opts = Map.put(context[:opts], :experimental, true)
     assert @command.run([experimental_flag], opts) == :ok
   end

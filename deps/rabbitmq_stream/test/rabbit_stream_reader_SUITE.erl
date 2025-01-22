@@ -9,7 +9,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2024 Broadcom. All Rights Reserved.
+%% Copyright (c) 2024-2025 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -143,7 +143,8 @@ evaluate_state_after_secret_update_test(_) ->
 
     {C1, S1} = Mod:evaluate_state_after_secret_update(ModTransport, #user{},
                                                       #stream_connection{publishers = Publishers,
-                                                                         stream_subscriptions = Subscriptions},
+                                                                         stream_subscriptions = Subscriptions,
+                                                                         user = #user{}},
                                                       #stream_connection_state{consumers = Consumers}),
 
     meck:validate(ModLog),
@@ -176,7 +177,7 @@ evaluate_state_after_secret_update_test(_) ->
     Now = os:system_time(second),
     meck:expect(rabbit_access_control, expiry_timestamp, fun (_) -> Now + 60 end),
     {C2, _} = Mod:evaluate_state_after_secret_update(ModTransport, #user{},
-                                                     #stream_connection{},
+                                                     #stream_connection{user = #user{}},
                                                      #stream_connection_state{}),
     #stream_connection{token_expiry_timer = TRef2} = C2,
     Cancel2 = erlang:cancel_timer(TRef2, [{async, false}, {info, true}]),

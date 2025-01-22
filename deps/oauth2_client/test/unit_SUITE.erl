@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(unit_SUITE).
@@ -50,33 +50,33 @@ groups() ->
 
 build_openid_discovery_endpoint(_) ->
     Issuer = "https://issuer",
-    ?assertEqual(Issuer ++ ?DEFAULT_OPENID_CONFIGURATION_PATH, 
+    ?assertEqual(Issuer ++ ?DEFAULT_OPENID_CONFIGURATION_PATH,
         build_openid_discovery_endpoint(Issuer, undefined, undefined)),
 
     IssuerWithPath = "https://issuer/v2",
-    ?assertEqual(IssuerWithPath ++ ?DEFAULT_OPENID_CONFIGURATION_PATH, 
+    ?assertEqual(IssuerWithPath ++ ?DEFAULT_OPENID_CONFIGURATION_PATH,
         build_openid_discovery_endpoint(IssuerWithPath, undefined, undefined)),
 
     IssuerWithPathAndExtraPathSeparator = "https://issuer/v2/",
-    ?assertEqual("https://issuer/v2" ++ ?DEFAULT_OPENID_CONFIGURATION_PATH, 
-        build_openid_discovery_endpoint(IssuerWithPathAndExtraPathSeparator, 
+    ?assertEqual("https://issuer/v2" ++ ?DEFAULT_OPENID_CONFIGURATION_PATH,
+        build_openid_discovery_endpoint(IssuerWithPathAndExtraPathSeparator,
             undefined, undefined)),
 
     IssuerWithPath = "https://issuer/v2",
     CustomPath = "/.well-known/other",
-    ?assertEqual(IssuerWithPath ++ CustomPath, 
+    ?assertEqual(IssuerWithPath ++ CustomPath,
         build_openid_discovery_endpoint(IssuerWithPath, CustomPath, undefined)),
-    
+
     IssuerWithPath = "https://issuer/v2",
     CustomPath = "/.well-known/other",
     WithParams = [{"param1", "v1"}, {"param2", "v2"}],
-    ?assertEqual("https://issuer/v2/.well-known/other?param1=v1&param2=v2", 
+    ?assertEqual("https://issuer/v2/.well-known/other?param1=v1&param2=v2",
         build_openid_discovery_endpoint(IssuerWithPath, CustomPath, WithParams)).
-    
+
 
 merge_oauth_provider(_) ->
     OAuthProvider = #oauth_provider{
-        id = "some_id", 
+        id = "some_id",
         issuer = "https://issuer",
         discovery_endpoint = "https://issuer/.well-known/openid_configuration",
         ssl_options = [ {verify, verify_none} ]},
@@ -110,19 +110,19 @@ merge_oauth_provider(_) ->
                   Proplist5),
 
     % ensure id, issuer, ssl_options and discovery_endpoint are not affected
-    ?assertEqual(OAuthProvider#oauth_provider.id, 
+    ?assertEqual(OAuthProvider#oauth_provider.id,
         OAuthProvider4#oauth_provider.id),
-    ?assertEqual(OAuthProvider#oauth_provider.issuer, 
+    ?assertEqual(OAuthProvider#oauth_provider.issuer,
         OAuthProvider4#oauth_provider.issuer),
-    ?assertEqual(OAuthProvider#oauth_provider.discovery_endpoint, 
+    ?assertEqual(OAuthProvider#oauth_provider.discovery_endpoint,
         OAuthProvider4#oauth_provider.discovery_endpoint),
-    ?assertEqual(OAuthProvider#oauth_provider.ssl_options, 
+    ?assertEqual(OAuthProvider#oauth_provider.ssl_options,
         OAuthProvider4#oauth_provider.ssl_options).
 
 merge_openid_configuration(_) ->
     OpenIdConfiguration = #openid_configuration{},
     OAuthProvider = #oauth_provider{
-        id = "some_id", 
+        id = "some_id",
         issuer = "https://issuer",
         discovery_endpoint = "https://issuer/.well-known/openid_configuration",
         ssl_options = [ {verify, verify_none} ]},
@@ -175,14 +175,14 @@ merge_openid_configuration(_) ->
         OAuthProvider5#oauth_provider.jwks_uri),
 
      % ensure id, issuer, ssl_options and discovery_endpoint are not affected
-    ?assertEqual(OAuthProvider#oauth_provider.id, 
+    ?assertEqual(OAuthProvider#oauth_provider.id,
         OAuthProvider5#oauth_provider.id),
-    ?assertEqual(OAuthProvider#oauth_provider.issuer, 
+    ?assertEqual(OAuthProvider#oauth_provider.issuer,
         OAuthProvider5#oauth_provider.issuer),
-    ?assertEqual(OAuthProvider#oauth_provider.discovery_endpoint, 
+    ?assertEqual(OAuthProvider#oauth_provider.discovery_endpoint,
         OAuthProvider5#oauth_provider.discovery_endpoint),
-    ?assertEqual(OAuthProvider#oauth_provider.ssl_options, 
-        OAuthProvider5#oauth_provider.ssl_options).    
+    ?assertEqual(OAuthProvider#oauth_provider.ssl_options,
+        OAuthProvider5#oauth_provider.ssl_options).
 
 
 no_ssl_options_triggers_verify_peer(_) ->

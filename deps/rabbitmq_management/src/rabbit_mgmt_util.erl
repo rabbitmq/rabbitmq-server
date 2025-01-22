@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_util).
@@ -19,7 +19,7 @@
          is_authorized_global_parameters/2]).
 -export([user/1]).
 -export([bad_request/3, service_unavailable/3, bad_request_exception/4,
-         internal_server_error/3, internal_server_error/4,
+         internal_server_error/3, internal_server_error/4, precondition_failed/3,
          id/2, parse_bool/1, parse_int/1, redirect_to_home/3]).
 -export([with_decode/4, not_found/3]).
 -export([with_channel/4, with_channel/5]).
@@ -674,6 +674,9 @@ not_found(Reason, ReqData, Context) ->
 
 method_not_allowed(Reason, ReqData, Context) ->
     halt_response(405, method_not_allowed, Reason, ReqData, Context).
+
+precondition_failed(Reason, ReqData, Context) ->
+    halt_response(412, precondition_failed, Reason, ReqData, Context).
 
 internal_server_error(Reason, ReqData, Context) ->
     internal_server_error(internal_server_error, Reason, ReqData, Context).

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_wm_vhosts).
@@ -69,5 +69,5 @@ augmented(ReqData, #context{user = User}) ->
 basic() ->
     Maps = lists:map(
             fun maps:from_list/1,
-            rabbit_vhost:info_all([name, description, tags, default_queue_type, metadata])),
+            rabbit_vhost:info_all([name, description, tags, default_queue_type, metadata, protected_from_deletion])),
     rabbit_queue_type:vhosts_with_dqt(Maps).

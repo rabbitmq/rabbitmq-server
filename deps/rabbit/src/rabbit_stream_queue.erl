@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_queue).
@@ -313,7 +313,8 @@ consume(Q, Spec, #stream_client{} = QState0)
               consumer_tag := ConsumerTag,
               exclusive_consume := ExclusiveConsume,
               args := Args,
-              ok_msg := OkMsg} = Spec,
+              ok_msg := OkMsg,
+              acting_user := ActingUser} = Spec,
             QName = amqqueue:get_name(Q),
             rabbit_log:debug("~s:~s Local pid resolved ~0p",
                              [?MODULE, ?FUNCTION_NAME, LocalPid]),
@@ -329,7 +330,16 @@ consume(Q, Spec, #stream_client{} = QState0)
                     AckRequired = not NoAck,
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
-                      QName, ConsumerPrefetchCount, false, up, Args),
+                      QName, ConsumerPrefetchCount, true, up, Args),
+                    rabbit_event:notify(consumer_created,
+                                        [{consumer_tag,   ConsumerTag},
+                                         {exclusive,      ExclusiveConsume},
+                                         {ack_required,   AckRequired},
+                                         {channel,        ChPid},
+                                         {queue,          QName},
+                                         {prefetch_count, ConsumerPrefetchCount},
+                                         {arguments,      Args},
+                                         {user_who_performed_action, ActingUser}]),
                     %% reply needs to be sent before the stream
                     %% begins sending
                     maybe_send_reply(ChPid, OkMsg),
@@ -972,9 +982,11 @@ init(Q) when ?is_amqqueue(Q) ->
             E
     end.
 
-close(#stream_client{readers = Readers}) ->
-    maps:foreach(fun (_, #stream{log = Log}) ->
-                         osiris_log:close(Log)
+close(#stream_client{readers = Readers,
+                     name = QName}) ->
+    maps:foreach(fun (CTag, #stream{log = Log}) ->
+                         close_log(Log),
+                         rabbit_core_metrics:consumer_deleted(self(), CTag, QName)
                  end, Readers).
 
 update(Q, State)

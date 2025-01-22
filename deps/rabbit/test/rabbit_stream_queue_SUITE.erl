@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_stream_queue_SUITE).
@@ -143,6 +143,8 @@ all_tests_3() ->
      consume_credit_out_of_order_ack,
      consume_credit_multiple_ack,
      basic_cancel,
+     consumer_metrics_cleaned_on_connection_close,
+     consume_cancel_should_create_events,
      receive_basic_cancel_on_queue_deletion,
      keep_consuming_on_leader_restart,
      max_length_bytes,
@@ -1184,6 +1186,76 @@ basic_cancel(Config) ->
     end,
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
 
+consumer_metrics_cleaned_on_connection_close(Config) ->
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    Conn = rabbit_ct_client_helpers:open_connection(Config, Server),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    qos(Ch, 10, false),
+    CTag = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    subscribe(Ch, Q, false, 0, CTag),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              1 == length(filter_consumers(Config, Server, CTag))
+      end, 30000),
+
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              0 == length(filter_consumers(Config, Server, CTag))
+      end, 30000),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
+consume_cancel_should_create_events(Config) ->
+    HandlerMod = rabbit_list_test_event_handler,
+    rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, HandlerMod),
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 gen_event,
+                                 add_handler,
+                                 [rabbit_event, HandlerMod, []]),
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Config, Server, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    Conn = rabbit_ct_client_helpers:open_connection(Config, Server),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    qos(Ch, 10, false),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                      gen_event,
+                                      call,
+                                      [rabbit_event, HandlerMod, clear_events]),
+
+    CTag = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+
+    ?assertEqual([], filtered_events(Config, consumer_created, CTag)),
+    ?assertEqual([], filtered_events(Config, consumer_deleted, CTag)),
+
+    subscribe(Ch, Q, false, 0, CTag),
+
+    ?awaitMatch([{event, consumer_created, _, _, _}], filtered_events(Config, consumer_created, CTag), ?WAIT),
+    ?assertEqual([], filtered_events(Config, consumer_deleted, CTag)),
+
+    amqp_channel:call(Ch, #'basic.cancel'{consumer_tag = CTag}),
+
+    ?awaitMatch([{event, consumer_deleted, _, _, _}], filtered_events(Config, consumer_deleted, CTag), ?WAIT),
+
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+                                 gen_event,
+                                 delete_handler,
+                                 [rabbit_event, HandlerMod, []]),
+
+    ok = rabbit_ct_client_helpers:close_connection(Conn),
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+
 receive_basic_cancel_on_queue_deletion(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1366,6 +1438,18 @@ filter_consumers(Config, Server, CTag) ->
                             _ -> Acc
                         end
                 end, [], CInfo).
+
+
+filtered_events(Config, EventType, CTag) ->
+    Events = rabbit_ct_broker_helpers:rpc(Config, 0,
+                                          gen_event,
+                                          call,
+                                          [rabbit_event, rabbit_list_test_event_handler, get_events]),
+    lists:filter(fun({event, Type, Fields, _, _}) when Type =:= EventType ->
+                         proplists:get_value(consumer_tag, Fields) =:= CTag;
+                    (_) ->
+                         false
+                 end, Events).
 
 consume_and_reject(Config) ->
     consume_and_(Config, fun (DT) -> #'basic.reject'{delivery_tag = DT} end).

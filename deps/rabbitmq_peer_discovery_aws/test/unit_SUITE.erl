@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(unit_SUITE).
@@ -140,13 +140,13 @@ reservation_set() ->
                    {"subnetId","subnet-61ff660"},
                    {"vpcId","vpc-4fe1562b"},
                    {"networkInterfaceSet", [
-                    {"item", 
+                    {"item",
                     [{"association",
                      [{"publicIp","203.0.113.11"},
                       {"publicDnsName",
                        "ec2-203-0-113-11.eu-west-1.compute.amazonaws.com"},
                       {"ipOwnerId","amazon"}]}]},
-                    {"item", 
+                    {"item",
                     [{"association",
                      [{"publicIp","203.0.113.12"},
                       {"publicDnsName",
@@ -170,13 +170,13 @@ reservation_set() ->
                    {"subnetId","subnet-61ff660"},
                    {"vpcId","vpc-4fe1562b"},
                    {"networkInterfaceSet", [
-                    {"item", 
+                    {"item",
                     [{"association",
                      [{"publicIp","203.0.113.21"},
                       {"publicDnsName",
                        "ec2-203-0-113-21.eu-west-1.compute.amazonaws.com"},
                       {"ipOwnerId","amazon"}]}]},
-                    {"item", 
+                    {"item",
                     [{"association",
                      [{"publicIp","203.0.113.22"},
                       {"publicDnsName",

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
   alias RabbitMQ.CLI.Core.DocGuide
@@ -52,6 +52,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       status0 ->
         tags = cluster_tags(node_name, timeout)
         status = status0 ++ [{:cluster_tags, tags}]
+
         case :rabbit_misc.rpc_call(node_name, :rabbit_nodes, :list_running, []) do
           {:badrpc, _} = err ->
             err
@@ -136,10 +137,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       [
         "\n#{bright("Cluster Tags")}\n"
       ] ++
-      case m[:cluster_tags] do
-        [] -> ["(none)"]
-        tags -> cluster_tag_lines(tags)
-      end
+        case m[:cluster_tags] do
+          [] -> ["(none)"]
+          tags -> cluster_tag_lines(tags)
+        end
 
     disk_nodes_section =
       [
@@ -397,11 +398,12 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
 
   defp cluster_tags(node, timeout) do
     case :rabbit_misc.rpc_call(
-          node,
-          :rabbit_runtime_parameters,
-          :value_global,
-          [:cluster_tags],
-          timeout) do
+           node,
+           :rabbit_runtime_parameters,
+           :value_global,
+           [:cluster_tags],
+           timeout
+         ) do
       :not_found -> []
       tags -> tags
     end

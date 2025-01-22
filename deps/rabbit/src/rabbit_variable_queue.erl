@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_variable_queue).
@@ -210,7 +210,7 @@
           disk_read_count,
           disk_write_count,
 
-          io_batch_size,
+          io_batch_size, %% Unused.
 
           %% default queue or lazy queue
           mode, %% Unused.
@@ -334,7 +334,7 @@
              disk_read_count       :: non_neg_integer(),
              disk_write_count      :: non_neg_integer(),
 
-             io_batch_size         :: pos_integer(),
+             io_batch_size         :: 0,
              mode                  :: 'default' | 'lazy',
              version               :: 2,
              unconfirmed_simple    :: sets:set()}.
@@ -1195,8 +1195,6 @@ init(IsDurable, IndexState, StoreState, DeltaCount, DeltaBytes, Terms,
                                     end_seq_id   = NextSeqId })
             end,
     Now = erlang:monotonic_time(),
-    IoBatchSize = rabbit_misc:get_env(rabbit, msg_store_io_batch_size,
-                                      ?IO_BATCH_SIZE),
 
     {ok, IndexMaxSize} = application:get_env(
                            rabbit, queue_index_embed_msgs_below),
@@ -1242,7 +1240,7 @@ init(IsDurable, IndexState, StoreState, DeltaCount, DeltaBytes, Terms,
       disk_read_count     = 0,
       disk_write_count    = 0,
 
-      io_batch_size       = IoBatchSize,
+      io_batch_size       = 0,
 
       mode                = default,
       virtual_host        = VHost},

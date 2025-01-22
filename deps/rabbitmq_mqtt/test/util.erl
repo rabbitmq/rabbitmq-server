@@ -65,7 +65,7 @@ expect_publishes(Client, Topic, [Payload|Rest])
                     payload := Other}} ->
             ct:fail("Received unexpected PUBLISH payload. Expected: ~p Got: ~p",
                     [Payload, Other])
-    after 30_000 ->
+    after 5000 ->
               {publish_not_received, Payload}
     end.
 

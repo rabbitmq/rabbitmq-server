@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
 -module(rabbit_amqp_writer).
@@ -148,12 +148,15 @@ format_status(Status) ->
       fun(#state{sock = Sock,
                  reader = Reader,
                  pending = Pending,
-                 pending_size = PendingSize}) ->
+                 pending_size = PendingSize,
+                 monitored_sessions = Sessions
+                }) ->
               #{socket => Sock,
                 reader => Reader,
                 %% Below 2 fields should always have the same value.
                 pending => iolist_size(Pending),
-                pending_size => PendingSize}
+                pending_size => PendingSize,
+                monitored_sessions => maps:keys(Sessions)}
       end,
       Status).
 

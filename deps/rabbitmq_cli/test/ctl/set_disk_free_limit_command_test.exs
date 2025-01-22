@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule SetDiskFreeLimitCommandTest do
   use ExUnit.Case, async: false
@@ -26,12 +26,13 @@ defmodule SetDiskFreeLimitCommandTest do
     # silences warnings
     context[:tag]
     on_exit([], fn -> set_disk_free_limit(@default_limit) end)
+
     :rabbit_misc.rpc_call(
-        get_rabbit_hostname(),
-        :rabbit_disk_monitor,
-        :set_enabled,
-        [:true]
-      )
+      get_rabbit_hostname(),
+      :rabbit_disk_monitor,
+      :set_enabled,
+      [true]
+    )
 
     {:ok, opts: %{node: get_rabbit_hostname()}}
   end
@@ -110,11 +111,12 @@ defmodule SetDiskFreeLimitCommandTest do
   test "run: a valid integer input returns an ok and sets the disk free limit", context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+
     await_condition(
-        fn ->
-           status()[:disk_free_limit] === context[:limit]
-        end,
-        30000
+      fn ->
+        status()[:disk_free_limit] === context[:limit]
+      end,
+      30000
     )
 
     set_disk_free_limit(@default_limit)
@@ -125,11 +127,12 @@ defmodule SetDiskFreeLimitCommandTest do
        context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+
     await_condition(
-        fn ->
-           status()[:disk_free_limit] === round(context[:limit])
-        end,
-        30000
+      fn ->
+        status()[:disk_free_limit] === round(context[:limit])
+      end,
+      30000
     )
 
     set_disk_free_limit(@default_limit)
@@ -140,11 +143,12 @@ defmodule SetDiskFreeLimitCommandTest do
        context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+
     await_condition(
-        fn ->
-           status()[:disk_free_limit] === context[:limit] |> Float.floor() |> round
-        end,
-        30000
+      fn ->
+        status()[:disk_free_limit] === context[:limit] |> Float.floor() |> round
+      end,
+      30000
     )
 
     set_disk_free_limit(@default_limit)
@@ -154,11 +158,12 @@ defmodule SetDiskFreeLimitCommandTest do
   test "run: an integer string input returns an ok and sets the disk free limit", context do
     set_disk_free_limit(@default_limit)
     assert @command.run([context[:limit]], context[:opts]) == :ok
+
     await_condition(
-        fn ->
-           status()[:disk_free_limit] === String.to_integer(context[:limit])
-        end,
-        30000
+      fn ->
+        status()[:disk_free_limit] === String.to_integer(context[:limit])
+      end,
+      30000
     )
 
     set_disk_free_limit(@default_limit)
@@ -167,11 +172,12 @@ defmodule SetDiskFreeLimitCommandTest do
   @tag limit: "2MB"
   test "run: an valid unit string input returns an ok and changes the limit", context do
     assert @command.run([context[:limit]], context[:opts]) == :ok
+
     await_condition(
-        fn ->
-           status()[:disk_free_limit] === 2_000_000
-        end,
-        30000
+      fn ->
+        status()[:disk_free_limit] === 2_000_000
+      end,
+      30000
     )
 
     set_disk_free_limit(@default_limit)

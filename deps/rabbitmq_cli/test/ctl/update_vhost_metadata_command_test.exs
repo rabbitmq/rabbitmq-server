@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule UpdateVhostMetadataCommandTest do
   use ExUnit.Case, async: false
@@ -81,6 +81,43 @@ defmodule UpdateVhostMetadataCommandTest do
     assert vh[:tags] == [:a1, :b2, :c3]
   end
 
+  test "run: enabling deletion protection succeeds", context do
+    add_vhost(@vhost)
+
+    opts =
+      Map.merge(context[:opts], %{
+        description: "Protected from deletion",
+        protected_from_deletion: true
+      })
+
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert vh[:protected_from_deletion]
+  end
+
+  test "run: disabling deletion protection succeeds", context do
+    add_vhost(@vhost)
+
+    opts =
+      Map.merge(context[:opts], %{
+        description: "Protected from deletion",
+        protected_from_deletion: false
+      })
+
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert !vh[:protected_from_deletion]
+  end
+
+  test "run: vhost tags are coerced to a list", context do
+    add_vhost(@vhost)
+
+    opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
+    assert @command.run([@vhost], opts) == :ok
+    vh = find_vhost(@vhost)
+    assert vh[:tags] == [:my_tag]
+  end
+
   test "run: attempt to use a non-existent virtual host fails", context do
     vh = "a-non-existent-3882-vhost"
 
@@ -93,15 +130,6 @@ defmodule UpdateVhostMetadataCommandTest do
   test "run: attempt to use an unreachable node returns a nodedown" do
     opts = %{node: :jake@thedog, timeout: 200, description: "does not matter"}
     assert match?({:badrpc, _}, @command.run(["na"], opts))
-  end
-
-  test "run: vhost tags are coerced to a list", context do
-    add_vhost(@vhost)
-
-    opts = Map.merge(context[:opts], %{description: "My vhost", tags: "my_tag"})
-    assert @command.run([@vhost], opts) == :ok
-    vh = find_vhost(@vhost)
-    assert vh[:tags] == [:my_tag]
   end
 
   test "banner", context do

@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_dispatcher).
@@ -162,6 +162,7 @@ dispatcher() ->
      {"/bindings/:vhost/e/:source/:dtype/:destination/:props", rabbit_mgmt_wm_binding, []},
      {"/vhosts",                                               rabbit_mgmt_wm_vhosts, []},
      {"/vhosts/:vhost",                                        rabbit_mgmt_wm_vhost, []},
+     {"/vhosts/:vhost/deletion/protection",                    rabbit_mgmt_wm_vhost_deletion_protection, []},
      {"/vhosts/:vhost/start/:node",                            rabbit_mgmt_wm_vhost_restart, []},
      {"/vhosts/:vhost/permissions",                            rabbit_mgmt_wm_permissions_vhost, []},
      {"/vhosts/:vhost/topic-permissions",                      rabbit_mgmt_wm_topic_permissions_vhost, []},

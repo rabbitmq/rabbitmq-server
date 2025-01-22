@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule ForceResetCommandTest do
   use ExUnit.Case, async: false
@@ -46,6 +46,7 @@ defmodule ForceResetCommandTest do
     assert vhost_exists?("some_vhost")
     node = get_rabbit_hostname()
     ret = @command.run([], context[:opts])
+
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
         assert match?({:error, :rabbitmq_unexpectedly_running}, ret)
@@ -53,6 +54,7 @@ defmodule ForceResetCommandTest do
       false ->
         assert match?({:error, :mnesia_unexpectedly_running}, ret)
     end
+
     assert vhost_exists?("some_vhost")
   end
 

@@ -2,7 +2,7 @@
 ## License, v. 2.0. If a copy of the MPL was not distributed with this
 ## file, You can obtain one at https://mozilla.org/MPL/2.0/.
 ##
-## Copyright (c) 2007-2023 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -15,25 +15,29 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfAnyDeprecatedFeaturesAreUsedC
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([], %{node: node_name, timeout: timeout}) do
-    deprecated_features_list = :rabbit_misc.rpc_call(
-      node_name,
-      :rabbit_deprecated_features,
-      :list,
-      [:used],
-      timeout
-    )
+    deprecated_features_list =
+      :rabbit_misc.rpc_call(
+        node_name,
+        :rabbit_deprecated_features,
+        :list,
+        [:used],
+        timeout
+      )
 
     # health checks return true if they pass
     case deprecated_features_list do
       {:badrpc, _} = err ->
         err
+
       {:error, _} = err ->
         err
+
       _ ->
         names = Enum.sort(Map.keys(deprecated_features_list))
+
         case names do
           [] -> true
-          _  -> {false, names}
+          _ -> {false, names}
         end
     end
   end

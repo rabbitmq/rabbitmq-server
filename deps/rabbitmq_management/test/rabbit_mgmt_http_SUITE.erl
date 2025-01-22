@@ -2,7 +2,7 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_mgmt_http_SUITE).
@@ -27,6 +27,7 @@
                                 http_get_no_decode/5,
                                 http_put/4, http_put/6,
                                 http_post/4, http_post/6,
+                                http_post_json/4,
                                 http_upload_raw/8,
                                 http_delete/3, http_delete/4, http_delete/5,
                                 http_put_raw/4, http_post_accept_json/4,
@@ -57,7 +58,7 @@ all() ->
     ].
 
 groups() ->
-    [        
+    [
         {all_tests_with_prefix, [], some_tests() ++ all_tests()},
         {all_tests_without_prefix, [], some_tests()},
         %% We have several groups because their interference is
@@ -243,7 +244,17 @@ start_broker(Config) ->
     Setup0 = rabbit_ct_broker_helpers:setup_steps(),
     Setup1 = rabbit_ct_client_helpers:setup_steps(),
     Steps = Setup0 ++ Setup1,
-    rabbit_ct_helpers:run_setup_steps(Config, Steps).
+    case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
+        {skip, _} = Skip ->
+            Skip;
+        Config1 ->
+            Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+                    Config1, 'rabbitmq_4.0.0'),
+            case Ret of
+                ok -> Config1;
+                _  -> Ret
+            end
+    end.
 
 finish_init(Group, Config) ->
     rabbit_ct_helpers:log_environment(),
@@ -3595,7 +3606,7 @@ check_cors_all_endpoints(Config) ->
     Endpoints = get_all_http_endpoints(),
 
     [begin
-        ct:pal("Options for ~tp~n", [EP]),
+        ct:pal("Verifying CORS for module ~tp using an OPTIONS request~n", [EP]),
         {ok, {{_, 200, _}, _, _}} = req(Config, options, EP, [{"origin", "https://rabbitmq.com"}])
     end
      || EP <- Endpoints].
@@ -4339,10 +4350,6 @@ publish(Ch) ->
     after 20 ->
         publish(Ch)
     end.
-
-http_post_json(Config, Path, Body, Assertion) ->
-    http_upload_raw(Config,  post, Path, Body, "guest", "guest",
-                    Assertion, [{"content-type", "application/json"}]).
 
 %% @doc encode fields and file for HTTP post multipart/form-data.
 %% @reference Inspired by <a href="http://code.activestate.com/recipes/146306/">Python implementation</a>.

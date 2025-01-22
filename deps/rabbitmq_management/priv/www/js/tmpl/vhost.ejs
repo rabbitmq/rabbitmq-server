@@ -27,6 +27,10 @@
         <td><%= vhost.default_queue_type == "undefined" ? "&lt;not set&gt;" :vhost.default_queue_type %></td>
       </tr>
       <tr>
+        <th>Deletion protection:</th>
+        <td><%= vhost.protected_from_deletion ? "enabled" :"disabled" %></td>
+      </tr>
+      <tr>
         <th>State:</th>
         <td>
         <table class="mini">
