@@ -32,6 +32,7 @@ body:
         - 4.0.5
         - 4.0.4
         - 4.0.3
+        - other (please specify)
     validations:
       required: true
   - type: dropdown
@@ -39,6 +40,9 @@ body:
     attributes:
       label: Erlang version used
       options:
+        - 27.2.x
+        - 27.1.x
+        - 27.0.x
         - 26.2.x
         - 26.1.x
         - 26.0.x
