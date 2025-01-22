@@ -46,11 +46,12 @@ end_per_group(_Group, _Config) ->
 
 init_per_testcase(_TestCase, Config) ->
   Mod = ?config(module, Config),
-
-  Dir = filename:join(["/tmp", "mqtt_test_" ++ integer_to_list(erlang:unique_integer())]),
+  Dir = filename:join(["/tmp", "mqtt_test_" ++ erlang:integer_to_list(erlang:unique_integer())]),
   ok = filelib:ensure_dir(Dir ++ "/"),
-  State = Mod:new(Dir, <<"test">>),
-  [{store_state, State}, {test_dir, Dir} | Config].
+  % VHost needs to be different for each test case to create a new table
+  VHost = erlang:iolist_to_binary([<<"test">>, erlang:integer_to_list(erlang:unique_integer())]),
+  State = Mod:new(Dir, VHost),
+  [{store_state, State}, {test_dir, Dir}, {vhost, VHost} | Config].
 
 end_per_testcase(_TestCase, Config) ->
   State = ?config(store_state, Config),
@@ -63,10 +64,9 @@ end_per_testcase(_TestCase, Config) ->
     ok ->
       ok;
     {error, enoent} ->
-      ok; % Directory already gone
+      ok;
     {error, Reason} ->
       ct:pal("Failed to delete directory ~p: ~p", [Dir, Reason]),
-      % Try a more aggressive cleanup
       os:cmd("rm -rf " ++ Dir)
   end,
   ok.
@@ -265,9 +265,7 @@ test_recovery(Config) ->
   ?assertEqual([], NoMatches),
   % Recover the state
   ok = Mod:terminate(State),
-  {ok, _Filenames} = file:list_dir(?config(test_dir, Config)),
-
-  {ok, State2, _Expire} = Mod:recover(?config(test_dir, Config), <<"test">>),
+  {ok, State2, _Expire} = Mod:recover(?config(test_dir, Config), ?config(vhost, Config)),
 
   Matches1 = Mod:lookup(<<"a/b/c">>, State2),
   Matches2 = Mod:lookup(<<"a/b/d">>, State2),
