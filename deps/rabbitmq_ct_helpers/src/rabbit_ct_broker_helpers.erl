@@ -1206,7 +1206,7 @@ stop_rabbitmq_nodes(Config) ->
     case FindCrashes of
         true ->
             %% TODO: Make the ignore list configurable.
-            IgnoredCrashes0 = ["** force_vhost_failure"],
+            IgnoredCrashes0 = ["** force_vhost_failure", "** killed"],
             case rabbit_ct_helpers:get_config(Config, ignored_crashes) of
                 undefined ->
                     find_crashes_in_logs(NodeConfigs, IgnoredCrashes0);
