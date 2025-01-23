@@ -72,7 +72,7 @@ run_checks([C | Checks], Q) ->
             Err
     end.
 
--spec erpc_call(node(), module(), atom(), list(), non_neg_integer()) ->
+-spec erpc_call(node(), module(), atom(), list(), non_neg_integer() | infinity) ->
     term() | {error, term()}.
 erpc_call(Node, M, F, A, _Timeout)
   when Node =:= node()  ->
