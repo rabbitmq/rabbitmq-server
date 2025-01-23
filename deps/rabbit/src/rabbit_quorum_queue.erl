@@ -1304,7 +1304,10 @@ get_sys_status(Proc) ->
 
     end.
 
-add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
+add_member(VHost, Name, Node, Membership, Timeout)
+  when is_binary(VHost) andalso
+       is_binary(Name) andalso
+       is_atom(Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
     rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts",
                      [rabbit_misc:rs(QName), Node]),
@@ -1324,7 +1327,7 @@ add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
                                            [rabbit_misc:rs(QName), Node]),
                           ok;
                         false ->
-                            add_member(Q, Node, Membership, Timeout)
+                            do_add_member(Q, Node, Membership, Timeout)
                     end
             end;
         {ok, _Q} ->
@@ -1333,16 +1336,21 @@ add_member(VHost, Name, Node, Membership, Timeout) when is_binary(VHost) ->
                     E
     end.
 
-add_member(Q, Node) ->
-    add_member(Q, Node, promotable).
-
-add_member(Q, Node, Membership) ->
-    add_member(Q, Node, Membership, ?MEMBER_CHANGE_TIMEOUT).
-
 add_member(VHost, Name, Node, Timeout) when is_binary(VHost) ->
     %% NOTE needed to pass mixed cluster tests.
-    add_member(VHost, Name, Node, promotable, Timeout);
-add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
+    add_member(VHost, Name, Node, promotable, Timeout).
+
+add_member(Q, Node) ->
+    do_add_member(Q, Node, promotable, ?MEMBER_CHANGE_TIMEOUT).
+
+add_member(Q, Node, Membership) ->
+    do_add_member(Q, Node, Membership, ?MEMBER_CHANGE_TIMEOUT).
+
+
+do_add_member(Q, Node, Membership, Timeout)
+  when ?is_amqqueue(Q) andalso
+       ?amqqueue_is_quorum(Q) andalso
+       is_atom(Node) ->
     {RaName, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
@@ -1354,12 +1362,12 @@ add_member(Q, Node, Membership, Timeout) when ?amqqueue_is_quorum(Q) ->
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
             ServerIdSpec  =
-                case rabbit_feature_flags:is_enabled(quorum_queue_non_voters) of
-                    true ->
-                        maps:with([id, uid, membership], Conf);
-                    false ->
-                        maps:get(id, Conf)
-                end,
+            case rabbit_feature_flags:is_enabled(quorum_queue_non_voters) of
+                true ->
+                    maps:with([id, uid, membership], Conf);
+                false ->
+                    maps:get(id, Conf)
+            end,
             case ra:add_member(Members, ServerIdSpec, Timeout) of
                 {ok, {RaIndex, RaTerm}, Leader} ->
                     Fun = fun(Q1) ->
