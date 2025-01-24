@@ -119,7 +119,9 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, [
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, {skip_metadata_store_configuration, true}),
+    rabbit_ct_helpers:run_setup_steps(Config1, [
       fun rabbit_ct_broker_helpers:configure_dist_proxy/1
     ]).
 

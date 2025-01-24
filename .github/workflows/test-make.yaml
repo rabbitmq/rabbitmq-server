@@ -27,7 +27,7 @@ jobs:
         - '1.17'
     # @todo Add macOS and Windows.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
       matrix:
         erlang_version:
         - '26'
-#        - '27'
+##        - '27'
         elixir_version:
         - '1.17'
         metadata_store:
@@ -83,7 +83,7 @@ jobs:
       matrix:
         erlang_version:
         - '26'
-#        - '27'
+##        - '27'
         elixir_version:
         - '1.17'
         metadata_store:

@@ -579,12 +579,20 @@ format_channel_details(Any) -> Any.
 
 -spec format_consumer_arguments(proplists:proplist()) -> proplists:proplist().
 format_consumer_arguments(Obj) ->
-    case pget(arguments, Obj) of
-         undefined -> Obj;
-         #{}       -> Obj;
-         []        -> pset(arguments, #{}, Obj);
-         Args      -> pset(arguments, amqp_table(Args), Obj)
-     end.
+    %% Make sure arguments is a map and not an empty list
+    Obj1 = case pget(arguments, Obj) of
+        undefined -> Obj;
+        #{}       -> Obj;
+        []        -> pset(arguments, #{}, Obj);
+        Args      -> pset(arguments, amqp_table(Args), Obj)
+    end,
+    %% Make sure channel_details is a map and not an empty list
+    case pget(channel_details, Obj1) of
+        undefined -> Obj1;
+        #{}       -> Obj1;
+        []        -> pset(channel_details, #{}, Obj1);
+        _         -> Obj1
+    end.
 
 
 parse_bool(<<"true">>)  -> true;

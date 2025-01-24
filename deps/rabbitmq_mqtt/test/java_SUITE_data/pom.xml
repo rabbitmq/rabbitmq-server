@@ -17,13 +17,13 @@
     <paho.v3.version>[1.2.5,)</paho.v3.version>
     <amqp-client.version>5.24.0</amqp-client.version>
     <junit.version>5.11.4</junit.version>
-    <assertj.version>3.27.2</assertj.version>
+    <assertj.version>3.27.3</assertj.version>
     <logback.version>1.2.13</logback.version>
     <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
     <groovy-maven-plugin.version>2.1.1</groovy-maven-plugin.version>
     <groovy.version>2.4.21</groovy.version>
     <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
-    <spotless.version>2.44.1</spotless.version>
+    <spotless.version>2.44.2</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <test-keystore.ca>${project.build.directory}/ca.keystore</test-keystore.ca>
     <test-keystore.password>bunnychow</test-keystore.password>

@@ -313,7 +313,8 @@ consume(Q, Spec, #stream_client{} = QState0)
               consumer_tag := ConsumerTag,
               exclusive_consume := ExclusiveConsume,
               args := Args,
-              ok_msg := OkMsg} = Spec,
+              ok_msg := OkMsg,
+              acting_user := ActingUser} = Spec,
             QName = amqqueue:get_name(Q),
             rabbit_log:debug("~s:~s Local pid resolved ~0p",
                              [?MODULE, ?FUNCTION_NAME, LocalPid]),
@@ -330,6 +331,15 @@ consume(Q, Spec, #stream_client{} = QState0)
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume, AckRequired,
                       QName, ConsumerPrefetchCount, true, up, Args),
+                    rabbit_event:notify(consumer_created,
+                                        [{consumer_tag,   ConsumerTag},
+                                         {exclusive,      ExclusiveConsume},
+                                         {ack_required,   AckRequired},
+                                         {channel,        ChPid},
+                                         {queue,          QName},
+                                         {prefetch_count, ConsumerPrefetchCount},
+                                         {arguments,      Args},
+                                         {user_who_performed_action, ActingUser}]),
                     %% reply needs to be sent before the stream
                     %% begins sending
                     maybe_send_reply(ChPid, OkMsg),
@@ -972,9 +982,11 @@ init(Q) when ?is_amqqueue(Q) ->
             E
     end.
 
-close(#stream_client{readers = Readers}) ->
-    maps:foreach(fun (_, #stream{log = Log}) ->
-                         osiris_log:close(Log)
+close(#stream_client{readers = Readers,
+                     name = QName}) ->
+    maps:foreach(fun (CTag, #stream{log = Log}) ->
+                         close_log(Log),
+                         rabbit_core_metrics:consumer_deleted(self(), CTag, QName)
                  end, Readers).
 
 update(Q, State)

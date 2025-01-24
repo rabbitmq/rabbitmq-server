@@ -148,12 +148,15 @@ format_status(Status) ->
       fun(#state{sock = Sock,
                  reader = Reader,
                  pending = Pending,
-                 pending_size = PendingSize}) ->
+                 pending_size = PendingSize,
+                 monitored_sessions = Sessions
+                }) ->
               #{socket => Sock,
                 reader => Reader,
                 %% Below 2 fields should always have the same value.
                 pending => iolist_size(Pending),
-                pending_size => PendingSize}
+                pending_size => PendingSize,
+                monitored_sessions => maps:keys(Sessions)}
       end,
       Status).
 

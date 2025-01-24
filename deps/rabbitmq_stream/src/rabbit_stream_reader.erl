@@ -9,7 +9,7 @@
 %% The Original Code is RabbitMQ.
 %%
 %% The Initial Developer of the Original Code is Pivotal Software, Inc.
-%% Copyright (c) 2020-2024 Broadcom. All Rights Reserved.
+%% Copyright (c) 2020-2025 Broadcom. All Rights Reserved.
 %% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
@@ -249,7 +249,10 @@ tcp_connected(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+tcp_connected({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 peer_properties_exchanged(enter, _OldState,
                           #statem_data{config =
@@ -282,7 +285,10 @@ peer_properties_exchanged(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+peer_properties_exchanged({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 authenticating(enter, _OldState,
                #statem_data{config =
@@ -323,7 +329,10 @@ authenticating(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+authenticating({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 tuning(enter, _OldState,
        #statem_data{config =
@@ -360,7 +369,10 @@ tuning(info, Msg, StateData) ->
                                               ?FUNCTION_NAME,
                                               NextConnectionStep)
                    end
-                end).
+                end);
+tuning({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 tuned(enter, _OldState,
       #statem_data{config =
@@ -390,7 +402,10 @@ tuned(info, Msg, StateData) ->
                                              ?FUNCTION_NAME,
                                              NextConnectionStep)
                    end
-                end).
+                end);
+tuned({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, not ready for this
+    {keep_state_and_data, {reply, From, []}}.
 
 state_timeout(State, Transport, Socket) ->
     rabbit_log_connection:warning("Closing connection because of timeout in state "
@@ -1185,7 +1200,11 @@ close_sent(info, {resource_alarm, IsThereAlarm},
 close_sent(info, Msg, _StatemData) ->
     rabbit_log_connection:warning("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
-    keep_state_and_data.
+    keep_state_and_data;
+close_sent({call, From}, {info, _Items}, _StateData) ->
+    %% must be a CLI call, returning no information
+    {keep_state_and_data, {reply, From, []}}.
+
 
 handle_inbound_data_pre_auth(Transport, Connection, State, Data) ->
     handle_inbound_data(Transport,
@@ -2230,7 +2249,7 @@ handle_frame_post_auth(Transport,
             {Connection, State};
         true ->
             {Connection1, State1} =
-                remove_subscription(SubscriptionId, Connection, State),
+                remove_subscription(SubscriptionId, Connection, State, true),
             response_ok(Transport, Connection, unsubscribe, CorrelationId),
             {Connection1, State1}
     end;
@@ -2905,9 +2924,8 @@ consumer_name(_Properties) ->
 maybe_dispatch_on_subscription(Transport,
                                State,
                                ConsumerState,
-                               #stream_connection{deliver_version =
-                                                      DeliverVersion} =
-                                   Connection,
+                               #stream_connection{deliver_version = DeliverVersion,
+                                                  user = #user{username = Username}} = Connection,
                                Consumers,
                                Stream,
                                SubscriptionId,
@@ -2951,13 +2969,14 @@ maybe_dispatch_on_subscription(Transport,
                                                    ConsumerOffset,
                                                    ConsumerOffsetLag,
                                                    true,
-                                                   SubscriptionProperties),
+                                                   SubscriptionProperties,
+                                                   Username),
             State#stream_connection_state{consumers = Consumers1}
     end;
 maybe_dispatch_on_subscription(_Transport,
                                State,
                                ConsumerState,
-                               Connection,
+                               #stream_connection{user = #user{username = Username}} = Connection,
                                Consumers,
                                Stream,
                                SubscriptionId,
@@ -2981,7 +3000,8 @@ maybe_dispatch_on_subscription(_Transport,
                                            Offset,
                                            0, %% offset lag
                                            Active,
-                                           SubscriptionProperties),
+                                           SubscriptionProperties,
+                                           Username),
     Consumers1 = Consumers#{SubscriptionId => ConsumerState},
     State#stream_connection_state{consumers = Consumers1}.
 
@@ -3062,7 +3082,7 @@ evaluate_state_after_secret_update(Transport,
                           _ ->
                               {C1, S1} =
                               lists:foldl(fun(SubId, {Conn, St}) ->
-                                                  remove_subscription(SubId, Conn, St)
+                                                  remove_subscription(SubId, Conn, St, false)
                                           end, {C0, S0}, Subs),
                               {Acc#{Str => ok}, C1, S1}
                       end
@@ -3186,18 +3206,15 @@ partition_index(VirtualHost, Stream, Properties) ->
             -1
     end.
 
-notify_connection_closed(#statem_data{connection =
-                                          #stream_connection{name = Name,
-                                                             publishers =
-                                                                 Publishers} =
-                                              Connection,
-                                      connection_state =
-                                          #stream_connection_state{consumers =
-                                                                       Consumers} =
-                                              ConnectionState}) ->
+notify_connection_closed(#statem_data{
+                            connection = #stream_connection{name = Name,
+                                                            user = #user{username = Username},
+                                                            publishers = Publishers} = Connection,
+                            connection_state = #stream_connection_state{consumers = Consumers} = ConnectionState}) ->
     rabbit_core_metrics:connection_closed(self()),
     [rabbit_stream_metrics:consumer_cancelled(self(),
-                                              stream_r(S, Connection), SubId)
+                                              stream_r(S, Connection),
+                                              SubId, Username, false)
      || #consumer{configuration =
                       #consumer_configuration{stream = S,
                                               subscription_id = SubId}}
@@ -3255,24 +3272,15 @@ clean_state_after_super_stream_deletion(Partitions, Connection, State, Transport
                 end, {Connection, State}, Partitions).
 
 clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
-                                             #stream_connection{virtual_host =
-                                                                    VirtualHost,
-                                                                stream_subscriptions
-                                                                    =
-                                                                    StreamSubscriptions,
-                                                                publishers =
-                                                                    Publishers,
-                                                                publisher_to_ids
-                                                                    =
-                                                                    PublisherToIds,
-                                                                stream_leaders =
-                                                                    Leaders,
-                                                                outstanding_requests = Requests0} =
-                                                 C0,
-                                             #stream_connection_state{consumers
-                                                                          =
-                                                                          Consumers} =
-                                                 S0) ->
+                                             #stream_connection{
+                                                user = #user{username = Username},
+                                                virtual_host = VirtualHost,
+                                                stream_subscriptions = StreamSubscriptions,
+                                                publishers = Publishers,
+                                                publisher_to_ids = PublisherToIds,
+                                                stream_leaders = Leaders,
+                                                outstanding_requests = Requests0} = C0,
+                                             #stream_connection_state{consumers = Consumers} = S0) ->
     {SubscriptionsCleaned, C1, S1} =
         case stream_has_subscriptions(Stream, C0) of
             true ->
@@ -3285,7 +3293,9 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                               rabbit_stream_metrics:consumer_cancelled(self(),
                                                                                        stream_r(Stream,
                                                                                                 C0),
-                                                                                       SubId),
+                                                                                       SubId,
+                                                                                       Username,
+                                                                                       false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
                                                 single_active_consumer(Consumer),
@@ -3295,7 +3305,9 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                               rabbit_stream_metrics:consumer_cancelled(self(),
                                                                                        stream_r(Stream,
                                                                                                 C0),
-                                                                                       SubId),
+                                                                                       SubId,
+                                                                                       Username,
+                                                                                       false),
                                               maybe_unregister_consumer(
                                                 VirtualHost, Consumer,
                                                 single_active_consumer(Consumer),
@@ -3407,12 +3419,13 @@ lookup_leader_from_manager(VirtualHost, Stream) ->
     rabbit_stream_manager:lookup_leader(VirtualHost, Stream).
 
 remove_subscription(SubscriptionId,
-                    #stream_connection{virtual_host = VirtualHost,
-                                       outstanding_requests = Requests0,
-                                       stream_subscriptions =
-                                           StreamSubscriptions} =
-                        Connection,
-                    #stream_connection_state{consumers = Consumers} = State) ->
+                    #stream_connection{
+                       user = #user{username = Username},
+                       virtual_host = VirtualHost,
+                       outstanding_requests = Requests0,
+                       stream_subscriptions = StreamSubscriptions} = Connection,
+                    #stream_connection_state{consumers = Consumers} = State,
+                    Notify) ->
     #{SubscriptionId := Consumer} = Consumers,
     #consumer{log = Log,
               configuration = #consumer_configuration{stream = Stream, member_pid = MemberPid}} =
@@ -3438,7 +3451,9 @@ remove_subscription(SubscriptionId,
     Connection2 = maybe_clean_connection_from_stream(MemberPid, Stream, Connection1),
     rabbit_stream_metrics:consumer_cancelled(self(),
                                              stream_r(Stream, Connection2),
-                                             SubscriptionId),
+                                             SubscriptionId,
+                                             Username,
+                                             Notify),
 
     Requests1 = maybe_unregister_consumer(
                   VirtualHost, Consumer,
@@ -3761,8 +3776,14 @@ ensure_stats_timer(Connection = #stream_connection{}) ->
     rabbit_event:ensure_stats_timer(Connection,
                                     #stream_connection.stats_timer, emit_stats).
 
-in_vhost(_Pid, undefined) ->
-    true;
+in_vhost(Pid, undefined) ->
+    %% no vhost filter, but check the connection is in open state and can return information
+    case info(Pid, [vhost]) of
+        [{vhost, _}] ->
+            true;
+        _ ->
+            false
+    end;
 in_vhost(Pid, VHost) ->
     case info(Pid, [vhost]) of
         [{vhost, VHost}] ->

@@ -256,7 +256,9 @@ handle_http_req(<<"DELETE">>,
                                 [rabbit_misc:rs(QName)])
                   end
           end)
-    catch exit:#amqp_error{explanation = Explanation} ->
+    catch exit:#amqp_error{name = not_found, explanation = Explanation} ->
+              throw(<<"404">>, Explanation, []);
+          exit:#amqp_error{explanation = Explanation} ->
               throw(<<"400">>, Explanation, [])
     end;
 

@@ -187,7 +187,9 @@ delete_crashed(Q) ->
     BQ = bq(),
     case priorities(Q) of
         none -> BQ:delete_crashed(Q);
-        Ps   -> [BQ:delete_crashed(mutate_name(P, Q)) || P <- Ps]
+        Ps   ->
+            [ok = BQ:delete_crashed(mutate_name(P, Q)) || P <- Ps],
+            ok
     end.
 
 purge(State = #state{bq = BQ}) ->

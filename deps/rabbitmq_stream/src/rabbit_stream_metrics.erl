@@ -20,9 +20,9 @@
 
 %% API
 -export([init/0]).
--export([consumer_created/9,
+-export([consumer_created/10,
          consumer_updated/9,
-         consumer_cancelled/3]).
+         consumer_cancelled/5]).
 -export([publisher_created/4,
          publisher_updated/7,
          publisher_deleted/3]).
@@ -42,7 +42,8 @@ consumer_created(Connection,
                  Offset,
                  OffsetLag,
                  Active,
-                 Properties) ->
+                 Properties,
+                 ActingUser) ->
     Values =
         [{credits, Credits},
          {consumed, MessageCount},
@@ -55,16 +56,32 @@ consumer_created(Connection,
     ets:insert(?TABLE_CONSUMER,
                {{StreamResource, Connection, SubscriptionId}, Values}),
     rabbit_global_counters:consumer_created(stream),
-    rabbit_core_metrics:consumer_created(Connection,
-                                         consumer_tag(SubscriptionId),
-                                         false,
-                                         false,
+    CTag = consumer_tag(SubscriptionId),
+    ExclusiveConsume = false,
+    AckRequired = false,
+    Pid = Connection,
+    PrefetchCount = 0,
+    Args = rabbit_misc:to_amqp_table(Properties),
+    rabbit_core_metrics:consumer_created(Pid,
+                                         CTag,
+                                         ExclusiveConsume,
+                                         AckRequired,
                                          StreamResource,
-                                         0,
+                                         PrefetchCount,
                                          Active,
                                          rabbit_stream_utils:consumer_activity_status(Active,
                                                                                       Properties),
-                                         rabbit_misc:to_amqp_table(Properties)),
+                                         Args),
+
+    rabbit_event:notify(consumer_created,
+                        [{consumer_tag,   CTag},
+                         {exclusive,      ExclusiveConsume},
+                         {ack_required,   AckRequired},
+                         {channel,        Pid},
+                         {queue,          StreamResource},
+                         {prefetch_count, PrefetchCount},
+                         {arguments,      Args},
+                         {user_who_performed_action, ActingUser}]),
     ok.
 
 consumer_tag(SubscriptionId) ->
@@ -104,16 +121,21 @@ consumer_updated(Connection,
 
     ok.
 
-consumer_cancelled(Connection, StreamResource, SubscriptionId) ->
+consumer_cancelled(Connection, StreamResource, SubscriptionId, ActingUser, Notify) ->
     ets:delete(?TABLE_CONSUMER,
                {StreamResource, Connection, SubscriptionId}),
     rabbit_global_counters:consumer_deleted(stream),
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
-    rabbit_event:notify(consumer_deleted,
-                        [{consumer_tag, consumer_tag(SubscriptionId)},
-                         {channel, self()}, {queue, StreamResource}]),
+    case Notify of
+        true ->
+            rabbit_event:notify(consumer_deleted,
+                                [{consumer_tag, consumer_tag(SubscriptionId)},
+                                 {channel, self()}, {queue, StreamResource},
+                                 {user_who_performed_action, ActingUser}]);
+        _ -> ok
+    end,
     ok.
 
 publisher_created(Connection,
