@@ -75,6 +75,7 @@ groups() ->
        unbind_bad_binding_path_segment,
        exclusive_queue,
        purge_stream,
+       purge_non_existing_queue_should_return_not_found,
        pipeline,
        multiple_link_pairs,
        link_attach_order,
@@ -771,6 +772,18 @@ purge_stream(Config) ->
                  Reason),
 
     {ok, #{}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = cleanup(Init).
+
+purge_non_existing_queue_should_return_not_found(Config) ->
+    Init = {_, LinkPair} = init(Config),
+    QName = atom_to_binary(?FUNCTION_NAME),
+
+    {error, Resp} = rabbitmq_amqp_client:purge_queue(LinkPair, QName),
+    ?assertMatch(#{subject := <<"404">>}, amqp10_msg:properties(Resp)),
+    #'v1_0.amqp_value'{content = {utf8, Reason}} = amqp10_msg:body(Resp),
+    ?assertEqual(<<"no queue '", QName/binary, "' in vhost '/'">>,
+                 Reason),
+
     ok = cleanup(Init).
 
 queue_topology(Config) ->
