@@ -55,7 +55,7 @@ test_limits(Config) ->
 test_limits1(_Config) ->
     dummy_runtime_parameters:register(),
     application:set_env(rabbit, runtime_parameters, [{limits, [{<<"test">>, 1}]}]),
-    E  = {error_string, "Validation failed\n\ncomponent test is limited to 1 per node\n"},
+    E  = {error_string, "Validation failed\n\ncomponent test is limited to 1\n"},
     ok = rabbit_runtime_parameters:set_any(<<"/">>, <<"test">>, <<"good">>, <<"">>, none),
     E  = rabbit_runtime_parameters:set_any(<<"/">>, <<"test">>, <<"good">>, <<"">>, none),
     dummy_runtime_parameters:unregister().

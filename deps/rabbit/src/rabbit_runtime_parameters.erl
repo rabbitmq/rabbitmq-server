@@ -166,10 +166,10 @@ is_within_limit(Component) ->
     case Limit < 0 orelse count_component(Component) < Limit of
        true -> ok;
        false ->
-            ErrorMsg = "Limit reached: component ~ts is limited to ~tp per node",
+            ErrorMsg = "Limit reached: component ~ts is limited to ~tp",
             ErrorArgs = [Component, Limit],
             rabbit_log:error(ErrorMsg, ErrorArgs),
-            {errors, [{"component ~ts is limited to ~tp per node", [Component, Limit]}]}
+            {errors, [{"component ~ts is limited to ~tp", [Component, Limit]}]}
     end.
 
 count_component(Component) -> length(list_component(Component)).
