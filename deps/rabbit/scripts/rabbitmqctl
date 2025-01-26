@@ -144,6 +144,16 @@ case "$@" in
             maybe_noinput='input'
         fi
         ;;
+    *import_definitions*)
+        if [ "$#" -eq 1 ]
+        then
+            # If there is only one argument, 'import_definitions', then input is required
+            #
+            # rabbitmqctl import_definitions
+            #
+            maybe_noinput='input'
+        fi
+        ;;
     *)
         maybe_noinput='noinput'
         ;;
