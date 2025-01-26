@@ -130,7 +130,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ImportDefinitionsCommand do
   def printer(), do: RabbitMQ.CLI.Printers.StdIORaw
 
   def usage,
-    do: "import_definitions <file_path | \"-\"> [--format <json | erlang>] [--skip-if-unchanged]"
+    do: "import_definitions <file_path> [--format <json | erlang>] [--skip-if-unchanged]"
 
   def usage_additional() do
     [
