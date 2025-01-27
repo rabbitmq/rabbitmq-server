@@ -56,7 +56,7 @@
 %% By staying below DEFAULT_MAX_QUEUE_CREDIT, we avoid situations where a single client is able to enqueue
 %% faster to a quorum queue than to consume from it. (Remember that a quorum queue fsyncs each credit top
 %% up and batch of enqueues.)
--define(DEFAULT_MAX_LINK_CREDIT, 170).
+-define(DEFAULT_MAX_LINK_CREDIT, 172).
 %% Initial and maximum link credit that we grant to a sending queue.
 %% Only when we sent sufficient messages to the writer proc, we will again grant
 %% credits to the sending queue. We have this limit in place to ensure that our
