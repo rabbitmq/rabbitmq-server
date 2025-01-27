@@ -81,7 +81,7 @@ merge_app_env(Config) ->
 end_per_testcase(Testcase, Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    reset_nodes([Server1, Server2], Server0),
+    reset_nodes([Server2, Server0], Server1),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
@@ -107,65 +107,65 @@ reset_nodes([Node| Nodes], Leader) ->
 auto_grow(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
 
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% There is only one node in the cluster at the moment
-    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
     ?assertEqual(1, length(Members)),
 
-    add_server_to_cluster(Server1, Server0),
+    add_server_to_cluster(Server0, Server1),
     %% With 2 nodes in the cluster, target group size is not reached, so no
     %% new members should be available. We sleep a while so the periodic check
     %% runs
     timer:sleep(4000),
-    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
     ?assertEqual(1, length(Members)),
 
-    add_server_to_cluster(Server2, Server0),
+    add_server_to_cluster(Server2, Server1),
     %% With 3 nodes in the cluster, target size is met so eventually it should
     %% be 3 members
     wait_until(fun() ->
-                       {ok, M, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+                       {ok, M, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
                        3 =:= length(M)
                end).
 
 auto_grow_drained_node(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
 
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
     %% There is only one node in the cluster at the moment
-    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+    {ok, Members, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
     ?assertEqual(1, length(Members)),
 
-    add_server_to_cluster(Server1, Server0),
-    %% mark server1 as drained, which should mean the node is not a candiate
+    add_server_to_cluster(Server0, Server1),
+    %% mark Server0 as drained, which should mean the node is not a candiate
     %% for qq membership
-    rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server1),
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, Server0),
     rabbit_ct_helpers:await_condition(
-        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server1) end,
+        fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server0) end,
         10000),
-    add_server_to_cluster(Server2, Server0),
+    add_server_to_cluster(Server2, Server1),
     timer:sleep(5000),
     %% We have 3 nodes, but one is drained, so it will not be concidered.
-    {ok, Members1, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+    {ok, Members1, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
     ?assertEqual(1, length(Members1)),
 
-    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server1),
+    rabbit_ct_broker_helpers:unmark_as_being_drained(Config, Server0),
     rabbit_ct_helpers:await_condition(
-        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server1) end,
+        fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, Server0) end,
         10000),
     %% We have 3 nodes, none is being drained, so we should grow membership to 3
     wait_until(fun() ->
-                       {ok, M, _} = ra:members({queue_utils:ra_name(QQ), Server0}),
+                       {ok, M, _} = ra:members({queue_utils:ra_name(QQ), Server1}),
                        3 =:= length(M)
                end).
 
@@ -173,9 +173,9 @@ auto_grow_drained_node(Config) ->
 auto_shrink(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    add_server_to_cluster(Server1, Server0),
-    add_server_to_cluster(Server2, Server0),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    add_server_to_cluster(Server0, Server1),
+    add_server_to_cluster(Server2, Server1),
 
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -183,7 +183,7 @@ auto_shrink(Config) ->
 
     wait_until(fun() ->
                        {ok, M, _} = ra:members({queue_utils:ra_name(QQ),
-                                                Server0}),
+                                                Server1}),
                        3 =:= length(M)
                end),
     ok = rabbit_control_helper:command(stop_app, Server2),
@@ -192,7 +192,7 @@ auto_shrink(Config) ->
     %% with one node 'forgotten', eventually the membership will shrink to 2
     wait_until(fun() ->
                        {ok, M, _} = ra:members({queue_utils:ra_name(QQ),
-                                                Server0}),
+                                                Server1}),
                        2 =:= length(M)
                end).
 

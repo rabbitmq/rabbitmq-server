@@ -237,7 +237,9 @@ init_per_group1(Group, Config) ->
                    _ ->
                        Config1
                end,
-    Ret = rabbit_ct_helpers:run_steps(Config1b,
+    Config1c = rabbit_ct_helpers:merge_app_env(
+                 Config1b, {rabbit, [{forced_feature_flags_on_init, []}]}),
+    Ret = rabbit_ct_helpers:run_steps(Config1c,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
     case Ret of

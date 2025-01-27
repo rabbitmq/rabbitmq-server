@@ -16,9 +16,9 @@
          handle_event/2,
          handle_call/2]).
 %% client API
--export([start/1,
-         stop/1,
-         get_events/1]).
+-export([start/1, start/2,
+         stop/1, stop/2,
+         get_events/1, get_events/2]).
 -export([assert_event_type/2,
          assert_event_prop/2]).
 
@@ -42,22 +42,31 @@ handle_call(take_state, State) ->
     {ok, lists:reverse(State), ?INIT_STATE}.
 
 start(Config) ->
+    start(Config, 0).
+
+start(Config, Node) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, ?MODULE),
-    ok = gen_event:add_handler(event_manager_ref(Config), ?MODULE, []).
+    ok = gen_event:add_handler(event_manager_ref(Config, Node), ?MODULE, []).
 
 stop(Config) ->
-    ok = gen_event:delete_handler(event_manager_ref(Config), ?MODULE, []).
+    stop(Config, 0).
+
+stop(Config, Node) ->
+    ok = gen_event:delete_handler(event_manager_ref(Config, Node), ?MODULE, []).
 
 get_events(Config) ->
+    get_events(Config, 0).
+
+get_events(Config, Node) ->
     %% events are sent and processed asynchronously
     timer:sleep(500),
-    Result = gen_event:call(event_manager_ref(Config), ?MODULE, take_state),
+    Result = gen_event:call(event_manager_ref(Config, Node), ?MODULE, take_state),
     ?assert(is_list(Result)),
     Result.
 
-event_manager_ref(Config) ->
-    Node = get_node_config(Config, 0, nodename),
-    {rabbit_event, Node}.
+event_manager_ref(Config, Node) ->
+    Node1 = get_node_config(Config, Node, nodename),
+    {rabbit_event, Node1}.
 
 assert_event_type(ExpectedType, #event{type = ActualType}) ->
     ?assertEqual(ExpectedType, ActualType).

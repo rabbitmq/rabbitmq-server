@@ -91,6 +91,7 @@ init_per_testcase(successful_discovery = Testcase, Config) ->
     NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- NodeNames],
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
+          {forced_feature_flags_on_init, []},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
               {internal_lock_retries, 10}
@@ -124,6 +125,7 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
     %% unreachable nodes vs ~6min without them
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
+          {forced_feature_flags_on_init, []},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
               {internal_lock_retries, 10}
@@ -141,6 +143,7 @@ init_per_testcase(no_nodes_configured = Testcase, Config) ->
       ]),
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
+          {forced_feature_flags_on_init, []},
           {cluster_nodes, {[], disc}},
           {cluster_formation, [
               {internal_lock_retries, 10}

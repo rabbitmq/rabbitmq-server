@@ -337,7 +337,7 @@ join_cluster(Config) ->
     Servers0 = [Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Servers = lists:sort(Servers0),
 
-    {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server1),
+    {_Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server2),
     DirectX = <<"amq.direct">>,
     Q = <<"q">>,
     RKey = <<"k">>,
@@ -346,35 +346,35 @@ join_cluster(Config) ->
     bind_queue(Ch1, Q, DirectX, RKey),
 
     %% Server1 and Server2 are not clustered yet.
-    %% Hence, every node has their own table (copy) and only Server1's table contains the binding.
-    ?assertEqual([Server1], index_table_ram_copies(Config, Server1)),
+    %% Hence, every node has their own table (copy) and only Server2's table contains the binding.
     ?assertEqual([Server2], index_table_ram_copies(Config, Server2)),
-    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
-    ?assertEqual(0, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
+    ?assertEqual([Server1], index_table_ram_copies(Config, Server1)),
+    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
+    ?assertEqual(0, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
 
-    ok = rabbit_control_helper:command(stop_app, Server2),
-    %% For the purpose of this test it shouldn't matter whether Server2 is reset. Both should work.
+    ok = rabbit_control_helper:command(stop_app, Server1),
+    %% For the purpose of this test it shouldn't matter whether Server1 is reset. Both should work.
     case erlang:system_time() rem 2 of
         0 ->
-            ok = rabbit_control_helper:command(reset, Server2);
+            ok = rabbit_control_helper:command(reset, Server1);
         1 ->
             ok
     end,
-    ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server1)], []),
-    ok = rabbit_control_helper:command(start_app, Server2),
+    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server2)], []),
+    ok = rabbit_control_helper:command(start_app, Server1),
 
-    %% After Server2 joined Server1, the table should be clustered.
-    ?assertEqual(Servers, index_table_ram_copies(Config, Server2)),
-    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server2)),
+    %% After Server1 joined Server2, the table should be clustered.
+    ?assertEqual(Servers, index_table_ram_copies(Config, Server1)),
+    ?assertEqual(1, table_size(Config, ?INDEX_TABLE_NAME, Server1)),
 
-    %% Publishing via Server1 via "direct exchange routing v2" should work.
+    %% Publishing via Server2 via "direct exchange routing v2" should work.
     amqp_channel:call(Ch1, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch1, self()),
     publish(Ch1, DirectX, RKey),
     assert_confirm(),
 
-    %% Publishing via Server2 via "direct exchange routing v2" should work.
-    {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server2),
+    %% Publishing via Server1 via "direct exchange routing v2" should work.
+    {_Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server1),
     amqp_channel:call(Ch2, #'confirm.select'{}),
     amqp_channel:register_confirm_handler(Ch2, self()),
     publish(Ch2, DirectX, RKey),

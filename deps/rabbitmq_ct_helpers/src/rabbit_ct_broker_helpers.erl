@@ -23,7 +23,7 @@
     stop_rabbitmq_nodes/1,
     stop_rabbitmq_nodes_on_vms/1,
     rewrite_node_config_file/2,
-    cluster_nodes/1, cluster_nodes/2,
+    cluster_nodes/1, cluster_nodes/2, cluster_nodes/3,
 
     setup_meck/1,
     setup_meck/2,
@@ -826,7 +826,10 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                 {ok, _} ->
                     NodeConfig1 = rabbit_ct_helpers:set_config(
                                     NodeConfig,
-                                    [{effective_srcdir, SrcDir},
+                                    [{use_secondary_umbrella,
+                                      UseSecondaryUmbrella orelse
+                                      UseSecondaryDist},
+                                     {effective_srcdir, SrcDir},
                                      {make_vars_for_node_startup, MakeVars}]),
                     query_node(Config, NodeConfig1);
                 _ ->
@@ -902,27 +905,38 @@ query_node(Config, NodeConfig) ->
     rabbit_ct_helpers:set_config(NodeConfig, Vars).
 
 uses_expected_metadata_store(Config, NodeConfig) ->
-    case skip_metadata_store_configuration(Config) of
-        true ->
-            {undefined, undefined};
+    case ?config(use_secondary_umbrella, NodeConfig) of
         false ->
-            %% We want to verify if the active metadata store matches the
-            %% expected one.
-            Nodename = ?config(nodename, NodeConfig),
+            does_use_expected_metadata_store(Config, NodeConfig);
+        true ->
             ExpectedMetadataStore = rabbit_ct_helpers:get_config(
                                       Config, metadata_store),
-            IsKhepriEnabled = rpc(
-                                Config, Nodename,
-                                rabbit_khepri, is_enabled, []),
-            UsedMetadataStore = case IsKhepriEnabled of
-                                    true  -> khepri;
-                                    false -> mnesia
-                                end,
-            ct:pal(
-              "Metadata store on ~s: expected=~s, used=~s",
-              [Nodename, ExpectedMetadataStore, UsedMetadataStore]),
-            {ExpectedMetadataStore, UsedMetadataStore}
+            case does_use_expected_metadata_store(Config, NodeConfig) of
+                {MetadataStore, MetadataStore} = Ret ->
+                    Ret;
+                _ when ExpectedMetadataStore =:= khepri ->
+                    Nodename = ?config(nodename, NodeConfig),
+                    _ = rpc(Config, Nodename, rabbit_feature_flags, enable, [khepri_db]),
+                    does_use_expected_metadata_store(Config, NodeConfig);
+                Ret ->
+                    Ret
+            end
     end.
+
+does_use_expected_metadata_store(Config, NodeConfig) ->
+    %% We want to verify if the active metadata store matches the expected one.
+    Nodename = ?config(nodename, NodeConfig),
+    ExpectedMetadataStore = rabbit_ct_helpers:get_config(
+                              Config, metadata_store),
+    IsKhepriEnabled = rpc(Config, Nodename, rabbit_khepri, is_enabled, []),
+    UsedMetadataStore = case IsKhepriEnabled of
+                            true  -> khepri;
+                            false -> mnesia
+                        end,
+    ct:pal(
+      "Metadata store on ~s: expected=~s, used=~s",
+      [Nodename, ExpectedMetadataStore, UsedMetadataStore]),
+    {ExpectedMetadataStore, UsedMetadataStore}.
 
 maybe_cluster_nodes(Config) ->
     Clustered0 = rabbit_ct_helpers:get_config(Config, rmq_nodes_clustered),
@@ -936,23 +950,52 @@ maybe_cluster_nodes(Config) ->
     end.
 
 cluster_nodes(Config) ->
-    [NodeConfig1 | NodeConfigs] = get_node_configs(Config),
-    cluster_nodes1(Config, NodeConfig1, NodeConfigs).
+    Nodenames = get_node_configs(Config, nodename),
+    cluster_nodes(Config, Nodenames).
 
-cluster_nodes(Config, Nodes) ->
-    [NodeConfig1 | NodeConfigs] = [
-      get_node_config(Config, Node) || Node <- Nodes],
-    cluster_nodes1(Config, NodeConfig1, NodeConfigs).
+cluster_nodes(Config, Nodes) when is_list(Nodes) ->
+    NodeConfigs = [get_node_config(Config, Node) || Node <- Nodes],
+    Search = lists:search(
+               fun(NodeConfig) ->
+                       rabbit_ct_helpers:get_config(
+                         NodeConfig, use_secondary_umbrella, false)
+               end, NodeConfigs),
+    case Search of
+        {value, SecNodeConfig} ->
+            NodeConfigs1 = NodeConfigs -- [SecNodeConfig],
+            Nodename = ?config(nodename, SecNodeConfig),
+            ct:pal(
+              "Using secondary-umbrella-based node ~s as the cluster seed "
+              "node",
+              [Nodename]),
+            cluster_nodes1(Config, SecNodeConfig, NodeConfigs1);
+        false ->
+            [NodeConfig | NodeConfigs1] = NodeConfigs,
+            Nodename = ?config(nodename, NodeConfig),
+            ct:pal(
+              "Using node ~s as the cluster seed node",
+              [Nodename]),
+            cluster_nodes1(Config, NodeConfig, NodeConfigs1)
+    end;
+cluster_nodes(Config, SeedNode) ->
+    Nodenames = get_node_configs(Config, nodename),
+    cluster_nodes(Config, SeedNode, Nodenames).
+
+cluster_nodes(Config, SeedNode, Nodes) ->
+    SeedNodeConfig = get_node_config(Config, SeedNode),
+    NodeConfigs = [get_node_config(Config, Node) || Node <- Nodes],
+    NodeConfigs1 = NodeConfigs -- [SeedNodeConfig],
+    cluster_nodes1(Config, SeedNodeConfig, NodeConfigs1).
 
 cluster_nodes1(Config, NodeConfig1, [NodeConfig2 | Rest]) ->
-    case cluster_nodes(Config, NodeConfig2, NodeConfig1) of
+    case do_cluster_nodes(Config, NodeConfig2, NodeConfig1) of
         ok    -> cluster_nodes1(Config, NodeConfig1, Rest);
         Error -> Error
     end;
 cluster_nodes1(Config, _, []) ->
     Config.
 
-cluster_nodes(Config, NodeConfig1, NodeConfig2) ->
+do_cluster_nodes(Config, NodeConfig1, NodeConfig2) ->
     Nodename1 = ?config(nodename, NodeConfig1),
     Nodename2 = ?config(nodename, NodeConfig2),
     Cmds = [
@@ -1051,36 +1094,53 @@ configured_metadata_store(Config) ->
     end.
 
 configure_metadata_store(Config) ->
-    case skip_metadata_store_configuration(Config) of
-        true ->
-            ct:log("Skipping metadata store configuration as requested"),
-            Config;
-        false ->
-            ct:log("Configuring metadata store..."),
-            MetadataStore = configured_metadata_store(Config),
-            Config1 = rabbit_ct_helpers:set_config(
-                        Config, {metadata_store, MetadataStore}),
-            FeatureNames0 = case MetadataStore of
-                                mnesia ->
-                                    ct:log("Enabling Mnesia metadata store"),
-                                    ?REQUIRED_FEATURE_FLAGS;
-                                khepri ->
-                                    ct:log("Enabling Khepri metadata store"),
-                                    [khepri_db | ?REQUIRED_FEATURE_FLAGS]
-                            end,
-            OtherFeatureNames = rabbit_ct_helpers:get_app_env(
-                                  Config,
-                                  rabbit, forced_feature_flags_on_init, []),
-            FeatureNames1 = lists:usort(FeatureNames0 ++ OtherFeatureNames),
-            rabbit_ct_helpers:merge_app_env(
-              Config1,
-              {rabbit, [{forced_feature_flags_on_init, FeatureNames1}]})
+    ct:log("Configuring metadata store..."),
+    Value = rabbit_ct_helpers:get_app_env(
+              Config, rabbit, forced_feature_flags_on_init, undefined),
+    MetadataStore = configured_metadata_store(Config),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, {metadata_store, MetadataStore}),
+    %% To enabled or disable `khepri_db', we use the relative forced feature
+    %% flags mechanism. This allows us to select the state of Khepri without
+    %% having to worry about other feature flags.
+    %%
+    %% However, RabbitMQ 4.0.x and older don't support it. See the
+    %% `uses_expected_metadata_store/2' check to see how Khepri is enabled in
+    %% this case.
+    case MetadataStore of
+        khepri ->
+            ct:log("Enabling Khepri metadata store"),
+            case Value of
+                undefined ->
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1,
+                      {rabbit,
+                       [{forced_feature_flags_on_init,
+                         {rel, [khepri_db], []}}]});
+                _ ->
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1,
+                      {rabbit,
+                       [{forced_feature_flags_on_init,
+                         [khepri_db | Value]}]})
+            end;
+        mnesia ->
+            ct:log("Enabling Mnesia metadata store"),
+            case Value of
+                undefined ->
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1,
+                      {rabbit,
+                       [{forced_feature_flags_on_init,
+                         {rel, [], [khepri_db]}}]});
+                _ ->
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1,
+                      {rabbit,
+                       [{forced_feature_flags_on_init,
+                         Value -- [khepri_db]}]})
+            end
     end.
-
-skip_metadata_store_configuration(Config) ->
-    Skip = rabbit_ct_helpers:get_config(
-             Config, skip_metadata_store_configuration),
-    Skip =:= true.
 
 %% Waits until the metadata store replica on Node is up to date with the leader.
 await_metadata_store_consistent(Config, Node) ->
