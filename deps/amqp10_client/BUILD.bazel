@@ -78,6 +78,7 @@ rabbitmq_app(
         "//deps/amqp10_common:erlang_app",
         "//deps/rabbit_common:erlang_app",
         "@credentials_obfuscation//:erlang_app",
+        "@gun//:erlang_app",
     ],
 )
 

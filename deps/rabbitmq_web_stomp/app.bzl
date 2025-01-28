@@ -155,14 +155,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_web_stomp",
         erlc_opts = "//:test_erlc_opts",
     )
-    erlang_bytecode(
-        name = "test_src_rfc6455_client_beam",
-        testonly = True,
-        srcs = ["test/src/rfc6455_client.erl"],
-        outs = ["test/src/rfc6455_client.beam"],
-        app_name = "rabbitmq_web_stomp",
-        erlc_opts = "//:test_erlc_opts",
-    )
+
     erlang_bytecode(
         name = "test_src_stomp_beam",
         testonly = True,
