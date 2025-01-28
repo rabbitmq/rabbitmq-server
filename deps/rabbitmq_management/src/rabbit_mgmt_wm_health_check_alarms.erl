@@ -36,7 +36,7 @@ to_json(ReqData, Context) ->
               end,
     case rabbit_alarm:get_alarms(Timeout) of
         [] ->
-            rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
         Xs when length(Xs) > 0 ->
             Msg = "There are alarms in effect in the cluster",
             failure(Msg, Xs, ReqData, Context)
