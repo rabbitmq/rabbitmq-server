@@ -43,8 +43,9 @@ to_json(ReqData, Context) ->
                 Msg = <<"No active listener">>,
                 failure(Msg, Port, [P || #listener{port = P} <- Local], ReqData, Context);
             _ ->
-                rabbit_mgmt_util:reply([{status, ok},
-                                        {port, Port}], ReqData, Context)
+                Body = #{status => ok,
+                         port => Port},
+                rabbit_mgmt_util:reply(Body, ReqData, Context)
         end
     catch
         error:badarg ->
@@ -52,10 +53,11 @@ to_json(ReqData, Context) ->
     end.
 
 failure(Message, Missing, Ports, ReqData, Context) ->
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
-                                                             {reason, Message},
-                                                             {missing, Missing},
-                                                             {ports, Ports}],
+    Body = #{status  => failed,
+             reason  => Message,
+             missing => Missing,
+             ports   => Ports},
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body,
                                                             ReqData, Context),
     {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
 

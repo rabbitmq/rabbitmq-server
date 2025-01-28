@@ -50,7 +50,7 @@ to_json(ReqData, Context) ->
                                             end, [], Local),
             case ExpiringListeners of
                 [] ->
-                    rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+                    rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
                 _ ->
                     Msg = <<"Certificates expiring">>,
                     failure(Msg, ExpiringListeners, ReqData, Context)
@@ -58,10 +58,12 @@ to_json(ReqData, Context) ->
     end.
 
 failure(Message, Listeners, ReqData, Context) ->
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
-                                                             {reason, Message},
-                                                             {expired, Listeners}],
-                                                            ReqData, Context),
+    Body = #{
+        status  => failed,
+        reason  => Message,
+        expired => Listeners
+    },
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
     {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->

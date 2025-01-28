@@ -35,12 +35,16 @@ groups() ->
      {single_node, [], [
                         alarms_test,
                         local_alarms_test,
+                        metadata_store_initialized_test,
+                        metadata_store_initialized_with_data_test,
                         is_quorum_critical_single_node_test]}
     ].
 
 all_tests() -> [
                 health_checks_test,
                 virtual_hosts_test,
+                metadata_store_initialized_test,
+                metadata_store_initialized_with_data_test,
                 protocol_listener_test,
                 port_listener_test,
                 certificate_expiration_test
@@ -100,6 +104,14 @@ health_checks_test(Config) ->
     http_get(Config, "/health/checks/protocol-listener/http", ?OK),
     http_get(Config, "/health/checks/virtual-hosts", ?OK),
     http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
+    passed.
+
+metadata_store_initialized_test(Config) ->
+    http_get(Config, "/health/checks/metadata-store/initialized", ?OK),
+    passed.
+
+metadata_store_initialized_with_data_test(Config) ->
+    http_get(Config, "/health/checks/metadata-store/initialized/with-data", ?OK),
     passed.
 
 alarms_test(Config) ->

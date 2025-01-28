@@ -196,6 +196,8 @@ dispatcher() ->
      %% modern generation of fine-grained health checks
      {"/health/checks/alarms",                                 rabbit_mgmt_wm_health_check_alarms, []},
      {"/health/checks/local-alarms",                           rabbit_mgmt_wm_health_check_local_alarms, []},
+     {"/health/checks/metadata-store/initialized",             rabbit_mgmt_wm_health_check_metadata_store_initialized, []},
+     {"/health/checks/metadata-store/initialized/with-data",   rabbit_mgmt_wm_health_check_metadata_store_initialized_with_data, []},
      {"/health/checks/certificate-expiration/:within/:unit",   rabbit_mgmt_wm_health_check_certificate_expiration, []},
      {"/health/checks/port-listener/:port",                    rabbit_mgmt_wm_health_check_port_listener, []},
      {"/health/checks/protocol-listener/:protocol",            rabbit_mgmt_wm_health_check_protocol_listener, []},
