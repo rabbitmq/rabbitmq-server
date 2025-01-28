@@ -533,6 +533,8 @@ def all_srcs(name = "all_srcs"):
             "include/internal_user.hrl",
             "include/mc.hrl",
             "include/rabbit_amqp.hrl",
+            "include/rabbit_amqp_metrics.hrl",
+            "include/rabbit_amqp_reader.hrl",
             "include/rabbit_global_counters.hrl",
             "include/rabbit_khepri.hrl",
             "include/vhost.hrl",
@@ -548,7 +550,6 @@ def all_srcs(name = "all_srcs"):
         name = "private_hdrs",
         srcs = [
             "src/mirrored_supervisor.hrl",
-            "src/rabbit_amqp_reader.hrl",
             "src/rabbit_feature_flags.hrl",
             "src/rabbit_ff_registry.hrl",
             "src/rabbit_fifo.hrl",

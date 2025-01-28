@@ -36,6 +36,7 @@ amqp10_client:
 - amqp10_client_frame_reader
 - amqp10_client_session
 - amqp10_client_sessions_sup
+- amqp10_client_socket
 - amqp10_client_sup
 - amqp10_client_types
 - amqp10_msg
@@ -867,6 +868,7 @@ rabbitmq_consistent_hash_exchange:
 - rabbit_exchange_type_consistent_hash
 rabbitmq_ct_client_helpers:
 - rabbit_ct_client_helpers
+- rfc6455_client
 rabbitmq_ct_helpers:
 - ct_master_event_fork
 - ct_master_fork
