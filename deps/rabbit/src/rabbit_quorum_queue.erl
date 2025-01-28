@@ -1373,7 +1373,7 @@ do_add_member(Q, Node, Membership, Timeout)
                     Fun = fun(Q1) ->
                                   Q2 = update_type_state(
                                          Q1, fun(#{nodes := Nodes} = Ts) ->
-                                                     Ts#{nodes => [Node | Nodes]}
+                                                     Ts#{nodes => lists:usort([Node | Nodes])}
                                              end),
                                   amqqueue:set_pid(Q2, Leader)
                           end,
