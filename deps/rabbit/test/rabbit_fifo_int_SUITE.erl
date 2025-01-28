@@ -76,6 +76,7 @@ init_per_testcase(TestCase, Config) ->
     meck:expect(rabbit_quorum_queue, cancel_consumer_handler, fun (_, _) -> ok end),
     meck:new(rabbit_feature_flags, []),
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
+    meck:expect(rabbit_feature_flags, is_enabled, fun (_, _) -> true end),
     ra_server_sup_sup:remove_all(?RA_SYSTEM),
     ServerName2 = list_to_atom(atom_to_list(TestCase) ++ "2"),
     ServerName3 = list_to_atom(atom_to_list(TestCase) ++ "3"),
@@ -341,9 +342,10 @@ detects_lost_delivery(Config) ->
     {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
     % lose first delivery
     receive
-        {ra_event, _, {machine, {delivery, _, [{_, {_, msg1}}]}}} ->
+        {ra_event, _, {machine, {delivery, _, _, _}}} ->
             ok
     after ?TIMEOUT ->
+              flush(),
               exit(await_delivery_timeout)
     end,
 
@@ -369,7 +371,7 @@ returns(Config) ->
 
     {FC3, _} =
     receive
-        {ra_event, Qname, {machine, {delivery, _, [{MsgId, {_, _}}]}} = Evt1} ->
+        {ra_event, Qname, {machine, {delivery, _, _, [{MsgId, _}]}} = Evt1} ->
             {ok, FC2, Actions1} =
                 rabbit_fifo_client:handle_ra_event(Qname, Qname, Evt1, FC1),
             [{deliver, _, true,
@@ -385,7 +387,7 @@ returns(Config) ->
     {FC5, _} =
     receive
         {ra_event, Qname2,
-         {machine, {delivery, _, [{MsgId1, {_, _Msg1Out}}]}} = Evt2} ->
+         {machine, {delivery, _, _, [{MsgId1, _}]}} = Evt2} ->
             {ok, FC4, Actions2} =
                 rabbit_fifo_client:handle_ra_event(Qname2, Qname2, Evt2, FC3),
             [{deliver, _tag, true,
@@ -401,7 +403,7 @@ returns(Config) ->
     end,
     receive
         {ra_event, Qname3,
-         {machine, {delivery, _, [{MsgId2, {_, _Msg2Out}}]}} = Evt3} ->
+         {machine, {delivery, _, _, [{MsgId2, _}]}} = Evt3} ->
             {ok, FC6, Actions3} =
                 rabbit_fifo_client:handle_ra_event(Qname3, Qname3, Evt3, FC5),
             [{deliver, _, true,
@@ -880,6 +882,8 @@ receive_ra_events(Applied, Deliveries, Acc) ->
             receive_ra_events(Applied - length(Seqs), Deliveries, [Evt | Acc]);
         {ra_event, _, {machine, {delivery, _, MsgIds}}} = Evt ->
             receive_ra_events(Applied, Deliveries - length(MsgIds), [Evt | Acc]);
+        {ra_event, _, {machine, {delivery, _, _Plan, MsgIds}}} = Evt ->
+            receive_ra_events(Applied, Deliveries - length(MsgIds), [Evt | Acc]);
         {ra_event, _, _} = Evt ->
             receive_ra_events(Applied, Deliveries, [Evt | Acc])
     after ?TIMEOUT ->
@@ -938,10 +942,16 @@ discard_next_delivery(ClusterName, State0, Wait) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM,
-                                        ClusterName#resource.name,
-                                        {module, rabbit_fifo, RaFifoConfig},
-                                        ServerIds),
+    UId = ra:new_uid(ra_lib:to_binary(ClusterName#resource.name)),
+    Confs = [#{id => Id,
+               uid => UId,
+               cluster_name => ClusterName#resource.name,
+               log_init_args => #{uid => UId},
+               initial_members => ServerIds,
+               initial_machine_version => rabbit_fifo:version(),
+               machine => {module, rabbit_fifo, RaFifoConfig}}
+             || Id <- ServerIds],
+    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM, Confs),
     ?assertEqual(length(Started), length(ServerIds)),
     ok.
 

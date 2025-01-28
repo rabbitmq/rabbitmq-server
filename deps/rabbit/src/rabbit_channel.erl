@@ -184,6 +184,7 @@
          messages_uncommitted,
          acks_uncommitted,
          pending_raft_commands,
+         cached_segments,
          prefetch_count,
          state,
          garbage_collection]).
@@ -548,8 +549,6 @@ prioritise_cast(Msg, _Len, _State) ->
     case Msg of
         {confirm,            _MsgSeqNos, _QPid} -> 5;
         {reject_publish,     _MsgSeqNos, _QPid} -> 5;
-        {queue_event, _, {confirm,            _MsgSeqNos, _QPid}} -> 5;
-        {queue_event, _, {reject_publish,     _MsgSeqNos, _QPid}} -> 5;
         _                                       -> 0
     end.
 
@@ -639,10 +638,14 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
     ok = rabbit_writer:flush(WriterPid),
     {stop, normal, State};
 
-handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg}, State) ->
+handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg},
+            #ch{consumer_mapping = CMap} = State)
+  when is_map_key(CTag, CMap) ->
     ok = send(Msg, State),
     noreply(consumer_monitor(CTag, State));
-
+handle_cast({command, #'basic.consume_ok'{}}, State) ->
+    %% a consumer was not found so just ignore this
+    noreply(State);
 handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
@@ -2259,6 +2262,8 @@ i(acks_uncommitted,        #ch{tx = {_Msgs, Acks}})       -> ack_len(Acks);
 i(acks_uncommitted,        #ch{})                         -> 0;
 i(pending_raft_commands,   #ch{queue_states = QS}) ->
     pending_raft_commands(QS);
+i(cached_segments,   #ch{queue_states = QS}) ->
+    cached_segments(QS);
 i(state,                   #ch{cfg = #conf{state = running}}) -> credit_flow:state();
 i(state,                   #ch{cfg = #conf{state = State}}) -> State;
 i(prefetch_count,          #ch{cfg = #conf{consumer_prefetch = C}})    -> C;
@@ -2280,6 +2285,17 @@ pending_raft_commands(QStates) ->
     Fun = fun(_, V, Acc) ->
                   case rabbit_queue_type:state_info(V) of
                       #{pending_raft_commands := P} ->
+                          Acc + P;
+                      _ ->
+                          Acc
+                  end
+          end,
+    rabbit_queue_type:fold_state(Fun, 0, QStates).
+
+cached_segments(QStates) ->
+    Fun = fun(_, V, Acc) ->
+                  case rabbit_queue_type:state_info(V) of
+                      #{cached_segments := P} ->
                           Acc + P;
                       _ ->
                           Acc
