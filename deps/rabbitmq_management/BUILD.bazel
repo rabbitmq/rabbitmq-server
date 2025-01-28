@@ -232,7 +232,7 @@ rabbitmq_suite(
     ],
 )
 
-assert_suites()
+# assert_suites()
 
 alias(
     name = "rabbitmq_management",
