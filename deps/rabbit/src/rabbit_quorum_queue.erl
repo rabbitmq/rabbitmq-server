@@ -77,6 +77,17 @@
          force_vhost_queues_shrink_member_to_current_member/1,
          force_all_queues_shrink_member_to_current_member/0]).
 
+<<<<<<< HEAD
+=======
+-export([policy_apply_to_name/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0]).
+
+-export([force_checkpoint/2, force_checkpoint_on_queue/1]).
+
+>>>>>>> 0d3dfd969 (Add force checkpoint functions for quorum queues and command line tool)
 %% for backwards compatibility
 -export([file_handle_leader_reservation/1,
          file_handle_other_reservation/0,
@@ -2104,6 +2115,39 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
          end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Shrinking finished"),
     ok.
+
+force_checkpoint_on_queue(QName) ->
+    Node = node(),
+    QNameFmt = rabbit_misc:rs(QName),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {RaName, _} = amqqueue:get_pid(Q),
+            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint]),
+            rabbit_log:debug("Sent command to force checkpoint ~ts", [QNameFmt]);
+        {ok, _Q} ->
+            {error, not_quorum_queue};
+        {error, _} = E ->
+            E
+    end.
+
+force_checkpoint(VhostSpec, QueueSpec) ->
+    [begin
+         QName = amqqueue:get_name(Q),
+         case force_checkpoint_on_queue(QName) of
+             ok ->
+                 {QName, {ok}};
+             {error, Err} ->
+                 rabbit_log:warning("~ts: failed to force checkpoint, error: ~w",
+                                    [rabbit_misc:rs(QName), Err]),
+                 {QName, {error, Err}}
+         end
+     end
+     || Q <- rabbit_amqqueue:list(),
+        amqqueue:get_type(Q) == ?MODULE,
+        is_match(amqqueue:get_vhost(Q), VhostSpec)
+        andalso is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)].
 
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
