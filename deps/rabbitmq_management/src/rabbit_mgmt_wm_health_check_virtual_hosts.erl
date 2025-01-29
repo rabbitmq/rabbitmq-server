@@ -31,7 +31,7 @@ resource_exists(ReqData, Context) ->
 to_json(ReqData, Context) ->
     case rabbit_vhost_sup_sup:check() of
         [] ->
-            rabbit_mgmt_util:reply([{status, ok}], ReqData, Context);
+            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
         Vs when length(Vs) > 0 ->
             Msg = <<"Some virtual hosts are down">>,
             failure(Msg, Vs, ReqData, Context)
