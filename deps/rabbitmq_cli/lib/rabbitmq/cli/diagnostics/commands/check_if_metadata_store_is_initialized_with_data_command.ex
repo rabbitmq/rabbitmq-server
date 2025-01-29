@@ -42,13 +42,29 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckIfMetadataStoreIsInitializedWit
     end
   end
 
+  def output(true, %{silent: true}) do
+    {:ok, :check_passed}
+  end
+  def output(true, %{formatter: "json"}) do
+    {:ok, %{"result" => "ok"}}
+  end
   def output(true, %{node: node_name} = _options) do
     {:ok, "Metadata store on node #{node_name} has completed its initialization"}
   end
 
+  def output(false, %{silent: true}) do
+    {:error, :check_failed}
+  end
+  def output(false, %{node: node_name, formatter: "json"}) do
+    {:error, :check_failed,
+      %{
+        "result"  => "error",
+        "message" => "Metadata store on node #{node_name} reports to not yet have finished initialization"
+      }}
+  end
   def output(false, %{node: node_name} = _options) do
     {:error,
-     "Metadata store on node #{node_name} reports to not yet have finished initialization"}
+      "Metadata store on node #{node_name} reports to not yet have finished initialization"}
   end
 
   use RabbitMQ.CLI.DefaultOutput
