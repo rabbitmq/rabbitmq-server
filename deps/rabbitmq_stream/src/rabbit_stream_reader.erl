@@ -2417,12 +2417,10 @@ handle_frame_post_auth(Transport,
         lists:sort(
             maps:keys(NodesMap)),
     %% filter out nodes in maintenance
-    Nodes =
-        lists:filter(fun(N) ->
-                        rabbit_maintenance:is_being_drained_consistent_read(N)
-                        =:= false
-                     end,
-                     Nodes0),
+        Nodes = lists:filter(fun(N) ->
+                                     rabbit_maintenance:is_being_drained_local_read(N) =:= false
+                             end,
+                             Nodes0),
     NodeEndpoints =
         lists:foldr(fun(Node, Acc) ->
                        PortFunction =
