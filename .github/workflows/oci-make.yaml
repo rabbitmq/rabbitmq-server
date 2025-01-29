@@ -25,6 +25,7 @@ on:
         default: false
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
+  VERSION: 4.0.0+${{ github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -58,7 +59,7 @@ jobs:
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         run: |
-          make package-generic-unix PROJECT_VERSION=4.0.0
+          make package-generic-unix PROJECT_VERSION=${{ env.VERSION }}
       - name: Upload package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
         uses: actions/upload-artifact@v4
@@ -118,5 +119,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           cache-to: type=gha,mode=max,scope=${{ matrix.otp_version }}
           cache-from: type=gha,scope=${{ matrix.otp_version }}
-          build-args:
+          build-args: |
             OTP_VERSION=${{ matrix.otp_version }}
+            RABBITMQ_VERSION=${{ env.VERSION }}
