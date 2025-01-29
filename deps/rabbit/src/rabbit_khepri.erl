@@ -1021,7 +1021,9 @@ delete_or_fail(Path) ->
                 0 -> {error, {node_not_found, #{}}};
                 _ -> ok
             end;
-        Error ->
+        {ok, #{} = NodePropsMap} when NodePropsMap =:= #{} ->
+            {error, {node_not_found, #{}}};
+        {error, _} = Error ->
             Error
     end.
 
