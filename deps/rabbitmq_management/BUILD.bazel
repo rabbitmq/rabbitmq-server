@@ -6,7 +6,6 @@ load(
     "APP_VERSION",
     "BROKER_VERSION_REQUIREMENTS_ANY",
     "RABBITMQ_DIALYZER_OPTS",
-    "assert_suites",
     "broker_for_integration_suites",
     "rabbitmq_app",
     "rabbitmq_integration_suite",

@@ -971,6 +971,8 @@ rabbitmq_management:
 - rabbit_mgmt_wm_health_check_alarms
 - rabbit_mgmt_wm_health_check_certificate_expiration
 - rabbit_mgmt_wm_health_check_local_alarms
+- rabbit_mgmt_wm_health_check_metadata_store_initialized
+- rabbit_mgmt_wm_health_check_metadata_store_initialized_with_data
 - rabbit_mgmt_wm_health_check_node_is_quorum_critical
 - rabbit_mgmt_wm_health_check_port_listener
 - rabbit_mgmt_wm_health_check_protocol_listener
