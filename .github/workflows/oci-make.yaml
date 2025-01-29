@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
 env:
-  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq-test
+  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
