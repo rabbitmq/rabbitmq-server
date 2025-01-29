@@ -42,16 +42,19 @@ to_json(ReqData, Context) ->
             Msg = <<"No active listener">>,
             failure(Msg, Protocol, [P || #listener{protocol = P} <- Local], ReqData, Context);
         _ ->
-            rabbit_mgmt_util:reply([{status, ok},
-                                    {protocol, list_to_binary(Protocol)}], ReqData, Context)
+            Body = #{status   => ok,
+                     protocol => list_to_binary(Protocol)},
+            rabbit_mgmt_util:reply(Body, ReqData, Context)
     end.
 
 failure(Message, Missing, Protocols, ReqData, Context) ->
-    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply([{status, failed},
-                                                             {reason, Message},
-                                                             {missing, list_to_binary(Missing)},
-                                                             {protocols, Protocols}],
-                                                            ReqData, Context),
+    Body = #{
+        status    => failed,
+        reason    => Message,
+        missing   => list_to_binary(Missing),
+        protocols => Protocols
+    },
+    {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
     {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
 
 is_authorized(ReqData, Context) ->

@@ -42,7 +42,7 @@ to_json(ReqData, Context) ->
         rabbit_mgmt_util:vhost(ReqData),
         ReqData,
         Context,
-        fun(_Ch) -> rabbit_mgmt_util:reply([{status, ok}], ReqData, Context) end
+        fun(_Ch) -> rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context) end
     ).
 
 is_authorized(ReqData, Context) ->

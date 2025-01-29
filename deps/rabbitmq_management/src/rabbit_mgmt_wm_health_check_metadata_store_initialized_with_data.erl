@@ -6,7 +6,7 @@
 %%
 
 %% An HTTP API counterpart of 'rabbitmq-dignoastics check_local_alarms'
--module(rabbit_mgmt_wm_health_check_local_alarms).
+-module(rabbit_mgmt_wm_health_check_metadata_store_initialized_with_data).
 
 -export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
 -export([resource_exists/2]).
@@ -30,24 +30,27 @@ resource_exists(ReqData, Context) ->
     {true, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Timeout = case cowboy_req:header(<<"timeout">>, ReqData) of
-                  undefined -> 70000;
-                  Val       -> list_to_integer(binary_to_list(Val))
-              end,
-    case rabbit_alarm:get_local_alarms(Timeout) of
-        [] ->
+    InitializedMetadataStore = rabbit_db:is_init_finished(),
+    %% We cannot know how many entities are supposed to be in the data store,
+    %% so let's verify that there's at least some data.
+    %%
+    %% Clusters without users or their permissions do exist (e.g. OAuth 2 or LDAP are used exclusively)
+    %% but clusters without any virtual hosts do not.
+    {ok, N} = rabbit_db_vhost:count_all(),
+    HasAVirtualHost = N > 0,
+    Result = InitializedMetadataStore andalso HasAVirtualHost,
+    case Result of
+        true ->
             rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-        Xs when length(Xs) > 0 ->
-            Msg = "There are alarms in effect on the node",
-            failure(Msg, Xs, ReqData, Context)
+        false ->
+            Msg = "Metadata store has not yet been initialized: it reports to have no virtual hosts",
+            failure(Msg, ReqData, Context)
     end.
 
-failure(Message, Alarms0, ReqData, Context) ->
-    Alarms = rabbit_alarm:format_as_maps(Alarms0),
+failure(Message, ReqData, Context) ->
     Body = #{
         status => failed,
-        reason => rabbit_data_coercion:to_binary(Message),
-        alarms => Alarms
+        reason => rabbit_data_coercion:to_binary(Message)
     },
     {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
     {stop, cowboy_req:reply(?HEALTH_CHECK_FAILURE_STATUS, #{}, Response, ReqData1), Context1}.
