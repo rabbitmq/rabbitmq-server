@@ -212,7 +212,11 @@ def title(name):
 
 
 def subcommands_usage():
-    usage = """Usage
+    usage = """
+IMPORTANT: this version of 'rabbitmqadmin' is no longer actively maintained.
+           See https://www.rabbitmq.com/docs/management-cli.
+
+Usage
 =====
   """ + short_usage() + """
 
@@ -241,12 +245,20 @@ def subcommands_usage():
     standard output along with the message metadata
 
   * If payload_file is specified on get, count must not be set
+
+IMPORTANT: this version of 'rabbitmqadmin' is no longer actively maintained.
+See https://www.rabbitmq.com/docs/management-cli.
 """
     return usage
 
 
 def config_usage():
-    usage = "Usage\n=====\n" + short_usage()
+    usage = """
+IMPORTANT: this version of 'rabbitmqadmin' is no longer actively maintained.
+See https://www.rabbitmq.com/docs/management-cli.
+"""
+
+    usage += "Usage\n=====\n" + short_usage()
     usage += "\n" + title("Configuration File")
     usage += """  It is possible to specify a configuration file from the command line.
   Hosts can be configured easily in a configuration file and called
@@ -277,6 +289,10 @@ def config_usage():
 """
     usage += title("Use")
     usage += """  rabbitmqadmin -c rabbitmqadmin.conf.example -N host_normal ..."""
+    usage += """
+IMPORTANT: this version of 'rabbitmqadmin' is no longer actively maintained.
+See https://www.rabbitmq.com/docs/management-cli.
+"""
     return usage
 
 
@@ -289,6 +305,9 @@ For more help use the help subcommand:
 
   rabbitmqadmin help subcommands  # For a list of available subcommands
   rabbitmqadmin help config       # For help with the configuration file
+
+IMPORTANT: this version of 'rabbitmqadmin' is no longer actively maintained.
+See https://www.rabbitmq.com/docs/management-cli.
 """
 
 
