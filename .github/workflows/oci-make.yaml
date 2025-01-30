@@ -107,6 +107,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: packaging/docker-image
+<<<<<<< HEAD
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-to: type=gha
@@ -174,3 +175,13 @@ jobs:
         cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
         ${{ toJson(needs) }}
         EOF
+=======
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ github.event.inputs.build_arm && 'linux/amd64, linux/arm64' || 'linux/amd64' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.otp_version }}
+          cache-from: type=gha,scope=${{ matrix.otp_version }}
+          build-args: |
+            OTP_VERSION=${{ matrix.otp_version }}
+            RABBITMQ_VERSION=${{ env.VERSION }}
+>>>>>>> ed522fea8 (Add back metadata labels to the OCI build)
