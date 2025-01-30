@@ -202,7 +202,7 @@
 
     %% the family name for this metric is stream_consumer_metrics but the real table used for data is rabbit_stream_consumer_created.
     {stream_consumer_metrics, [
-        {2, undefined, stream_consumer_max_offset_lag, gauge, "Current maximum of offset lag of consumers"}
+        {2, undefined, stream_consumer_max_offset_lag, gauge, "Highest consumer offset lag"}
     ]},
 
     {connection_metrics, [
