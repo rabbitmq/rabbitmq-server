@@ -2,6 +2,7 @@ name: Peer Discovery AWS Integration Test
 on:
   push:
     paths:
+      - ".github/workflows/peer-discovery-aws.yaml"
       - "deps/rabbitmq_peer_discovery_aws/**"
       - "deps/rabbitmq_peer_discovery_common/**"
       - "deps/rabbit/src/rabbit_peer_discovery.erl"
@@ -11,6 +12,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
+env:
+  OTP_VERSION: "27"
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
@@ -33,6 +36,8 @@ jobs:
       id: metadata
       with:
         images: pivotalrabbitmq/rabbitmq
+        flavor: |
+          suffix=-otp${{ env.OTP_VERSION }}
         tags: |
           type=sha,format=long
     - uses: int128/wait-for-docker-image-action@v1
@@ -41,23 +46,12 @@ jobs:
         tags: ${{ steps.metadata.outputs.tags }}
         timeout-seconds: 3600
         polling-seconds: 60
-    - name: COMPUTE REPO CACHE KEY
-      if: steps.authorized.outputs.authorized == 'true'
-      id: repo-cache-key
-      run: |
-        echo "value=bazel-repo-cache-${{ hashFiles('MODULE.bazel') }}" | tee -a $GITHUB_OUTPUT
-    - name: LOAD REPO CACHE
-      if: steps.authorized.outputs.authorized == 'true'
-      uses: actions/cache/restore@v4
-      with:
-        key: ${{ steps.repo-cache-key.outputs.value }}
-        path: /home/runner/repo-cache/
     - name: CONFIGURE OTP & ELIXIR
       if: steps.authorized.outputs.authorized == 'true'
       uses: erlef/setup-beam@v1.17
       with:
-        otp-version: 26
-        elixir-version: 1.15
+        otp-version: ${{ env.OTP_VERSION }}
+        elixir-version: "1.17"
     - name: SETUP ecs-cli
       if: steps.authorized.outputs.authorized == 'true'
       env:
@@ -66,40 +60,20 @@ jobs:
         curl -Lo /usr/local/bin/ecs-cli https://amazon-ecs-cli.s3.amazonaws.com/ecs-cli-linux-amd64-v${ECS_CLI_VERSION} && \
         chmod +x /usr/local/bin/ecs-cli && \
         ecs-cli --version
-    - name: AUTHENTICATE TO GOOGLE CLOUD
-      if: steps.authorized.outputs.authorized == 'true'
-      uses: google-github-actions/auth@v2.1.7
-      with:
-        credentials_json: ${{ secrets.REMOTE_CACHE_CREDENTIALS_JSON }}
-    - name: CONFIGURE BAZEL
-      if: steps.authorized.outputs.authorized == 'true'
-      run: |
-        if [ -n "${{ secrets.REMOTE_CACHE_BUCKET_NAME }}" ]; then
-        cat << EOF >> user.bazelrc
-          build --remote_cache=https://storage.googleapis.com/${{ secrets.REMOTE_CACHE_BUCKET_NAME }}
-          build --google_default_credentials
-
-          build --experimental_guard_against_concurrent_changes
-        EOF
-        fi
-        cat << EOF >> user.bazelrc
-          build --repository_cache=/home/runner/repo-cache/
-          build --color=yes
-        EOF
-
-        bazelisk info release
-    #! - name: Setup tmate session
-    #!   uses: mxschmitt/action-tmate@v3
     - name: RUN INTEGRATION TESTS
       if: steps.authorized.outputs.authorized == 'true'
+      env:
+        AWS_ACCESS_KEY_ID: "${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }}"
+        RABBITMQ_IMAGE: "${{ steps.metadata.outputs.tags }}"
       run: |
         branch_or_tag="${GITHUB_REF##*/}"
-        bazelisk test //deps/rabbitmq_peer_discovery_aws:integration_SUITE \
-          --test_tag_filters=aws \
-          --build_tests_only \
-          --test_env AWS_ACCESS_KEY_ID=${{ secrets.CONCOURSE_AWS_ACCESS_KEY_ID }} \
-          --test_env AWS_SECRET_ACCESS_KEY=${{ secrets.CONCOURSE_AWS_SECRET_ACCESS_KEY }} \
-          --test_env RABBITMQ_IMAGE="pivotalrabbitmq/rabbitmq:sha-${{ github.sha }}" \
-          --test_env AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}" \
-          --test_output=streamed \
-          --verbose_failures
+        export AWS_ECS_CLUSTER_NAME="rabbitmq-peer-discovery-aws-actions-${branch_or_tag//[._]/-}"
+        make -C deps/rabbitmq_peer_discovery_aws ct-integration
+    - name: UPLOAD TEST LOGS
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CT logs
+        path: "logs/"
+        if-no-files-found: ignore
