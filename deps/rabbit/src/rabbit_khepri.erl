@@ -286,7 +286,7 @@ setup(_) ->
 retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
         {ok, T}   -> T;
-        undefined -> 30000
+        undefined -> 300_000
     end.
 
 retry_limit() ->
