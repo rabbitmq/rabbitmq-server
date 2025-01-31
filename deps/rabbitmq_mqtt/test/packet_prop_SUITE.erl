@@ -103,7 +103,7 @@ publish_packet() ->
                        retain = boolean()},
             variable = #mqtt_packet_publish{
                           packet_id = packet_id(Qos),
-                          topic_name = utf8_string()},
+                          topic_name = mqtt_utf8_string()},
             payload = binary()}).
 
 publish_with_properties_packet() ->
@@ -135,15 +135,15 @@ publish_properties() ->
          list(elements([{'Payload-Format-Indicator', bit()},
                         {'Message-Expiry-Interval', four_byte_integer()},
                         {'Topic-Alias', two_byte_integer()},
-                        {'Response-Topic', utf8_string()},
+                        {'Response-Topic', mqtt_utf8_string()},
                         {'Correlation-Data', binary_data()},
                         user_property(),
-                        {'Content-Type', utf8_string()}])),
+                        {'Content-Type', mqtt_utf8_string()}])),
          maps:from_list(L)).
 
 puback_properties() ->
     ?LET(L,
-         list(elements([{'Reason-String', utf8_string()},
+         list(elements([{'Reason-String', mqtt_utf8_string()},
                         user_property()
                        ])),
          maps:from_list(L)).
@@ -151,7 +151,7 @@ puback_properties() ->
 disconnect_properties() ->
     ?LET(L,
          list(elements([{'Session-Expiry-Interval', four_byte_integer()},
-                        {'Reason-String', utf8_string()},
+                        {'Reason-String', mqtt_utf8_string()},
                         user_property()
                        ])),
          maps:from_list(L)).
@@ -161,7 +161,7 @@ user_property() ->
      non_empty(list(frequency(
                       [{5, utf8_string_pair()},
                        %% "The same name is allowed to appear more than once." [v5 3.3.2.3.7]
-                       {1, {<<"same name">>, utf8_string()}},
+                       {1, {<<"same name">>, mqtt_utf8_string()}},
                        {1, {<<"same name">>, <<"same value">>}}
                       ])))}.
 
@@ -204,11 +204,11 @@ binary_up_to(N) ->
 
 %% v5 1.5.7
 utf8_string_pair() ->
-    {utf8_string(), utf8_string()}.
+    {mqtt_utf8_string(), mqtt_utf8_string()}.
 
 %% "Unless stated otherwise all UTF-8 encoded strings can have any length
 %% in the range 0 to 65,535 bytes." v5 1.5.4
-utf8_string() ->
+mqtt_utf8_string() ->
     %% Defining an upper size other than 'inf' is too slow because the
     %% test ?SIZE is not taken into account anymore.
     MaxCodePointSize = 4,
