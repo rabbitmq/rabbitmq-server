@@ -76,13 +76,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     steps:
-<<<<<<< HEAD
-      - name: Prepare
-        run: |
-          platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV          
-=======
->>>>>>> e796b61f4 (Simplified OCI builds)
       - name: Checkout
         uses: actions/checkout@v4
       - name: Download package-generic-unix
@@ -121,79 +114,9 @@ jobs:
         with:
           push: true
           context: packaging/docker-image
-<<<<<<< HEAD
-          platforms: ${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-to: type=gha
-          cache-from: type=gha
-          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-      - name: Export digest
-        run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"          
-      - name: Upload digest
-        uses: actions/upload-artifact@v4
-        with:
-          name: digests-${{ env.PLATFORM_PAIR }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge:
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v4
-        with:
-          path: /tmp/digests
-          pattern: digests-*
-          merge-multiple: true
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY_IMAGE }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,format=long
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      - name: Create manifest list and push
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)          
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} 
-
-  summary-oci:
-    needs:
-    - build-package-generic-unix
-    - build
-    - merge
-    runs-on: ubuntu-latest
-    steps:
-    - name: SUMMARY
-      run: |
-        cat << 'EOF' | jq -e 'map(.result == "success") | all(.)'
-        ${{ toJson(needs) }}
-        EOF
-=======
           platforms: ${{ github.event.inputs.build_arm && 'linux/amd64, linux/arm64' || 'linux/amd64' }}
           tags: ${{ steps.meta.outputs.tags }}
           cache-to: type=gha,mode=max,scope=${{ matrix.otp_version }}
           cache-from: type=gha,scope=${{ matrix.otp_version }}
           build-args:
             OTP_VERSION=${{ matrix.otp_version }}
->>>>>>> e796b61f4 (Simplified OCI builds)
