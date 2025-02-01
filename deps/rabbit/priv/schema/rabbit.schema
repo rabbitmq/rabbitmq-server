@@ -1353,6 +1353,13 @@ end}.
     {datatype, {enum, [disc, disk, ram]}}
 ]}.
 
+%% Register node during cluster formation.
+%%
+
+{mapping, "cluster_formation.registration", "rabbit.cluster_formation.register", [
+    {datatype, {enum, [true, false]}}
+]}.
+
 {translation, "rabbit.cluster_formation.node_type",
 fun(Conf) ->
     %% if peer discovery backend isn't configured, don't generate
