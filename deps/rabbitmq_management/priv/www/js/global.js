@@ -96,6 +96,7 @@ var ALL_COLUMNS =
                    ['mode',  'Mode',      true],
                    ['state', 'State',     true]],
       'Details': [['msgs-unconfirmed', 'Unconfirmed', true],
+                  ['consumer-count',   'Consumer count', false],
                   ['prefetch',         'Prefetch',    true],
                   ['msgs-unacked',     'Unacked',     true]],
       'Transactions': [['msgs-uncommitted', 'Msgs uncommitted', false],
