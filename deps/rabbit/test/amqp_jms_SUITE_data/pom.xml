@@ -1,11 +1,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>com.rabbitmq.amqp1_0.tests.proton</groupId>
-  <artifactId>rabbitmq-amqp1.0-java-tests</artifactId>
+  <groupId>com.rabbitmq.amqp.tests.jms</groupId>
+  <artifactId>rabbitmq-amqp-jms-tests</artifactId>
   <packaging>jar</packaging>
   <version>1.0-SNAPSHOT</version>
-  <name>rabbitmq-amqp1.0-java-tests</name>
+  <name>rabbitmq-amqp-jms-tests</name>
   <url>https://www.rabbitmq.com</url>
   <properties>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>

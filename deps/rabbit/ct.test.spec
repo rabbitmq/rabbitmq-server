@@ -18,7 +18,8 @@
 ,   amqp_credit_api_v2_SUITE
 ,   amqp_filtex_SUITE
 ,   amqp_proxy_protocol_SUITE
-,   amqp_system_SUITE
+,   amqp_dotnet_SUITE
+,   amqp_jms_SUITE
 ,   amqpl_consumer_ack_SUITE
 ,   amqpl_direct_reply_to_SUITE
 ,   amqqueue_backward_compatibility_SUITE

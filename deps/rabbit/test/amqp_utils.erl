@@ -10,6 +10,7 @@
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([init/1, init/2,
+         close/1,
          connection_config/1, connection_config/2,
          web_amqp/1,
          flush/1,
@@ -30,6 +31,11 @@ init(Node, Config) ->
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"my link pair">>),
     {Connection, Session, LinkPair}.
+
+close({Connection, Session, LinkPair}) ->
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
 
 connection_config(Config) ->
     connection_config(0, Config).
