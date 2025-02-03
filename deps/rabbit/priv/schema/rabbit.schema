@@ -1373,7 +1373,7 @@ end}.
 %% Register node during cluster formation when backend supports registration.
 %%
 
-{mapping, "cluster_formation.registration", "rabbit.cluster_formation.register", [
+{mapping, "cluster_formation.registration.enabled", "rabbit.cluster_formation.perform_registration", [
     {datatype, {enum, [true, false]}}
 ]}.
 
