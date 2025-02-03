@@ -59,6 +59,17 @@
 
 -export([check_max_segment_size_bytes/1]).
 
+-export([queue_topology/1,
+         policy_apply_to_name/0,
+         can_redeliver/0,
+         stop/1,
+         is_replicated/0,
+         rebalance_module/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -102,6 +113,17 @@
 
 -import(rabbit_queue_type_util, [args_policy_lookup/3]).
 -import(rabbit_misc, [queue_resource/2]).
+
+-rabbit_boot_step(
+   {?MODULE,
+    [{description, "Stream queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"stream">>, ?MODULE]}},
+     %% {cleanup,  {rabbit_registry, unregister,
+     %%             [queue, <<"stream">>]}},
+     {requires, rabbit_registry}%%,
+     %% {enables,     rabbit_stream_queue_type}
+    ]}).
 
 -type client() :: #stream_client{}.
 
@@ -838,10 +860,6 @@ status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} when ?amqqueue_is_classic(Q) ->
-            {error, classic_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             [begin
                  [get_key(role, C),
@@ -853,6 +871,8 @@ status(Vhost, QueueName) ->
                   get_key(readers, C),
                   get_key(segments, C)]
              end || C <- get_counters(Q)];
+        {ok, _Q} ->
+            {error, not_supported};
         {error, not_found} = E ->
             E
     end.
@@ -911,10 +931,6 @@ tracking_status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} when ?amqqueue_is_classic(Q) ->
-            {error, classic_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             Leader = amqqueue:get_pid(Q),
             Map = osiris:read_tracking(Leader),
@@ -927,6 +943,8 @@ tracking_status(Vhost, QueueName) ->
                                                   {value, TrkData}] | Acc0]
                                         end, [], Trackings) ++ Acc
                       end, [], Map);
+        {ok, Q} ->
+            {error, {queue_not_supported, ?amqqueue_type(Q)}};
         {error, not_found} = E->
             E
     end.
@@ -1027,10 +1045,6 @@ restart_stream(VHost, Queue, Options)
 add_replica(VHost, Name, Node) ->
     QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} when ?amqqueue_is_classic(Q) ->
-            {error, classic_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             case lists:member(Node, rabbit_nodes:list_running()) of
                 false ->
@@ -1038,6 +1052,8 @@ add_replica(VHost, Name, Node) ->
                 true ->
                     rabbit_stream_coordinator:add_replica(Q, Node)
             end;
+        {ok, Q} ->
+            {error, {queue_not_supported, ?amqqueue_type(Q)}};
         E ->
             E
     end.
@@ -1045,14 +1061,12 @@ add_replica(VHost, Name, Node) ->
 delete_replica(VHost, Name, Node) ->
     QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} when ?amqqueue_is_classic(Q) ->
-            {error, classic_queue_not_supported};
-        {ok, Q} when ?amqqueue_is_quorum(Q) ->
-            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             #{name := StreamId} = amqqueue:get_type_state(Q),
             {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
             Reply;
+        {ok, Q} ->
+            {error, {queue_not_supported, ?amqqueue_type(Q)}};
         E ->
             E
     end.
@@ -1399,3 +1413,73 @@ delivery_count_add(none, _) ->
     none;
 delivery_count_add(Count, N) ->
     serial_number:add(Count, N).
+
+-spec queue_topology(amqqueue:amqqueue()) ->
+    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+queue_topology(Q) ->
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    case rabbit_stream_coordinator:members(StreamId) of
+        {ok, Members} ->
+            maps:fold(fun(Node, {_Pid, writer}, {_, Replicas}) ->
+                              {Node, [Node | Replicas]};
+                         (Node, {_Pid, replica}, {Writer, Replicas}) ->
+                              {Writer, [Node | Replicas]}
+                      end, {undefined, []}, Members);
+                {error, _} ->
+            {undefined, undefined}
+    end.
+
+policy_apply_to_name() ->
+    <<"streams">>.
+
+can_redeliver() ->
+    true.
+
+stop(_VHost) ->
+    ok.
+
+is_replicated() ->
+    true.
+
+rebalance_module() ->
+    ?MODULE.
+
+drain(TransferCandidates) ->
+    case whereis(rabbit_stream_coordinator) of
+        undefined -> ok;
+        _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
+    end.
+
+revive() ->
+    ok.
+
+-spec transfer_leadership_of_stream_coordinator([node()]) -> ok.
+transfer_leadership_of_stream_coordinator([]) ->
+    rabbit_log:warning("Skipping leadership transfer of stream coordinator: no candidate "
+                       "(online, not under maintenance) nodes to transfer to!");
+transfer_leadership_of_stream_coordinator(TransferCandidates) ->
+    % try to transfer to the node with the lowest uptime; the assumption is that
+    % nodes are usually restarted in a rolling fashion, in a consistent order;
+    % therefore, the youngest node has already been restarted  or (if we are draining the first node)
+    % that it will be restarted last. either way, this way we limit the number of transfers
+    Uptimes = rabbit_misc:append_rpc_all_nodes(TransferCandidates, erlang, statistics, [wall_clock]),
+    Candidates = lists:zipwith(fun(N, {U, _}) -> {N, U}  end, TransferCandidates, Uptimes),
+    BestCandidate = element(1, hd(lists:keysort(2, Candidates))),
+    case rabbit_stream_coordinator:transfer_leadership([BestCandidate]) of
+        {ok, Node} ->
+            rabbit_log:info("Leadership transfer for stream coordinator completed. The new leader is ~p", [Node]);
+        Error ->
+            rabbit_log:warning("Skipping leadership transfer of stream coordinator: ~p", [Error])
+    end.
+
+queue_vm_stats_sups() ->
+    {[stream_queue_procs,
+      stream_queue_replica_reader_procs,
+      stream_queue_coordinator_procs],
+     [[osiris_server_sup],
+      [osiris_replica_reader_sup],
+      [rabbit_stream_coordinator]]}.
+
+queue_vm_ets() ->
+    {[],
+     []}.

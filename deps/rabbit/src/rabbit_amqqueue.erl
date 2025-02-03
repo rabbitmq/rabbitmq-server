@@ -150,11 +150,7 @@ filter_pid_per_type(QPids) ->
 
 -spec stop(rabbit_types:vhost()) -> 'ok'.
 stop(VHost) ->
-    %% Classic queues
-    ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
-    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
-    ok = BQ:stop(VHost),
-    rabbit_quorum_queue:stop(VHost).
+    rabbit_queue_type:stop(VHost).
 
 -spec start([amqqueue:amqqueue()]) -> 'ok'.
 
@@ -424,6 +420,8 @@ rebalance(Type, VhostSpec, QueueSpec) ->
     %% We have not yet acquired the rebalance_queues global lock.
     maybe_rebalance(get_rebalance_lock(self()), Type, VhostSpec, QueueSpec).
 
+%% TODO: classic queues do not support rebalancing, it looks like they are simply
+%% filtered out with is_replicated(Q). Maybe error instead?
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
                     [Type, VhostSpec, QueueSpec]),
@@ -459,10 +457,15 @@ filter_per_type(stream, Q) ->
 filter_per_type(classic, Q) ->
     ?amqqueue_is_classic(Q).
 
-rebalance_module(Q) when ?amqqueue_is_quorum(Q) ->
-    rabbit_quorum_queue;
-rebalance_module(Q) when ?amqqueue_is_stream(Q) ->
-    rabbit_stream_queue.
+%% TODO: note that it can return {error, not_supported}.
+%% this will result in a badmatch. However that's fine
+%% for now because the original function will fail with
+%% bad clause if called with classical queue.
+%% The assumption is all non-replicated queues
+%% are filtered before calling this with is_replicated/0
+rebalance_module(Q) ->
+    TypeModule = ?amqqueue_type(Q),
+    TypeModule:rebalance_module().
 
 get_resource_name(#resource{name = Name}) ->
     Name.
@@ -487,13 +490,19 @@ iterative_rebalance(ByNode, MaxQueuesDesired) ->
 maybe_migrate(ByNode, MaxQueuesDesired) ->
     maybe_migrate(ByNode, MaxQueuesDesired, maps:keys(ByNode)).
 
+%% TODO: unfortunate part - UI bits mixed deep inside logic.
+%% I will not be moving this inside queue type. Instead
+%% an attempt to generate something more readable than
+%% Other made.
 column_name(rabbit_classic_queue) -> <<"Number of replicated classic queues">>;
 column_name(rabbit_quorum_queue) -> <<"Number of quorum queues">>;
 column_name(rabbit_stream_queue) -> <<"Number of streams">>;
-column_name(Other) -> Other.
+column_name(TypeModule) ->
+    Alias = rabbit_queue_type:short_alias_of(TypeModule),
+    <<"Number of \"", Alias/binary, "\" queues">>.
 
 maybe_migrate(ByNode, _, []) ->
-    ByNodeAndType = maps:map(fun(_Node, Queues) -> maps:groups_from_list(fun({_, Q, _}) -> column_name(?amqqueue_v2_field_type(Q)) end, Queues) end, ByNode),
+    ByNodeAndType = maps:map(fun(_Node, Queues) -> maps:groups_from_list(fun({_, Q, _}) -> column_name(?amqqueue_type(Q)) end, Queues) end, ByNode),
     CountByNodeAndType = maps:map(fun(_Node, Type) -> maps:map(fun (_, Qs)-> length(Qs) end, Type) end, ByNodeAndType),
     {ok, maps:values(maps:map(fun(Node,Counts) -> [{<<"Node name">>, Node} | maps:to_list(Counts)] end, CountByNodeAndType))};
 maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
@@ -1281,14 +1290,12 @@ list_durable() ->
 
 -spec list_by_type(atom()) -> [amqqueue:amqqueue()].
 
-list_by_type(classic) -> list_by_type(rabbit_classic_queue);
-list_by_type(quorum)  -> list_by_type(rabbit_quorum_queue);
-list_by_type(stream)  -> list_by_type(rabbit_stream_queue);
-list_by_type(Type) ->
-    rabbit_db_queue:get_all_durable_by_type(Type).
+list_by_type(TypeDescriptor) ->
+    TypeModule = rabbit_queue_type:discover(TypeDescriptor),
+    rabbit_db_queue:get_all_durable_by_type(TypeModule).
 
+%% TODO: looks unused
 -spec list_local_quorum_queue_names() -> [name()].
-
 list_local_quorum_queue_names() ->
     [ amqqueue:get_name(Q) || Q <- list_by_type(quorum),
            amqqueue:get_state(Q) =/= crashed,
@@ -1325,6 +1332,7 @@ list_local_followers() ->
          rabbit_quorum_queue:is_recoverable(Q)
          ].
 
+%% TODO: looks unused
 -spec list_local_quorum_queues_with_name_matching(binary()) -> [amqqueue:amqqueue()].
 list_local_quorum_queues_with_name_matching(Pattern) ->
     [ Q || Q <- list_by_type(quorum),
@@ -1911,11 +1919,9 @@ run_backing_queue(QPid, Mod, Fun) ->
 
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 
-is_replicated(Q) when ?amqqueue_is_classic(Q) ->
-    false;
-is_replicated(_Q) ->
-    %% streams and quorum queues are all replicated
-    true.
+is_replicated(Q) ->
+    TypeModule = ?amqqueue_type(Q),
+    TypeModule:is_replicated().
 
 is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;

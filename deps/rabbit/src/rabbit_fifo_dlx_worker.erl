@@ -538,14 +538,8 @@ redeliver0(#pending{delivery = Msg0,
 clients_redeliver(Qs, QTypeState) ->
     lists:filter(fun(Q) ->
                          case rabbit_queue_type:module(Q, QTypeState) of
-                             {ok, rabbit_quorum_queue} ->
-                                 % If #enqueue{} Raft command does not get applied
-                                 % rabbit_fifo_client will resend.
-                                 true;
-                             {ok, rabbit_stream_queue} ->
-                                 true;
-                             _ ->
-                                 false
+                             {ok, TypeModule} -> TypeModule:can_redeliver();
+                             _ -> false
                          end
                  end, Qs).
 

@@ -2,6 +2,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-include_lib("rabbit_common/include/rabbit.hrl").
+
 -export([
          wait_for_messages_ready/3,
          wait_for_messages_pending_ack/3,

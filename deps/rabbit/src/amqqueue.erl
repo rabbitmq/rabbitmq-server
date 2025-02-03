@@ -389,6 +389,7 @@ get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) ->
 
 -spec get_leader(amqqueue_v2()) -> node().
 
+%% TODO: not only qqs can have leaders, dispatch via queue type
 get_leader(#amqqueue{type = rabbit_quorum_queue, pid = {_, Leader}}) -> Leader.
 
 % operator_policy
