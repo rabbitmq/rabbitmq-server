@@ -310,6 +310,25 @@ cluster_formation.dns.hostname = discovery.eng.example.local",
    ]}],
  []},
 
+ %% registration is enabled by default for the backends that support it
+ {cluster_formation_explicitly_enable_of_registration,
+   "cluster_formation.registration.enabled = true",
+   [{rabbit,
+        [{cluster_formation, [
+          {perform_registration, true}
+         ]}]
+   }],
+   []},
+
+  {cluster_formation_opt_out_of_registration,
+   "cluster_formation.registration.enabled = false",
+   [{rabbit,
+        [{cluster_formation, [
+          {perform_registration, false}
+         ]}]
+   }],
+   []},
+
  {tcp_listen_options,
   "tcp_listen_options.backlog = 128
 tcp_listen_options.nodelay = true
