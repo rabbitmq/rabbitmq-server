@@ -7,7 +7,7 @@
 
 -module(rabbit_vm).
 
--export([memory/0, binary/0, ets_tables_memory/1]).
+-export([memory/0, binary/0, ets_tables_memory/1, all_vhosts_children/1]).
 
 -define(MAGIC_PLUGINS, ["cowboy", "ranch", "sockjs"]).
 
@@ -16,19 +16,37 @@
 -spec memory() -> rabbit_types:infos().
 
 memory() ->
-    All = interesting_sups(),
+    %% this whole aggregation pipeline preserves sups order
+    %% [{info_key, [SupName...]}...] i.e. flattened list of
+    %% info key, sups list pairs for each queue type
+    %% example for existing info keys:
+    %% [{queue_procs,          queue_sups()},
+    %%  {quorum_queue_procs,   [ra_server_sup_sup]},
+    %%  {quorum_queue_dlx_procs, [rabbit_fifo_dlx_sup]},
+    %%  {stream_queue_procs,   [osiris_server_sup]},
+    %%  {stream_queue_replica_reader_procs,  [osiris_replica_reader_sup]},
+    %%  {stream_queue_coordinator_procs, [rabbit_stream_coordinator]}]
+    {QueueSupsStatsKeys, QueueStatsSups} = rabbit_queue_type:queue_vm_stats_sups(),
+
+    %% we keep order and that means this variable queues part
+    %% has to be matched somehow - | Rest is the best.
+    All = interesting_sups() ++ QueueStatsSups,
     {Sums, _Other} = sum_processes(
                        lists:append(All), distinguishers(), [memory]),
 
-    [Qs, Qqs, DlxWorkers, Ssqs, Srqs, SCoor, ConnsReader, ConnsWriter, ConnsChannel,
-     ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
+    [ConnsReader, ConnsWriter, ConnsChannel,
+     ConnsOther, MsgIndexProc, MgmtDbProc, Plugins | QueueSupsStats] =
         [aggregate(Names, Sums, memory, fun (X) -> X end)
-         || Names <- distinguished_interesting_sups()],
+         || Names <- distinguished_interesting_sups() ++ QueueStatsSups],
+
+
+    {QueuesEtsStatsKeys, QueueStatsEtsNames} = rabbit_queue_type:queue_vm_ets(),
+
+    QueuesEtsStats = lists:map(fun ets_memory/1, QueueStatsEtsNames),
 
     MnesiaETS           = mnesia_memory(),
     MsgIndexETS         = ets_memory(msg_stores()),
     MetricsETS          = ets_memory([rabbit_metrics]),
-    QuorumETS           = ets_memory([ra_log_ets]),
     MetricsProc  = try
                        [{_, M}] = process_info(whereis(rabbit_metrics), [memory]),
                        M
@@ -63,23 +81,20 @@ memory() ->
 
     OtherProc = Processes
         - ConnsReader - ConnsWriter - ConnsChannel - ConnsOther
-        - Qs - Qqs - DlxWorkers - Ssqs - Srqs - SCoor - MsgIndexProc - Plugins
+        - lists:sum(QueueSupsStats) - MsgIndexProc - Plugins
         - MgmtDbProc - MetricsProc - MetadataStoreProc,
+
     [
      %% Connections
      {connection_readers,   ConnsReader},
      {connection_writers,   ConnsWriter},
      {connection_channels,  ConnsChannel},
-     {connection_other,     ConnsOther},
+     {connection_other,     ConnsOther}] ++
 
      %% Queues
-     {queue_procs,          Qs},
-     {quorum_queue_procs,   Qqs},
-     {quorum_queue_dlx_procs, DlxWorkers},
-     {stream_queue_procs,   Ssqs},
-     {stream_queue_replica_reader_procs,  Srqs},
-     {stream_queue_coordinator_procs, SCoor},
+    lists:zip(QueueSupsStatsKeys, QueueSupsStats) ++
 
+    [
      %% Processes
      {plugins,              Plugins},
      {metadata_store,       MetadataStoreProc},
@@ -87,13 +102,16 @@ memory() ->
 
      %% Metrics
      {metrics,              MetricsETS + MetricsProc},
-     {mgmt_db,              MgmtDbETS + MgmtDbProc},
+     {mgmt_db,              MgmtDbETS + MgmtDbProc}] ++
 
      %% ETS
+     %% queues
+    lists:zip(QueuesEtsStatsKeys, QueuesEtsStats) ++
+
+    [
      {mnesia,               MnesiaETS},
-     {quorum_ets,           QuorumETS},
      {metadata_store_ets,   MetadataStoreETS},
-     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS - QuorumETS - MetadataStoreETS},
+     {other_ets,            ETS - MnesiaETS - MetricsETS - MgmtDbETS - MsgIndexETS  - MetadataStoreETS - lists:sum(QueuesEtsStats)},
 
      %% Messages (mostly, some binaries are not messages)
      {binary,               Bin},
@@ -110,6 +128,7 @@ memory() ->
                              {rss, Rss},
                              {allocated, Allocated}]}
     ].
+
 %% [1] - erlang:memory(processes) can be less than the sum of its
 %% parts. Rather than display something nonsensical, just silence any
 %% claims about negative memory. See
@@ -118,7 +137,9 @@ memory() ->
 -spec binary() -> rabbit_types:infos().
 
 binary() ->
-    All = interesting_sups(),
+    {QueueSupsStatsKeys, QueueStatsSups} = rabbit_queue_type:queue_vm_stats_sups(),
+
+    All = interesting_sups() ++ QueueStatsSups,
     {Sums, Rest} =
         sum_processes(
           lists:append(All),
@@ -127,10 +148,10 @@ binary() ->
                                       sets:add_element({Ptr, Sz}, Acc0)
                               end, Acc, Info)
           end, distinguishers(), [{binary, sets:new()}]),
-    [Other, Qs, Qqs, DlxWorkers, Ssqs, Srqs, Scoor, ConnsReader, ConnsWriter,
-     ConnsChannel, ConnsOther, MsgIndexProc, MgmtDbProc, Plugins] =
+    [Other, ConnsReader, ConnsWriter,
+     ConnsChannel, ConnsOther, MsgIndexProc, MgmtDbProc, Plugins | QueueSupsStats] =
         [aggregate(Names, [{other, Rest} | Sums], binary, fun sum_binary/1)
-         || Names <- [[other] | distinguished_interesting_sups()]],
+         || Names <- [[other] | distinguished_interesting_sups()] ++ QueueStatsSups],
     MetadataStoreProc = try
                             [{_, B}] = process_info(whereis(rabbit_khepri:get_ra_cluster_name()), [binary]),
                             lists:foldl(fun({_, Sz, _}, Acc) ->
@@ -143,13 +164,10 @@ binary() ->
     [{connection_readers,  ConnsReader},
      {connection_writers,  ConnsWriter},
      {connection_channels, ConnsChannel},
-     {connection_other,    ConnsOther},
-     {queue_procs,         Qs},
-     {quorum_queue_procs,  Qqs},
-     {quorum_queue_dlx_procs, DlxWorkers},
-     {stream_queue_procs,  Ssqs},
-     {stream_queue_replica_reader_procs, Srqs},
-     {stream_queue_coordinator_procs, Scoor},
+     {connection_other,    ConnsOther}] ++
+     %% Queues
+    lists:zip(QueueSupsStatsKeys, QueueSupsStats) ++
+    [
      {metadata_store,      MetadataStoreProc},
      {plugins,             Plugins},
      {mgmt_db,             MgmtDbProc},
@@ -194,19 +212,7 @@ bytes(Words) ->  try
                  end.
 
 interesting_sups() ->
-    [queue_sups(), quorum_sups(), dlx_sups(),
-     stream_server_sups(), stream_reader_sups(), stream_coordinator(),
-     conn_sups() | interesting_sups0()].
-
-queue_sups() ->
-    all_vhosts_children(rabbit_amqqueue_sup_sup).
-
-quorum_sups() -> [ra_server_sup_sup].
-
-dlx_sups() -> [rabbit_fifo_dlx_sup].
-stream_server_sups() -> [osiris_server_sup].
-stream_reader_sups() -> [osiris_replica_reader_sup].
-stream_coordinator() -> [rabbit_stream_coordinator].
+    [conn_sups() | interesting_sups0()].
 
 msg_stores() ->
     all_vhosts_children(msg_store_transient)
@@ -256,12 +262,6 @@ distinguishers() -> with(conn_sups(), fun conn_type/1).
 
 distinguished_interesting_sups() ->
     [
-     queue_sups(),
-     quorum_sups(),
-     dlx_sups(),
-     stream_server_sups(),
-     stream_reader_sups(),
-     stream_coordinator(),
      with(conn_sups(), reader),
      with(conn_sups(), writer),
      with(conn_sups(), channel),

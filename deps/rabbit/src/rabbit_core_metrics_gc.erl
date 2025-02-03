@@ -74,22 +74,15 @@ gc_local_queues() ->
     GbSetDown = gb_sets:from_list(QueuesDown),
     gc_queue_metrics(GbSet, GbSetDown),
     gc_entity(queue_coarse_metrics, GbSet),
-    Followers = gb_sets:from_list([amqqueue:get_name(Q) || Q <- rabbit_amqqueue:list_local_followers() ]),
-    gc_leader_data(Followers).
+    %% remove coarse metrics for quorum queues without local leader
+    gc_leader_data().
 
-gc_leader_data(Followers) ->
-    ets:foldl(fun({Id, _, _, _, _}, none) ->
-                      gc_leader_data(Id, queue_coarse_metrics, Followers)
-              end, none, queue_coarse_metrics).
-
-gc_leader_data(Id, Table, GbSet) ->
-    case gb_sets:is_member(Id, GbSet) of
-        true ->
-            ets:delete(Table, Id),
-            none;
-        false ->
-            none
-    end.
+gc_leader_data() ->
+    _ = [begin
+             QName = amqqueue:get_name(Q),
+             rabbit_core_metrics:delete_queue_coarse_metrics(QName)
+         end || Q <- rabbit_amqqueue:list_local_followers()],
+    ok.
 
 gc_global_queues() ->
     GbSet = gb_sets:from_list(rabbit_amqqueue:list_names()),

@@ -7,10 +7,21 @@
 
 -module(rabbit_observer_cli).
 
--export([init/0]).
+-export([init/0, add_plugin/1]).
 
 init() ->
     application:set_env(observer_cli, plugins, [
         rabbit_observer_cli_classic_queues:plugin_info(),
         rabbit_observer_cli_quorum_queues:plugin_info()
     ]).
+
+%% must be executed after observer_cli boot_step
+add_plugin(PluginInfo) ->
+    case application:get_env(observer_cli, plugins, undefined) of
+        undefined -> %% shouldn't be there, die
+            exit({rabbit_observer_cli_step_not_there, "Can't add observer_cli plugin, required boot_step wasn't executed"});
+        Plugins when is_list(Plugins) ->
+            application:set_env(observer_cli, plugins, Plugins ++ [PluginInfo]);
+        _ ->
+            exit({rabbit_observer_cli_plugins_error, "Can't add observer_cli plugin, existing entry is not a list"})
+    end.

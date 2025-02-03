@@ -36,7 +36,10 @@
          queue_declared/1,
          queue_created/1,
          queue_deleted/1,
-         queues_deleted/1]).
+         queues_deleted/1,
+         %% used by ra-based queues to cleanup follower metrics,
+         %% see rabbit_core_metrics_gc for an example
+         delete_queue_coarse_metrics/1]).
 
 -export([node_stats/2]).
 
@@ -321,8 +324,12 @@ partition_queues(Queues) ->
     [Queues].
 
 delete_queue_metrics(Queue) ->
-    ets:delete(queue_coarse_metrics, Queue),
+    delete_queue_coarse_metrics(Queue),
     ets:update_element(queue_metrics, Queue, {3, 1}),
+    ok.
+
+delete_queue_coarse_metrics(Queue) ->
+    ets:delete(queue_coarse_metrics, Queue),
     ok.
 
 delete_channel_queue_exchange_metrics(MatchSpecCondition) ->

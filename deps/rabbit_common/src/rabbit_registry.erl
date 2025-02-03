@@ -15,7 +15,7 @@
          code_change/3]).
 
 -export([register/3, unregister/2,
-         binary_to_type/1, lookup_module/2, lookup_all/1]).
+         binary_to_type/1, lookup_module/2, lookup_type_module/2, lookup_type_name/2, lookup_all/1]).
 
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
@@ -60,6 +60,61 @@ lookup_module(Class, T) when is_atom(T) ->
         [] ->
             {error, not_found}
     end.
+
+
+-spec lookup_type_module(Class, TypeDescriptor) ->
+          Ret when
+      Class :: atom(),
+      TypeDescriptor :: atom() | %% can be TypeModule or Type
+                        binary(), %% or whati currently called "alias" - a TypeName
+      Ret :: {ok, TypeModule} | {error, not_found},
+      TypeModule :: atom().
+lookup_type_module(Class, TypeDescriptor) ->
+    case lookup_type(Class, TypeDescriptor) of
+            {error, _} = Error ->
+            Error;
+        {ok, {_TypeName, TypeModule}} ->
+            {ok, TypeModule}
+    end.
+
+-spec lookup_type_name(Class, TypeDescriptor) ->
+          Ret when
+      Class :: atom(),
+      TypeDescriptor :: atom() | %% either full typemodule or atomized typename
+                        binary(), %% typename pr typemodule in binary
+      Ret :: {ok, binary()} | {error, not_found}.
+lookup_type_name(Class, TypeDescriptor) ->
+    case lookup_type(Class, TypeDescriptor) of
+            {error, _} = Error ->
+            Error;
+        {ok, {TypeName, _TypeModule}} ->
+            {ok, atom_to_binary(TypeName)}
+    end.
+
+lookup_type(Class, TypeDescriptor)
+    when is_atom(TypeDescriptor) ->
+    case ets:lookup(?ETS_NAME, {Class, TypeDescriptor}) of
+        [{_, Module}] ->
+            {ok, {TypeDescriptor, Module}};
+        [] ->
+             %% In principle it is enough to do the same sanity check
+             %% we do when registring a type.
+             %% This however will return false positives for loaded
+             %% but unregistered modules.
+             TMMatch = ets:match(?ETS_NAME, {{Class, '$1'}, TypeDescriptor}),
+             case TMMatch of
+                 [[TypeName]] -> {ok, {TypeName, TypeDescriptor}};
+                 [] ->
+                     {error, not_found}
+             end
+    end;
+lookup_type(Class, TypeDescriptor)
+    when is_binary(TypeDescriptor) ->
+    %% when we register a type we convert
+    %% typename to atom so we can lookup
+    %% only existing atoms.
+    lookup_type(Class, binary_to_existing_atom(TypeDescriptor)).
+
 
 lookup_all(Class) ->
     [{K, V} || [K, V] <- ets:match(?ETS_NAME, {{Class, '$1'}, '$2'})].

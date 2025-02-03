@@ -461,32 +461,8 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
 -spec queue_topology(amqqueue:amqqueue()) ->
     {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
 queue_topology(Q) ->
-    case amqqueue:get_type(Q) of
-        rabbit_quorum_queue ->
-            [{leader, Leader0},
-             {members, Members}] = rabbit_queue_type:info(Q, [leader, members]),
-            Leader = case Leader0 of
-                         '' -> undefined;
-                         _ -> Leader0
-                     end,
-            {Leader, Members};
-        rabbit_stream_queue ->
-            #{name := StreamId} = amqqueue:get_type_state(Q),
-            case rabbit_stream_coordinator:members(StreamId) of
-                {ok, Members} ->
-                    maps:fold(fun(Node, {_Pid, writer}, {_, Replicas}) ->
-                                      {Node, [Node | Replicas]};
-                                 (Node, {_Pid, replica}, {Writer, Replicas}) ->
-                                      {Writer, [Node | Replicas]}
-                              end, {undefined, []}, Members);
-                {error, _} ->
-                    {undefined, undefined}
-            end;
-        _ ->
-            Pid = amqqueue:get_pid(Q),
-            Node = node(Pid),
-            {Node, [Node]}
-    end.
+    Type = amqqueue:get_type(Q),
+    Type:queue_topology(Q).
 
 decode_exchange({map, KVList}) ->
     M = lists:foldl(

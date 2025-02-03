@@ -1265,11 +1265,7 @@ handle_method(#'basic.get'{queue = QueueNameBin, no_ack = NoAck},
             ?INCR_STATS(queue_stats, QueueName, 1, get_empty, State),
             {reply, #'basic.get_empty'{}, State#ch{queue_states = QueueStates}};
         {error, {unsupported, single_active_consumer}} ->
-            rabbit_misc:protocol_error(
-              resource_locked,
-              "cannot obtain access to locked ~ts. basic.get operations "
-              "are not supported by quorum queues with single active consumer",
-              [rabbit_misc:rs(QueueName)]);
+             rabbit_amqqueue:with_or_die(QueueName, fun unsupported_single_active_consumer_error/1);
         {error, Reason} ->
             %% TODO add queue type to error message
             rabbit_misc:protocol_error(internal_error,
@@ -2005,6 +2001,7 @@ foreach_per_queue(_F, [], Acc) ->
 foreach_per_queue(F, [#pending_ack{tag = CTag,
                                    queue = QName,
                                    msg_id = MsgId}], Acc) ->
+    %% TODO: fix this abstraction leak
     %% quorum queue, needs the consumer tag
     F({QName, CTag}, [MsgId], Acc);
 foreach_per_queue(F, UAL, Acc) ->
@@ -2032,6 +2029,7 @@ notify_limiter(Limiter, Acked) ->
      case rabbit_limiter:is_active(Limiter) of
         false -> ok;
         true  -> case lists:foldl(fun (#pending_ack{tag = CTag}, Acc) when is_integer(CTag) ->
+                                          %% TODO: fix absctraction leak
                                           %% Quorum queues use integer CTags
                                           %% classic queues use binaries
                                           %% Quorum queues do not interact
@@ -2792,3 +2790,12 @@ maybe_decrease_global_publishers(#ch{publishing_mode = true}) ->
 
 is_global_qos_permitted() ->
     rabbit_deprecated_features:is_permitted(global_qos).
+
+-spec unsupported_single_active_consumer_error(amqqueue:amqqueue()) -> no_return().
+unsupported_single_active_consumer_error(Q) ->
+    rabbit_misc:protocol_error(
+      resource_locked,
+      "cannot obtain access to locked ~ts. basic.get operations "
+      "are not supported by ~p queues with single active consumer",
+      [rabbit_misc:rs(amqqueue:get_name(Q)),
+       rabbit_queue_type:short_alias_of(amqqueue:get_type(Q))]).
