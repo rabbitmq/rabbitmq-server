@@ -35,6 +35,9 @@
 <% if (show_column('channels', 'msgs-unconfirmed')) { %>
     <th><%= fmt_sort('Unconfirmed',     'messages_unconfirmed') %></th>
 <% } %>
+<% if (show_column('channels', 'consumer-count')) { %>
+    <th><%= fmt_sort('Consumer count', 'consumer_count') %></th>
+<% } %>
 <% if (show_column('channels', 'prefetch')) { %>
     <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
 <% } %>
@@ -84,6 +87,9 @@
 <% } %>
 <% if (show_column('channels', 'msgs-unconfirmed')) { %>
     <th>Unconfirmed</th>
+<% } %>
+<% if (show_column('channels', 'consumer-count')) { %>
+    <th>Consumer count</th>
 <% } %>
 <% if (show_column('channels', 'prefetch')) { %>
     <th>Prefetch <span class="help" id="channel-prefetch"></span></th>
@@ -151,6 +157,9 @@
 <% } %>
 <% if (show_column('channels', 'msgs-unconfirmed')) { %>
     <td class="c"><%= channel.messages_unconfirmed %></td>
+<% } %>
+<% if (show_column('channels', 'consumer-count')) { %>
+    <td class="c"><%= channel.consumer_count %></td>
 <% } %>
 <% if (show_column('channels', 'prefetch')) { %>
     <td class="c">
