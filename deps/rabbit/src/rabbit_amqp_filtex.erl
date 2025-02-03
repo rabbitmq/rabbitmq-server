@@ -13,18 +13,24 @@
 -export([validate/1,
          filter/2]).
 
+%% "Impose a limit on the complexity of each filter expression."
+%% [filtex-v1.0-wd09 7.1]
+-define(MAX_FILTER_FIELDS, 16).
+
 -type simple_type() :: number() | binary() | atom().
 -type affix() :: {suffix, non_neg_integer(), binary()} |
                  {prefix, non_neg_integer(), binary()}.
 -type filter_expression_value() :: simple_type() | affix().
--type filter_expression() :: {properties, [{FieldName :: atom(), filter_expression_value()}]} |
-                             {application_properties, [{binary(), filter_expression_value()}]}.
+-type filter_expression() :: {properties, [{FieldName :: atom(), filter_expression_value()}, ...]} |
+                             {application_properties, [{binary(), filter_expression_value()}, ...]}.
 -type filter_expressions() :: [filter_expression()].
 -export_type([filter_expressions/0]).
 
 -spec validate(tuple()) ->
     {ok, filter_expression()} | error.
-validate({described, Descriptor, {map, KVList}}) ->
+validate({described, Descriptor, {map, KVList}})
+  when KVList =/= [] andalso
+       length(KVList) =< ?MAX_FILTER_FIELDS ->
     try validate0(Descriptor, KVList)
     catch throw:{?MODULE, _, _} ->
               error
@@ -108,14 +114,12 @@ match_simple_type(RefVal, Val) ->
     RefVal == Val.
 
 validate0(Descriptor, KVList) when
-      (Descriptor =:= {symbol, ?DESCRIPTOR_NAME_PROPERTIES_FILTER} orelse
-       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_PROPERTIES_FILTER}) andalso
-      KVList =/= [] ->
+      Descriptor =:= {symbol, ?DESCRIPTOR_NAME_PROPERTIES_FILTER} orelse
+      Descriptor =:= {ulong, ?DESCRIPTOR_CODE_PROPERTIES_FILTER} ->
     validate_props(KVList, []);
 validate0(Descriptor, KVList) when
-      (Descriptor =:= {symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER} orelse
-       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES_FILTER}) andalso
-      KVList =/= [] ->
+      Descriptor =:= {symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER} orelse
+      Descriptor =:= {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES_FILTER} ->
     validate_app_props(KVList, []);
 validate0(_, _) ->
     error.
