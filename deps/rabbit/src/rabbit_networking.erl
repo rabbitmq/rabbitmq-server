@@ -560,28 +560,28 @@ handshake(Ref, ProxyProtocolEnabled) ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch:handshake(Ref),
-                    ok = tune_buffer_size(Sock),
+                    %ok = tune_buffer_size(Sock),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
             {ok, Sock} = ranch:handshake(Ref),
-            ok = tune_buffer_size(Sock),
+            %ok = tune_buffer_size(Sock),
             {ok, Sock}
     end.
 
-tune_buffer_size(Sock) ->
-    case tune_buffer_size1(Sock) of
-        ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
-                      exit(normal)
-    end.
-
-tune_buffer_size1(Sock) ->
-    case rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]) of
-        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
-                          rabbit_net:setopts(Sock, [{buffer, BufSz}]);
-        Error          -> Error
-    end.
+%tune_buffer_size(Sock) ->
+%    case tune_buffer_size1(Sock) of
+%        ok         -> ok;
+%        {error, _} -> rabbit_net:fast_close(Sock),
+%                      exit(normal)
+%    end.
+%
+%tune_buffer_size1(Sock) ->
+%    case rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]) of
+%        {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
+%                          rabbit_net:setopts(Sock, [{buffer, BufSz}]);
+%        Error          -> Error
+%    end.
 
 %%--------------------------------------------------------------------
 
