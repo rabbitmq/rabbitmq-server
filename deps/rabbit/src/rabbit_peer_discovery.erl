@@ -46,6 +46,9 @@
 %% a new cluster as a virgin node
 -define(DEFAULT_NODE_TYPE, disc).
 
+%% Register node by default (with the backends that support registration)
+-define(PERFORM_REGISTRATION_BY_DEFAULT, true).
+
 %% default node prefix to attach to discovered hostnames
 -define(DEFAULT_PREFIX, "rabbit").
 
@@ -80,6 +83,16 @@ node_type() ->
             proplists:get_value(node_type, Proplist, ?DEFAULT_NODE_TYPE);
         undefined ->
             ?DEFAULT_NODE_TYPE
+    end.
+
+-spec should_perform_registration() -> true | false.
+
+should_perform_registration() ->
+    case application:get_env(rabbit, cluster_formation) of
+        {ok, Proplist} ->
+            proplists:get_value(perform_registration, Proplist, ?PERFORM_REGISTRATION_BY_DEFAULT);
+        undefined ->
+            ?PERFORM_REGISTRATION_BY_DEFAULT
     end.
 
 -spec lock_acquisition_failure_mode() -> ignore | fail.
@@ -968,18 +981,26 @@ error_description({invalid_cluster_node_type, BadType}) ->
 -spec maybe_register() -> ok.
 
 maybe_register() ->
-    Backend = persistent_term:get(?PT_PEER_DISC_BACKEND, backend()),
-    case Backend:supports_registration() of
+    case should_perform_registration() of
         true ->
-            ?LOG_DEBUG(
-               "Peer discovery: registering this node",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            register(Backend),
-            _ = Backend:post_registration(),
-            ok;
+            Backend = persistent_term:get(?PT_PEER_DISC_BACKEND, backend()),
+            case Backend:supports_registration() of
+                true ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: registering this node",
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                    register(Backend),
+                    _ = Backend:post_registration(),
+                    ok;
+                false ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: registration is not supported, skipping it",
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                    ok
+            end;
         false ->
             ?LOG_DEBUG(
-               "Peer discovery: registration unsupported, skipping register",
+               "Peer discovery: registration is disabled via configuration, skipping it",
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok
     end.
@@ -987,16 +1008,24 @@ maybe_register() ->
 -spec maybe_unregister() -> ok.
 
 maybe_unregister() ->
-    Backend = persistent_term:get(?PT_PEER_DISC_BACKEND),
-    case Backend:supports_registration() of
+    case should_perform_registration() of
         true ->
-            ?LOG_DEBUG(
-               "Peer discovery: unregistering this node",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            unregister(Backend);
+            Backend = persistent_term:get(?PT_PEER_DISC_BACKEND),
+            case Backend:supports_registration() of
+                true ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: unregistering this node",
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                    unregister(Backend);
+                false ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: registration is not supported, skipping unregistration",
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                    ok
+            end;
         false ->
             ?LOG_DEBUG(
-               "Peer discovery: registration unsupported, skipping unregister",
+               "Peer discovery: registration is disabled via configuration, skipping unregistration",
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok
     end.

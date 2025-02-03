@@ -1370,6 +1370,13 @@ fun(Conf) ->
     end
 end}.
 
+%% Register node during cluster formation when backend supports registration.
+%%
+
+{mapping, "cluster_formation.registration.enabled", "rabbit.cluster_formation.perform_registration", [
+    {datatype, {enum, [true, false]}}
+]}.
+
 %% Cluster formation: lock acquisition retries as passed to https://erlang.org/doc/man/global.html#set_lock-3
 %%
 %% Currently used in classic, k8s, and aws peer discovery backends.
