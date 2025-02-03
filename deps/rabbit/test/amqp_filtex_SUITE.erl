@@ -377,6 +377,39 @@ application_properties_section(Config) ->
     ?assertEqual([<<"m4">>], amqp10_msg:body(R4M4)),
     ok = detach_link_sync(Receiver4),
 
+    %% Complex filter (too many properties to filter on) should fail validation in the server.
+    %% RabbitMQ should exclude this filter in its reply attach frame because
+    %% "the sending endpoint [RabbitMQ] sets the filter actually in place".
+    %% Hence, no filter expression is actually in place and we should receive all messages.
+    AppPropsFilter5 = [{{utf8, integer_to_binary(N)}, {uint, 1}} ||
+                       N <- lists:seq(1, 17)],
+    Filter5 = #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
+                ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER => {map, AppPropsFilter5}},
+    {ok, Receiver5} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 5">>, Address,
+                        unsettled, configuration, Filter5),
+    receive {amqp10_event,
+             {link, Receiver5,
+              {attached, #'v1_0.attach'{
+                            source = #'v1_0.source'{filter = {map, ActualFilter5}}}}}} ->
+                ?assertMatch([{{symbol,<<"rabbitmq:stream-offset-spec">>}, _}],
+                             ActualFilter5)
+    after 30000 -> ct:fail({missing_event, ?LINE})
+    end,
+    {ok, R5M1} = amqp10_client:get_msg(Receiver5),
+    {ok, R5M2} = amqp10_client:get_msg(Receiver5),
+    {ok, R5M3} = amqp10_client:get_msg(Receiver5),
+    {ok, R5M4} = amqp10_client:get_msg(Receiver5),
+    ok = amqp10_client:accept_msg(Receiver5, R5M1),
+    ok = amqp10_client:accept_msg(Receiver5, R5M2),
+    ok = amqp10_client:accept_msg(Receiver5, R5M3),
+    ok = amqp10_client:accept_msg(Receiver5, R5M4),
+    ?assertEqual([<<"m1">>], amqp10_msg:body(R5M1)),
+    ?assertEqual([<<"m2">>], amqp10_msg:body(R5M2)),
+    ?assertEqual([<<"m3">>], amqp10_msg:body(R5M3)),
+    ?assertEqual([<<"m4">>], amqp10_msg:body(R5M4)),
+    ok = detach_link_sync(Receiver5),
+
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, Stream),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
