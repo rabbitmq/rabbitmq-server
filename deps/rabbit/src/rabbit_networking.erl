@@ -566,6 +566,8 @@ handshake(Ref, ProxyProtocolEnabled) ->
         false ->
             {ok, Sock} = ranch:handshake(Ref),
             %ok = tune_buffer_size(Sock),
+            {ok, Bufs} = rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]),
+            rabbit_log:debug("Buffer sizes: ~p", [Bufs]),
             {ok, Sock}
     end.
 
