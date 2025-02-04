@@ -10,6 +10,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("rabbit/src/rabbit_fifo.hrl").
 
 -import(queue_utils, [wait_for_messages_ready/3,
                       wait_for_messages_pending_ack/3,
@@ -1327,12 +1328,9 @@ force_checkpoint_on_queue(Config) ->
     % Wait for initial checkpoint and make sure it's 0; checkpoint hasn't been triggered yet.
     rabbit_ct_helpers:await_condition(
       fun() ->
-          {ok, #{aux := Aux1}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          {aux_v3, _, _, _, _, _, _, {checkpoint, Index, _, _, _, _, _}} = Aux1,
-          case Index of
-              0 -> true;
-              _ -> false
-          end
+          {ok, #{aux := Aux}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+          #aux_v3{last_checkpoint = #checkpoint{index = Index}} = Aux,
+          Index =:= 0
       end),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
@@ -1341,12 +1339,9 @@ force_checkpoint_on_queue(Config) ->
     % Wait for initial checkpoint and make sure it's not 0
     rabbit_ct_helpers:await_condition(
       fun() ->
-          {ok, #{aux := Aux1}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          {aux_v3, _, _, _, _, _, _, {checkpoint, Index, _, _, _, _, _}} = Aux1,
-          case Index of
-              0 -> false;
-              _ -> true
-          end
+          {ok, #{aux := Aux}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+          #aux_v3{last_checkpoint = #checkpoint{index = Index}} = Aux,
+          Index =/= 0
       end).
 
 force_checkpoint(Config) ->
@@ -1354,6 +1349,7 @@ force_checkpoint(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
+    QQName = rabbit_misc:r(<<"/">>, queue, QQ),
     CQ = <<"force_checkpoint_cq">>,
     RaName = ra_name(QQ),
 
@@ -1366,24 +1362,12 @@ force_checkpoint(Config) ->
     rabbit_ct_client_helpers:publish(Ch, QQ, 3),
     wait_for_messages_ready([Server0], RaName, 3),
 
-    meck:expect(rabbit_quorum_queue, force_checkpoint_on_queue, fun(Q) -> ok end),
-
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+    ForceCheckpointRes = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_checkpoint, [<<".*">>, <<".*">>]),
-
-    % Waiting here to make sure checkpoint has been forced
-    rabbit_ct_helpers:await_condition(
-      fun() ->
-          {ok, #{aux := Aux1}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          {aux_v3, _, _, _, _, _, _, {checkpoint, Index, _, _, _, _, _}} = Aux1,
-          case Index of
-              0 -> false;
-              _ -> true
-          end
-      end),
-
-    % Make sure force_checkpoint_on_queue was only called for the quorun queue
-    ?assertEqual(1, meck:num_calls(rabbit_quorum_queue, force_checkpoint_on_queue, '_')).
+    ExpectedRes = [{QQName, {ok}}],
+    
+    % Result should only have quorum queue
+    ?assertEqual(ExpectedRes, ForceCheckpointRes).
 
 % Tests that, if the process of a QQ is dead in the moment of declaring a policy
 % that affects such queue, when the process is made available again, the policy
