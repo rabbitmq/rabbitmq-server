@@ -2119,13 +2119,13 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
 force_checkpoint_on_queue(QName) ->
     Node = node(),
     QNameFmt = rabbit_misc:rs(QName),
-    case rabbit_amqqueue:lookup(QName) of
+    case rabbit_db_queue:get_durable(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
-            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint]),
-            rabbit_log:debug("Sent command to force checkpoint ~ts", [QNameFmt]);
+            rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
+            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint]);
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, _} = E ->
@@ -2144,8 +2144,7 @@ force_checkpoint(VhostSpec, QueueSpec) ->
                  {QName, {error, Err}}
          end
      end
-     || Q <- rabbit_amqqueue:list(),
-        amqqueue:get_type(Q) == ?MODULE,
+     || Q <- rabbit_db_queue:get_all_durable_by_type(?MODULE),
         is_match(amqqueue:get_vhost(Q), VhostSpec)
         andalso is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)].
 

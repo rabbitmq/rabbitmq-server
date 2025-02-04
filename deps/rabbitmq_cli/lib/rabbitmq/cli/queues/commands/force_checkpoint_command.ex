@@ -35,9 +35,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.ForceCheckpointCommand do
     args = [vhost_pat, queue_pat]
 
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :force_checkpoint, args) do
-      {:error, _} = error ->
-        error
-
       {:badrpc, _} = error ->
         error
 
@@ -46,7 +43,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ForceCheckpointCommand do
             do: [
               {:vhost, vhost},
               {:name, name},
-              {:result, format_result(res)}
+              {:result, res}
             ]
 
       results ->
@@ -54,7 +51,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ForceCheckpointCommand do
             do: [
               {:vhost, vhost},
               {:name, name},
-              {:result, format_result(res)}
+              {:result, res}
             ]
     end
   end
@@ -87,21 +84,5 @@ defmodule RabbitMQ.CLI.Queues.Commands.ForceCheckpointCommand do
 
   def banner([], _) do
     "Forcing checkpoint for all matching quorum queues..."
-  end
-
-  #
-  # Implementation
-  #
-
-  defp format_result({:ok}) do
-    "ok"
-  end
-
-  defp format_result({:error, :timeout}) do
-    "error: the operation timed out and may not have been completed"
-  end
-
-  defp format_result({:error, err}) do
-    to_string(:io_lib.format("error: ~W", [err, 10]))
   end
 end
