@@ -5,6 +5,38 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
+{mapping, "cluster_formation.k8s.ordinal_start", "rabbit.cluster_formation.peer_discovery_k8s.ordinal_start", [
+    {datatype, integer}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.ordinal_start",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.ordinal_start", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+{mapping, "cluster_formation.k8s.seed_node", "rabbit.cluster_formation.peer_discovery_k8s.seed_node", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_k8s.seed_node",
+fun(Conf) ->
+    case cuttlefish:conf_get("cluster_formation.k8s.seed_node", Conf, undefined) of
+        undefined -> cuttlefish:unset();
+        Value     -> Value
+    end
+end}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%% All configuration options below are deprecated as of version 2 of this plugin (first shipped in 4.1).
+%% Test cases are kept to ensure we still accept the old config, but it is completely ignored.
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 %% Kubernetes host
 
 {mapping, "cluster_formation.k8s.host", "rabbit.cluster_formation.peer_discovery_k8s.k8s_host", [

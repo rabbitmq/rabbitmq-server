@@ -2,167 +2,93 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% The Initial Developer of the Original Code is AWeber Communications.
-%% Copyright (c) 2015-2016 AWeber Communications
-%% Copyright (c) 2007-2024 Broadcom. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved. All rights reserved.
+%% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbitmq_peer_discovery_k8s_SUITE).
 
+-compile(nowarn_export_all).
 -compile(export_all).
--include_lib("eunit/include/eunit.hrl").
 
-
-%% rabbitmq/cluster-operator contains an implicit integration test
-%% for the rabbitmq_peer_discovery_k8s plugin added by
-%% https://github.com/rabbitmq/cluster-operator/pull/704
+-include_lib("stdlib/include/assert.hrl").
 
 all() ->
     [
-     {group, unit},
-     {group, lock}
+     {group, unit}
     ].
 
 groups() ->
     [
      {unit, [], [
-                 extract_node_list_long_test,
-                 extract_node_list_short_test,
-                 extract_node_list_hostname_short_test,
-                 extract_node_list_real_test,
-                 extract_node_list_with_not_ready_addresses_test,
-                 node_name_empty_test,
-                 node_name_suffix_test,
-                 registration_support,
-                 event_v1_test
-                ]},
-     {lock, [], [
-                 lock_single_node,
-                 lock_multiple_nodes,
-                 lock_local_node_not_discovered
+                 returns_node_0_by_default,
+                 ordinal_start_is_configurable,
+                 seed_node_can_be_explicitly_configured
                 ]}
     ].
 
-init_per_testcase(T, Config) when T == node_name_empty_test;
-                                  T == node_name_suffix_test ->
-    meck:new(net_kernel, [passthrough, unstick]),
-    meck:expect(net_kernel, longnames, fun() -> true end),
-    Config;
-init_per_testcase(_, Config) -> Config.
+returns_node_0_by_default(_Config) ->
+    meck:new(rabbit_peer_discovery_k8s, [passthrough]),
 
-end_per_testcase(_, _Config) ->
-    meck:unload(),
+    Cases = #{
+              'rabbit@foo-server-0.foo-nodes.default' =>  {ok, {'rabbit@foo-server-0.foo-nodes.default', disc} },
+              'rabbit@foo-server-10.foo-nodes.default' => {ok, {'rabbit@foo-server-0.foo-nodes.default', disc} },
+              'rabbit@foo-0-bar-1.foo-0-bar-nodes.default' => {ok, {'rabbit@foo-0-bar-0.foo-0-bar-nodes.default', disc} },
+              'rabbit@foo--0-bar--1.foo0.default' => {ok, {'rabbit@foo--0-bar--0.foo0.default', disc} },
+              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to have the expected -ID suffix like StatefulSet pods should"}
+             },
+
+    [begin
+         meck:expect(rabbit_peer_discovery_k8s, node, fun() -> Nodename end),
+         ?assertEqual(Result, rabbitmq_peer_discovery_k8s:list_nodes())
+     end || Nodename := Result <- Cases ],
+
+    meck:unload([rabbit_peer_discovery_k8s]).
+
+ordinal_start_is_configurable(_Config) ->
+    meck:new(rabbit_peer_discovery_k8s, [passthrough]),
+
+    application:set_env(rabbit, cluster_formation,
+                        [
+                         {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                         {peer_discovery_k8s, [
+                                                {ordinal_start, 123}
+                                              ]}
+                        ]),
+
+    Cases = #{
+              'rabbit@foo-server-0.foo-nodes.default' =>  {ok, {'rabbit@foo-server-123.foo-nodes.default', disc} },
+              'rabbit@foo-server-10.foo-nodes.default' => {ok, {'rabbit@foo-server-123.foo-nodes.default', disc} },
+              'rabbit@foo-0-bar-1.foo-0-bar-nodes.default' => {ok, {'rabbit@foo-0-bar-123.foo-0-bar-nodes.default', disc} },
+              'rabbit@foo--0-bar--1.foo0.default' => {ok, {'rabbit@foo--0-bar--123.foo0.default', disc} },
+              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to have the expected -ID suffix like StatefulSet pods should"}
+             },
+
+    [begin
+         meck:expect(rabbit_peer_discovery_k8s, node, fun() -> Nodename end),
+         ?assertEqual(Result, rabbitmq_peer_discovery_k8s:list_nodes())
+     end || Nodename := Result <- Cases ],
+
     application:unset_env(rabbit, cluster_formation),
-    [os:unsetenv(Var) || Var <- ["K8S_HOSTNAME_SUFFIX",
-                                 "K8S_ADDRESS_TYPE"]].
+    meck:unload([rabbit_peer_discovery_k8s]).
 
-%%%
-%%% Testcases
-%%%
+seed_node_can_be_explicitly_configured(_Config) ->
+    meck:new(rabbit_peer_discovery_k8s, [passthrough]),
 
-registration_support(_Config) ->
-    ?assertEqual(true, rabbit_peer_discovery_k8s:supports_registration()).
+    application:set_env(rabbit, cluster_formation,
+                        [
+                         {peer_discovery_backend, rabbit_peer_discovery_k8s},
+                         {peer_discovery_k8s, [
+                                                {seed_node, "foo@seed-node"}
+                                              ]}
+                        ]),
+    Cases = #{
+              'rabbit@foo-server-0.foo-nodes.default' =>  {ok, {'foo@seed-node', disc} },
+              'bunny@hop' =>  {ok, {'foo@seed-node', disc} }
+             },
 
-extract_node_list_long_test(_Config) ->
-    {ok, Response} =
-	rabbit_json:try_decode(
-          rabbit_data_coercion:to_binary(
-            "{\"name\": \"mysvc\",\n\"subsets\": [\n{\n\"addresses\": [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\"ports\": [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n},\n{\n\"addresses\": [{\"ip\": \"10.10.3.3\"}],\n\"ports\": [{\"name\": \"a\", \"port\": 93},{\"name\": \"b\", \"port\": 76}]\n}]}")),
-    Expectation = [<<"10.10.1.1">>, <<"10.10.2.2">>, <<"10.10.3.3">>],
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:extract_node_list(Response)).
+    [begin
+         meck:expect(rabbit_peer_discovery_k8s, node, fun() -> Nodename end),
+         ?assertEqual(Result, rabbitmq_peer_discovery_k8s:list_nodes())
+     end || Nodename := Result <- Cases ],
 
-extract_node_list_short_test(_Config) ->
-    {ok, Response} =
-	rabbit_json:try_decode(
-          rabbit_data_coercion:to_binary(
-            "{\"name\": \"mysvc\",\n\"subsets\": [\n{\n\"addresses\": [{\"ip\": \"10.10.1.1\"}, {\"ip\": \"10.10.2.2\"}],\n\"ports\": [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n}]}")),
-    Expectation = [<<"10.10.1.1">>, <<"10.10.2.2">>],
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:extract_node_list(Response)).
-
-extract_node_list_hostname_short_test(_Config) ->
-    os:putenv("K8S_ADDRESS_TYPE", "hostname"),
-    {ok, Response} =
-	rabbit_json:try_decode(
-          rabbit_data_coercion:to_binary(
-            "{\"name\": \"mysvc\",\n\"subsets\": [\n{\n\"addresses\": [{\"ip\": \"10.10.1.1\", \"hostname\": \"rabbitmq-1\"}, {\"ip\": \"10.10.2.2\", \"hostname\": \"rabbitmq-2\"}],\n\"ports\": [{\"name\": \"a\", \"port\": 8675}, {\"name\": \"b\", \"port\": 309}]\n}]}")),
-    Expectation = [<<"rabbitmq-1">>, <<"rabbitmq-2">>],
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:extract_node_list(Response)).
-
-extract_node_list_real_test(_Config) ->
-    {ok, Response} =
-	rabbit_json:try_decode(
-          rabbit_data_coercion:to_binary(
-            "{\"kind\":\"Endpoints\",\"apiVersion\":\"v1\",\"metadata\":{\"name\":\"galera\",\"namespace\":\"default\",\"selfLink\":\"/api/v1/namespaces/default/endpoints/galera\",\"uid\":\"646f8305-3491-11e6-8c20-ecf4bbd91e6c\",\"resourceVersion\":\"17373568\",\"creationTimestamp\":\"2016-06-17T13:42:54Z\",\"labels\":{\"app\":\"mysqla\"}},\"subsets\":[{\"addresses\":[{\"ip\":\"10.1.29.8\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-tco7k\",\"uid\":\"fb59cc71-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13034802\"}},{\"ip\":\"10.1.47.2\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-izgp8\",\"uid\":\"fb484ab3-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13035747\"}},{\"ip\":\"10.1.47.3\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-init-ffrsz\",\"uid\":\"fb12e1d3-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13032722\"}},{\"ip\":\"10.1.94.2\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-zcc0o\",\"uid\":\"fb31ce6e-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13034771\"}}],\"ports\":[{\"name\":\"mysql\",\"port\":3306,\"protocol\":\"TCP\"}]}]}")),
-    Expectation = [<<"10.1.94.2">>, <<"10.1.47.3">>, <<"10.1.47.2">>,
-                   <<"10.1.29.8">>],
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:extract_node_list(Response)).
-
-extract_node_list_with_not_ready_addresses_test(_Config) ->
-    {ok, Response}  =
-	rabbit_json:try_decode(
-          rabbit_data_coercion:to_binary(
-            "{\"kind\":\"Endpoints\",\"apiVersion\":\"v1\",\"metadata\":{\"name\":\"rabbitmq\",\"namespace\":\"test-rabbitmq\",\"selfLink\":\"\/api\/v1\/namespaces\/test-rabbitmq\/endpoints\/rabbitmq\",\"uid\":\"4ff733b8-3ad2-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170098\",\"creationTimestamp\":\"2017-05-17T07:27:41Z\",\"labels\":{\"app\":\"rabbitmq\",\"type\":\"LoadBalancer\"}},\"subsets\":[{\"addresses\":[{\"ip\":\"10.1.29.8\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"default\",\"name\":\"mariadb-tco7k\",\"uid\":\"fb59cc71-558c-11e6-86e9-ecf4bbd91e6c\",\"resourceVersion\":\"13034802\"}}],\"ports\":[{\"name\":\"mysql\",\"port\":3306,\"protocol\":\"TCP\"}]},{\"notReadyAddresses\":[{\"ip\":\"172.17.0.2\",\"hostname\":\"rabbitmq-0\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-0\",\"uid\":\"e980fe5a-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170044\"}},{\"ip\":\"172.17.0.4\",\"hostname\":\"rabbitmq-1\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-1\",\"uid\":\"f6285603-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170071\"}},{\"ip\":\"172.17.0.5\",\"hostname\":\"rabbitmq-2\",\"nodeName\":\"minikube\",\"targetRef\":{\"kind\":\"Pod\",\"namespace\":\"test-rabbitmq\",\"name\":\"rabbitmq-2\",\"uid\":\"fd5a86dc-3afd-11e7-a40d-080027cbdcae\",\"resourceVersion\":\"170096\"}}],\"ports\":[{\"name\":\"amqp\",\"port\":5672,\"protocol\":\"TCP\"},{\"name\":\"http\",\"port\":15672,\"protocol\":\"TCP\"}]}]}")),
-    Expectation = [<<"10.1.29.8">>,
-                   <<"172.17.0.2">>, <<"172.17.0.4">>, <<"172.17.0.5">>],
-    ?assertEqual(Expectation, lists:sort(rabbit_peer_discovery_k8s:extract_node_list(Response))).
-
-node_name_empty_test(_Config) ->
-    Expectation = 'rabbit@rabbitmq-0',
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:node_name(<<"rabbitmq-0">>)).
-
-node_name_suffix_test(_Config) ->
-    os:putenv("K8S_HOSTNAME_SUFFIX", ".rabbitmq.default.svc.cluster.local"),
-    Expectation = 'rabbit@rabbitmq-0.rabbitmq.default.svc.cluster.local',
-    ?assertEqual(Expectation, rabbit_peer_discovery_k8s:node_name(<<"rabbitmq-0">>)).
-
-event_v1_test(_Config) ->
-    Expectation = #{
-		    count => 1,
-		    type => <<"Normal">>,
-		    lastTimestamp => <<"2019-12-06T15:10:23+00:00">>,
-		    reason => <<"Reason">>,
-		    message => <<"MyMessage">>,
-		    metadata =>#{
-				 name => <<"test">> ,
-				 namespace => <<"namespace">>
-				},
-		    involvedObject =>#{
-				       apiVersion => <<"v1">>,
-				       kind => <<"RabbitMQ">>,
-				       name => <<"pod/MyHostName">>,
-				       namespace => <<"namespace">>
-				      },
-		    source =>#{
-			       component => <<"MyHostName/rabbitmq_peer_discovery">>,
-			       host => <<"MyHostName">>
-			      }
-		   },
-    ?assertEqual(Expectation,
-		 rabbit_peer_discovery_k8s:generate_v1_event(<<"namespace">>, "test",
-							     "Normal", "Reason", "MyMessage", "2019-12-06T15:10:23+00:00", "MyHostName")).
-
-lock_single_node(_Config) ->
-  LocalNode = node(),
-  Nodes = [LocalNode],
-
-  {ok, {LockId, Nodes}} = rabbit_peer_discovery_k8s:lock([LocalNode]),
-  ?assertEqual(ok, rabbit_peer_discovery_k8s:unlock({LockId, Nodes})).
-
-lock_multiple_nodes(_Config) ->
-  application:set_env(rabbit, cluster_formation, [{internal_lock_retries, 2}]),
-  LocalNode = node(),
-  OtherNodeA = a@host,
-  OtherNodeB = b@host,
-
-  meck:expect(rabbit_nodes, lock_id, 1, {rabbit_nodes:cookie_hash(), OtherNodeA}),
-  {ok, {{LockResourceId, OtherNodeA}, [LocalNode, OtherNodeA]}} = rabbit_peer_discovery_k8s:lock([LocalNode, OtherNodeA]),
-  meck:expect(rabbit_nodes, lock_id, 1, {rabbit_nodes:cookie_hash(), OtherNodeB}),
-  ?assertEqual({error, "Acquiring lock taking too long, bailing out after 2 retries"}, rabbit_peer_discovery_k8s:lock([LocalNode, OtherNodeB])),
-  ?assertEqual(ok, rabbit_peer_discovery_k8s:unlock({{LockResourceId, OtherNodeA}, [LocalNode, OtherNodeA]})),
-  ?assertEqual({ok, {{LockResourceId, OtherNodeB}, [LocalNode, OtherNodeB]}}, rabbit_peer_discovery_k8s:lock([LocalNode, OtherNodeB])),
-  ?assertEqual(ok, rabbit_peer_discovery_k8s:unlock({{LockResourceId, OtherNodeB}, [LocalNode, OtherNodeB]})),
-  meck:unload(rabbit_nodes).
-
-lock_local_node_not_discovered(_Config) ->
-  Expectation = {error, "Local node " ++ atom_to_list(node()) ++ " is not part of discovered nodes [me@host]"},
-  ?assertEqual(Expectation, rabbit_peer_discovery_k8s:lock([me@host])).
+    meck:unload([rabbit_peer_discovery_k8s]).

@@ -121,28 +121,30 @@ maybe_init() ->
     %% node, even if the configuration changed in between.
     persistent_term:put(?PT_PEER_DISC_BACKEND, Backend),
 
-    _ = code:ensure_loaded(Backend),
-    case erlang:function_exported(Backend, init, 0) of
-        true  ->
-            ?LOG_DEBUG(
-               "Peer discovery: backend supports initialisation",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            case Backend:init() of
-                ok ->
-                    ?LOG_DEBUG(
-                       "Peer discovery: backend initialisation succeeded",
-                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-                    ok;
-                {error, _Reason} = Error ->
-                    ?LOG_WARNING(
-                       "Peer discovery: backend initialisation failed: ~tp.",
-                       [Error],
-                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-                    ok
-            end;
-        false ->
+    try
+        case Backend:init() of
+            ok ->
+                ?LOG_DEBUG(
+                   "Peer discovery: backend initialisation succeeded",
+                   #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                ok;
+            {error, _Reason} = Error ->
+                ?LOG_WARNING(
+                   "Peer discovery: backend initialisation failed: ~tp.",
+                   [Error],
+                   #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                ok
+        end
+    catch
+        error:undef ->
             ?LOG_DEBUG(
                "Peer discovery: backend does not support initialisation",
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            ok;
+        _:Reason:Stacktrace ->
+            ?LOG_ERROR(
+               "Peer discovery: backend initialisation failed: ~tp, ~tp",
+               [Reason, Stacktrace],
                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok
     end.
@@ -166,13 +168,13 @@ sync_desired_cluster() ->
 
     %% We handle retries at the top level: steps are followed sequentially and
     %% if one of them fails, we retry the whole process.
-    {Retries, RetryDelay} = discovery_retries(),
+    {Retries, RetryDelay} = discovery_retries(Backend),
 
     sync_desired_cluster(Backend, Retries, RetryDelay).
 
 -spec sync_desired_cluster(Backend, RetriesLeft, RetryDelay) -> ok when
       Backend :: backend(),
-      RetriesLeft :: non_neg_integer(),
+      RetriesLeft :: non_neg_integer() | unlimited,
       RetryDelay :: non_neg_integer().
 %% @private
 
@@ -253,10 +255,18 @@ sync_desired_cluster(Backend, RetriesLeft, RetryDelay) ->
 
 -spec retry_sync_desired_cluster(Backend, RetriesLeft, RetryDelay) -> ok when
       Backend :: backend(),
-      RetriesLeft :: non_neg_integer(),
+      RetriesLeft :: non_neg_integer() | unlimited,
       RetryDelay :: non_neg_integer().
 %% @private
 
+retry_sync_desired_cluster(Backend, unlimited, RetryDelay) ->
+    ?LOG_DEBUG(
+       "Peer discovery: retrying to create/sync cluster in ~b ms "
+       "(will retry forever)",
+       [RetryDelay],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    timer:sleep(RetryDelay),
+    sync_desired_cluster(Backend, unlimited, RetryDelay);
 retry_sync_desired_cluster(Backend, RetriesLeft, RetryDelay)
   when RetriesLeft > 0 ->
     RetriesLeft1 = RetriesLeft - 1,
@@ -848,6 +858,12 @@ can_use_discovered_nodes(_DiscoveredNodes, []) ->
 %%
 %% @private
 
+select_node_to_join([]) ->
+    ?LOG_INFO(
+       "Peer discovery: no nodes available for auto-clustering; waiting before retrying...",
+       [],
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+    false;
 select_node_to_join([{Node, _Members, _StartTime, _IsReady} | _])
   when Node =:= node() ->
     ?LOG_INFO(
@@ -1030,11 +1046,24 @@ maybe_unregister() ->
             ok
     end.
 
--spec discovery_retries() -> {Retries, RetryDelay} when
-      Retries :: non_neg_integer(),
+-spec discovery_retries(Backend) -> {Retries, RetryDelay} when
+      Backend :: backend(),
+      Retries :: non_neg_integer() | unlimited,
       RetryDelay :: non_neg_integer().
 
-discovery_retries() ->
+discovery_retries(Backend) ->
+    {_Retries, RetryDelay} = RetryConfig = discovery_retries_from_config(),
+    case catch Backend:retry_strategy() of
+        unlimited ->
+            {unlimited, RetryDelay};
+        _ ->
+            RetryConfig
+    end.
+
+-spec discovery_retries_from_config() -> {Retries, RetryDelay} when
+      Retries :: non_neg_integer(),
+      RetryDelay :: non_neg_integer().
+discovery_retries_from_config() ->
     case application:get_env(rabbit, cluster_formation) of
         {ok, Proplist} ->
             Retries  = proplists:get_value(discovery_retry_limit,    Proplist, ?DEFAULT_DISCOVERY_RETRY_COUNT),
