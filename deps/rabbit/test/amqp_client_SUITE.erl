@@ -130,6 +130,10 @@ groups() ->
        handshake_timeout,
        credential_expires,
        attach_to_exclusive_queue,
+       dynamic_target_short_link_name,
+       dynamic_target_long_link_name,
+       dynamic_source_rpc,
+       dynamic_terminus_delete,
        modified_classic_queue,
        modified_quorum_queue,
        modified_dead_letter_headers_exchange,
@@ -4761,6 +4765,230 @@ attach_to_exclusive_queue(Config) ->
     ok = close_connection_sync(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
+
+dynamic_target_short_link_name(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{container_id := <<"my-container">>,
+                        notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% "The address of the target MUST NOT be set" [3.5.4]
+    Target = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>]},
+    ShortLinkName = <<"my/sender">>,
+    AttachArgs = #{name => ShortLinkName,
+                   role => {sender, Target},
+                   snd_settle_mode => mixed,
+                   rcv_settle_mode => first},
+    {ok, Sender} = amqp10_client:attach_link(Session, AttachArgs),
+    Addr = receive {amqp10_event, {link, Sender, {attached, Attach}}} ->
+                       #'v1_0.attach'{
+                          target = #'v1_0.target'{
+                                      address = {utf8, Address},
+                                      dynamic = true}} = Attach,
+                       Address
+           after 30000 -> ct:fail({missing_event, ?LINE})
+           end,
+    %% The client doesn't really care what the address looks like.
+    %% However let's do whitebox testing here and check the address format.
+    %% We expect the address to contain both container ID and link name since they are short.
+    ?assertMatch(<<"/queues/amq.dyn-my-container-my%2Fsender-", _GUID/binary>>, Addr),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepted(<<"t1">>),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"my-receiver">>, Addr, unsettled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg)),
+    ok = amqp10_client:accept_msg(Receiver, Msg),
+
+    %% The exclusive queue should be deleted when we close our connection.
+    ?assertMatch([_ExclusiveQueue], rpc(Config, rabbit_amqqueue, list, [])),
+    ok = close_connection_sync(Connection),
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
+    ok.
+
+dynamic_target_long_link_name(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{container_id := <<"my-container">>,
+                        notify_with_performative => true},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% "The address of the target MUST NOT be set" [3.5.4]
+    Target = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>]},
+    LongLinkName = binary:copy(<<"z">>, 200),
+    AttachArgs = #{name => LongLinkName,
+                   role => {sender, Target},
+                   snd_settle_mode => mixed,
+                   rcv_settle_mode => first},
+    {ok, Sender} = amqp10_client:attach_link(Session, AttachArgs),
+    Addr = receive {amqp10_event, {link, Sender, {attached, Attach}}} ->
+                       #'v1_0.attach'{
+                          target = #'v1_0.target'{
+                                      address = {utf8, Address},
+                                      dynamic = true}} = Attach,
+                       Address
+           after 30000 -> ct:fail({missing_event, ?LINE})
+           end,
+    %% The client doesn't really care what the address looks like.
+    %% However let's do whitebox testing here and check the address format.
+    %% We expect the address to not contain the long link name.
+    ?assertMatch(<<"/queues/amq.dyn.gen-", _GUID/binary>>, Addr),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"t1">>, <<"m1">>)),
+    ok = wait_for_accepted(<<"t1">>),
+
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"my-receiver">>, Addr, unsettled),
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(Msg)),
+    ok = amqp10_client:accept_msg(Receiver, Msg),
+    flush(accepted),
+
+    %% Since RabbitMQ uses the delete-on-close lifetime policy, the exclusive queue should be
+    %% "deleted at the point that the link which caused its creation ceases to exist" [3.5.10]
+    ok = amqp10_client:detach_link(Sender),
+    receive {amqp10_event, {link, Receiver, {detached, Detach}}} ->
+                ?assertMatch(
+                   #'v1_0.detach'{error = #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_RESOURCE_DELETED}},
+                   Detach)
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
+
+%% Test the following RPC workflow:
+%% RPC client -> queue         -> RPC server
+%% RPC server -> dynamic queue -> RPC client
+dynamic_source_rpc(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{container_id := <<"rpc-client">>,
+                        notify_with_performative => true},
+    {ok, ConnectionClient} = amqp10_client:open_connection(OpnConf),
+    {ok, SessionClient} = amqp10_client:begin_session_sync(ConnectionClient),
+
+    %% "The address of the source MUST NOT be set" [3.5.3]
+    Source = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>],
+               durable => none},
+    AttachArgs = #{name => <<"rpc-client-receiver🥕"/utf8>>,
+                   role => {receiver, Source, self()},
+                   snd_settle_mode => unsettled,
+                   rcv_settle_mode => first,
+                   filter => #{}},
+    {ok, ReceiverClient} = amqp10_client:attach_link(SessionClient, AttachArgs),
+    RespAddr = receive {amqp10_event, {link, ReceiverClient, {attached, Attach}}} ->
+                           #'v1_0.attach'{
+                              source = #'v1_0.source'{
+                                          address = {utf8, Address},
+                                          dynamic = true}} = Attach,
+                           Address
+               after 30000 -> ct:fail({missing_event, ?LINE})
+               end,
+    %% The client doesn't really care what the address looks like.
+    %% However let's do whitebox testing here and check the address format.
+    %% We expect the address to contain both container ID and link name since they are short.
+    ?assertMatch(<<"/queues/amq.dyn-rpc-client-rpc-client-receiver", _CarrotAndGUID/binary>>,
+                 RespAddr),
+
+    %% Let's use a separate connection for the RPC server.
+    {_, SessionServer, LinkPair} = RpcServer = init(Config),
+    ReqQName = atom_to_binary(?FUNCTION_NAME),
+    ReqAddr = rabbitmq_amqp_address:queue(ReqQName),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, ReqQName, #{}),
+    {ok, ReceiverServer} = amqp10_client:attach_receiver_link(SessionServer, <<"rpc-server-receiver">>, ReqAddr, unsettled),
+    {ok, SenderServer} = amqp10_client:attach_sender_link(SessionServer, <<"rpc-server-sender">>, null),
+    ok = wait_for_credit(SenderServer),
+
+    {ok, SenderClient} = amqp10_client:attach_sender_link(SessionClient, <<"rpc-client-sender">>, ReqAddr),
+    wait_for_credit(SenderClient),
+    flush(attached),
+
+    ok = amqp10_client:send_msg(
+           SenderClient,
+           amqp10_msg:set_properties(
+             #{reply_to => RespAddr},
+             amqp10_msg:new(<<"t1">>, <<"hello">>))),
+    ok = wait_for_accepted(<<"t1">>),
+
+    {ok, ReqMsg} = amqp10_client:get_msg(ReceiverServer),
+    ReqBody = amqp10_msg:body_bin(ReqMsg),
+    RespBody = string:uppercase(ReqBody),
+    #{reply_to := ReplyTo} = amqp10_msg:properties(ReqMsg),
+    ok = amqp10_client:send_msg(
+           SenderServer,
+           amqp10_msg:set_properties(
+             #{to => ReplyTo},
+             amqp10_msg:new(<<"t2">>, RespBody))),
+    ok = wait_for_accepted(<<"t2">>),
+    ok = amqp10_client:accept_msg(ReceiverServer, ReqMsg),
+
+    {ok, RespMsg} = amqp10_client:get_msg(ReceiverClient),
+    ?assertEqual(<<"HELLO">>, amqp10_msg:body_bin(RespMsg)),
+    ok = amqp10_client:accept_msg(ReceiverClient, RespMsg),
+
+    ok = detach_link_sync(ReceiverServer),
+    ok = detach_link_sync(SenderClient),
+    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, ReqQName),
+    ok = detach_link_sync(SenderServer),
+    ok = close(RpcServer),
+    ok = close_connection_sync(ConnectionClient).
+
+dynamic_terminus_delete(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session1} = amqp10_client:begin_session_sync(Connection),
+    {ok, Session2} = amqp10_client:begin_session_sync(Connection),
+
+    Terminus = #{address => undefined,
+                 dynamic => true,
+                 capabilities => [<<"temporary-queue">>],
+                 durable => none},
+    RcvAttachArgs = #{role => {receiver, Terminus, self()},
+                      snd_settle_mode => unsettled,
+                      rcv_settle_mode => first,
+                      filter => #{}},
+    SndAttachArgs = #{role => {sender, Terminus},
+                      snd_settle_mode => mixed,
+                      rcv_settle_mode => first},
+    RcvAttachArgs1 = RcvAttachArgs#{name => <<"receiver 1">>},
+    RcvAttachArgs2 = RcvAttachArgs#{name => <<"receiver 2">>},
+    RcvAttachArgs3 = RcvAttachArgs#{name => <<"receiver 3">>},
+    SndAttachArgs1 = SndAttachArgs#{name => <<"sender 1">>},
+    SndAttachArgs2 = SndAttachArgs#{name => <<"sender 2">>},
+    SndAttachArgs3 = SndAttachArgs#{name => <<"sender 3">>},
+    {ok, _R1} = amqp10_client:attach_link(Session1, RcvAttachArgs1),
+    {ok, _R2} = amqp10_client:attach_link(Session2, RcvAttachArgs2),
+    {ok, R3} = amqp10_client:attach_link(Session2, RcvAttachArgs3),
+    {ok, _S1} = amqp10_client:attach_link(Session1, SndAttachArgs1),
+    {ok, _S2} = amqp10_client:attach_link(Session2, SndAttachArgs2),
+    {ok, S3} = amqp10_client:attach_link(Session2, SndAttachArgs3),
+    [receive {amqp10_event, {link, _LinkRef, attached}} -> ok
+     after 30000 -> ct:fail({missing_event, ?LINE})
+     end
+     || _ <- lists:seq(1, 6)],
+
+    %% We should now have 6 exclusive queues.
+    ?assertEqual(6, rpc(Config, rabbit_amqqueue, count, [])),
+
+    %% Since RabbitMQ uses the delete-on-close lifetime policy, the exclusive queue should be
+    %% "deleted at the point that the link which caused its creation ceases to exist" [3.5.10]
+    ok = detach_link_sync(R3),
+    ok = detach_link_sync(S3),
+    ?assertEqual(4, rpc(Config, rabbit_amqqueue, count, [])),
+
+    %% When a session is ended, the sessions's links cease to exist.
+    ok = end_session_sync(Session2),
+    eventually(?_assertEqual(2, rpc(Config, rabbit_amqqueue, count, []))),
+
+    %% When a connection is closed, the connection's links cease to exist.
+    ok = close_connection_sync(Connection),
+    eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, []))),
+    ok.
 
 priority_classic_queue(Config) ->
     QArgs = #{<<"x-queue-type">> => {utf8, <<"classic">>},
