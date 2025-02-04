@@ -260,8 +260,8 @@ wait_for_shutdown_sessions(TimerRef, #v1{tracked_channels = Channels} = State0) 
             State = untrack_channel(ChannelNum, SessionPid, State0),
             wait_for_shutdown_sessions(TimerRef, State);
         shutdown_sessions_timeout ->
-            ?LOG_INFO("sessions not shut down after ~b ms: ~p",
-                      [?SHUTDOWN_SESSIONS_TIMEOUT, Channels]),
+            ?LOG_INFO("sessions running ~b ms after requested to be shut down: ~p",
+                      [?SHUTDOWN_SESSIONS_TIMEOUT, maps:values(Channels)]),
             State0
     end.
 
@@ -792,6 +792,7 @@ send_to_new_session(
       connection = #v1_connection{outgoing_max_frame_size = MaxFrame,
                                   vhost = Vhost,
                                   user = User,
+                                  container_id = ContainerId,
                                   name = ConnName},
       writer = WriterPid} = State) ->
     %% Subtract fixed frame header size.
@@ -804,6 +805,7 @@ send_to_new_session(
                  OutgoingMaxFrameSize,
                  User,
                  Vhost,
+                 ContainerId,
                  ConnName,
                  BeginFrame],
     case rabbit_amqp_session_sup:start_session(SessionSup, ChildArgs) of
