@@ -55,9 +55,12 @@ groups() ->
       [
        %% authz
        attach_source_queue,
+       attach_source_queue_dynamic,
        attach_target_exchange,
        attach_target_topic_exchange,
        attach_target_queue,
+       attach_target_queue_dynamic_exchange_write,
+       attach_target_queue_dynamic_queue_configure,
        target_per_message_exchange,
        target_per_message_internal_exchange,
        target_per_message_topic,
@@ -437,6 +440,39 @@ attach_source_queue(Config) ->
     end,
     ok = close_connection_sync(Conn).
 
+attach_source_queue_dynamic(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% missing configure permission to queue
+    ok = set_permissions(Config, <<>>, <<".*">>, <<".*">>),
+
+    Source = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>],
+               durable => none},
+    AttachArgs = #{name => <<"my link">>,
+                   role => {receiver, Source, self()},
+                   snd_settle_mode => unsettled,
+                   rcv_settle_mode => first,
+                   filter => #{}},
+    {ok, _Recv} = amqp10_client:attach_link(Session, AttachArgs),
+    receive {amqp10_event,
+             {session, Session,
+              {ended, Error}}} ->
+                #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                              description = {utf8, Description}} = Error,
+                ?assertEqual(
+                   match,
+                   re:run(Description,
+                          <<"^configure access to queue 'amq\.dyn-.*' in vhost "
+                            "'test vhost' refused for user 'test user'$">>,
+                          [{capture, none}]))
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
+
 attach_target_exchange(Config) ->
     XName = <<"amq.fanout">>,
     Address1 = rabbitmq_amqp_address:exchange(XName),
@@ -484,6 +520,61 @@ attach_target_queue(Config) ->
     after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
     end,
     ok = amqp10_client:close_connection(Conn).
+
+attach_target_queue_dynamic_exchange_write(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% missing write permission to default exchange
+    ok = set_permissions(Config, <<".*">>, <<>>, <<".*">>),
+
+    Target = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>]},
+    AttachArgs = #{name => <<"my link">>,
+                   role => {sender, Target},
+                   snd_settle_mode => mixed,
+                   rcv_settle_mode => first},
+    {ok, _Recv} = amqp10_client:attach_link(Session, AttachArgs),
+    ExpectedErr = error_unauthorized(
+                    <<"write access to exchange 'amq.default' ",
+                      "in vhost 'test vhost' refused for user 'test user'">>),
+    receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
+
+attach_target_queue_dynamic_queue_configure(Config) ->
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    %% missing configure permission to queue
+    ok = set_permissions(Config, <<>>, <<".*">>, <<".*">>),
+
+    Target = #{address => undefined,
+               dynamic => true,
+               capabilities => [<<"temporary-queue">>]},
+    AttachArgs = #{name => <<"my link">>,
+                   role => {sender, Target},
+                   snd_settle_mode => mixed,
+                   rcv_settle_mode => first},
+    {ok, _Recv} = amqp10_client:attach_link(Session, AttachArgs),
+    receive {amqp10_event,
+             {session, Session,
+              {ended, Error}}} ->
+                #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+                              description = {utf8, Description}} = Error,
+                ?assertEqual(
+                   match,
+                   re:run(Description,
+                          <<"^configure access to queue 'amq\.dyn-.*' in vhost "
+                            "'test vhost' refused for user 'test user'$">>,
+                          [{capture, none}]))
+    after ?TIMEOUT -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = close_connection_sync(Connection).
 
 target_per_message_exchange(Config) ->
     TargetAddress = null,

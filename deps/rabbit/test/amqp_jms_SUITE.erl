@@ -14,6 +14,10 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
+-import(rabbit_ct_broker_helpers,
+        [rpc/4]).
+-import(rabbit_ct_helpers,
+        [eventually/3]).
 -import(amqp_utils,
         [init/1,
          close/1,
@@ -30,8 +34,15 @@ all() ->
 groups() ->
     [{cluster_size_1, [shuffle],
       [
+       %% CT test case per Java class
+       jms_connection,
+       jms_temporary_queue,
+
+       %% CT test case per test in Java class JmsTest
        message_types_jms_to_jms,
-       message_types_jms_to_amqp
+       message_types_jms_to_amqp,
+       temporary_queue_rpc,
+       temporary_queue_delete
       ]
      }].
 
@@ -54,7 +65,9 @@ end_per_suite(Config) ->
 
 init_per_group(cluster_size_1, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
-    Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodename_suffix, Suffix}),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                {rmq_nodename_suffix, Suffix}),
     Config2 = rabbit_ct_helpers:merge_app_env(
                 Config1,
                 {rabbit,
@@ -82,6 +95,9 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    %% Assert that every testcase cleaned up.
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, [])), 1000, 5),
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqp_session, list_local, [])), 1000, 5),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 build_maven_test_project(Config) ->
@@ -98,11 +114,17 @@ build_maven_test_project(Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
+jms_connection(Config) ->
+    ok = run(?FUNCTION_NAME, [{"-Dtest=~s", [<<"JmsConnectionTest">>]}], Config).
+
+jms_temporary_queue(Config) ->
+    ok = run(?FUNCTION_NAME, [{"-Dtest=~s", [<<"JmsTemporaryQueueTest">>]}], Config).
+
 %% Send different message types from JMS client to JMS client.
 message_types_jms_to_jms(Config) ->
     TestName = QName = atom_to_binary(?FUNCTION_NAME),
     ok = declare_queue(QName, <<"quorum">>, Config),
-    ok = run(TestName, [{"-Dqueue=~ts", [rabbitmq_amqp_address:queue(QName)]}], Config),
+    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [rabbitmq_amqp_address:queue(QName)]}], Config),
     ok = delete_queue(QName, Config).
 
 %% Send different message types from JMS client to Erlang AMQP 1.0 client.
@@ -112,7 +134,7 @@ message_types_jms_to_amqp(Config) ->
     Address = rabbitmq_amqp_address:queue(QName),
 
     %% The JMS client sends messaegs.
-    ok = run(TestName, [{"-Dqueue=~ts", [Address]}], Config),
+    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [Address]}], Config),
 
     %% The Erlang AMQP 1.0 client receives messages.
     OpnConf = connection_config(Config),
@@ -120,6 +142,7 @@ message_types_jms_to_amqp(Config) ->
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, settled),
     {ok, Msg1} = amqp10_client:get_msg(Receiver),
+
     ?assertEqual(
        #'v1_0.amqp_value'{content = {utf8, <<"msg1🥕"/utf8>>}},
        amqp10_msg:body(Msg1)),
@@ -149,16 +172,31 @@ message_types_jms_to_amqp(Config) ->
     ok = close_connection_sync(Connection),
     ok = delete_queue(QName, Config).
 
+temporary_queue_rpc(Config) ->
+    TestName = QName = atom_to_binary(?FUNCTION_NAME),
+    ok = declare_queue(QName, <<"classic">>, Config),
+    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [rabbitmq_amqp_address:queue(QName)]}], Config),
+    ok = delete_queue(QName, Config).
+
+temporary_queue_delete(Config) ->
+    TestName = atom_to_binary(?FUNCTION_NAME),
+    ok = run_jms_test(TestName, [], Config).
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
 
+run_jms_test(TestName, JavaProps, Config) ->
+    run(TestName, [{"-Dtest=JmsTest#~ts", [TestName]} | JavaProps], Config).
+
 run(TestName, JavaProps, Config) ->
     TestProjectDir = ?config(data_dir, Config),
+
     Cmd = [filename:join([TestProjectDir, "mvnw"]),
            "test",
-           {"-Dtest=JmsTest#~ts", [TestName]},
-           {"-Drmq_broker_uri=~ts", [rabbit_ct_broker_helpers:node_uri(Config, 0)]}
+           {"-Drmq_broker_uri=~ts", [rabbit_ct_broker_helpers:node_uri(Config, 0)]},
+           {"-Dnodename=~ts", [rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)]},
+           {"-Drabbitmqctl.bin=~ts", [rabbit_ct_helpers:get_config(Config, rabbitmqctl_cmd)]}
           ] ++ JavaProps,
     case rabbit_ct_helpers:exec(Cmd, [{cd, TestProjectDir}]) of
         {ok, _Stdout_} ->

@@ -1,7 +1,6 @@
 package com.rabbitmq.amqp.tests.jms;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 import jakarta.jms.*;
 import java.util.*;
@@ -104,8 +103,6 @@ public class JmsTest {
             Session session = connection.createSession();
             Destination queue = (Destination) context.lookup("myQueue");
             MessageProducer producer = session.createProducer(queue);
-            MessageConsumer consumer = session.createConsumer(queue);
-            connection.start();
 
             // TextMessage
             String msg1 = "msg1🥕";
@@ -127,6 +124,58 @@ public class JmsTest {
             streamMessage.writeDouble(-1.1);
             streamMessage.writeLong(-1L);
             producer.send(streamMessage);
+        }
+
+    }
+
+    // Test that Request/reply pattern using a TemporaryQueue works.
+    // https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#requestreply-pattern-using-a-temporaryqueue-jakarta-ee
+    @Test
+    public void temporary_queue_rpc() throws Exception {
+        Context context = getContext();
+        ConnectionFactory factory = (ConnectionFactory) context.lookup("myConnection");
+
+        try (JMSContext clientContext = factory.createContext()) {
+            Destination responseQueue = clientContext.createTemporaryQueue();
+            JMSConsumer clientConsumer = clientContext.createConsumer(responseQueue);
+
+            Destination requestQueue = (Destination) context.lookup("myQueue");
+            TextMessage clientRequestMessage = clientContext.createTextMessage("hello");
+            clientContext.createProducer().
+                setJMSReplyTo(responseQueue).
+                send(requestQueue, clientRequestMessage);
+
+            // Let's open a new connection to simulate the RPC server.
+            try (JMSContext serverContext = factory.createContext()) {
+                JMSConsumer serverConsumer = serverContext.createConsumer(requestQueue);
+                TextMessage serverRequestMessage = (TextMessage) serverConsumer.receive(5000);
+
+                TextMessage serverResponseMessage = serverContext.createTextMessage(
+                    serverRequestMessage.getText().toUpperCase());
+                serverContext.createProducer().
+                    send(serverRequestMessage.getJMSReplyTo(), serverResponseMessage);
+            }
+
+            TextMessage clientResponseMessage = (TextMessage) clientConsumer.receive(5000);
+            assertEquals("HELLO", clientResponseMessage.getText());
+        }
+    }
+
+    // Test that a temporary queue can be deleted.
+    @Test
+    public void temporary_queue_delete() throws Exception {
+        Context context = getContext();
+        ConnectionFactory factory = (ConnectionFactory) context.lookup("myConnection");
+
+        try (JMSContext clientContext = factory.createContext()) {
+            TemporaryQueue queue = clientContext.createTemporaryQueue();
+            queue.delete();
+            try {
+                clientContext.createProducer().send(queue, "hello");
+                fail("should not be able to create producer for deleted temporary queue");
+            } catch (IllegalStateRuntimeException expectedException) {
+                assertEquals("Temporary destination has been deleted", expectedException.getMessage());
+            }
         }
     }
 }
