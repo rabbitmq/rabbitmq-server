@@ -140,6 +140,7 @@
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
+-define(FORCE_CHECKPOINT_RPC_TIMEOUT, 15_000).
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
@@ -2095,7 +2096,7 @@ force_checkpoint_on_queue(QName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
-            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint]);
+            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint], ?FORCE_CHECKPOINT_RPC_TIMEOUT);
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, _} = E ->
