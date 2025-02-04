@@ -108,22 +108,31 @@ maybe_init() ->
     %% node, even if the configuration changed in between.
     persistent_term:put(?PT_PEER_DISC_BACKEND, Backend),
 
-    case catch Backend:init() of
-        ok ->
-            ?LOG_INFO(
-               "Peer discovery: backend initialisation succeeded",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            ok;
-        {error, _Reason} = Error ->
-            ?LOG_ERROR(
-               "Peer discovery: backend initialisation failed: ~tp",
-               [Error],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            ok;
-        {'EXIT', {undef, _}} ->
+    try
+        case Backend:init() of
+            ok ->
+                ?LOG_DEBUG(
+                   "Peer discovery: backend initialisation succeeded",
+                   #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                ok;
+            {error, _Reason} = Error ->
+                ?LOG_WARNING(
+                   "Peer discovery: backend initialisation failed: ~tp.",
+                   [Error],
+                   #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                ok
+        end
+    catch
+        error:undef ->
             ?LOG_DEBUG(
                "Peer discovery: backend does not support initialisation",
-                #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+            ok;
+        _:Reason:Stacktrace ->
+            ?LOG_ERROR(
+               "Peer discovery: backend initialisation failed: ~tp, ~tp",
+               [Reason, Stacktrace],
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok
     end.
 

@@ -34,7 +34,7 @@ returns_node_0_by_default(_Config) ->
               'rabbit@foo-server-10.foo-nodes.default' => {ok, {'rabbit@foo-server-0.foo-nodes.default', disc} },
               'rabbit@foo-0-bar-1.foo-0-bar-nodes.default' => {ok, {'rabbit@foo-0-bar-0.foo-0-bar-nodes.default', disc} },
               'rabbit@foo--0-bar--1.foo0.default' => {ok, {'rabbit@foo--0-bar--0.foo0.default', disc} },
-              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to be have an -ID suffix like StatefulSet pods should"}
+              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to have the expected -ID suffix like StatefulSet pods should"}
              },
 
     [begin
@@ -60,7 +60,7 @@ ordinal_start_is_configurable(_Config) ->
               'rabbit@foo-server-10.foo-nodes.default' => {ok, {'rabbit@foo-server-123.foo-nodes.default', disc} },
               'rabbit@foo-0-bar-1.foo-0-bar-nodes.default' => {ok, {'rabbit@foo-0-bar-123.foo-0-bar-nodes.default', disc} },
               'rabbit@foo--0-bar--1.foo0.default' => {ok, {'rabbit@foo--0-bar--123.foo0.default', disc} },
-              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to be have an -ID suffix like StatefulSet pods should"}
+              'bunny@hop' => {error, "my nodename (bunny@hop) doesn't seem to have the expected -ID suffix like StatefulSet pods should"}
              },
 
     [begin

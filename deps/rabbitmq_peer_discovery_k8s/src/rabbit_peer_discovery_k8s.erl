@@ -63,7 +63,7 @@ seed_node(undefined, SeedNodeOrdinal) ->
                            "Perhaps you are trying to deploy RabbitMQ without a StatefulSet?",
                            [Nodename],
                            #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-              {error, lists:flatten(io_lib:format("my nodename (~s) doesn't seem to be have an -ID suffix "
+              {error, lists:flatten(io_lib:format("my nodename (~s) doesn't seem to have the expected -ID suffix "
                                                   "like StatefulSet pods should", [?MODULE:node()]))}
     end;
 seed_node(SeedNode, _SeedNodeOrdinal) ->
