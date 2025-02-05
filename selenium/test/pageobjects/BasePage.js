@@ -185,42 +185,69 @@ module.exports = class BasePage {
   }
 
   async waitForLocated (locator) {
-    try {
-      return this.driver.wait(until.elementLocated(locator), this.timeout,
-        'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] seconds locating ' + locator,
-        this.polling)
-    }catch(error) {
-      if (!error.name.includes("NoSuchSessionError")) {
-        console.error("Failed waitForLocated " + locator + " due to " + error)
-      }
-      throw error
-    }
+    let attempts = 3
+    let retry = false
+    let rethrowError = null
+    do {
+      try {
+        return this.driver.wait(until.elementLocated(locator), this.timeout,
+          'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] seconds locating ' + locator,
+          this.polling)
+      }catch(error) {
+        if (error.name.includes("StaleElementReferenceError")) {
+          retry = true
+        }else if (!error.name.includes("NoSuchSessionError")) {
+          console.error("Failed waitForLocated " + locator + " due to " + error)
+          retry = false
+        }
+        rethrowError = error
+      }  
+    } while (retry && --attempts > 0)
+    throw rethrowError
   }
 
   async waitForVisible (element) {
-    try {
-      return this.driver.wait(until.elementIsVisible(element), this.timeout,
-        'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-        this.polling)
-    }catch(error) {      
-      if (!error.name.includes("NoSuchSessionError")) {
-        console.error("Failed to find visible element " + element + " due to " + error)
+    let attempts = 3
+    let retry = false
+    let rethrowError = null
+    do {      
+      try {
+        return this.driver.wait(until.elementIsVisible(element), this.timeout,
+          'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+          this.polling)
+      }catch(error) {         
+        if (error.name.includes("StaleElementReferenceError")) {
+          retry = true
+        }else if (!error.name.includes("NoSuchSessionError")) {
+          console.error("Failed to find visible element " + element + " due to " + error)
+          retry = false
+        }        
+        rethrowError = error
       }
-      throw error
-    }
+    } while (retry && --attempts > 0)
+    throw rethrowError
   }
 
 
   async waitForDisplayed (locator) {
-    if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
-    try {
-      return this.waitForVisible(await this.waitForLocated(locator))
-    }catch(error) {
-      if (!error.name.includes("NoSuchSessionError")) {
-        console.error("Failed to waitForDisplayed " + locator + " due to " + error)
-      }
-      throw error
-    }
+    let attempts = 3
+    let retry = false
+    let rethrowError = null
+    do {
+      if (this.interactionDelay && this.interactionDelay > 0) await this.driver.sleep(this.interactionDelay)
+        try {
+          return this.waitForVisible(await this.waitForLocated(locator))
+        }catch(error) {
+          if (error.name.includes("StaleElementReferenceError")) {
+            retry = true
+          }else if (!error.name.includes("NoSuchSessionError")) {
+            retry = false
+            console.error("Failed to waitForDisplayed " + locator + " due to " + error)
+          }
+          rethrowError = error
+        }
+    } while (retry && --attempts > 0 )
+    throw rethrowError
   }
 
   async getText (locator) {
