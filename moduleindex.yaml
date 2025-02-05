@@ -1087,9 +1087,6 @@ rabbitmq_peer_discovery_etcd:
 rabbitmq_peer_discovery_k8s:
 - rabbit_peer_discovery_k8s
 - rabbitmq_peer_discovery_k8s
-- rabbitmq_peer_discovery_k8s_app
-- rabbitmq_peer_discovery_k8s_node_monitor
-- rabbitmq_peer_discovery_k8s_sup
 rabbitmq_prelaunch:
 - rabbit_boot_state
 - rabbit_boot_state_sup
