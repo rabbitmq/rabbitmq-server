@@ -45,6 +45,7 @@ module.exports = class BasePage {
     return this.selectOption(SELECT_REFRESH, option)
   }
   async waitForOverviewTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(OVERVIEW_TAB)
   }
 
@@ -56,6 +57,7 @@ module.exports = class BasePage {
     return this.click(CONNECTIONS_TAB)
   }
   async waitForConnectionsTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(CONNECTIONS_TAB)
   }
 
@@ -63,6 +65,7 @@ module.exports = class BasePage {
     return this.click(ADMIN_TAB)
   }
   async waitForAdminTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(ADMIN_TAB)
   }
 
@@ -70,6 +73,7 @@ module.exports = class BasePage {
     return this.click(CHANNELS_TAB)
   }
   async waitForChannelsTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(CHANNELS_TAB)
   }
 
@@ -77,6 +81,7 @@ module.exports = class BasePage {
     return this.click(EXCHANGES_TAB)
   }
   async waitForExchangesTab() {
+    await this.driver.sleep(250)
     return this.waitForDisplayed(EXCHANGES_TAB)
   }
 
