@@ -42,11 +42,7 @@ rabbitmq_app(
     beam_files = [":beam_files"],
     license_files = [":license_files"],
     priv = [":priv"],
-    deps = [
-        "//deps/rabbit:erlang_app",
-        "//deps/rabbit_common:erlang_app",
-        "//deps/rabbitmq_peer_discovery_common:erlang_app",
-    ],
+    deps = ["//deps/rabbit_common:erlang_app"],
 )
 
 xref(

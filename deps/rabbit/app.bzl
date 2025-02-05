@@ -2087,15 +2087,7 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
     )
-    erlang_bytecode(
-        name = "amqp_system_SUITE_beam_files",
-        testonly = True,
-        srcs = ["test/amqp_system_SUITE.erl"],
-        outs = ["test/amqp_system_SUITE.beam"],
-        app_name = "rabbit",
-        erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
-    )
+
     erlang_bytecode(
         name = "amqp_address_SUITE_beam_files",
         testonly = True,
@@ -2219,4 +2211,22 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         outs = ["test/rabbit_list_test_event_handler.beam"],
         app_name = "rabbit",
         erlc_opts = "//:test_erlc_opts",
+    )
+    erlang_bytecode(
+        name = "amqp_dotnet_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_dotnet_SUITE.erl"],
+        outs = ["test/amqp_dotnet_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/rabbit_common:erlang_app"],
+    )
+    erlang_bytecode(
+        name = "amqp_jms_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/amqp_jms_SUITE.erl"],
+        outs = ["test/amqp_jms_SUITE.beam"],
+        app_name = "rabbit",
+        erlc_opts = "//:test_erlc_opts",
+        deps = ["//deps/amqp10_common:erlang_app"],
     )
