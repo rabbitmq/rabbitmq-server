@@ -33,12 +33,17 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 init([]) ->
-    case rabbit_peer_discovery:backend() of
-        rabbit_peer_discovery_consul ->
-            set_up_periodic_health_check();
-        rabbitmq_peer_discovery_consul ->
-            set_up_periodic_health_check();
-        _ ->
+    case rabbit_peer_discovery:should_perform_registration() of
+        true ->
+            case rabbit_peer_discovery:backend() of
+                rabbit_peer_discovery_consul ->
+                    set_up_periodic_health_check();
+                rabbitmq_peer_discovery_consul ->
+                    set_up_periodic_health_check();
+                _ ->
+                    {ok, #state{}}
+            end;
+        false ->
             {ok, #state{}}
     end.
 
