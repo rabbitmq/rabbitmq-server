@@ -22,6 +22,7 @@
          maybe_unregister/0,
          discover_cluster_nodes/0]).
 -export([backend/0,
+         should_perform_registration/0,
          node_type/0,
          normalize/1,
          append_node_prefix/1,
