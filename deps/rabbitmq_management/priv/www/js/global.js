@@ -223,7 +223,7 @@ var HELP = {
       'Optional replacement routing key to use when a message is dead-lettered. If this is not set, the message\'s original routing key will be used.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/dlx.html">x-dead-letter-routing-key</a>" argument.)',
 
     'queue-dead-letter-strategy':
-      'Valid values are <code>at-most-once</code> or <code>at-least-once</code>. It defaults to <code>at-most-once</code>. This setting is understood only by quorum queues. If <code>at-least-once</code> is set, <code>Overflow behaviour</code> must be set to <code>reject-publish</code>. Otherwise, dead letter strategy will fall back to <code>at-most-once</code>.',
+      'Valid values are <code>at-most-once</code> or <code>at-least-once</code>. It defaults to <code>at-most-once</code>. If <code>at-least-once</code> is set, <code>Overflow behaviour</code> must be set to <code>reject-publish</code>. Otherwise, dead letter strategy will fall back to <code>at-most-once</code>.',
 
     'queue-single-active-consumer':
       'If set, makes sure only one consumer at a time consumes from the queue and fails over to another registered consumer in case the active one is cancelled or dies.<br/>(Sets the "<a target="_blank" href="https://rabbitmq.com/consumers.html#single-active-consumer">x-single-active-consumer</a>" argument.)',
@@ -235,7 +235,10 @@ var HELP = {
       'Sets the data retention for stream queues in time units </br>(Y=Years, M=Months, D=Days, h=hours, m=minutes, s=seconds).<br/>E.g. "1h" configures the stream to only keep the last 1 hour of received messages.</br></br>(Sets the x-max-age argument.)',
 
     'queue-overflow':
-      'Sets the <a target="_blank" href="https://www.rabbitmq.com/maxlength.html#overflow-behaviour">queue overflow behaviour</a>. This determines what happens to messages when the maximum length of a queue is reached. Valid values are <code>drop-head</code>, <code>reject-publish</code> or <code>reject-publish-dlx</code>. The quorum queue type only supports <code>drop-head</code> and <code>reject-publish</code>.',
+      'Sets the <a target="_blank" href="https://www.rabbitmq.com/maxlength.html#overflow-behaviour">queue overflow behaviour</a>. This determines what happens to messages when the maximum length of a queue is reached. Valid values are <code>drop-head</code>, <code>reject-publish</code> or <code>reject-publish-dlx</code>',
+
+    'quorum-queue-overflow':
+      'Sets the <a target="_blank" href="https://www.rabbitmq.com/maxlength.html#overflow-behaviour">queue overflow behaviour</a>. This determines what happens to messages when the maximum length of a queue is reached. Valid values for quorum queues are <code>drop-head</code> and <code>reject-publish</code>.',
 
     'queue-master-locator':
        'Deprecated: please use `queue-leader-locator` instead. <a target="_blank" href="https://www.rabbitmq.com/docs/clustering#replica-placement">Controls which node the queue will be running on.</a>',
@@ -887,3 +890,239 @@ var chart_data = {};
 var last_page_out_of_range_error = 0;
 
 var oauth;
+
+
+///////////////////////////////////////////////////////////////////////////
+//                                                                       //
+// Queue types                                                           //
+//                                                                       //
+///////////////////////////////////////////////////////////////////////////
+
+/// this queue types are very well known to the server, at the very least
+/// this collection must be validated in terms of matching server queue
+/// types registry. I hope I will have time for this.
+
+/// this one defaults to classic, How can a queue be without type?
+var QUEUE_TYPE = function (queue) {
+    if (queue["arguments"]) {
+        if (queue["arguments"]["x-queue-type"]) {
+            return QUEUE_TYPE[queue["arguments"]["x-queue-type"]];
+        } else {
+            /// I observed that streams do not have
+            /// (at least always) x-queue-type
+            /// but all queues seems to be having
+            /// type field.
+            /// curiosuly is_[type] functions in main.js
+            /// rely on x-queue-type. is_stream might be
+            /// broken here.
+            if (queue.hasOwnProperty("type")) {
+                return QUEUE_TYPE[queue.type];
+            }
+            else {
+                return QUEUE_TYPE["classic"];
+            }
+        }
+    } else {
+        return QUEUE_TYPE["classic"];
+    }
+}
+// TODO: while this allows for custom queues
+// the proper way is to follow single source of truth
+// and generate most of this on the server from queue type metadata
+// including replacing tmpl's with data-driven generators
+// For example server knows policy_apply_to for each queue
+// and it knows what extra agruments each queue type accepts.
+// So for the latter case we dont' need a template that lists
+// queue args. We need iterator over server-supplied object.
+QUEUE_TYPE["default"] = {
+    label: "Default",
+    params: {},
+    policy_apply_to: "classic_queue",
+    actions: {
+        get_message: true,
+        purge: true
+    },
+    tmpl: {
+        "arguments"    : "classic-queue-arguments",
+        // TODO: this must be generated from js objects of course.
+        // and then those objects must be rendered by the server
+        "user_policy_arguments": "classic-queue-user-policy-arguments",
+        "operator_policy_arguments": "classic-queue-operator-policy-arguments",
+        "list"   : "classic-queue-list",
+        "stats"  : "classic-queue-stats",
+        "node_details" : "classic-queue-node-details"
+    }
+};
+
+QUEUE_TYPE["classic"] = {
+    label: "Classic",
+    params: {},
+    policy_apply_to: "classic_queue",
+    actions: {
+        get_message: true,
+        purge: true
+    },
+    tmpl: {
+        "arguments"    : "classic-queue-arguments",
+        "user_policy_arguments": "classic-queue-user-policy-arguments",
+        "operator_policy_arguments": "classic-queue-operator-policy-arguments",
+        "list"   : "classic-queue-list",
+        "stats"  : "classic-queue-stats",
+        "node_details" : "classic-queue-node-details"
+    }
+};
+
+QUEUE_TYPE["quorum"] = {
+    label: "Quorum",
+    params: {
+        'durable': true,
+        'auto_delete': false
+    },
+    policy_apply_to: "quorum_queues",
+    actions: {
+        get_message: true,
+        purge: true
+    },
+    tmpl: {
+        "arguments"    : "quorum-queue-arguments",
+        "user_policy_arguments": "quorum-queue-user-policy-arguments",
+        "operator_policy_arguments": "quorum-queue-operator-policy-arguments",
+        "list"   : "quorum-queue-list",
+        "stats": "quorum-queue-stats",
+        "node_details" : "quorum-queue-node-details"
+    }
+};
+
+QUEUE_TYPE["stream"] = {
+    label: "Stream",
+    params: {
+        'durable': true,
+        'auto_delete': false
+    },
+    policy_apply_to: "streams",
+    actions: {
+        get_message: false,
+        purge: false
+    },
+    tmpl: {
+        "arguments"    : "stream-queue-arguments",
+        "user_policy_arguments": "quorum-queue-user-policy-arguments",
+        "operator_policy_arguments": "stream-queue-operator-policy-arguments",
+        "list"   : "stream-queue-list",
+        "stats"  : "stream-queue-stats",
+        "node_details" : "stream-queue-node-details"
+    }
+};
+
+// here I'll shortcut for now and let it be like that
+// other queue types can inject themlves where they want.
+// since the 'sections' object will likely keep key insertion
+// order custom keys for queue type will be coming last.
+
+// maybe add helper functions?
+var MEMORY_STATISTICS = {
+    sections: {'queue_procs'         : ['classic',  'Classic queues'],
+               'quorum_queue_procs'  : ['quorum', 'Quorum queues'],
+               'quorum_queue_dlx_procs'      : ['quorum', 'Dead letter workers'],
+               'stream_queue_procs'          : ['stream',  'Stream queues'],
+               'stream_queue_replica_reader_procs'  : ['stream',  'Stream queues (replica reader)'],
+               'stream_queue_coordinator_procs'  : ['stream',  'Stream queues (coordinator)'],
+               'binary'              : ['binary', 'Binaries'],
+               'connection_readers'  : ['conn',   'Connection readers'],
+               'connection_writers'  : ['conn',   'Connection writers'],
+               'connection_channels' : ['conn',   'Connection channels'],
+               'connection_other'    : ['conn',   'Connections (other)'],
+               'mnesia'              : ['table',  'Mnesia'],
+               'msg_index'           : ['table',  'Message store index'],
+               'mgmt_db'             : ['table',  'Management database'],
+               'quorum_ets'          : ['table',  'Quorum queue ETS tables'],
+               'other_ets'           : ['table',  'Other ETS tables'],
+               'plugins'             : ['proc',   'Plugins'],
+               'other_proc'          : ['proc',   'Other process memory'],
+               'code'                : ['system', 'Code'],
+               'atom'                : ['system', 'Atoms'],
+               'other_system'        : ['system', 'Other system'],
+               'allocated_unused'    : ['unused', 'Allocated unused'],
+               'reserved_unallocated': ['unused', 'Unallocated reserved by the OS']},
+    keys: [[{name: 'Classic Queues', colour: 'classic',
+             keys: [['queue_procs',       'queues']]},
+            {name: 'Quorum Queues', colour: 'quorum',
+             keys: [['quorum_queue_procs','quorum'],
+                    ['quorum_queue_dlx_procs', 'dead letter workers']]},
+            {name: 'Streams', colour: 'stream',
+             keys: [['stream_queue_procs',                'stream'],
+                    ['stream_queue_replica_reader_procs', 'stream replica reader'],
+                    ['stream_queue_coordinator_procs',    'stream coordinator']]},
+            {name: 'Binaries', colour: 'binary',
+             keys: [['binary', '']]}],
+
+           [{name: 'Connections', colour: 'conn',
+             keys: [['connection_readers',  'readers'],
+                    ['connection_writers',  'writers'],
+                    ['connection_channels', 'channels'],
+                    ['connection_other',    'other']]}],
+
+           [{name: 'Tables', colour: 'table',
+             keys: [['mnesia',              'internal database tables'],
+                    ['msg_index',           'message store index'],
+                    ['mgmt_db',             'management database'],
+                    ['quorum_ets',          'quorum queue tables'],
+                    ['other_ets',           'other']]}],
+
+           [{name: 'Processes', colour: 'proc',
+             keys: [['plugins',             'plugins'],
+                    ['metadata_store',      'metadata store'],
+                    ['other_proc',          'other']]},
+            {name: 'System', colour: 'system',
+             keys: [['code',                'code'],
+                    ['atom',                'atoms'],
+                    ['other_system',        'other']
+                   ]}],
+
+           [{name: 'Preallocated memory', colour: 'unused',
+             keys: [['allocated_unused',     'preallocated by runtime, unused'],
+                    ['reserved_unallocated', 'unallocated, reserved by the OS']]}]]
+}
+
+var BINARY_STATISTICS = {
+    sections: {'queue_procs'         : ['classic',  'Classic queues'],
+               'quorum_queue_procs'  : ['quorum',  'Quorum queues'],
+               'quorum_queue_dlx_procs'      : ['quorum', 'Dead letter workers'],
+               'stream_queue_procs'          : ['stream',  'Stream queues'],
+               'stream_queue_replica_reader_procs'  : ['stream',  'Stream queues (replica reader)'],
+               'stream_queue_coordinator_procs'  : ['stream',  'Stream queues (coordinator)'],
+               'connection_readers'  : ['conn',   'Connection readers'],
+               'connection_writers'  : ['conn',   'Connection writers'],
+               'connection_channels' : ['conn',   'Connection channels'],
+               'connection_other'    : ['conn',   'Connections (other)'],
+               'msg_index'           : ['table',  'Message store index'],
+               'mgmt_db'             : ['table',  'Management database'],
+               'plugins'             : ['proc',   'Plugins'],
+               'metadata_store'      : ['metadata_store',  'Metadata store'],
+               'other'               : ['system', 'Other binary references']},
+    key: [[{name: 'Classic Queues', colour: 'classic',
+            keys: [['queue_procs',                       'queues']]},
+           {name: 'Quorum Queues', colour: 'quorum',
+            keys: [['quorum_queue_procs',                'quorum'],
+                   ['quorum_queue_dlx_procs',            'dead letter workers']]},
+           {name: 'Streams', colour: 'stream',
+            keys: [['stream_queue_procs',                'stream'],
+                   ['stream_queue_replica_reader_procs', 'stream replica reader'],
+                   ['stream_queue_coordinator_procs',    'stream coordinator']]}],
+
+          [{name: 'Connections', colour: 'conn',
+            keys: [['connection_readers',  'readers'],
+                   ['connection_writers',  'writers'],
+                   ['connection_channels', 'channels'],
+                   ['connection_other',    'other']]}],
+
+          [{name: 'Tables', colour: 'table',
+            keys: [['msg_index',           'message store index'],
+                   ['mgmt_db',             'management database']]}],
+
+          [{name: 'Processes', colour: 'proc',
+            keys: [['plugins',             'plugins'],
+                   ['metadata_store',      'metadata store']]},
+           {name: 'System', colour: 'system',
+            keys: [['other',               'other']]}]]
+};

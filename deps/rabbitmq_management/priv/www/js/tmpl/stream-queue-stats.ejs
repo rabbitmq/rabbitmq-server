@@ -1,0 +1,56 @@
+<table class="facts facts-l">
+      <tr>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
+      </tr>
+      <% if(queue.consumers) { %>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <% } else if(queue.hasOwnProperty('consumer_details')) { %>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumer_details.length) %></td>
+      </tr>
+      <% } %>
+      <% if(queue.hasOwnProperty('publishers')) { %>
+      <tr>
+        <th>Publishers</th>
+        <td><%= fmt_string(queue.publishers) %></td>
+      </tr>
+      <% } %>
+      <tr>
+        <th>Readers</th>
+        <td><%= fmt_table_short(queue.readers) %></td>
+      </tr>
+      <tr>
+        <th>Segments</th>
+        <td><%= fmt_string(queue.segments) %></td>
+      </tr>
+    </table>
+
+    <table class="facts">
+      <tr>
+        <td></td>
+        <th class="horizontal">Total</th>
+      </tr>
+      <tr>
+        <th>
+          Messages
+          <span class="help" id="queue-messages-stream"></span>
+        </th>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages) %>
+        </td>
+      </tr>
+      <tr>
+      </tr>
+      <tr>
+        <th>
+          Process memory
+          <span class="help" id="queue-process-memory"></span>
+        </th>
+        <td class="r"><%= fmt_bytes(queue.memory) %></td>
+      </tr>
+    </table>

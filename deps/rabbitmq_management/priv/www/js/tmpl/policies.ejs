@@ -83,9 +83,11 @@
               <option value="all">Exchanges and queues</option>
               <option value="exchanges">Exchanges</option>
               <option value="queues">Queues</option>
-              <option value="classic_queues">Classic Queues</option>
-              <option value="quorum_queues">Quorum Queues</option>
-              <option value="streams">Streams</option>
+              <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
+                  <% if (typename != "default") { %>
+              <option value="<%= type_config.policy_apply_to %>"><%= type_config.label %> Queues</option>
+                  <% } %>
+              <% } %>
             </select>
           </td>
         </tr>
@@ -111,15 +113,11 @@
                   <span class="argument-link" field="definition" key="consumer-timeout" type="number">Consumer Timeout</span><span class="help" id="queue-consumer-timeout"></span> |
                   <span class="argument-link" field="definition" key="queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span></br>
                 </td>
-              <tr>
-                <td>Queues [Quorum]</td>
-                <td>
-                  <span class="argument-link" field="definition" key="delivery-limit" type="number">Delivery limit</span>
-                  <span class="help" id="delivery-limit"></span> |
-                  <span class="argument-link" field="definition" key="dead-letter-strategy" type="string">Dead letter strategy</span>
-                  <span class="help" id="queue-dead-letter-strategy"></span> |
-                </td>
-              </tr>
+                <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
+                    <% if (typename != "default") { %>
+                        <%= format(type_config.tmpl.user_policy_arguments, {}) %>
+                  <% } %>
+                <% } %>
               <tr>
                 <td>Streams</td>
                 <td>
@@ -246,9 +244,11 @@
           <td>
             <select name="apply-to">
               <option value="queues">Queues</option>
-              <option value="classic_queues">Classic Queues</option>
-              <option value="quorum_queues">Quorum Queues</option>
-              <option value="streams">Streams</option>
+              <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
+                  <% if (typename != "default") { %>
+                      <option value="<%= type_config.policy_apply_to %>"><%= type_config.label %> Queues</option>
+                  <% } %>
+              <% } %>
             </select>
           </td>
         </tr>
@@ -261,39 +261,11 @@
           <td>
             <div class="multifield" id="definitionop"></div>
             <table class="argument-links">
-              <tr>
-                <td>Queues [Classic]</td>
-                <td>
-                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
-                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
-                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
-                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span> |
-                  <span class="help" id="queue-message-ttl"></span> |
-                  <span class="argument-link" field="definitionop" key="overflow" type="string">Length limit overflow behaviour</span> <span class="help" id="queue-overflow"></span> </br>
-                </td>
-              </tr>
-              <tr>
-                <td>Queues [Quorum]</td>
-                <td>
-                  <span class="argument-link" field="definitionop" key="delivery-limit" type="number">Delivery limit</span>
-                  <span class="help" id="delivery-limit"></span> |
-                  <span class="argument-link" field="definitionop" key="expires" type="number">Auto expire</span> |
-                  <span class="argument-link" field="definitionop" key="max-in-memory-bytes" type="number">Max in-memory bytes</span> |
-                  <span class="argument-link" field="definitionop" key="max-in-memory-length" type="number">Max in-memory length</span> <br>
-                  <span class="argument-link" field="definitionop" key="max-length" type="number">Max length</span> |
-                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span> |
-                  <span class="argument-link" field="definitionop" key="message-ttl" type="number">Message TTL</span>
-                  <span class="help" id="queue-message-ttl"></span> |
-                  <span class="argument-link" field="definitionop" key="target-group-size" type="number">Target group size</span> |
-                  <span class="argument-link" field="definitionop" key="overflow" type="string">Length limit overflow behaviour</span> <span class="help" id="queue-overflow"></span> </br>
-                </td>
-              </tr>
-              <tr>
-                <td>Queues [Streams]</td>
-                <td>
-                  <span class="argument-link" field="definitionop" key="max-length-bytes" type="number">Max length bytes</span>
-                </td>
-              </tr>
+                <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
+                    <% if (typename != "default") { %>
+                        <%= format(type_config.tmpl.operator_policy_arguments, {}) %>
+                    <% } %>
+                <% } %>
             </table>
           </td>
           <td class="t"><span class="mand">*</span></td>
