@@ -245,22 +245,16 @@
           <th><label>Type:</label></th>
           <td>
             <select name="queuetype" onchange="select_queue_type(queuetype)">
-              <option value="default">Default for virtual host</option>
-              <% if (queue_type == "classic") { %>
-               <option value="classic" selected>Classic</option>
-              <% } else { %>
-               <option value="classic">Classic</option>
-              <% } %>
-              <% if (queue_type == "quorum") { %>
-               <option value="quorum" selected>Quorum</option>
-              <% } else { %>
-               <option value="quorum">Quorum</option>
-              <% } %>
-              <% if (queue_type == "stream") { %>
-               <option value="stream" selected>Stream</option>
-              <% } else { %>
-               <option value="stream">Stream</option>
-              <% } %>
+                <option value="default">Default for virtual host</option>
+                <% for (const [typename, type_config] of Object.entries(QUEUE_TYPE)) { %>
+                  <% if (typename != "default") { %>
+                  <% if (queue_type == typename) { %>
+                      <option value="<%= typename%>" selected><%= type_config["label"]%></option>
+                  <% } else { %>
+                      <option value="<%= typename%>"><%= type_config["label"]%></option>
+                  <% } %>
+                  <% } %>
+                <% } %>
             </select>
           </td>
         </tr>
@@ -294,7 +288,7 @@
           </td>
         </tr>
 <% } %>
-<% if (queue_type == "classic") { %>
+        <% if (queue_type == "classic") { %>
         <tr>
           <th><label>Auto delete: <span class="help" id="queue-auto-delete"></span></label></th>
           <td>
@@ -313,32 +307,7 @@
               <tr>
                 <td>Add</td>
                 <td>
-                <% if (queue_type != "stream") { %>
-                  <span class="argument-link" field="arguments" key="x-expires" type="number">Auto expire</span> <span class="help" id="queue-expires"></span> |
-                  <span class="argument-link" field="arguments" key="x-message-ttl" type="number">Message TTL</span> <span class="help" id="queue-message-ttl"></span> |
-                  <span class="argument-link" field="arguments" key="x-overflow" type="string">Overflow behaviour</span> <span class="help" id="queue-overflow"></span><br/>
-                  <span class="argument-link" field="arguments" key="x-single-active-consumer" type="boolean">Single active consumer</span> <span class="help" id="queue-single-active-consumer"></span> |
-                  <span class="argument-link" field="arguments" key="x-dead-letter-exchange" type="string">Dead letter exchange</span> <span class="help" id="queue-dead-letter-exchange"></span> |
-                  <span class="argument-link" field="arguments" key="x-dead-letter-routing-key" type="string">Dead letter routing key</span> <span class="help" id="queue-dead-letter-routing-key"></span><br/>
-                  <span class="argument-link" field="arguments" key="x-max-length" type="number">Max length</span> <span class="help" id="queue-max-length"></span> |
-                <% } %>
-                  <span class="argument-link" field="arguments" key="x-max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span>
-                <% if (queue_type == "classic") { %>
-                | <span class="argument-link" field="arguments" key="x-max-priority" type="number">Maximum priority</span> <span class="help" id="queue-max-priority"></span>
-                <% } %>
-                <% if (queue_type == "quorum") { %>
-                  | <span class="argument-link" field="arguments" key="x-delivery-limit" type="number">Delivery limit</span><span class="help" id="delivery-limit"></span>
-                  | <span class="argument-link" field="arguments" key="x-quorum-initial-group-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span><br/>
-                  <span class="argument-link" field="arguments" key="x-quorum-target-group-size" type="number">Target cluster size</span><span class="help" id="qourum-queue-target-group-size"></span>    
-                  | <span class="argument-link" field="arguments" key="x-dead-letter-strategy" type="string">Dead letter strategy</span><span class="help" id="queue-dead-letter-strategy"></span>
-                <% } %>
-                <% if (queue_type == "stream") { %>
-                  | <span class="argument-link" field="arguments" key="x-max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
-                  | <span class="argument-link" field="arguments" key="x-stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span></br>
-                  <span class="argument-link" field="arguments" key="x-stream-filter-size-bytes" type="number">Filter size (per chunk) in bytes</span><span class="help" id="queue-stream-filter-size-bytes"></span>
-                  | <span class="argument-link" field="arguments" key="x-initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
-                <% } %>
-                  | <span class="argument-link" field="arguments" key="x-queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
+                        <%= format(QUEUE_TYPE[queue_type].tmpl['arguments'], {}) %>
                 </td>
               </tr>
             </table>

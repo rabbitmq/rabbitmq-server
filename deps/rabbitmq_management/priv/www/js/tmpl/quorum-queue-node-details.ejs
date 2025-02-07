@@ -1,0 +1,21 @@
+      <tr>
+        <th>Leader</th>
+        <td><%= fmt_node(queue.leader) %></td>
+      </tr>
+      <tr>
+          <th>Online</th>
+          <td>
+              <% for (var i in queue.online) { %>
+                  <%= fmt_node(queue.online[i]) %>
+                  <br/>
+              <% } %>
+          </td>
+      </tr>
+      <th>Members</th>
+      <td>
+          <% for (var i in queue.members) {  %>
+              <%= fmt_node(queue.members[i]) %>
+              <br/>
+          <% } %>
+      </td>
+      </tr>

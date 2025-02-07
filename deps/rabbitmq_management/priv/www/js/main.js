@@ -1585,11 +1585,8 @@ function collapse_multifields(params0) {
         if (queue_type != 'default') {
             params['arguments']['x-queue-type'] = queue_type;
         }
-        if (queue_type == 'quorum' ||
-            queue_type == 'stream') {
-            params['durable'] = true;
-            params['auto_delete'] = false;
-        }
+
+        params = Object.assign(params, QUEUE_TYPE[queue_type].params)
     }
     return params;
 }
