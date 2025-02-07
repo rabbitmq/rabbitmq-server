@@ -947,22 +947,11 @@ force_reset_node_in_khepri(Config) ->
 
     stop_join_start(Config, Rabbit, Hare),
     stop_app(Config, Rabbit),
-    ok = force_reset(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]}, [Hare]),
-    %% Khepri is stopped, so it won't report anything.
-    assert_status({[Rabbit], [], [Rabbit], [Rabbit], []}, [Rabbit]),
-    %% Hare thinks that Rabbit is still clustered
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Hare]),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-    %% We can rejoin Rabbit and Hare. Unlike with Mnesia, we try to solve the
-    %% inconsistency instead of returning an error.
-    ok = stop_app(Config, Rabbit),
-    ?assertEqual(ok, join_cluster(Config, Rabbit, Hare, false)),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]).
+    {error, 69, Msg} = force_reset(Config, Rabbit),
+    ?assertEqual(
+       match,
+       re:run(
+         Msg, "Forced reset is unsupported with Khepri", [{capture, none}])).
 
 status_with_alarm(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
