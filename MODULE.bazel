@@ -231,8 +231,8 @@ erlang_package.hex_package(
 erlang_package.hex_package(
     name = "observer_cli",
     build_file = "@rabbitmq-server//bazel:BUILD.observer_cli",
-    sha256 = "872cf8e833a3a71ebd05420692678ec8aaede8fd96c805a4687398f6b23a3014",
-    version = "1.7.5",
+    sha256 = "93ae523d42d566b176f7ae77a0bf36802dab8bb51a6086316cce66a7cfb5d81f",
+    version = "1.8.2",
 )
 
 erlang_package.hex_package(
