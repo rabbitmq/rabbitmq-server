@@ -3,6 +3,8 @@
 -define(CLOSING_TIMEOUT, 30_000).
 -define(SILENT_CLOSE_DELAY, 3_000).
 
+-define(SHUTDOWN_SESSIONS_TIMEOUT, 10_000).
+
 %% Allow for potentially large sets of tokens during the SASL exchange.
 %% https://docs.oasis-open.org/amqp/amqp-cbs/v1.0/csd01/amqp-cbs-v1.0-csd01.html#_Toc67999915
 -define(INITIAL_MAX_FRAME_SIZE, 8192).
