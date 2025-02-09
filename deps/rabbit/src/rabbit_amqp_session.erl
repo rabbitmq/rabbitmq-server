@@ -602,7 +602,9 @@ handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
             noreply(State)
     catch exit:#'v1_0.error'{} = Error ->
               log_error_and_close_session(Error, State1)
-    end.
+    end;
+handle_cast(shutdown, State) ->
+    {stop, normal, State}.
 
 log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
