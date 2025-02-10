@@ -43,7 +43,7 @@ all() ->
         test_invalid_signature,
         test_incorrect_kid,
         normalize_token_scope_using_multiple_scopes_key,
-        normalize_token_scope_with_keycloak_scopes,
+        normalize_token_scope_with_requesting_party_token_scopes,
         normalize_token_scope_with_rich_auth_request,
         normalize_token_scope_with_rich_auth_request_using_regular_expression_with_cluster,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
@@ -125,7 +125,7 @@ normalize_token_scope_using_multiple_scopes_key(_) ->
     Pairs = [
         %% common case
     {
-        "keycloak format 1",
+        "keycloak format 1, i.e. requesting party token",
         #{<<"authorization">> => 
             #{<<"permissions">> =>
             [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
@@ -186,10 +186,10 @@ normalize_token_scope_using_multiple_scopes_key(_) ->
             additional_scopes_key = <<"authorization.permissions.scopes realm_access.roles resource_access.account.roles">>
             },
         Token = normalize_token_scope(ResourceServer, Token0),
-        ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token), Case)
+        ?assertEqual(lists:sort(ExpectedScope), lists:sort(uaa_jwt:get_scope(Token)), Case)
         end, Pairs).
 
-normalize_token_scope_with_keycloak_scopes(_) ->
+normalize_token_scope_with_requesting_party_token_scopes(_) ->
     Pairs = [
         %% common case
     {
@@ -241,12 +241,9 @@ normalize_token_scope_with_keycloak_scopes(_) ->
     ],
 
     lists:foreach(fun({Case, Authorization, ExpectedScope}) ->
-        ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),
-        ResourceServer = ResourceServer0#resource_server{
-            additional_scopes_key = <<"authorization.permissions.scopes">>
-            },
+        ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),        
         Token0 = #{<<"authorization">> => Authorization},
-        Token = normalize_token_scope(ResourceServer, Token0),
+        Token = normalize_token_scope(ResourceServer0, Token0),
         ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token), Case)
         end, Pairs).
 
@@ -431,7 +428,7 @@ normalize_token_scope_with_rich_auth_request(_) ->
           }
         ],
         [<<"tag:management">>, <<"tag:policymaker">>,
-            <<"tag:management">>, <<"tag:monitoring">>  ]
+             <<"tag:monitoring">>  ]
     },
     { "should produce a scope for every user tag action but only for the clusters that match {resource_server_id}",
         [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
