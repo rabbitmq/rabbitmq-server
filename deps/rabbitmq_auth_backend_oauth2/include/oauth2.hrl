@@ -22,6 +22,14 @@
 
 %% End of Key JWT fields
 
+%% UMA claim-type returns a RPT which is a token
+%% where scopes are located under a map of list of objects which have 
+%% the scopes in the "scopes" attribute
+%% Used by Keycloak, WSO2 and others.
+%% https://en.wikipedia.org/wiki/User-Managed_Access#cite_note-docs.wso2.com-19
+-define(SCOPES_LOCATION_IN_REQUESTING_PARTY_TOKEN, <<"authorization.permissions.scopes">>).
+
+
 -type raw_jwt_token() :: binary() | #{binary() => any()}.
 -type decoded_jwt_token() :: #{binary() => any()}.
 
