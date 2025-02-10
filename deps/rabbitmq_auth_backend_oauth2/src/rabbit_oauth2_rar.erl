@@ -11,7 +11,7 @@
 -include("oauth2.hrl").
 -import(uaa_jwt, [get_scope/1, set_scope/2]).
 
--export([extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
+-export([extract_scopes_from_rich_auth_request/2]).
 
 -define(AUTHORIZATION_DETAILS_CLAIM, <<"authorization_details">>).
 -define(RAR_ACTIONS_FIELD, <<"actions">>).
@@ -44,15 +44,12 @@
         <<"management">>,
         <<"policymaker">> ]).
 
--spec has_rich_auth_request_scopes(Payload::map()) -> boolean().
-has_rich_auth_request_scopes(Payload) ->
-    maps:is_key(?AUTHORIZATION_DETAILS_CLAIM, Payload).
-
 -spec extract_scopes_from_rich_auth_request(ResourceServer :: resource_server(),
         Payload :: map()) -> map().
 %% https://oauth.net/2/rich-authorization-requests/
 extract_scopes_from_rich_auth_request(ResourceServer,
-        #{?AUTHORIZATION_DETAILS_CLAIM := Permissions} = Payload) ->
+        #{?AUTHORIZATION_DETAILS_CLAIM := Permissions} = Payload) 
+          when is_list(Permissions) ->
     ResourceServerType = ResourceServer#resource_server.resource_server_type,
 
     FilteredPermissionsByType = lists:filter(fun(P) ->
@@ -61,7 +58,8 @@ extract_scopes_from_rich_auth_request(ResourceServer,
         ResourceServer#resource_server.id, FilteredPermissionsByType),
 
     ExistingScopes = get_scope(Payload),
-    set_scope(AdditionalScopes ++ ExistingScopes, Payload).
+    set_scope(AdditionalScopes ++ ExistingScopes, Payload);
+extract_scopes_from_rich_auth_request(_, Payload) -> Payload.
 
 put_location_attribute(Attribute, Map) ->
     put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
