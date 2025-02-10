@@ -11,7 +11,8 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
+// and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.amqp.tests.jms;
@@ -31,19 +32,21 @@ import org.apache.qpid.jms.JmsConnection;
 import org.apache.qpid.jms.JmsConnectionFactory;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Based on https://github.com/apache/qpid-jms/tree/main/qpid-jms-interop-tests/qpid-jms-activemq-tests.
+ * Based on
+ * https://github.com/apache/qpid-jms/tree/main/qpid-jms-interop-tests/qpid-jms-activemq-tests.
  */
+@JmsTestInfrastructure
 public class JmsConnectionTest {
+
+  String destination;
 
   @Test
   @Timeout(30)
   public void testCreateConnection() throws Exception {
-    JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
-    try (Connection connection = factory.createConnection()) {
+    try (Connection connection = connection()) {
       assertNotNull(connection);
     }
   }
@@ -51,8 +54,7 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionAndStart() throws Exception {
-    JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
-    try (Connection connection = factory.createConnection()) {
+    try (Connection connection = connection()) {
       assertNotNull(connection);
       connection.start();
     }
@@ -63,7 +65,7 @@ public class JmsConnectionTest {
   // Currently not supported by RabbitMQ.
   @Disabled
   public void testCreateWithDuplicateClientIdFails() throws Exception {
-    JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
+    JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
     JmsConnection connection1 = (JmsConnection) factory.createConnection();
     connection1.setClientID("Test");
     assertNotNull(connection1);
@@ -87,8 +89,7 @@ public class JmsConnectionTest {
     assertThrows(
         JMSException.class,
         () -> {
-          JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
-          try (Connection connection = factory.createConnection()) {
+          try (Connection connection = connection()) {
             connection.setClientID("Test");
             connection.start();
             connection.setClientID("NewTest");
@@ -99,7 +100,7 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionAsSystemAdmin() throws Exception {
-    JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
+    JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
     factory.setUsername(adminUsername());
     factory.setPassword(adminPassword());
     try (Connection connection = factory.createConnection()) {
@@ -111,8 +112,8 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionCallSystemAdmin() throws Exception {
-    JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
-    try (Connection connection = factory.createConnection(adminUsername(), adminPassword())) {
+    try (Connection connection =
+        connectionFactory().createConnection(adminUsername(), adminPassword())) {
       assertNotNull(connection);
       connection.start();
     }
@@ -124,7 +125,7 @@ public class JmsConnectionTest {
     assertThrows(
         JMSSecurityException.class,
         () -> {
-          JmsConnectionFactory factory = new JmsConnectionFactory(TestUtils.brokerUri());
+          JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
           factory.setUsername("unknown");
           factory.setPassword("unknown");
           try (Connection connection = factory.createConnection()) {
@@ -140,8 +141,7 @@ public class JmsConnectionTest {
     assertThrows(
         JMSSecurityException.class,
         () -> {
-          JmsConnectionFactory factory = new JmsConnectionFactory(brokerUri());
-          try (Connection connection = factory.createConnection("unknown", "unknown")) {
+          try (Connection connection = connectionFactory().createConnection("unknown", "unknown")) {
             assertNotNull(connection);
             connection.start();
           }
@@ -150,14 +150,11 @@ public class JmsConnectionTest {
 
   @Test
   @Timeout(30)
-  public void testBrokerStopWontHangConnectionClose(TestInfo info) throws Exception {
-    Connection connection = new JmsConnectionFactory(brokerUri()).createConnection();
+  public void testBrokerStopWontHangConnectionClose() throws Exception {
+    Connection connection = connection();
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-    // TODO use a "regular" queue
-    TemporaryQueue queue = session.createTemporaryQueue();
-    //    String destinationName = name(info);
-    //    Queue queue = session.createQueue("/queues/" + destinationName);
+    Queue queue = queue(destination);
     connection.start();
 
     MessageProducer producer = session.createProducer(queue);
@@ -182,7 +179,7 @@ public class JmsConnectionTest {
   @Timeout(60)
   public void testConnectionExceptionBrokerStop() throws Exception {
     final CountDownLatch latch = new CountDownLatch(1);
-    try (Connection connection = new JmsConnectionFactory(brokerUri()).createConnection()) {
+    try (Connection connection = connection()) {
       connection.setExceptionListener(exception -> latch.countDown());
       connection.start();
       Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);

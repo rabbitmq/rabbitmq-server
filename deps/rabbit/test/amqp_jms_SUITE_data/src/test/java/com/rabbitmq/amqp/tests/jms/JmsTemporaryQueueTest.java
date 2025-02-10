@@ -11,12 +11,14 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
+// and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.amqp.tests.jms;
 
 import static com.rabbitmq.amqp.tests.jms.TestUtils.brokerUri;
+import static com.rabbitmq.amqp.tests.jms.TestUtils.connection;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -25,15 +27,22 @@ import jakarta.jms.IllegalStateException;
 import java.util.UUID;
 import org.apache.qpid.jms.JmsConnectionFactory;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 /**
- * Based on https://github.com/apache/qpid-jms/tree/main/qpid-jms-interop-tests/qpid-jms-activemq-tests.
+ * Based on
+ * https://github.com/apache/qpid-jms/tree/main/qpid-jms-interop-tests/qpid-jms-activemq-tests.
  */
 public class JmsTemporaryQueueTest {
 
   Connection connection;
+
+  @BeforeEach
+  void init() throws JMSException {
+    connection = connection();
+  }
 
   @AfterEach
   void tearDown() throws JMSException {
@@ -43,7 +52,6 @@ public class JmsTemporaryQueueTest {
   @Test
   @Timeout(60)
   public void testCreatePublishConsumeTemporaryQueue() throws Exception {
-    connection = new JmsConnectionFactory(brokerUri()).createConnection();
     connection.start();
 
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
@@ -60,7 +68,6 @@ public class JmsTemporaryQueueTest {
   @Test
   @Timeout(60)
   public void testCantConsumeFromTemporaryQueueCreatedOnAnotherConnection() throws Exception {
-    connection = new JmsConnectionFactory(brokerUri()).createConnection();
     connection.start();
 
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
@@ -84,7 +91,6 @@ public class JmsTemporaryQueueTest {
   @Test
   @Timeout(60)
   public void testCantSendToTemporaryQueueFromClosedConnection() throws Exception {
-    connection = new JmsConnectionFactory(brokerUri()).createConnection();
     connection.start();
 
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
@@ -113,7 +119,6 @@ public class JmsTemporaryQueueTest {
   @Test
   @Timeout(60)
   public void testCantDeleteTemporaryQueueWithConsumers() throws Exception {
-    connection = new JmsConnectionFactory(brokerUri()).createConnection();
     connection.start();
 
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
