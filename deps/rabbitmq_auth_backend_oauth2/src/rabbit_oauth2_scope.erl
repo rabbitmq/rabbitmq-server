@@ -96,6 +96,7 @@ parse_resource_pattern(Pattern, Permission) ->
 -spec filter_matching_scope_prefix_and_drop_it(list(), binary()|list()) -> list().
 filter_matching_scope_prefix_and_drop_it(Scopes, <<"">>) -> Scopes;
 filter_matching_scope_prefix_and_drop_it(Scopes, PrefixPattern)  ->
+    
     PatternLength = byte_size(PrefixPattern),
     lists:filtermap(
         fun(ScopeEl) ->
