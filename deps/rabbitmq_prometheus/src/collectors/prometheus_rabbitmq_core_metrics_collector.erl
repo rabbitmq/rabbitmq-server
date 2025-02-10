@@ -158,7 +158,8 @@
         {2, undefined, queue_head_message_timestamp, gauge, "Timestamp of the first message in the queue, if any", head_message_timestamp},
         {2, undefined, queue_disk_reads_total, counter, "Total number of times queue read messages from disk", disk_reads},
         {2, undefined, queue_disk_writes_total, counter, "Total number of times queue wrote messages to disk", disk_writes},
-        {2, undefined, stream_segments, counter, "Total number of stream segment files", segments}
+        {2, undefined, stream_segments, counter, "Total number of stream segment files", segments},
+        {2, fun erlang:length/1, queue_online_members, gauge, "Number of online members of a queue/stream", online}
     ]},
 %%% Metrics that contain reference to a channel. Some of them also have
 %%% a queue name, but in this case filtering on it doesn't make any
@@ -411,7 +412,9 @@ mf(Callback, Prefix, Contents, Data) ->
          Fun = case Conversion of
                    undefined ->
                        fun(D) -> element(Index, D) end;
-                   BaseUnitConversionFactor ->
+                   ConvertFun when is_function(ConvertFun, 1) ->
+                       fun(D) -> ConvertFun(element(Index, D)) end;
+                   BaseUnitConversionFactor when is_integer(BaseUnitConversionFactor) ->
                        fun(D) -> element(Index, D) / BaseUnitConversionFactor end
                end,
         Callback(
@@ -428,7 +431,9 @@ mf(Callback, Prefix, Contents, Data) ->
         Fun = case Conversion of
                   undefined ->
                       fun(D) -> proplists:get_value(Key, element(Index, D)) end;
-                  BaseUnitConversionFactor ->
+                  ConvertFun when is_function(ConvertFun, 1) ->
+                      fun(D) -> ConvertFun(proplists:get_value(Key, element(Index, D), [])) end;
+                  BaseUnitConversionFactor when is_integer(BaseUnitConversionFactor) ->
                       fun(D) -> proplists:get_value(Key, element(Index, D)) / BaseUnitConversionFactor end
               end,
         Callback(
