@@ -168,8 +168,7 @@
 -export([check_cluster_consistency/0,
          check_cluster_consistency/2,
          node_info/0]).
--export([reset/0,
-         force_reset/0]).
+-export([reset/0]).
 -export([cluster_status_from_khepri/0,
          cli_cluster_status/0]).
 
@@ -592,23 +591,6 @@ reset() ->
             ok = setup(),
             ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
             ok = khepri:stop(?RA_CLUSTER_NAME),
-
-            _ = file:delete(rabbit_guid:filename()),
-            ok;
-        true ->
-            throw({error, rabbitmq_unexpectedly_running})
-    end.
-
-%% @private
-
-force_reset() ->
-    case rabbit:is_running() of
-        false ->
-            ok = khepri:stop(?RA_CLUSTER_NAME),
-            DataDir = maps:get(data_dir, ra_system:fetch(?RA_SYSTEM)),
-            ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM),
-            ok = rabbit_file:recursive_delete(
-                   filelib:wildcard(DataDir ++ "/*")),
 
             _ = file:delete(rabbit_guid:filename()),
             ok;
