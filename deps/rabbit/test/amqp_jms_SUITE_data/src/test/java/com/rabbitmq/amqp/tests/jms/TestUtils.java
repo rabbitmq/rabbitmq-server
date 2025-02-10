@@ -11,29 +11,30 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
+// and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.amqp.tests.jms;
 
 import static java.lang.String.format;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import jakarta.jms.Connection;
+import jakarta.jms.ConnectionFactory;
+import jakarta.jms.JMSException;
+import jakarta.jms.Queue;
 import java.lang.reflect.Method;
 import java.util.UUID;
-
-import org.junit.jupiter.api.Tag;
+import org.apache.qpid.jms.JmsConnectionFactory;
+import org.apache.qpid.jms.JmsQueue;
 import org.junit.jupiter.api.TestInfo;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
+import org.junit.jupiter.api.extension.ExtensionContext;
 
 final class TestUtils {
 
   private static final String DEFAULT_BROKER_URI = "amqp://localhost:5672";
 
-  private TestUtils() { }
+  private TestUtils() {}
 
   static String brokerUri() {
     String uri = System.getProperty("rmq_broker_uri", "amqp://localhost:5672");
@@ -48,10 +49,26 @@ final class TestUtils {
     return "guest";
   }
 
+  static ConnectionFactory connectionFactory() {
+    return new JmsConnectionFactory(brokerUri());
+  }
+
+  static Connection connection() throws JMSException {
+    return connectionFactory().createConnection();
+  }
+
+  static Queue queue(String name) {
+    // no path encoding, use names with e.g. ASCII characters only
+    return new JmsQueue("/queues/" + name);
+  }
+
   static String name(TestInfo info) {
     return name(info.getTestClass().get(), info.getTestMethod().get());
   }
 
+  static String name(ExtensionContext context) {
+    return name(context.getTestInstance().get().getClass(), context.getTestMethod().get());
+  }
 
   private static String name(Class<?> testClass, Method testMethod) {
     return name(testClass, testMethod.getName());
@@ -62,5 +79,4 @@ final class TestUtils {
     return format(
         "%s_%s%s", testClass.getSimpleName(), testMethod, uuid.substring(uuid.length() / 2));
   }
-
 }
