@@ -346,7 +346,7 @@ next time it is started:
 .sp
 .Dl rabbitmqctl force_boot
 .\" ------------------------------------------------------------------
-.It Cm force_reset
+.It Cm force_reset Em (deprecated)
 .Pp
 Forcefully returns a RabbitMQ node to its virgin state.
 .Pp
@@ -358,6 +358,13 @@ in that it resets the node unconditionally, regardless of the current
 management database state and cluster configuration.
 It should only be used as a last resort if the database or cluster
 configuration has been corrupted.
+.Pp
+The
+.Cm force_reset
+command is
+.Sy deprecated .
+It remains available when the Mnesia metadata store is used.
+It is unsupported with the Khepri metadata store.
 .Pp
 For
 .Cm reset
