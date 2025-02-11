@@ -55,6 +55,7 @@
     kill_node_after/3,
 
     reset_node/2,
+    force_reset_node/2,
 
     forget_cluster_node/3,
     forget_cluster_node/4,
@@ -2157,6 +2158,10 @@ await_os_pid_death(Pid) ->
 reset_node(Config, Node) ->
     Name = get_node_config(Config, Node, nodename),
     rabbit_control_helper:command(reset, Name).
+
+force_reset_node(Config, Node) ->
+    Name = get_node_config(Config, Node, nodename),
+    rabbit_control_helper:command(force_reset, Name).
 
 forget_cluster_node(Config, Node, NodeToForget) ->
     forget_cluster_node(Config, Node, NodeToForget, []).
