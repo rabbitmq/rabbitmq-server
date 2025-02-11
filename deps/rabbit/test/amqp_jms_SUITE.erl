@@ -129,48 +129,8 @@ message_types_jms_to_jms(Config) ->
 
 %% Send different message types from JMS client to Erlang AMQP 1.0 client.
 message_types_jms_to_amqp(Config) ->
-    TestName = QName = atom_to_binary(?FUNCTION_NAME),
-    ok = declare_queue(QName, <<"quorum">>, Config),
-    Address = rabbitmq_amqp_address:queue(QName),
-
-    %% The JMS client sends messaegs.
-    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [Address]}], Config),
-
-    %% The Erlang AMQP 1.0 client receives messages.
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address, settled),
-    {ok, Msg1} = amqp10_client:get_msg(Receiver),
-
-    ?assertEqual(
-       #'v1_0.amqp_value'{content = {utf8, <<"msg1🥕"/utf8>>}},
-       amqp10_msg:body(Msg1)),
-    {ok, Msg2} = amqp10_client:get_msg(Receiver),
-    ?assertEqual(
-       #'v1_0.amqp_value'{
-          content = {map, [
-                           {{utf8, <<"key1">>}, {utf8, <<"value">>}},
-                           {{utf8, <<"key2">>}, true},
-                           {{utf8, <<"key3">>}, {double, -1.1}},
-                           {{utf8, <<"key4">>}, {long, -1}}
-                          ]}},
-       amqp10_msg:body(Msg2)),
-    {ok, Msg3} = amqp10_client:get_msg(Receiver),
-    ?assertEqual(
-       [
-        #'v1_0.amqp_sequence'{
-           content = [{utf8, <<"value">>},
-                      true,
-                      {double, -1.1},
-                      {long, -1}]}
-       ],
-       amqp10_msg:body(Msg3)),
-
-    ok = detach_link_sync(Receiver),
-    ok = end_session_sync(Session),
-    ok = close_connection_sync(Connection),
-    ok = delete_queue(QName, Config).
+    TestName = atom_to_binary(?FUNCTION_NAME),
+    ok = run_jms_test(TestName, [], Config).
 
 temporary_queue_rpc(Config) ->
     TestName = QName = atom_to_binary(?FUNCTION_NAME),
