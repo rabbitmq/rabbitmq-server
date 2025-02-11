@@ -340,8 +340,6 @@ extract_token_value_from_map(R, Map, Acc, [KeyStr | Rest], Mapper) when is_map(M
         {ok, Value} when Rest =:= [] -> Acc ++ Mapper(R, Value);
         _ -> Acc
     end.
-%extract_token_value_from_map(_, _, Acc, _, _Mapper) ->
-%    Acc.
 
 extract_token_value_from_list(_, [], Acc, [], _Mapper) -> 
     Acc;
