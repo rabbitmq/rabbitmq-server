@@ -1563,13 +1563,13 @@ format(Config) ->
     case length(Nodes) of
         3 ->
             [_, Server2, Server3] = Nodes,
-            ok = rabbit_control_helper:command(stop_app, Server2),
             ok = rabbit_control_helper:command(stop_app, Server3),
+            ok = rabbit_control_helper:command(stop_app, Server2),
 
             Fmt2 = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
                                                ?FUNCTION_NAME, [QRecord, #{}]),
-            ok = rabbit_control_helper:command(start_app, Server2),
             ok = rabbit_control_helper:command(start_app, Server3),
+            ok = rabbit_control_helper:command(start_app, Server2),
             ?assertEqual(stream, proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
