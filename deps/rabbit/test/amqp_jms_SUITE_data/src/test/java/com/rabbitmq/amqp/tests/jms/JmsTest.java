@@ -1,12 +1,22 @@
 package com.rabbitmq.amqp.tests.jms;
 
+import static com.rabbitmq.amqp.tests.jms.TestUtils.protonClient;
+import static com.rabbitmq.amqp.tests.jms.TestUtils.protonConnection;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 import jakarta.jms.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import javax.naming.Context;
+
+import com.rabbitmq.qpid.protonj2.client.Client;
+import com.rabbitmq.qpid.protonj2.client.Delivery;
+import com.rabbitmq.qpid.protonj2.client.Receiver;
+import jakarta.jms.Queue;
 import org.junit.jupiter.api.Test;
 
+@JmsTestInfrastructure
 public class JmsTest {
 
     private javax.naming.Context getContext() throws Exception{
@@ -94,18 +104,20 @@ public class JmsTest {
         }
     }
 
+    String destination;
+
     @Test
     public void message_types_jms_to_amqp() throws Exception {
         Context context = getContext();
         ConnectionFactory factory = (ConnectionFactory) context.lookup("myConnection");
 
+        Queue queue = TestUtils.queue(destination);
+        String msg1 = "msg1🥕";
         try (Connection connection = factory.createConnection()) {
             Session session = connection.createSession();
-            Destination queue = (Destination) context.lookup("myQueue");
             MessageProducer producer = session.createProducer(queue);
 
             // TextMessage
-            String msg1 = "msg1🥕";
             TextMessage textMessage = session.createTextMessage(msg1);
             producer.send(textMessage);
 
@@ -126,12 +138,32 @@ public class JmsTest {
             producer.send(streamMessage);
         }
 
-    }
+        try (Client client = protonClient();
+             com.rabbitmq.qpid.protonj2.client.Connection amqpConnection = protonConnection(client)) {
+            Receiver receiver = amqpConnection.openReceiver(queue.getQueueName());
+            Delivery delivery = receiver.receive(10, TimeUnit.SECONDS);
+            assertNotNull(delivery);
+            assertEquals(msg1, delivery.message().body());
 
-    // Test that Request/reply pattern using a TemporaryQueue works.
-    // https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#requestreply-pattern-using-a-temporaryqueue-jakarta-ee
-    @Test
-    public void temporary_queue_rpc() throws Exception {
+            delivery = receiver.receive(10, TimeUnit.SECONDS);
+            assertNotNull(delivery);
+            com.rabbitmq.qpid.protonj2.client.Message<Map<String, Object>> mapMessage = delivery.message();
+            assertThat(mapMessage.body()).containsEntry("key1", "value")
+                .containsEntry("key2", true)
+                .containsEntry("key3", -1.1)
+                .containsEntry("key4", -1L);
+
+            delivery = receiver.receive(10, TimeUnit.SECONDS);
+            assertNotNull(delivery);
+            com.rabbitmq.qpid.protonj2.client.Message<List<Object>> listMessage = delivery.message();
+            assertThat(listMessage.body()).containsExactly("value", true, -1.1, -1L);
+    }
+  }
+
+  // Test that Request/reply pattern using a TemporaryQueue works.
+  // https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#requestreply-pattern-using-a-temporaryqueue-jakarta-ee
+  @Test
+  public void temporary_queue_rpc() throws Exception {
         Context context = getContext();
         ConnectionFactory factory = (ConnectionFactory) context.lookup("myConnection");
 
