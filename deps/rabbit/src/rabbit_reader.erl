@@ -202,7 +202,7 @@ conserve_resources(Pid, Source, {_, Conserve, _}) ->
 
 server_properties(Protocol) ->
     {ok, Product} = application:get_key(rabbit, description),
-    {ok, Version} = application:get_key(rabbit, vsn),
+    Version = rabbit_misc:version(),
 
     %% Get any configuration-specified server properties
     {ok, RawConfigServerProps} = application:get_env(rabbit,
