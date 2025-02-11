@@ -882,11 +882,11 @@ clustering_ok_with_ff_disabled_everywhere(Config) ->
     ok.
 
 clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
-    %% The test feature flag is enabled on node 1, but not on node 2.
+    %% The test feature flag is enabled on node 2, but not on node 1.
     %% Clustering the two nodes should be accepted because they are
-    %% compatible. Also, the feature flag will be enabled on node 2 as a
+    %% compatible. Also, the feature flag will be enabled on node 1 as a
     %% consequence.
-    enable_feature_flag_on(Config, 0, ff_from_testsuite),
+    enable_feature_flag_on(Config, 1, ff_from_testsuite),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
@@ -895,13 +895,13 @@ clustering_ok_with_ff_enabled_on_some_nodes(Config) ->
         true ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, ff_from_testsuite)),
-            ?assertEqual([true, false],
+            ?assertEqual([false, true],
                          is_feature_flag_enabled(Config, ff_from_testsuite));
         false ->
             ok
     end,
 
-    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
+    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 1)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
@@ -975,35 +975,35 @@ clustering_ok_with_new_ff_disabled(Config) ->
     ok.
 
 clustering_denied_with_new_ff_enabled(Config) ->
-    %% We declare a new (fake) feature flag on node 1. Clustering the
-    %% two nodes should then be forbidden because node 2 is sure it does
+    %% We declare a new (fake) feature flag on node 2. Clustering the
+    %% two nodes should then be forbidden because node 1 is sure it does
     %% not support it (because the application, `rabbit` is loaded and
     %% it does not have it).
     NewFeatureFlags = #{time_travel =>
                         #{desc => "Time travel with RabbitMQ",
                           provided_by => rabbit,
                           stability => stable}},
-    inject_ff_on_nodes(Config, [0], NewFeatureFlags),
-    enable_feature_flag_on(Config, 0, time_travel),
+    inject_ff_on_nodes(Config, [1], NewFeatureFlags),
+    enable_feature_flag_on(Config, 1, time_travel),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, false],
+        true  -> ?assertEqual([false, true],
                               is_feature_flag_supported(Config, time_travel)),
-                 ?assertEqual([true, false],
+                 ?assertEqual([false, true],
                               is_feature_flag_enabled(Config, time_travel));
         false -> ok
     end,
 
-    ?assertMatch({skip, _}, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
+    ?assertMatch({skip, _}, rabbit_ct_broker_helpers:cluster_nodes(Config, 1)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, false],
+        true  -> ?assertEqual([false, true],
                               is_feature_flag_supported(Config, time_travel)),
-                 ?assertEqual([true, false],
+                 ?assertEqual([false, true],
                               is_feature_flag_enabled(Config, time_travel));
         false -> ok
     end,
@@ -1040,33 +1040,33 @@ clustering_ok_with_new_ff_disabled_from_plugin_on_some_nodes(Config) ->
     ok.
 
 clustering_ok_with_new_ff_enabled_from_plugin_on_some_nodes(Config) ->
-    %% We first enable the test plugin on node 1 and enable its feature
+    %% We first enable the test plugin on node 2 and enable its feature
     %% flag, then we try to cluster them. Even though both nodes don't
     %% share the same feature flags (the test plugin exposes one), they
     %% should be considered compatible and the clustering should be
     %% allowed.
-    rabbit_ct_broker_helpers:enable_plugin(Config, 0, "my_plugin"),
-    enable_feature_flag_on(Config, 0, plugin_ff),
+    rabbit_ct_broker_helpers:enable_plugin(Config, 1, "my_plugin"),
+    enable_feature_flag_on(Config, 1, plugin_ff),
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
-        true  -> ?assertEqual([true, false],
+        true  -> ?assertEqual([false, true],
                               is_feature_flag_supported(Config, plugin_ff)),
-                 ?assertEqual([true, false],
+                 ?assertEqual([false, true],
                               is_feature_flag_enabled(Config, plugin_ff));
         false -> ok
     end,
 
-    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 0)),
+    ?assertEqual(Config, rabbit_ct_broker_helpers:cluster_nodes(Config, 1)),
 
     log_feature_flags_of_all_nodes(Config),
     case FFSubsysOk of
         true ->
             ?assertEqual([true, true],
                          is_feature_flag_supported(Config, plugin_ff)),
-            ?assertEqual([true, false],
+            ?assertEqual([false, true],
                          is_feature_flag_enabled(Config, plugin_ff));
         false ->
             ok
