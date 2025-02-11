@@ -19,11 +19,16 @@ package com.rabbitmq.amqp.tests.jms;
 
 import static java.lang.String.format;
 
+import com.rabbitmq.qpid.protonj2.client.Client;
+import com.rabbitmq.qpid.protonj2.client.ConnectionOptions;
+import com.rabbitmq.qpid.protonj2.client.exceptions.ClientException;
 import jakarta.jms.Connection;
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.JMSException;
 import jakarta.jms.Queue;
 import java.lang.reflect.Method;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.UUID;
 import org.apache.qpid.jms.JmsConnectionFactory;
 import org.apache.qpid.jms.JmsQueue;
@@ -39,6 +44,24 @@ final class TestUtils {
   static String brokerUri() {
     String uri = System.getProperty("rmq_broker_uri", "amqp://localhost:5672");
     return uri == null || uri.isEmpty() ? DEFAULT_BROKER_URI : uri;
+  }
+
+  static String brokerHost() {
+    try {
+      URI uri = new URI(brokerUri());
+      return uri.getHost();
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  static int brokerPort() {
+    try {
+      URI uri = new URI(brokerUri());
+      return uri.getPort();
+    } catch (URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   static String adminUsername() {
@@ -60,6 +83,20 @@ final class TestUtils {
   static Queue queue(String name) {
     // no path encoding, use names with e.g. ASCII characters only
     return new JmsQueue("/queues/" + name);
+  }
+
+  static Client protonClient() {
+    return Client.create();
+  }
+
+  static com.rabbitmq.qpid.protonj2.client.Connection protonConnection(Client client) {
+    ConnectionOptions connectionOptions = new ConnectionOptions().virtualHost("vhost:/");
+    connectionOptions.saslOptions().addAllowedMechanism("ANONYMOUS");
+    try {
+      return client.connect(brokerHost(), brokerPort(), connectionOptions);
+    } catch (ClientException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   static String name(TestInfo info) {
