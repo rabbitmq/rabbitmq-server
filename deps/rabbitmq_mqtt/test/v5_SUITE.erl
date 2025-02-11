@@ -1665,7 +1665,8 @@ will_delay_node_restart(Config) ->
     {ok, _, [0]} = emqtt:subscribe(Sub0a, Topic),
     Sub1 = connect(<<"sub1">>, Config, 1, []),
     {ok, _, [0]} = emqtt:subscribe(Sub1, Topic),
-    WillDelaySecs = 10,
+    %% In mixed version mode with Khepri, draining the node can take 30 seconds.
+    WillDelaySecs = 40,
     C0a = connect(<<"will">>, Config, 0,
                   [{properties, #{'Session-Expiry-Interval' => 900}},
                    {will_props, #{'Will-Delay-Interval' => WillDelaySecs}},
