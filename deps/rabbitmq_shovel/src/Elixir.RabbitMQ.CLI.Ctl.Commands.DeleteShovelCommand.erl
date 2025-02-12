@@ -84,10 +84,6 @@ run([Name], #{node := Node, vhost := VHost}) ->
                         {badrpc, _} = Error ->
                             Error;
                         {error, not_found} ->
-                            ErrMsg = rabbit_misc:format("Shovel with the given name was not found "
-                                                        "on the target node '~ts' and/or virtual host '~ts'. "
-                                                        "It may be failing to connect and report its state, will delete its runtime parameter...",
-                                                        [Node, VHost]),
                             try_force_removing(HostingNode, VHost, Name, ActingUser),
                             {error, rabbit_data_coercion:to_binary(ErrMsg)};
                         ok ->
@@ -117,4 +113,4 @@ try_clearing_runtime_parameter(Node, VHost, ShovelName, ActingUser) ->
     _ = rabbit_misc:rpc_call(Node, rabbit_runtime_parameters, clear, [VHost, <<"shovel">>, ShovelName, ActingUser]).
 
 try_stopping_child_process(Node, VHost, ShovelName) ->
-    _ = rabbit_misc:rpc_call(Node, rabbit_shovel_dyn_worker_sup_sup, stop_and_delete_child, [{VHost, ShovelName}]).
+    _ = rabbit_misc:rpc_call(Node, rabbit_shovel_dyn_worker_sup_sup, stop_child, [{VHost, ShovelName}]).
