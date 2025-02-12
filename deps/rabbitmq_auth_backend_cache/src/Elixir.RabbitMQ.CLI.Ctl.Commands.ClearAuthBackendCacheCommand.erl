@@ -5,7 +5,7 @@
 %%  Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
--module('Elixir.RabbitMQ.CLI.Ctl.Commands.AuthClearCacheCommand').
+-module('Elixir.RabbitMQ.CLI.Ctl.Commands.ClearAuthBackendCacheCommand').
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
@@ -38,7 +38,7 @@ switches() ->
     [].
 
 usage() ->
-    <<"auth_clear_cache">>.
+    <<"clear_auth_backend_cache">>.
 
 usage_additional() -> 
     [].
@@ -50,7 +50,7 @@ help_section() ->
     {plugin, rabbitmq_auth_backend_cache}.
 
 description() ->
-    <<"Clear cache of authorization decisions">>.
+    <<"Clears rabbitmq_auth_backend_cache plugin's cache on the target node">>.
 
 flags() ->
     [].
@@ -65,7 +65,7 @@ merge_defaults(A, O) ->
     {A, O}.
 
 banner(_, _) ->
-    erlang:iolist_to_binary([<<"Will delete all cached authorization decisions">>]).
+    <<"Will clear rabbitmq_auth_backend_cache plugin's cache on the target node...">>.
 
 run(_Args, #{node := Node}) ->
     case rabbit_misc:rpc_call(Node, rabbit_auth_backend_cache, clear_cache_cluster_wide, []) of
