@@ -69,7 +69,7 @@ sub_groups() ->
        ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping
       ]},
      {ssl_user_with_invalid_client_id_in_cert_san_dns, [],
-       [client_id_from_cert_san_dns
+       [invalid_client_id_from_cert_san_dns
        ]}, 
      {ssl_user_with_client_id_in_cert_san_dns, [],
        [client_id_from_cert_san_dns
