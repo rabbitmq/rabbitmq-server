@@ -85,8 +85,10 @@
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(HIBERNATE_AFTER, 6_000).
 -define(CREDIT_REPLY_TIMEOUT, 30_000).
+%% Capability defined in amqp-bindmap-jms-v1.0-wd10 [5.2] and sent by Qpid JMS client.
+-define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
 
--export([start_link/8,
+-export([start_link/9,
          process_frame/2,
          list_local/0,
          conserve_resources/3,
@@ -163,6 +165,7 @@
           routing_key :: rabbit_types:routing_key() | to | subject,
           %% queue_name_bin is only set if the link target address refers to a queue.
           queue_name_bin :: undefined | rabbit_misc:resource_name(),
+          dynamic :: boolean(),
           max_message_size :: pos_integer(),
           delivery_count :: sequence_no(),
           credit :: rabbit_queue_type:credit(),
@@ -206,6 +209,7 @@
           %% or a topic filter, an outgoing link will always consume from a queue.
           queue_name :: rabbit_amqqueue:name(),
           queue_type :: rabbit_queue_type:queue_type(),
+          dynamic :: boolean(),
           send_settled :: boolean(),
           max_message_size :: unlimited | pos_integer(),
 
@@ -260,6 +264,7 @@
 
 -record(cfg, {
           outgoing_max_frame_size :: unlimited | pos_integer(),
+          container_id :: binary(),
           reader_pid :: rabbit_types:connection(),
           writer_pid :: pid(),
           user :: rabbit_types:user(),
@@ -382,15 +387,17 @@
 
 -type state() :: #state{}.
 
-start_link(ReaderPid, WriterPid, ChannelNum, FrameMax, User, Vhost, ConnName, BeginFrame) ->
-    Args = {ReaderPid, WriterPid, ChannelNum, FrameMax, User, Vhost, ConnName, BeginFrame},
+start_link(ReaderPid, WriterPid, ChannelNum, FrameMax,
+           User, Vhost, ContainerId, ConnName, BeginFrame) ->
+    Args = {ReaderPid, WriterPid, ChannelNum, FrameMax,
+            User, Vhost, ContainerId, ConnName, BeginFrame},
     Opts = [{hibernate_after, ?HIBERNATE_AFTER}],
     gen_server:start_link(?MODULE, Args, Opts).
 
 process_frame(Pid, FrameBody) ->
     gen_server:cast(Pid, {frame_body, FrameBody}).
 
-init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
+init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, ConnName,
       #'v1_0.begin'{
          %% "If a session is locally initiated, the remote-channel MUST NOT be set." [2.7.2]
          remote_channel = undefined,
@@ -401,6 +408,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
     logger:update_process_metadata(#{channel_number => ChannelNum,
+                                     amqp_container => ContainerId,
                                      connection => ConnName,
                                      vhost => Vhost,
                                      user => User#user.username}),
@@ -453,7 +461,8 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
                 remote_incoming_window = RemoteIncomingWindow,
                 remote_outgoing_window = RemoteOutgoingWindow,
                 outgoing_delivery_id = ?INITIAL_OUTGOING_DELIVERY_ID,
-                cfg = #cfg{reader_pid = ReaderPid,
+                cfg = #cfg{container_id = ContainerId,
+                           reader_pid = ReaderPid,
                            writer_pid = WriterPid,
                            outgoing_max_frame_size = MaxFrameSize,
                            user = User,
@@ -470,14 +479,17 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ConnName,
 
 terminate(_Reason, #state{incoming_links = IncomingLinks,
                           outgoing_links = OutgoingLinks,
-                          queue_states = QStates}) ->
+                          queue_states = QStates,
+                          cfg = Cfg}) ->
     maps:foreach(
-      fun (_, _) ->
-              rabbit_global_counters:publisher_deleted(?PROTOCOL)
+      fun (_, Link) ->
+              rabbit_global_counters:publisher_deleted(?PROTOCOL),
+              maybe_delete_dynamic_queue(Link, Cfg)
       end, IncomingLinks),
     maps:foreach(
-      fun (_, _) ->
-              rabbit_global_counters:consumer_deleted(?PROTOCOL)
+      fun (_, Link) ->
+              rabbit_global_counters:consumer_deleted(?PROTOCOL),
+              maybe_delete_dynamic_queue(Link, Cfg)
       end, OutgoingLinks),
     ok = rabbit_queue_type:close(QStates).
 
@@ -602,7 +614,9 @@ handle_cast({reset_authz, User}, #state{cfg = Cfg} = State0) ->
             noreply(State)
     catch exit:#'v1_0.error'{} = Error ->
               log_error_and_close_session(Error, State1)
-    end.
+    end;
+handle_cast(shutdown, State) ->
+    {stop, normal, State}.
 
 log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
@@ -1092,39 +1106,52 @@ handle_frame(#'v1_0.attach'{handle = ?UINT(Handle)} = Attach,
     end;
 
 handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
-             State0 = #state{incoming_links = IncomingLinks,
+             State0 = #state{incoming_links = IncomingLinks0,
                              outgoing_links = OutgoingLinks0,
                              outgoing_unsettled_map = Unsettled0,
                              outgoing_pending = Pending0,
                              queue_states = QStates0,
-                             cfg = #cfg{user = #user{username = Username}}}) ->
+                             cfg = Cfg = #cfg{user = #user{username = Username}}}) ->
     {OutgoingLinks, Unsettled, Pending, QStates} =
     case maps:take(HandleInt, OutgoingLinks0) of
-        {#outgoing_link{queue_name = QName}, OutgoingLinks1} ->
+        {#outgoing_link{queue_name = QName,
+                        dynamic = Dynamic}, OutgoingLinks1} ->
             Ctag = handle_to_ctag(HandleInt),
             {Unsettled1, Pending1} = remove_outgoing_link(Ctag, Unsettled0, Pending0),
-            case rabbit_amqqueue:lookup(QName) of
-                {ok, Q} ->
-                    Spec = #{consumer_tag => Ctag,
-                             reason => remove,
-                             user => Username},
-                    case rabbit_queue_type:cancel(Q, Spec, QStates0) of
-                        {ok, QStates1} ->
-                            {OutgoingLinks1, Unsettled1, Pending1, QStates1};
-                        {error, Reason} ->
-                            protocol_error(
-                              ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                              "Failed to remove consumer from ~s: ~tp",
-                              [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
-                    end;
-                {error, not_found} ->
-                    {OutgoingLinks1, Unsettled1, Pending1, QStates0}
+            case Dynamic of
+                true ->
+                    delete_dynamic_queue(QName, Cfg),
+                    {OutgoingLinks1, Unsettled1, Pending1, QStates0};
+                false ->
+                    case rabbit_amqqueue:lookup(QName) of
+                        {ok, Q} ->
+                            Spec = #{consumer_tag => Ctag,
+                                     reason => remove,
+                                     user => Username},
+                            case rabbit_queue_type:cancel(Q, Spec, QStates0) of
+                                {ok, QStates1} ->
+                                    {OutgoingLinks1, Unsettled1, Pending1, QStates1};
+                                {error, Reason} ->
+                                    protocol_error(
+                                      ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                      "Failed to remove consumer from ~s: ~tp",
+                                      [rabbit_misc:rs(amqqueue:get_name(Q)), Reason])
+                            end;
+                        {error, not_found} ->
+                            {OutgoingLinks1, Unsettled1, Pending1, QStates0}
+                    end
             end;
         error ->
             {OutgoingLinks0, Unsettled0, Pending0, QStates0}
     end,
-
-    State1 = State0#state{incoming_links = maps:remove(HandleInt, IncomingLinks),
+    IncomingLinks = case maps:take(HandleInt, IncomingLinks0) of
+                        {IncomingLink, IncomingLinks1} ->
+                            maybe_delete_dynamic_queue(IncomingLink, Cfg),
+                            IncomingLinks1;
+                        error ->
+                            IncomingLinks0
+                    end,
+    State1 = State0#state{incoming_links = IncomingLinks,
                           outgoing_links = OutgoingLinks,
                           outgoing_unsettled_map = Unsettled,
                           outgoing_pending = Pending,
@@ -1269,29 +1296,33 @@ handle_attach(#'v1_0.attach'{
     reply_frames([Reply], State);
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
-                             name = LinkName = {utf8, LinkName0},
+                             name = LinkName = {utf8, LinkNameBin},
                              handle = Handle = ?UINT(HandleInt),
                              source = Source,
                              snd_settle_mode = MaybeSndSettleMode,
-                             target = Target = #'v1_0.target'{address = TargetAddress},
+                             target = Target0,
                              initial_delivery_count = DeliveryCount = ?UINT(DeliveryCountInt)
                             },
               State0 = #state{incoming_links = IncomingLinks0,
                               permission_cache = PermCache0,
-                              cfg = #cfg{max_link_credit = MaxLinkCredit,
+                              cfg = #cfg{container_id = ContainerId,
+                                         reader_pid = ReaderPid,
+                                         max_link_credit = MaxLinkCredit,
                                          vhost = Vhost,
                                          user = User}}) ->
-    case ensure_target(Target, Vhost, User, PermCache0) of
-        {ok, Exchange, RoutingKey, QNameBin, PermCache} ->
+    case ensure_target(Target0, LinkNameBin, Vhost, User,
+                       ContainerId, ReaderPid, PermCache0) of
+        {ok, Exchange, RoutingKey, QNameBin, Target, PermCache} ->
             SndSettleMode = snd_settle_mode(MaybeSndSettleMode),
             MaxMessageSize = persistent_term:get(max_message_size),
             IncomingLink = #incoming_link{
-                              name = LinkName0,
+                              name = LinkNameBin,
                               snd_settle_mode = SndSettleMode,
-                              target_address = address(TargetAddress),
+                              target_address = address(Target#'v1_0.target'.address),
                               exchange = Exchange,
                               routing_key = RoutingKey,
                               queue_name_bin = QNameBin,
+                              dynamic = default(Target#'v1_0.target'.dynamic, false),
                               max_message_size = MaxMessageSize,
                               delivery_count = DeliveryCountInt,
                               credit = MaxLinkCredit},
@@ -1325,10 +1356,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
-                             name = LinkName = {utf8, LinkName0},
+                             name = LinkName = {utf8, LinkNameBin},
                              handle = Handle = ?UINT(HandleInt),
-                             source = Source = #'v1_0.source'{address = SourceAddress,
-                                                              filter = DesiredFilter},
+                             source = Source0 = #'v1_0.source'{filter = DesiredFilter},
                              snd_settle_mode = SndSettleMode,
                              rcv_settle_mode = RcvSettleMode,
                              max_message_size = MaybeMaxMessageSize,
@@ -1339,6 +1369,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                              topic_permission_cache = TopicPermCache0,
                              cfg = #cfg{vhost = Vhost,
                                         user = User = #user{username = Username},
+                                        container_id = ContainerId,
                                         reader_pid = ReaderPid}}) ->
     {SndSettled, EffectiveSndSettleMode} =
     case SndSettleMode of
@@ -1350,10 +1381,11 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
             %% client only for durable messages.
             {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
     end,
-    case ensure_source(Source, Vhost, User, PermCache0, TopicPermCache0) of
+    case ensure_source(Source0, LinkNameBin, Vhost, User, ContainerId,
+                       ReaderPid, PermCache0, TopicPermCache0) of
         {error, Reason} ->
             protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach rejected: ~tp", [Reason]);
-        {ok, QName = #resource{name = QNameBin}, PermCache1, TopicPermCache} ->
+        {ok, QName = #resource{name = QNameBin}, Source, PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
                    QName,
@@ -1439,12 +1471,14 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           %% Echo back that we will respect the client's requested max-message-size.
                                           max_message_size = MaybeMaxMessageSize,
                                           offered_capabilities = OfferedCaps},
+                                   {utf8, SourceAddress} = Source#'v1_0.source'.address,
                                    MaxMessageSize = max_message_size(MaybeMaxMessageSize),
                                    Link = #outgoing_link{
-                                             name = LinkName0,
-                                             source_address = address(SourceAddress),
+                                             name = LinkNameBin,
+                                             source_address = SourceAddress,
                                              queue_name = queue_resource(Vhost, QNameBin),
                                              queue_type = QType,
+                                             dynamic = default(Source#'v1_0.source'.dynamic, false),
                                              send_settled = SndSettled,
                                              max_message_size = MaxMessageSize,
                                              credit_api_version = CreditApiVsn,
@@ -2614,17 +2648,53 @@ maybe_grant_mgmt_link_credit(Credit, _, _) ->
     {Credit, []}.
 
 -spec ensure_source(#'v1_0.source'{},
+                    binary(),
                     rabbit_types:vhost(),
                     rabbit_types:user(),
+                    binary(),
+                    rabbit_types:connection(),
                     permission_cache(),
                     topic_permission_cache()) ->
-    {ok, rabbit_amqqueue:name(), permission_cache(), topic_permission_cache()} |
+    {ok,
+     rabbit_amqqueue:name(),
+     #'v1_0.source'{},
+     permission_cache(),
+     topic_permission_cache()} |
     {error, term()}.
-ensure_source(#'v1_0.source'{dynamic = true}, _, _, _, _) ->
-    exit_not_implemented("Dynamic sources not supported");
-ensure_source(#'v1_0.source'{address = Address,
-                             durable = Durable},
-              Vhost, User, PermCache, TopicPermCache) ->
+ensure_source(#'v1_0.source'{
+                 address = undefined,
+                 dynamic = true,
+                 %% We will reply with the actual node properties.
+                 dynamic_node_properties = _IgnoreDesiredProperties,
+                 capabilities = {array, symbol, Caps}
+                } = Source0,
+              LinkName, Vhost, User, ContainerId,
+              ConnPid, PermCache0, TopicPermCache) ->
+    case lists:member({symbol, ?CAP_TEMPORARY_QUEUE}, Caps) of
+        true ->
+            {QNameBin, Address, Props, PermCache} =
+            declare_dynamic_queue(ContainerId, LinkName, Vhost, User, ConnPid, PermCache0),
+            Source = Source0#'v1_0.source'{
+                               address = {utf8, Address},
+                               %% While Khepri stores queue records durably, the terminus
+                               %% - i.e. the existence of this receiver - is not stored durably.
+                               durable = ?V_1_0_TERMINUS_DURABILITY_NONE,
+                               expiry_policy = ?V_1_0_TERMINUS_EXPIRY_POLICY_LINK_DETACH,
+                               timeout = {uint, 0},
+                               dynamic_node_properties = Props,
+                               distribution_mode = ?V_1_0_STD_DIST_MODE_MOVE,
+                               capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                              },
+            QName = queue_resource(Vhost, QNameBin),
+            {ok, QName, Source, PermCache, TopicPermCache};
+        false ->
+            exit_not_implemented("Dynamic source not supported: ~p", [Source0])
+    end;
+ensure_source(Source = #'v1_0.source'{dynamic = true}, _, _, _, _, _, _, _) ->
+    exit_not_implemented("Dynamic source not supported: ~p", [Source]);
+ensure_source(Source = #'v1_0.source'{address = Address,
+                                      durable = Durable},
+              _LinkName, Vhost, User, _ContainerId, _ConnPid, PermCache, TopicPermCache) ->
     case Address of
         {utf8, <<"/queues/", QNameBinQuoted/binary>>} ->
             %% The only possible v2 source address format is:
@@ -2633,15 +2703,20 @@ ensure_source(#'v1_0.source'{address = Address,
                 QNameBin ->
                     QName = queue_resource(Vhost, QNameBin),
                     ok = exit_if_absent(QName),
-                    {ok, QName, PermCache, TopicPermCache}
+                    {ok, QName, Source, PermCache, TopicPermCache}
             catch error:_ ->
                       {error, {bad_address, Address}}
             end;
         {utf8, SourceAddr} ->
             case address_v1_permitted() of
                 true ->
-                    ensure_source_v1(SourceAddr, Vhost, User, Durable,
-                                     PermCache, TopicPermCache);
+                    case ensure_source_v1(SourceAddr, Vhost, User, Durable,
+                                          PermCache, TopicPermCache) of
+                        {ok, QName, PermCache1, TopicPermCache1} ->
+                            {ok, QName, Source, PermCache1, TopicPermCache1};
+                        Err ->
+                            Err
+                    end;
                 false ->
                     {error, {amqp_address_v1_not_permitted, Address}}
             end;
@@ -2687,42 +2762,71 @@ ensure_source_v1(Address,
             Err
     end.
 
-address(undefined) ->
-    null;
-address({utf8, String}) ->
-    String.
-
 -spec ensure_target(#'v1_0.target'{},
+                    binary(),
                     rabbit_types:vhost(),
                     rabbit_types:user(),
+                    binary(),
+                    rabbit_types:connection(),
                     permission_cache()) ->
     {ok,
      rabbit_types:exchange() | rabbit_exchange:name() | to,
      rabbit_types:routing_key() | to | subject,
      rabbit_misc:resource_name() | undefined,
+     #'v1_0.target'{},
      permission_cache()} |
     {error, term()}.
-ensure_target(#'v1_0.target'{dynamic = true}, _, _, _) ->
-    exit_not_implemented("Dynamic targets not supported");
-ensure_target(#'v1_0.target'{address = Address,
-                             durable = Durable},
-              Vhost, User, PermCache) ->
+ensure_target(#'v1_0.target'{
+                 address = undefined,
+                 dynamic = true,
+                 %% We will reply with the actual node properties.
+                 dynamic_node_properties = _IgnoreDesiredProperties,
+                 capabilities = {array, symbol, Caps}
+                } = Target0,
+              LinkName, Vhost, User, ContainerId, ConnPid, PermCache0) ->
+    case lists:member({symbol, ?CAP_TEMPORARY_QUEUE}, Caps) of
+        true ->
+            {QNameBin, Address, Props, PermCache1} =
+            declare_dynamic_queue(ContainerId, LinkName, Vhost, User, ConnPid, PermCache0),
+            {ok, Exchange, PermCache} = check_exchange(?DEFAULT_EXCHANGE_NAME, User, Vhost, PermCache1),
+            Target = #'v1_0.target'{
+                        address = {utf8, Address},
+                        %% While Khepri stores queue records durably,
+                        %% the terminus - i.e. the existence of this producer - is not stored durably.
+                        durable = ?V_1_0_TERMINUS_DURABILITY_NONE,
+                        expiry_policy = ?V_1_0_TERMINUS_EXPIRY_POLICY_LINK_DETACH,
+                        timeout = {uint, 0},
+                        dynamic = true,
+                        dynamic_node_properties = Props,
+                        capabilities = rabbit_amqp_util:capabilities([?CAP_TEMPORARY_QUEUE])
+                       },
+            {ok, Exchange, QNameBin, QNameBin, Target, PermCache};
+        false ->
+            exit_not_implemented("Dynamic target not supported: ~p", [Target0])
+    end;
+ensure_target(Target = #'v1_0.target'{dynamic = true}, _, _, _, _, _, _) ->
+    exit_not_implemented("Dynamic target not supported: ~p", [Target]);
+ensure_target(Target = #'v1_0.target'{address = Address,
+                                      durable = Durable},
+              _LinkName, Vhost, User, _ContainerId, _ConnPid, PermCache0) ->
     case target_address_version(Address) of
         2 ->
             case ensure_target_v2(Address, Vhost) of
                 {ok, to, RKey, QNameBin} ->
-                    {ok, to, RKey, QNameBin, PermCache};
+                    {ok, to, RKey, QNameBin, Target, PermCache0};
                 {ok, XNameBin, RKey, QNameBin} ->
-                    check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache);
+                    {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache0),
+                    {ok, Exchange, RKey, QNameBin, Target, PermCache};
                 {error, _} = Err ->
                     Err
             end;
         1 ->
             case address_v1_permitted() of
                 true ->
-                    case ensure_target_v1(Address, Vhost, User, Durable, PermCache) of
+                    case ensure_target_v1(Address, Vhost, User, Durable, PermCache0) of
                         {ok, XNameBin, RKey, QNameBin, PermCache1} ->
-                            check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache1);
+                            {ok, Exchange, PermCache} = check_exchange(XNameBin, User, Vhost, PermCache1),
+                            {ok, Exchange, RKey, QNameBin, Target, PermCache};
                         {error, _} = Err ->
                             Err
                     end;
@@ -2731,7 +2835,7 @@ ensure_target(#'v1_0.target'{address = Address,
             end
     end.
 
-check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache0) ->
+check_exchange(XNameBin, User, Vhost, PermCache0) ->
     XName = exchange_resource(Vhost, XNameBin),
     PermCache = check_resource_access(XName, write, User, PermCache0),
     case rabbit_exchange:lookup(XName) of
@@ -2745,7 +2849,7 @@ check_exchange(XNameBin, RKey, QNameBin, User, Vhost, PermCache0) ->
                            <<"amq.", _/binary>> -> X;
                            _ -> XName
                        end,
-            {ok, Exchange, RKey, QNameBin, PermCache};
+            {ok, Exchange, PermCache};
         {error, not_found} ->
             exit_not_found(XName)
     end.
@@ -3033,7 +3137,10 @@ credit_reply_timeout(QType, QName) ->
     protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
 
 default(undefined, Default) -> Default;
-default(Thing,    _Default) -> Thing.
+default(Thing, _Default) -> Thing.
+
+address(undefined) -> null;
+address({utf8, String}) -> String.
 
 snd_settle_mode({ubyte, Val}) ->
     case Val of
@@ -3247,20 +3354,20 @@ ensure_terminus(Type, {exchange, {XNameList, _RoutingKey}}, Vhost, User, Durabil
     ok = exit_if_absent(exchange, Vhost, XNameList),
     case Type of
         target -> {undefined, PermCache};
-        source -> declare_queue(generate_queue_name(), Vhost, User, Durability, PermCache)
+        source -> declare_queue_v1(generate_queue_name_v1(), Vhost, User, Durability, PermCache)
     end;
 ensure_terminus(target, {topic, _bindingkey}, _, _, _, PermCache) ->
     %% exchange amq.topic exists
     {undefined, PermCache};
 ensure_terminus(source, {topic, _BindingKey}, Vhost, User, Durability, PermCache) ->
     %% exchange amq.topic exists
-    declare_queue(generate_queue_name(), Vhost, User, Durability, PermCache);
+    declare_queue_v1(generate_queue_name_v1(), Vhost, User, Durability, PermCache);
 ensure_terminus(target, {queue, undefined}, _, _, _, PermCache) ->
     %% Target "/queue" means publish to default exchange with message subject as routing key.
     %% Default exchange exists.
     {undefined, PermCache};
 ensure_terminus(_, {queue, QNameList}, Vhost, User, Durability, PermCache) ->
-    declare_queue(unicode:characters_to_binary(QNameList), Vhost, User, Durability, PermCache);
+    declare_queue_v1(unicode:characters_to_binary(QNameList), Vhost, User, Durability, PermCache);
 ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _, PermCache) ->
     %% Target "/amq/queue/" is handled specially due to AMQP legacy:
     %% "Queue names starting with "amq." are reserved for pre-declared and
@@ -3285,22 +3392,39 @@ exit_if_absent(ResourceName = #resource{kind = Kind}) ->
         false -> exit_not_found(ResourceName)
     end.
 
-generate_queue_name() ->
+generate_queue_name_v1() ->
     rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.gen").
+
+%% "The generated name of the address SHOULD include the link name and the
+%% container-id of the remote container to allow for ease of identification." [3.5.4]
+%% Let's include container-id and link name if they are not very long
+%% because the generated address might be sent in every message.
+generate_queue_name_dynamic(ContainerId, LinkName)
+  when byte_size(ContainerId) + byte_size(LinkName) < 150 ->
+    Prefix = <<"amq.dyn-", ContainerId/binary, "-", LinkName/binary>>,
+    rabbit_guid:binary(rabbit_guid:gen_secure(), Prefix);
+generate_queue_name_dynamic(_, _) ->
+    rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.dyn.gen").
+
+declare_queue_v1(QNameBin, Vhost, User, TerminusDurability, PermCache0) ->
+    Durable = queue_is_durable(TerminusDurability),
+    {ok, PermCache} = declare_queue(QNameBin, Vhost, User, Durable, none, PermCache0),
+    {QNameBin, PermCache}.
 
 declare_queue(QNameBin,
               Vhost,
               User = #user{username = Username},
-              TerminusDurability,
+              Durable,
+              QOwner,
               PermCache0) ->
     QName = queue_resource(Vhost, QNameBin),
     PermCache = check_resource_access(QName, configure, User, PermCache0),
     rabbit_core_metrics:queue_declared(QName),
     Q0 = amqqueue:new(QName,
                       _Pid = none,
-                      queue_is_durable(TerminusDurability),
+                      Durable,
                       _AutoDelete = false,
-                      _QOwner = none,
+                      QOwner,
                       _QArgs = [],
                       Vhost,
                       #{user => Username},
@@ -3320,7 +3444,40 @@ declare_queue(QNameBin,
                            "Failed to declare ~s: ~p",
                            [rabbit_misc:rs(QName), Other])
     end,
-    {QNameBin, PermCache}.
+    {ok, PermCache}.
+
+declare_dynamic_queue(ContainerId, LinkName, Vhost, User, ConnPid, PermCache0) ->
+    QNameBin = generate_queue_name_dynamic(ContainerId, LinkName),
+    {ok, PermCache} = declare_queue(QNameBin, Vhost, User, true, ConnPid, PermCache0),
+    QNameBinQuoted = uri_string:quote(QNameBin),
+    Address = <<"/queues/", QNameBinQuoted/binary>>,
+    Props = {map, [{{symbol, <<"lifetime-policy">>},
+                    {described, ?V_1_0_SYMBOL_DELETE_ON_CLOSE, {list, []}}},
+                   {{symbol, <<"supported-dist-modes">>},
+                    {array, symbol, [?V_1_0_STD_DIST_MODE_MOVE]}}]},
+    {QNameBin, Address, Props, PermCache}.
+
+maybe_delete_dynamic_queue(#incoming_link{dynamic = true,
+                                          queue_name_bin = QNameBin},
+                           Cfg = #cfg{vhost = Vhost}) ->
+    QName = queue_resource(Vhost, QNameBin),
+    delete_dynamic_queue(QName, Cfg);
+maybe_delete_dynamic_queue(#outgoing_link{dynamic = true,
+                                          queue_name = QName},
+                           Cfg) ->
+    delete_dynamic_queue(QName, Cfg);
+maybe_delete_dynamic_queue(_, _) ->
+    ok.
+
+delete_dynamic_queue(QName, #cfg{user = #user{username = Username}}) ->
+    %% No real need to check for 'configure' access again since this queue is owned by
+    %% this connection and the user had 'configure' access when the queue got declared.
+    _ = rabbit_amqqueue:with(
+          QName,
+          fun(Q) ->
+                  rabbit_queue_type:delete(Q, false, false, Username)
+          end),
+    ok.
 
 outcomes(#'v1_0.source'{outcomes = undefined}) ->
     {array, symbol, ?OUTCOMES};

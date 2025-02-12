@@ -70,9 +70,9 @@ sub_groups() ->
       ]},
      {ssl_user_with_invalid_client_id_in_cert_san_dns, [],
        [invalid_client_id_from_cert_san_dns
-       ]}, 
+       ]},
      {ssl_user_with_client_id_in_cert_san_dns, [],
-       [client_id_from_cert_san_dns
+       [client_id_from_cert_san_dns        
        ]},
      {ssl_user_with_client_id_in_cert_san_dns_1, [],
        [client_id_from_cert_san_dns_1
@@ -209,8 +209,8 @@ mqtt_config(no_ssl_user) ->
 mqtt_config(client_id_propagation) ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, true}]};
-mqtt_config(T) when T == ssl_user_with_invalid_client_id_in_cert_san_dns;
-                         ssl_user_with_client_id_in_cert_san_dns ->
+mqtt_config(T) when T == ssl_user_with_client_id_in_cert_san_dns;
+                    T == ssl_user_with_invalid_client_id_in_cert_san_dns ->
     {rabbitmq_mqtt, [{ssl_cert_login,  true},
                      {allow_anonymous, false},
                      {ssl_cert_client_id_from, subject_alternative_name},
@@ -591,8 +591,8 @@ client_id_from_cert_dn(Config) ->
 invalid_client_id_from_cert_san_dns(Config) ->
     MqttClientId = <<"other_client_id">>,
     {ok, C} = connect_ssl(MqttClientId, Config),
-    {error, {client_identifier_not_valid, _}} = emqtt:connect(C),
-    unlink(C).
+    unlink(C),
+    {error, {client_identifier_not_valid, _}} = emqtt:connect(C).
 
 ssl_user_vhost_parameter_mapping_success(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).

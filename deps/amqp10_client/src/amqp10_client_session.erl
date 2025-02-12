@@ -698,23 +698,39 @@ build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
 
 make_source(#{role := {sender, _}}) ->
     #'v1_0.source'{};
-make_source(#{role := {receiver, #{address := Address} = Source, _Pid}, filter := Filter}) ->
+make_source(#{role := {receiver, Source, _Pid},
+              filter := Filter}) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
+    Dynamic = maps:get(dynamic, Source, false),
     TranslatedFilter = translate_filters(Filter),
-    #'v1_0.source'{address = {utf8, Address},
+    #'v1_0.source'{address = make_address(Source),
                    durable = {uint, Durable},
-                   filter = TranslatedFilter}.
+                   dynamic = Dynamic,
+                   filter = TranslatedFilter,
+                   capabilities = make_capabilities(Source)}.
 
 make_target(#{role := {receiver, _Source, _Pid}}) ->
     #'v1_0.target'{};
-make_target(#{role := {sender, #{address := Address} = Target}}) ->
+make_target(#{role := {sender, Target}}) ->
     Durable = translate_terminus_durability(maps:get(durable, Target, none)),
-    TargetAddr = case is_binary(Address) of
-                     true -> {utf8, Address};
-                     false -> Address
-                 end,
-    #'v1_0.target'{address = TargetAddr,
-                   durable = {uint, Durable}}.
+    Dynamic = maps:get(dynamic, Target, false),
+    #'v1_0.target'{address = make_address(Target),
+                   durable = {uint, Durable},
+                   dynamic = Dynamic,
+                   capabilities = make_capabilities(Target)}.
+
+make_address(#{address := Addr}) ->
+    if is_binary(Addr) ->
+           {utf8, Addr};
+       is_atom(Addr) ->
+           Addr
+    end.
+
+make_capabilities(#{capabilities := Caps0}) ->
+    Caps = [{symbol, C} || C <- Caps0],
+    {array, symbol, Caps};
+make_capabilities(_) ->
+    undefined.
 
 max_message_size(#{max_message_size := Size})
   when is_integer(Size) andalso

@@ -220,10 +220,17 @@ terminate(_, _) ->
 %%--------------------------------------------------------------------------
 %% error handling / termination
 
-close(Error, State = #v1{connection = #v1_connection{timeout = Timeout}}) ->
+close(Error, State0 = #v1{connection = #v1_connection{timeout = Timeout}}) ->
     %% Client properties will be emitted in the connection_closed event by rabbit_reader.
-    ClientProperties = i(client_properties, State),
+    ClientProperties = i(client_properties, State0),
     put(client_properties, ClientProperties),
+
+    %% "It is illegal to send any more frames (or bytes of any other kind)
+    %% after sending a close frame." [2.7.9]
+    %% Sessions might send frames via the writer proc.
+    %% Therefore, let's first try to orderly shutdown our sessions.
+    State = shutdown_sessions(State0),
+
     Time = case Timeout > 0 andalso
                 Timeout < ?CLOSING_TIMEOUT of
                true -> Timeout;
@@ -232,6 +239,31 @@ close(Error, State = #v1{connection = #v1_connection{timeout = Timeout}}) ->
     _TRef = erlang:send_after(Time, self(), terminate_connection),
     ok = send_on_channel0(State, #'v1_0.close'{error = Error}, amqp10_framing),
     State#v1{connection_state = closed}.
+
+shutdown_sessions(#v1{tracked_channels = Channels} = State) ->
+    maps:foreach(fun(_ChannelNum, Pid) ->
+                         gen_server:cast(Pid, shutdown)
+                 end, Channels),
+    TimerRef = erlang:send_after(?SHUTDOWN_SESSIONS_TIMEOUT,
+                                 self(),
+                                 shutdown_sessions_timeout),
+    wait_for_shutdown_sessions(TimerRef, State).
+
+wait_for_shutdown_sessions(TimerRef, #v1{tracked_channels = Channels} = State)
+  when map_size(Channels) =:= 0 ->
+    ok = erlang:cancel_timer(TimerRef, [{async, false},
+                                        {info, false}]),
+    State;
+wait_for_shutdown_sessions(TimerRef, #v1{tracked_channels = Channels} = State0) ->
+    receive
+        {{'DOWN', ChannelNum}, _MRef, process, SessionPid, _Reason} ->
+            State = untrack_channel(ChannelNum, SessionPid, State0),
+            wait_for_shutdown_sessions(TimerRef, State);
+        shutdown_sessions_timeout ->
+            ?LOG_INFO("sessions running ~b ms after requested to be shut down: ~p",
+                      [?SHUTDOWN_SESSIONS_TIMEOUT, maps:values(Channels)]),
+            State0
+    end.
 
 handle_session_exit(ChannelNum, SessionPid, Reason, State0) ->
     State = untrack_channel(ChannelNum, SessionPid, State0),
@@ -760,6 +792,7 @@ send_to_new_session(
       connection = #v1_connection{outgoing_max_frame_size = MaxFrame,
                                   vhost = Vhost,
                                   user = User,
+                                  container_id = ContainerId,
                                   name = ConnName},
       writer = WriterPid} = State) ->
     %% Subtract fixed frame header size.
@@ -772,6 +805,7 @@ send_to_new_session(
                  OutgoingMaxFrameSize,
                  User,
                  Vhost,
+                 ContainerId,
                  ConnName,
                  BeginFrame],
     case rabbit_amqp_session_sup:start_session(SessionSup, ChildArgs) of
