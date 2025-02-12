@@ -70,12 +70,16 @@ sub_groups() ->
       ]},
      {ssl_user_with_invalid_client_id_in_cert_san_dns, [],
 <<<<<<< HEAD
+<<<<<<< HEAD
        [invalid_client_id_from_cert_san_dns
        ]},
      {ssl_user_with_client_id_in_cert_san_dns, [],
        [client_id_from_cert_san_dns        
 =======
        [client_id_from_cert_san_dns
+=======
+       [invalid_client_id_from_cert_san_dns
+>>>>>>> aeda3cada (Fix test case name)
        ]}, 
      {ssl_user_with_client_id_in_cert_san_dns, [],
        [client_id_from_cert_san_dns
