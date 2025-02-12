@@ -68,17 +68,11 @@ sub_groups() ->
        ssl_user_vhost_parameter_mapping_vhost_does_not_exist,
        ssl_user_cert_vhost_mapping_takes_precedence_over_port_vhost_mapping
       ]},
-<<<<<<< HEAD
-     {ssl_user_with_client_id_in_cert_san_dns, [], 
-       [client_id_from_cert_san_dns,
-        invalid_client_id_from_cert_san_dns
-=======
      {ssl_user_with_invalid_client_id_in_cert_san_dns, [],
        [invalid_client_id_from_cert_san_dns
        ]},
      {ssl_user_with_client_id_in_cert_san_dns, [],
        [client_id_from_cert_san_dns        
->>>>>>> e84a51603 (Fix flake on rabbitmq_mqtt auth_SUITE (#13180))
        ]},
      {ssl_user_with_client_id_in_cert_san_dns_1, [], 
        [client_id_from_cert_san_dns_1        

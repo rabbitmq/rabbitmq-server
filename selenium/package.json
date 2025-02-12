@@ -12,11 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-<<<<<<< HEAD
-    "chromedriver": "^128.0.0",
-=======
     "chromedriver": "^132.0",
->>>>>>> e84a51603 (Fix flake on rabbitmq_mqtt auth_SUITE (#13180))
     "ejs": "^3.1.8",
     "express": "^4.18.2",
     "geckodriver": "^3.0.2",
