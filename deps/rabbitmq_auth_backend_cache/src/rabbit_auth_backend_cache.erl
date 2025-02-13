@@ -13,7 +13,7 @@
 
 -export([user_login_authentication/2, user_login_authorization/2,
          check_vhost_access/3, check_resource_access/4, check_topic_access/4,
-         expiry_timestamp/1]).
+         expiry_timestamp/1, clear_cache_cluster_wide/0, clear_cache/0]).
 
 %% API
 
@@ -66,6 +66,17 @@ expiry_timestamp(_) -> never.
 %% Implementation
 %%
 
+clear_cache_cluster_wide() ->
+    Nodes = rabbit_nodes:list_running(),
+    rabbit_log:warning("Clearing auth_backend_cache in all nodes : ~p", [Nodes]),
+    rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, clear_cache, []).
+
+clear_cache() ->
+    {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
+                                          cache_module),
+    rabbit_log:warning("Clearing auth_backend_cache"),
+    AuthCache:clear().
+
 with_cache(BackendType, {F, A}, Fun) ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
@@ -105,3 +116,5 @@ should_cache(Result, Fun) ->
         {refusal, true} -> true;
         _               -> false
     end.
+
+    

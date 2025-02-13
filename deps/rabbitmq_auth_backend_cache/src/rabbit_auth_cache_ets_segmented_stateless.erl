@@ -12,7 +12,7 @@
 -include("rabbit_auth_backend_cache.hrl").
 
 -export([start_link/1,
-         get/1, put/3, delete/1]).
+         get/1, put/3, delete/1, clear/0]).
 -export([gc/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -44,6 +44,11 @@ put(Key, Value, TTL) ->
 
 delete(Key) ->
     _ = [ets:delete(Table, Key)
+         || Table <- get_all_segment_tables()],
+    ok.
+
+clear() ->
+    _ = [ets:delete_all_objects(Table)
          || Table <- get_all_segment_tables()],
     ok.
 
