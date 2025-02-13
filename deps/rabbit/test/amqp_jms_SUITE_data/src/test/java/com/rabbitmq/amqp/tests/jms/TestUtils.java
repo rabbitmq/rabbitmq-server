@@ -21,6 +21,7 @@ import static java.lang.String.format;
 import com.rabbitmq.qpid.protonj2.client.Client;
 import com.rabbitmq.qpid.protonj2.client.ConnectionOptions;
 import com.rabbitmq.qpid.protonj2.client.exceptions.ClientException;
+import java.lang.annotation.*;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -126,4 +127,9 @@ final class TestUtils {
     return format(
         "%s_%s%s", testClass.getSimpleName(), testMethod, uuid.substring(uuid.length() / 2));
   }
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface Classic {}
 }

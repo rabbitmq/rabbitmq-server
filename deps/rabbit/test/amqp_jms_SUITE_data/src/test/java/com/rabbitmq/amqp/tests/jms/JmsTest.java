@@ -21,6 +21,7 @@ import static com.rabbitmq.amqp.tests.jms.TestUtils.protonConnection;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
+import com.rabbitmq.amqp.tests.jms.TestUtils.Classic;
 import com.rabbitmq.qpid.protonj2.client.Client;
 import com.rabbitmq.qpid.protonj2.client.Delivery;
 import com.rabbitmq.qpid.protonj2.client.Receiver;
@@ -150,7 +151,7 @@ public class JmsTest {
   // Test that Request/reply pattern using a TemporaryQueue works.
   // https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#requestreply-pattern-using-a-temporaryqueue-jakarta-ee
   @Test
-  public void temporary_queue_rpc(Queue requestQueue) throws Exception {
+  public void temporary_queue_rpc(@Classic Queue requestQueue) throws Exception {
     try (JMSContext clientContext = factory.createContext()) {
       Destination responseQueue = clientContext.createTemporaryQueue();
       JMSConsumer clientConsumer = clientContext.createConsumer(responseQueue);

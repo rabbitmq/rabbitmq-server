@@ -20,6 +20,7 @@ import static java.util.Collections.singletonMap;
 
 import com.rabbitmq.client.amqp.Connection;
 import com.rabbitmq.client.amqp.Environment;
+import com.rabbitmq.client.amqp.Management;
 import com.rabbitmq.client.amqp.impl.AmqpEnvironmentBuilder;
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.Queue;
@@ -55,6 +56,12 @@ final class JmsTestInfrastructureExtension
     return Queue.class.isAssignableFrom(parameter.getType());
   }
 
+  private static Management.QueueType queueType(Parameter parameter) {
+    return parameter.isAnnotationPresent(TestUtils.Classic.class)
+        ? Management.QueueType.CLASSIC
+        : Management.QueueType.QUORUM;
+  }
+
   @Override
   public void beforeEach(ExtensionContext context) throws Exception {
     if (context.getTestMethod().isPresent()) {
@@ -66,7 +73,8 @@ final class JmsTestInfrastructureExtension
           try (Environment environment = new AmqpEnvironmentBuilder().build();
               Connection connection =
                   environment.connectionBuilder().uri(TestUtils.brokerUri()).build()) {
-            connection.management().queue(queueName).declare();
+            Management.QueueType type = queueType(parameter);
+            connection.management().queue(queueName).type(type).declare();
           }
           store(context).put("queueName", queueName);
           Context jndiContext = TestUtils.context(singletonMap("queue." + queueName, queueAddress));
