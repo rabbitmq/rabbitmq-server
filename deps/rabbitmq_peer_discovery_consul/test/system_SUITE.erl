@@ -83,9 +83,27 @@ init_per_testcase(Testcase, Config)
     case Config3 of
         _ when is_list(Config3) ->
             try
-                _ = rabbit_ct_broker_helpers:rpc_all(
-                      Config3, rabbit_peer_discovery_backend, api_version, []),
-                Config3
+                SameMacVer = (
+                  rabbit_ct_broker_helpers:
+                  do_nodes_run_same_ra_machine_version(
+                    Config3, khepri_machine)),
+                case SameMacVer of
+                    true ->
+                        _ = rabbit_ct_broker_helpers:rpc_all(
+                              Config3,
+                              rabbit_peer_discovery_backend, api_version, []),
+                        Config3;
+                    false ->
+                        Config5 = rabbit_ct_helpers:run_steps(
+                                    Config3,
+                                    rabbit_ct_client_helpers:teardown_steps()
+                                    ++
+                                    rabbit_ct_broker_helpers:teardown_steps()),
+                        rabbit_ct_helpers:testcase_finished(Config5, Testcase),
+                        {skip,
+                         "Nodes are using different Khepri Ra machine "
+                         "versions; clustering will likely fail"}
+                end
             catch
                 error:{exception, undef,
                        [{rabbit_peer_discovery_backend, api_version, _, _}
