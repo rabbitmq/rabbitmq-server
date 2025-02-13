@@ -31,7 +31,13 @@ updates:
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+    groups:
+      test-dependencies:
+        applies-to: version-updates
+    commit-message:
+      prefix: "[skip ci] "
     target-branch: "main"
     ignore:
       - dependency-name: "ch.qos.logback:logback-classic"
@@ -45,7 +51,13 @@ updates:
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+    groups:
+      test-dependencies:
+        applies-to: version-updates
+    commit-message:
+      prefix: "[skip ci] "
     target-branch: "v4.1.x"
     ignore:
       - dependency-name: "ch.qos.logback:logback-classic"
@@ -59,7 +71,13 @@ updates:
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+    groups:
+      test-dependencies:
+        applies-to: version-updates
+    commit-message:
+      prefix: "[skip ci] "
     target-branch: "v4.0.x"
     ignore:
       - dependency-name: "ch.qos.logback:logback-classic"
@@ -73,7 +91,13 @@ updates:
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
-      interval: "daily"
+      interval: "weekly"
+      day: "saturday"
+    groups:
+      test-dependencies:
+        applies-to: version-updates
+    commit-message:
+      prefix: "[skip ci] "
     target-branch: "v3.13.x"
     ignore:
       - dependency-name: "ch.qos.logback:logback-classic"
