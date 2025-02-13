@@ -122,32 +122,24 @@ jms_temporary_queue(Config) ->
 
 %% Send different message types from JMS client to JMS client.
 message_types_jms_to_jms(Config) ->
-    TestName = QName = atom_to_binary(?FUNCTION_NAME),
-    ok = declare_queue(QName, <<"quorum">>, Config),
-    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [rabbitmq_amqp_address:queue(QName)]}], Config),
-    ok = delete_queue(QName, Config).
+    ok = run_jms_test(?FUNCTION_NAME, Config).
 
 %% Send different message types from JMS client to Erlang AMQP 1.0 client.
 message_types_jms_to_amqp(Config) ->
-    TestName = atom_to_binary(?FUNCTION_NAME),
-    ok = run_jms_test(TestName, [], Config).
+    ok = run_jms_test(?FUNCTION_NAME, Config).
 
 temporary_queue_rpc(Config) ->
-    TestName = QName = atom_to_binary(?FUNCTION_NAME),
-    ok = declare_queue(QName, <<"classic">>, Config),
-    ok = run_jms_test(TestName, [{"-Dqueue=~ts", [rabbitmq_amqp_address:queue(QName)]}], Config),
-    ok = delete_queue(QName, Config).
+    ok = run_jms_test(?FUNCTION_NAME, Config).
 
 temporary_queue_delete(Config) ->
-    TestName = atom_to_binary(?FUNCTION_NAME),
-    ok = run_jms_test(TestName, [], Config).
+    ok = run_jms_test(?FUNCTION_NAME, Config).
 
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
 
-run_jms_test(TestName, JavaProps, Config) ->
-    run(TestName, [{"-Dtest=JmsTest#~ts", [TestName]} | JavaProps], Config).
+run_jms_test(TestName, Config) ->
+    run(TestName, [{"-Dtest=JmsTest#~ts", [TestName]}], Config).
 
 run(TestName, JavaProps, Config) ->
     TestProjectDir = ?config(data_dir, Config),
