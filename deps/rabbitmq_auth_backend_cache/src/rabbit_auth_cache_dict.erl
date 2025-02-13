@@ -15,7 +15,7 @@
 -include("rabbit_auth_backend_cache.hrl").
 
 -export([start_link/0,
-         get/1, put/3, delete/1]).
+         get/1, put/3, delete/1, clear/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -28,6 +28,8 @@ put(Key, Value, TTL) -> gen_server:cast(?MODULE, {put, Key, Value, TTL}).
 
 delete(Key) -> gen_server:call(?MODULE, {delete, Key}, ?CACHE_OPERATION_TIMEOUT).
 
+clear() -> gen_server:cast(?MODULE, clear).
+
 init(_Args) -> {ok, nostate}.
 
 handle_call({get, Key}, _From, nostate) ->
@@ -39,6 +41,10 @@ handle_call({get, Key}, _From, nostate) ->
 handle_call({delete, Key}, _From, nostate) ->
     do_delete(Key),
     {reply, ok, nostate}.
+
+handle_cast(clear, nostate) ->
+    _ = erlang:erase(),
+    {noreply, nostate};
 
 handle_cast({put, Key, Value, TTL}, nostate) ->
     erlang:put({items, Key}, Value),

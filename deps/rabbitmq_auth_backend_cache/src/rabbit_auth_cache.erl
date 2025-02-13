@@ -15,6 +15,8 @@
 
 -callback delete(term()) -> ok.
 
+-callback clear() -> ok.
+
 expiration(TTL) ->
     erlang:system_time(milli_seconds) + TTL.
 
