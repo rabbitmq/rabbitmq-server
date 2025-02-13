@@ -14,7 +14,6 @@
 // Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
 // and/or its subsidiaries. All rights reserved.
 //
-
 package com.rabbitmq.amqp.tests.jms;
 
 import static java.lang.String.format;
@@ -22,16 +21,15 @@ import static java.lang.String.format;
 import com.rabbitmq.qpid.protonj2.client.Client;
 import com.rabbitmq.qpid.protonj2.client.ConnectionOptions;
 import com.rabbitmq.qpid.protonj2.client.exceptions.ClientException;
-import jakarta.jms.Connection;
-import jakarta.jms.ConnectionFactory;
-import jakarta.jms.JMSException;
-import jakarta.jms.Queue;
+import java.lang.annotation.*;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Hashtable;
+import java.util.Map;
 import java.util.UUID;
-import org.apache.qpid.jms.JmsConnectionFactory;
-import org.apache.qpid.jms.JmsQueue;
+import javax.naming.Context;
+import javax.naming.NamingException;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.ExtensionContext;
 
@@ -72,17 +70,30 @@ final class TestUtils {
     return "guest";
   }
 
-  static ConnectionFactory connectionFactory() {
-    return new JmsConnectionFactory(brokerUri());
+  static Context context(Map<String, String> extraEnv) {
+    // Configure a JNDI initial context, see
+    // https://github.com/apache/qpid-jms/blob/main/qpid-jms-docs/Configuration.md#configuring-a-jndi-initialcontext
+    Hashtable<Object, Object> env = new Hashtable<>();
+    env.put(Context.INITIAL_CONTEXT_FACTORY, "org.apache.qpid.jms.jndi.JmsInitialContextFactory");
+
+    String uri = brokerUri();
+    // For a list of options, see
+    // https://github.com/apache/qpid-jms/blob/main/qpid-jms-docs/Configuration.md#jms-configuration-options
+    uri = uri + "?jms.clientID=my-client-id";
+    env.put("connectionfactory.testConnectionFactory", uri);
+
+    env.putAll(extraEnv);
+
+    try {
+      return new javax.naming.InitialContext(env);
+    } catch (NamingException e) {
+      throw new RuntimeException(e);
+    }
   }
 
-  static Connection connection() throws JMSException {
-    return connectionFactory().createConnection();
-  }
-
-  static Queue queue(String name) {
+  static String queueAddress(String name) {
     // no path encoding, use names with e.g. ASCII characters only
-    return new JmsQueue("/queues/" + name);
+    return "/queues/" + name;
   }
 
   static Client protonClient() {
@@ -116,4 +127,9 @@ final class TestUtils {
     return format(
         "%s_%s%s", testClass.getSimpleName(), testMethod, uuid.substring(uuid.length() / 2));
   }
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface Classic {}
 }
