@@ -76,7 +76,6 @@ groups() ->
                                                  status_with_alarm,
                                                  pid_file_and_await_node_startup_in_khepri,
                                                  await_running_count_in_khepri,
-                                                 start_with_invalid_schema_in_path,
                                                  persistent_cluster_id,
                                                  stop_start_cluster_node,
                                                  restart_cluster_node,
