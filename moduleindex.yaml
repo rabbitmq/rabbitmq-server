@@ -815,6 +815,7 @@ rabbitmq_amqp_client:
 rabbitmq_amqp1_0:
 - rabbitmq_amqp1_0_noop
 rabbitmq_auth_backend_cache:
+- Elixir.RabbitMQ.CLI.Ctl.Commands.ClearAuthBackendCacheCommand
 - rabbit_auth_backend_cache
 - rabbit_auth_backend_cache_app
 - rabbit_auth_cache
