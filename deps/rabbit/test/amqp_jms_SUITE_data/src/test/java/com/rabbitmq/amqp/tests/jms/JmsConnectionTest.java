@@ -14,7 +14,6 @@
 // Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
 // and/or its subsidiaries. All rights reserved.
 //
-
 package com.rabbitmq.amqp.tests.jms;
 
 import static com.rabbitmq.amqp.tests.jms.Cli.startBroker;
@@ -41,12 +40,12 @@ import org.junit.jupiter.api.Timeout;
 @JmsTestInfrastructure
 public class JmsConnectionTest {
 
-  String destination;
+  ConnectionFactory factory;
 
   @Test
   @Timeout(30)
   public void testCreateConnection() throws Exception {
-    try (Connection connection = connection()) {
+    try (Connection connection = factory.createConnection()) {
       assertNotNull(connection);
     }
   }
@@ -54,7 +53,7 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionAndStart() throws Exception {
-    try (Connection connection = connection()) {
+    try (Connection connection = factory.createConnection()) {
       assertNotNull(connection);
       connection.start();
     }
@@ -65,7 +64,6 @@ public class JmsConnectionTest {
   // Currently not supported by RabbitMQ.
   @Disabled
   public void testCreateWithDuplicateClientIdFails() throws Exception {
-    JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
     JmsConnection connection1 = (JmsConnection) factory.createConnection();
     connection1.setClientID("Test");
     assertNotNull(connection1);
@@ -89,7 +87,7 @@ public class JmsConnectionTest {
     assertThrows(
         JMSException.class,
         () -> {
-          try (Connection connection = connection()) {
+          try (Connection connection = factory.createConnection()) {
             connection.setClientID("Test");
             connection.start();
             connection.setClientID("NewTest");
@@ -100,9 +98,10 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionAsSystemAdmin() throws Exception {
-    JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
-    factory.setUsername(adminUsername());
-    factory.setPassword(adminPassword());
+    JmsConnectionFactory f = (JmsConnectionFactory) factory;
+
+    f.setUsername(adminUsername());
+    f.setPassword(adminPassword());
     try (Connection connection = factory.createConnection()) {
       assertNotNull(connection);
       connection.start();
@@ -112,8 +111,7 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionCallSystemAdmin() throws Exception {
-    try (Connection connection =
-        connectionFactory().createConnection(adminUsername(), adminPassword())) {
+    try (Connection connection = factory.createConnection(adminUsername(), adminPassword())) {
       assertNotNull(connection);
       connection.start();
     }
@@ -121,13 +119,13 @@ public class JmsConnectionTest {
 
   @Test
   @Timeout(30)
-  public void testCreateConnectionAsUnknwonUser() {
+  public void testCreateConnectionAsUnknownUser() {
     assertThrows(
         JMSSecurityException.class,
         () -> {
-          JmsConnectionFactory factory = (JmsConnectionFactory) connectionFactory();
-          factory.setUsername("unknown");
-          factory.setPassword("unknown");
+          JmsConnectionFactory f = (JmsConnectionFactory) factory;
+          f.setUsername("unknown");
+          f.setPassword("unknown");
           try (Connection connection = factory.createConnection()) {
             assertNotNull(connection);
             connection.start();
@@ -137,11 +135,11 @@ public class JmsConnectionTest {
 
   @Test
   @Timeout(30)
-  public void testCreateConnectionCallUnknwonUser() {
+  public void testCreateConnectionCallUnknownUser() {
     assertThrows(
         JMSSecurityException.class,
         () -> {
-          try (Connection connection = connectionFactory().createConnection("unknown", "unknown")) {
+          try (Connection connection = factory.createConnection("unknown", "unknown")) {
             assertNotNull(connection);
             connection.start();
           }
@@ -150,11 +148,10 @@ public class JmsConnectionTest {
 
   @Test
   @Timeout(30)
-  public void testBrokerStopWontHangConnectionClose() throws Exception {
-    Connection connection = connection();
+  public void testBrokerStopWontHangConnectionClose(Queue queue) throws Exception {
+    Connection connection = factory.createConnection();
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
 
-    Queue queue = queue(destination);
     connection.start();
 
     MessageProducer producer = session.createProducer(queue);
@@ -179,7 +176,7 @@ public class JmsConnectionTest {
   @Timeout(60)
   public void testConnectionExceptionBrokerStop() throws Exception {
     final CountDownLatch latch = new CountDownLatch(1);
-    try (Connection connection = connection()) {
+    try (Connection connection = factory.createConnection()) {
       connection.setExceptionListener(exception -> latch.countDown());
       connection.start();
       Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
