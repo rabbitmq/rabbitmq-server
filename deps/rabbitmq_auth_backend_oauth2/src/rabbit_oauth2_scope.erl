@@ -7,10 +7,13 @@
 
 -module(rabbit_oauth2_scope).
 
+-include("oauth2.hrl").
+
 -export([vhost_access/2,
         resource_access/3,
         topic_access/4,
         concat_scopes/2,
+        filter_matching_scope_prefix/2,
         filter_matching_scope_prefix_and_drop_it/2]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -93,8 +96,17 @@ parse_resource_pattern(Pattern, Permission) ->
         _Other -> ignore
     end.
 
+-spec filter_matching_scope_prefix(ResourceServer :: resource_server(),
+        Payload :: map()) -> map().
+filter_matching_scope_prefix(
+    #resource_server{scope_prefix = ScopePrefix},
+    #{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
+        Payload#{?SCOPE_JWT_FIELD := 
+            filter_matching_scope_prefix_and_drop_it(Scopes, ScopePrefix)};
+filter_matching_scope_prefix(_, Payload) -> Payload.
+
 -spec filter_matching_scope_prefix_and_drop_it(list(), binary()|list()) -> list().
-filter_matching_scope_prefix_and_drop_it(Scopes, <<"">>) -> Scopes;
+filter_matching_scope_prefix_and_drop_it(Scopes, <<>>) -> Scopes;
 filter_matching_scope_prefix_and_drop_it(Scopes, PrefixPattern)  ->
     PatternLength = byte_size(PrefixPattern),
     lists:filtermap(

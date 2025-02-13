@@ -592,7 +592,7 @@ invalid_client_id_from_cert_san_dns(Config) ->
     MqttClientId = <<"other_client_id">>,
     {ok, C} = connect_ssl(MqttClientId, Config),
     unlink(C),
-    {error, {client_identifier_not_valid, _}} = emqtt:connect(C).        
+    {error, {client_identifier_not_valid, _}} = emqtt:connect(C).
 
 ssl_user_vhost_parameter_mapping_success(Config) ->
     expect_successful_connection(fun connect_ssl/1, Config).

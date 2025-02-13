@@ -17,13 +17,16 @@
     user_login_authentication/2,
     user_login_authorization/2,
     normalize_token_scope/2,
-    check_vhost_access/3]).
+    check_vhost_access/3,
+    extract_token_value/4,
+    extract_scope_list_from_token_value/2]).
 -import(rabbit_oauth2_resource_server, [
     new_resource_server/1
 ]).
 
 all() ->
     [
+        test_extract_scope_from_path_expression,
         filter_matching_scope_prefix_and_drop_it,
         normalize_token_scopes_with_scope_prefix,
         normalize_token_scope_from_space_separated_list_in_scope_claim,
@@ -39,13 +42,15 @@ all() ->
         test_token_expiration,
         test_invalid_signature,
         test_incorrect_kid,
-        normalize_token_scope_with_keycloak_scopes,
+        normalize_token_scope_using_multiple_scopes_key,
+        normalize_token_scope_with_requesting_party_token_scopes,
         normalize_token_scope_with_rich_auth_request,
         normalize_token_scope_with_rich_auth_request_using_regular_expression_with_cluster,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
         test_username_from,
         {group, with_rabbitmq_node}
+      
     ].
 groups() ->
     [
@@ -116,8 +121,75 @@ end_per_group(_, Config) ->
 -define(RESOURCE_SERVER_TYPE, <<"rabbitmq-type">>).
 -define(DEFAULT_SCOPE_PREFIX, <<"rabbitmq.">>).
 
+normalize_token_scope_using_multiple_scopes_key(_) ->
+    Pairs = [
+        %% common case
+    {
+        "keycloak format 1, i.e. requesting party token",
+        #{<<"authorization">> => 
+            #{<<"permissions">> =>
+            [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+               <<"rsname">> => <<"allvhost">>,
+               <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
+             #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+               <<"rsname">> => <<"vhost1">>,
+               <<"scopes">> => [<<"rabbitmq-resource.write:vhost1/*">>]},
+             #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+               <<"rsname">> => <<"Default Resource">>,
+               <<"scopes">> => [<<"unknown-resource.write:vhost1/*">>]}
+             ]
+            }
+        },        
+        [<<"read:*/*">>, <<"write:vhost1/*">>]
+    },
+    {
+        "keycloak format 2 using realm_access",
+        #{<<"realm_access">> =>
+            #{<<"roles">> => [<<"rabbitmq-resource.read:format2/*">>]}
+        },
+        [<<"read:format2/*">>]
+    },
+     {
+        "keycloak format 2 using resource_access",
+        #{<<"resource_access">> =>
+            #{<<"account">> => #{<<"roles">> => [<<"rabbitmq-resource.read:format2bis/*">>]} }
+        },
+        [<<"read:format2bis/*">>]
+    },
+     {
+        "both formats",
+        #{<<"authorization">> => 
+            #{<<"permissions">> =>
+            [#{<<"rsid">> => <<"2c390fe4-02ad-41c7-98a2-cebb8c60ccf1">>,
+               <<"rsname">> => <<"allvhost">>,
+               <<"scopes">> => [<<"rabbitmq-resource.read:*/*">>]},
+             #{<<"rsid">> => <<"e7f12e94-4c34-43d8-b2b1-c516af644cee">>,
+               <<"rsname">> => <<"vhost1">>,
+               <<"scopes">> => [<<"rabbitmq-resource.write:vhost1/*">>]},
+             #{<<"rsid">> => <<"12ac3d1c-28c2-4521-8e33-0952eff10bd9">>,
+               <<"rsname">> => <<"Default Resource">>,
+               <<"scopes">> => [<<"unknown-resource.write:vhost1/*">>]}
+             ]
+            },
+         <<"realm_access">> =>
+            #{<<"roles">> => [<<"rabbitmq-resource.read:format2/*">>]},
+         <<"resource_access">> =>
+            #{<<"account">> => #{<<"roles">> => [<<"rabbitmq-resource.read:format2bis/*">>]} }   
+        },        
+        [<<"read:*/*">>, <<"write:vhost1/*">>, <<"read:format2/*">>, <<"read:format2bis/*">>]
+    }
+    ],
 
-normalize_token_scope_with_keycloak_scopes(_) ->
+    lists:foreach(fun({Case, Token0, ExpectedScope}) ->
+        ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),
+        ResourceServer = ResourceServer0#resource_server{
+            additional_scopes_key = <<"authorization.permissions.scopes realm_access.roles resource_access.account.roles">>
+            },
+        Token = normalize_token_scope(ResourceServer, Token0),
+        ?assertEqual(lists:sort(ExpectedScope), lists:sort(uaa_jwt:get_scope(Token)), Case)
+        end, Pairs).
+
+normalize_token_scope_with_requesting_party_token_scopes(_) ->
     Pairs = [
         %% common case
     {
@@ -169,9 +241,9 @@ normalize_token_scope_with_keycloak_scopes(_) ->
     ],
 
     lists:foreach(fun({Case, Authorization, ExpectedScope}) ->
-        ResourceServer = new_resource_server(<<"rabbitmq-resource">>),
+        ResourceServer0 = new_resource_server(<<"rabbitmq-resource">>),        
         Token0 = #{<<"authorization">> => Authorization},
-        Token = normalize_token_scope(ResourceServer, Token0),
+        Token = normalize_token_scope(ResourceServer0, Token0),
         ?assertEqual(ExpectedScope, uaa_jwt:get_scope(Token), Case)
         end, Pairs).
 
@@ -356,7 +428,7 @@ normalize_token_scope_with_rich_auth_request(_) ->
           }
         ],
         [<<"tag:management">>, <<"tag:policymaker">>,
-            <<"tag:management">>, <<"tag:monitoring">>  ]
+             <<"tag:monitoring">>  ]
     },
     { "should produce a scope for every user tag action but only for the clusters that match {resource_server_id}",
         [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
@@ -1285,6 +1357,77 @@ normalize_token_scope_without_scope_claim(_) ->
     ResourceServer = new_resource_server(?RESOURCE_SERVER_ID),
     Token0 = #{ },
     ?assertEqual([], uaa_jwt:get_scope(normalize_token_scope(ResourceServer, Token0))).
+
+
+test_extract_scope_from_path_expression(_) ->
+    M = fun rabbit_auth_backend_oauth2:extract_scope_list_from_token_value/2,
+    R = #resource_server{id = <<"rabbitmq">>},
+
+    [<<"role1">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => <<"role1">> }}, 
+        <<"auth.permission">>, M),
+    [<<"role1">>,<<"role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => [<<"role1">>,<<"role2">>] }}, 
+        <<"auth.permission">>, M),
+    [<<"role1">>,<<"role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => <<"role1 role2">> }}, 
+        <<"auth.permission">>, M),
+    [<<"rabbitmq.role1">>,<<"rabbitmq.role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ 
+            <<"rabbitmq">> => [<<"role1">>,<<"role2">>]            
+        }}, 
+        <<"auth">>, M),
+    [<<"rabbitmq.role1">>,<<"rabbitmq.role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ 
+            <<"rabbitmq">> => <<"role1 role2">>         
+        }}, 
+        <<"auth">>, M),
+    %% this is the old keycloak format    
+    [<<"role1">>,<<"role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ 
+            <<"permission">> => [
+                #{ <<"scopes">> => <<"role1">>},
+                #{ <<"scopes">> => <<"role2">>}
+            ]
+        }}, 
+        <<"auth.permission.scopes">>, M),
+
+    [<<"role1">>,<<"role2">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ 
+            <<"permission">> => [
+                #{ <<"scopes">> => [<<"role1">>]},
+                #{ <<"scopes">> => [<<"role2">>]}
+            ]
+        }}, 
+        <<"auth.permission.scopes">>, M),
+
+    [<<"role1">>,<<"role2">>] = extract_token_value(R,
+        #{ <<"auth">> => [
+            #{ <<"permission">> => [
+                #{ <<"scopes">> => [<<"role1">>]}                
+            ]},
+            #{ <<"permission">> => [
+                #{ <<"scopes">> => [<<"role2">>]}                
+            ]}        
+        ]}, 
+        <<"auth.permission.scopes">>, M),
+
+    [<<"role1">>] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => [<<"role1">>] }}, 
+        <<"auth.permission">>, M),
+
+    [] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => [<<"role1">>] }}, 
+        <<"auth.permission2">>, M),
+
+    [] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => [<<"role1">>] }}, 
+        <<"auth2.permission">>, M),
+
+    [] = extract_token_value(R,
+        #{ <<"auth">> => #{ <<"permission">> => [<<"role1">>] }}, 
+        <<"auth.permission2">>, M).
+
 
 %%
 %% Helpers

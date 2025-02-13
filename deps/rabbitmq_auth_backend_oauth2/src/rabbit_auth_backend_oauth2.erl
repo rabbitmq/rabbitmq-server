@@ -28,10 +28,11 @@
     get_scope/1, set_scope/2,
     resolve_resource_server/1]).
 
--import(rabbit_oauth2_keycloak, [has_keycloak_scopes/1, extract_scopes_from_keycloak_format/1]).
--import(rabbit_oauth2_rar, [extract_scopes_from_rich_auth_request/2, has_rich_auth_request_scopes/1]).
+-import(rabbit_oauth2_rar, [extract_scopes_from_rich_auth_request/2]).
 
--import(rabbit_oauth2_scope, [filter_matching_scope_prefix_and_drop_it/2]).
+-import(rabbit_oauth2_scope, [
+    filter_matching_scope_prefix/2,
+    filter_matching_scope_prefix_and_drop_it/2]).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -229,98 +230,152 @@ check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
         {false, _} -> {refused, signature_invalid}
     end.
 
+extract_scopes_from_scope_claim(Payload) -> 
+    case maps:find(?SCOPE_JWT_FIELD, Payload) of
+        {ok, Bin} when is_binary(Bin) -> 
+            maps:put(?SCOPE_JWT_FIELD, 
+                    binary:split(Bin, <<" ">>, [global, trim_all]),
+                    Payload);
+        _ -> Payload
+    end.
+
 -spec normalize_token_scope(
     ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
 normalize_token_scope(ResourceServer, Payload) ->
-    Payload0 = maps:map(fun(K, V) ->
-        case K of
-            ?SCOPE_JWT_FIELD when is_binary(V) ->
-                binary:split(V, <<" ">>, [global, trim_all]);
-             _ -> V
-         end
-       end, Payload),
 
-    Payload1 = case has_additional_scopes_key(ResourceServer, Payload0) of
-        true  -> extract_scopes_from_additional_scopes_key(ResourceServer, Payload0);
-        false -> Payload0
-        end,
+    filter_duplicates(   
+        filter_matching_scope_prefix(ResourceServer,
+            extract_scopes_from_rich_auth_request(ResourceServer,
+                extract_scopes_using_scope_aliases(ResourceServer, 
+                    extract_scopes_from_additional_scopes_key(ResourceServer, 
+                        extract_scopes_from_requesting_party_token(ResourceServer,
+                            extract_scopes_from_scope_claim(Payload))))))).
 
-    Payload2 = case has_keycloak_scopes(Payload1) of
-        true  -> extract_scopes_from_keycloak_format(Payload1);
-        false -> Payload1
-        end,
+filter_duplicates(#{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
+    set_scope(lists:usort(Scopes), Payload);
+filter_duplicates(Payload) -> Payload.
 
-    Payload3 = case ResourceServer#resource_server.scope_aliases of
-        undefined -> Payload2;
-        ScopeAliases  -> extract_scopes_using_scope_aliases(ScopeAliases, Payload2)
-        end,
-
-    Payload4 = case has_rich_auth_request_scopes(Payload3) of
-        true  -> extract_scopes_from_rich_auth_request(ResourceServer, Payload3);
-        false -> Payload3
-        end,
-
-    FilteredScopes = filter_matching_scope_prefix_and_drop_it(
-        get_scope(Payload4), ResourceServer#resource_server.scope_prefix),
-    set_scope(FilteredScopes, Payload4).
-
+-spec extract_scopes_from_requesting_party_token(
+    ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
+extract_scopes_from_requesting_party_token(ResourceServer, Payload) ->
+    Path = ?SCOPES_LOCATION_IN_REQUESTING_PARTY_TOKEN,
+    case extract_token_value(ResourceServer, Payload, Path, 
+        fun extract_scope_list_from_token_value/2) of
+        [] -> 
+            Payload;
+        AdditionalScopes -> 
+            set_scope(lists:flatten(AdditionalScopes) ++ get_scope(Payload), Payload)
+    end.
 
 -spec extract_scopes_using_scope_aliases(
-    ScopeAliasMapping :: map(), Payload :: map()) -> map().
-extract_scopes_using_scope_aliases(ScopeAliasMapping, Payload) ->
-      Scopes0 = get_scope(Payload),
-      Scopes = rabbit_data_coercion:to_list_of_binaries(Scopes0),
-      %% for all scopes, look them up in the scope alias map, and if they are
-      %% present, add the alias to the final scope list. Note that we also preserve
-      %% the original scopes, it should not hurt.
-      ExpandedScopes =
-          lists:foldl(fun(ScopeListItem, Acc) ->
-                        case maps:get(ScopeListItem, ScopeAliasMapping, undefined) of
-                            undefined ->
-                                Acc;
-                            MappedList when is_list(MappedList) ->
-                                Binaries = rabbit_data_coercion:to_list_of_binaries(MappedList),
-                                Acc ++ Binaries;
-                            Value ->
-                                Binaries = rabbit_data_coercion:to_list_of_binaries(Value),
-                                Acc ++ Binaries
-                        end
-                      end, Scopes, Scopes),
-       set_scope(ExpandedScopes, Payload).
+     ResourceServer :: resource_server(), Payload :: map()) -> map().
+extract_scopes_using_scope_aliases( 
+        #resource_server{scope_aliases = ScopeAliasMapping}, Payload) 
+        when is_map(ScopeAliasMapping) ->
+    Scopes0 = get_scope(Payload),
+    Scopes = rabbit_data_coercion:to_list_of_binaries(Scopes0),
+    %% for all scopes, look them up in the scope alias map, and if they are
+    %% present, add the alias to the final scope list. Note that we also preserve
+    %% the original scopes, it should not hurt.
+    ExpandedScopes =
+        lists:foldl(fun(ScopeListItem, Acc) ->
+                    case maps:get(ScopeListItem, ScopeAliasMapping, undefined) of
+                        undefined ->
+                            Acc;
+                        MappedList when is_list(MappedList) ->
+                            Binaries = rabbit_data_coercion:to_list_of_binaries(MappedList),
+                            Acc ++ Binaries;
+                        Value ->
+                            Binaries = rabbit_data_coercion:to_list_of_binaries(Value),
+                            Acc ++ Binaries
+                    end
+                    end, Scopes, Scopes),
+    set_scope(ExpandedScopes, Payload);
+extract_scopes_using_scope_aliases(_, Payload) -> Payload.
 
--spec has_additional_scopes_key(
-    ResourceServer :: resource_server(), Payload :: map()) -> boolean().
-has_additional_scopes_key(ResourceServer, Payload) when is_map(Payload) ->
-    case ResourceServer#resource_server.additional_scopes_key of
-        undefined -> false;
-        ScopeKey -> maps:is_key(ScopeKey, Payload)
+%% Path is a binary expression which is a plain word like <<"roles">>
+%% or +1 word separated by . like <<"authorization.permissions.scopes">>
+%% The Payload is a map.
+%% Using the path <<"authorization.permissions.scopes">> as an example
+%% 1. lookup the key <<"authorization">> in the Payload
+%% 2. if it is found, the next map to use as payload is the value found from the key <<"authorization">>
+%% 3. lookup the key <<"permissions">> in the previous map 
+%% 4. if it is found, it may be a map or a list of maps. 
+%% 5. if it is a list of maps, iterate each element in the list 
+%% 6. for each element in the list, which should be a map, find the key <<"scopes">>
+%% 7. because there are no more words/keys, return a list of all the values found
+%%    associated to the word <<"scopes">>
+extract_token_value(R, Payload, Path, ValueMapperFun) 
+        when is_map(Payload), is_binary(Path), is_function(ValueMapperFun) ->
+    extract_token_value_from_map(R, Payload, [], split_path(Path), ValueMapperFun);
+extract_token_value(_, _, _, _) ->
+    [].
+
+extract_scope_list_from_token_value(_R, List) when is_list(List) -> List;
+extract_scope_list_from_token_value(_R, Binary) when is_binary(Binary) -> 
+    binary:split(Binary, <<" ">>, [global, trim_all]);
+extract_scope_list_from_token_value(#resource_server{id = ResourceServerId}, Map) when is_map(Map) -> 
+    case maps:get(ResourceServerId, Map, undefined) of
+        undefined           -> [];
+        Ks when is_list(Ks) ->
+            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
+        ClaimBin when is_binary(ClaimBin) ->
+            UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
+            [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
+        _ -> []
+    end;
+extract_scope_list_from_token_value(_, _) -> [].
+
+extract_token_value_from_map(_, _Map, Acc, [], _Mapper) ->
+    Acc;
+extract_token_value_from_map(R, Map, Acc, [KeyStr], Mapper) when is_map(Map) ->
+    case maps:find(KeyStr, Map) of
+        {ok, Value} -> Acc ++ Mapper(R, Value);
+        error -> Acc
+    end;
+extract_token_value_from_map(R, Map, Acc, [KeyStr | Rest], Mapper) when is_map(Map) ->
+    case maps:find(KeyStr, Map) of
+        {ok, M} when is_map(M) -> extract_token_value_from_map(R, M, Acc, Rest, Mapper);
+        {ok, L} when is_list(L) -> extract_token_value_from_list(R, L, Acc, Rest, Mapper); 
+        {ok, Value} when Rest =:= [] -> Acc ++ Mapper(R, Value);
+        _ -> Acc
     end.
+
+extract_token_value_from_list(_, [], Acc, [], _Mapper) -> 
+    Acc;
+extract_token_value_from_list(_, [], Acc, [_KeyStr | _Rest], _Mapper) -> 
+    Acc;
+extract_token_value_from_list(R, [H | T], Acc, [KeyStr | Rest] = KeyList, Mapper) when is_map(H) ->
+    NewAcc = case maps:find(KeyStr, H) of
+        {ok, Map} when is_map(Map) -> extract_token_value_from_map(R, Map, Acc, Rest, Mapper);
+        {ok, List} when is_list(List) -> extract_token_value_from_list(R, List, Acc, Rest, Mapper);
+        {ok, Value} -> Acc++Mapper(R, Value);
+        _ -> Acc
+    end,
+    extract_token_value_from_list(R, T, NewAcc, KeyList, Mapper);
+
+extract_token_value_from_list(R, [E | T], Acc, [], Mapper) ->        
+    extract_token_value_from_list(R, T, Acc++Mapper(R, E), [], Mapper);
+extract_token_value_from_list(R, [E | _T] = L, Acc, KeyList, Mapper) when is_map(E) ->    
+    extract_token_value_from_list(R, L, Acc, KeyList, Mapper);
+extract_token_value_from_list(R, [_ | T], Acc, KeyList, Mapper) ->
+    extract_token_value_from_list(R, T, Acc, KeyList, Mapper).
+
+
+split_path(Path) when is_binary(Path) ->
+    binary:split(Path, <<".">>, [global, trim_all]).
+
 
 -spec extract_scopes_from_additional_scopes_key(
     ResourceServer :: resource_server(), Payload :: map()) -> map().
-extract_scopes_from_additional_scopes_key(ResourceServer, Payload) ->
-    Claim = maps:get(ResourceServer#resource_server.additional_scopes_key, Payload),
-    AdditionalScopes = extract_additional_scopes(ResourceServer, Claim),
-    set_scope(AdditionalScopes ++ get_scope(Payload), Payload).
-
-extract_additional_scopes(ResourceServer, ComplexClaim) ->
-    ResourceServerId = ResourceServer#resource_server.id,
-    case ComplexClaim of
-        L when is_list(L) -> L;
-        M when is_map(M) ->
-            case maps:get(ResourceServerId, M, undefined) of
-                undefined           -> [];
-                Ks when is_list(Ks) ->
-                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- Ks];
-                ClaimBin when is_binary(ClaimBin) ->
-                    UnprefixedClaims = binary:split(ClaimBin, <<" ">>, [global, trim_all]),
-                    [erlang:iolist_to_binary([ResourceServerId, <<".">>, K]) || K <- UnprefixedClaims];
-                _ -> []
-                end;
-        Bin when is_binary(Bin) ->
-            binary:split(Bin, <<" ">>, [global, trim_all]);
-        _ -> []
-    end.
+extract_scopes_from_additional_scopes_key(
+        #resource_server{additional_scopes_key = Key} = ResourceServer, Payload) 
+          when is_binary(Key) ->
+    Paths = binary:split(Key, <<" ">>, [global, trim_all]),
+    AdditionalScopes = [ extract_token_value(ResourceServer, 
+        Payload, Path, fun extract_scope_list_from_token_value/2) || Path <- Paths],    
+    set_scope(lists:flatten(AdditionalScopes) ++ get_scope(Payload), Payload);
+extract_scopes_from_additional_scopes_key(_, Payload) -> Payload.
 
 
 %% A token may be present in the password credential or in the rabbit_auth_backend_oauth2
