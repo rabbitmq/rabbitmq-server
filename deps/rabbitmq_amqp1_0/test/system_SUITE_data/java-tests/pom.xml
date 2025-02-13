@@ -9,7 +9,7 @@
   <url>https://www.rabbitmq.com</url>
   <properties>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
-    <qpid-jms-client.version>2.5.0</qpid-jms-client.version>
+    <qpid-jms-client.version>2.6.1</qpid-jms-client.version>
     <logback.version>1.2.13</logback.version>
     <spotless.version>2.43.0</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
