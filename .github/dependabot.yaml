@@ -34,8 +34,10 @@ updates:
       interval: "weekly"
       day: "saturday"
     groups:
-      test-dependencies:
-        applies-to: version-updates
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
     commit-message:
       prefix: "[skip ci] "
     target-branch: "main"
@@ -54,8 +56,10 @@ updates:
       interval: "weekly"
       day: "saturday"
     groups:
-      test-dependencies:
-        applies-to: version-updates
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v4.1.x"
@@ -74,8 +78,10 @@ updates:
       interval: "weekly"
       day: "saturday"
     groups:
-      test-dependencies:
-        applies-to: version-updates
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v4.0.x"
@@ -94,8 +100,10 @@ updates:
       interval: "weekly"
       day: "saturday"
     groups:
-      test-dependencies:
-        applies-to: version-updates
+      dev-deps:
+        dependency-type: "development"
+      prod-deps:
+        dependency-type: "production"
     commit-message:
       prefix: "[skip ci] "
     target-branch: "v3.13.x"
