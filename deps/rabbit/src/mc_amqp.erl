@@ -16,6 +16,8 @@
          prepare/2
         ]).
 
+-export([init_from_stream/2]).
+
 -import(rabbit_misc,
         [maps_put_truthy/3]).
 
@@ -98,10 +100,26 @@
 
 -export_type([state/0]).
 
+%% API
+
+-spec init_from_stream(binary(), mc:annotations()) ->
+    mc:state().
+init_from_stream(Payload, #{} = Anns0) ->
+    Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
+    Msg = msg_body_encoded(Sections, Payload, #msg_body_encoded{}),
+    %% when initalising from stored stream data the recovered
+    %% annotations take precendence over the ones provided
+    Anns = maps:merge(Anns0, essential_properties(Msg, recover)),
+    mc:init(?MODULE, Msg, Anns).
+
+%% CALLBACKS
+
+init(#msg_body_encoded{} = Msg) ->
+    {Msg, #{}};
 init(Payload) ->
     Sections = amqp10_framing:decode_bin(Payload, [server_mode]),
     Msg = msg_body_encoded(Sections, Payload, #msg_body_encoded{}),
-    Anns = essential_properties(Msg),
+    Anns = essential_properties(Msg, new),
     {Msg, Anns}.
 
 convert_from(?MODULE, Sections, _Env) when is_list(Sections) ->
@@ -602,7 +620,11 @@ encode_deaths(Deaths) ->
               {map, Map}
       end, Deaths).
 
+<<<<<<< HEAD
 essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
+=======
+essential_properties(#msg_body_encoded{} = Msg, new) ->
+>>>>>>> 91e3180a5 (Mc: introduce new function in mc_amqp to init mc from stream.)
     Durable = get_property(durable, Msg),
     Priority = get_property(priority, Msg),
     Timestamp = get_property(timestamp, Msg),
@@ -615,6 +637,12 @@ essential_properties(#msg_body_encoded{message_annotations = MA} = Msg) ->
                maps_put_truthy(
                  ttl, Ttl,
                  Anns0))),
+<<<<<<< HEAD
+=======
+    Anns;
+essential_properties(#msg_body_encoded{message_annotations = MA} = Msg, recover) ->
+    Anns = essential_properties(Msg, new),
+>>>>>>> 91e3180a5 (Mc: introduce new function in mc_amqp to init mc from stream.)
     case MA of
         [] ->
             Anns;

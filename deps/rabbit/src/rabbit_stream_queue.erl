@@ -1288,6 +1288,7 @@ parse_uncompressed_subbatch(
           end,
     parse_uncompressed_subbatch(Rem, Offset + 1, StartOffset, QName, Name, LocalPid, Acc).
 
+<<<<<<< HEAD
 entry_to_msg(Entry, Offset, #resource{kind = queue,
                                       name = QName}, Name, LocalPid) ->
     Mc0 = mc:init(mc_amqp, Entry, #{}),
@@ -1304,6 +1305,19 @@ entry_to_msg(Entry, Offset, #resource{kind = queue,
           end,
     Mc = mc:set_annotation(<<"x-stream-offset">>, Offset, Mc2),
     {Name, LocalPid, Offset, false, Mc}.
+=======
+entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName},
+             Name, LocalPid, Filter) ->
+    Mc = mc_amqp:init_from_stream(Entry, #{?ANN_EXCHANGE => <<>>,
+                                           ?ANN_ROUTING_KEYS => [QName],
+                                           <<"x-stream-offset">> => Offset}),
+    case rabbit_amqp_filtex:filter(Filter, Mc) of
+        true ->
+            {Name, LocalPid, Offset, false, Mc};
+        false ->
+            none
+    end.
+>>>>>>> 91e3180a5 (Mc: introduce new function in mc_amqp to init mc from stream.)
 
 capabilities() ->
     #{unsupported_policies => [%% Classic policies
