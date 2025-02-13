@@ -80,6 +80,7 @@ callback_mode() ->
     [handle_event_function].
 
 init([Sup, ConnConfig]) when is_map(ConnConfig) ->
+    process_flag(trap_exit, true),
     Port = maps:get(port, ConnConfig, 5672),
     %% combined the list of `addresses' with the value of the original `address' option if provided
     Addresses0 = maps:get(addresses, ConnConfig, []),
