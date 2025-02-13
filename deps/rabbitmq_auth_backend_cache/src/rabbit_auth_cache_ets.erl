@@ -15,7 +15,7 @@
 -behaviour(rabbit_auth_cache).
 
 -export([start_link/0,
-         get/1, put/3, delete/1]).
+         get/1, put/3, delete/1, clear/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -36,6 +36,8 @@ put(Key, Value, TTL) ->
 
 delete(Key) -> gen_server:call(?MODULE, {delete, Key}, ?CACHE_OPERATION_TIMEOUT).
 
+clear() -> gen_server:cast(?MODULE, clear).
+
 init([]) ->
     {ok, #state{cache = ets:new(?MODULE, [set, private]),
                 timers = ets:new(auth_cache_ets_timers, [set, private])}}.
@@ -52,6 +54,10 @@ handle_call({get, Key}, _From, State = #state{cache = Table}) ->
 handle_call({delete, Key}, _From, State = #state{cache = Table, timers = Timers}) ->
     do_delete(Key, Table, Timers),
     {reply, ok, State}.
+
+handle_cast(clear, State = #state{cache = Table}) ->
+    ets:delete_all_objects(Table),
+    {noreply, State};
 
 handle_cast({put, Key, Value, TTL, Expiration},
             State = #state{cache = Table, timers = Timers}) ->
