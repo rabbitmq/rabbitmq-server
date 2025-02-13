@@ -316,5 +316,15 @@
             }            
         ]}
        ], []
+  },
+  {additional_scopes_key, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.additional_scopes_key = roles realm.roles",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id,<<"new_resource_server_id">>},
+            {extra_scopes_source, <<"roles realm.roles">> }            
+        ]}
+       ], []
   }
 ].
