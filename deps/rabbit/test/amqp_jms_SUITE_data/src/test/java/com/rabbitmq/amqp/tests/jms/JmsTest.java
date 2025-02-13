@@ -19,7 +19,7 @@ package com.rabbitmq.amqp.tests.jms;
 import static com.rabbitmq.amqp.tests.jms.TestUtils.protonClient;
 import static com.rabbitmq.amqp.tests.jms.TestUtils.protonConnection;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.fail;
 
 import com.rabbitmq.qpid.protonj2.client.Client;
 import com.rabbitmq.qpid.protonj2.client.Delivery;
@@ -49,7 +49,7 @@ public class JmsTest {
       TextMessage textMessage = session.createTextMessage(msg1);
       producer.send(textMessage);
       TextMessage receivedTextMessage = (TextMessage) consumer.receive(5000);
-      assertEquals(msg1, receivedTextMessage.getText());
+      assertThat(receivedTextMessage.getText()).isEqualTo(msg1);
 
       // BytesMessage
       String msg2 = "msg2";
@@ -57,7 +57,7 @@ public class JmsTest {
       bytesMessage.writeUTF(msg2);
       producer.send(bytesMessage);
       BytesMessage receivedBytesMessage = (BytesMessage) consumer.receive(5000);
-      assertEquals(msg2, receivedBytesMessage.readUTF());
+      assertThat(receivedBytesMessage.readUTF()).isEqualTo(msg2);
 
       // MapMessage
       MapMessage mapMessage = session.createMapMessage();
@@ -67,10 +67,10 @@ public class JmsTest {
       mapMessage.setLong("key4", 1L);
       producer.send(mapMessage);
       MapMessage receivedMapMessage = (MapMessage) consumer.receive(5000);
-      assertEquals("value", receivedMapMessage.getString("key1"));
-      assertEquals(true, receivedMapMessage.getBoolean("key2"));
-      assertEquals(1.0, receivedMapMessage.getDouble("key3"));
-      assertEquals(1L, receivedMapMessage.getLong("key4"));
+      assertThat(receivedMapMessage.getString("key1")).isEqualTo("value");
+      assertThat(receivedMapMessage.getBoolean("key2")).isTrue();
+      assertThat(receivedMapMessage.getDouble("key3")).isEqualTo(1.0);
+      assertThat(receivedMapMessage.getLong("key4")).isEqualTo(1L);
 
       // StreamMessage
       StreamMessage streamMessage = session.createStreamMessage();
@@ -80,10 +80,10 @@ public class JmsTest {
       streamMessage.writeLong(1L);
       producer.send(streamMessage);
       StreamMessage receivedStreamMessage = (StreamMessage) consumer.receive(5000);
-      assertEquals("value", receivedStreamMessage.readString());
-      assertEquals(true, receivedStreamMessage.readBoolean());
-      assertEquals(1.0, receivedStreamMessage.readDouble());
-      assertEquals(1L, receivedStreamMessage.readLong());
+      assertThat(receivedStreamMessage.readString()).isEqualTo("value");
+      assertThat(receivedStreamMessage.readBoolean()).isTrue();
+      assertThat(receivedStreamMessage.readDouble()).isEqualTo(1.0);
+      assertThat(receivedStreamMessage.readLong()).isEqualTo(1L);
 
       // ObjectMessage
       ObjectMessage objectMessage = session.createObjectMessage();
@@ -91,7 +91,7 @@ public class JmsTest {
       objectMessage.setObject(list);
       producer.send(objectMessage);
       ObjectMessage receivedObjectMessage = (ObjectMessage) consumer.receive(5000);
-      assertEquals(list, receivedObjectMessage.getObject());
+      assertThat(receivedObjectMessage.getObject()).isEqualTo(list);
     }
   }
 
@@ -127,11 +127,11 @@ public class JmsTest {
         com.rabbitmq.qpid.protonj2.client.Connection amqpConnection = protonConnection(client)) {
       Receiver receiver = amqpConnection.openReceiver(queue.getQueueName());
       Delivery delivery = receiver.receive(10, TimeUnit.SECONDS);
-      assertNotNull(delivery);
-      assertEquals(msg1, delivery.message().body());
+      assertThat(delivery).isNotNull();
+      assertThat(delivery.message().body()).isEqualTo(msg1);
 
       delivery = receiver.receive(10, TimeUnit.SECONDS);
-      assertNotNull(delivery);
+      assertThat(delivery).isNotNull();
       com.rabbitmq.qpid.protonj2.client.Message<Map<String, Object>> mapMessage =
           delivery.message();
       assertThat(mapMessage.body())
@@ -141,7 +141,7 @@ public class JmsTest {
           .containsEntry("key4", -1L);
 
       delivery = receiver.receive(10, TimeUnit.SECONDS);
-      assertNotNull(delivery);
+      assertThat(delivery).isNotNull();
       com.rabbitmq.qpid.protonj2.client.Message<List<Object>> listMessage = delivery.message();
       assertThat(listMessage.body()).containsExactly("value", true, -1.1, -1L);
     }
@@ -174,7 +174,7 @@ public class JmsTest {
       }
 
       TextMessage clientResponseMessage = (TextMessage) clientConsumer.receive(5000);
-      assertEquals("HELLO", clientResponseMessage.getText());
+      assertThat(clientResponseMessage.getText()).isEqualTo("HELLO");
     }
   }
 
@@ -188,7 +188,7 @@ public class JmsTest {
         clientContext.createProducer().send(queue, "hello");
         fail("should not be able to create producer for deleted temporary queue");
       } catch (IllegalStateRuntimeException expectedException) {
-        assertEquals("Temporary destination has been deleted", expectedException.getMessage());
+        assertThat(expectedException).hasMessage("Temporary destination has been deleted");
       }
     }
   }

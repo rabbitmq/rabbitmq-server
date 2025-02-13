@@ -19,10 +19,7 @@ package com.rabbitmq.amqp.tests.jms;
 import static com.rabbitmq.amqp.tests.jms.Cli.startBroker;
 import static com.rabbitmq.amqp.tests.jms.Cli.stopBroker;
 import static com.rabbitmq.amqp.tests.jms.TestUtils.*;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 
 import jakarta.jms.*;
 import java.util.concurrent.CountDownLatch;
@@ -46,7 +43,7 @@ public class JmsConnectionTest {
   @Timeout(30)
   public void testCreateConnection() throws Exception {
     try (Connection connection = factory.createConnection()) {
-      assertNotNull(connection);
+      assertThat(connection).isNotNull();
     }
   }
 
@@ -54,19 +51,18 @@ public class JmsConnectionTest {
   @Timeout(30)
   public void testCreateConnectionAndStart() throws Exception {
     try (Connection connection = factory.createConnection()) {
-      assertNotNull(connection);
+      assertThat(connection).isNotNull();
       connection.start();
     }
   }
 
   @Test
   @Timeout(30)
-  // Currently not supported by RabbitMQ.
-  @Disabled
+  @Disabled("Client ID conflict detection is not supported by RabbitMQ")
   public void testCreateWithDuplicateClientIdFails() throws Exception {
     JmsConnection connection1 = (JmsConnection) factory.createConnection();
     connection1.setClientID("Test");
-    assertNotNull(connection1);
+    assertThat(connection1).isNotNull();
     connection1.start();
     JmsConnection connection2 = (JmsConnection) factory.createConnection();
     try {
@@ -84,15 +80,15 @@ public class JmsConnectionTest {
 
   @Test
   public void testSetClientIdAfterStartedFails() {
-    assertThrows(
-        JMSException.class,
-        () -> {
-          try (Connection connection = factory.createConnection()) {
-            connection.setClientID("Test");
-            connection.start();
-            connection.setClientID("NewTest");
-          }
-        });
+    assertThatThrownBy(
+            () -> {
+              try (Connection connection = factory.createConnection()) {
+                connection.setClientID("Test");
+                connection.start();
+                connection.setClientID("NewTest");
+              }
+            })
+        .isInstanceOf(JMSException.class);
   }
 
   @Test
@@ -103,7 +99,7 @@ public class JmsConnectionTest {
     f.setUsername(adminUsername());
     f.setPassword(adminPassword());
     try (Connection connection = factory.createConnection()) {
-      assertNotNull(connection);
+      assertThat(connection).isNotNull();
       connection.start();
     }
   }
@@ -112,7 +108,7 @@ public class JmsConnectionTest {
   @Timeout(30)
   public void testCreateConnectionCallSystemAdmin() throws Exception {
     try (Connection connection = factory.createConnection(adminUsername(), adminPassword())) {
-      assertNotNull(connection);
+      assertThat(connection).isNotNull();
       connection.start();
     }
   }
@@ -120,30 +116,30 @@ public class JmsConnectionTest {
   @Test
   @Timeout(30)
   public void testCreateConnectionAsUnknownUser() {
-    assertThrows(
-        JMSSecurityException.class,
-        () -> {
-          JmsConnectionFactory f = (JmsConnectionFactory) factory;
-          f.setUsername("unknown");
-          f.setPassword("unknown");
-          try (Connection connection = factory.createConnection()) {
-            assertNotNull(connection);
-            connection.start();
-          }
-        });
+    assertThatThrownBy(
+            () -> {
+              JmsConnectionFactory f = (JmsConnectionFactory) factory;
+              f.setUsername("unknown");
+              f.setPassword("unknown");
+              try (Connection connection = factory.createConnection()) {
+                assertThat(connection).isNotNull();
+                connection.start();
+              }
+            })
+        .isInstanceOf(JMSSecurityException.class);
   }
 
   @Test
   @Timeout(30)
   public void testCreateConnectionCallUnknownUser() {
-    assertThrows(
-        JMSSecurityException.class,
-        () -> {
-          try (Connection connection = factory.createConnection("unknown", "unknown")) {
-            assertNotNull(connection);
-            connection.start();
-          }
-        });
+    assertThatThrownBy(
+            () -> {
+              try (Connection connection = factory.createConnection("unknown", "unknown")) {
+                assertThat(connection).isNotNull();
+                connection.start();
+              }
+            })
+        .isInstanceOf(JMSSecurityException.class);
   }
 
   @Test
@@ -180,11 +176,11 @@ public class JmsConnectionTest {
       connection.setExceptionListener(exception -> latch.countDown());
       connection.start();
       Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-      assertNotNull(session);
+      assertThat(session).isNotNull();
 
       try {
         stopBroker();
-        assertTrue(latch.await(10, TimeUnit.SECONDS));
+        assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
       } finally {
         startBroker();
       }

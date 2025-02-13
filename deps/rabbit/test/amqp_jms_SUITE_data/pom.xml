@@ -50,6 +50,13 @@
       <version>${assertj.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- add explicitly to update automatically with dependabot -->
+    <dependency>
+      <groupId>com.google.googlejavaformat</groupId>
+      <artifactId>google-java-format</artifactId>
+      <version>${google-java-format.version}</version>
+      <scope>test</scope>
+    </dependency>
 
   </dependencies>
   <build>

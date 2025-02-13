@@ -17,8 +17,7 @@
 package com.rabbitmq.amqp.tests.jms;
 
 import static com.rabbitmq.amqp.tests.jms.TestUtils.brokerUri;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.*;
 
 import jakarta.jms.*;
 import jakarta.jms.IllegalStateException;
@@ -56,14 +55,14 @@ public class JmsTemporaryQueueTest {
     connection.start();
 
     Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-    assertNotNull(session);
+    assertThat(session).isNotNull();
     TemporaryQueue queue = session.createTemporaryQueue();
     MessageConsumer consumer = session.createConsumer(queue);
 
     MessageProducer producer = session.createProducer(queue);
     String body = UUID.randomUUID().toString();
     producer.send(session.createTextMessage(body));
-    assertEquals(body, consumer.receive(60_000).getBody(String.class));
+    assertThat(consumer.receive(60_000).getBody(String.class)).isEqualTo(body);
   }
 
   @Test
