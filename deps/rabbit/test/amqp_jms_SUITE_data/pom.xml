@@ -15,7 +15,7 @@
     <logback.version>1.2.13</logback.version>
     <spotless.version>2.43.0</spotless.version>
     <google-java-format.version>1.25.2</google-java-format.version>
-    <maven-compiler-plugin.version>3.12.1</maven-compiler-plugin.version>
+    <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
   </properties>
   <dependencies>
