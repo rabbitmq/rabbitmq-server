@@ -10,7 +10,7 @@
 -behaviour(rabbit_auth_cache).
 
 -export([start_link/1,
-         get/1, put/3, delete/1]).
+         get/1, put/3, delete/1, clear/0]).
 -export([gc/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,6 +40,11 @@ put(Key, Value, TTL) ->
 
 delete(Key) ->
     _ = [ets:delete(Table, Key)
+         || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)],
+    ok.
+
+clear() -> 
+    _ = [ets:delete_all_objects(Table)
          || Table <- gen_server:call(?MODULE, get_segment_tables, ?CACHE_OPERATION_TIMEOUT)],
     ok.
 

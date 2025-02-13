@@ -19,7 +19,14 @@ all() ->
     ].
 
 groups() ->
-    CommonTests = [get_empty, get_put, get_expired, put_replace, get_deleted, random_timing],
+    CommonTests = [
+        get_empty, 
+        get_put, 
+        get_expired, 
+        put_replace, 
+        get_deleted, 
+        random_timing, 
+        clear],
     [
     {rabbit_auth_cache_dict, [sequence], CommonTests},
     {rabbit_auth_cache_ets, [sequence], CommonTests},
@@ -153,6 +160,20 @@ get_deleted(Config) ->
     AuthCacheModule:delete(Key),
     {error, not_found} = AuthCacheModule:get(Key).
 
+clear(Config) ->
+    AuthCacheModule = ?config(auth_cache_module, Config),
+    Key1 = some_key1,
+    Key2 = some_key2,
+    TTL = ?config(current_ttl, Config),
+    {error, not_found} = AuthCacheModule:get(Key1),
+    {error, not_found} = AuthCacheModule:get(Key2),
+    ok = AuthCacheModule:put(Key1, some_value, TTL),
+    ok = AuthCacheModule:put(Key2, some_value, TTL),
+    {ok, some_value} = AuthCacheModule:get(Key1),
+    {ok, some_value} = AuthCacheModule:get(Key2),
+    AuthCacheModule:clear(),
+    {error, not_found} = AuthCacheModule:get(Key1),
+    {error, not_found} = AuthCacheModule:get(Key2).
 
 random_timing(Config) ->
     random_timing(Config, 15000, 1000).
