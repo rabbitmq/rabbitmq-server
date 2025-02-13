@@ -28,7 +28,6 @@ updates:
       - "/deps/rabbitmq_mqtt/test/java_SUITE_data"
       - "/deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
       - "/deps/rabbitmq_stream_management/test/http_SUITE_data"
-      - "/deps/rabbitmq_amqp1_0/test/system_SUITE_data/java-tests"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
@@ -43,7 +42,6 @@ updates:
       - "/deps/rabbitmq_mqtt/test/java_SUITE_data"
       - "/deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
       - "/deps/rabbitmq_stream_management/test/http_SUITE_data"
-      - "/deps/rabbitmq_amqp1_0/test/system_SUITE_data/java-tests"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
@@ -58,7 +56,6 @@ updates:
       - "/deps/rabbitmq_mqtt/test/java_SUITE_data"
       - "/deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
       - "/deps/rabbitmq_stream_management/test/http_SUITE_data"
-      - "/deps/rabbitmq_amqp1_0/test/system_SUITE_data/java-tests"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot"
       - "/deps/rabbitmq_auth_backend_http/examples/rabbitmq_auth_backend_spring_boot_kotlin"
     schedule:
