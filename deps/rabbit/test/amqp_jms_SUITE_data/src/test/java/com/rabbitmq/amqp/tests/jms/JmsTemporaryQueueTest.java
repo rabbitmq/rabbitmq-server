@@ -14,11 +14,9 @@
 // Copyright (c) 2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc.
 // and/or its subsidiaries. All rights reserved.
 //
-
 package com.rabbitmq.amqp.tests.jms;
 
 import static com.rabbitmq.amqp.tests.jms.TestUtils.brokerUri;
-import static com.rabbitmq.amqp.tests.jms.TestUtils.connection;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -35,13 +33,16 @@ import org.junit.jupiter.api.Timeout;
  * Based on
  * https://github.com/apache/qpid-jms/tree/main/qpid-jms-interop-tests/qpid-jms-activemq-tests.
  */
+@JmsTestInfrastructure
 public class JmsTemporaryQueueTest {
+
+  ConnectionFactory factory;
 
   Connection connection;
 
   @BeforeEach
   void init() throws JMSException {
-    connection = connection();
+    connection = factory.createConnection();
   }
 
   @AfterEach
