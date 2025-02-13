@@ -17,6 +17,7 @@ def all_beam_files(name = "all_beam_files"):
     erlang_bytecode(
         name = "other_beam",
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ClearAuthBackendCacheCommand.erl",
             "src/rabbit_auth_backend_cache.erl",
             "src/rabbit_auth_backend_cache_app.erl",
             "src/rabbit_auth_cache_dict.erl",
@@ -29,7 +30,7 @@ def all_beam_files(name = "all_beam_files"):
         beam = [":behaviours"],
         dest = "ebin",
         erlc_opts = "//:erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app"],
     )
 
 def all_test_beam_files(name = "all_test_beam_files"):
@@ -51,6 +52,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         name = "test_other_beam",
         testonly = True,
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ClearAuthBackendCacheCommand.erl",
             "src/rabbit_auth_backend_cache.erl",
             "src/rabbit_auth_backend_cache_app.erl",
             "src/rabbit_auth_cache_dict.erl",
@@ -63,7 +65,7 @@ def all_test_beam_files(name = "all_test_beam_files"):
         beam = [":test_behaviours"],
         dest = "test",
         erlc_opts = "//:test_erlc_opts",
-        deps = ["//deps/rabbit_common:erlang_app"],
+        deps = ["//deps/rabbit_common:erlang_app", "//deps/rabbitmq_cli:erlang_app"],
     )
 
 def all_srcs(name = "all_srcs"):
@@ -86,6 +88,7 @@ def all_srcs(name = "all_srcs"):
     filegroup(
         name = "srcs",
         srcs = [
+            "src/Elixir.RabbitMQ.CLI.Ctl.Commands.ClearAuthBackendCacheCommand.erl",
             "src/rabbit_auth_backend_cache.erl",
             "src/rabbit_auth_backend_cache_app.erl",
             "src/rabbit_auth_cache.erl",
