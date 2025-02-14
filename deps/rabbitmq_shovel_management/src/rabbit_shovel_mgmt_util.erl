@@ -42,9 +42,10 @@ status(Node) ->
             [format(Node, I) || I <- Status]
     end.
 
-format(Node, {Name, Type, Info, _Metrics, TS}) ->
+format(Node, {Name, Type, Info, Metrics, TS}) ->
     [{node, Node}, {timestamp, format_ts(TS)}] ++
         format_name(Type, Name) ++
+        format_metrics(Metrics) ++
         format_info(Info);
 format(Node, {Name, Type, Info, TS}) ->
     [{node, Node}, {timestamp, format_ts(TS)}] ++
@@ -56,6 +57,11 @@ format_name(static,  Name)          -> [{name,  Name},
 format_name(dynamic, {VHost, Name}) -> [{name,  Name},
     {vhost, VHost},
     {type,  dynamic}].
+
+format_metrics(undefined) ->
+    [];
+format_metrics(Metrics) when is_map(Metrics) ->
+    maps:to_list(Metrics).
 
 format_info(starting) ->
     [{state, starting}];
