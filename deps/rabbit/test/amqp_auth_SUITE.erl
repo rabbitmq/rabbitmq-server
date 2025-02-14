@@ -120,12 +120,17 @@ init_per_group(Group, Config0) ->
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-    Vhost = <<"test vhost">>,
-    User = <<"test user">>,
-    ok = rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
-    ok = rabbit_ct_broker_helpers:add_user(Config, User),
-    [{test_vhost, Vhost},
-     {test_user, User}] ++ Config.
+    case Config of
+        _ when is_list(Config) ->
+            Vhost = <<"test vhost">>,
+            User = <<"test user">>,
+            ok = rabbit_ct_broker_helpers:add_vhost(Config, Vhost),
+            ok = rabbit_ct_broker_helpers:add_user(Config, User),
+            [{test_vhost, Vhost},
+             {test_user, User}] ++ Config;
+        {skip, _} = Skip ->
+            Skip
+    end.
 
 end_per_group(_Group, Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, ?config(test_user, Config)),
