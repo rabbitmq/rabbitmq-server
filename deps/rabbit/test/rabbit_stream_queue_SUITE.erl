@@ -2743,7 +2743,7 @@ retry_if_coordinator_unavailable(Config, Server, Cmd, Retry) ->
             case re:run(Msg, ".*coordinator_unavailable.*", [{capture, none}]) of
                 match ->
                     ct:pal("Attempt to execute command ~p failed, coordinator unavailable", [Cmd]),
-                    retry_if_coordinator_unavailable(Config, Ch, Cmd, Retry - 1);
+                    retry_if_coordinator_unavailable(Config, Server, Cmd, Retry - 1);
                 _ ->
                     exit(Error)
             end
