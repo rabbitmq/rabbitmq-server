@@ -471,11 +471,13 @@ delete(XName, IfUnused, Username) ->
                                       ?EXCHANGE_DELETE_IN_PROGRESS_COMPONENT,
                                       XName#resource.name, true, Username),
         case rabbit_db_exchange:delete(XName, IfUnused) of
-            {deleted, #exchange{name = XName} = X, Bs, Deletions} ->
+            {deleted, #exchange{name = XName, type = XType} = X, Bs, Deletions} ->
                 Deletions1 = rabbit_binding:add_deletion(
                                XName, X, deleted, Bs, Deletions),
                 ok = rabbit_binding:process_deletions(Deletions1),
                 ok = rabbit_binding:notify_deletions(Deletions1, Username),
+                {ok, XTypeModule} = rabbit_registry:lookup_type_module(exchange, XType),
+                ok = XTypeModule:delete(0, X),
                 ok;
             {error, _} = Err ->
                 Err
