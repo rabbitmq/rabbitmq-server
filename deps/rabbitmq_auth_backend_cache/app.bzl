@@ -136,3 +136,11 @@ def test_suite_beam_files(name = "test_suite_beam_files"):
         app_name = "rabbitmq_auth_backend_cache",
         erlc_opts = "//:test_erlc_opts",
     )
+    erlang_bytecode(
+        name = "rabbit_auth_clear_cache_command_SUITE_beam_files",
+        testonly = True,
+        srcs = ["test/rabbit_auth_clear_cache_command_SUITE.erl"],
+        outs = ["test/rabbit_auth_clear_cache_command_SUITE.beam"],
+        app_name = "rabbitmq_auth_backend_cache",
+        erlc_opts = "//:test_erlc_opts",
+    )
