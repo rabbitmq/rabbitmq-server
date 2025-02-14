@@ -49,6 +49,12 @@
                 info :: info(),
                 blocked_status = running :: blocked_status(),
                 blocked_at :: integer() | undefined,
+                metrics :: #{remaining := rabbit_types:option(non_neg_integer()) | unlimited,
+                             ramaining_unacked := rabbit_types:option(non_neg_integer()),
+                             pending := rabbit_types:option(non_neg_integer()),
+                             forwarded := rabbit_types:option(non_neg_integer())
+                             },
+
                 timestamp :: calendar:datetime()}).
 
 start_link() ->
@@ -112,6 +118,7 @@ handle_call(status, _From, State) ->
     {reply, [{Entry#entry.name,
               Entry#entry.type,
               blocked_status_to_info(Entry),
+              Entry#entry.metrics,
               Entry#entry.timestamp}
              || Entry <- Entries], State};
 
@@ -120,6 +127,7 @@ handle_call({lookup, Name}, _From, State) ->
                [Entry] -> [{name, Name},
                            {type, Entry#entry.type},
                            {info, blocked_status_to_info(Entry)},
+                           {metrics, Entry#entry.metrics},
                            {timestamp, Entry#entry.timestamp}];
                [] -> not_found
            end,
@@ -141,6 +149,18 @@ handle_cast({report, Name, Type, Info, Timestamp}, State) ->
                         split_name(Name) ++ split_status(Info)),
     {noreply, State};
 
+handle_cast({report_blocked_status, Name, {Status, Metrics}, Timestamp}, State) ->
+    case Status of
+        flow ->
+            true = ets:update_element(?ETS_NAME, Name, [{#entry.blocked_status, flow},
+                                                        {#entry.metrics, Metrics},
+                                                        {#entry.blocked_at, Timestamp}]);
+        _ ->
+            true = ets:update_element(?ETS_NAME, Name, [{#entry.blocked_status, Status},
+                                                        {#entry.metrics, Metrics}])
+    end,
+    {noreply, State};
+%% used in tests
 handle_cast({report_blocked_status, Name, Status, Timestamp}, State) ->
     case Status of
         flow ->
@@ -178,22 +198,22 @@ code_change(_OldVsn, State, _Extra) ->
 inject_node_info(Node, Shovels) ->
     lists:map(
         %% starting
-        fun({Name, Type, State, Timestamp}) when is_atom(State) ->
+        fun({Name, Type, State, Metrics, Timestamp}) when is_atom(State) ->
              Opts = [{node, Node}],
-             {Name, Type, {State, Opts}, Timestamp};
+             {Name, Type, {State, Opts}, Metrics, Timestamp};
            %% terminated
-           ({Name, Type, {terminated, Reason}, Timestamp}) ->
-             {Name, Type, {terminated, Reason}, Timestamp};
+           ({Name, Type, {terminated, Reason}, Metrics, Timestamp}) ->
+             {Name, Type, {terminated, Reason}, Metrics, Timestamp};
             %% running
-           ({Name, Type, {State, Opts}, Timestamp}) ->
+           ({Name, Type, {State, Opts}, Metrics, Timestamp}) ->
              Opts1 = Opts ++ [{node, Node}],
-             {Name, Type, {State, Opts1}, Timestamp}
+             {Name, Type, {State, Opts1}, Metrics, Timestamp}
         end, Shovels).
 
 -spec find_matching_shovel(rabbit_types:vhost(), binary(), [status_tuple()]) -> status_tuple() | undefined.
 find_matching_shovel(VHost, Name, Shovels) ->
     case lists:filter(
-        fun ({{V, S}, _Kind, _Status, _}) ->
+        fun ({{V, S}, _Kind, _Status, _Metrics, _}) ->
             VHost =:= V andalso Name =:= S
         end, Shovels) of
             []  -> undefined;

@@ -30,7 +30,8 @@
          status/1,
          % common functions
          decr_remaining_unacked/1,
-         decr_remaining/2
+         decr_remaining/2,
+         incr_forwarded/1
         ]).
 
 -type tag() :: non_neg_integer().
@@ -155,7 +156,18 @@ nack(Tag, Multi, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tag, Multi, State).
 
 status(#{dest := #{module := Mod}} = State) ->
-    Mod:status(State).
+    {Mod:status(State), metrics(State)}.
+
+incr_forwarded(State = #{dest := Dest}) ->
+    State#{dest => maps:put(forwarded, maps:get(forwarded, Dest, 0) + 1, Dest)}.
+
+metrics(_State = #{source := Source,
+                   dest := Dest}) ->
+    #{remaining => maps:get(remaining, Source, unlimited),
+     remaining_unacked => maps:get(remaining_unacked, Source, 0),
+      pending => maps:get(pending, Dest, 0),
+      forwarded => maps:get(forwarded, Dest, 0)}.
+
 
 %% Common functions
 

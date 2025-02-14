@@ -118,13 +118,17 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 simple(Config) ->
+    Name = <<"test">>,
     with_ch(Config,
       fun (Ch) ->
               shovel_test_utils:set_param(
                 Config,
-                <<"test">>, [{<<"src-queue">>,  <<"src">>},
+                Name, [{<<"src-queue">>,  <<"src">>},
                              {<<"dest-queue">>, <<"dest">>}]),
-              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>)
+              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
+              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, Name}]),
+              ?assertMatch([_|_], Status),
+              ?assertMatch(#{metrics := #{forwarded := 1}}, maps:from_list(Status))
       end).
 
 quorum_queues(Config) ->
