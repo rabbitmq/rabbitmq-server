@@ -6299,26 +6299,9 @@ ra_name(Q) ->
 wait_for_local_member(<<"stream">>, QName, Config) ->
     %% If it is a stream we need to wait until there is a local member
     %% on the node we want to subscribe from before proceeding.
-    rabbit_ct_helpers:await_condition(
-      fun() -> rpc(Config, 0, ?MODULE, has_local_member,
-                   [rabbit_misc:r(<<"/">>, queue, QName)])
-      end, 30_000);
+    ok = queue_utils:wait_for_local_stream_member(0, <<"/">>, QName, Config);
 wait_for_local_member(_, _, _) ->
     ok.
-
-has_local_member(QName) ->
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            #{name := StreamId} = amqqueue:get_type_state(Q),
-            case rabbit_stream_coordinator:local_pid(StreamId) of
-                {ok, Pid} ->
-                    is_process_alive(Pid);
-                {error, _} ->
-                    false
-            end;
-        {error, _} ->
-            false
-    end.
 
 -spec find_event(Type, Props, Events) -> Ret when
       Type :: atom(),

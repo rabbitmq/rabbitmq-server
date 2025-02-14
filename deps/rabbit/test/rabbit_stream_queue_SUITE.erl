@@ -1732,6 +1732,7 @@ consume_from_replica(Config) ->
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server3),
     qos(Ch2, 10, false),
 
+    ok = queue_utils:wait_for_local_stream_member(Server3, <<"/">>, Q, Config),
     subscribe(Ch2, Q, false, 0),
     receive_batch(Ch2, 0, 99),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
