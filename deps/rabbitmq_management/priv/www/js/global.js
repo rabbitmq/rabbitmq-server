@@ -250,7 +250,7 @@ var HELP = {
        'Set the queue type, determining the type of queue to use: raft-based high availability or classic queue. Valid values are <code>quorum</code> or <code>classic</code>. It defaults to <code>classic</code>. <br/>',
 
     'queue-messages':
-      '<p>Message counts.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p>',
+      '<p>Message counts.</p><p>Note that some messages can be in memory and on disk at the same time.',
 
     'queue-messages-stream':
       '<p>Approximate message counts.</p><p>Note that streams store some entries that are not user messages such as offset tracking data which is included in this count. Thus this value will never be completely correct.</p>',
@@ -262,7 +262,7 @@ var HELP = {
       'The number of times a message can be returned to this queue before it is dead-lettered (if configured) or dropped.',
 
     'queue-message-body-bytes':
-      '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that "in memory" and "persistent" are not mutually exclusive; persistent messages can be in memory as well as on disc, and transient messages can be paged out if memory is tight. Non-durable queues will consider all messages to be transient.</p><p>If a message is routed to multiple queues on publication, its body will be stored only once (in memory and on disk) and shared between queues. The value shown here does not take account of this effect.</p>',
+      '<p>The sum total of the sizes of the message bodies in this queue. This only counts message bodies; it does not include message properties (including headers) or metadata used by the queue.</p><p>Note that some messages can be in memory and on disk at the same time.</p><p>For classic queues, if a message larger than <code>queue_index_embed_msgs_below</code> (4KB by default) is routed to multiple queues, its body will be stored only once and shared between queues. The value shown here does not take this optimization into account.</p>',
 
     'queue-process-memory':
       'Total memory used by this queue process. This does not include in-memory message bodies (which may be shared between queues and will appear in the global "binaries" memory) but does include everything else.',
