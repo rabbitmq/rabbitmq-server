@@ -7,7 +7,7 @@
 defmodule RabbitMQ.CLI.Core.OsPid do
   @external_process_check_interval 1000
 
-  @pid_regex ~r/^\s*(?<pid>\d+)/
+  @pid_regex ~S"^\s*(?<pid>\d+)"
 
   #
   # API
@@ -27,7 +27,7 @@ defmodule RabbitMQ.CLI.Core.OsPid do
   def read_pid_from_file(pidfile_path, should_wait) do
     case {:file.read_file(pidfile_path), should_wait} do
       {{:ok, contents}, _} ->
-        pid_regex = Regex.recompile!(@pid_regex)
+        pid_regex = Regex.compile!(@pid_regex)
 
         case Regex.named_captures(pid_regex, contents)["pid"] do
           # e.g. the file is empty
