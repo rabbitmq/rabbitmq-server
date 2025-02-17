@@ -11,7 +11,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
 
   import RabbitMQ.CLI.Core.CodePath
 
-  @commands_ns ~r/RabbitMQ.CLI.(.*).Commands/
+  @commands_ns ~S"RabbitMQ.CLI.(.*).Commands"
 
   def module_map(opts \\ %{}) do
     Application.get_env(:rabbitmqctl, :commands) || load(opts)
@@ -130,7 +130,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   end
 
   defp make_module_map(modules, scope) when modules != nil do
-    commands_ns = Regex.recompile!(@commands_ns)
+    commands_ns = Regex.compile!(@commands_ns)
 
     modules
     |> Enum.filter(fn mod ->
@@ -212,7 +212,7 @@ defmodule RabbitMQ.CLI.Core.CommandModules do
   defp command_scopes(cmd) do
     case CommandBehaviour.scopes(cmd) do
       nil ->
-        Regex.recompile!(@commands_ns)
+        Regex.compile!(@commands_ns)
         |> Regex.run(to_string(cmd), capture: :all_but_first)
         |> List.first()
         |> to_snake_case
