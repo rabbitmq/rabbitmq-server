@@ -409,8 +409,8 @@ clean-deps:
 PACKAGES_SOURCE_DIST_FILE ?= $(firstword $(SOURCE_DIST_FILES))
 
 RABBITMQ_PACKAGING_TARGETS = package-deb package-rpm \
-package-rpm-redhat package-rpm-fedora package-rpm-rhel6 package-rpm-rhel7 \
-package-rpm-rhel8 package-rpm-suse package-rpm-opensuse package-rpm-sles11 \
+package-rpm-redhat package-rpm-fedora package-rpm-rhel8 \
+package-rpm-suse package-rpm-opensuse \
 package-windows
 
 ifneq ($(filter $(RABBITMQ_PACKAGING_TARGETS),$(MAKECMDGOALS)),)
