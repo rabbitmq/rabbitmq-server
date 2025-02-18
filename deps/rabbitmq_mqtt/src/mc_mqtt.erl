@@ -92,7 +92,7 @@ convert_from(mc_amqp, Sections, Env) ->
                            MqttX:(byte_size(MqttX))/binary,
                            "/",
                            RoutingKeyQuoted/binary>> ->
-                             try rabbit_uri:urldecode(RoutingKeyQuoted) of
+                             try cow_uri:urldecode(RoutingKeyQuoted) of
                                  RoutingKey ->
                                      MqttTopic = rabbit_mqtt_util:amqp_to_mqtt(RoutingKey),
                                      #{'Response-Topic' => MqttTopic}
