@@ -59,7 +59,10 @@
          buf :: list(),
          buf_len :: non_neg_integer(),
          tracked_channels = maps:new() :: #{channel_number() => Session :: pid()},
-         stats_timer :: rabbit_event:state()
+         stats_timer :: rabbit_event:state(),
+         %% dynamic buffer
+         dynamic_buffer_size = 128,
+         dynamic_buffer_moving_average = 0.0
         }).
 
 -type state() :: #v1{}.
