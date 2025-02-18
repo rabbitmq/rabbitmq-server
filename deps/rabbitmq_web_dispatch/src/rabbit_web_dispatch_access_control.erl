@@ -141,7 +141,10 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
         _                           -> []
     end,
     {IP, _} = cowboy_req:peer(ReqData),
-    case rabbit_access_control:check_user_login(Username, AuthProps) of
+
+	{ok, AuthBackends} = get_auth_backends(),
+
+    case rabbit_access_control:check_user_login(Username, AuthProps, AuthBackends) of
         {ok, User = #user{username = ResolvedUsername, tags = Tags}} ->
             case rabbit_access_control:check_user_loopback(ResolvedUsername, IP) of
                 ok ->
@@ -359,3 +362,11 @@ log_access_control_result(NotOK) ->
 
 is_basic_auth_disabled(#auth_settings{basic_auth_enabled = Enabled}) ->
     not Enabled.
+
+get_auth_backends() ->
+    case application:get_env(rabbitmq_web_dispatch, auth_backends) of
+		{ok, Backends} -> {ok, Backends};
+		_ -> rabbit_log:debug("rabbitmq_web_dispatch.auth_backends not configured,
+                                falling back to rabbit.auth_backends"),
+             application:get_env(rabbit, auth_backends)
+	end.
