@@ -40,8 +40,8 @@ endif
 # all projects use the same versions. It avoids conflicts.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.12.0
-dep_cowlib = hex 2.13.0
+dep_cowboy = hex 2.13.0
+dep_cowlib = hex 2.14.0
 dep_credentials_obfuscation = hex 3.4.0
 dep_cuttlefish = hex 3.4.0
 dep_gen_batch_server = hex 0.8.8
@@ -51,7 +51,7 @@ dep_khepri_mnesia_migration = hex 0.7.1
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.5
 dep_prometheus = hex 4.11.0
 dep_ra = hex 2.16.2
-dep_ranch = hex 2.1.0
+dep_ranch = hex 2.2.0
 dep_recon = hex 2.5.6
 dep_redbug = hex 2.0.7
 dep_systemd = hex 0.6.1
