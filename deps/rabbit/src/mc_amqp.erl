@@ -677,6 +677,9 @@ essential_properties(#msg_body_encoded{message_annotations = MA} = Msg, recover)
                   ({{symbol, <<"x-exchange">>},
                     {utf8, Exchange}}, Acc) ->
                       Acc#{?ANN_EXCHANGE => Exchange};
+                  ({{symbol, <<"x-opt-rabbitmq-received-time">>},
+                    {timestamp, Ts}}, Acc) ->
+                      Acc#{?ANN_RECEIVED_AT_TIMESTAMP => Ts};
                   (_, Acc) ->
                       Acc
               end, Anns, MA)
