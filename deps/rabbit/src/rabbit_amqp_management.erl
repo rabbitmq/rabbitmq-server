@@ -80,7 +80,7 @@ handle_http_req(<<"GET">>,
                 _User,
                 _ConnPid,
                 PermCaches) ->
-    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
+    QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
     case rabbit_amqqueue:with(
            QName,
@@ -110,7 +110,7 @@ handle_http_req(HttpMethod = <<"PUT">>,
       exclusive := Exclusive,
       arguments := QArgs0
      } = decode_queue(ReqPayload),
-    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
+    QNameBin = cow_uri:urldecode(QNameBinQuoted),
     Owner = case Exclusive of
                 true -> ConnPid;
                 false -> none
@@ -190,7 +190,7 @@ handle_http_req(<<"PUT">>,
                 User = #user{username = Username},
                 _ConnPid,
                 {PermCache0, TopicPermCache}) ->
-    XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
+    XNameBin = cow_uri:urldecode(XNameBinQuoted),
     #{type := XTypeBin,
       durable := Durable,
       auto_delete := AutoDelete,
@@ -240,7 +240,7 @@ handle_http_req(<<"DELETE">>,
                 User,
                 ConnPid,
                 {PermCache0, TopicPermCache}) ->
-    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
+    QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
     PermCache = check_resource_access(QName, read, User, PermCache0),
     try rabbit_amqqueue:with_exclusive_access_or_die(
@@ -270,7 +270,7 @@ handle_http_req(<<"DELETE">>,
                 User = #user{username = Username},
                 ConnPid,
                 {PermCache0, TopicPermCache}) ->
-    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
+    QNameBin = cow_uri:urldecode(QNameBinQuoted),
     QName = queue_resource(Vhost, QNameBin),
     ok = prohibit_cr_lf(QNameBin),
     PermCache = check_resource_access(QName, configure, User, PermCache0),
@@ -290,7 +290,7 @@ handle_http_req(<<"DELETE">>,
                 User = #user{username = Username},
                 _ConnPid,
                 {PermCache0, TopicPermCache}) ->
-    XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
+    XNameBin = cow_uri:urldecode(XNameBinQuoted),
     XName = exchange_resource(Vhost, XNameBin),
     ok = prohibit_cr_lf(XNameBin),
     ok = prohibit_default_exchange(XName),
@@ -630,9 +630,9 @@ decode_binding_path_segment(Segment) ->
          end,
     case re:run(Segment, MP, [{capture, all_but_first, binary}]) of
         {match, [SrcQ, <<DstKindChar>>, DstQ, KeyQ, ArgsHash]} ->
-            Src = rabbit_uri:urldecode(SrcQ),
-            Dst = rabbit_uri:urldecode(DstQ),
-            Key = rabbit_uri:urldecode(KeyQ),
+            Src = cow_uri:urldecode(SrcQ),
+            Dst = cow_uri:urldecode(DstQ),
+            Key = cow_uri:urldecode(KeyQ),
             DstKind = destination_char_to_kind(DstKindChar),
             {Src, DstKind, Dst, Key, ArgsHash};
         nomatch ->

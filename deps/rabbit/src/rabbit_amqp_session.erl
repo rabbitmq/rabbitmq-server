@@ -2699,7 +2699,7 @@ ensure_source(Source = #'v1_0.source'{address = Address,
         {utf8, <<"/queues/", QNameBinQuoted/binary>>} ->
             %% The only possible v2 source address format is:
             %%  /queues/:queue
-            try rabbit_uri:urldecode(QNameBinQuoted) of
+            try cow_uri:urldecode(QNameBinQuoted) of
                 QNameBin ->
                     QName = queue_resource(Vhost, QNameBin),
                     ok = exit_if_absent(QName),
@@ -2907,11 +2907,11 @@ parse_target_v2_string0(<<"/exchanges/", Rest/binary>>) ->
         [<<"amq.default">> | _] ->
             {error, bad_address};
         [XNameBinQuoted] ->
-            XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
+            XNameBin = cow_uri:urldecode(XNameBinQuoted),
             {ok, XNameBin, <<>>, undefined};
         [XNameBinQuoted, RKeyQuoted] ->
-            XNameBin = rabbit_uri:urldecode(XNameBinQuoted),
-            RKey = rabbit_uri:urldecode(RKeyQuoted),
+            XNameBin = cow_uri:urldecode(XNameBinQuoted),
+            RKey = cow_uri:urldecode(RKeyQuoted),
             {ok, XNameBin, RKey, undefined};
         _ ->
             {error, bad_address}
@@ -2920,7 +2920,7 @@ parse_target_v2_string0(<<"/queues/">>) ->
     %% empty queue name is invalid
     {error, bad_address};
 parse_target_v2_string0(<<"/queues/", QNameBinQuoted/binary>>) ->
-    QNameBin = rabbit_uri:urldecode(QNameBinQuoted),
+    QNameBin = cow_uri:urldecode(QNameBinQuoted),
     {ok, ?DEFAULT_EXCHANGE_NAME, QNameBin, QNameBin};
 parse_target_v2_string0(_) ->
     {error, bad_address}.
