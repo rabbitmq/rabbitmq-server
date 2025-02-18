@@ -99,7 +99,11 @@
           %% throttling state, for both
           %% credit- and resource-driven flow control
           throttle,
-          proxy_socket}).
+          proxy_socket,
+          %% dynamic buffer
+          dynamic_buffer_size = 128,
+          dynamic_buffer_moving_average = 0.0
+}).
 
 -record(throttle, {
   %% never | timestamp()
@@ -155,7 +159,8 @@ shutdown(Pid, Explanation) ->
 init(Parent, HelperSups, Ref) ->
     ?LG_PROCESS_TYPE(reader),
     {ok, Sock} = rabbit_networking:handshake(Ref,
-        application:get_env(rabbit, proxy_protocol, false)),
+        application:get_env(rabbit, proxy_protocol, false),
+        dynamic_buffer),
     Deb = sys:debug_options([]),
     start_connection(Parent, HelperSups, Ref, Deb, Sock).
 
@@ -512,8 +517,9 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
     end,
     case Recv of
         {data, Data} ->
+            State1 = maybe_resize_buffer(State, Data),
             recvloop(Deb, [Data | Buf], BufLen + size(Data),
-                     State#v1{pending_recv = false});
+                     State1#v1{pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             State;
         closed when CS =:= pre_init andalso Buf =:= [] ->
@@ -534,6 +540,37 @@ mainloop(Deb, Buf, BufLen, State = #v1{sock = Sock,
                 stop     -> State;
                 NewState -> recvloop(Deb, Buf, BufLen, NewState)
             end
+    end.
+
+maybe_resize_buffer(State=#v1{sock=Sock, dynamic_buffer_size=BufferSize0,
+        dynamic_buffer_moving_average=MovingAvg0}, Data) ->
+    LowDynamicBuffer = 128,
+    HighDynamicBuffer = 131072,
+    DataLen = byte_size(Data),
+    MovingAvg = (MovingAvg0 * 7 + DataLen) / 8,
+    if
+        BufferSize0 < HighDynamicBuffer andalso MovingAvg > BufferSize0 * 0.9 ->
+            BufferSize = min(BufferSize0 * 2, HighDynamicBuffer),
+            case rabbit_net:setopts(Sock, [{buffer, BufferSize}]) of
+                ok -> State#v1{
+                    dynamic_buffer_size=BufferSize,
+                    dynamic_buffer_moving_average=MovingAvg
+                };
+                Error ->
+                    stop(Error, State)
+            end;
+        BufferSize0 > LowDynamicBuffer andalso MovingAvg < BufferSize0 * 0.4 ->
+            BufferSize = max(BufferSize0 div 2, LowDynamicBuffer),
+            case rabbit_net:setopts(Sock, [{buffer, BufferSize}]) of
+                ok -> State#v1{
+                    dynamic_buffer_size=BufferSize,
+                    dynamic_buffer_moving_average=MovingAvg
+                };
+                Error ->
+                    stop(Error, State)
+            end;
+        true ->
+            State#v1{dynamic_buffer_moving_average=MovingAvg}
     end.
 
 -spec stop(_, #v1{}) -> no_return().
