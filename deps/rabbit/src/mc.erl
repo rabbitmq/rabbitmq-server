@@ -160,7 +160,7 @@ init(Proto, Data, Anns0, Env) ->
                 false -> Anns0#{env => Env}
             end,
     Anns2 = maps:merge(ProtoAnns, Anns1),
-    Anns = set_received_at_timestamp(Anns2),
+    Anns = ensure_received_at_timestamp(Anns2),
     #?MODULE{protocol = Proto,
              data = ProtoData,
              annotations = Anns}.
@@ -527,6 +527,9 @@ is_cycle_v1(Queue, [{Queue, Reason} | _])
 is_cycle_v1(Queue, [_ | Rem]) ->
     is_cycle_v1(Queue, Rem).
 
-set_received_at_timestamp(Anns) ->
+ensure_received_at_timestamp(Anns)
+  when is_map_key(?ANN_RECEIVED_AT_TIMESTAMP, Anns) ->
+    Anns;
+ensure_received_at_timestamp(Anns) ->
     Millis = os:system_time(millisecond),
     Anns#{?ANN_RECEIVED_AT_TIMESTAMP => Millis}.
