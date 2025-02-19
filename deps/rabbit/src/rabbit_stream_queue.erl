@@ -42,7 +42,6 @@
 
 -export([list_with_minimum_quorum/0]).
 
--export([set_retention_policy/3]).
 -export([restart_stream/3,
          add_replica/3,
          delete_replica/3,
@@ -998,24 +997,6 @@ update_leader_pid(Pid, #stream_client{} =  State) ->
 
 state_info(_) ->
     #{}.
-
-set_retention_policy(Name, VHost, Policy) ->
-    case rabbit_amqqueue:check_max_age(Policy) of
-        {error, _} = E ->
-            E;
-        MaxAge ->
-            QName = queue_resource(VHost, Name),
-            Fun = fun(Q) ->
-                          Conf = amqqueue:get_type_state(Q),
-                          amqqueue:set_type_state(Q, Conf#{max_age => MaxAge})
-                  end,
-            case rabbit_amqqueue:update(QName, Fun) of
-                not_found ->
-                    {error, not_found};
-                _ ->
-                    ok
-            end
-    end.
 
 -spec restart_stream(VHost :: binary(), Queue :: binary(),
                      #{preferred_leader_node => node()}) ->
