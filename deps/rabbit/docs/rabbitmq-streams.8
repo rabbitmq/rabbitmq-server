@@ -5,7 +5,7 @@
 .\"
 .\" Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 .\"
-.Dd June 22, 2023
+.Dd February 18, 2025
 .Dt RABBITMQ-STREAMS 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -127,18 +127,6 @@ node flag instructs the command to try to place the leader on a specific node du
 Example:
 .Sp
 .Dl rabbitmq-streams restart_stream --vhost Qo a-vhost Qc Qo a-stream Qc --preferred-leader-node Qo node
-.\" ------------------------------------
-.El
-.Ss Policies
-.Bl -tag -width Ds
-.\" ------------------------------------
-.It Cm set_stream_retention_policy Ar stream Ar policy Fl -vhost Ar virtual-host
-.Pp
-Set the retention policy of a stream.
-.Pp
-Example:
-.Sp
-.Dl rabbitmq-streams set_stream_retention_policy --vhost Qo a-vhost Qc Qo a-stream Qc Qo a-policy Qc
 .\" ------------------------------------
 .El
 .Ss Stream plugin
