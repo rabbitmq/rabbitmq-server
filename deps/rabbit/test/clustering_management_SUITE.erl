@@ -76,7 +76,6 @@ groups() ->
                                                  status_with_alarm,
                                                  pid_file_and_await_node_startup_in_khepri,
                                                  await_running_count_in_khepri,
-                                                 start_with_invalid_schema_in_path,
                                                  persistent_cluster_id,
                                                  stop_start_cluster_node,
                                                  restart_cluster_node,
@@ -331,7 +330,7 @@ restart_cluster_node(Config) ->
     assert_clustered([Rabbit, Hare]).
 
 join_and_part_cluster_in_khepri(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
@@ -441,38 +440,38 @@ join_to_start_interval(Config) ->
     assert_clustered([Rabbit, Hare]).
 
 join_cluster_in_minority(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
 
-    stop_join_start(Config, Bunny, Rabbit),
+    stop_join_start(Config, Rabbit, Bunny),
     assert_clustered([Rabbit, Bunny]),
-    ok = rabbit_ct_broker_helpers:stop_node(Config, Bunny),
+    ok = rabbit_ct_broker_helpers:stop_node(Config, Rabbit),
 
     ok = stop_app(Config, Hare),
-    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Bunny, false)),
 
-    ok = rabbit_ct_broker_helpers:start_node(Config, Bunny),
+    ok = rabbit_ct_broker_helpers:start_node(Config, Rabbit),
     ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
     ?assertEqual(ok, start_app(Config, Hare)),
 
     assert_clustered([Rabbit, Bunny, Hare]).
 
 join_cluster_with_rabbit_stopped(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
 
-    stop_join_start(Config, Bunny, Rabbit),
+    stop_join_start(Config, Rabbit, Bunny),
     assert_clustered([Rabbit, Bunny]),
-    ok = stop_app(Config, Bunny),
+    ok = stop_app(Config, Rabbit),
 
     ok = stop_app(Config, Hare),
-    ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
+    ?assertEqual(ok, join_cluster(Config, Hare, Bunny, false)),
 
-    ok = start_app(Config, Bunny),
+    ok = start_app(Config, Rabbit),
     ?assertEqual(ok, join_cluster(Config, Hare, Rabbit, false)),
     ?assertEqual(ok, start_app(Config, Hare)),
 
@@ -947,22 +946,11 @@ force_reset_node_in_khepri(Config) ->
 
     stop_join_start(Config, Rabbit, Hare),
     stop_app(Config, Rabbit),
-    ok = force_reset(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]}, [Hare]),
-    %% Khepri is stopped, so it won't report anything.
-    assert_status({[Rabbit], [], [Rabbit], [Rabbit], []}, [Rabbit]),
-    %% Hare thinks that Rabbit is still clustered
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Hare]},
-                          [Hare]),
-    ok = start_app(Config, Rabbit),
-    assert_not_clustered(Rabbit),
-    %% We can rejoin Rabbit and Hare. Unlike with Mnesia, we try to solve the
-    %% inconsistency instead of returning an error.
-    ok = stop_app(Config, Rabbit),
-    ?assertEqual(ok, join_cluster(Config, Rabbit, Hare, false)),
-    ok = start_app(Config, Rabbit),
-    assert_cluster_status({[Rabbit, Hare], [Rabbit, Hare], [Rabbit, Hare]},
-                          [Rabbit, Hare]).
+    {error, 69, Msg} = force_reset(Config, Rabbit),
+    ?assertEqual(
+       match,
+       re:run(
+         Msg, "Forced reset is unsupported with Khepri", [{capture, none}])).
 
 status_with_alarm(Config) ->
     [Rabbit, Hare] = rabbit_ct_broker_helpers:get_node_configs(Config,
@@ -1124,7 +1112,7 @@ await_running_count_in_khepri(Config) ->
                                               await_running_count, [5, 1000])).
 
 start_nodes_in_reverse_order(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
@@ -1147,7 +1135,7 @@ start_nodes_in_reverse_order(Config) ->
 
 %% Test booting nodes in the wrong order for Mnesia. Interesting...
 start_nodes_in_stop_order(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
@@ -1172,7 +1160,7 @@ start_nodes_in_stop_order(Config) ->
     end.
 
 start_nodes_in_stop_order_in_khepri(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),
@@ -1195,7 +1183,7 @@ start_nodes_in_stop_order_in_khepri(Config) ->
 
 %% TODO test force_boot with Khepri involved
 start_nodes_in_stop_order_with_force_boot(Config) ->
-    [Rabbit, Hare, Bunny] = cluster_members(Config),
+    [Rabbit, Bunny, Hare] = cluster_members(Config),
     assert_not_clustered(Rabbit),
     assert_not_clustered(Hare),
     assert_not_clustered(Bunny),

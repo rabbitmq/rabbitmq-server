@@ -55,7 +55,6 @@
     kill_node_after/3,
 
     reset_node/2,
-    force_reset_node/2,
 
     forget_cluster_node/3,
     forget_cluster_node/4,
@@ -174,7 +173,8 @@
     user/1,
 
     configured_metadata_store/1,
-    await_metadata_store_consistent/2
+    await_metadata_store_consistent/2,
+    do_nodes_run_same_ra_machine_version/2
   ]).
 
 %% Internal functions exported to be used by rpc:call/4.
@@ -1070,6 +1070,12 @@ await_metadata_store_consistent(Config, Node) ->
 ra_last_applied(ServerId) ->
     #{last_applied := LastApplied} = ra:key_metrics(ServerId),
     LastApplied.
+
+do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->
+    [MacVer1 | MacVerN] = MacVers = rpc_all(Config, RaMachineMod, version, []),
+    ct:pal("Ra machine versions of ~s: ~0p", [RaMachineMod, MacVers]),
+    is_integer(MacVer1) andalso
+    lists:all(fun(MacVer) -> MacVer =:= MacVer1 end, MacVerN).
 
 rewrite_node_config_file(Config, Node) ->
     NodeConfig = get_node_config(Config, Node),
@@ -2054,10 +2060,6 @@ await_os_pid_death(Pid) ->
 reset_node(Config, Node) ->
     Name = get_node_config(Config, Node, nodename),
     rabbit_control_helper:command(reset, Name).
-
-force_reset_node(Config, Node) ->
-    Name = get_node_config(Config, Node, nodename),
-    rabbit_control_helper:command(force_reset, Name).
 
 forget_cluster_node(Config, Node, NodeToForget) ->
     forget_cluster_node(Config, Node, NodeToForget, []).

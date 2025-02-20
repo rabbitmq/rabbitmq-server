@@ -11,6 +11,9 @@
 
 -compile(export_all).
 
+suite() ->
+    [{timetrap, {minutes, 3}}].
+
 all() ->
     [
       {group, sequential_tests}

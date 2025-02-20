@@ -163,11 +163,13 @@ force_reset_using_mnesia() ->
       #{domain => ?RMQLOG_DOMAIN_DB}),
     rabbit_mnesia:force_reset().
 
+-spec force_reset_using_khepri() -> no_return().
+
 force_reset_using_khepri() ->
-    ?LOG_DEBUG(
-      "DB: resetting node forcefully (using Khepri)",
+    ?LOG_ERROR(
+      "DB: resetting node forcefully is unsupported with Khepri",
       #{domain => ?RMQLOG_DOMAIN_DB}),
-    rabbit_khepri:force_reset().
+    throw({error, "Forced reset is unsupported with Khepri"}).
 
 -spec force_load_on_next_boot() -> Ret when
       Ret :: ok.

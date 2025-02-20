@@ -1563,13 +1563,13 @@ format(Config) ->
     case length(Nodes) of
         3 ->
             [_, Server2, Server3] = Nodes,
-            ok = rabbit_control_helper:command(stop_app, Server2),
             ok = rabbit_control_helper:command(stop_app, Server3),
+            ok = rabbit_control_helper:command(stop_app, Server2),
 
             Fmt2 = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_stream_queue,
                                                ?FUNCTION_NAME, [QRecord, #{}]),
-            ok = rabbit_control_helper:command(start_app, Server2),
             ok = rabbit_control_helper:command(start_app, Server3),
+            ok = rabbit_control_helper:command(start_app, Server2),
             ?assertEqual(stream, proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
@@ -2741,7 +2741,7 @@ retry_if_coordinator_unavailable(Config, Server, Cmd, Retry) ->
             case re:run(Msg, ".*coordinator_unavailable.*", [{capture, none}]) of
                 match ->
                     ct:pal("Attempt to execute command ~p failed, coordinator unavailable", [Cmd]),
-                    retry_if_coordinator_unavailable(Config, Ch, Cmd, Retry - 1);
+                    retry_if_coordinator_unavailable(Config, Server, Cmd, Retry - 1);
                 _ ->
                     exit(Error)
             end
