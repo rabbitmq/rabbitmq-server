@@ -27,6 +27,7 @@
     load_rabbitmqctl_app/1,
     ensure_rabbitmq_plugins_cmd/1,
     ensure_rabbitmq_queues_cmd/1,
+    ensure_rabbitmq_diagnostics_cmd/1,
     redirect_logger_to_ct_logs/1,
     init_skip_as_error_flag/1,
     start_long_running_testsuite_monitor/1,
@@ -587,6 +588,41 @@ ensure_rabbitmq_queues_cmd(Config) ->
                     set_config(Config,
                                {rabbitmq_queues_cmd,
                                 RabbitmqQueues});
+                {error, Code, Reason} ->
+                    ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
+                    Error;
+                _ ->
+                    Error
+            end
+    end.
+
+ensure_rabbitmq_diagnostics_cmd(Config) ->
+    RabbitmqDiagnostics = case get_config(Config, rabbitmq_diagnostics_cmd) of
+        undefined ->
+            case os:getenv("RABBITMQ_DIAGNOSTICS") of
+                false -> find_script(Config, "rabbitmq-diagnostics");
+                R -> R
+            end;
+        R ->
+            ct:log(?LOW_IMPORTANCE,
+              "Using rabbitmq-diagnostics from rabbitmq_diagnostics_cmd: ~tp~n", [R]),
+            R
+    end,
+    Error = {skip, "rabbitmq-diagnostics required, " ++
+             "please set 'rabbitmq_diagnostics_cmd' in ct config"},
+    case RabbitmqDiagnostics of
+        false ->
+            Error;
+        _ ->
+            Cmd = [RabbitmqDiagnostics],
+            Env = [
+                   {"RABBITMQ_SCRIPTS_DIR", filename:dirname(RabbitmqDiagnostics)}
+                  ],
+            case exec(Cmd, [drop_stdout, {env, Env}]) of
+                {error, 64, _} ->
+                    set_config(Config,
+                               {rabbitmq_diagnostics_cmd,
+                                RabbitmqDiagnostics});
                 {error, Code, Reason} ->
                     ct:pal("Exec failed with exit code ~tp: ~tp", [Code, Reason]),
                     Error;

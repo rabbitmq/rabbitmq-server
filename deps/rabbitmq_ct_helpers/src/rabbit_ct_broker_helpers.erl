@@ -35,7 +35,7 @@
 
     control_action/2, control_action/3, control_action/4,
     rabbitmqctl/3, rabbitmqctl/4, rabbitmqctl_list/3,
-    rabbitmq_queues/3,
+    rabbitmq_queues/3, rabbitmq_diagnostics/3,
 
     add_code_path_to_node/2,
     add_code_path_to_all_nodes/2,
@@ -217,6 +217,7 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
                 fun rabbit_ct_helpers:ensure_rabbitmqctl_app/1,
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+                fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
                 fun share_dist_and_proxy_ports_map/1,
@@ -227,6 +228,7 @@ setup_steps() ->
                 fun rabbit_ct_helpers:ensure_rabbitmqctl_cmd/1,
                 fun rabbit_ct_helpers:load_rabbitmqctl_app/1,
                 fun rabbit_ct_helpers:ensure_rabbitmq_plugins_cmd/1,
+                fun rabbit_ct_helpers:ensure_rabbitmq_diagnostics_cmd/1,
                 fun set_lager_flood_limit/1,
                 fun start_rabbitmq_nodes/1,
                 fun share_dist_and_proxy_ports_map/1,
@@ -1459,6 +1461,21 @@ rabbitmq_queues(Config, Node, Args) ->
                   [{"RABBITMQ_FEATURE_FLAGS_FILE", EnabledFeatureFlagsFile}]
           end,
     Cmd = [RabbitmqQueues, "-n", Nodename | Args],
+    rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
+
+rabbitmq_diagnostics(Config, Node, Args) ->
+    Rabbitmqdiagnostics = ?config(rabbitmq_diagnostics_cmd, Config),
+    NodeConfig = get_node_config(Config, Node),
+    Nodename = ?config(nodename, NodeConfig),
+    Env = [
+      {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqdiagnostics)},
+      {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
+      {"RABBITMQ_MNESIA_DIR", ?config(data_dir, NodeConfig)},
+      {"RABBITMQ_PLUGINS_DIR", ?config(plugins_dir, NodeConfig)},
+      {"RABBITMQ_ENABLED_PLUGINS_FILE",
+        ?config(enabled_plugins_file, NodeConfig)}
+    ],
+    Cmd = [Rabbitmqdiagnostics, "-n", Nodename | Args],
     rabbit_ct_helpers:exec(Cmd, [{env, Env}]).
 
 %% -------------------------------------------------------------------
