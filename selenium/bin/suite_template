@@ -136,7 +136,7 @@ build_mocha_image() {
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
   print "> tag : $tag"
   if [[ $(docker images -q mocha-test:$tag 2> /dev/null) == "" ]]; then
-    docker build $DOCKER_BUILD_ARGS -f ${MOCHA_DOCKER_FILE} -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
+    docker build $DOCKER_BUILD_ARGS -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
     print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"
