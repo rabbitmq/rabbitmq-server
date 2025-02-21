@@ -65,7 +65,7 @@ start_rabbitmq_server() {
 
     check_start_params
 
-    exec erl \
+    exec ktrace -di -t cint -f /tmp/n$RABBITMQ_NODENAME.out erl \
         -pa "$RABBITMQ_SERVER_CODE_PATH" \
         ${RABBITMQ_START_RABBIT} \
         -boot "${SASL_BOOT_FILE}" \
