@@ -138,7 +138,7 @@ endef
 # --------------------------------------------------------------------
 
 .PHONY: source-dist clean-source-dist
-.PHONY: build-dist clean-build-dist
+.PHONY: source-bundle clean-source-bundle
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz
@@ -151,8 +151,8 @@ SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
 .PHONY: $(SOURCE_DIST_FILES)
 
 # Override rsync flags as a pre-requisite
-build-dist: RSYNC_FLAGS = $(BUILD_DIST_RSYNC_FLAGS)
-build-dist: $(SOURCE_DIST_FILES)
+source-bundle: RSYNC_FLAGS = $(SOURCE_BUNDLE_RSYNC_FLAGS)
+source-bundle: $(SOURCE_DIST_FILES)
 	@:
 
 # Override rsync flags as a pre-requisite
@@ -222,10 +222,10 @@ SOURCE_DIST_RSYNC_FLAGS += $(BASE_RSYNC_FLAGS)          \
 	       --exclude 'packaging'			\
 	       --exclude 'test'
 
-# For build-dist, explicitly include folders that are needed
+# For source-bundle, explicitly include folders that are needed
 # for tests to execute. These are added before excludes from
 # the base flags so rsync honors the first match.
-BUILD_DIST_RSYNC_FLAGS += \
+SOURCE_BUNDLE_RSYNC_FLAGS += \
 	       --include 'rabbit_shovel_test/ebin'      \
 	       --include 'rabbit_shovel_test/ebin/*'    \
 	       --include 'rabbitmq_ct_helpers/tools'    \
@@ -395,7 +395,7 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
 
 clean:: clean-source-dist
 
-clean-build-dist:: clean-source-dist
+clean-source-bundle:: clean-source-dist
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
