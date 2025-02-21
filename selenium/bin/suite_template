@@ -128,11 +128,15 @@ init_suite() {
 }
 
 build_mocha_image() {
-  begin "Ensuring mocha-test image ..."
+  DOCKER_BUILD_ARGS=""
+  if [[ -n "$MOCHA_DOCKER_FILE" ]]; then 
+    DOCKER_BUILD_ARGS="-f $MOCHA_DOCKER_FILE "
+  fi
+  begin "Ensuring mocha-test image ($DOCKER_BUILD_ARGS) ..."
   tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
   print "> tag : $tag"
   if [[ $(docker images -q mocha-test:$tag 2> /dev/null) == "" ]]; then
-    docker build -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
+    docker build $DOCKER_BUILD_ARGS -f ${MOCHA_DOCKER_FILE} -t mocha-test:$tag  --target test $SELENIUM_ROOT_FOLDER
     print "> Built docker image mocha-test:$tag"
   fi
   end "mocha-test image exists"

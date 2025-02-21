@@ -209,3 +209,10 @@ following command:
 ```
   npm install
 ```
+
+## Build mocha-test image using a different Dockefile
+
+```bash 
+MOCHA_DOCKER_FILE=\location\of\my\Dockerfile ./run-suites.sh
+```
+
