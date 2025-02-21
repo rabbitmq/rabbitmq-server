@@ -82,7 +82,8 @@
          file_handle_other_reservation/0,
          file_handle_release_reservation/0]).
 
--export([leader_health_check/2, run_leader_health_check/4]).
+-export([leader_health_check/2,
+         run_leader_health_check/4]).
 
 -ifdef(TEST).
 -export([filter_promotable/2,
@@ -2221,4 +2222,4 @@ check_process_limit_safety(QCount, ProcessLimitThreshold) ->
 maybe_log_leader_health_check_result([]) -> ok;
 maybe_log_leader_health_check_result(Result) ->
     Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
-    rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~ts", [Qs]).
+    rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
