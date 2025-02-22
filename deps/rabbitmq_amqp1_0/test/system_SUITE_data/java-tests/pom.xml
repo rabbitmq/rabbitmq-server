@@ -8,8 +8,8 @@
   <name>rabbitmq-amqp1.0-java-tests</name>
   <url>https://www.rabbitmq.com</url>
   <properties>
-    <junit.jupiter.version>5.11.4</junit.jupiter.version>
-    <qpid-jms-client.version>2.6.1</qpid-jms-client.version>
+    <junit.jupiter.version>5.12.0</junit.jupiter.version>
+    <qpid-jms-client.version>2.7.0</qpid-jms-client.version>
     <logback.version>1.2.13</logback.version>
     <spotless.version>2.44.2</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
