@@ -111,7 +111,6 @@ endef
 # --------------------------------------------------------------------
 
 .PHONY: source-dist clean-source-dist
-.PHONY: source-bundle clean-source-bundle
 
 SOURCE_DIST_BASE ?= rabbitmq-server
 SOURCE_DIST_SUFFIXES ?= tar.xz
@@ -123,13 +122,6 @@ SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
 
 .PHONY: $(SOURCE_DIST_FILES)
 
-# Override rsync flags as a pre-requisite
-source-bundle: RSYNC_FLAGS = $(SOURCE_BUNDLE_RSYNC_FLAGS)
-source-bundle: $(SOURCE_DIST_FILES)
-	@:
-
-# Override rsync flags as a pre-requisite
-source-dist: RSYNC_FLAGS = $(SOURCE_DIST_RSYNC_FLAGS)
 source-dist: $(SOURCE_DIST_FILES)
 	@:
 
@@ -138,9 +130,7 @@ RSYNC_V_0 =
 RSYNC_V_1 = -v
 RSYNC_V_2 = -v
 RSYNC_V = $(RSYNC_V_$(V))
-BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
-	       --delete					\
-	       --delete-excluded                        \
+RSYNC_FLAGS += -a $(RSYNC_V)		\
 	       --exclude '.sw?' --exclude '.*.sw?'	\
 	       --exclude '*.beam'			\
 	       --exclude '*.d'				\
@@ -172,6 +162,7 @@ BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
 	       --exclude '$(notdir $(DEPS_DIR))/'	\
 	       --exclude 'hexer*'			\
 	       --exclude 'logs/'			\
+	       --exclude 'packaging'			\
 	       --exclude 'PKG_*.md'			\
 	       --exclude '/plugins/'			\
 	       --include 'cli/plugins'			\
@@ -194,21 +185,9 @@ BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
 	       --exclude '/ranch/doc/'			\
 	       --exclude '/ranch/examples/'		\
 	       --exclude '/sockjs/examples/'		\
-	       --exclude '/workflow_sources/'
-
-SOURCE_DIST_RSYNC_FLAGS += $(BASE_RSYNC_FLAGS)          \
-	       --exclude 'packaging'			\
-	       --exclude 'test'
-
-# For source-bundle, explicitly include folders that are needed
-# for tests to execute. These are added before excludes from
-# the base flags so rsync honors the first match.
-SOURCE_BUNDLE_RSYNC_FLAGS += \
-	       --include 'rabbit_shovel_test/ebin'      \
-	       --include 'rabbit_shovel_test/ebin/*'    \
-	       --include 'rabbitmq_ct_helpers/tools'    \
-	       --include 'rabbitmq_ct_helpers/tools/*'  \
-               $(BASE_RSYNC_FLAGS)
+	       --exclude '/workflow_sources/'		\
+	       --delete					\
+	       --delete-excluded
 
 TAR ?= tar
 TAR_V_0 =
@@ -372,8 +351,6 @@ $(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
 		$(ZIP) $(ZIP_V) --names-stdin $@ < $(SOURCE_DIST).manifest
 
 clean:: clean-source-dist
-
-clean-source-bundle:: clean-source-dist
 
 clean-source-dist:
 	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
