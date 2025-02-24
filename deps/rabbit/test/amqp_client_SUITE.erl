@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([nowarn_export_all,
           export_all]).
@@ -3866,6 +3867,7 @@ leader_transfer_stream_credit_batches(Config) ->
 
 leader_transfer_credit(QName, QType, Credit, Config) ->
     %% Create queue with leader on node 1.
+<<<<<<< HEAD
     {Connection1, Session1, LinkPair1} = init(1, Config),
     {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(
                                LinkPair1,
@@ -3875,6 +3877,18 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair1),
     ok = end_session_sync(Session1),
     ok = close_connection_sync(Connection1),
+=======
+    {_, _, LinkPair1} = Init = init(1, Config),
+    ?awaitMatch(
+       {ok, #{type := QType}},
+       rabbitmq_amqp_client:declare_queue(
+         LinkPair1,
+         QName,
+         #{arguments => #{<<"x-queue-type">> => {utf8, QType},
+                          <<"x-queue-leader-locator">> => {utf8, <<"client-local">>}}}),
+       60000),
+    ok = close(Init),
+>>>>>>> 603ad0d7e (amqp_client_SUITE: Retry connection in two testcases)
 
     %% Consume from a follower.
     OpnConf = connection_config(0, Config),
@@ -5184,12 +5198,15 @@ dead_letter_into_stream(Config) ->
                                                        <<"x-dead-letter-exchange">> => {utf8, <<>>},
                                                        <<"x-dead-letter-routing-key">> => {utf8, QName1}
                                                       }}),
-    {ok, #{type := <<"stream">>}} = rabbitmq_amqp_client:declare_queue(
-                                      LinkPair1,
-                                      QName1,
-                                      #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>},
-                                                       <<"x-initial-cluster-size">> => {ulong, 1}
-                                                      }}),
+    ?awaitMatch(
+       {ok, #{type := <<"stream">>}},
+       rabbitmq_amqp_client:declare_queue(
+         LinkPair1,
+         QName1,
+         #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>},
+                          <<"x-initial-cluster-size">> => {ulong, 1}
+                         }}),
+       60000),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session1, <<"receiver">>, <<"/amq/queue/", QName1/binary>>,
                        settled, configuration,
