@@ -160,7 +160,7 @@ do_recv(State = #state{phase = opening, ppid = PPid, data = Data}) ->
             State#state{phase = open,
                         data = Data1}
     end;
-do_recv(State = #state{phase = Phase, data = Data, socket = Socket, transport = Transport, ppid = PPid})
+do_recv(State0 = #state{phase = Phase, data = Data, socket = Socket, transport = Transport, ppid = PPid})
   when Phase =:= open orelse Phase =:= closing ->
     R = case Data of
             <<F:1, _:3, O:4, 0:1, L:7, Payload:L/binary, Rest/binary>>
@@ -181,8 +181,10 @@ do_recv(State = #state{phase = Phase, data = Data, socket = Socket, transport = 
         end,
     case R of
         moredata ->
-            State;
-        _ -> do_recv2(State, R)
+            State0;
+        _ ->
+            State = do_recv2(State0, R),
+            do_recv(State)
     end.
 
 do_recv2(State = #state{phase = Phase, socket = Socket, ppid = PPid, transport = Transport}, R) ->
