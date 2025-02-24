@@ -4597,19 +4597,8 @@ plugin(Config) ->
 idle_time_out_on_server(Config) ->
     App = rabbit,
     Par = heartbeat,
-    {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
-    %% Configure RabbitMQ to use an idle-time-out of 1 second.
-    ok = rpc(Config, application, set_env, [App, Par, 1]),
-
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    receive {amqp10_event, {connection, Connection, opened}} -> ok
-    after 30000 -> ct:fail({missing_event, ?LINE})
-    end,
-
-    %% Mock the server socket to not have received any bytes.
-    rabbit_ct_broker_helpers:setup_meck(Config),
     Mod = rabbit_net,
+<<<<<<< HEAD
     ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
     ok = rpc(Config, meck, expect, [Mod, getstat, 2, {ok, [{recv_oct, 999}]}]),
     %% The server "SHOULD try to gracefully close the connection using a close
@@ -4625,10 +4614,46 @@ idle_time_out_on_server(Config) ->
     after 30000 ->
               ct:fail({missing_event, ?LINE})
     end,
+=======
+    {ok, DefaultVal} = rpc(Config, application, get_env, [App, Par]),
+    try
+        %% Configure RabbitMQ to use an idle-time-out of 1 second.
+        ok = rpc(Config, application, set_env, [App, Par, 1]),
 
-    ?assert(rpc(Config, meck, validate, [Mod])),
-    ok = rpc(Config, meck, unload, [Mod]),
-    ok = rpc(Config, application, set_env, [App, Par, DefaultVal]).
+        OpnConf = connection_config(Config),
+        {ok, Connection} = amqp10_client:open_connection(OpnConf),
+        receive {amqp10_event, {connection, Connection, opened}} -> ok
+        after 30000 -> ct:fail({missing_event, ?LINE})
+        end,
+>>>>>>> 608405518 (amqp_client_SUITE: Ensure `idle_time_out_on_server` restores heartbeat value)
+
+        %% Mock the server socket to not have received any bytes.
+        rabbit_ct_broker_helpers:setup_meck(Config),
+        ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
+        ok = rpc(Config, meck, expect, [Mod, getstat, fun(_Sock, [recv_oct]) ->
+                                                              {ok, [{recv_oct, 999}]};
+                                                         (Sock, Opts) ->
+                                                              meck:passthrough([Sock, Opts])
+                                                      end]),
+
+        %% The server "SHOULD try to gracefully close the connection using a close
+        %% frame with an error explaining why" [2.4.5].
+        %% Since we chose a heartbeat value of 1 second, the server should easily
+        %% close the connection within 5 seconds.
+        receive
+            {amqp10_event,
+             {connection, Connection,
+              {closed,
+               {resource_limit_exceeded,
+                <<"no frame received from client within idle timeout threshold">>}}}} -> ok
+        after 30000 ->
+                  ct:fail({missing_event, ?LINE})
+        end
+    after
+        ?assert(rpc(Config, meck, validate, [Mod])),
+        ok = rpc(Config, meck, unload, [Mod]),
+        ok = rpc(Config, application, set_env, [App, Par, DefaultVal])
+    end.
 
 %% Test that the idle timeout threshold is exceeded on the client
 %% when no frames are sent from server to client.
