@@ -29,12 +29,17 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let expectations = []
   let username = process.env.RABBITMQ_AMQP_USERNAME
   let password = process.env.RABBITMQ_AMQP_PASSWORD
+  let usemtls = process.env.AMQP_USE_MTLS
   let amqp;
 
-  before(function () {
-    if (backends.includes("http") && username.includes("http")) {
+  before(function () {    
+    if (backends.includes("http") && (username.includes("http") || usemtls)) {
       reset()
-      expectations.push(expectUser({ "username": username, "password": password}, "allow"))
+      if (!usemtls) {
+        expectations.push(expectUser({ "username": username, "password": password}, "allow"))
+      } else {
+        expectations.push(expectUser({ "username": username}, "allow"))
+      }
       expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"configure", "tags":""}, "allow"))
       expectations.push(expectResource({ "username": username, "vhost": "/", "resource": "queue", "name": "my-queue", "permission":"read", "tags":""}, "allow"))
@@ -56,7 +61,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
     await untilConnectionEstablished
     var untilMessageReceived = new Promise((resolve, reject) => {
       onAmqp('message', function(context) {
-        resolve()
+        if (receivedAmqpMessageCount == 2) resolve()
       })
     })
     amqp.sender.send({body:'second message'})    

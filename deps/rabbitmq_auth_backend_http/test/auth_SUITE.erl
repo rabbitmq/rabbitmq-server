@@ -18,6 +18,9 @@
                         password => <<"Kocur">>,
                         expected_credentials => [username, password],
                         tags => [policymaker, monitoring]}).
+-define(ALLOWED_USER_2, #{username => <<"Ala3">>,                        
+                        expected_credentials => [username],
+                        tags => [policymaker, monitoring]}).
 -define(ALLOWED_USER_WITH_EXTRA_CREDENTIALS, #{username => <<"Ala2">>,
                                                password => <<"Kocur">>,
                                                client_id => <<"some_id">>,
@@ -46,12 +49,14 @@ shared() ->
         grants_access_to_user_passing_additional_required_authprops,
         grants_access_to_user_skipping_internal_authprops,
         grants_access_to_user_with_credentials_in_rabbit_auth_backend_http,
-        grants_access_to_user_with_credentials_in_rabbit_auth_backend_cache
+        grants_access_to_user_with_credentials_in_rabbit_auth_backend_cache,
+        grants_access_to_ssl_user_without_a_password
     ].
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:run_setup_steps(Config) ++
         [{allowed_user, ?ALLOWED_USER},
+        {allowed_user_2, ?ALLOWED_USER_2},
         {allowed_user_with_extra_credentials, ?ALLOWED_USER_WITH_EXTRA_CREDENTIALS},
         {denied_user, ?DENIED_USER}].
 
@@ -65,13 +70,21 @@ init_per_group(over_http, Config) ->
 init_per_group(over_https, Config) ->
     configure_http_auth_backend("https", Config),
     {User1, Tuple1} = extractUserTuple(?ALLOWED_USER),
-    {User2, Tuple2} = extractUserTuple(?ALLOWED_USER_WITH_EXTRA_CREDENTIALS),
+    {User2, Tuple2} = extractUserTuple(?ALLOWED_USER_2),    
+    {User3, Tuple3} = extractUserTuple(?ALLOWED_USER_WITH_EXTRA_CREDENTIALS),
     CertsDir = ?config(rmq_certsdir, Config),
-    start_https_auth_server(?AUTH_PORT, CertsDir, ?USER_PATH, #{User1 => Tuple1, User2 => Tuple2}),
-    Config.
+    start_https_auth_server(?AUTH_PORT, CertsDir, ?USER_PATH, #{
+        User1 => Tuple1, 
+        User3 => Tuple3, 
+        User2 => Tuple2}),
+    Config ++ [{group, over_https}].
 
 extractUserTuple(User) ->
-    #{username := Username, password := Password, tags := Tags, expected_credentials := ExpectedCredentials} = User,
+    #{username := Username,  tags := Tags, expected_credentials := ExpectedCredentials} = User,
+    Password = case maps:get(password, User, undefined) of
+        undefined -> none;
+        P -> P
+    end,
     {Username, {Password, Tags, ExpectedCredentials}}.
 
 end_per_suite(Config) ->
@@ -91,6 +104,16 @@ grants_access_to_user(Config) ->
     ?assertMatch({U, T, AuthProps},
                  {User#auth_user.username, User#auth_user.tags, (User#auth_user.impl)()}).
 
+grants_access_to_ssl_user_without_a_password(Config) ->
+    case ?config(group, Config) of 
+        over_https -> 
+            #{username := U, tags := T} = ?config(allowed_user_2, Config),
+            {ok, User} = rabbit_auth_backend_http:user_login_authentication(U, []),
+            ?assertMatch({U, T, []},
+                        {User#auth_user.username, User#auth_user.tags, (User#auth_user.impl)()});
+        _ ->{skip, "Requires https"}
+    end.
+ 
 denies_access_to_user(Config) ->
     #{username := U, password := P} = ?config(denied_user, Config),
     ?assertMatch({refused, "Denied by the backing HTTP service", []},

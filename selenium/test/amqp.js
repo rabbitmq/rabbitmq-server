@@ -28,6 +28,7 @@ function getAmqpsConnectionOptions() {
 }
 function getConnectionOptions() {
   let scheme = process.env.RABBITMQ_AMQP_SCHEME || 'amqp'
+  console.log("Using AMQP protocol: " + scheme)
   switch(scheme){
     case "amqp":
       return getAmqpConnectionOptions()
