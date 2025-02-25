@@ -1159,20 +1159,20 @@ await_metadata_store_consistent(Config, Node) ->
         khepri ->
             RaClusterName = rabbit_khepri:get_ra_cluster_name(),
             Leader = rpc(Config, Node, ra_leaderboard, lookup_leader, [RaClusterName]),
-            LastAppliedLeader = ra_last_applied(Leader),
+            LastAppliedLeader = khepri_last_applied(Leader),
 
             NodeName = get_node_config(Config, Node, nodename),
             ServerId = {RaClusterName, NodeName},
             rabbit_ct_helpers:eventually(
               ?_assert(
                  begin
-                     LastApplied = ra_last_applied(ServerId),
+                     LastApplied = khepri_last_applied(ServerId),
                      is_integer(LastApplied) andalso LastApplied >= LastAppliedLeader
                  end))
     end.
 
-ra_last_applied(ServerId) ->
-    #{last_applied := LastApplied} = ra:key_metrics(ServerId),
+khepri_last_applied(ServerId) ->
+    #{last_applied := LastApplied} = ra:key_metrics(coordination, ServerId),
     LastApplied.
 
 do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->

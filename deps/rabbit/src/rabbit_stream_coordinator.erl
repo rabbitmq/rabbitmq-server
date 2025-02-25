@@ -2342,7 +2342,7 @@ status() ->
     end.
 
 key_metrics_rpc(ServerId) ->
-    Metrics = ra:key_metrics(ServerId),
+    Metrics = ra:key_metrics(?RA_SYSTEM, ServerId),
     Metrics#{machine_version => rabbit_fifo:version()}.
 
 maps_to_list(M) ->
