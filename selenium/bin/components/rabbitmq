@@ -147,7 +147,7 @@ start_docker_rabbitmq() {
   init_rabbitmq
   kill_container_if_exist rabbitmq
 
-  mkdir -p $CONF_DIR/rabbitmq
+  mkdir -pv $CONF_DIR/rabbitmq/conf.d/
 
   RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
@@ -161,13 +161,12 @@ start_docker_rabbitmq() {
       fi
   fi
   if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
-      mkdir -p $CONF_DIR/rabbitmq/conf.d/
       cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
   fi
   if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
       cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/rabbitmq
   fi
-  if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then      
+  if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then
       cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/rabbitmq
   fi
   if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
