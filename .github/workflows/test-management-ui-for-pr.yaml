@@ -61,12 +61,16 @@ jobs:
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
           ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui        
+
+    - name: Prepare logs for upload
+      if: ${{ failure() && steps.tests.outcome == 'failed' }}
+      run: |
         mkdir -p /tmp/short-suite
         mv /tmp/selenium/* /tmp/short-suite
         
     - name: Upload Test Artifacts
-      if: always()
-      uses: actions/upload-artifact@v4.3.2
+      if: ${{ failure() && steps.tests.outcome == 'failed' }}
+      uses: actions/upload-artifact@v4
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
