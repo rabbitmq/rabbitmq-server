@@ -72,7 +72,7 @@ sub_groups() ->
        [invalid_client_id_from_cert_san_dns
        ]},
      {ssl_user_with_client_id_in_cert_san_dns, [],
-       [client_id_from_cert_san_dns        
+       [client_id_from_cert_san_dns
        ]},
      {ssl_user_with_client_id_in_cert_san_dns_1, [],
        [client_id_from_cert_san_dns_1

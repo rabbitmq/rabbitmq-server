@@ -14,8 +14,9 @@ init(Req = #{method := <<"GET">>}, Users) ->
 %%% HELPERS
 
 authenticate(QsVals, Users) ->
+   ct:log("QsVals: ~p Users: ~p", [QsVals, Users]),
    Username = proplists:get_value(<<"username">>, QsVals),
-   Password = proplists:get_value(<<"password">>, QsVals),
+   Password = proplists:get_value(<<"password">>, QsVals, none),
    case maps:get(Username, Users, undefined) of
        {MatchingPassword, Tags, ExpectedCredentials} when Password =:= MatchingPassword ->
             case lists:all(fun(C) -> proplists:is_defined(list_to_binary(rabbit_data_coercion:to_list(C)),QsVals) end, ExpectedCredentials) of

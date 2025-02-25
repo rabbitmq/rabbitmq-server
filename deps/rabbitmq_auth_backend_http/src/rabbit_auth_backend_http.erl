@@ -76,8 +76,12 @@ is_internal_property(rabbit_auth_backend_http) -> true;
 is_internal_property(rabbit_auth_backend_cache) -> true;
 is_internal_property(_Other) -> false.
 
+is_internal_none_password(password, none) -> true;
+is_internal_none_password(_, _) -> false.
+
 extract_other_credentials(AuthProps) ->
-  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K)],
+  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K) and 
+                                                  not is_internal_none_password(K, V)],
   case PublicAuthProps of
     [] -> resolve_using_persisted_credentials(AuthProps);
     _ -> PublicAuthProps

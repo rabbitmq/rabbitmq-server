@@ -23,11 +23,23 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
   let password = process.env.RABBITMQ_AMQP_PASSWORD
   let client_id = process.env.RABBITMQ_AMQP_USERNAME || 'selenium-client'
   
-  before(function () {
-    if (backends.includes("http") && username.includes("http")) {
+  before(function () {    
+    if (backends.includes("http") && (username.includes("http") || usemtls)) {
       reset()
-      expectations.push(expectUser({ "username": username, "password": password, "client_id": client_id, "vhost": "/" }, "allow"))
+      if (!usemtls) {
+        expectations.push(expectUser({ 
+          "username": username, 
+          "password": password, 
+          "client_id": client_id, 
+          "vhost": "/" }, "allow"))
+      } else {
+        expectations.push(expectUser({ 
+          "username": username, 
+          "client_id": client_id, 
+          "vhost": "/" }, "allow"))
+      }
       expectations.push(expectVhost({ "username": username, "vhost": "/"}, "allow"))
+
     } else if (backends.includes("oauth") && username.includes("oauth")) {
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
@@ -58,15 +70,20 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
     }
   })
 
-  it('can open an MQTT connection', function () {
+  it('can open an MQTT connection', async function () {
     var client = mqtt.connect(mqttUrl, mqttOptions)
-    client.on('error', function(err) {
-      assert.fail("Mqtt connection failed due to " + err)
-      client.end()
+    let done = new Promise((resolve, reject) => {
+      client.on('error', function(err) {
+        reject(err)
+        client.end()
+        assert.fail("Mqtt connection failed due to " + err)        
+      }),
+      client.on('connect', function(err) {
+        resolve("ok")
+        client.end()
+      })
     })
-    client.on('connect', function(err) {
-      client.end()
-    })
+    assert.equal("ok", await done)
   })
 
   after(function () {
