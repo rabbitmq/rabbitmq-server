@@ -50,7 +50,7 @@ shared() ->
         grants_access_to_user_skipping_internal_authprops,
         grants_access_to_user_with_credentials_in_rabbit_auth_backend_http,
         grants_access_to_user_with_credentials_in_rabbit_auth_backend_cache,
-        grants_access_to_ssl_user_with_none_password
+        grants_access_to_ssl_user_without_a_password
     ].
 
 init_per_suite(Config) ->
@@ -104,7 +104,7 @@ grants_access_to_user(Config) ->
     ?assertMatch({U, T, AuthProps},
                  {User#auth_user.username, User#auth_user.tags, (User#auth_user.impl)()}).
 
-grants_access_to_ssl_user_with_none_password(Config) ->
+grants_access_to_ssl_user_without_a_password(Config) ->
     case ?config(group, Config) of 
         over_https -> 
             #{username := U, tags := T} = ?config(allowed_user_2, Config),
