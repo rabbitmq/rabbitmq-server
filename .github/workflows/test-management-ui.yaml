@@ -84,12 +84,3 @@ jobs:
         path: |
           /tmp/full-suite
           /tmp/short-suite
-
-  summary-selenium:
-    needs:
-    - selenium
-    runs-on: ubuntu-latest
-    steps:
-    - name: SUMMARY
-      run: |
-        echo "SUCCESS"
