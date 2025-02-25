@@ -71,12 +71,3 @@ jobs:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
           /tmp/short-suite
-
-  summary-selenium:
-    needs:
-    - selenium
-    runs-on: ubuntu-latest
-    steps:
-    - name: SUMMARY
-      run: |
-        echo "SUCCESS"
