@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-arch=$(uname -a)
-if [[ $arch == arm* ]]; then
-  SELENIUM_DOCKER_IMAGE=selenium/standalone-chrome:123.0
-else
-  SELENIUM_DOCKER_IMAGE=seleniarm/standalone-chromium:123.0
-fi
+# selenium/standalone-chromium is multi-arch
+# https://hub.docker.com/r/selenium/standalone-chromium/tags
+SELENIUM_DOCKER_IMAGE=${SELENIUM_DOCKER_IMAGE:-selenium/standalone-chromium:133.0}
 
 start_selenium() {
   begin "Starting selenium  ..."
