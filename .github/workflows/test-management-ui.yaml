@@ -3,10 +3,7 @@ on:
   push:
     branches:
       - main
-      - v4.0.x
-      - bump-otp-for-oci
-      - bump-rbe-*
-      - bump-rules_erlang
+      - 'v4.*.x'
     paths:
       - 'deps/rabbitmq_management/src/**'
       - 'deps/rabbitmq_management/priv/**'
