@@ -56,7 +56,7 @@ jobs:
         cd ${SELENIUM_DIR}
         docker build -t mocha-test --target test .
 
-    - name: Run short ui suites on a standalone rabbitmq server
+    - name: Run short UI suites on a standalone rabbitmq server
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
