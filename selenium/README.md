@@ -116,6 +116,20 @@ cd deps/rabbitmq_management/selenium
 RABBITMQ_DOCKER_IMAGE=bazel/packaging/docker-image:rabbitmq suites/authnz-mgt/oauth-with-uaa-with-mgt-prefix.sh
 ```
 
+To customise the Selenium docker image, use the env variable `SELENIUM_DOCKER_IMAGE`:
+
+```
+cd deps/rabbitmq_management/selenium
+SELENIUM_DOCKER_IMAGE=tds-rabbitmq-docker-virtual.usw1.packages.broadcom.com/selenium/standalone-chromium:133.0 ./suites/authnz-mgt/basic-auth.sh
+```
+
+To customise the temporary directory for test configuration and intermediate container configuration, use `CONF_DIR_PREFIX`. This
+variable defaults to `/tmp`.
+
+```
+cd deps/rabbitmq_management/selenium
+CONF_DIR_PREFIX="$PWD/temp" ./suites/authnz-mgt/basic-auth.sh
+```
 
 ## Run tests interactively using your local chrome browser
 
