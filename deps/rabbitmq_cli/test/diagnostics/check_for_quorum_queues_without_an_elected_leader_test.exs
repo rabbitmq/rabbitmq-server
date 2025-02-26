@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule LeaderHealthCheckCommandTest do
+defmodule CheckForQuorumQueuesWithoutAnElectedLeaderTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElectedLeaderCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
@@ -46,7 +46,7 @@ defmodule LeaderHealthCheckCommandTest do
             {:error, {:badrpc, :nodedown}},
              @command.run(
                ["quorum.queue.*"],
-               %{node: :jake@thedog, vhost: "/", global: false, timeout: 200}
+               %{node: :jake@thedog, vhost: "/", across_all_vhosts: false, timeout: 200}
              )
            )
   end
