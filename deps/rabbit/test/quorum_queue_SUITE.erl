@@ -4159,7 +4159,7 @@ leader_health_check(Config) ->
             [<<".*">>, VHost1])),
     ?assertEqual([],
         rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-            [<<".*">>, global])),
+            [<<".*">>, across_all_vhosts])),
 
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
     {ok, Ch1} = amqp_connection:open_channel(Conn1),
@@ -4180,7 +4180,7 @@ leader_health_check(Config) ->
                  declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
         || Q <- Qs2],
 
-    %% test sucessful health checks in vhost1, vhost2, global
+    %% test sucessful health checks in vhost1, vhost2, across_all_vhosts
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
                                       [<<".*">>, VHost1])),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
@@ -4196,9 +4196,9 @@ leader_health_check(Config) ->
                                       [Q, VHost2])) || Q <- Qs2],
 
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-                                      [<<".*">>, global])),
+                                      [<<".*">>, across_all_vhosts])),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-                                      [<<"Q.*">>, global])),
+                                      [<<"Q.*">>, across_all_vhosts])),
 
     %% clear leaderboard
     Qs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
@@ -4223,7 +4223,7 @@ leader_health_check(Config) ->
          end
             || {Q_ClusterName, Q_Res} <- QQ_Clusters],
 
-    %% test failed health checks in vhost1, vhost2, global
+    %% test failed health checks in vhost1, vhost2, across_all_vhosts
     ?assertEqual([Q1Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
                                       [<<"Q.1">>, VHost1])),
     ?assertEqual([Q2Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
@@ -4252,10 +4252,10 @@ leader_health_check(Config) ->
 
     ?assertEqual(QQ_Data,
         lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-                        [<<"Q.*">>, global]))),
+                        [<<"Q.*">>, across_all_vhosts]))),
     ?assertEqual(QQ_Data,
         lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
-                        [<<"Q.*">>, global]))),
+                        [<<"Q.*">>, across_all_vhosts]))),
 
     %% cleanup
     [?assertMatch(#'queue.delete_ok'{},
