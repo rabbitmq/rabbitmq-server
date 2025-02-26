@@ -4,26 +4,26 @@
 ##
 ## Copyright (c) 2007-2025 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElectedLeaderCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
-  def switches(), do: [global: :boolean]
+  def switches(), do: [across_all_vhosts: :boolean]
 
   def scopes(), do: [:diagnostics]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{global: false, vhost: "/"}, opts)}
+    {args, Map.merge(%{across_all_vhosts: false, vhost: "/"}, opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([pattern] = _args, %{node: node_name, vhost: vhost, global: global_opt}) do
-    vhost = if global_opt, do: :global, else: vhost
+  def run([pattern] = _args, %{node: node_name, vhost: vhost, across_all_vhosts: across_all_vhosts_opt}) do
+    vhost = if across_all_vhosts_opt, do: :across_all_vhosts, else: vhost
 
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :leader_health_check, [pattern, vhost]) do
       [] ->
@@ -73,13 +73,13 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage() do
-    "leader_health_check [--vhost <vhost>] [--global] <pattern>"
+    "leader_health_check [--vhost <vhost>] [--across-all-vhosts] <pattern>"
   end
 
   def usage_additional do
     [
       ["<pattern>", "regular expression pattern used to match quorum queues"],
-      ["--global", "run leader health check for all queues in all virtual hosts on the node"]
+      ["--across-all-vhosts", "run leader health check for all queues in all virtual hosts on the node"]
     ]
   end
 
@@ -93,11 +93,11 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand do
 
   def description(), do: "Checks availability and health status of quorum queue leaders"
 
-  def banner([name], %{global: true}),
-    do: "Checking availability and health status of leaders for quorum queues matching #{name} in all vhosts ..."
+  def banner([name], %{across_all_vhosts: true}),
+    do: "Checking availability and health status of leaders for quorum queues matching '#{name}' in all vhosts ..."
 
   def banner([name], %{vhost: vhost}),
-    do: "Checking availability and health status of leaders for quorum queues matching #{name} in vhost #{vhost} ..."
+    do: "Checking availability and health status of leaders for quorum queues matching '#{name}' in vhost #{vhost} ..."
 
   def queue_lines(qs) do
     for q <- qs, do: "Leader for #{q["readable_name"]} is unhealthy and unavailable"
