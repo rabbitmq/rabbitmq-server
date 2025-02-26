@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommandTest do
+defmodule LeaderHealthCheckCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand
+  @command RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()
