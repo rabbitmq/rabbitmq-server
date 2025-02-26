@@ -147,7 +147,7 @@
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 % -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 -define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
--define(LEADER_HEALTH_CHECK_TIMEOUT, 1_000).
+-define(LEADER_HEALTH_CHECK_TIMEOUT, 5_000).
 -define(GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
 
 %%----------- QQ policies ---------------------------------------------------
@@ -2151,19 +2151,19 @@ file_handle_release_reservation() ->
     ok.
 
 leader_health_check(QueueNameOrRegEx, VHost) ->
-    %% Set a process limit threshold to 40% of ErlangVM process limit, beyond which
+    %% Set a process limit threshold to 20% of ErlangVM process limit, beyond which
     %% we cannot spawn any new processes for executing QQ leader health checks.
-    ProcessLimitThreshold = round(0.4 * erlang:system_info(process_limit)),
+    ProcessLimitThreshold = round(0.2 * erlang:system_info(process_limit)),
 
     leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold).
 
 leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
     Qs =
         case VHost of
-            global ->
-                rabbit_amqqueue:list();
+            across_all_vhosts ->
+                rabbit_db_queue:get_all_by_type(?MODULE);
             VHost when is_binary(VHost) ->
-                rabbit_amqqueue:list(VHost)
+                rabbit_db_queue:get_all_by_type_and_vhost(?MODULE, VHost)
         end,
     check_process_limit_safety(length(Qs), ProcessLimitThreshold),
     ParentPID = self(),
