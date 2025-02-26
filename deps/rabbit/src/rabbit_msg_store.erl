@@ -1274,19 +1274,26 @@ write_large_message(MsgId, MsgBodyBin,
     ok = index_insert(IndexEts,
            #msg_location { msg_id = MsgId, ref_count = 1, file = LargeMsgFile,
                            offset = 0, total_size = TotalSize }),
-    _ = case CurFile of
+    State1 = case CurFile of
         %% We didn't open a new file. We must update the existing value.
         LargeMsgFile ->
             [_,_] = ets:update_counter(FileSummaryEts, LargeMsgFile,
                                        [{#file_summary.valid_total_size, TotalSize},
-                                        {#file_summary.file_size,        TotalSize}]);
+                                        {#file_summary.file_size,        TotalSize}]),
+            State0;
         %% We opened a new file. We can insert it all at once.
+        %% We must also check whether we need to delete the previous
+        %% current file, because if there is no valid data this is
+        %% the only time we will consider it (outside recovery).
         _ ->
             true = ets:insert_new(FileSummaryEts, #file_summary {
                                     file             = LargeMsgFile,
                                     valid_total_size = TotalSize,
                                     file_size        = TotalSize,
-                                    locked           = false })
+                                    locked           = false }),
+            delete_file_if_empty(CurFile, State0 #msstate { current_file_handle = LargeMsgHdl,
+                                                            current_file        = LargeMsgFile,
+                                                            current_file_offset = TotalSize })
     end,
     %% Roll over to the next file.
     NextFile = LargeMsgFile + 1,
@@ -1299,7 +1306,7 @@ write_large_message(MsgId, MsgBodyBin,
     %% Delete messages from the cache that were written to disk.
     true = ets:match_delete(CurFileCacheEts, {'_', '_', 0}),
     %% Process confirms (this won't flush; we already did) and continue.
-    State = internal_sync(State0),
+    State = internal_sync(State1),
     State #msstate { current_file_handle = NextHdl,
                      current_file        = NextFile,
                      current_file_offset = 0 }.
