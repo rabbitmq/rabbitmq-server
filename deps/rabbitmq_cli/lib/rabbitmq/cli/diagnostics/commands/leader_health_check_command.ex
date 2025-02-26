@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2024 VMware, Inc. or its affiliates.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
+defmodule RabbitMQ.CLI.Diagnostics.Commands.LeaderHealthCheckCommand do
   alias RabbitMQ.CLI.Core.DocGuide
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
@@ -13,13 +13,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.LeaderHealthCheckCommand do
 
   def switches(), do: [global: :boolean]
 
-  def scopes(), do: [:queues]
+  def scopes(), do: [:diagnostics]
 
   def merge_defaults(args, opts) do
     {args, Map.merge(%{global: false, vhost: "/"}, opts)}
   end
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
