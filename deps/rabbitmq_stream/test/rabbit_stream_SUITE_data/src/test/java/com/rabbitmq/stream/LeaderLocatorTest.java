@@ -28,6 +28,7 @@ import com.rabbitmq.stream.impl.Client.ClientParameters;
 import com.rabbitmq.stream.impl.Client.Response;
 import com.rabbitmq.stream.impl.Client.StreamMetadata;
 import java.util.Collections;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -57,7 +58,9 @@ public class LeaderLocatorTest {
   void clientLocalLocatorShouldMakeLeaderOnConnectedNode() {
     int[] ports = new int[] {TestUtils.streamPortNode1(), TestUtils.streamPortNode2()};
     for (int port : ports) {
-      Client client = cf.get(new Client.ClientParameters().port(port));
+      Client client = cf.get(new Client.ClientParameters()
+              .port(port)
+              .rpcTimeout(Duration.ofSeconds(30)));
       String s = UUID.randomUUID().toString();
       try {
         Response response =
