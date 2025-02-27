@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+OAUTH2_PROXY_DOCKER_IMAGE=bitnami/oauth2-proxy:7.7.1
+
+ensure_oauth2-proxy() {
+  if docker ps | grep oauth2-proxy &> /dev/null; then
+     print "oauth2-proxy already running ..."
+ else
+   start_oauth2-proxy
+ fi
+}
+init_oauth2-proxy() {
+  KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
+  KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})
+  
+  OAUTH2_PROXY_CONFIG_PATH=${OAUTH2_PROXY_CONFIG_PATH:-oauth/oauth2-proxy}
+  OAUTH2_PROXY_CONFIG_DIR=$(realpath ${TEST_DIR}/${OAUTH2_PROXY_CONFIG_PATH})
+  OAUTH2_PROXY_URL=${OAUTH_PROVIDER_URL}
+
+  print "> KEYCLOAK_CONFIG_DIR: ${KEYCLOAK_CONFIG_DIR}"
+  print "> KEYCLOAK_URL: ${KEYCLOAK_URL}"
+  print "> KEYCLOAK_DOCKER_IMAGE: ${KEYCLOAK_DOCKER_IMAGE}"
+
+  print "> OAUTH2_PROXY_CONFIG_DIR: ${OAUTH2_PROXY_CONFIG_DIR}"
+  print "> OAUTH2_PROXY_URL: ${OAUTH2_PROXY_URL}"
+  print "> OAUTH2_PROXY_DOCKER_IMAGE: ${OAUTH2_PROXY_DOCKER_IMAGE}"
+
+  generate-ca-server-client-kpi oauth2-proxy $OAUTH2_PROXY_CONFIG_DIR
+
+}
+start_oauth2-proxy() {
+  begin "Starting oauth2-proxy ..."
+
+  init_oauth2-proxy
+  kill_container_if_exist oauth2-proxy
+
+  MOUNT_OAUTH2_PROXY_CONF_DIR=$CONF_DIR/oauth2-proxy
+  MOUNT_KEYCLOAK_CONF_DIR=$CONF_DIR/keycloak
+
+  mkdir -p $MOUNT_OAUTH2_PROXY_CONF_DIR
+  mkdir -p $MOUNT_KEYCLOAK_CONF_DIR
+  ${BIN_DIR}/gen-oauth2-proxy-yaml ${OAUTH2_PROXY_CONFIG_DIR} $ENV_FILE $MOUNT_OAUTH2_PROXY_CONF_DIR/alpha-config.yaml
+  print "> EFFECTIVE OAUTH2_PROXY_CONFIG_FILE: $MOUNT_OAUTH2_PROXY_CONF_DIR/alpha-config.yaml"
+  cp ${OAUTH2_PROXY_CONFIG_DIR}/*.pem $MOUNT_OAUTH2_PROXY_CONF_DIR
+  cp ${KEYCLOAK_CONFIG_DIR}/*.pem $MOUNT_KEYCLOAK_CONF_DIR
+
+  docker run \
+		--detach \
+		--name oauth2-proxy \
+    --net ${DOCKER_NETWORK} \
+		--publish 8442:8442 \
+    --env OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET} \
+    --env OAUTH2_PROXY_EMAIL_DOMAINS="*" \
+    --env OAUTH2_PROXY_COOKIE_DOMAINS="" \
+    --env OAUTH2_PROXY_WHITELIST_DOMAINS="*" \
+    --env OAUTH2_PROXY_COOKIE_CSRF_PER_REQUEST="true" \
+    --env OAUTH2_PROXY_COOKIE_CSRF_EXPIRE="5m" \
+    --env OAUTH2_PROXY_REDIRECT_URL="https://oauth2-proxy:8442/oauth2/callback" \
+    --env OAUTH2_PROXY_TLS_KEY_FILE=/etc/oauth2-proxy/certs/server_oauth2-proxy_key.pem \
+    --env OAUTH2_PROXY_TLS_CERT_FILE=/etc/oauth2-proxy/certs/server_oauth2-proxy_certificate.pem \
+		-v ${MOUNT_KEYCLOAK_CONF_DIR}:/etc/keycloak \
+    -v ${MOUNT_OAUTH2_PROXY_CONF_DIR}:/etc/oauth2-proxy \
+		${OAUTH2_PROXY_DOCKER_IMAGE} --alpha-config /etc/oauth2-proxy/alpha-config.yaml --cookie-secure=true 
+
+  wait_for_oidc_endpoint oauth2-proxy $OAUTH2_PROXY_URL $MOUNT_OAUTH2_PROXY_CONF_DIR/ca_oauth2-proxy_certificate.pem
+  end "oauth2-proxy is ready"
+
+}
