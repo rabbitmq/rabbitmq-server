@@ -32,7 +32,7 @@
          close_connection/2, close_connections/2, close_all_connections/1,
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
-         handshake/2, tcp_host/1,
+         handshake/2, handshake/3, tcp_host/1,
          ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
          listener_of_protocol/1, stop_ranch_listener_of_protocol/1,
          list_local_connections_of_protocol/1]).
@@ -551,6 +551,9 @@ failed_to_recv_proxy_header(Ref, Error) ->
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
+    handshake(Ref, ProxyProtocolEnabled, static_buffer).
+
+handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
     case ProxyProtocolEnabled of
         true ->
             case ranch:recv_proxy_header(Ref, 3000) of
@@ -560,23 +563,29 @@ handshake(Ref, ProxyProtocolEnabled) ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch:handshake(Ref),
-                    ok = tune_buffer_size(Sock),
+                    ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
             {ok, Sock} = ranch:handshake(Ref),
-            ok = tune_buffer_size(Sock),
+            ok = tune_buffer_size(Sock, BufferStrategy),
             {ok, Sock}
     end.
 
-tune_buffer_size(Sock) ->
-    case tune_buffer_size1(Sock) of
+tune_buffer_size(Sock, dynamic_buffer) ->
+    case rabbit_net:setopts(Sock, [{buffer, 128}]) of
+        ok         -> ok;
+        {error, _} -> rabbit_net:fast_close(Sock),
+                      exit(normal)
+    end;
+tune_buffer_size(Sock, static_buffer) ->
+    case tune_buffer_size_static(Sock) of
         ok         -> ok;
         {error, _} -> rabbit_net:fast_close(Sock),
                       exit(normal)
     end.
 
-tune_buffer_size1(Sock) ->
+tune_buffer_size_static(Sock) ->
     case rabbit_net:getopts(Sock, [sndbuf, recbuf, buffer]) of
         {ok, BufSizes} -> BufSz = lists:max([Sz || {_Opt, Sz} <- BufSizes]),
                           rabbit_net:setopts(Sock, [{buffer, BufSz}]);

@@ -111,9 +111,10 @@ recvloop(Deb, State0 = #v1{recv_len = RecvLen,
 mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
     case rabbit_net:recv(Sock) of
         {data, Data} ->
-            recvloop(Deb, State#v1{buf = [Data | Buf],
-                                   buf_len = BufLen + size(Data),
-                                   pending_recv = false});
+            State1 = maybe_resize_buffer(State, Data),
+            recvloop(Deb, State1#v1{buf = [Data | Buf],
+                                    buf_len = BufLen + size(Data),
+                                    pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
         closed ->
@@ -128,6 +129,37 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
                 stop     -> ok;
                 NewState -> recvloop(Deb, NewState)
             end
+    end.
+
+maybe_resize_buffer(State=#v1{sock=Sock, dynamic_buffer_size=BufferSize0,
+        dynamic_buffer_moving_average=MovingAvg0}, Data) ->
+    LowDynamicBuffer = 128,
+    HighDynamicBuffer = 131072,
+    DataLen = byte_size(Data),
+    MovingAvg = (MovingAvg0 * 7 + DataLen) / 8,
+    if
+        BufferSize0 < HighDynamicBuffer andalso MovingAvg > BufferSize0 * 0.9 ->
+            BufferSize = min(BufferSize0 * 2, HighDynamicBuffer),
+            case rabbit_net:setopts(Sock, [{buffer, BufferSize}]) of
+                ok -> State#v1{
+                    dynamic_buffer_size=BufferSize,
+                    dynamic_buffer_moving_average=MovingAvg
+                };
+                {error, Reason} ->
+                    throw({inet_error, Reason})
+            end;
+        BufferSize0 > LowDynamicBuffer andalso MovingAvg < BufferSize0 * 0.4 ->
+            BufferSize = max(BufferSize0 div 2, LowDynamicBuffer),
+            case rabbit_net:setopts(Sock, [{buffer, BufferSize}]) of
+                ok -> State#v1{
+                    dynamic_buffer_size=BufferSize,
+                    dynamic_buffer_moving_average=MovingAvg
+                };
+                {error, Reason} ->
+                    throw({inet_error, Reason})
+            end;
+        true ->
+            State#v1{dynamic_buffer_moving_average=MovingAvg}
     end.
 
 -spec handle_other(any(), state()) -> state() | stop.
