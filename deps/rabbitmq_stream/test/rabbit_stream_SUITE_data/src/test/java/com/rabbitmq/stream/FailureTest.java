@@ -221,6 +221,7 @@ public class FailureTest {
                 () -> {
                   connected.set(false);
 
+                  try { Thread.sleep(2000); } catch (Exception e) {}
                   Client locator =
                       cf.get(new Client.ClientParameters().port(streamPortNode2()));
                   // wait until there's a new leader
@@ -467,6 +468,7 @@ public class FailureTest {
             // avoid long-running task in the IO thread
             executorService.submit(
                 () -> {
+                  try { Thread.sleep(2000); } catch (Exception e) {}
                   Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
                   int newReplicaPort = m.getReplicas().get(0).getPort();
 
