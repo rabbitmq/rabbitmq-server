@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule CheckForQuorumQueuesWithoutAnElectedLeaderTest do
+defmodule CheckForQuorumQueuesWithoutAnElectedLeaderCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
