@@ -35,6 +35,7 @@ all_tests() ->
      get_all,
      get_all_by_vhost,
      get_all_by_type,
+     get_all_by_type_and_vhost,
      get_all_by_type_and_node,
      list,
      count,
@@ -196,6 +197,30 @@ get_all_by_type1(_Config) ->
     ?assertEqual([Q], rabbit_db_queue:get_all_by_type(rabbit_classic_queue)),
     ?assertEqual(Quorum, lists:sort(rabbit_db_queue:get_all_by_type(rabbit_quorum_queue))),
     ?assertEqual([Q4], rabbit_db_queue:get_all_by_type(rabbit_stream_queue)),
+    passed.
+
+get_all_by_type_and_vhost(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_all_by_type_and_vhost1, [Config]).
+
+get_all_by_type_and_vhost1(_Config) ->
+    VHost1 = <<"carrots">>,
+    VHost2 = <<"cabage">>,
+    QName = rabbit_misc:r(VHost1, queue, <<"test-queue">>),
+    QName2 = rabbit_misc:r(VHost2, queue, <<"test-queue2">>),
+    QName3 = rabbit_misc:r(VHost2, queue, <<"test-queue3">>),
+    QName4 = rabbit_misc:r(VHost1, queue, <<"test-queue4">>),
+    Q = new_queue(QName, rabbit_classic_queue),
+    Q2 = new_queue(QName2, rabbit_quorum_queue),
+    Q3 = new_queue(QName3, rabbit_quorum_queue),
+    Q4 = new_queue(QName4, rabbit_stream_queue),
+    Quorum = lists:sort([Q2, Q3]),
+    ?assertEqual([], rabbit_db_queue:get_all_by_type_and_vhost(rabbit_classic_queue, VHost1)),
+    ?assertEqual([], lists:sort(rabbit_db_queue:get_all_by_type_and_vhost(rabbit_quorum_queue, VHost2))),
+    ?assertEqual([], rabbit_db_queue:get_all_by_type_and_vhost(rabbit_stream_queue, VHost1)),
+    set_list([Q, Q2, Q3, Q4]),
+    ?assertEqual([Q], rabbit_db_queue:get_all_by_type_and_vhost(rabbit_classic_queue, VHost1)),
+    ?assertEqual(Quorum, lists:sort(rabbit_db_queue:get_all_by_type_and_vhost(rabbit_quorum_queue, VHost2))),
+    ?assertEqual([Q4], rabbit_db_queue:get_all_by_type_and_vhost(rabbit_stream_queue, VHost1)),
     passed.
 
 get_all_by_type_and_node(Config) ->

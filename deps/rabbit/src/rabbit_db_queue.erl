@@ -21,6 +21,7 @@
          get_all/0,
          get_all/1,
          get_all_by_type/1,
+         get_all_by_type_and_vhost/2,
          get_all_by_type_and_node/3,
          list/0,
          count/0,
@@ -824,6 +825,28 @@ consistent_exists_in_mnesia(QName) ->
 
 get_all_by_type(Type) ->
     Pattern = amqqueue:pattern_match_on_type(Type),
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> get_all_by_pattern_in_mnesia(Pattern) end,
+        khepri => fun() -> get_all_by_pattern_in_khepri(Pattern) end
+       }).
+
+%% -------------------------------------------------------------------
+%% get_all_by_type_and_vhost().
+%% -------------------------------------------------------------------
+
+-spec get_all_by_type_and_vhost(Type, VHost) -> [Queue] when
+      Type :: atom(),
+      VHost :: binary(),
+      Queue :: amqqueue:amqqueue().
+
+%% @doc Gets all queues belonging to the given type and vhost
+%%
+%% @returns a list of queue records.
+%%
+%% @private
+
+get_all_by_type_and_vhost(Type, VHost) ->
+    Pattern = amqqueue:pattern_match_on_type_and_vhost(Type, VHost),
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> get_all_by_pattern_in_mnesia(Pattern) end,
         khepri => fun() -> get_all_by_pattern_in_khepri(Pattern) end
