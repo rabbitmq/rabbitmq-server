@@ -359,7 +359,11 @@ end_per_testcase(Testcase, Config) ->
     %% Assert that every testcase cleaned up.
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
-    %% Wait for sessions to terminate before starting the next test case.
+    %% Terminate all connections and wait for sessions to terminate before
+    %% starting the next test case.
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          rabbit_networking, close_all_connections, [<<"test finished">>]),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqp_session, list_local, []))),
     %% Assert that global counters count correctly.
     eventually(?_assertMatch(#{publishers := 0,
