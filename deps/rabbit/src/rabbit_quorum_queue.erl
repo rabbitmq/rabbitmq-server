@@ -2194,13 +2194,9 @@ run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     end,
     ok.
 
-wait_for_leader_health_checks(_Ref, 0, UnhealthyAcc = []) -> UnhealthyAcc;
+wait_for_leader_health_checks(_Ref, 0, UnhealthyAcc) -> UnhealthyAcc;
 wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
     receive
-        {ok, Ref, _QResource} when N == 1 ->
-            UnhealthyAcc;
-        {error, Ref, QResource} when N == 1 ->
-            [amqqueue:to_printable(QResource, ?MODULE) | UnhealthyAcc];
         {ok, Ref, _QResource} ->
             wait_for_leader_health_checks(Ref, N - 1, UnhealthyAcc);
         {error, Ref, QResource} ->
