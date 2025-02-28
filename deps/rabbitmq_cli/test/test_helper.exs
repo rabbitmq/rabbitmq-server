@@ -471,7 +471,7 @@ defmodule TestHelper do
   end
 
   def error_check(cmd_line, code) do
-    assert catch_exit(RabbitMQCtl.main(cmd_line)) == {:shutdown, code}
+    assert catch_exit(RabbitMQCtl.main1(cmd_line)) == {:shutdown, code}
   end
 
   def with_channel(vhost, fun) do
