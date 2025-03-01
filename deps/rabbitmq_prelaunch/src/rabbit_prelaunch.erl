@@ -48,6 +48,7 @@ run_prelaunch_first_phase() ->
 do_run() ->
     %% Indicate RabbitMQ is booting.
     clear_stop_reason(),
+    rabbit_boot_state:record_start_time(),
     rabbit_boot_state:set(booting),
 
     %% Configure dbg if requested.
