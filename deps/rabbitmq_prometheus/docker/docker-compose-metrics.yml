@@ -34,7 +34,7 @@ services:
       GF_INSTALL_PLUGINS: "flant-statusmap-panel,grafana-piechart-panel"
   prometheus:
     # https://hub.docker.com/r/prom/prometheus/tags
-    image: prom/prometheus:v2.28.1
+    image: prom/prometheus:v2.53.3
     networks:
       - "rabbitmq-prometheus"
     ports:
