@@ -21,6 +21,7 @@ rabbitmq_package_generic_unix(
 rabbitmq_run(
     name = "rabbitmq-run",
     home = ":broker-home",
+    otp = "@erlang_config//25_3:erlang_25_3_toolchain",
     visibility = ["//visibility:public"],
 )
 
