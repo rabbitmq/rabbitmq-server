@@ -18,6 +18,8 @@
 
 -import(prometheus_text_format, [escape_label_value/1]).
 
+-include_lib("stdlib/include/assert.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour(prometheus_collector).
@@ -303,6 +305,12 @@ deregister_cleanup(_) -> ok.
 collect_mf('detailed', Callback) ->
     collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_RAW), Callback),
     collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
+    case is_mf_enabled(khepri) of
+        true ->
+            collect_khepri_info(Callback);
+        false ->
+            ok
+    end,
     %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(<<"detailed">>, Callback),
     ok;
@@ -338,6 +346,20 @@ totals(Callback) ->
          mf_totals(Callback, Name, Type, Help, Size)
      end || {Table, Name, Type, Help} <- ?TOTALS],
     ok.
+
+collect_khepri_info(Callback) ->
+    ServerId = rabbit_khepri:get_server_id(node()),
+    maps:foreach(
+      fun (Name, #{type := Type, help := Help, values := #{ServerId := Value}}) ->
+              Callback(
+                create_mf(
+                  <<?DETAILED_METRIC_NAME_PREFIX/binary,
+                    "khepri_",
+                    (prometheus_model_helpers:metric_name(Name))/binary>>,
+                  Help, Type, [Value]));
+          (_Name, _Format) ->
+                ok
+      end, seshat:format(ra)).
 
 emit_identity_info(Endpoint, Callback) ->
     add_metric_family(build_info(), Callback),
@@ -871,12 +893,19 @@ sum('', B) ->
 sum(A, B) ->
     A + B.
 
+is_mf_enabled(MF) ->
+    case get(prometheus_mf_filter) of
+        undefined ->
+            false;
+        MFNameSet ->
+            sets:is_element(MF, MFNameSet)
+    end.
+
 enabled_mfs_from_pdict(AllMFs) ->
     case get(prometheus_mf_filter) of
         undefined ->
             [];
-        MFNames ->
-            MFNameSet = sets:from_list(MFNames),
+        MFNameSet ->
             [ MF || MF = {Table, _} <- AllMFs, sets:is_element(Table, MFNameSet) ]
     end.
 
@@ -890,4 +919,3 @@ vhosts_filter_from_pdict() ->
             Enabled = maps:from_list([ {VHost, true} || VHost <- L ]),
             maps:merge(All, Enabled)
     end.
-
