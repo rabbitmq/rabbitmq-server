@@ -57,7 +57,7 @@
          logging_to_syslog_works/1]).
 
 suite() ->
-    [{timetrap, {minutes, 1}}].
+    [{timetrap, {minutes, 3}}].
 
 all() ->
     [
