@@ -302,6 +302,34 @@ defmodule TestHelper do
     ])
   end
 
+  def declare_protected_from_delete_queue(
+        name,
+        vhost,
+        durable \\ false,
+        auto_delete \\ false,
+        args \\ [],
+        owner \\ :none
+      ) do
+    queue_name = :rabbit_misc.r(vhost, :queue, name)
+
+    amqqueue = :amqqueue.new(
+      queue_name,
+      :none,
+      durable,
+      auto_delete,
+      owner,
+      args,
+      vhost,
+      %{})
+
+    internal_amqqueue = :amqqueue.make_internal(amqqueue)
+
+    :rpc.call(get_rabbit_hostname(), :rabbit_queue_type, :declare, [
+      internal_amqqueue,
+      get_rabbit_hostname()
+    ])
+  end
+
   def declare_stream(name, vhost) do
     declare_queue(name, vhost, true, false, [{"x-queue-type", :longstr, "stream"}])
   end
