@@ -206,9 +206,26 @@ end_per_testcase(T, Config) ->
     end_per_testcase0(T, Config).
 
 end_per_testcase0(Testcase, Config) ->
+    %% Terminate all connections and wait for sessions to terminate before
+    %% starting the next test case.
+    _ = rabbit_ct_broker_helpers:rpc(
+          Config, 0,
+          rabbit_networking, close_all_connections, [<<"test finished">>]),
+    _ = rabbit_ct_broker_helpers:rpc_all(
+          Config,
+          rabbit_mqtt, close_local_client_connections, [normal]),
+    eventually(?_assertEqual(
+                  [],
+                  rpc(Config, rabbit_mqtt, local_connection_pids, []))),
     %% Assert that every testcase cleaned up their MQTT sessions.
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_queues() ->
+    _ = [catch rabbit_amqqueue:delete(Q, false, false, <<"test finished">>)
+         || Q <- rabbit_amqqueue:list()],
+    ok.
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
