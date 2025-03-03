@@ -2186,7 +2186,9 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
 
 run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     Leader = ra_leaderboard:lookup_leader(ClusterName),
-    {_, _, _} =
+
+    %% Ignoring result here is required to clear a diayzer warning.
+    _ =
         case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
             {pong,leader} ->
                 From ! {ok, HealthCheckRef, QResource};
