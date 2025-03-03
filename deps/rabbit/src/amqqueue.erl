@@ -572,7 +572,7 @@ to_printable(#amqqueue{name = QName = #resource{name = Name},
        <<"virtual_host">> => VHost,
        <<"type">> => Type}.
 
--spec to_printable(rabbit_types:r(), atom() | binary()) -> #{binary() => any()}.
+-spec to_printable(rabbit_types:r(queue), atom() | binary()) -> #{binary() => any()}.
 to_printable(QName = #resource{name = Name, virtual_host = VHost}, Type) ->
     _ = rabbit_queue_type:discover(Type),
      #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),

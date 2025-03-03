@@ -2186,12 +2186,13 @@ leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
 
 run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
     Leader = ra_leaderboard:lookup_leader(ClusterName),
-    case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
-        {pong,leader} ->
-            From ! {ok, HealthCheckRef, QResource};
-        _ ->
-            From ! {error, HealthCheckRef, QResource}
-    end,
+    {_, _, _} =
+        case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
+            {pong,leader} ->
+                From ! {ok, HealthCheckRef, QResource};
+            _ ->
+                From ! {error, HealthCheckRef, QResource}
+        end,
     ok.
 
 wait_for_leader_health_checks(_Ref, 0, UnhealthyAcc) -> UnhealthyAcc;
