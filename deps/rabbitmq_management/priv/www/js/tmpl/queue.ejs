@@ -195,6 +195,7 @@
 </div>
 <% } %>
 
+<% if (!is_internal(queue)) { %>
 <div class="section-hidden">
   <h2>Delete</h2>
   <div class="hider">
@@ -206,6 +207,7 @@
     </form>
   </div>
 </div>
+<% } %>
 
 <% if (QUEUE_TYPE(queue).actions.purge) { %>
 <div class="section-hidden">

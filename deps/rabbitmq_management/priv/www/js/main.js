@@ -74,6 +74,8 @@ function dispatcher_add(fun) {
 }
 
 function dispatcher() {
+    this.use('Title');
+    this.setTitle('RabbitMQ - ');
     for (var i in dispatcher_modules) {
         dispatcher_modules[i](this);
     }
@@ -1761,6 +1763,10 @@ function rename_multifield(params, from, to) {
 function select_queue_type(queuetype) {
     queue_type = queuetype.value;
     update();
+}
+
+function is_internal(queue) {
+    return queue.internal;
 }
 
 function is_quorum(queue) {
