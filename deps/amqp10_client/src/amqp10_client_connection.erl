@@ -288,8 +288,6 @@ open_sent({call, From}, begin_session,
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1};
 open_sent(_EvtType, {close, Reason}, State) ->
-    %% TODO: stop all sessions writing
-    %% We could still accept incoming frames (See: 2.4.6)
     case send_close(State, Reason) of
         ok ->
             %% "After writing this frame the peer SHOULD continue to read from the connection
@@ -361,7 +359,10 @@ close_sent(_EvtType, #'v1_0.close'{} = Close, #state{config = Config}) ->
     ok = notify_closed(Config, Close),
     {stop, normal};
 close_sent(state_timeout, received_no_close_frame, _Data) ->
-    {stop, normal}.
+    {stop, normal};
+close_sent(_EvtType, #'v1_0.open'{}, _Data) ->
+    %% Transition from CLOSE_PIPE to CLOSE_SENT in figure 2.23.
+    keep_state_and_data.
 
 set_other_procs0(OtherProcs, State) ->
     #{sessions_sup := SessionsSup,
