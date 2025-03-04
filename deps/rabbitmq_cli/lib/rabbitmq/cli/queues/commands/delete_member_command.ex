@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.DeleteMemberCommand do
            to_atom(node)
          ]) do
       {:error, :classic_queue_not_supported} ->
-        {:error, "Cannot add members to a classic queue"}
+        {:error, "Cannot delete members from a classic queue"}
 
       {:error, :not_found} ->
         {:error, {:not_found, :queue, vhost, name}}
