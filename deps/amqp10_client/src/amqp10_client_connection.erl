@@ -288,8 +288,6 @@ open_sent({call, From}, begin_session,
 open_sent(info, {'DOWN', MRef, _, _, _},
 =======
 open_sent(_EvtType, {close, Reason}, State) ->
-    %% TODO: stop all sessions writing
-    %% We could still accept incoming frames (See: 2.4.6)
     case send_close(State, Reason) of
         ok ->
             %% "After writing this frame the peer SHOULD continue to read from the connection
@@ -344,6 +342,7 @@ close_sent(_EvtType, heartbeat, State) ->
     {next_state, close_sent, State};
 close_sent(_EvtType, {'EXIT', _Pid, shutdown}, State) ->
     %% monitored processes may exit during closure
+<<<<<<< HEAD
     {next_state, close_sent, State};
 close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _},
            #state{reader = ReaderPid} = State) ->
@@ -353,6 +352,21 @@ close_sent(_EvtType, #'v1_0.close'{}, State) ->
     %% TODO: we should probably set up a timer before this to ensure
     %% we close down event if no reply is received
     {stop, normal, State}.
+=======
+    keep_state_and_data;
+close_sent(_EvtType, {'DOWN', _Ref, process, ReaderPid, _Reason},
+           #state{reader = ReaderPid}) ->
+    %% if the reader exits we probably won't receive a close frame
+    {stop, normal};
+close_sent(_EvtType, #'v1_0.close'{} = Close, #state{config = Config}) ->
+    ok = notify_closed(Config, Close),
+    {stop, normal};
+close_sent(state_timeout, received_no_close_frame, _Data) ->
+    {stop, normal};
+close_sent(_EvtType, #'v1_0.open'{}, _Data) ->
+    %% Transition from CLOSE_PIPE to CLOSE_SENT in figure 2.23.
+    keep_state_and_data.
+>>>>>>> 65576863f (amqp10_client: Fix crash in close_sent)
 
 set_other_procs0(OtherProcs, State) ->
     #{sessions_sup := SessionsSup,
