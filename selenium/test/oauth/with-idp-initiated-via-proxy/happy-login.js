@@ -8,9 +8,7 @@ const OverviewPage = require('../../pageobjects/OverviewPage')
 describe('A user with a JWT token', function () {
   let overview
   let captureScreen
-  let token
-  let fakePortal
-
+  
   before(async function () {
     driver = buildDriver()
     overview = new OverviewPage(driver)
