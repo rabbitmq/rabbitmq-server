@@ -90,6 +90,7 @@ updates:
         versions: [ "[1.3,)" ]
   - package-ecosystem: "maven"
     directories:
+      - "/deps/rabbitmq_management/selenium/amqp10-roundtriptest"
       - "/deps/rabbitmq_mqtt/test/java_SUITE_data"
       - "/deps/rabbitmq_stream/test/rabbit_stream_SUITE_data"
       - "/deps/rabbitmq_stream_management/test/http_SUITE_data"
