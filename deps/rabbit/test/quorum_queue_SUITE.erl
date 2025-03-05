@@ -192,7 +192,8 @@ all_tests() ->
      priority_queue_2_1_ratio,
      requeue_multiple_true,
      requeue_multiple_false,
-     subscribe_from_each
+     subscribe_from_each,
+     leader_health_check
     ].
 
 memory_tests() ->
@@ -4145,6 +4146,129 @@ amqpl_headers(Config) ->
     ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
                                             multiple = true}).
 
+leader_health_check(Config) ->
+    VHost1 = <<"vhost1">>,
+    VHost2 = <<"vhost2">>,
+
+    set_up_vhost(Config, VHost1),
+    set_up_vhost(Config, VHost2),
+
+    %% check empty vhost
+    ?assertEqual([],
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+            [<<".*">>, VHost1])),
+    ?assertEqual([],
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+            [<<".*">>, across_all_vhosts])),
+
+    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost1),
+    {ok, Ch1} = amqp_connection:open_channel(Conn1),
+
+    Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost2),
+    {ok, Ch2} = amqp_connection:open_channel(Conn2),
+
+    Qs1 = [<<"Q.1">>, <<"Q.2">>, <<"Q.3">>],
+    Qs2 = [<<"Q.4">>, <<"Q.5">>, <<"Q.6">>],
+
+    %% in vhost1
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch1, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
+        || Q <- Qs1],
+
+    %% in vhost2
+    [?assertEqual({'queue.declare_ok', Q, 0, 0},
+                 declare(Ch2, Q, [{<<"x-queue-type">>, longstr, <<"quorum">>}]))
+        || Q <- Qs2],
+
+    %% test sucessful health checks in vhost1, vhost2, across_all_vhosts
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<".*">>, VHost1])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.*">>, VHost1])),
+    [?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [Q, VHost1])) || Q <- Qs1],
+
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<".*">>, VHost2])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.*">>, VHost2])),
+    [?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [Q, VHost2])) || Q <- Qs2],
+
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<".*">>, across_all_vhosts])),
+    ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.*">>, across_all_vhosts])),
+
+    %% clear leaderboard
+    Qs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+
+    [{_Q1_ClusterName, _Q1Res},
+     {_Q2_ClusterName, _Q2Res},
+     {_Q3_ClusterName, _Q3Res},
+     {_Q4_ClusterName, _Q4Res},
+     {_Q5_ClusterName, _Q5Res},
+     {_Q6_ClusterName, _Q6Res}] = QQ_Clusters =
+        lists:usort(
+            [begin
+                {ClusterName, _} = amqqueue:get_pid(Q),
+                {ClusterName, amqqueue:get_name(Q)}
+            end
+                || Q <- Qs, amqqueue:get_type(Q) == rabbit_quorum_queue]),
+
+    [Q1Data, Q2Data, Q3Data, Q4Data, Q5Data, Q6Data] = QQ_Data =
+        [begin
+            rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q_ClusterName]),
+            _QData = amqqueue:to_printable(Q_Res, rabbit_quorum_queue)
+         end
+            || {Q_ClusterName, Q_Res} <- QQ_Clusters],
+
+    %% test failed health checks in vhost1, vhost2, across_all_vhosts
+    ?assertEqual([Q1Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.1">>, VHost1])),
+    ?assertEqual([Q2Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.2">>, VHost1])),
+    ?assertEqual([Q3Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.3">>, VHost1])),
+    ?assertEqual([Q1Data, Q2Data, Q3Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<".*">>, VHost1]))),
+    ?assertEqual([Q1Data, Q2Data, Q3Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<"Q.*">>, VHost1]))),
+
+    ?assertEqual([Q4Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.4">>, VHost2])),
+    ?assertEqual([Q5Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.5">>, VHost2])),
+    ?assertEqual([Q6Data], rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                                      [<<"Q.6">>, VHost2])),
+    ?assertEqual([Q4Data, Q5Data, Q6Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<".*">>, VHost2]))),
+    ?assertEqual([Q4Data, Q5Data, Q6Data],
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<"Q.*">>, VHost2]))),
+
+    ?assertEqual(QQ_Data,
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<"Q.*">>, across_all_vhosts]))),
+    ?assertEqual(QQ_Data,
+        lists:usort(rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, leader_health_check,
+                        [<<"Q.*">>, across_all_vhosts]))),
+
+    %% cleanup
+    [?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = Q}))
+        || Q <- Qs1],
+    [?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch1, #'queue.delete'{queue = Q}))
+        || Q <- Qs2],
+
+    amqp_connection:close(Conn1),
+    amqp_connection:close(Conn2).
+
+
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Q = ?config(queue_name, Config),
@@ -4465,6 +4589,11 @@ declare_passive(Ch, Q, Args) ->
                                            auto_delete = false,
                                            passive = true,
                                            arguments = Args}).
+
+set_up_vhost(Config, VHost) ->
+    rabbit_ct_broker_helpers:add_vhost(Config, VHost),
+    rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost).
+
 assert_queue_type(Server, Q, Expected) ->
     assert_queue_type(Server, <<"/">>, Q, Expected).
 
