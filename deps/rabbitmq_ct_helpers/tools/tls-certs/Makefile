@@ -17,7 +17,7 @@ gen_verbose_0 = @echo " GEN   " $@;
 gen_verbose_2 = set -x;
 gen_verbose = $(gen_verbose_$(V))
 
-openssl_output_0 = 2>/dev/null
+# openssl_output_0 = 2>/dev/null
 openssl_output = $(openssl_output_$(V))
 
 .PRECIOUS: %/testca/cacert.pem
@@ -51,7 +51,7 @@ $(DIR)/testca/cacert.pem:
 
 $(DIR)/%/cert.pem: $(DIR)/testca/cacert.pem
 	$(gen_verbose) mkdir -p $(DIR)/$(TARGET)
-	$(verbose) { ( cd $(DIR)/$(TARGET) && \
+	$(verbose) { set -x; ( cd $(DIR)/$(TARGET) && \
 	    sed -e 's/@HOSTNAME@/$(HOSTNAME)/g' $(CURDIR)/openssl.cnf.in > $(CURDIR)/openssl.cnf && \
 	    openssl genrsa -out key.pem 2048 && \
 	    openssl req -config $(CURDIR)/openssl.cnf -new -key key.pem -out req.pem -outform PEM \

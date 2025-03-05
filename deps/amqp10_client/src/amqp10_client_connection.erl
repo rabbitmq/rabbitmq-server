@@ -287,6 +287,20 @@ open_sent({call, From}, begin_session,
           #state{pending_session_reqs = PendingSessionReqs} = State) ->
     State1 = State#state{pending_session_reqs = [From | PendingSessionReqs]},
     {keep_state, State1};
+open_sent(_EvtType, {close, Reason}, State) ->
+    case send_close(State, Reason) of
+        ok ->
+            %% "After writing this frame the peer SHOULD continue to read from the connection
+            %% until it receives the partner's close frame (in order to guard against
+            %% erroneously or maliciously implemented partners, a peer SHOULD implement a
+            %% timeout to give its partner a reasonable time to receive and process the close
+            %% before giving up and simply closing the underlying transport mechanism)." [§2.4.3]
+            {next_state, close_sent, State, {state_timeout, ?TIMEOUT, received_no_close_frame}};
+        {error, closed} ->
+            {stop, normal, State};
+        Error ->
+            {stop, Error, State}
+    end;
 open_sent(info, {'DOWN', MRef, process, _, _},
           #state{reader_m_ref = MRef}) ->
     {stop, {shutdown, reader_down}}.
@@ -345,7 +359,10 @@ close_sent(_EvtType, #'v1_0.close'{} = Close, #state{config = Config}) ->
     ok = notify_closed(Config, Close),
     {stop, normal};
 close_sent(state_timeout, received_no_close_frame, _Data) ->
-    {stop, normal}.
+    {stop, normal};
+close_sent(_EvtType, #'v1_0.open'{}, _Data) ->
+    %% Transition from CLOSE_PIPE to CLOSE_SENT in figure 2.23.
+    keep_state_and_data.
 
 set_other_procs0(OtherProcs, State) ->
     #{sessions_sup := SessionsSup,

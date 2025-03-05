@@ -325,8 +325,10 @@ start-background-broker: node-tmpdir $(DIST_TARGET)
 	  $(REDIRECT_STDIO) &
 	ERL_LIBS="$(DIST_ERL_LIBS)" \
 	  $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) wait --timeout $(RMQCTL_WAIT_TIMEOUT) $(RABBITMQ_PID_FILE) && \
-	ERL_LIBS="$(DIST_ERL_LIBS)" \
-	  $(RABBITMQCTL) --node $(RABBITMQ_NODENAME) await_startup
+	for i in $$(seq 1 10); do \
+	  ERL_LIBS="$(DIST_ERL_LIBS)" $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) await_startup || sleep 1; \
+	done && \
+	ERL_LIBS="$(DIST_ERL_LIBS)" $(RABBITMQCTL) -n $(RABBITMQ_NODENAME) await_startup
 
 start-rabbit-on-node:
 	$(exec_verbose) ERL_LIBS="$(DIST_ERL_LIBS)" \
