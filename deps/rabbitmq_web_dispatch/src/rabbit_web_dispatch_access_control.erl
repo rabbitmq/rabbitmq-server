@@ -366,7 +366,7 @@ is_basic_auth_disabled(#auth_settings{basic_auth_enabled = Enabled}) ->
 get_auth_backends() ->
     case application:get_env(rabbitmq_web_dispatch, auth_backends) of
 		{ok, Backends} -> {ok, Backends};
-		undefined -> rabbit_log:debug("rabbitmq_web_dispatch.auth_backends not configured,
-                                falling back to rabbit.auth_backends"),
+		undefined -> rabbit_log:debug("rabbitmq_web_dispatch.auth_backends not "
+		                              "configured, falling back to rabbit.auth_backends"),
                      application:get_env(rabbit, auth_backends)
 	end.

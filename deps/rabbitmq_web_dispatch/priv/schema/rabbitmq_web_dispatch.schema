@@ -7,8 +7,8 @@
 %% ===========================================================================
 %% Auth Backends
 
-%% Select an authentication backend to use for the management plugin. RabbitMQ provides an
-%% internal backend in the core.
+%% Select an authentication backend to use for rabbitmq_web_dispatch (HTTP).
+%% RabbitMQ provides an internal backend in the core.
 %%
 %% {http_dispatch.auth_backends, [rabbit_auth_backend_internal]},
 
@@ -95,6 +95,3 @@ end}.
 {mapping, "http_dispatch.auth_backends.$num.authz", "rabbitmq_web_dispatch.auth_backends",[
     {datatype, atom}
 ]}.
-
-%{mapping, "management.test_config", "rabbitmq_management.test_config",
-%    [{datatype, {enum, [true, false]}}]}.
