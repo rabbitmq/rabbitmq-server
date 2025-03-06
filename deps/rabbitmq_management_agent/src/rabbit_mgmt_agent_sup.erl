@@ -58,5 +58,4 @@ maybe_enable_metrics_collector() ->
     end.
 
 get_management_delegate_count() ->
-    {ok, MDC} = application:get_env(rabbitmq_management, delegate_count),
-    MDC.
+    application:get_env(rabbitmq_management, delegate_count, 5).
