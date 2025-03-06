@@ -10,11 +10,11 @@
 %% Select an authentication backend to use for the management plugin. RabbitMQ provides an
 %% internal backend in the core.
 %%
-%% {web_dispatch.auth_backends, [rabbit_auth_backend_internal]},
+%% {http_dispatch.auth_backends, [rabbit_auth_backend_internal]},
 
 {translation, "rabbitmq_web_dispatch.auth_backends",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("web_dispatch.auth_backends", Conf),
+    Settings = cuttlefish_variable:filter_by_prefix("http_dispatch.auth_backends", Conf),
     BackendModule = fun
         (internal) -> rabbit_auth_backend_internal;
         (ldap)     -> rabbit_auth_backend_ldap;
@@ -27,9 +27,9 @@ fun(Conf) ->
         (Other) when is_atom(Other) -> Other;
         (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
     end,
-    AuthBackends  = [{Num, {default, BackendModule(V)}} || {["web_dispatch", "auth_backends", Num], V}          <- Settings],
-    AuthNBackends = [{Num, {authn, BackendModule(V)}}   || {["web_dispatch", "auth_backends", Num, "authn"], V} <- Settings],
-    AuthZBackends = [{Num, {authz, BackendModule(V)}}   || {["web_dispatch", "auth_backends", Num, "authz"], V} <- Settings],
+    AuthBackends  = [{Num, {default, BackendModule(V)}} || {["http_dispatch", "auth_backends", Num], V}          <- Settings],
+    AuthNBackends = [{Num, {authn, BackendModule(V)}}   || {["http_dispatch", "auth_backends", Num, "authn"], V} <- Settings],
+    AuthZBackends = [{Num, {authz, BackendModule(V)}}   || {["http_dispatch", "auth_backends", Num, "authz"], V} <- Settings],
     Backends = lists:foldl(
         fun({NumStr, {Type, V}}, Acc) ->
             Num = case catch list_to_integer(NumStr) of
@@ -84,15 +84,15 @@ fun(Conf) ->
         lists:keysort(1, dict:to_list(Backends)))
 end}.
 
-{mapping, "web_dispatch.auth_backends.$num", "rabbitmq_web_dispatch.auth_backends", [
+{mapping, "http_dispatch.auth_backends.$num", "rabbitmq_web_dispatch.auth_backends", [
     {datatype, atom}
 ]}.
 
-{mapping, "web_dispatch.auth_backends.$num.authn", "rabbitmq_web_dispatch.auth_backends",[
+{mapping, "http_dispatch.auth_backends.$num.authn", "rabbitmq_web_dispatch.auth_backends",[
     {datatype, atom}
 ]}.
 
-{mapping, "web_dispatch.auth_backends.$num.authz", "rabbitmq_web_dispatch.auth_backends",[
+{mapping, "http_dispatch.auth_backends.$num.authz", "rabbitmq_web_dispatch.auth_backends",[
     {datatype, atom}
 ]}.
 
