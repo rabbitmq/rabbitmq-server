@@ -37,6 +37,15 @@ fun(Conf) ->
 end}.
 
 
+%% Number of delegate processes to use for metrics acquisition intra-cluster
+%% communication. On a machine which has a very large number of cores and is
+%% also part of a cluster, you may wish to increase this value.
+%%
+
+{mapping, "management.delegate_count", "rabbitmq_management.delegate_count", [
+    {datatype, integer}, {validators, ["non_negative_integer"]}
+]}.
+
 %% HTTP (TCP) listener options ========================================================
 
 %% HTTP listener consistent with Web STOMP and Web MQTT.

@@ -37,9 +37,10 @@ maybe_enable_metrics_collector() ->
     case rabbit_mgmt_agent_config:is_metrics_collector_enabled() of
         true ->
             ok = pg:join(?MANAGEMENT_PG_SCOPE, ?MANAGEMENT_PG_GROUP, self()),
+            MDC = get_management_delegate_count(),
             ST = {rabbit_mgmt_storage, {rabbit_mgmt_storage, start_link, []},
                   permanent, ?WORKER_WAIT, worker, [rabbit_mgmt_storage]},
-            MD = {delegate_management_sup, {delegate_sup, start_link, [5, ?DELEGATE_PREFIX]},
+            MD = {delegate_management_sup, {delegate_sup, start_link, [MDC, ?DELEGATE_PREFIX]},
                   permanent, ?SUPERVISOR_WAIT, supervisor, [delegate_sup]},
             MC = [{rabbit_mgmt_metrics_collector:name(Table),
                    {rabbit_mgmt_metrics_collector, start_link, [Table]},
@@ -55,3 +56,6 @@ maybe_enable_metrics_collector() ->
         false ->
             []
     end.
+
+get_management_delegate_count() ->
+    application:get_env(rabbitmq_management, delegate_count, 5).
