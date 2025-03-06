@@ -170,7 +170,7 @@ wait_for_oidc_endpoint() {
 wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
-  CURL_ARGS="-L --fail "
+  CURL_ARGS="-L -k --fail "
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -eq 3 ]]; then
     CURL_ARGS="$CURL_ARGS --cacert $3"
@@ -191,7 +191,7 @@ wait_for_oidc_endpoint_local() {
 wait_for_oidc_endpoint_docker() {
   NAME=$1
   BASE_URL=$2
-  CURL_ARGS="-L --fail "
+  CURL_ARGS="-L -k --fail "
   DOCKER_ARGS="--rm --net ${DOCKER_NETWORK} "
   DELAY_BETWEEN_ATTEMPTS=5
   if [[ $# -gt 2  ]]; then
