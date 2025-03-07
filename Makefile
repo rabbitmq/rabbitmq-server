@@ -134,36 +134,8 @@ define restore_hex_cache_from_erl_term
 endef
 
 # --------------------------------------------------------------------
-# Distribution.
+# Distribution - common variables and generic functions.
 # --------------------------------------------------------------------
-
-
-.PHONY: source-dist clean-source-dist
-
-SOURCE_DIST_BASE ?= rabbitmq-server
-SOURCE_DIST_SUFFIXES ?= tar.xz
-SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
-
-# The first source distribution file is used by packages: if the archive
-# type changes, you must update all packages' Makefile.
-SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(SOURCE_DIST_SUFFIXES))
-
-.PHONY: $(SOURCE_DIST_FILES)
-
-source-dist: $(SOURCE_DIST_FILES)
-	@:
-
-.PHONY: source-bundle clean-source-bundle
-
-SOURCE_BUNDLE_BASE ?= rabbitmq-server-bundle
-BUNDLE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_BUNDLE_BASE)-$(PROJECT_VERSION)
-
-BUNDLE_DIST_FILES = $(addprefix $(BUNDLE_DIST).,$(SOURCE_DIST_SUFFIXES))
-
-.PHONY: $(BUNDLE_DIST_FILES)
-
-source-bundle: $(BUNDLE_DIST_FILES)
-	@:
 
 RSYNC ?= rsync
 RSYNC_V_0 =
@@ -253,69 +225,124 @@ ZIP_V_1 =
 ZIP_V_2 =
 ZIP_V = $(ZIP_V_$(V))
 
-.PHONY: $(SOURCE_DIST)
-.PHONY: clean-source-dist distclean-packages clean-unpacked-source-dist
+ifeq ($(shell tar --version | grep -c "GNU tar"),0)
+# Skip all flags if this is Darwin (a.k.a. macOS, a.k.a. OS X)
+ifeq ($(shell uname | grep -c "Darwin"),0)
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
+				    --gid 0 \
+				    --numeric-owner \
+				    --no-acls \
+				    --no-fflags \
+				    --no-xattrs
+endif
+else
+TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --owner 0 \
+				    --group 0 \
+				    --numeric-owner
+endif
 
-$(SOURCE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(verbose) mkdir -p $(dir $@)
-	$(gen_verbose) $(RSYNC) $(SOURCE_DIST_RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > "$@/git-revisions.txt"
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> "$@/git-revisions.txt"
-	$(verbose) echo "$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > "$@.git-times.txt"
-	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
-	$(verbose) mkdir -p $@/deps/licensing
-	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
-		$(RSYNC) $(SOURCE_DIST_RSYNC_FLAGS) \
-		 $$dep \
-		 $@/deps; \
+DIST_SUFFIXES ?= tar.xz
+
+# Function to create distribution targets
+# Args: $(1) - Full distribution path
+#       $(2) - RSYNC flags to use
+define create_dist_target
+$(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
+	$${verbose} mkdir -p $$(dir $$@)
+	$${gen_verbose} $${RSYNC} $(2) ./ $$@/
+	$${verbose} echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $$@/git-revisions.txt
+	$${verbose} echo "$(PROJECT) $$$$(git rev-parse HEAD) $$$$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $$@/git-revisions.txt
+	$${verbose} echo "$$$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > $$@.git-times.txt
+	$${verbose} cat packaging/common/LICENSE.head > $$@/LICENSE
+	$${verbose} mkdir -p $$@/deps/licensing
+	$${verbose} set -e; for dep in $$$$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
+		$${RSYNC} $(2) \
+		 $$$$dep \
+		 $$@/deps; \
 		rm -f \
-		 $@/deps/rabbit_common/rebar.config \
-		 $@/deps/rabbit_common/rebar.lock; \
-		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
-		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
-		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
-			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
+		 $$@/deps/rabbit_common/rebar.config \
+		 $$@/deps/rabbit_common/rebar.lock; \
+		if test -f $$@/deps/$$$$(basename $$$$dep)/erlang.mk && \
+		   test "$$$$(wc -l $$@/deps/$$$$(basename $$$$dep)/erlang.mk | awk '{print $$$$1;}')" = "1" && \
+		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$$$" $$@/deps/$$$$(basename $$$$dep)/erlang.mk; then \
+			echo "include ../../erlang.mk" > $$@/deps/$$$$(basename $$$$dep)/erlang.mk; \
 		fi; \
-		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
-		 $@/deps/$$(basename $$dep)/Makefile && \
-		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
-		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
-		if test -f $$mix_exs; then \
-			(cd $$(dirname "$$mix_exs") && \
-			 (test -d $@/deps/.hex || env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
-			 env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
+		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$$$|include ../../erlang.mk|" \
+		 $$@/deps/$$$$(basename $$$$dep)/Makefile && \
+		rm $$@/deps/$$$$(basename $$$$dep)/Makefile.bak; \
+		mix_exs=$$@/deps/$$$$(basename $$$$dep)/mix.exs; \
+		if test -f $$$$mix_exs; then \
+			(cd $$$$(dirname "$$$$mix_exs") && \
+			 (test -d $$@/deps/.hex || env DEPS_DIR=$$@/deps MIX_HOME=$$@/deps/.mix HEX_HOME=$$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
+			 env DEPS_DIR=$$@/deps MIX_HOME=$$@/deps/.mix HEX_HOME=$$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
 			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
 			 rm -rf _build deps); \
 		fi; \
-		if test -f "$$dep/license_info"; then \
-			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
-			cat "$$dep/license_info" >> $@/LICENSE; \
+		if test -f "$$$$dep/license_info"; then \
+			cp "$$$$dep/license_info" "$$@/deps/licensing/license_info_$$$$(basename $$$$dep)"; \
+			cat "$$$$dep/license_info" >> $$@/LICENSE; \
 		fi; \
-		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
-		(cd $$dep; \
-		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
-		 >> "$@/git-revisions.txt"; \
-		! test -d $$dep/.git || (cd $$dep; \
-		 echo "$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
-		 >> "$@.git-times.txt"; \
+		find "$$$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $$@/deps/licensing \; ; \
+		(cd $$$$dep; \
+		 echo "$$$$(basename "$$$$dep") $$$$(git rev-parse HEAD) $$$$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
+		 >> "$$@/git-revisions.txt"; \
+		! test -d $$$$dep/.git || (cd $$$$dep; \
+		 echo "$$$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
+		 >> "$$@.git-times.txt"; \
 	done
-	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
-	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
-	$(verbose) rm -rf $@/deps/licensing
-	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
+	$${verbose} cat packaging/common/LICENSE.tail >> $$@/LICENSE
+	$${verbose} find $$@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $$@ \;
+	$${verbose} rm -rf $$@/deps/licensing
+	$${verbose} for file in $$$$(find $$@ -name '*.app.src'); do \
 		sed -E -i.bak \
 		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
 		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(PROJECT_VERSION)"]}/' \
-		  $$file; \
-		rm $$file.bak; \
+		  $$$$file; \
+		rm $$$$file.bak; \
 	done
-	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
-# Remember the latest Git timestamp.
-	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
-	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$(call core_native_path,$@),$(call core_native_path,$@.git-time.txt)))
-# Fix file timestamps to have reproducible source archives.
-	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
-	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
+	$${verbose} echo "PLUGINS := $(PLUGINS)" > $$@/plugins.mk
+	$${verbose} sort -r < "$$@.git-times.txt" | head -n 1 > "$$@.git-time.txt"
+	$${verbose} $$(call erlang,$$(call dump_hex_cache_to_erl_term,$$(call core_native_path,$$@),$$(call core_native_path,$$@.git-time.txt)))
+	$${verbose} find $$@ -print0 | xargs -0 touch -t "$$$$(cat $$@.git-time.txt)"
+	$${verbose} rm "$$@.git-times.txt" "$$@.git-time.txt"
+
+$(1).manifest: $(1)
+	$${gen_verbose} cd $$(dir $$@) && \
+		find $$(notdir $$<) | LC_COLLATE=C sort > $$@
+
+$(1).tar.xz: $(1).manifest
+	$${gen_verbose} cd $$(dir $$@) && \
+		$${TAR} $${TAR_V} $${TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS} --no-recursion -T $$(notdir $$<) -cf - | \
+		$${XZ} > $$@
+
+$(1).tar.gz: $(1).manifest
+	$${gen_verbose} cd $$(dir $$@) && \
+		$${TAR} $${TAR_V} $${TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS} --no-recursion -T $$(notdir $$<) -cf - | \
+		$${GZIP} --best > $$@
+
+$(1).tar.bz2: $(1).manifest
+	$${gen_verbose} cd $$(dir $$@) && \
+		$${TAR} $${TAR_V} $${TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS} --no-recursion -T $$(notdir $$<) -cf - | \
+		$${BZIP2} > $$@
+
+$(1).zip: $(1).manifest
+	$${verbose} rm -f $$@
+	$${gen_verbose} cd $$(dir $$@) && \
+		$${ZIP} $${ZIP_V} --names-stdin $$@ < $$(notdir $$<)
+
+endef
+
+# Function to create clean targets
+# Args: $(1) - Base name (e.g. SOURCE_DIST_BASE or BUNDLE_DIST_BASE)
+define create_clean_targets
+.PHONY: clean-$(1)
+
+clean-$(1):
+	$${gen_verbose} rm -rf -- $(1)-*
+
+# Add each clean target to the clean:: rule
+clean:: clean-$(1)
+endef
 
 # Mix Hex component requires a cache file, otherwise it refuses to build
 # offline... That cache is an ETS table with all the applications we
@@ -358,140 +385,35 @@ define dump_hex_cache_to_erl_term
   init:stop().
 endef
 
-.PHONY: $(BUNDLE_DIST)
+# --------------------------------------------------------------------
+# Distribution - public targets
+# --------------------------------------------------------------------
 
-$(BUNDLE_DIST): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
-	$(verbose) mkdir -p $(dir $@)
-	$(gen_verbose) $(RSYNC) $(SOURCE_BUNDLE_RSYNC_FLAGS) ./ $@/
-	$(verbose) echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > "$@/git-revisions.txt"
-	$(verbose) echo "$(PROJECT) $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> "$@/git-revisions.txt"
-	$(verbose) echo "$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > "$@.git-times.txt"
-	$(verbose) cat packaging/common/LICENSE.head > $@/LICENSE
-	$(verbose) mkdir -p $@/deps/licensing
-	$(verbose) set -e; for dep in $$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
-		$(RSYNC) $(SOURCE_BUNDLE_RSYNC_FLAGS) \
-		 $$dep \
-		 $@/deps; \
-		rm -f \
-		 $@/deps/rabbit_common/rebar.config \
-		 $@/deps/rabbit_common/rebar.lock; \
-		if test -f $@/deps/$$(basename $$dep)/erlang.mk && \
-		   test "$$(wc -l $@/deps/$$(basename $$dep)/erlang.mk | awk '{print $$1;}')" = "1" && \
-		   grep -qs -E "^[[:blank:]]*include[[:blank:]]+(erlang\.mk|.*/erlang\.mk)$$" $@/deps/$$(basename $$dep)/erlang.mk; then \
-			echo "include ../../erlang.mk" > $@/deps/$$(basename $$dep)/erlang.mk; \
-		fi; \
-		sed -E -i.bak "s|^[[:blank:]]*include[[:blank:]]+\.\./.*erlang.mk$$|include ../../erlang.mk|" \
-		 $@/deps/$$(basename $$dep)/Makefile && \
-		rm $@/deps/$$(basename $$dep)/Makefile.bak; \
-		mix_exs=$@/deps/$$(basename $$dep)/mix.exs; \
-		if test -f $$mix_exs; then \
-			(cd $$(dirname "$$mix_exs") && \
-			 (test -d $@/deps/.hex || env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix local.hex --force) && \
-			 env DEPS_DIR=$@/deps MIX_HOME=$@/deps/.mix HEX_HOME=$@/deps/.hex MIX_ENV=prod FILL_HEX_CACHE=yes mix deps.get --only prod && \
-			 cp $(CURDIR)/mk/rabbitmq-mix.mk . && \
-			 rm -rf _build deps); \
-		fi; \
-		if test -f "$$dep/license_info"; then \
-			cp "$$dep/license_info" "$@/deps/licensing/license_info_$$(basename "$$dep")"; \
-			cat "$$dep/license_info" >> $@/LICENSE; \
-		fi; \
-		find "$$dep" -maxdepth 1 -name 'LICENSE-*' -exec cp '{}' $@/deps/licensing \; ; \
-		(cd $$dep; \
-		 echo "$$(basename "$$dep") $$(git rev-parse HEAD) $$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
-		 >> "$@/git-revisions.txt"; \
-		! test -d $$dep/.git || (cd $$dep; \
-		 echo "$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
-		 >> "$@.git-times.txt"; \
-	done
-	$(verbose) cat packaging/common/LICENSE.tail >> $@/LICENSE
-	$(verbose) find $@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $@ \;
-	$(verbose) rm -rf $@/deps/licensing
-	$(verbose) for file in $$(find $@ -name '*.app.src'); do \
-		sed -E -i.bak \
-		  -e 's/[{]vsn[[:blank:]]*,[[:blank:]]*(""|"0.0.0")[[:blank:]]*}/{vsn, "$(PROJECT_VERSION)"}/' \
-		  -e 's/[{]broker_version_requirements[[:blank:]]*,[[:blank:]]*\[\][[:blank:]]*}/{broker_version_requirements, ["$(PROJECT_VERSION)"]}/' \
-		  $$file; \
-		rm $$file.bak; \
-	done
-	$(verbose) echo "PLUGINS := $(PLUGINS)" > $@/plugins.mk
-# Remember the latest Git timestamp.
-	$(verbose) sort -r < "$@.git-times.txt" | head -n 1 > "$@.git-time.txt"
-	$(verbose) $(call erlang,$(call dump_hex_cache_to_erl_term,$(call core_native_path,$@),$(call core_native_path,$@.git-time.txt)))
-# Fix file timestamps to have reproducible source archives.
-	$(verbose) find $@ -print0 | xargs -0 touch -t "$$(cat "$@.git-time.txt")"
-	$(verbose) rm "$@.git-times.txt" "$@.git-time.txt"
+SOURCE_DIST_BASE ?= rabbitmq-server
+SOURCE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_DIST_BASE)-$(PROJECT_VERSION)
+SOURCE_DIST_FILES = $(addprefix $(SOURCE_DIST).,$(DIST_SUFFIXES))
 
-$(SOURCE_DIST).manifest: $(SOURCE_DIST)
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		find $(notdir $(SOURCE_DIST)) | LC_COLLATE=C sort > $@
+.PHONY: source-dist
+source-dist: $(SOURCE_DIST_FILES)
+	@:
 
-$(BUNDLE_DIST).manifest: $(BUNDLE_DIST)
-	$(gen_verbose) cd $(dir $(BUNDLE_DIST)) && \
-		find $(notdir $(BUNDLE_DIST)) | LC_COLLATE=C sort > $@
+$(eval $(call create_dist_target,$(SOURCE_DIST),$(SOURCE_DIST_RSYNC_FLAGS)))
 
-ifeq ($(shell tar --version | grep -c "GNU tar"),0)
-# Skip all flags if this is Darwin (a.k.a. macOS, a.k.a. OS X)
-ifeq ($(shell uname | grep -c "Darwin"),0)
-TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --uid 0 \
-				    --gid 0 \
-				    --numeric-owner \
-				    --no-acls \
-				    --no-fflags \
-				    --no-xattrs
-endif
-else
-TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS = --owner 0 \
-				    --group 0 \
-				    --numeric-owner
-endif
+SOURCE_BUNDLE_BASE ?= rabbitmq-server-bundle
+SOURCE_BUNDLE_DIST ?= $(PACKAGES_DIR)/$(SOURCE_BUNDLE_BASE)-$(PROJECT_VERSION)
+SOURCE_BUNDLE_FILES = $(addprefix $(SOURCE_BUNDLE_DIST).,$(DIST_SUFFIXES))
 
-$(SOURCE_DIST).tar.gz: $(SOURCE_DIST).manifest
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
-		$(GZIP) --best > $@
+.PHONY: source-bundle
+source-bundle: $(SOURCE_BUNDLE_FILES)
+	@:
 
-$(SOURCE_DIST).tar.bz2: $(SOURCE_DIST).manifest
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
-		$(BZIP2) > $@
+$(eval $(call create_dist_target,$(SOURCE_BUNDLE_DIST),$(SOURCE_BUNDLE_RSYNC_FLAGS)))
 
-$(SOURCE_DIST).tar.xz: $(SOURCE_DIST).manifest
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(SOURCE_DIST).manifest -cf - | \
-		$(XZ) > $@
+# Create the clean targets for both distributions
+$(eval $(call create_clean_targets,$(SOURCE_DIST_BASE)))
+$(eval $(call create_clean_targets,$(SOURCE_BUNDLE_BASE)))
 
-$(SOURCE_DIST).zip: $(SOURCE_DIST).manifest
-	$(verbose) rm -f $@
-	$(gen_verbose) cd $(dir $(SOURCE_DIST)) && \
-		$(ZIP) $(ZIP_V) --names-stdin $@ < $(SOURCE_DIST).manifest
-
-$(BUNDLE_DIST).tar.gz: $(BUNDLE_DIST).manifest
-	$(gen_verbose) cd $(dir $(BUNDLE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(BUNDLE_DIST).manifest -cf - | \
-		$(GZIP) --best > $@
-
-$(BUNDLE_DIST).tar.bz2: $(BUNDLE_DIST).manifest
-	$(gen_verbose) cd $(dir $(BUNDLE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(BUNDLE_DIST).manifest -cf - | \
-		$(BZIP2) > $@
-
-$(BUNDLE_DIST).tar.xz: $(BUNDLE_DIST).manifest
-	$(gen_verbose) cd $(dir $(BUNDLE_DIST)) && \
-		$(TAR) $(TAR_V) $(TAR_FLAGS_FOR_REPRODUCIBLE_BUILDS) --no-recursion -T $(BUNDLE_DIST).manifest -cf - | \
-		$(XZ) > $@
-
-$(BUNDLE_DIST).zip: $(BUNDLE_DIST).manifest
-	$(verbose) rm -f $@
-	$(gen_verbose) cd $(dir $(BUNDLE_DIST)) && \
-		$(ZIP) $(ZIP_V) --names-stdin $@ < $(BUNDLE_DIST).manifest
-
-clean:: clean-source-dist
-
-clean-source-dist:
-	$(gen_verbose) rm -rf -- $(SOURCE_DIST_BASE)-*
-
-clean-source-bundle:
-	$(gen_verbose) rm -rf -- $(SOURCE_BUNDLE_BASE)-*
+.PHONY: distclean-packages clean-unpacked-source-dist
 
 distclean:: distclean-packages
 
