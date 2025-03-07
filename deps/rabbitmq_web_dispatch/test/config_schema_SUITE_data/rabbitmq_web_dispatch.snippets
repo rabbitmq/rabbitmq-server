@@ -1,0 +1,64 @@
+% vim:ft=erlang:
+%
+
+[{internal_auth_backend,
+  "http_dispatch.auth_backends.1 = internal",
+  [{rabbitmq_web_dispatch,[{auth_backends,[rabbit_auth_backend_internal]}]}],
+  []},
+ {ldap_auth_backend,
+  "http_dispatch.auth_backends.1 = ldap",
+  [{rabbitmq_web_dispatch,[{auth_backends,[rabbit_auth_backend_ldap]}]}],
+  []},
+ {http_auth_backend,
+  "http_dispatch.auth_backends.1 = http",
+  [{rabbitmq_web_dispatch,[{auth_backends,[rabbit_auth_backend_http]}]}],
+  []},
+ {oauth2_auth_backend,
+  "http_dispatch.auth_backends.1 = oauth2",
+  [{rabbitmq_web_dispatch,[{auth_backends,[rabbit_auth_backend_oauth2]}]}],
+  []},
+ {multiple_auth_backends,
+ "http_dispatch.auth_backends.1 = ldap
+http_dispatch.auth_backends.2 = internal",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,
+            [rabbit_auth_backend_ldap,rabbit_auth_backend_internal]}]}],
+  []},
+ {full_name_auth_backend,
+  "http_dispatch.auth_backends.1 = ldap
+# uses module name instead of a short alias, \"http\"
+http_dispatch.auth_backends.2 = rabbit_auth_backend_http",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,[rabbit_auth_backend_ldap,rabbit_auth_backend_http]}]}],
+  []},
+ {third_party_auth_backend,
+  "http_dispatch.auth_backends.1.authn = internal
+# uses module name because this backend is from a 3rd party
+http_dispatch.auth_backends.1.authz = rabbit_auth_backend_ip_range",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,
+            [{rabbit_auth_backend_internal,rabbit_auth_backend_ip_range}]}]}],
+  []},
+ {authn_authz_backend,
+ "http_dispatch.auth_backends.1.authn = ldap
+http_dispatch.auth_backends.1.authz = internal",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,
+            [{rabbit_auth_backend_ldap,rabbit_auth_backend_internal}]}]}],
+  []},
+ {authn_authz_multiple_backends,
+  "http_dispatch.auth_backends.1.authn = ldap
+http_dispatch.auth_backends.1.authz = internal
+http_dispatch.auth_backends.2       = internal",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,
+            [{rabbit_auth_backend_ldap,rabbit_auth_backend_internal},
+             rabbit_auth_backend_internal]}]}],
+  []},
+ {authn_backend_only,
+  "http_dispatch.auth_backends.1.authn = ldap",
+  [{rabbitmq_web_dispatch,
+       [{auth_backends,
+            [{rabbit_auth_backend_ldap,rabbit_auth_backend_ldap}]}]}],
+  []}
+].
