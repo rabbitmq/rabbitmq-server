@@ -1,0 +1,100 @@
+% vim:ft=erlang:
+%% ----------------------------------------------------------------------------
+%% RabbitMQ Web Dispatch
+%%
+%% ----------------------------------------------------------------------------
+
+%% ===========================================================================
+%% Auth Backends
+
+%% Select an authentication backend to use for the management plugin. RabbitMQ provides an
+%% internal backend in the core.
+%%
+%% {http_dispatch.auth_backends, [rabbit_auth_backend_internal]},
+
+{translation, "rabbitmq_web_dispatch.auth_backends",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("http_dispatch.auth_backends", Conf),
+    BackendModule = fun
+        (internal) -> rabbit_auth_backend_internal;
+        (ldap)     -> rabbit_auth_backend_ldap;
+        (http)     -> rabbit_auth_backend_http;
+        (oauth)    -> rabbit_auth_backend_oauth2;
+        (oauth2)   -> rabbit_auth_backend_oauth2;
+        (cache)    -> rabbit_auth_backend_cache;
+        (amqp)     -> rabbit_auth_backend_amqp;
+        (dummy)    -> rabbit_auth_backend_dummy;
+        (Other) when is_atom(Other) -> Other;
+        (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
+    end,
+    AuthBackends  = [{Num, {default, BackendModule(V)}} || {["http_dispatch", "auth_backends", Num], V}          <- Settings],
+    AuthNBackends = [{Num, {authn, BackendModule(V)}}   || {["http_dispatch", "auth_backends", Num, "authn"], V} <- Settings],
+    AuthZBackends = [{Num, {authz, BackendModule(V)}}   || {["http_dispatch", "auth_backends", Num, "authz"], V} <- Settings],
+    Backends = lists:foldl(
+        fun({NumStr, {Type, V}}, Acc) ->
+            Num = case catch list_to_integer(NumStr) of
+                N when is_integer(N) -> N;
+                Err ->
+                    cuttlefish:invalid(
+                        iolist_to_binary(io_lib:format(
+                            "Auth backend position in the chain should be an integer ~p", [Err])))
+            end,
+            NewVal = case dict:find(Num, Acc) of
+                {ok, {AuthN, AuthZ}} ->
+                    case {Type, AuthN, AuthZ} of
+                        {authn, undefined, _} ->
+                            {V, AuthZ};
+                        {authz, _, undefined} ->
+                            {AuthN, V};
+                        _ ->
+                            cuttlefish:invalid(
+                                iolist_to_binary(
+                                    io_lib:format(
+                                        "Auth backend already defined for the ~pth ~p backend",
+                                        [Num, Type])))
+                    end;
+                error ->
+                    case Type of
+                        authn   -> {V, undefined};
+                        authz   -> {undefined, V};
+                        default -> {V, V}
+                    end
+            end,
+            dict:store(Num, NewVal, Acc)
+        end,
+        dict:new(),
+        AuthBackends ++ AuthNBackends ++ AuthZBackends),
+    lists:map(
+        fun
+            ({Num, {undefined, AuthZ}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Auth backend undefined for the ~pth authz backend. Using ~p",
+                        [Num, AuthZ])),
+                {AuthZ, AuthZ};
+            ({Num, {AuthN, undefined}}) ->
+                cuttlefish:warn(
+                    io_lib:format(
+                        "Authz backend undefined for the ~pth authn backend. Using ~p",
+                        [Num, AuthN])),
+                {AuthN, AuthN};
+            ({_Num, {Auth, Auth}})   -> Auth;
+            ({_Num, {AuthN, AuthZ}}) -> {AuthN, AuthZ}
+        end,
+        lists:keysort(1, dict:to_list(Backends)))
+end}.
+
+{mapping, "http_dispatch.auth_backends.$num", "rabbitmq_web_dispatch.auth_backends", [
+    {datatype, atom}
+]}.
+
+{mapping, "http_dispatch.auth_backends.$num.authn", "rabbitmq_web_dispatch.auth_backends",[
+    {datatype, atom}
+]}.
+
+{mapping, "http_dispatch.auth_backends.$num.authz", "rabbitmq_web_dispatch.auth_backends",[
+    {datatype, atom}
+]}.
+
+%{mapping, "management.test_config", "rabbitmq_management.test_config",
+%    [{datatype, {enum, [true, false]}}]}.
