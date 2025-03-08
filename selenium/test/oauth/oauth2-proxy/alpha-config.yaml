@@ -1,0 +1,37 @@
+
+server:
+  BindAddress: 0.0.0.0:4180
+  SecureBindAddress: 0.0.0.0:8442
+  TLS: 
+    Key: 
+      FromFile: /etc/oauth2-proxy/server_oauth2-proxy_key.pem
+    Cert: 
+      FromFile: /etc/oauth2-proxy/server_oauth2-proxy_certificate.pem
+
+upstreamConfig:
+  upstreams:
+  - id: rabbitmq
+    path: /
+    uri: ${RABBITMQ_URL}
+injectRequestHeaders:
+- name: Authorization
+  values:
+  - claim: access_token
+    prefix: 'Bearer '
+providers:
+- provider: keycloak-oidc
+  id: keycloak-oidc
+  clientSecret: nt6pmZMeyrgzYgkg2MLgZQZxLveRMW5M
+  clientID: rabbitmq-proxy-client-tls
+  code_challenge_method: S256
+  scope: "email openid profile rabbitmq.tag:administrator"
+  skipClaimsFromProfileURL: true
+  caFiles:
+    - /etc/keycloak/ca_keycloak_certificate.pem
+  oidcConfig:
+    issuerURL: ${KEYCLOAK_URL}
+    insecureSkipNonce: true
+    audienceClaims:
+      - aud
+    emailClaim: sub
+    userIDClaim: user_name
