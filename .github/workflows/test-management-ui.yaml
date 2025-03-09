@@ -69,18 +69,22 @@ jobs:
         docker build -t mocha-test --target test .
 
     - name: Run full UI suite on a 3-node rabbitmq cluster
+      id: tests
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
           ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
+
+    - name: Prepare logs for upload
+      if: ${{ failure() && steps.tests.outcome == 'failed' }}
+      run: |
         mkdir -p /tmp/full-suite
-        mv /tmp/selenium/* /tmp/full-suite
+        mv -v /tmp/selenium/* /tmp/full-suite
         
     - name: Upload Test Artifacts
-      if: always()
+      if: ${{ failure() && steps.tests.outcome == 'failed' }}
       uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
           /tmp/full-suite
-          /tmp/short-suite
