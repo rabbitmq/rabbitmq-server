@@ -144,9 +144,17 @@ close_everything(undefined, []) ->
 open_connection(Config, Node) ->
     Pid = rabbit_ct_broker_helpers:get_node_config(Config, Node,
       channels_manager),
+    MRef = erlang:monitor(process, Pid),
     Pid ! {open_connection, self()},
     receive
-        Conn when is_pid(Conn) -> Conn
+        Conn when is_pid(Conn) ->
+            erlang:demonitor(MRef),
+            Conn;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            Msg = lists:flatten(
+                    io_lib:format(
+                      "Channel manager ~0p exited: ~p", [Pid, Reason])),
+            ct:fail(Msg)
     after 60_000 ->
         ct:fail("Timed out waiting for connection to open")
     end.
