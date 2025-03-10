@@ -36,6 +36,8 @@
 %% When a queue is declared as exclusive on a channel, the channel
 %% will notify queue collector of that queue.
 
+-include_lib("kernel/include/logger.hrl").
+
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
@@ -728,6 +730,10 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             State = State0#ch{queue_states = QState1},
             handle_eol(QRef, State)
     end;
+
+handle_info({'DOWN', _MRef, process, Pid, normal}, State) ->
+    ?LOG_DEBUG("Process ~0p monitored by channel ~0p exited", [Pid, self()]),
+    {noreply, State};
 
 handle_info({'EXIT', _Pid, Reason}, State) ->
     {stop, Reason, State};
