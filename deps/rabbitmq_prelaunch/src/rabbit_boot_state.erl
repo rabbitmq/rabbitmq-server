@@ -17,9 +17,12 @@
          set/1,
          wait_for/2,
          has_reached/1,
-         has_reached_and_is_active/1]).
+         has_reached_and_is_active/1,
+         get_start_time/0,
+         record_start_time/0]).
 
 -define(PT_KEY_BOOT_STATE, {?MODULE, boot_state}).
+-define(PT_KEY_START_TIME, {?MODULE, start_time}).
 
 -type boot_state() :: stopped |
                       booting |
@@ -94,4 +97,57 @@ has_reached_and_is_active(TargetBootState) ->
             has_reached(CurrentBootState, TargetBootState)
             andalso
             not has_reached(CurrentBootState, stopping)
+    end.
+
+-spec get_start_time() -> StartTime when
+      StartTime :: integer().
+%% @doc Returns the start time of the Erlang VM.
+%%
+%% This time was recorded by {@link record_start_time/0} as early as possible
+%% and is immutable.
+
+get_start_time() ->
+    persistent_term:get(?PT_KEY_START_TIME).
+
+-spec record_start_time() -> ok.
+%% @doc Records the start time of the Erlang VM.
+%%
+%% The time is expressed in microseconds since Epoch. It can be compared to
+%% other non-native times. This is used by the Peer Discovery subsystem to
+%% sort nodes and select a seed node if the peer discovery backend did not
+%% select one.
+%%
+%% This time is recorded once. Calling this function multiple times won't
+%% overwrite the value.
+
+record_start_time() ->
+    Key = ?PT_KEY_START_TIME,
+    try
+        %% Check if the start time was recorded.
+        _ = persistent_term:get(Key),
+        ok
+    catch
+        error:badarg ->
+            %% The start time was not recorded yet. Acquire a lock and check
+            %% again in case another process got the lock first and recorded
+            %% the start time.
+            Node = node(),
+            LockId = {?PT_KEY_START_TIME, self()},
+            true = global:set_lock(LockId, [Node]),
+            try
+                _ = persistent_term:get(Key),
+                ok
+            catch
+                error:badarg ->
+                    %% We are really the first to get the lock and we can
+                    %% record the start time.
+                    NativeStartTime = erlang:system_info(start_time),
+                    TimeOffset = erlang:time_offset(),
+                    SystemStartTime = NativeStartTime + TimeOffset,
+                    StartTime = erlang:convert_time_unit(
+                                  SystemStartTime, native, microsecond),
+                    persistent_term:put(Key, StartTime)
+            after
+                global:del_lock(LockId, [Node])
+            end
     end.
