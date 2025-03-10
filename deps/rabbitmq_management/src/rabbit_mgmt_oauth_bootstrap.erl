@@ -18,12 +18,14 @@ init(Req0, State) ->
 bootstrap_oauth(Req0, State) ->
     AuthSettings = rabbit_mgmt_wm_auth:authSettings(),
     Dependencies = oauth_dependencies(),
+    {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
     JSContent = import_dependencies(Dependencies) ++
                 set_oauth_settings(AuthSettings) ++
-                set_token_auth(AuthSettings, Req0) ++
+                SetTokenAuth ++
                 export_dependencies(Dependencies),
+    
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
-        JSContent, Req0), State}.
+        JSContent, Req1), State}.
 
 set_oauth_settings(AuthSettings) ->
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
@@ -33,11 +35,20 @@ set_token_auth(AuthSettings, Req0) ->
     case proplists:get_value(oauth_enabled, AuthSettings, false) of
         true ->
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
-                {bearer, Token} ->  ["set_token_auth('", Token, "');"];
-                _ -> []
+                {bearer, Token} ->  
+                    {Req0, ["set_token_auth('", Token, "');"]};
+                _ -> 
+                    Cookies = cowboy_req:parse_cookies(Req0),
+                    case lists:keyfind(<<"token">>, 1, Cookies) of 
+                        {_, Token} ->                             
+                            {cowboy_req:set_resp_cookie(
+                                <<"token">>, <<>>, Req0, #{max_age => 0}), 
+                            ["set_token_auth('", Token, "');"]};
+                        false -> {Req0, []}
+                    end
             end;
         false ->
-            []
+            {Req0, []}
     end.
 
 import_dependencies(Dependencies) ->
