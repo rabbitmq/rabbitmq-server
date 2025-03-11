@@ -29,7 +29,6 @@ defmodule RabbitMQCtl.MixfileBase do
           JSON,
           :mnesia,
           :msacc,
-          :observer_cli,
           :public_key,
           :pubkey_cert,
           :rabbit,
@@ -155,11 +154,6 @@ defmodule RabbitMQCtl.MixfileBase do
       {
         :stdout_formatter,
         path: Path.join(deps_dir, "stdout_formatter"),
-        compile: if(is_bazel, do: fake_cmd, else: make_cmd)
-      },
-      {
-        :observer_cli,
-        path: Path.join(deps_dir, "observer_cli"),
         compile: if(is_bazel, do: fake_cmd, else: make_cmd)
       },
       {
