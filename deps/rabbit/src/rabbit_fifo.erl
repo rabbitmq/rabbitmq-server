@@ -925,26 +925,6 @@ which_module(3) -> rabbit_fifo_v3;
 which_module(4) -> ?MODULE;
 which_module(5) -> ?MODULE.
 
--define(AUX, aux_v3).
-
--record(checkpoint, {index :: ra:index(),
-                     timestamp :: milliseconds(),
-                     smallest_index :: undefined | ra:index(),
-                     messages_total :: non_neg_integer(),
-                     indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
-                     unused_1 = ?NIL}).
--record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
--record(aux, {name :: atom(),
-              capacity :: term(),
-              gc = #aux_gc{} :: #aux_gc{}}).
--record(?AUX, {name :: atom(),
-               last_decorators_state :: term(),
-               capacity :: term(),
-               gc = #aux_gc{} :: #aux_gc{},
-               tick_pid :: undefined | pid(),
-               cache = #{} :: map(),
-               last_checkpoint :: #checkpoint{}}).
-
 init_aux(Name) when is_atom(Name) ->
     %% TODO: catch specific exception throw if table already exists
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
