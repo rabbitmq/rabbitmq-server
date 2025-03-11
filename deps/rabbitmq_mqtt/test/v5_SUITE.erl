@@ -1020,17 +1020,27 @@ session_upgrade_v3_v5_qos0(Config) ->
 session_upgrade_v3_v5_qos(Qos, Config) ->
     ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
     Pub = connect(<<"publisher">>, Config),
-    Subv3 = connect(ClientId, Config, [{proto_ver, v3} | non_clean_sess_opts()]),
+    Subv3 = connect(ClientId, Config,
+                    [{proto_ver, v3},
+                     {auto_ack, false}] ++
+                    non_clean_sess_opts()),
     ?assertEqual(3, proplists:get_value(proto_ver, emqtt:info(Subv3))),
     {ok, _, [Qos]} = emqtt:subscribe(Subv3, Topic, Qos),
     Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
     receive {publish, #{payload := <<"1">>,
-                        client_pid := Subv3}} -> ok
+                        client_pid := Subv3,
+                        packet_id := PacketId}} ->
+                case Qos of
+                    0 -> ok;
+                    1 -> emqtt:puback(Subv3, PacketId)
+                end
     after ?TIMEOUT -> ct:fail("did not receive 1")
     end,
     %% Upgrade session from v3 to v5 while another client is sending messages.
     ok = emqtt:disconnect(Subv3),
-    Subv5 = connect(ClientId, Config, [{proto_ver, v5}, {clean_start, false}]),
+    Subv5 = connect(ClientId, Config, [{proto_ver, v5},
+                                       {clean_start, false},
+                                       {auto_ack, true}]),
     ?assertEqual(5, proplists:get_value(proto_ver, emqtt:info(Subv5))),
     Sender ! stop,
     NumSent = receive {N, Sender} -> N
