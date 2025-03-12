@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2025 VMware, Inc. or its affiliates.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElectedLeaderCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{Config, DocGuide}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -30,7 +30,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
         :ok
 
       error_or_leaderless_queues ->
-        {:error, :check_failed, error_or_leaderless_queues}
+        {:error, error_or_leaderless_queues}
     end
   end
 
@@ -43,15 +43,16 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
      }}
   end
 
-  def output(:ok, %{silent: true}) do
-    {:ok, :check_passed}
+  def output(:ok, %{node: node_name} = opts) do
+    case Config.output_less?(opts) do
+      true ->
+        {:ok, :check_passed}
+      false ->
+        {:ok, "Node #{node_name} reported all quorum queue as having responsive leader replicas"}
+    end
   end
 
-  def output(:ok, %{node: node_name}) do
-    {:ok, "Node #{node_name} reported all quorum queue as having responsive leader replicas"}
-  end
-
-  def output({:error, :check_failed, error_or_leaderless_queues}, %{node: node_name, formatter: "json"}) when is_list(error_or_leaderless_queues) do
+  def output({:error, error_or_leaderless_queues}, %{node: node_name, formatter: "json"}) when is_list(error_or_leaderless_queues) do
     {:error, :check_failed,
      %{
        "result" => "error",
@@ -60,14 +61,14 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
      }}
   end
 
-  def output({:error, :check_failed, error_or_leaderless_queues}, %{silent: true}) when is_list(error_or_leaderless_queues) do
-    {:error, :check_failed, error_or_leaderless_queues}
-  end
-
-  def output({:error, :check_failed, error_or_leaderless_queues}, %{vhost: _vhost}) when is_list(error_or_leaderless_queues) do
-    lines = queue_lines(error_or_leaderless_queues)
-
-    {:error, :check_failed, Enum.join(lines, line_separator())}
+  def output({:error, error_or_leaderless_queues}, opts) when is_list(error_or_leaderless_queues) do
+    case Config.output_less?(opts) do
+      true ->
+        {:error, :check_failed}
+      false ->
+        lines = queue_lines(error_or_leaderless_queues)
+        {:error, :check_failed, Enum.join(lines, line_separator())}
+    end
   end
 
   def usage() do
