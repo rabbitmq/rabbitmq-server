@@ -39,7 +39,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
      %{
        "result" => "ok",
        "message" =>
-         "Node #{node_name} reported all quorum queue leaders as healthy"
+         "Node #{node_name} reported all quorum queue as having responsive leader replicas"
      }}
   end
 
@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
   end
 
   def output(:ok, %{node: node_name}) do
-    {:ok, "Node #{node_name} reported all quorum queue leaders as healthy"}
+    {:ok, "Node #{node_name} reported all quorum queue as having responsive leader replicas"}
   end
 
   def output({:error, unhealthy_queues}, %{node: node_name, formatter: "json"}) when is_list(unhealthy_queues) do
@@ -56,7 +56,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
      %{
        "result" => "error",
        "queues" => unhealthy_queues,
-       "message" => "Node #{node_name} reported unhealthy quorum queue leaders"
+       "message" => "Node #{node_name} reported quorum queues with a missing (not elected) or unresponsive leader replica"
      }}
   end
 
@@ -70,8 +70,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
     {:ok, :check_passed, Enum.join(lines, line_separator())}
   end
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
-
   def usage() do
     "check_for_quorum_queues_without_an_elected_leader [--vhost <vhost>] [--across-all-vhosts] <pattern>"
   end
@@ -79,7 +77,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
   def usage_additional do
     [
       ["<pattern>", "regular expression pattern used to match quorum queues"],
-      ["--across-all-vhosts", "run leader health check for all queues in all virtual hosts on the node"]
+      ["--across-all-vhosts", "run this health check across all existing virtual hosts"]
     ]
   end
 
@@ -87,6 +85,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
 
   def usage_doc_guides() do
     [
+      DocGuide.monitoring(),
       DocGuide.quorum_queues()
     ]
   end
