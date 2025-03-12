@@ -537,8 +537,8 @@ determine_required_components_excluding_rabbitmq() {
 }
 initOnly() {
   for (( i=1; i<=$#; i++)) {
-    if [[ $i != "rabbitmq" ]]; then
-      eval val='$'$i
+    eval val='$'$i
+    if [[ $val != "rabbitmq" ]]; then  
       init="init_$val"
       $init
     fi
