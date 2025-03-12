@@ -18,6 +18,10 @@ defmodule RabbitMQ.CLI.Core.Output do
     :ok
   end
 
+  def format_output({:ok, :check_passed, output}, formatter, options) do
+    {:ok, formatter.format_output(output, options)}
+  end
+
   def format_output({:ok, output}, formatter, options) do
     {:ok, formatter.format_output(output, options)}
   end
