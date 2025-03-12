@@ -627,8 +627,7 @@ query_node_props2([{Node, Members} | Rest], NodesAndProps, FromNode) ->
                            ["Peer discovery: temporary hidden node '~ts' "
                             "queries properties from node '~ts'",
                             [node(), Node]], FromNode),
-                         StartTime = get_node_start_time(
-                                       Node, microsecond, FromNode),
+                         StartTime = get_node_start_time(Node, FromNode),
                          IsReady = is_node_db_ready(Node, FromNode),
                          NodeAndProps = {Node, Members, StartTime, IsReady},
                          NodesAndProps1 = [NodeAndProps | NodesAndProps],
@@ -656,9 +655,8 @@ query_node_props2([], NodesAndProps, _FromNode) ->
     ?assert(length(NodesAndProps1) =< length(nodes(hidden))),
     NodesAndProps1.
 
--spec get_node_start_time(Node, Unit, FromNode) -> StartTime when
+-spec get_node_start_time(Node, FromNode) -> StartTime when
       Node :: node(),
-      Unit :: erlang:time_unit(),
       FromNode :: node(),
       StartTime :: non_neg_integer().
 %% @doc Returns the start time of the given `Node' in `Unit'.
@@ -679,15 +677,21 @@ query_node_props2([], NodesAndProps, _FromNode) ->
 %%
 %% @private
 
-get_node_start_time(Node, Unit, FromNode) ->
-    NativeStartTime = erpc_call(
-                        Node, erlang, system_info, [start_time], FromNode),
-    TimeOffset = erpc_call(Node, erlang, time_offset, [], FromNode),
-    SystemStartTime = NativeStartTime + TimeOffset,
-    StartTime = erpc_call(
-                  Node, erlang, convert_time_unit,
-                  [SystemStartTime, native, Unit], FromNode),
-    StartTime.
+get_node_start_time(Node, FromNode) ->
+    try
+        erpc_call(Node,rabbit_boot_state, get_start_time, [], FromNode)
+    catch
+        error:{exception, _, _} ->
+            NativeStartTime = erpc_call(
+                                Node, erlang, system_info, [start_time],
+                                FromNode),
+            TimeOffset = erpc_call(Node, erlang, time_offset, [], FromNode),
+            SystemStartTime = NativeStartTime + TimeOffset,
+            StartTime = erpc_call(
+                          Node, erlang, convert_time_unit,
+                          [SystemStartTime, native, microsecond], FromNode),
+            StartTime
+    end.
 
 -spec is_node_db_ready(Node, FromNode) -> IsReady when
       Node :: node(),
