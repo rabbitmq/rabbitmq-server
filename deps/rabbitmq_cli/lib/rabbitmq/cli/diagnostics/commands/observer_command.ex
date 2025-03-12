@@ -19,11 +19,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.ObserverCommand do
 
   @dialyzer {:nowarn_function, run: 2}
   def run([], %{node: node_name, interval: interval}) do
-    case :observer_cli.start(node_name, [{:interval, interval * 1000}]) do
-      # See zhongwencool/observer_cli#54
-      {:badrpc, _} = err -> err
-      {:error, _} = err -> err
-      {:error, _, _} = err -> err
+    case :rabbit_misc.rpc_call(node_name, :observer_cli, :start, [interval * 1000], :infinity) do
       :ok -> {:ok, "Disconnected from #{node_name}."}
       :quit -> {:ok, "Disconnected from #{node_name}."}
       other -> other
