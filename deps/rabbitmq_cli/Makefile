@@ -1,7 +1,7 @@
 PROJECT = rabbitmq_cli
 
 BUILD_DEPS = rabbit_common
-DEPS = csv json observer_cli stdout_formatter
+DEPS = csv json stdout_formatter
 TEST_DEPS = amqp amqp_client temp x509 rabbit
 
 dep_amqp = hex 3.3.0
