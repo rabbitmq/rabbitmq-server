@@ -58,6 +58,7 @@ function access_token(id, secret) {
     console.log("Token => " + token)
     return token;
   } else {
-    throw new Error(req.status + " : " + req.responseText);
+    throw new Error(req.status + " : " + " : " + 
+      req.response + " : " + req.responseText)
   }
 }
