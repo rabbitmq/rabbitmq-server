@@ -73,7 +73,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
   def usage() do
-    "leader_health_check [--vhost <vhost>] [--across-all-vhosts] <pattern>"
+    "check_for_quorum_queues_without_an_elected_leader [--vhost <vhost>] [--across-all-vhosts] <pattern>"
   end
 
   def usage_additional do
@@ -91,15 +91,15 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
     ]
   end
 
-  def description(), do: "Checks availability and health status of quorum queue leaders"
+  def description(), do: "Checks that quorum queue have elected and available leader replicas"
 
   def banner([name], %{across_all_vhosts: true}),
-    do: "Checking availability and health status of leaders for quorum queues matching '#{name}' in all vhosts ..."
+    do: "Checking leader replicas of quorum queues matching '#{name}' in all vhosts ..."
 
   def banner([name], %{vhost: vhost}),
-    do: "Checking availability and health status of leaders for quorum queues matching '#{name}' in vhost #{vhost} ..."
+    do: "Checking leader replicas of quorum queues matching '#{name}' in vhost #{vhost} ..."
 
   def queue_lines(qs) do
-    for q <- qs, do: "Leader for #{q["readable_name"]} is unhealthy and unavailable"
+    for q <- qs, do: "#{q["readable_name"]} does not have an elected leader replica or the replica was unresponsive"
   end
 end
