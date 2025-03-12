@@ -29,8 +29,8 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
       [] ->
         :ok
 
-      unhealthy_queues_or_error ->
-        {:error, unhealthy_queues_or_error}
+      error_or_leaderless_queues ->
+        {:error, :check_failed, error_or_leaderless_queues}
     end
   end
 
@@ -51,23 +51,23 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.CheckForQuorumQueuesWithoutAnElected
     {:ok, "Node #{node_name} reported all quorum queue as having responsive leader replicas"}
   end
 
-  def output({:error, unhealthy_queues}, %{node: node_name, formatter: "json"}) when is_list(unhealthy_queues) do
-    {:ok, :check_passed,
+  def output({:error, :check_failed, error_or_leaderless_queues}, %{node: node_name, formatter: "json"}) when is_list(error_or_leaderless_queues) do
+    {:error, :check_failed,
      %{
        "result" => "error",
-       "queues" => unhealthy_queues,
+       "queues" => error_or_leaderless_queues,
        "message" => "Node #{node_name} reported quorum queues with a missing (not elected) or unresponsive leader replica"
      }}
   end
 
-  def output({:error, unhealthy_queues}, %{silent: true}) when is_list(unhealthy_queues) do
-    {:ok, :check_passed}
+  def output({:error, :check_failed, error_or_leaderless_queues}, %{silent: true}) when is_list(error_or_leaderless_queues) do
+    {:error, :check_failed, error_or_leaderless_queues}
   end
 
-  def output({:error, unhealthy_queues}, %{vhost: _vhost}) when is_list(unhealthy_queues) do
-    lines = queue_lines(unhealthy_queues)
+  def output({:error, :check_failed, error_or_leaderless_queues}, %{vhost: _vhost}) when is_list(error_or_leaderless_queues) do
+    lines = queue_lines(error_or_leaderless_queues)
 
-    {:ok, :check_passed, Enum.join(lines, line_separator())}
+    {:error, :check_failed, Enum.join(lines, line_separator())}
   end
 
   def usage() do
