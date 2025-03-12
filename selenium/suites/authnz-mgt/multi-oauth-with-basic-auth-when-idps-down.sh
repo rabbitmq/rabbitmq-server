@@ -7,4 +7,5 @@ TEST_CONFIG_PATH=/multi-oauth
 PROFILES="devkeycloak prodkeycloak enable-basic-auth with-resource-label with-resource-scopes tls"
 
 source $SCRIPT/../../bin/suite_template $@
+initOnly devkeycloak prodkeycloak
 run
