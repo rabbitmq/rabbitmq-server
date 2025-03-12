@@ -19,23 +19,14 @@ init(Req0, State) ->
 bootstrap_oauth(Req0, State) ->
     AuthSettings = rabbit_mgmt_wm_auth:authSettings(),
     Dependencies = oauth_dependencies(),
-<<<<<<< HEAD
-    JSContent = import_dependencies(Dependencies) ++ 
-                set_oauth_settings(AuthSettings) ++ 
-                set_token_auth(AuthSettings, Req0) ++ 
-                export_dependencies(Dependencies),                
-    {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>}, 
-        JSContent, Req0), State}.
-=======
     {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
     JSContent = import_dependencies(Dependencies) ++
                 set_oauth_settings(AuthSettings) ++
                 SetTokenAuth ++
                 export_dependencies(Dependencies),
-    
+
     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
         JSContent, Req1), State}.
->>>>>>> 5e5521a3c (Use POST+Redirect_with_cookie)
 
 set_oauth_settings(AuthSettings) ->    
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
@@ -45,15 +36,15 @@ set_token_auth(AuthSettings, Req0) ->
     case proplists:get_value(oauth_enabled, AuthSettings, false) of      
         true ->       
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
-                {bearer, Token} -> 
+                {bearer, Token} ->
                     {
-                        Req0, 
+                        Req0,
                         ["set_token_auth('", Token, "');"]
                     };
-                _ -> 
+                _ ->
                     Cookies = cowboy_req:parse_cookies(Req0),
-                    case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 
-                        {_, Token} -> 
+                    case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of
+                        {_, Token} ->
                             {
                                 cowboy_req:set_resp_cookie(
                                     ?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, <<"">>, Req0, #{
@@ -61,24 +52,19 @@ set_token_auth(AuthSettings, Req0) ->
                                         http_only => true,
                                         path => ?OAUTH2_ACCESS_TOKEN_COOKIE_PATH,
                                         same_site => strict
-                                    }), 
+                                    }),
                                 ["set_token_auth('", Token, "');"]
                             };
                         false -> {
-                                Req0, 
+                                Req0,
                                 []
                             }
                     end
             end;
-<<<<<<< HEAD
-        false -> 
-            []
-=======
         false -> {
-                Req0, 
+                Req0,
                 []
             }
->>>>>>> 5e5521a3c (Use POST+Redirect_with_cookie)
     end.
 
 import_dependencies(Dependencies) ->
