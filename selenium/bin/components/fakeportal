@@ -52,7 +52,7 @@ start_fakeportal() {
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
     --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
-    -v ${TEST_CONFIG_PATH}/uaa:/etc/uaa \
+    -v ${TEST_CONFIG_DIR}/uaa:/etc/uaa \
     -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeportal
 
