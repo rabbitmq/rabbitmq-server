@@ -188,13 +188,8 @@ all_tests() ->
      priority_queue_fifo,
      priority_queue_2_1_ratio,
      requeue_multiple_true,
-<<<<<<< HEAD
-     requeue_multiple_false
-=======
      requeue_multiple_false,
-     subscribe_from_each,
      leader_health_check
->>>>>>> e1d748131 (By @Ayanda-D: new CLI health check that detects QQs without an elected reachable leader #13433 (#13487))
     ].
 
 memory_tests() ->
