@@ -66,10 +66,12 @@
          pattern_match_on_type/1,
          pattern_match_on_durable/1,
          pattern_match_on_type_and_durable/2,
+         pattern_match_on_type_and_vhost/2,
          reset_decorators/1,
          set_immutable/1,
          qnode/1,
          to_printable/1,
+         to_printable/2,
          macros/0]).
 
 -define(record_version, amqqueue_v2).
@@ -531,6 +533,12 @@ pattern_match_on_durable(IsDurable) ->
 pattern_match_on_type_and_durable(Type, IsDurable) ->
     #amqqueue{type = Type, durable = IsDurable, _ = '_'}.
 
+-spec pattern_match_on_type_and_vhost(atom(), binary()) ->
+    amqqueue_pattern().
+
+pattern_match_on_type_and_vhost(Type, VHost) ->
+    #amqqueue{type = Type, vhost = VHost, _ = '_'}.
+
 -spec reset_decorators(amqqueue()) -> amqqueue().
 
 reset_decorators(#amqqueue{} = Queue) ->
@@ -559,6 +567,14 @@ qnode({_, Node}) ->
 -spec to_printable(amqqueue()) -> #{binary() => any()}.
 to_printable(#amqqueue{name = QName = #resource{name = Name},
                        vhost = VHost, type = Type}) ->
+     #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
+       <<"name">> => Name,
+       <<"virtual_host">> => VHost,
+       <<"type">> => Type}.
+
+-spec to_printable(rabbit_types:r(queue), atom() | binary()) -> #{binary() => any()}.
+to_printable(QName = #resource{name = Name, virtual_host = VHost}, Type) ->
+    _ = rabbit_queue_type:discover(Type),
      #{<<"readable_name">> => rabbit_data_coercion:to_binary(rabbit_misc:rs(QName)),
        <<"name">> => Name,
        <<"virtual_host">> => VHost,
