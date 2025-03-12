@@ -82,6 +82,9 @@
          file_handle_other_reservation/0,
          file_handle_release_reservation/0]).
 
+-export([leader_health_check/2,
+         run_leader_health_check/4]).
+
 -ifdef(TEST).
 -export([filter_promotable/2,
          ra_machine_config/1]).
@@ -144,6 +147,8 @@
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
 % -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 -define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
+-define(LEADER_HEALTH_CHECK_TIMEOUT, 5_000).
+-define(GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
 
 %%----------- QQ policies ---------------------------------------------------
 
@@ -2145,3 +2150,75 @@ file_handle_other_reservation() ->
 file_handle_release_reservation() ->
     ok.
 
+leader_health_check(QueueNameOrRegEx, VHost) ->
+    %% Set a process limit threshold to 20% of ErlangVM process limit, beyond which
+    %% we cannot spawn any new processes for executing QQ leader health checks.
+    ProcessLimitThreshold = round(0.2 * erlang:system_info(process_limit)),
+
+    leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold).
+
+leader_health_check(QueueNameOrRegEx, VHost, ProcessLimitThreshold) ->
+    Qs =
+        case VHost of
+            across_all_vhosts ->
+                rabbit_db_queue:get_all_by_type(?MODULE);
+            VHost when is_binary(VHost) ->
+                rabbit_db_queue:get_all_by_type_and_vhost(?MODULE, VHost)
+        end,
+    check_process_limit_safety(length(Qs), ProcessLimitThreshold),
+    ParentPID = self(),
+    HealthCheckRef = make_ref(),
+    HealthCheckPids =
+        lists:flatten(
+            [begin
+                {resource, _VHostN, queue, QueueName} = QResource = amqqueue:get_name(Q),
+                case re:run(QueueName, QueueNameOrRegEx, [{capture, none}]) of
+                    match ->
+                        {ClusterName, _} = rabbit_amqqueue:pid_of(Q),
+                        _Pid = spawn(fun() -> run_leader_health_check(ClusterName, QResource, HealthCheckRef, ParentPID) end);
+                    _ ->
+                        []
+                end
+            end || Q <- Qs, amqqueue:get_type(Q) == ?MODULE]),
+    Result = wait_for_leader_health_checks(HealthCheckRef, length(HealthCheckPids), []),
+    _ = spawn(fun() -> maybe_log_leader_health_check_result(Result) end),
+    Result.
+
+run_leader_health_check(ClusterName, QResource, HealthCheckRef, From) ->
+    Leader = ra_leaderboard:lookup_leader(ClusterName),
+
+    %% Ignoring result here is required to clear a diayzer warning.
+    _ =
+        case ra_server_proc:ping(Leader, ?LEADER_HEALTH_CHECK_TIMEOUT) of
+            {pong,leader} ->
+                From ! {ok, HealthCheckRef, QResource};
+            _ ->
+                From ! {error, HealthCheckRef, QResource}
+        end,
+    ok.
+
+wait_for_leader_health_checks(_Ref, 0, UnhealthyAcc) -> UnhealthyAcc;
+wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
+    receive
+        {ok, Ref, _QResource} ->
+            wait_for_leader_health_checks(Ref, N - 1, UnhealthyAcc);
+        {error, Ref, QResource} ->
+            wait_for_leader_health_checks(Ref, N - 1, [amqqueue:to_printable(QResource, ?MODULE) | UnhealthyAcc])
+    after
+        ?GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT ->
+            UnhealthyAcc
+    end.
+
+check_process_limit_safety(QCount, ProcessLimitThreshold) ->
+    case (erlang:system_info(process_count) + QCount) >= ProcessLimitThreshold of
+        true ->
+            rabbit_log:warning("Leader health check not permitted, process limit threshold will be exceeded."),
+            throw({error, leader_health_check_process_limit_exceeded});
+        false ->
+            ok
+    end.
+
+maybe_log_leader_health_check_result([]) -> ok;
+maybe_log_leader_health_check_result(Result) ->
+    Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
+    rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
