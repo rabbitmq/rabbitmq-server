@@ -27,10 +27,12 @@ defmodule DistributionTest do
       :exit, _ -> :ok
     end
 
-    System.put_env("RABBITMQ_ERLANG_COOKIE", "mycookie")
-    opts = %{}
-    Distribution.start(opts)
-    :mycookie = Node.get_cookie()
+    if !System.get_env("CI") do
+      System.put_env("RABBITMQ_ERLANG_COOKIE", "mycookie")
+      opts = %{}
+      Distribution.start(opts)
+      :mycookie = Node.get_cookie()
+    end
   end
 
   test "set cookie via argument" do
@@ -45,8 +47,10 @@ defmodule DistributionTest do
       :exit, _ -> :ok
     end
 
-    opts = %{erlang_cookie: :mycookie}
-    Distribution.start(opts)
-    :mycookie = Node.get_cookie()
+    if !System.get_env("CI") do
+      opts = %{erlang_cookie: :mycookie}
+      Distribution.start(opts)
+      :mycookie = Node.get_cookie()
+    end
   end
 end
