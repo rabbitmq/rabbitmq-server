@@ -154,9 +154,9 @@ export function oidc_settings_from(resource_server) {
     automaticSilentRenew: true,
     revokeAccessTokenOnSignout: true
   }
-  if (resource_server.end_session_endpoint != "") {
+  if (resource_server.oauth_end_session_endpoint != "") {
     oidcSettings.metadataSeed = {
-      end_session_endpoint: resource_server.end_session_endpoint
+      end_session_endpoint: resource_server.oauth_end_session_endpoint
     }
   }
   if (resource_server.oauth_client_secret != "") {
@@ -214,6 +214,9 @@ export function oauth_initialize(authSettings) {
     if (resource_server) {
       oauth.sp_initiated = resource_server.sp_initiated
       oauth.authority = resource_server.oauth_provider_url
+      if (resource_server.oauth_end_session_endpoint != "") {
+        oauth.oauth_end_session_endpoint = resource_server.oauth_end_session_endpoint      
+      }
       if (!resource_server.sp_initiated) return oauth;
       else oauth_initialize_user_manager(resource_server)
     }
@@ -311,7 +314,11 @@ export function oauth_initiateLogout() {
     })
 
   } else {
-    go_to_authority()
+    if (oauth.oauth_end_session_endpoint != null) {
+      location.href = oauth.oauth_end_session_endpoint      
+    }else {
+      go_to_authority()
+    }
   }
 }
 

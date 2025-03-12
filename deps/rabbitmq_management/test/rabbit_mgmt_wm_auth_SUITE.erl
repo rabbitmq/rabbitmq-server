@@ -788,31 +788,31 @@ should_return_oauth_client_id_z(Config) ->
 
 should_not_return_end_session_endpoint(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(authSettings(),
-    Config, rabbit, end_session_endpoint).
+    Config, rabbit, oauth_end_session_endpoint).
 
 should_return_end_session_endpoint_0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, rabbit, end_session_endpoint, ?config(logout_url_0, Config)).
+    Config, rabbit, oauth_end_session_endpoint, ?config(logout_url_0, Config)).
 
 should_return_end_session_endpoint_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, rabbit, end_session_endpoint, ?config(logout_url_1, Config)).
+    Config, rabbit, oauth_end_session_endpoint, ?config(logout_url_1, Config)).
 
 should_return_oauth_resource_server_a_without_end_session_endpoint(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(authSettings(),
-    Config, a, end_session_endpoint).
+    Config, a, oauth_end_session_endpoint).
 
 should_return_oauth_resource_server_a_with_end_session_endpoint_0(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, a, end_session_endpoint, ?config(logout_url_0, Config)).
+    Config, a, oauth_end_session_endpoint, ?config(logout_url_0, Config)).
 
 should_return_oauth_resource_server_a_with_end_session_endpoint_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, a, end_session_endpoint, ?config(logout_url_1, Config)).
+    Config, a, oauth_end_session_endpoint, ?config(logout_url_1, Config)).
 
 should_return_oauth_resource_server_a_with_end_session_endpoint_2(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
-    Config, a, end_session_endpoint, ?config(logout_url_2, Config)).
+    Config, a, oauth_end_session_endpoint, ?config(logout_url_2, Config)).
 
 should_return_mgt_oauth_resource_rabbit_without_authorization_endpoint_params(Config) ->
   assert_attribute_not_defined_for_oauth_resource_server(authSettings(),
