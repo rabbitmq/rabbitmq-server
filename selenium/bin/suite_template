@@ -486,6 +486,12 @@ runWith() {
     run_local_with $@
   fi
 }
+initOnly() {
+  if [[ "$COMMAND" == "initOnly" ]]
+  then
+    init_only $@
+  fi
+}
 
 run_local_with() {
   export PROFILES="local ${PROFILES}"
@@ -533,6 +539,15 @@ determine_required_components_excluding_rabbitmq() {
     if [[ $i != "rabbitmq" ]]; then
       eval val='$'$i
       REQUIRED_COMPONENTS+=( "$val" )
+    fi
+  }
+}
+initOnly() {
+  for (( i=1; i<=$#; i++)) {
+    eval val='$'$i
+    if [[ $val != "rabbitmq" ]]; then  
+      init="init_$val"
+      $init
     fi
   }
 }

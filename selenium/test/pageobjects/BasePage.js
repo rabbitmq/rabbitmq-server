@@ -163,6 +163,27 @@ module.exports = class BasePage {
       })
       */
   }
+  
+  async isPopupWarningNotDisplayed() {
+    return this.isElementNotVisible(FORM_POPUP)
+  }
+
+  async isElementNotVisible(locator) {
+    try {
+      await this.driver.wait(async() => {
+        try {
+          const element = await this.driver.findElement(locator)
+          const visible = await element.isDisplayed()
+          return !visible
+        } catch (error) {
+          return true
+        }
+      }, this.timeout)
+      return true
+    } catch (error) {
+      return false
+    }
+  }
   async getPopupWarning() {
     let element = await driver.findElement(FORM_POPUP)
     return this.driver.wait(until.elementIsVisible(element), this.timeout,

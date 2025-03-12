@@ -26,7 +26,7 @@ describe('When UAA is down', function () {
 
   it('should not be presented with a login button to log in', async function () {
     await homePage.isLoaded()
-    assert.equal(false, await homePage.isLoginButtonVisible())    
+    assert.ok(await homePage.isLoginButtonNotVisible())
   })
 
   after(async function () {
