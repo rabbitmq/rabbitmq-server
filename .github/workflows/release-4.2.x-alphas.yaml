@@ -1,9 +1,10 @@
-name: "Trigger a 4.1.x alpha release build"
+name: "Trigger a 4.2.x alpha release build"
 on:
   workflow_dispatch:
   push:
     branches:
-      - "v4.1.x"
+      # 4.2.x
+      - "main"
     paths:
       - "deps/*/src/**"
       - 'deps/rabbitmq_management/priv/**'
@@ -22,7 +23,7 @@ jobs:
         with:
           token: ${{ secrets.RABBITMQCI_BOT_TOKEN }}
           repository: ${{ env.DEV_WORKFLOW_REPOSITORY }}
-          event-type: "new_4.1.x_alpha"
+          event-type: "new_4.2.x_alpha"
           client-payload: |-
             {
               "release_repository": "${{ env.DEV_WORKFLOW_REPOSITORY }}",
@@ -30,6 +31,6 @@ jobs:
               "prerelease": true,
               "prerelease_kind": "alpha",
               "prerelease_identifier": "${{ env.PRERELEASE_IDENTIFIER }}",
-              "release_title": "RabbitMQ ${{ vars.SERVER_41_NEXT_PATCH_VERSION }}-alpha.${{ env.PRERELEASE_IDENTIFIER }} (from ${{ github.event.repository.pushed_at }})",
-              "base_version": "${{ vars.SERVER_41_NEXT_PATCH_VERSION }}"
+              "release_title": "RabbitMQ ${{ vars.SERVER_42_NEXT_PATCH_VERSION }}-alpha.${{ env.PRERELEASE_IDENTIFIER }} (from ${{ github.event.repository.pushed_at }})",
+              "base_version": "${{ vars.SERVER_42_NEXT_PATCH_VERSION }}"
             }
