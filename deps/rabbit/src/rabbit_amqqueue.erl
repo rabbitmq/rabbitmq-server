@@ -811,6 +811,35 @@ check_exclusive_access(Q, _ReaderPid, _MatchType) ->
       "match that of the original declaration.",
       [rabbit_misc:rs(QueueName)]).
 
+-spec check_internal(amqqueue:amqqueue(), rabbit_types:username()) ->
+          'ok' | rabbit_types:channel_exit().
+check_internal(Q, Username) ->
+    case amqqueue:is_internal(Q) of
+        true ->
+            case Username of
+                %% note cli delete command uses "cli_user"
+                ?INTERNAL_USER ->
+                    ok;
+                _ ->
+                    QueueName = amqqueue:get_name(Q),
+                    case amqqueue:internal_owner(Q) of
+                        undefined ->
+                            rabbit_misc:protocol_error(
+                              resource_locked,
+                              "Cannot delete protected ~ts.",
+                              [rabbit_misc:rs(QueueName)]);
+                        IOwner ->
+                            rabbit_misc:protocol_error(
+                              resource_locked,
+                              "Cannot delete protected ~ts. It was "
+                              "declared as an protected and can be deleted only by deleting the owner entity: ~ts",
+                              [rabbit_misc:rs(QueueName), rabbit_misc:rs(IOwner)])
+                    end
+            end;
+        false ->
+            ok
+    end.
+
 -spec with_exclusive_access_or_die(name(), pid(), qfun(A)) ->
     A | rabbit_types:channel_exit().
 with_exclusive_access_or_die(Name, ReaderPid, F) ->
@@ -1681,6 +1710,7 @@ delete_with(QueueName, ConnPid, IfUnused, IfEmpty, Username, CheckExclusive) whe
     case with(
            QueueName,
            fun (Q) ->
+                ok = check_internal(Q, Username),
                 if CheckExclusive ->
                     check_exclusive_access(Q, ConnPid);
                 true ->
