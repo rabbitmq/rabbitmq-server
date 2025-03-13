@@ -1,0 +1,17 @@
+:root {
+ 
+}
+
+/* Theme switcher */
+
+.switcher__radio {
+    filter: invert(1);
+}
+
+.switcher__radio:checked {
+    filter: invert(0);
+}
+
+.switcher__status {
+    filter: invert(1);
+}

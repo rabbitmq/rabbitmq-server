@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   id="svg8"
+   version="1.1"
+   viewBox="0 0 8.4666665 8.4666669"
+   height="32"
+   width="32"
+   sodipodi:docname="auto.svg"
+   inkscape:version="0.92.4 (5da689c313, 2019-01-14)">
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     id="namedview8"
+     showgrid="false"
+     units="px"
+     inkscape:zoom="13.455443"
+     inkscape:cx="-0.96818981"
+     inkscape:cy="9.1969465"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2" />
+  <metadata
+     id="metadata5">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     id="layer1"
+     transform="matrix(0.48587407,0,0,0.48587407,-29.9988,-55.881719)">
+    <path
+       style="stroke-width:1.01683795"
+       d="M 16.054688 0.021484375 A 15.978883 15.978883 0 0 0 0.076171875 16 A 15.978883 15.978883 0 0 0 16.054688 31.978516 A 15.978883 15.978883 0 0 0 32.035156 16 A 15.978883 15.978883 0 0 0 16.054688 0.021484375 z M 16.054688 1.1582031 A 14.843054 14.843054 0 0 1 30.898438 16 A 14.843054 14.843054 0 0 1 16.054688 30.84375 A 14.843054 14.843054 0 0 1 1.2128906 16 A 14.843054 14.843054 0 0 1 16.054688 1.1582031 z "
+       transform="matrix(0.54455125,0,0,0.54455125,61.741924,115.01276)"
+       id="path3713" />
+    <circle
+       style="fill:#000000;stroke-width:0.54455125"
+       id="path9"
+       cx="70.485031"
+       cy="123.72583"
+       r="1.6592989" />
+  </g>
+</svg>
