@@ -48,6 +48,7 @@ dep_gen_batch_server = hex 0.8.8
 dep_jose = hex 1.11.10
 dep_khepri = hex 0.16.0
 dep_khepri_mnesia_migration = hex 0.7.1
+dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.6
 dep_prometheus = hex 4.11.0
 dep_ra = hex 2.16.2
