@@ -182,7 +182,7 @@ class TestParsing(unittest.TestCase):
     def test_broadcast(self):
         ''' Single message should be delivered to two consumers:
             amq.topic --routing_key--> first_queue --> first_connection
-                     \--routing_key--> second_queue--> second_connection
+                     \\--routing_key--> second_queue--> second_connection
         '''
         subscribe=( 'SUBSCRIBE\n'
                     'id: XsKNhAf\n'
