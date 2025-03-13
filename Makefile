@@ -76,7 +76,6 @@ endif
 
 include erlang.mk
 include mk/github-actions.mk
-include mk/bazel.mk
 
 # If PLUGINS was set when we use run-broker we want to
 # fill in the enabled plugins list. PLUGINS is a more
@@ -153,15 +152,12 @@ BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
 	       --exclude '.hg*'				\
 	       --exclude '.*.plt'			\
 	       --exclude '*.bzl'			\
-	       --exclude '*.bazel'			\
-	       --exclude '*.bazelrc'			\
 	       --exclude 'moduleindex.yaml'		\
 	       --exclude 'BUILD.*'			\
 	       --exclude 'erlang_ls.config'		\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '_build/'			\
 	       --exclude '__pycache__/'			\
-	       --exclude 'bazel*/'			\
 	       --exclude 'tools/'			\
 	       --exclude 'ci/'				\
 	       --exclude 'cover/'			\
