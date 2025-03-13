@@ -151,9 +151,6 @@ BASE_RSYNC_FLAGS += -a $(RSYNC_V) \
 	       --exclude '.git*'			\
 	       --exclude '.hg*'				\
 	       --exclude '.*.plt'			\
-	       --exclude '*.bzl'			\
-	       --exclude 'moduleindex.yaml'		\
-	       --exclude 'BUILD.*'			\
 	       --exclude 'erlang_ls.config'		\
 	       --exclude '$(notdir $(ERLANG_MK_TMP))'	\
 	       --exclude '_build/'			\
