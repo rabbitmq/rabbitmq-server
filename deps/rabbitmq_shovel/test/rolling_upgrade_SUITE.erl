@@ -101,7 +101,7 @@ child_id_format(Config) ->
     %%   Node 4: the secondary umbrella
     %%   ...
     %%
-    %% Therefore, `Pouet' will use the primary copy, `OldNode' the secondary
+    %% Therefore, `NewNode' will use the primary copy, `OldNode' the secondary
     %% umbrella, `NewRefNode' the primary copy, and `NodeWithQueues' the
     %% secondary umbrella.
 
@@ -221,7 +221,7 @@ child_id_format(Config) ->
     %% After that, the supervisors run on the new code.
     ct:pal("Clustering nodes ~s and ~s", [OldNode, NewNode]),
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(
-                Config, [OldNode, NewNode]),
+                Config, OldNode, [NewNode]),
     ok = rabbit_ct_broker_helpers:stop_broker(Config1, OldNode),
     ok = rabbit_ct_broker_helpers:reset_node(Config1, OldNode),
 

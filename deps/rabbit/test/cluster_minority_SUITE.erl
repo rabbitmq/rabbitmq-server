@@ -9,14 +9,14 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
 all() ->
     [
      {group, client_operations},
-     {group, cluster_operation_add},
-     {group, cluster_operation_remove}
+     {group, cluster_operation}
     ].
 
 groups() ->
@@ -42,8 +42,10 @@ groups() ->
                               delete_policy,
                               export_definitions
                              ]},
-     {cluster_operation_add, [], [add_node]},
-     {cluster_operation_remove, [], [remove_node]},
+     {cluster_operation, [], [add_node_when_seed_node_is_leader,
+                              add_node_when_seed_node_is_follower,
+                              remove_node_when_seed_node_is_leader,
+                              remove_node_when_seed_node_is_follower]},
      {feature_flags, [], [enable_feature_flag]}
     ].
 
@@ -127,26 +129,49 @@ init_per_group(Group, Config0) when Group == client_operations;
             partition_5_node_cluster(Config1),
             Config1
     end;
-init_per_group(Group, Config0) ->
+init_per_group(_Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{rmq_nodes_count, 5},
-                                                    {rmq_nodename_suffix, Group},
                                                     {rmq_nodes_clustered, false},
                                                     {tcp_ports_base},
                                                     {net_ticktime, 5}]),
     Config1 = rabbit_ct_helpers:merge_app_env(
-                Config, {rabbit, [{forced_feature_flags_on_init, []}]}),
-    rabbit_ct_helpers:run_steps(Config1,
-                                rabbit_ct_broker_helpers:setup_steps() ++
-                                    rabbit_ct_client_helpers:setup_steps()).
+                Config, {rabbit, [{forced_feature_flags_on_init, []},
+                                  {khepri_leader_wait_retry_timeout, 30000}]}),
+    Config1.
 
-end_per_group(_, Config) ->
+end_per_group(Group, Config) when Group == client_operations;
+                                  Group == feature_flags ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_client_helpers:teardown_steps() ++
-                                    rabbit_ct_broker_helpers:teardown_steps()).
+                                rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(_Group, Config) ->
+    Config.
 
+init_per_testcase(Testcase, Config)
+  when Testcase =:= add_node_when_seed_node_is_leader orelse
+       Testcase =:= add_node_when_seed_node_is_follower orelse
+       Testcase =:= remove_node_when_seed_node_is_leader orelse
+       Testcase =:= remove_node_when_seed_node_is_follower ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodename_suffix, Testcase}]),
+    rabbit_ct_helpers:run_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps());
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(Testcase, Config)
+  when Testcase =:= add_node_when_seed_node_is_leader orelse
+       Testcase =:= add_node_when_seed_node_is_follower orelse
+       Testcase =:= remove_node_when_seed_node_is_leader orelse
+       Testcase =:= remove_node_when_seed_node_is_follower ->
+    rabbit_ct_helpers:run_steps(
+      Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -271,53 +296,153 @@ set_policy(Config) ->
 delete_policy(Config) ->
     ?assertError(_, rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy-to-delete">>)).
 
-add_node(Config) ->
-    [A, B, C, D, _E] = rabbit_ct_broker_helpers:get_node_configs(
+add_node_when_seed_node_is_leader(Config) ->
+    [A, B, C, _D, E] = rabbit_ct_broker_helpers:get_node_configs(
                          Config, nodename),
 
     %% Three node cluster: A, B, C
-    ok = rabbit_control_helper:command(stop_app, B),
-    ok = rabbit_control_helper:command(join_cluster, B, [atom_to_list(A)], []),
-    rabbit_control_helper:command(start_app, B),
+    Cluster = [A, B, C],
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
 
-    ok = rabbit_control_helper:command(stop_app, C),
-    ok = rabbit_control_helper:command(join_cluster, C, [atom_to_list(A)], []),
-    rabbit_control_helper:command(start_app, C),
+    AMember = {rabbit_khepri:get_store_id(), A},
+    _ = ra:transfer_leadership(AMember, AMember),
+    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
 
     %% Minority partition: A
+    partition_3_node_cluster(Config1),
+
+    Pong = ra:ping(AMember, 10000),
+    ct:pal("Member A state: ~0p", [Pong]),
+    case Pong of
+        {pong, State} when State =/= follower andalso State =/= candidate ->
+            Ret = rabbit_control_helper:command(
+                    join_cluster, E, [atom_to_list(A)], []),
+            ?assertMatch({error, _, _}, Ret),
+            {error, _, Msg} = Ret,
+            ?assertEqual(
+               match,
+               re:run(
+                 Msg, "(Khepri cluster could be in minority|\\{:rabbit, \\{\\{:error, :timeout\\})",
+                 [{capture, none}]));
+        Ret ->
+            ct:pal("A is not the expected leader: ~p", [Ret]),
+            {skip, "Node A was not elected leader"}
+    end.
+
+add_node_when_seed_node_is_follower(Config) ->
+    [A, B, C, _D, E] = rabbit_ct_broker_helpers:get_node_configs(
+                         Config, nodename),
+
+    %% Three node cluster: A, B, C
     Cluster = [A, B, C],
-    partition_3_node_cluster(Config),
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
 
-    ok = rabbit_control_helper:command(stop_app, D),
-    %% The command is appended to the log, but it will be dropped once the connectivity
-    %% is restored
-    ?assertMatch(ok,
-                 rabbit_control_helper:command(join_cluster, D, [atom_to_list(A)], [])),
-    timer:sleep(10000),
-    join_3_node_cluster(Config),
-    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster).
+    CMember = {rabbit_khepri:get_store_id(), C},
+    ra:transfer_leadership(CMember, CMember),
+    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
 
-remove_node(Config) ->
+    %% Minority partition: A
+    partition_3_node_cluster(Config1),
+
+    AMember = {rabbit_khepri:get_store_id(), A},
+    Pong = ra:ping(AMember, 10000),
+    ct:pal("Member A state: ~0p", [Pong]),
+    case Pong of
+        {pong, State}
+          when State =:= follower orelse State =:= pre_vote ->
+            Ret = rabbit_control_helper:command(
+                    join_cluster, E, [atom_to_list(A)], []),
+            ?assertMatch({error, _, _}, Ret),
+            {error, _, Msg} = Ret,
+            ?assertEqual(
+               match,
+               re:run(
+                 Msg, "Khepri cluster could be in minority",
+                 [{capture, none}]));
+        {pong, await_condition} ->
+            Ret = rabbit_control_helper:command(
+                    join_cluster, E, [atom_to_list(A)], []),
+            ?assertMatch({error, _, _}, Ret),
+            {error, _, Msg} = Ret,
+            ?assertEqual(
+               match,
+               re:run(
+                 Msg, "\\{:rabbit, \\{\\{:error, :timeout\\}",
+                 [{capture, none}])),
+            clustering_utils:assert_cluster_status(
+              {Cluster, Cluster}, Cluster);
+        Ret ->
+            ct:pal("A is not the expected follower: ~p", [Ret]),
+            {skip, "Node A was not a follower"}
+    end.
+
+remove_node_when_seed_node_is_leader(Config) ->
     [A, B, C | _] = rabbit_ct_broker_helpers:get_node_configs(
                       Config, nodename),
 
     %% Three node cluster: A, B, C
-    ok = rabbit_control_helper:command(stop_app, B),
-    ok = rabbit_control_helper:command(join_cluster, B, [atom_to_list(A)], []),
-    rabbit_control_helper:command(start_app, B),
+    Cluster = [A, B, C],
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
 
-    ok = rabbit_control_helper:command(stop_app, C),
-    ok = rabbit_control_helper:command(join_cluster, C, [atom_to_list(A)], []),
-    rabbit_control_helper:command(start_app, C),
+    AMember = {rabbit_khepri:get_store_id(), A},
+    ra:transfer_leadership(AMember, AMember),
+    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
 
     %% Minority partition: A
-    partition_3_node_cluster(Config),
-    Cluster = [A, B, C],
+    partition_3_node_cluster(Config1),
 
-    ok = rabbit_control_helper:command(forget_cluster_node, A, [atom_to_list(B)], []),
-    timer:sleep(10000),
-    join_3_node_cluster(Config),
-    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster).
+    Pong = ra:ping(AMember, 10000),
+    ct:pal("Member A state: ~0p", [Pong]),
+    case Pong of
+        {pong, leader} ->
+            ?awaitMatch(
+               ok,
+               rabbit_control_helper:command(
+                 forget_cluster_node, A, [atom_to_list(B)], []),
+               60000);
+        Ret ->
+            ct:pal("A is not the expected leader: ~p", [Ret]),
+            {skip, "Node A was not a leader"}
+    end.
+
+remove_node_when_seed_node_is_follower(Config) ->
+    [A, B, C | _] = rabbit_ct_broker_helpers:get_node_configs(
+                      Config, nodename),
+
+    %% Three node cluster: A, B, C
+    Cluster = [A, B, C],
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
+
+    CMember = {rabbit_khepri:get_store_id(), C},
+    ra:transfer_leadership(CMember, CMember),
+    clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
+
+    %% Minority partition: A
+    partition_3_node_cluster(Config1),
+
+    AMember = {rabbit_khepri:get_store_id(), A},
+    Pong = ra:ping(AMember, 10000),
+    ct:pal("Member A state: ~0p", [Pong]),
+    case Pong of
+        {pong, State}
+          when State =:= follower orelse State =:= pre_vote ->
+            Ret = rabbit_control_helper:command(
+                    forget_cluster_node, A, [atom_to_list(B)], []),
+            ?assertMatch({error, _, _}, Ret),
+            {error, _, Msg} = Ret,
+            ?assertEqual(
+               match,
+               re:run(
+                 Msg, "Khepri cluster could be in minority",
+                 [{capture, none}]));
+        {pong, await_condition} ->
+            Ret = rabbit_control_helper:command(
+                    forget_cluster_node, A, [atom_to_list(B)], []),
+            ?assertMatch(ok, Ret);
+        Ret ->
+            ct:pal("A is not the expected leader: ~p", [Ret]),
+            {skip, "Node A was not a leader"}
+    end.
 
 enable_feature_flag(Config) ->
     [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),

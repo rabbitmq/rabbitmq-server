@@ -21,9 +21,7 @@
 all() ->
     [
      {group, non_parallel},
-     {group, cluster_size_3},
-     {group, cluster_size_5},
-     {group, cluster_size_7}
+     {group, discovery}
     ].
 
 groups() ->
@@ -31,18 +29,24 @@ groups() ->
      {non_parallel, [], [
                          no_nodes_configured
                         ]},
-     {cluster_size_3, [], [
-                           successful_discovery,
-                           successful_discovery_with_a_subset_of_nodes_coming_online
-                          ]},
-     {cluster_size_5, [], [
-                           successful_discovery,
-                           successful_discovery_with_a_subset_of_nodes_coming_online
-                          ]},
-     {cluster_size_7, [], [
-                           successful_discovery,
-                           successful_discovery_with_a_subset_of_nodes_coming_online
-                          ]}
+     {discovery, [],
+      [
+       {cluster_size_3, [],
+        [
+         successful_discovery,
+         successful_discovery_with_a_subset_of_nodes_coming_online
+        ]},
+       {cluster_size_5, [],
+        [
+         successful_discovery,
+         successful_discovery_with_a_subset_of_nodes_coming_online
+        ]},
+       {cluster_size_7, [],
+        [
+         successful_discovery,
+         successful_discovery_with_a_subset_of_nodes_coming_online
+        ]}
+      ]}
     ].
 
 suite() ->
@@ -63,6 +67,24 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
+init_per_group(discovery, Config) ->
+    case rabbit_ct_helpers:is_mixed_versions(Config) of
+        false ->
+            Config;
+        true ->
+            %% We can't support the creation of a cluster because peer
+            %% discovery might select a newer node as the seed node and ask an
+            %% older node to join it. The creation of the cluster may fail of
+            %% the cluster might be degraded. Examples:
+            %%  - a feature flag is enabled by the newer node but the older
+            %%    node doesn't know it
+            %%  - the newer node uses a newer Khepri machine version and the
+            %%    older node can join but won't be able to apply Khepri
+            %%    commands and progress.
+            {skip,
+             "Peer discovery is unsupported with a mix of old and new "
+             "RabbitMQ versions"}
+    end;
 init_per_group(cluster_size_3 = Group, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_count, 3}, {group, Group}]);
 init_per_group(cluster_size_5 = Group, Config) ->
