@@ -42,6 +42,8 @@ ifeq ($(VERBOSE_TEST),true)
 MIX_TEST := $(MIX_TEST) --trace
 endif
 
+EUNIT = disable
+
 export MAKE
 
 ESCRIPT_NAME = Elixir.RabbitMQCtl

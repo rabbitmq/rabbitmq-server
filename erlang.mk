@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 2022.05.31-167-g10b849e
+ERLANG_MK_VERSION = 2022.05.31-171-g33d7b80
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -361,7 +361,7 @@ pkg_proper_name = proper
 pkg_proper_description = PropEr: a QuickCheck-inspired property-based testing tool for Erlang.
 pkg_proper_homepage = http://proper.softlab.ntua.gr
 pkg_proper_fetch = git
-pkg_proper_repo = https://github.com/proper-testing/proper
+pkg_proper_repo = https://github.com/manopapad/proper
 pkg_proper_commit = master
 
 PACKAGES += ranch
@@ -1239,37 +1239,6 @@ define hex_get_tarball.erl
 	end
 endef
 
-# Unfortunately this currently requires Elixir.
-define hex_version_resolver.erl
-	HexVersionResolve = fun(Name, Req) ->
-		application:ensure_all_started(ssl),
-		application:ensure_all_started(inets),
-		Config = $(hex_config.erl),
-		case hex_repo:get_package(Config, atom_to_binary(Name)) of
-			{ok, {200, _RespHeaders, Package}} ->
-				#{releases := List} = Package,
-				{value, #{version := Version}} = lists:search(fun(#{version := Vsn}) ->
-					M = list_to_atom("Elixir.Version"),
-					F = list_to_atom("match?"),
-					M:F(Vsn, Req)
-				end, List),
-				{ok, Version};
-			{ok, {Status, _, Errors}} ->
-				{error, Status, Errors}
-		end
-	end,
-	HexVersionResolveAndPrint = fun(Name, Req) ->
-		case HexVersionResolve(Name, Req) of
-			{ok, Version} ->
-				io:format("~s", [Version]),
-				halt(0);
-			{error, Status, Errors} ->
-				io:format("Error ~b: ~0p~n", [Status, Errors]),
-				halt(77)
-		end
-	end
-endef
-
 ifeq ($(CACHE_DEPS),1)
 
 # Hex only has a package version. No need to look in the Erlang.mk packages.
@@ -1325,7 +1294,7 @@ endif
 
 ifeq ($1,elixir)
 autopatch-elixir::
-	ln -s lib/elixir/ebin $(DEPS_DIR)/elixir/
+	$$(verbose) ln -s lib/elixir/ebin $(DEPS_DIR)/elixir/
 else
 autopatch-$(call query_name,$1)::
 	$$(autopatch_verbose) $$(call dep_autopatch_for_$(AUTOPATCH_METHOD),$(call query_name,$1))
@@ -1530,7 +1499,6 @@ ALL_SRC_FILES := $(sort $(call core_find,src/,*))
 ERL_FILES := $(filter %.erl,$(ALL_SRC_FILES))
 CORE_FILES := $(filter %.core,$(ALL_SRC_FILES))
 
-# @todo Must be defined first.
 ALL_LIB_FILES := $(sort $(call core_find,lib/,*))
 EX_FILES := $(filter-out lib/mix/%,$(filter %.ex,$(ALL_SRC_FILES) $(ALL_LIB_FILES)))
 
@@ -1753,7 +1721,7 @@ endef
 ebin/$(PROJECT).app:: $(ERL_FILES) $(CORE_FILES) $(wildcard src/$(PROJECT).app.src) $(EX_FILES)
 	$(eval FILES_TO_COMPILE := $(filter-out $(EX_FILES) src/$(PROJECT).app.src,$?))
 	$(if $(strip $(FILES_TO_COMPILE)),$(call compile_erl,$(FILES_TO_COMPILE)))
-	$(if $(filter $?,$(EX_FILES)),$(elixirc_verbose) $(eval MODULES := $(shell $(call erlang,$(call compile_ex.erl,$(EX_FILES))))))
+	$(if $(filter $(ELIXIR),disable),,$(if $(filter $?,$(EX_FILES)),$(elixirc_verbose) $(eval MODULES := $(shell $(call erlang,$(call compile_ex.erl,$(EX_FILES)))))))
 	$(eval ELIXIR_COMP_FAILED := $(if $(filter _ERROR_,$(firstword $(MODULES))),true,false))
 # Older git versions do not have the --first-parent flag. Do without in that case.
 	$(verbose) if $(ELIXIR_COMP_FAILED); then exit 1; fi
@@ -1797,23 +1765,63 @@ endif
 # Copyright (c) 2024, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-ELIXIR ?= $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),dep,system)
+# Elixir is automatically enabled in all cases except when
+# an Erlang project uses an Elixir dependency. In that case
+# $(ELIXIR) must be set explicitly.
+ELIXIR ?= $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),dep,$(if $(EX_FILES),system,disable))
 export ELIXIR
 
 ifeq ($(ELIXIR),system)
 # We expect 'elixir' to be on the path.
-# @todo Only if there are EX_FILES
 ELIXIR_LIBS ?= $(dir $(shell readlink -f `which elixir`))/../lib
 ELIXIR_LIBS := $(ELIXIR_LIBS)
 export ELIXIR_LIBS
 ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIBS)
 else
+ifeq ($(ELIXIR),dep)
 ERL_LIBS := $(ERL_LIBS):$(DEPS_DIR)/elixir/lib/
+endif
 endif
 
 elixirc_verbose_0 = @echo " EXC    $(words $(EX_FILES)) files";
 elixirc_verbose_2 = set -x;
 elixirc_verbose = $(elixirc_verbose_$(V))
+
+# Unfortunately this currently requires Elixir.
+# https://github.com/jelly-beam/verl is a good choice
+# for an Erlang implementation, but we already have to
+# pull hex_core and Rebar3 so adding yet another pull
+# is annoying, especially one that would be necessary
+# every time we autopatch Rebar projects. Wait and see.
+define hex_version_resolver.erl
+	HexVersionResolve = fun(Name, Req) ->
+		application:ensure_all_started(ssl),
+		application:ensure_all_started(inets),
+		Config = $(hex_config.erl),
+		case hex_repo:get_package(Config, atom_to_binary(Name)) of
+			{ok, {200, _RespHeaders, Package}} ->
+				#{releases := List} = Package,
+				{value, #{version := Version}} = lists:search(fun(#{version := Vsn}) ->
+					M = list_to_atom("Elixir.Version"),
+					F = list_to_atom("match?"),
+					M:F(Vsn, Req)
+				end, List),
+				{ok, Version};
+			{ok, {Status, _, Errors}} ->
+				{error, Status, Errors}
+		end
+	end,
+	HexVersionResolveAndPrint = fun(Name, Req) ->
+		case HexVersionResolve(Name, Req) of
+			{ok, Version} ->
+				io:format("~s", [Version]),
+				halt(0);
+			{error, Status, Errors} ->
+				io:format("Error ~b: ~0p~n", [Status, Errors]),
+				halt(77)
+		end
+	end
+endef
 
 define dep_autopatch_mix.erl
 	$(call hex_version_resolver.erl),
@@ -1926,6 +1934,7 @@ define dep_autopatch_mix.erl
 endef
 
 define dep_autopatch_mix
+	if [ "$(ELIXIR)" = "disable" ]; then echo "Elixir is currently disabled. Please set 'ELIXIR = system' in the Makefile to enable"; exit 99; fi
 	sed 's|\(defmodule.*do\)|\1\n  try do\n    Code.compiler_options(on_undefined_variable: :warn)\n    rescue _ -> :ok\n  end\n|g' -i $(DEPS_DIR)/$(1)/mix.exs; \
 	$(MAKE) $(DEPS_DIR)/hex_core/ebin/dep_built; \
 	MIX_ENV="$(if $(MIX_ENV),$(strip $(MIX_ENV)),prod)" \
@@ -3483,6 +3492,11 @@ distclean-escript:
 
 .PHONY: eunit apps-eunit
 
+# Eunit can be disabled by setting this to any other value.
+EUNIT ?= system
+
+ifeq ($(EUNIT),system)
+
 # Configuration
 
 EUNIT_OPTS ?=
@@ -3539,6 +3553,8 @@ apps-eunit: test-build
 		[ $$? -ne 0 ] && eunit_retcode=1 ; done ; \
 		exit $$eunit_retcode
 endif
+endif
+
 endif
 
 # Copyright (c) 2020, Loïc Hoguin <essen@ninenines.eu>
