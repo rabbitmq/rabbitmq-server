@@ -6,6 +6,8 @@
 name: OCI (make)
 on:
   push:
+    branches:
+      - main
     paths:
       - deps/**
       - scripts/**
