@@ -12,6 +12,8 @@ on:
       - Makefile
       - plugins.mk
       - rabbitmq-components.mk
+      - packaging/**
+      - .github/workflows/oci-make.yaml
   workflow_dispatch:
     inputs:
       otp_version:
