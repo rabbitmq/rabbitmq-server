@@ -12,11 +12,6 @@ on:
       - 'deps/rabbitmq_management/priv/**'
       - 'deps/rabbitmq_management/selenium/**'
       - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
       - .github/workflows/test-authnz.yaml
   pull_request:
     paths:
