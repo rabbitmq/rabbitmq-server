@@ -5,7 +5,7 @@
 ## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
-  alias RabbitMQ.CLI.Core.DocGuide
+  alias RabbitMQ.CLI.Core.{DocGuide, Users}
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
@@ -51,7 +51,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.DeleteQueueCommand do
       }) do
     ## Generate queue resource name from queue name and vhost
     queue_resource = :rabbit_misc.r(vhost, :queue, qname)
-    user = if force, do: RabbitMQ.CLI.Common.internal_user, else: "cli_user"
+    user = if force, do: Users.internal_user, else: Users.cli_user
     ## Lookup a queue on broker node using resource name
     case :rabbit_misc.rpc_call(node, :rabbit_amqqueue, :lookup, [queue_resource]) do
       {:ok, queue} ->
