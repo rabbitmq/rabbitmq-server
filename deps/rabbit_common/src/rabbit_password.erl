@@ -32,8 +32,11 @@ salted_hash(Salt, Cleartext) ->
     salted_hash(hashing_mod(), Salt, Cleartext).
 
 salted_hash(Mod, Salt, Cleartext) ->
-    Fun = fun Mod:hash/1,
-    Fun(<<Salt/binary, Cleartext/binary>>).
+    ModuleInfoFun = fun Mod:module_info/1,
+    case lists:member({hash,2}, ModuleInfoFun(exports)) of
+        true  -> Fun = fun Mod:hash/2, Fun(Salt, Cleartext);
+        false -> Fun = fun Mod:hash/1, Fun(<<Salt/binary, Cleartext/binary>>)
+    end.
 
 hashing_mod() ->
     rabbit_misc:get_env(rabbit, password_hashing_module,
