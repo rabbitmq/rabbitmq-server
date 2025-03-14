@@ -6,12 +6,12 @@
 name: OCI (make)
 on:
   push:
-    paths-ignore:
-      - '.github/workflows/secondary-umbrella.yaml'
-      - '.github/workflows/update-elixir-patches.yaml'
-      - '.github/workflows/update-otp-patches.yaml'
-      - '.github/workflows/release-alphas.yaml'
-      - '*.md'
+    paths:
+      - deps/**
+      - scripts/**
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
   workflow_dispatch:
     inputs:
       otp_version:
