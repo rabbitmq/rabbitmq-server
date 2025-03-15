@@ -93,12 +93,6 @@ rebar.config
 !/deps/amqp10_common/rebar.config
 !/rebar.config
 
-# Bazel.
-.bazelrc
-user.bazelrc
-bazel-*
-extra_deps/
-
 # Erlang/OTP unwanted files.
 .erlang.cookie
 erl_crash.dump
