@@ -288,12 +288,6 @@ retry_timeout() ->
         undefined -> 300_000
     end.
 
-retry_limit() ->
-    case application:get_env(rabbit, khepri_leader_wait_retry_limit) of
-        {ok, T}   -> T;
-        undefined -> 10
-    end.
-
 %% @private
 
 -spec init(IsVirgin) -> Ret when
@@ -333,22 +327,13 @@ init(IsVirgin) ->
     end.
 
 await_replication() ->
-    await_replication(retry_timeout(), retry_limit()).
-
-await_replication(_Timeout, 0) ->
-    {error, timeout};
-await_replication(Timeout, Retries) ->
+    Timeout = retry_timeout(),
     ?LOG_DEBUG(
        "Khepri-based " ?RA_FRIENDLY_NAME " waiting to catch up on replication "
-       "to the Raft cluster leader. Waiting for ~tb ms, ~tb retries left",
-       [Timeout, Retries],
+       "to the Raft cluster leader. Waiting for ~tb ms",
+       [Timeout],
        #{domain => ?RMQLOG_DOMAIN_DB}),
-    case fence(Timeout) of
-        ok ->
-            ok;
-        {error, timeout} ->
-            await_replication(Timeout, Retries -1)
-    end.
+    fence(Timeout).
 
 %% @private
 
