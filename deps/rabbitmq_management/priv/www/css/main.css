@@ -477,11 +477,11 @@ input.toggle:checked + label.toggle:after {
 }
 
 .switcher__radio--light {
-  background-image: url('../ing/light.svg');
+  background-image: url('../img/light.svg');
 }
 
 .switcher__radio--auto {
-  background-image: url('../ing/auto.svg');
+  background-image: url('../img/auto.svg');
 }
 
 .switcher__radio--dark {
@@ -501,7 +501,7 @@ input.toggle:checked + label.toggle:after {
   border-radius: 18px;
   background-color: rgb(255 255 255 / 0.5);
   background-repeat: no-repeat;
-  background-image: url('../ing/status.svg');
+  background-image: url('../img/status.svg');
   background-size: 32px;
   background-position: center;
   transition: background-position 0.1s ease-in;
