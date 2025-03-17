@@ -74,7 +74,7 @@
         {"name": "FRAME-HEADER", "value": 2},
         {"name": "FRAME-BODY", "value": 3},
         {"name": "FRAME-HEARTBEAT", "value": 8},
-        {"name": "FRAME-MIN-SIZE", "value": 4096},
+        {"name": "FRAME-MIN-SIZE", "value": 8192},
         {"name": "FRAME-END", "value": 206},
         {"name": "REPLY-SUCCESS", "value": 200},
         {"name": "CONTENT-TOO-LARGE", "value": 311, "class": "soft-error"},
