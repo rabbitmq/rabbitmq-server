@@ -1119,7 +1119,17 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
 handle_input(handshake, <<"AMQP", A, B, C, D, Rest/binary>>, State) ->
     {Rest, version_negotiation({A, B, C, D}, State)};
 handle_input(handshake, <<Other:8/binary, _/binary>>, #v1{sock = Sock}) ->
-    refuse_connection(Sock, {bad_header, Other});
+    Reason = case Other of
+                 <<16#16, 16#03, _Ver2, _Len1, _Len2, 16#01, _, _>> ->
+                     %% Looks like a TLS client hello.
+                     detected_unexpected_tls_header;
+                 <<"GET ", _URL/binary>> ->
+                     %% Looks like an HTTP request.
+                     detected_unexpected_http_header;
+                 _ ->
+                     bad_header
+             end,
+    refuse_connection(Sock, {Reason, Other});
 handle_input(Callback, Data, _State) ->
     throw({bad_input, Callback, Data}).
 
