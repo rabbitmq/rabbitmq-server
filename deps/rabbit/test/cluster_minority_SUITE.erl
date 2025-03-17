@@ -15,8 +15,7 @@
 all() ->
     [
      {group, client_operations},
-     {group, cluster_operation_add},
-     {group, cluster_operation_remove}
+     {group, cluster_operation}
     ].
 
 groups() ->
