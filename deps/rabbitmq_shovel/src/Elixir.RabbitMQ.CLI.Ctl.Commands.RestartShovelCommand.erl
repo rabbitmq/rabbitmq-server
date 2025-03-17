@@ -63,7 +63,7 @@ run([Name], #{node := Node, vhost := VHost}) ->
                 undefined ->
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
                 Match ->
-                    {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} = Match,
+                    {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} = Match,
                     {_, HostingNode} = lists:keyfind(node, 1, Opts),
                     case rabbit_misc:rpc_call(
                         HostingNode, rabbit_shovel_util, restart_shovel, [VHost, Name]) of

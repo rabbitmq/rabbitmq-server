@@ -36,12 +36,18 @@
               | {running, proplists:proplist()}
               | {terminated, term()}.
 -type blocked_status() :: running | flow | blocked.
+-type shovel_status() :: blocked_status() | ignore.
 
 -type name() :: binary() | {rabbit_types:vhost(), binary()}.
 -type type() :: static | dynamic.
--type status_tuple() :: {name(), type(), info(), calendar:datetime()}.
+-type metrics() :: #{remaining := rabbit_types:option(non_neg_integer()) | unlimited,
+                     remaining_unacked := rabbit_types:option(non_neg_integer()),
+                     pending := rabbit_types:option(non_neg_integer()),
+                     forwarded := rabbit_types:option(non_neg_integer())
+                    } | #{}.
+-type status_tuple() :: {name(), type(), info(), metrics(), calendar:datetime()}.
 
--export_type([info/0, blocked_status/0]).
+-export_type([info/0, blocked_status/0, shovel_status/0, metrics/0]).
 
 -record(state, {timer}).
 -record(entry, {name :: name(),
@@ -49,11 +55,7 @@
                 info :: info(),
                 blocked_status = running :: blocked_status(),
                 blocked_at :: integer() | undefined,
-                metrics :: #{remaining := rabbit_types:option(non_neg_integer()) | unlimited,
-                             ramaining_unacked := rabbit_types:option(non_neg_integer()),
-                             pending := rabbit_types:option(non_neg_integer()),
-                             forwarded := rabbit_types:option(non_neg_integer())
-                             },
+                metrics = #{} :: metrics(),
 
                 timestamp :: calendar:datetime()}).
 
@@ -64,7 +66,7 @@ start_link() ->
 report(Name, Type, Info) ->
     gen_server:cast(?SERVER, {report, Name, Type, Info, calendar:local_time()}).
 
--spec report_blocked_status(name(), blocked_status()) -> ok.
+-spec report_blocked_status(name(), {blocked_status(), metrics()} | blocked_status()) -> ok.
 report_blocked_status(Name, Status) ->
     gen_server:cast(?SERVER, {report_blocked_status, Name, Status, erlang:monotonic_time()}).
 
