@@ -77,7 +77,7 @@
         {"name": "FRAME-OOB-BODY", "value": 6},
         {"name": "FRAME-TRACE", "value": 7},
         {"name": "FRAME-HEARTBEAT", "value": 8},
-        {"name": "FRAME-MIN-SIZE", "value": 4096},
+        {"name": "FRAME-MIN-SIZE", "value": 8192},
         {"name": "FRAME-END", "value": 206},
         {"name": "REPLY-SUCCESS", "value": 200},
         {"name": "NOT-DELIVERED", "value": 310, "class": "soft-error"},
