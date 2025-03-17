@@ -424,11 +424,13 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
             erpc:cast(Node, Module, Function, Args)
     end.
 
-become_leader(QName, Name) ->
+become_leader(_QName, _Name) ->
+    %% noop now as we instead rely on the promt tick_timeout + repair
+    ok.
     %% as this function is called synchronously when a ra node becomes leader
     %% we need to ensure there is no chance of blocking as else the ra node
     %% may not be able to establish its leadership
-    spawn(fun () -> become_leader0(QName, Name) end).
+    % spawn(fun () -> become_leader0(QName, Name) end).
 
 become_leader0(QName, Name) ->
     Fun = fun (Q1) ->
@@ -682,8 +684,8 @@ repair_leader_record(Q, Self) ->
             ok;
         _ ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("~ts: repairing leader record",
-                             [rabbit_misc:rs(QName)]),
+            rabbit_log:debug("~ts: updating leader record to current node ~b",
+                             [rabbit_misc:rs(QName), Node]),
             {_, Name} = erlang:process_info(Self, registered_name),
             ok = become_leader0(QName, Name),
             ok
