@@ -83,7 +83,7 @@
 -callback forward(Tag :: tag(), Props :: #{atom() => any()},
                   Payload :: binary(), state()) ->
     state() | {stop, any()}.
--callback status(state()) -> rabbit_shovel_status:blocked_status() | ignore.
+-callback status(state()) -> rabbit_shovel_status:shovel_status().
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
     source_config() | dest_config().
@@ -155,12 +155,14 @@ ack(Tag, Multi, #{source := #{module := Mod}} = State) ->
 nack(Tag, Multi, #{source := #{module := Mod}} = State) ->
     Mod:nack(Tag, Multi, State).
 
+-spec status(state()) -> {rabbit_shovel_status:shovel_status(), rabbit_shovel_status:metrics()}.
 status(#{dest := #{module := Mod}} = State) ->
     {Mod:status(State), metrics(State)}.
 
 incr_forwarded(State = #{dest := Dest}) ->
     State#{dest => maps:put(forwarded, maps:get(forwarded, Dest, 0) + 1, Dest)}.
 
+-spec metrics(state()) -> rabbit_shovel_status:metrics().
 metrics(_State = #{source := Source,
                    dest := Dest}) ->
     #{remaining => maps:get(remaining, Source, unlimited),
