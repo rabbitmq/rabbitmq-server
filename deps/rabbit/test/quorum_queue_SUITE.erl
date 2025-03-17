@@ -1353,26 +1353,31 @@ force_checkpoint_on_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    rabbit_ct_client_helpers:publish(Ch, QQ, 3),
-    wait_for_messages_ready([Server0], RaName, 3),
+    N = 17000,
+    rabbit_ct_client_helpers:publish(Ch, QQ, N),
+    wait_for_messages_ready([Server0], RaName, N),
 
-    % Wait for initial checkpoint and make sure it's 0; checkpoint hasn't been triggered yet.
+    %% The state before any checkpoints
     rabbit_ct_helpers:await_condition(
       fun() ->
-          {ok, #{aux := Aux}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          #aux_v3{last_checkpoint = #checkpoint{index = Index}} = Aux,
-          Index =:= 0
+          {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          LCI =:= undefined
       end),
+
+    %% {ok, State0, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+    %% ct:pal("Ra server state before forcing a checkpoint: ~tp~n", [State0]),
 
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_checkpoint_on_queue, [QName]),
 
-    % Wait for initial checkpoint and make sure it's not 0
+    %% Wait for initial checkpoint and make sure it's not 0
     rabbit_ct_helpers:await_condition(
       fun() ->
-          {ok, #{aux := Aux}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          #aux_v3{last_checkpoint = #checkpoint{index = Index}} = Aux,
-          Index =/= 0
+          {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+          %% ct:pal("Ra server state: ~tp~n", [State]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          LCI >= N
       end).
 
 force_checkpoint(Config) ->
