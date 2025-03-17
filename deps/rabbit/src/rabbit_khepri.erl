@@ -1513,19 +1513,31 @@ get_feature_state(Node) ->
 %% @private
 
 khepri_db_migration_enable(#{feature_name := FeatureName}) ->
-    maybe
-        ok ?= sync_cluster_membership_from_mnesia(FeatureName),
-        ?LOG_INFO(
-           "Feature flag `~s`: unregistering legacy projections",
-           [FeatureName],
-           #{domain => ?RMQLOG_DOMAIN_DB}),
-        ok ?= unregister_legacy_projections(),
-        ?LOG_INFO(
-           "Feature flag `~s`: registering projections",
-           [FeatureName],
-           #{domain => ?RMQLOG_DOMAIN_DB}),
-        ok ?= register_projections(),
-        migrate_mnesia_tables(FeatureName)
+    Members = locally_known_members(),
+    case length(Members) < 2 of
+        true ->
+            maybe
+                ok ?= sync_cluster_membership_from_mnesia(FeatureName),
+                ?LOG_INFO(
+                   "Feature flag `~s`: unregistering legacy projections",
+                   [FeatureName],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                ok ?= unregister_legacy_projections(),
+                ?LOG_INFO(
+                   "Feature flag `~s`: registering projections",
+                   [FeatureName],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                ok ?= register_projections(),
+                migrate_mnesia_tables(FeatureName)
+            end;
+        false ->
+            ?LOG_INFO(
+               "Feature flag `~s`: node ~0p already clustered (feature flag "
+               "enabled as part of clustering?); "
+               "skipping Mnesia->Khepri migration",
+               [node()],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            ok
     end.
 
 %% @private
