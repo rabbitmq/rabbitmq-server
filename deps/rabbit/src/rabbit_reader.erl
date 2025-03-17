@@ -1123,6 +1123,9 @@ handle_input(handshake, <<Other:8/binary, _/binary>>, #v1{sock = Sock}) ->
                  <<16#16, 16#03, _Ver2, _Len1, _Len2, 16#01, _, _>> ->
                      %% Looks like a TLS client hello.
                      detected_unexpected_tls_header;
+                 <<"GET ", _URL/binary>> ->
+                     %% Looks like an HTTP request.
+                     detected_unexpected_http_header;
                  _ ->
                      bad_header
              end,
