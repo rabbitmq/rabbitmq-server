@@ -42,7 +42,7 @@ status(Node) ->
             [format(Node, I) || I <- Status]
     end.
 
-format(Node, {Name, Type, Info, Metrics, TS}) ->
+format(Node, {Name, Type, Info, _Metrics, TS}) ->
     [{node, Node}, {timestamp, format_ts(TS)}] ++
         format_name(Type, Name) ++
         format_info(Info).
