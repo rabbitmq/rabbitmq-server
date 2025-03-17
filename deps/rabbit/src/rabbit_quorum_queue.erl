@@ -425,11 +425,10 @@ local_or_remote_handler(ChPid, Module, Function, Args) ->
             erpc:cast(Node, Module, Function, Args)
     end.
 
-become_leader(QName, Name) ->
-    %% as this function is called synchronously when a ra node becomes leader
-    %% we need to ensure there is no chance of blocking as else the ra node
-    %% may not be able to establish its leadership
-    spawn(fun () -> become_leader0(QName, Name) end).
+become_leader(_QName, _Name) ->
+    %% noop now as we instead rely on the promt tick_timeout + repair to update
+    %% the meta data store after a leader change
+    ok.
 
 become_leader0(QName, Name) ->
     Fun = fun (Q1) ->
@@ -580,7 +579,6 @@ handle_tick(QName,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
-    Self = self(),
     spawn(
       fun() ->
               try
@@ -638,7 +636,7 @@ handle_tick(QName,
                                             end}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
-                  ok = repair_leader_record(Q, Self),
+                  ok = repair_leader_record(Q, Name),
                   case repair_amqqueue_nodes(Q) of
                       ok ->
                           ok;
@@ -675,7 +673,7 @@ handle_tick(QName, Config, _Nodes) ->
     rabbit_log:debug("~ts: handle tick received unexpected config format ~tp",
                      [rabbit_misc:rs(QName), Config]).
 
-repair_leader_record(Q, Self) ->
+repair_leader_record(Q, Name) ->
     Node = node(),
     case amqqueue:get_pid(Q) of
         {_, Node} ->
@@ -683,9 +681,8 @@ repair_leader_record(Q, Self) ->
             ok;
         _ ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("~ts: repairing leader record",
-                             [rabbit_misc:rs(QName)]),
-            {_, Name} = erlang:process_info(Self, registered_name),
+            rabbit_log:debug("~ts: updating leader record to current node ~b",
+                             [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
     end,
