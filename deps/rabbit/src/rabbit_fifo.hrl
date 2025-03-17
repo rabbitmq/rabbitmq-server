@@ -230,23 +230,3 @@
                     msg_ttl => non_neg_integer(),
                     created => non_neg_integer()
                    }.
-
--define(AUX, aux_v3).
-
--record(checkpoint, {index :: ra:index(),
-                     timestamp :: milliseconds(),
-                     smallest_index :: undefined | ra:index(),
-                     messages_total :: non_neg_integer(),
-                     indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
-                     unused_1 = ?NIL}).
--record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
--record(aux, {name :: atom(),
-              capacity :: term(),
-              gc = #aux_gc{} :: #aux_gc{}}).
--record(?AUX, {name :: atom(),
-               last_decorators_state :: term(),
-               capacity :: term(),
-               gc = #aux_gc{} :: #aux_gc{},
-               tick_pid :: undefined | pid(),
-               cache = #{} :: map(),
-               last_checkpoint :: #checkpoint{}}).
