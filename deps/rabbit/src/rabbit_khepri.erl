@@ -145,6 +145,7 @@
          transaction/1,
          transaction/2,
          transaction/3,
+         tx_api_version/0,
 
          clear_store/0,
 
@@ -1055,6 +1056,14 @@ transaction(Fun, ReadWrite, Options) ->
         ok -> ok;
         {ok, Result} -> Result;
         {error, Reason} -> throw({error, Reason})
+    end.
+
+tx_api_version() ->
+    try
+        khepri_tx:api_version()
+    catch
+        error:undef ->
+            0
     end.
 
 clear_store() ->

@@ -411,8 +411,13 @@ delete_in_khepri(QueueName, OnlyDurable) ->
     rabbit_khepri:transaction(
       fun () ->
               Path = khepri_queue_path(QueueName),
+              TxApiVersion = rabbit_khepri:tx_api_version(),
               case khepri_tx_adv:delete(Path) of
-                  {ok, #{Path := #{data := _}}} ->
+                  {ok, #{Path := #{data := _}}} when TxApiVersion >= 1 ->
+                      %% we want to execute some things, as decided by rabbit_exchange,
+                      %% after the transaction.
+                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+                  {ok, #{data := _}} when TxApiVersion =:= 0 ->
                       %% we want to execute some things, as decided by rabbit_exchange,
                       %% after the transaction.
                       rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
@@ -1139,20 +1144,26 @@ do_delete_transient_queues_in_khepri(Qs, FilterFun) ->
 do_delete_transient_queues_in_khepri_tx([], Acc) ->
     {ok, Acc};
 do_delete_transient_queues_in_khepri_tx([{Path, Vsn, QName} | Rest], Acc) ->
-     %% Also see `delete_in_khepri/2'.
-     VersionedPath = khepri_path:combine_with_conditions(
-                       Path, [#if_payload_version{version = Vsn}]),
-     case khepri_tx_adv:delete(VersionedPath) of
-         {ok, #{Path := #{data := _}}} ->
-             Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
-                           QName, false),
-             Acc1 = [{QName, Deletions} | Acc],
-             do_delete_transient_queues_in_khepri_tx(Rest, Acc1);
-         {ok, _} ->
-             do_delete_transient_queues_in_khepri_tx(Rest, Acc);
-         {error, _} = Error ->
-             Error
-     end.
+    %% Also see `delete_in_khepri/2'.
+    VersionedPath = khepri_path:combine_with_conditions(
+                      Path, [#if_payload_version{version = Vsn}]),
+    TxApiVersion = rabbit_khepri:tx_api_version(),
+    case khepri_tx_adv:delete(VersionedPath) of
+        {ok, #{Path := #{data := _}}} when TxApiVersion >= 1 ->
+            Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                          QName, false),
+            Acc1 = [{QName, Deletions} | Acc],
+            do_delete_transient_queues_in_khepri_tx(Rest, Acc1);
+        {ok, #{data := _}} when TxApiVersion =:= 0 ->
+            Deletions = rabbit_db_binding:delete_for_destination_in_khepri(
+                          QName, false),
+            Acc1 = [{QName, Deletions} | Acc],
+            do_delete_transient_queues_in_khepri_tx(Rest, Acc1);
+        {ok, _} ->
+            do_delete_transient_queues_in_khepri_tx(Rest, Acc);
+        {error, _} = Error ->
+            Error
+    end.
 
 %% -------------------------------------------------------------------
 %% foreach_transient().
