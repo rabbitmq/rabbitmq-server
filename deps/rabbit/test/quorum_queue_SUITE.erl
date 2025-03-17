@@ -1353,7 +1353,7 @@ force_checkpoint_on_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    N = 17000,
+    N = 20_000,
     rabbit_ct_client_helpers:publish(Ch, QQ, N),
     wait_for_messages_ready([Server0], RaName, N),
 
@@ -1365,9 +1365,11 @@ force_checkpoint_on_queue(Config) ->
           LCI =:= undefined
       end),
 
-    %% {ok, State0, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-    %% ct:pal("Ra server state before forcing a checkpoint: ~tp~n", [State0]),
+    {ok, State0, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+    ct:pal("Ra server state before forcing a checkpoint: ~tp~n", [State0]),
 
+    %% wait for longer than ?CHECK_MIN_INTERVAL_MS ms
+    timer:sleep(?CHECK_MIN_INTERVAL_MS + 1000),
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_checkpoint_on_queue, [QName]),
 
@@ -1375,9 +1377,9 @@ force_checkpoint_on_queue(Config) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          %% ct:pal("Ra server state: ~tp~n", [State]),
+          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
           #{log := #{latest_checkpoint_index := LCI}} = State,
-          LCI >= N
+          (LCI =/= undefined) andalso (LCI >= N)
       end).
 
 force_checkpoint(Config) ->
