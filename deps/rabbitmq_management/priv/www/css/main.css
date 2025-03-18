@@ -1,7 +1,3 @@
-:root {
-  color-scheme: light dark;
-}
-
 body { font: 12px Verdana, sans-serif; color: var(--default-text-color); background-color: var(--dafault-background-color); padding: 0; margin: 0; }
 input, button, a.button { font: 12px Verdana, sans-serif; }
 
