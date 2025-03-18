@@ -9,11 +9,6 @@ on:
       - 'deps/rabbitmq_management/priv/**'
       - 'deps/rabbitmq_web_dispatch/src/**'
       - 'scripts/**'
-      - .bazelrc
-      - .bazelversion
-      - BUILD.*
-      - '*.bzl'
-      - '*.bazel'
       - 'selenium/**'
       - .github/workflows/test-management-ui.yaml
 
@@ -27,11 +22,11 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - "26.2"
+        - "27.3"
         browser:
         - chrome
         include:
-        - erlang_version: "26.2"
+        - erlang_version: "27.3"
           elixir_version: 1.17.3
     env:
       SELENIUM_DIR: selenium

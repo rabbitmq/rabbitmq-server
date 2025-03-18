@@ -62,8 +62,7 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '26'
-##        - '27'
+        - '27'
         elixir_version:
         - '1.17'
         metadata_store:
@@ -82,8 +81,7 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '26'
-##        - '27'
+        - '27'
         elixir_version:
         - '1.17'
         metadata_store:

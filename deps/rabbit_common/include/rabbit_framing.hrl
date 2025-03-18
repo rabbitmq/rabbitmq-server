@@ -11,7 +11,7 @@
 -define(FRAME_HEADER, 2).
 -define(FRAME_BODY, 3).
 -define(FRAME_HEARTBEAT, 8).
--define(FRAME_MIN_SIZE, 4096).
+-define(FRAME_MIN_SIZE, 8192).
 -define(FRAME_END, 206).
 -define(REPLY_SUCCESS, 200).
 -define(CONTENT_TOO_LARGE, 311).

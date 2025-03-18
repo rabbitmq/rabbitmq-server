@@ -276,7 +276,7 @@ PARALLEL_CT_SET_3_D = metadata_store_phase1 metrics mirrored_supervisor peer_dis
 PARALLEL_CT_SET_4_A = clustering_events rabbit_local_random_exchange rabbit_message_interceptor rabbitmq_4_0_deprecations unit_pg_local unit_plugin_directories unit_plugin_versioning unit_policy_validators unit_priority_queue
 PARALLEL_CT_SET_4_B = per_user_connection_tracking per_vhost_connection_limit rabbit_fifo_dlx_integration rabbit_fifo_int
 PARALLEL_CT_SET_4_C = msg_size_metrics unit_msg_size_metrics per_vhost_msg_store per_vhost_queue_limit priority_queue upgrade_preparation vhost
-PARALLEL_CT_SET_4_D = per_user_connection_channel_tracking product_info publisher_confirms_parallel queue_type rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown routing
+PARALLEL_CT_SET_4_D = per_user_connection_channel_tracking product_info publisher_confirms_parallel queue_type rabbitmq_queues_cli_integration rabbitmqctl_integration rabbitmqctl_shutdown routing rabbit_amqqueue
 
 PARALLEL_CT_SET_1 = $(sort $(PARALLEL_CT_SET_1_A) $(PARALLEL_CT_SET_1_B) $(PARALLEL_CT_SET_1_C) $(PARALLEL_CT_SET_1_D))
 PARALLEL_CT_SET_2 = $(sort $(PARALLEL_CT_SET_2_A) $(PARALLEL_CT_SET_2_B) $(PARALLEL_CT_SET_2_C) $(PARALLEL_CT_SET_2_D))
@@ -328,6 +328,7 @@ tpl_parallel_ct_test_spec_set_$1 = $$(call tpl_parallel_ct_test_spec,$(PARALLEL_
 parallel-ct-set-$(1): test-build
 	$(verbose) mkdir -p $(CT_LOGS_DIR)
 	$(verbose) $$(call core_render,tpl_parallel_ct_test_spec_set_$(1),ct.set-$(1).spec)
+	$$(eval ERL := erl -noinput -boot no_dot_erlang)
 	$$(call erlang,$$(call ct_master.erl,ct.set-$(1).spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
 endef
 
@@ -337,6 +338,7 @@ $(foreach set,1 2 3 4,$(eval $(call parallel_ct_set_target,$(set))))
 
 parallel-ct: test-build
 	$(verbose) mkdir -p $(CT_LOGS_DIR)
+	$(eval ERL := erl -noinput -boot no_dot_erlang)
 	$(call erlang,$(call ct_master.erl,ct.test.spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
 
 # --------------------------------------------------------------------

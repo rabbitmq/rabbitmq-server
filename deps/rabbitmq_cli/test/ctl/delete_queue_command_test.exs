@@ -25,16 +25,17 @@ defmodule DeleteQueueCommandTest do
        vhost: @vhost,
        timeout: context[:test_timeout],
        if_empty: false,
-       if_unused: false
+       if_unused: false,
+       force: false
      }}
   end
 
   test "merge_defaults: defaults can be overridden" do
     assert @command.merge_defaults([], %{}) ==
-             {[], %{vhost: "/", if_empty: false, if_unused: false}}
+             {[], %{vhost: "/", if_empty: false, if_unused: false, force: false}}
 
     assert @command.merge_defaults([], %{vhost: "non_default", if_empty: true}) ==
-             {[], %{vhost: "non_default", if_empty: true, if_unused: false}}
+             {[], %{vhost: "non_default", if_empty: true, if_unused: false, force: false}}
   end
 
   test "validate: providing no queue name fails validation", context do
@@ -73,6 +74,25 @@ defmodule DeleteQueueCommandTest do
     publish_messages(@vhost, q, n)
 
     assert @command.run([q], context[:opts]) == {:ok, n}
+    {:error, :not_found} = lookup_queue(q, @vhost)
+  end
+
+  @tag test_timeout: 30000
+  test "run: protected queue can be deleted only with --force", context do
+    add_vhost(@vhost)
+    set_permissions(@user, @vhost, [".*", ".*", ".*"])
+    on_exit(context, fn -> delete_vhost(@vhost) end)
+
+    q = "foo"
+    n = 20
+
+    declare_internal_queue(q, @vhost)
+    publish_messages(@vhost, q, n)
+
+    assert @command.run([q], context[:opts]) == {:error, :protected}
+    {:ok, _queue} = lookup_queue(q, @vhost)
+
+    assert @command.run([q], %{context[:opts] | force: true}) == {:ok, n}
     {:error, :not_found} = lookup_queue(q, @vhost)
   end
 
@@ -135,7 +155,7 @@ defmodule DeleteQueueCommandTest do
 
   test "defaults to vhost /" do
     assert @command.merge_defaults(["foo"], %{bar: "baz"}) ==
-             {["foo"], %{bar: "baz", vhost: "/", if_unused: false, if_empty: false}}
+             {["foo"], %{bar: "baz", vhost: "/", if_unused: false, if_empty: false, force: false}}
   end
 
   test "validate: with extra arguments returns an arg count error" do
@@ -152,13 +172,13 @@ defmodule DeleteQueueCommandTest do
   end
 
   test "banner informs that vhost's queue is deleted" do
-    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: false, if_unused: false}) ==
+    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: false, if_unused: false, force: false}) ==
              "Deleting queue 'my-q' on vhost '/foo' ..."
 
-    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: true, if_unused: false}) ==
+    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: true, if_unused: false, force: false}) ==
              "Deleting queue 'my-q' on vhost '/foo' if queue is empty ..."
 
-    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: true, if_unused: true}) ==
+    assert @command.banner(["my-q"], %{vhost: "/foo", if_empty: true, if_unused: true, force: false}) ==
              "Deleting queue 'my-q' on vhost '/foo' if queue is empty and if queue is unused ..."
   end
 end

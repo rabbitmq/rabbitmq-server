@@ -394,60 +394,69 @@ log_connection_exception(Name, ConnectedAt, Ex) ->
                    connection_closed_abruptly              -> warning;
                    _                                       -> error
                end,
-    log_connection_exception(Severity, Name, ConnectedAt, Ex).
+    Duration = connection_duration(ConnectedAt),
+    log_connection_exception(Severity, Name, Duration, Ex).
 
-log_connection_exception(Severity, Name, ConnectedAt, {heartbeat_timeout, TimeoutSec}) ->
-    ConnDuration = connection_duration(ConnectedAt),
+log_connection_exception(Severity, Name, Duration, {heartbeat_timeout, TimeoutSec}) ->
     Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
           "missed heartbeats from client, timeout: ~ps",
     %% Long line to avoid extra spaces and line breaks in log
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [self(), Name, ConnDuration, TimeoutSec]);
-log_connection_exception(Severity, Name, _ConnectedAt,
+                                           [self(), Name, Duration, TimeoutSec]);
+log_connection_exception(Severity, Name, _Duration,
                          {connection_closed_abruptly,
                           #v1{connection = #connection{user  = #user{username = Username},
                                                        vhost = VHost,
                                                        connected_at = ConnectedAt}}}) ->
-    ConnDuration = connection_duration(ConnectedAt),
+    Duration = connection_duration(ConnectedAt),
     Fmt = "closing AMQP connection ~tp (~ts, vhost: '~ts', user: '~ts', duration: '~ts'):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [self(), Name, VHost, Username, ConnDuration]);
+                                           [self(), Name, VHost, Username, Duration]);
 %% when client abruptly closes connection before connection.open/authentication/authorization
 %% succeeded, don't log username and vhost as 'none'
-log_connection_exception(Severity, Name, ConnectedAt, {connection_closed_abruptly, _}) ->
-    ConnDuration = connection_duration(ConnectedAt),
+log_connection_exception(Severity, Name, Duration, {connection_closed_abruptly, _}) ->
     Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [self(), Name, ConnDuration]);
+                                           [self(), Name, Duration]);
 %% failed connection.tune negotiations
-log_connection_exception(Severity, Name, ConnectedAt, {handshake_error, tuning,
-                                                       {exit, #amqp_error{explanation = Explanation},
-                                                        _Method, _Stacktrace}}) ->
-    ConnDuration = connection_duration(ConnectedAt),
+log_connection_exception(Severity, Name, Duration, {handshake_error, tuning,
+                                                    {exit, #amqp_error{explanation = Explanation},
+                                                     _Method, _Stacktrace}}) ->
     Fmt = "closing AMQP connection ~tp (~ts):~n"
           "failed to negotiate connection parameters: ~ts",
-    log_connection_exception_with_severity(Severity, Fmt, [self(), Name, ConnDuration, Explanation]);
-log_connection_exception(Severity, Name, ConnectedAt, {sasl_required, ProtocolId}) ->
-    ConnDuration = connection_duration(ConnectedAt),
+    log_connection_exception_with_severity(Severity, Fmt, [self(), Name, Duration, Explanation]);
+log_connection_exception(Severity, Name, Duration, {sasl_required, ProtocolId}) ->
     Fmt = "closing AMQP 1.0 connection (~ts, duration: '~ts'): RabbitMQ requires SASL "
           "security layer (expected protocol ID 3, but client sent protocol ID ~b)",
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [Name, ConnDuration, ProtocolId]);
+                                           [Name, Duration, ProtocolId]);
 %% old exception structure
-log_connection_exception(Severity, Name, ConnectedAt, connection_closed_abruptly) ->
-    ConnDuration = connection_duration(ConnectedAt),
+log_connection_exception(Severity, Name, Duration, connection_closed_abruptly) ->
     Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
           "client unexpectedly closed TCP connection",
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [self(), Name, ConnDuration]);
-log_connection_exception(Severity, Name, ConnectedAt, Ex) ->
-    ConnDuration = connection_duration(ConnectedAt),
+                                           [self(), Name, Duration]);
+log_connection_exception(Severity, Name, Duration, {bad_header, detected_tls}) ->
+    Fmt = "closing AMQP connection ~ts (duration: '~ts'):~n"
+          "TLS client detected on non-TLS AMQP port. "
+          "Ensure the client is connecting to the correct port.",
+    log_connection_exception_with_severity(Severity, Fmt, [Name, Duration]);
+log_connection_exception(Severity, Name, Duration, {bad_header, detected_http_get}) ->
+    Fmt = "closing AMQP connection ~ts (duration: '~ts'):~n"
+          "HTTP GET request detected on AMQP port. "
+          "Ensure the client is connecting to the correct port.",
+    log_connection_exception_with_severity(Severity, Fmt, [Name, Duration]);
+log_connection_exception(Severity, Name, Duration, {bad_header, Other}) ->
+    Fmt = "closing AMQP connection ~ts (duration: '~ts'):~n"
+          "client did not start with AMQP protocol header: ~p",
+    log_connection_exception_with_severity(Severity, Fmt, [Name, Duration, Other]);
+log_connection_exception(Severity, Name, Duration, Ex) ->
     Fmt = "closing AMQP connection ~tp (~ts, duration: '~ts'):~n"
           "~tp",
     log_connection_exception_with_severity(Severity, Fmt,
-                                           [self(), Name, ConnDuration, Ex]).
+                                           [self(), Name, Duration, Ex]).
 
 log_connection_exception_with_severity(Severity, Fmt, Args) ->
     case Severity of
@@ -1118,6 +1127,14 @@ handle_input({frame_payload, Type, Channel, PayloadSize}, Data, State) ->
     end;
 handle_input(handshake, <<"AMQP", A, B, C, D, Rest/binary>>, State) ->
     {Rest, version_negotiation({A, B, C, D}, State)};
+handle_input(handshake, <<"GET ", _URL/binary>>, #v1{sock = Sock}) ->
+    %% Looks like an HTTP request.
+    refuse_connection(Sock, {bad_header, detected_http_get});
+handle_input(handshake,
+             <<16#16, 16#03, _Ver2, _Len1, _Len2, 16#01, _/binary>>,
+             #v1{sock = Sock}) ->
+    %% Looks like a TLS client hello.
+    refuse_connection(Sock, {bad_header, detected_tls});
 handle_input(handshake, <<Other:8/binary, _/binary>>, #v1{sock = Sock}) ->
     refuse_connection(Sock, {bad_header, Other});
 handle_input(Callback, Data, _State) ->
@@ -1862,8 +1879,8 @@ get_client_value_detail(_Field, _ClientValue) ->
     "".
 
 connection_duration(ConnectedAt) ->
-    Now = os:system_time(milli_seconds),
-    DurationMillis = Now - ConnectedAt,
+    Now = os:system_time(millisecond),
+    DurationMillis = max(0, Now - ConnectedAt),
     if
         DurationMillis >= 1000 ->
             DurationSecs = DurationMillis div 1000,
