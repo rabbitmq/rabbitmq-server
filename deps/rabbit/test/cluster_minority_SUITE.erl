@@ -138,7 +138,12 @@ init_per_group(_Group, Config0) ->
                                   {khepri_leader_wait_retry_timeout, 30000}]}),
     Config1.
 
-end_per_group(_, Config) ->
+end_per_group(Group, Config) when Group == client_operations;
+                                  Group == feature_flags ->
+    rabbit_ct_helpers:run_steps(Config,
+                                rabbit_ct_client_helpers:teardown_steps() ++
+                                rabbit_ct_broker_helpers:teardown_steps());
+end_per_group(_Group, Config) ->
     Config.
 
 init_per_testcase(Testcase, Config)
