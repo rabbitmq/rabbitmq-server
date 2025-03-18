@@ -1,26 +1,62 @@
 var lightStyles;
 var darkStyles;
 var darkSdhemeMedia;
-var switcherRadios;
 
-var initializeSwitcher = function initializeSwitcher() {
+function initializeSwitcher() {
     lightStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=light]');
     darkStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=dark]');
     darkSdhemeMedia = matchMedia('(prefers-color-scheme: dark)');
-    switcherRadios = document.getElementsByClassName('switcher__radio');
 
     let savedScheme = getSavedScheme();
+    let switcherButtons = document.getElementsByClassName('theme-switcher');
 
-    if (savedScheme !== null) {
-        let currentRadio = document.querySelector(`.switcher__radio[value=${savedScheme}]`);
-        if (currentRadio !== null) {
-            currentRadio.checked = true;
-        }
+    if(switcherButtons.length === 0) return;
+    
+    if(savedScheme !== null)
+    {
+        switcherButtons[0].setAttribute("x-scheme", savedScheme);
     }
 
-    [...switcherRadios].forEach((radio) => {
-        radio.addEventListener('change', (event) => {
-            setScheme(event.target.value);
+    [...switcherButtons].forEach((button) => {
+        button.addEventListener('click', function() {
+            let currentScheme = switcherButtons[0].getAttribute("x-scheme");
+            let systemScheme = getSystemScheme();
+            let newScheme;
+            switch (currentScheme) {
+                case "dark":
+                    if(systemScheme === "dark")
+                    {
+                        newScheme = "auto";
+                    }
+                    else
+                    {
+                        newScheme = "light";
+                    }
+                    break;
+                case "light":
+                    if(systemScheme === "light")
+                    {
+                        newScheme = "auto";
+                    }
+                    else
+                    {
+                        newScheme = "dark";
+                    }
+                    break;
+                default:
+                    if(systemScheme === "light")
+                    {
+                        newScheme = "dark";
+                    }
+                    else
+                    {
+                        newScheme = "light";
+                    }
+                    break;
+            }
+
+            setScheme(newScheme);
+            switcherButtons[0].setAttribute("x-scheme", newScheme);
         });
     });
 }

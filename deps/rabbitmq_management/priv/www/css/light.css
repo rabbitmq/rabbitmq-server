@@ -269,14 +269,14 @@
 
 /* Theme switcher */
 
-.switcher__radio {
+.theme-switcher[x-scheme="auto"]:after {
     filter: invert(0);
 }
-
-.switcher__radio:checked {
-    filter: invert(1);
+  
+.theme-switcher[x-scheme="dark"]:after {
+    filter: invert(0);
 }
-
-.switcher__status {
+  
+.theme-switcher[x-scheme="light"]:after {
     filter: invert(0);
 }
