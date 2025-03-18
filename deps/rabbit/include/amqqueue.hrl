@@ -48,10 +48,6 @@
         (?is_amqqueue_v2(Q) andalso
          ?amqqueue_v2_field_type(Q) =:= Type)).
 
--define(amqqueue_type(Q),
-        (?is_amqqueue_v2(Q) andalso
-         ?amqqueue_v2_field_type(Q))).
-
 -define(amqqueue_has_valid_pid(Q),
         (?is_amqqueue_v2(Q) andalso
          is_pid(?amqqueue_v2_field_pid(Q)))).

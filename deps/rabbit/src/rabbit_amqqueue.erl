@@ -464,7 +464,7 @@ filter_per_type(classic, Q) ->
 %% The assumption is all non-replicated queues
 %% are filtered before calling this with is_replicated/0
 rebalance_module(Q) ->
-    TypeModule = ?amqqueue_type(Q),
+    TypeModule = amqqueue:get_type(Q),
     TypeModule:rebalance_module().
 
 get_resource_name(#resource{name = Name}) ->
@@ -502,7 +502,7 @@ column_name(TypeModule) ->
     <<"Number of \"", Alias/binary, "\" queues">>.
 
 maybe_migrate(ByNode, _, []) ->
-    ByNodeAndType = maps:map(fun(_Node, Queues) -> maps:groups_from_list(fun({_, Q, _}) -> column_name(?amqqueue_type(Q)) end, Queues) end, ByNode),
+    ByNodeAndType = maps:map(fun(_Node, Queues) -> maps:groups_from_list(fun({_, Q, _}) -> column_name(amqqueue:get_type(Q)) end, Queues) end, ByNode),
     CountByNodeAndType = maps:map(fun(_Node, Type) -> maps:map(fun (_, Qs)-> length(Qs) end, Type) end, ByNodeAndType),
     {ok, maps:values(maps:map(fun(Node,Counts) -> [{<<"Node name">>, Node} | maps:to_list(Counts)] end, CountByNodeAndType))};
 maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
@@ -1920,7 +1920,7 @@ run_backing_queue(QPid, Mod, Fun) ->
 -spec is_replicated(amqqueue:amqqueue()) -> boolean().
 
 is_replicated(Q) ->
-    TypeModule = ?amqqueue_type(Q),
+    TypeModule = amqqueue:get_type(Q),
     TypeModule:is_replicated().
 
 is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->

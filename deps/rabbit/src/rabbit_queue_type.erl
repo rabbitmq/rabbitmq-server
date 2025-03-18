@@ -63,7 +63,7 @@
          publish_at_most_once/2,
          can_redeliver/2,
          stop/1,
-         endangered_queues/0,
+         list_with_minimum_quorum/0,
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
@@ -301,6 +301,8 @@
 %% (currently memory and binary) stats
 -callback queue_vm_stats_sups() -> {StatsKeys :: [atom()], SupsNames:: [[atom()]]}.
 
+-callback queue_vm_ets() -> {StatsKeys :: [atom()], ETSNames:: [[atom()]]}.
+
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
     fallback();
@@ -311,8 +313,11 @@ discover(TypeDescriptor) ->
     TypeModule.
 
 -spec short_alias_of(TypeDescriptor) -> Ret when
-      TypeDescriptor :: atom() | binary(),
+      TypeDescriptor :: {utf8, binary()} | atom() | binary(),
       Ret :: binary().
+%% AMQP 1.0 management client
+short_alias_of({utf8, TypeName}) ->
+    short_alias_of(TypeName);
 short_alias_of(TypeDescriptor) ->
     case rabbit_registry:lookup_type_name(queue, TypeDescriptor) of
         {ok, TypeName} -> TypeName;
@@ -899,7 +904,7 @@ stop(VHost) ->
     _ = [TypeModule:stop(VHost) || {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)],
     ok.
 
-endangered_queues() ->
+list_with_minimum_quorum() ->
     lists:append([TypeModule:list_with_minimum_quorum()
                   || {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)]).
 

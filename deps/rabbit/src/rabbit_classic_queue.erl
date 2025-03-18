@@ -74,8 +74,7 @@
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
-         queue_vm_ets/0,
-         dir_base/0]).
+         queue_vm_ets/0]).
 
 -export([validate_policy/1]).
 
@@ -713,7 +712,7 @@ policy_apply_to_name() ->
     <<"classic_queues">>.
 
 can_redeliver() ->
-    true.
+    false.
 
 stop(VHost) ->
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
@@ -746,8 +745,4 @@ queue_vm_stats_sups() ->
 %% returns proplist? And rabbit_vm calculates
 %% Other as usual by substraction.
 queue_vm_ets() ->
-    {[],
-     []}.
-
-dir_base() ->
-    [rabbit_vhost:msg_store_dir_base()].
+    {[], []}.

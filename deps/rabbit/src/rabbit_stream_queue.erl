@@ -119,10 +119,9 @@
     [{description, "Stream queue: queue type"},
      {mfa,      {rabbit_registry, register,
                     [queue, <<"stream">>, ?MODULE]}},
-     %% {cleanup,  {rabbit_registry, unregister,
-     %%             [queue, <<"stream">>]}},
-     {requires, rabbit_registry}%%,
-     %% {enables,     rabbit_stream_queue_type}
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"stream">>]}},
+     {requires, rabbit_registry}
     ]}).
 
 -type client() :: #stream_client{}.
@@ -860,6 +859,10 @@ status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             [begin
                  [get_key(role, C),
@@ -931,6 +934,10 @@ tracking_status(Vhost, QueueName) ->
     %% Handle not found queues
     QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             Leader = amqqueue:get_pid(Q),
             Map = osiris:read_tracking(Leader),
@@ -944,7 +951,7 @@ tracking_status(Vhost, QueueName) ->
                                         end, [], Trackings) ++ Acc
                       end, [], Map);
         {ok, Q} ->
-            {error, {queue_not_supported, ?amqqueue_type(Q)}};
+            {error, {queue_not_supported, amqqueue:get_type(Q)}};
         {error, not_found} = E->
             E
     end.
@@ -1045,6 +1052,10 @@ restart_stream(VHost, Queue, Options)
 add_replica(VHost, Name, Node) ->
     QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             case lists:member(Node, rabbit_nodes:list_running()) of
                 false ->
@@ -1053,7 +1064,7 @@ add_replica(VHost, Name, Node) ->
                     rabbit_stream_coordinator:add_replica(Q, Node)
             end;
         {ok, Q} ->
-            {error, {queue_not_supported, ?amqqueue_type(Q)}};
+            {error, {queue_not_supported, amqqueue:get_type(Q)}};
         E ->
             E
     end.
@@ -1061,12 +1072,16 @@ add_replica(VHost, Name, Node) ->
 delete_replica(VHost, Name, Node) ->
     QName = queue_resource(VHost, Name),
     case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {error, quorum_queue_not_supported};
         {ok, Q} when ?amqqueue_is_stream(Q) ->
             #{name := StreamId} = amqqueue:get_type_state(Q),
             {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
             Reply;
         {ok, Q} ->
-            {error, {queue_not_supported, ?amqqueue_type(Q)}};
+            {error, {queue_not_supported, amqqueue:get_type(Q)}};
         E ->
             E
     end.

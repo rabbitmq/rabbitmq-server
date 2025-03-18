@@ -52,7 +52,7 @@
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
-         dir_base/0]).
+         queue_vm_ets/0]).
 
 %% Stateful rabbit_queue_type callbacks are unsupported by this queue type.
 -define(STATEFUL_CALLBACKS,
@@ -329,7 +329,7 @@ policy_apply_to_name() ->
     <<"qos0_queues">>.
 
 can_redeliver() ->
-    true.
+    false.
 
 stop(_VHost) ->
     ok.
@@ -352,5 +352,5 @@ revive() ->
 queue_vm_stats_sups() ->
     {[], []}.
 
-dir_base() ->
-    [].
+queue_vm_ets() ->
+    {[], []}.

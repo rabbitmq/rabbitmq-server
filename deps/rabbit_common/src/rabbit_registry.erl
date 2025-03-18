@@ -66,7 +66,7 @@ lookup_module(Class, T) when is_atom(T) ->
           Ret when
       Class :: atom(),
       TypeDescriptor :: atom() | %% can be TypeModule or Type
-                        binary(), %% or whati currently called "alias" - a TypeName
+                        binary(), %% or what is currently called "alias" - a TypeName
       Ret :: {ok, TypeModule} | {error, not_found},
       TypeModule :: atom().
 lookup_type_module(Class, TypeDescriptor) ->
@@ -81,7 +81,7 @@ lookup_type_module(Class, TypeDescriptor) ->
           Ret when
       Class :: atom(),
       TypeDescriptor :: atom() | %% either full typemodule or atomized typename
-                        binary(), %% typename pr typemodule in binary
+                        binary(), %% typename or typemodule in binary
       Ret :: {ok, binary()} | {error, not_found}.
 lookup_type_name(Class, TypeDescriptor) ->
     case lookup_type(Class, TypeDescriptor) of

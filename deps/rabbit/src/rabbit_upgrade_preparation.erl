@@ -56,7 +56,7 @@ endangered_critical_components() ->
 do_await_safe_online_quorum(0) ->
     false;
 do_await_safe_online_quorum(IterationsLeft) ->
-    EndangeredQueues = rabbit_queue_type:endangered_queues(),
+    EndangeredQueues = rabbit_queue_type:list_with_minimum_quorum(),
     case EndangeredQueues =:= [] andalso endangered_critical_components() =:= [] of
         true -> true;
         false ->
@@ -81,7 +81,7 @@ do_await_safe_online_quorum(IterationsLeft) ->
 
 -spec list_with_minimum_quorum_for_cli() -> [#{binary() => term()}].
 list_with_minimum_quorum_for_cli() ->
-    EndangeredQueues = rabbit_queue_type:endangered_queues(),
+    EndangeredQueues = rabbit_queue_type:list_with_minimum_quorum(),
     [amqqueue:to_printable(Q) || Q <- EndangeredQueues] ++
     [#{
            <<"readable_name">> => C,

@@ -581,7 +581,6 @@ is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
 apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
-apply_to_validation(_Name, <<"streams">>)    -> ok;
 apply_to_validation(_Name, Term) ->
     %% as a last restort go to queue types registry
     %% and try to find something here
@@ -594,7 +593,7 @@ apply_to_validation(_Name, Term) ->
     end.
 
 maybe_apply_to_queue_type(Term) ->
-    [] =/= lists:filter(fun({_TypeName, TypeModule}) ->
-                               TypeModule:policy_apply_to_name() == Term
-                       end,
-                       rabbit_registry:lookup_all(queue)).
+    lists:any(fun({_TypeName, TypeModule}) ->
+                      TypeModule:policy_apply_to_name() == Term
+              end,
+              rabbit_registry:lookup_all(queue)).
