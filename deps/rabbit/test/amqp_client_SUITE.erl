@@ -144,6 +144,8 @@ groups() ->
        incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
        tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
+       session_flow_control_default_max_frame_size,
+       session_flow_control_small_max_frame_size,
        session_max_per_connection,
        link_max_per_session,
        reserved_annotation
@@ -1642,7 +1644,7 @@ server_closes_link(QType, Config) ->
 
     receive {amqp10_msg, Receiver, Msg} ->
                 ?assertEqual([Body], amqp10_msg:body(Msg))
-    after 30000 -> ct:fail("missing msg")
+    after 9000 -> ct:fail({missing_msg, ?LINE})
     end,
 
     [SessionPid] = rpc(Config, rabbit_amqp_session, list_local, []),
@@ -2998,7 +3000,7 @@ detach_requeues_two_connections(QType, Config) ->
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session1, <<"my link pair">>),
     QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QType}}},
     {ok, #{type := QType}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
-    flush(link_pair_attached),
+    flush(queue_declared),
 
     %% Attach 1 sender and 2 receivers.
     {ok, Sender} = amqp10_client:attach_sender_link(Session0, <<"sender">>, Address, settled),
@@ -3008,7 +3010,7 @@ detach_requeues_two_connections(QType, Config) ->
     receive {amqp10_event, {link, Receiver0, attached}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
     end,
-    ok = gen_statem:cast(Session0, {flow_session, #'v1_0.flow'{incoming_window = {uint, 1}}}),
+    ok = amqp10_client_session:flow(Session0, 1, never),
     ok = amqp10_client:flow_link_credit(Receiver0, 50, never),
     %% Wait for credit being applied to the queue.
     timer:sleep(10),
@@ -4302,7 +4304,7 @@ available_messages(QType, Config) ->
                link_credit = {uint, 1},
                %% Request sending queue to send us a FLOW including available messages.
                echo = true},
-    ok = amqp10_client_session:flow(Session, OutputHandle, Flow0, never),
+    ok = amqp10_client_session:flow_link(Session, OutputHandle, Flow0, never),
     receive_messages(Receiver, 1),
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
@@ -4343,8 +4345,8 @@ available_messages(QType, Config) ->
                link_credit = {uint, 1},
                echo = true},
     %% Send both FLOW frames in sequence.
-    ok = amqp10_client_session:flow(Session, OutputHandle, Flow1, never),
-    ok = amqp10_client_session:flow(Session, OutputHandle, Flow2, never),
+    ok = amqp10_client_session:flow_link(Session, OutputHandle, Flow1, never),
+    ok = amqp10_client_session:flow_link(Session, OutputHandle, Flow2, never),
     receive_messages(Receiver, 1),
     receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
     after 30000 -> ct:fail({missing_event, ?LINE})
@@ -5657,7 +5659,7 @@ incoming_window_closed_transfer_flow_order(Config) ->
     end,
 
     %% Open our incoming window
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    ok = amqp10_client_session:flow(Session, 5, never),
     %% Important: We should first receive the TRANSFER,
     %% and only thereafter the FLOW (and hence the credit_exhausted notification).
     receive First ->
@@ -5710,7 +5712,7 @@ incoming_window_closed_stop_link(Config) ->
     end,
 
     %% Open our incoming window
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    ok = amqp10_client_session:flow(Session, 5, never),
 
     %% Since we decreased link credit dynamically, we may or may not receive the 1st message.
     receive {amqp10_msg, Receiver, Msg1} ->
@@ -5758,7 +5760,7 @@ incoming_window_closed_close_link(Config) ->
     %% Close the link while our session incoming-window is closed.
     ok = detach_link_sync(Receiver),
     %% Open our incoming window.
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    ok = amqp10_client_session:flow(Session, 5, never),
     %% Given that both endpoints have now destroyed the link, we do not
     %% expect to receive any TRANSFER or FLOW frame referencing the destroyed link.
     receive Unexpected2 -> ct:fail({unexpected, Unexpected2})
@@ -5814,7 +5816,7 @@ incoming_window_closed_rabbitmq_internal_flow(QType, Config) ->
     ?assert(MsgsReady > 0),
 
     %% Open our incoming window.
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, Num}}}),
+    ok = amqp10_client_session:flow(Session, 100, 50),
     receive_messages(Receiver, Num),
 
     ok = detach_link_sync(Receiver),
@@ -5899,6 +5901,122 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
+
+session_flow_control_default_max_frame_size(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    Num = 1000,
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+
+    ok = amqp10_client_session:flow(Session, 2, never),
+    %% Grant link credit worth of all messages that we are going to receive
+    %% in this test case.
+    ok = amqp10_client:flow_link_credit(Receiver, Num * 2, never),
+
+    [Msg1000, Msg999] = receive_messages(Receiver, 2),
+    ?assertEqual(<<"1000">>, amqp10_msg:body_bin(Msg1000)),
+    ?assertEqual(<<"999">>, amqp10_msg:body_bin(Msg999)),
+    receive {amqp10_msg, _, _} = Unexpected0 ->
+                ct:fail({unexpected_msg, Unexpected0, ?LINE})
+    after 50 -> ok
+    end,
+
+    ok = amqp10_client_session:flow(Session, 1, never),
+    [Msg998] = receive_messages(Receiver, 1),
+    ?assertEqual(<<"998">>, amqp10_msg:body_bin(Msg998)),
+    receive {amqp10_msg, _, _} = Unexpected1 ->
+                ct:fail({unexpected_msg, Unexpected1, ?LINE})
+    after 50 -> ok
+    end,
+
+    ok = amqp10_client_session:flow(Session, 0, never),
+    receive {amqp10_msg, _, _} = Unexpected2 ->
+                ct:fail({unexpected_msg, Unexpected2, ?LINE})
+    after 50 -> ok
+    end,
+
+    %% When the client automatically widens the session window,
+    %% we should receive all remaining messages.
+    ok = amqp10_client_session:flow(Session, 2, 1),
+    receive_messages(Receiver, Num - 3),
+
+    %% Let's test with a different auto renew session flow config (100, 100).
+    ok = amqp10_client_session:flow(Session, 0, never),
+    ok = send_messages(Sender, Num, false),
+    ok = wait_for_accepts(Num),
+    receive {amqp10_msg, _, _} = Unexpected3 ->
+                ct:fail({unexpected_msg, Unexpected3, ?LINE})
+    after 50 -> ok
+    end,
+    ok = amqp10_client_session:flow(Session, 100, 100),
+    receive_messages(Receiver, Num),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close(Init).
+
+%% Test session flow control with large messages split into multiple transfer frames.
+session_flow_control_small_max_frame_size(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{max_frame_size => 1000},
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session, <<"pair">>),
+
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, Address),
+    receive {amqp10_event, {link, Receiver, attached}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    Suffix = binary:copy(<<"x">>, 2500),
+    Num = 10,
+    ok = send_messages(Sender, Num, false, Suffix),
+    ok = wait_for_accepts(Num),
+
+    %% 1 message of size ~2500 bytes gets split into 3 transfer frames
+    %% because each transfer frame has max size of 1000 bytes.
+    %% Hence, if we set our incoming-window to 3, we should receive exactly 1 message.
+    ok = amqp10_client_session:flow(Session, 3, never),
+    %% Grant plenty of link credit.
+    ok = amqp10_client:flow_link_credit(Receiver, Num * 5, never),
+    receive {amqp10_msg, Receiver, Msg10} ->
+                ?assertEqual(<<"10", Suffix/binary>>,
+                             amqp10_msg:body_bin(Msg10))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, _} = Unexpected0 ->
+                ct:fail({unexpected_msg, Unexpected0, ?LINE})
+    after 50 -> ok
+    end,
+
+    %% When the client automatically widens the session window,
+    %% we should receive all remaining messages.
+    ok = amqp10_client_session:flow(Session, 2, 1),
+    Msgs = receive_messages(Receiver, Num - 1),
+    Msg1 = lists:last(Msgs),
+    ?assertEqual(<<"1", Suffix/binary>>,
+                 amqp10_msg:body_bin(Msg1)),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close_connection_sync(Connection).
 
 session_max_per_connection(Config) ->
     App = rabbit,
@@ -6320,4 +6438,4 @@ find_event(Type, Props, Events) when is_list(Props), is_list(Events) ->
       end, Events).
 
 close_incoming_window(Session) ->
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}).
+    amqp10_client_session:flow(Session, 0, never).
