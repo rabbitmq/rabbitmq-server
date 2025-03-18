@@ -339,7 +339,7 @@ flow_link_credit(#link_ref{role = receiver, session = Session,
        RenewWhenBelow =< Credit) ->
     Flow = #'v1_0.flow'{link_credit = {uint, Credit},
                         drain = Drain},
-    ok = amqp10_client_session:flow(Session, Handle, Flow, RenewWhenBelow).
+    ok = amqp10_client_session:flow_link(Session, Handle, Flow, RenewWhenBelow).
 
 %% @doc Stop a receiving link.
 %% See AMQP 1.0 spec §2.6.10.
@@ -348,7 +348,7 @@ stop_receiver_link(#link_ref{role = receiver,
                              link_handle = Handle}) ->
     Flow = #'v1_0.flow'{link_credit = {uint, 0},
                         echo = true},
-    ok = amqp10_client_session:flow(Session, Handle, Flow, never).
+    ok = amqp10_client_session:flow_link(Session, Handle, Flow, never).
 
 %%% messages
 
