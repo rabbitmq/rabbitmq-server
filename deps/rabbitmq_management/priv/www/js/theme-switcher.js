@@ -1,84 +1,96 @@
-$(document).ready(function() {
-    const lightStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=light]');
-    const darkStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=dark]');
-    const darkSdhemeMedia = matchMedia('(prefers-color-scheme: dark)');
-    const switcherRadios = document.getElementsByClassName('switcher__radio');
+var lightStyles;
+var darkStyles;
+var darkSdhemeMedia;
+var switcherRadios;
 
-    function initializeSwitcher() {
-        const savedScheme = getSavedScheme();
+var initializeSwitcher = function initializeSwitcher() {
+    lightStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=light]');
+    darkStyles = document.querySelectorAll('link[rel=stylesheet][media*=prefers-color-scheme][media*=dark]');
+    darkSdhemeMedia = matchMedia('(prefers-color-scheme: dark)');
+    switcherRadios = document.getElementsByClassName('switcher__radio');
 
-        if (savedScheme !== null) {
-            const currentRadio = document.querySelector(`.switcher__radio[value=${savedScheme}]`);
+    let savedScheme = getSavedScheme();
+
+    if (savedScheme !== null) {
+        let currentRadio = document.querySelector(`.switcher__radio[value=${savedScheme}]`);
+        if (currentRadio !== null) {
             currentRadio.checked = true;
         }
+    }
 
-        [...switcherRadios].forEach((radio) => {
-            radio.addEventListener('change', (event) => {
-                setScheme(event.target.value);
-            });
+    [...switcherRadios].forEach((radio) => {
+        radio.addEventListener('change', (event) => {
+            setScheme(event.target.value);
         });
+    });
+}
+
+var initializeScheme = function initializeScheme() {
+    let savedScheme = getSavedScheme();
+    let systemScheme = getSystemScheme();
+
+    if (savedScheme == null) return;
+
+    if(savedScheme !== systemScheme) {
+        setScheme(savedScheme);
+    }
+}
+
+function setScheme(scheme) {
+    switchMediaScheme(scheme);
+
+    if (scheme === 'auto') {
+        clearScheme();
+    } else {
+        saveScheme(scheme);
+    }
+}
+
+function switchMediaScheme(scheme) {
+    let lightMedia;
+    let darkMedia;
+
+    if (scheme === 'auto') {
+        lightMedia = '(prefers-color-scheme: light)';
+        darkMedia = '(prefers-color-scheme: dark)';
+    } else {
+        lightMedia = (scheme === 'light') ? 'all' : 'bot all';
+        darkMedia = (scheme === 'dark') ? 'all' : 'bot all';
     }
 
-    function initializeScheme() {
-        const savedScheme = getSavedScheme();
-        const systemScheme = getSystemScheme();
+    [...lightStyles].forEach((link) => {
+        link.media = lightMedia;
+    });
 
-        if (savedScheme == null) return;
+    [...darkStyles].forEach((link) => {
+        link.media = darkMedia;
+    });
+}
 
-        if(savedScheme !== systemScheme) {
-            setScheme(savedScheme);
-        }
-    }
+function getSystemScheme() {
+    let darkScheme = darkSdhemeMedia.matches;
 
-    function setScheme(scheme) {
-        switchMediaScheme(scheme);
+    return darkScheme ? 'dark' : 'light';
+}
 
-        if (scheme === 'auto') {
-            clearScheme();
-        } else {
-            saveScheme(scheme);
-        }
-    }
+function getSavedScheme() {
+    return localStorage.getItem('color-scheme');
+}
 
-    function switchMediaScheme(scheme) {
-        let lightMedia;
-        let darkMedia;
+function saveScheme(scheme) {
+    localStorage.setItem('color-scheme', scheme);
+}
 
-        if (scheme === 'auto') {
-            lightMedia = '(prefers-color-scheme: light)';
-            darkMedia = '(prefers-color-scheme: dark)';
-        } else {
-            lightMedia = (scheme === 'light') ? 'all' : 'bot all';
-            darkMedia = (scheme === 'dark') ? 'all' : 'bot all';
-        }
+function clearScheme() {
+    localStorage.removeItem('color-scheme');
+}
 
-        [...lightStyles].forEach((link) => {
-            link.media = lightMedia;
-        });
+$(window).on('popstate', function() {
+    initializeSwitcher();
+    initializeScheme();
+});
 
-        [...darkStyles].forEach((link) => {
-            link.media = darkMedia;
-        });
-    }
-
-    function getSystemScheme() {
-        const darkScheme = darkSdhemeMedia.matches;
-
-        return darkScheme ? 'dark' : 'light';
-    }
-
-    function getSavedScheme() {
-        return localStorage.getItem('color-scheme');
-    }
-
-    function saveScheme(scheme) {
-        localStorage.setItem('color-scheme', scheme);
-    }
-
-    function clearScheme() {
-        localStorage.removeItem('color-scheme');
-    }
-
+$(document).ready(function() {
     initializeSwitcher();
     initializeScheme();
 });
