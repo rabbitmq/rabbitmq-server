@@ -19,7 +19,8 @@ all() ->
 all_tests() ->
     [
      normal_queue_delete_with,
-     internal_queue_delete_with
+     internal_owner_queue_delete_with,
+     internal_no_owner_queue_delete_with
     ].
 
 groups() ->
@@ -44,7 +45,9 @@ end_per_group(_Group, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_helpers:run_steps(Config1,
+    QName = rabbit_misc:r(<<"/">>, queue, rabbit_data_coercion:to_binary(Testcase)),
+    Config2 = rabbit_ct_helpers:set_config(Config1, [{queue_name, QName}]),
+    rabbit_ct_helpers:run_steps(Config2,
                                 rabbit_ct_client_helpers:setup_steps()).
 
 end_per_testcase(Testcase, Config) ->
@@ -58,7 +61,7 @@ end_per_testcase(Testcase, Config) ->
 %%%===================================================================
 
 normal_queue_delete_with(Config) ->
-    QName = queue_name(Config, <<"normal">>),
+    QName = ?config(queue_name, Config),
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Queue = amqqueue:new(QName,
                          none, %% pid
@@ -78,8 +81,8 @@ normal_queue_delete_with(Config) ->
 
     ok.
 
-internal_queue_delete_with(Config) ->
-    QName = queue_name(Config, <<"internal_protected">>),
+internal_owner_queue_delete_with(Config) ->
+    QName = ?config(queue_name, Config),
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     Queue = amqqueue:new(QName,
                          none, %% pid
@@ -96,7 +99,7 @@ internal_queue_delete_with(Config) ->
 
     ?assertException(exit, {exception,
                             {amqp_error, resource_locked,
-                             "Cannot delete protected queue 'rabbit_amqqueue_tests/internal_protected' in vhost '/'.",
+                             "Cannot delete protected queue 'internal_owner_queue_delete_with' in vhost '/'.",
                              none}}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
 
     ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName])),
@@ -107,11 +110,31 @@ internal_queue_delete_with(Config) ->
 
     ok.
 
-%% Utility
+internal_no_owner_queue_delete_with(Config) ->
+    QName = ?config(queue_name, Config),
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Queue = amqqueue:new(QName,
+                         none, %% pid
+                         true, %% durable
+                         false, %% auto delete
+                         none, %% owner,
+                         [],
+                         <<"/">>,
+                         #{},
+                         rabbit_classic_queue),
+    IQueue = amqqueue:make_internal(Queue),
 
-queue_name(Config, Name) ->
-    Name1 = iolist_to_binary(rabbit_ct_helpers:config_to_testcase_name(Config, Name)),
-    queue_name(Name1).
+    ?assertMatch({new, _Q},  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type, declare, [IQueue, Node])),
 
-queue_name(Name) ->
-    rabbit_misc:r(<<"/">>, queue, Name).
+    ?assertException(exit, {exception,
+                            {amqp_error, resource_locked,
+                             "Cannot delete protected queue 'internal_no_owner_queue_delete_with' in vhost '/'.",
+                             none}}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, <<"dummy">>])),
+
+    ?assertMatch({ok, _}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName])),
+
+    ?assertMatch({ok, _},  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete_with, [QName, false, false, ?INTERNAL_USER])),
+
+    ?assertMatch({error, not_found}, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QName])),
+
+    ok.

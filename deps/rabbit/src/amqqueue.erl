@@ -520,9 +520,14 @@ internal_owner(#amqqueue{options = #{internal := true,
 internal_owner(#amqqueue{}) ->
     undefined.
 
+-spec make_internal(amqqueue()) -> amqqueue().
+
 make_internal(Q = #amqqueue{options = Options}) when is_map(Options) ->
     Q#amqqueue{options = maps:merge(Options, #{internal => true,
                                                internal_owner => undefined})}.
+
+-spec make_internal(amqqueue(), rabbit_types:r(queue | exchange)) -> amqqueue().
+
 make_internal(Q = #amqqueue{options = Options}, Owner)
   when is_map(Options) andalso is_record(Owner, resource) ->
     Q#amqqueue{options = maps:merge(Options, #{internal => true,
