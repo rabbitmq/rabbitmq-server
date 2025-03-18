@@ -1015,7 +1015,7 @@ session_flow_control(Config) ->
 
     ok = amqp10_client:flow_link_credit(IncomingLink, 1, never),
     %% Close our incoming window.
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 0}}}),
+    amqp10_client_session:flow(Session, 0, never),
 
     Request0 = amqp10_msg:new(<<>>, #'v1_0.amqp_value'{content = null}, true),
     MessageId = <<1>>,
@@ -1031,7 +1031,7 @@ session_flow_control(Config) ->
     end,
 
     %% Open our incoming window
-    gen_statem:cast(Session, {flow_session, #'v1_0.flow'{incoming_window = {uint, 5}}}),
+    amqp10_client_session:flow(Session, 1, never),
 
     receive {amqp10_msg, IncomingLink, Response} ->
                 ?assertMatch(#{correlation_id := MessageId,
