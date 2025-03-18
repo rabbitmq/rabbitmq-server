@@ -56,7 +56,9 @@ function initializeSwitcher() {
             }
 
             setScheme(newScheme);
-            switcherButtons[0].setAttribute("x-scheme", newScheme);
+            button.setAttribute("x-scheme", newScheme);
+            button.setAttribute("title", `Switch between dark and light mode (currently ${newScheme} mode)`);
+            button.setAttribute("aria-label", `Switch between dark and light mode (currently ${newScheme} mode)`);
         });
     });
 }
