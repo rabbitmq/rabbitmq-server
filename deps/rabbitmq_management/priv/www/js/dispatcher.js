@@ -111,6 +111,7 @@ dispatcher_add(function(sammy) {
 
     if (ac.canAccessVhosts()) {
       sammy.get('#/connections', function() {
+            this.title('Connections');
             renderConnections();
         });
       sammy.get('#/connections/:name', function() {
@@ -143,6 +144,7 @@ dispatcher_add(function(sammy) {
            return false;
         });
       sammy.get('#/channels', function() {
+            this.title('Channels');
             renderChannels();
         });
       sammy.get('#/channels/:name', function() {
@@ -336,6 +338,7 @@ dispatcher_add(function(sammy) {
                         'operator_policies': '/operator-policies',
                         'vhosts':   '/vhosts'}, 'policies');
       sammy.get('#/policies/:vhost/:id', function() {
+            this.title('Policies');
             render({'policy': '/policies/' + esc(this.params['vhost'])
                         + '/' + esc(this.params['id'])},
                 'policy', '#/policies');
