@@ -148,10 +148,17 @@ context_as_parameters(_) ->
     [].
 
 bool_req(PathName, Props) ->
-    case http_req(p(PathName), q(Props)) of
-        "deny"  -> false;
-        "allow" -> true;
-        E       -> E
+    Authpath = p(PathName),
+    case Authpath of
+        "disabled" ->
+            rabbit_log:debug("auth_backend_http: Skip ~ts!", [PathName]),
+            true;
+        _Else ->
+            case http_req(Authpath, q(Props)) of
+                 "deny"  -> false;
+                 "allow" -> true;
+                 E       -> E
+         end
     end.
 
 http_req(Path, Query) -> http_req(Path, Query, ?RETRY_ON_KEEPALIVE_CLOSED).
