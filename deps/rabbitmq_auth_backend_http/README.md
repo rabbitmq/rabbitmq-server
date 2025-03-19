@@ -93,7 +93,7 @@ For instance, if the user accessed RabbitMQ via the MQTT protocol, it is expecte
 * `vhost`: the name of the virtual host being accessed
 * `ip`: the client ip address
 
-Note that you cannot create arbitrary virtual hosts using this plugin; you can only determine whether your users can see / access the ones that exist. By setting `vhost_path` to `disabled`, this authentication request is skipped, and  unrestricted access is granted.
+Note that you cannot create arbitrary virtual hosts using this plugin; you can only determine whether your users can see / access the ones that exist. By setting `vhost_path` to `disabled`, this authentication request is skipped, and unrestricted access is granted.
 
 ### resource_path
 
@@ -105,7 +105,7 @@ Note that you cannot create arbitrary virtual hosts using this plugin; you can o
 
 Note: This request may include additional http request parameters in addition to the ones listed above.
 For instance, if the user accessed RabbitMQ via the MQTT protocol, it is expected `client_id` request parameter too.
-By setting `resource_path` to `disabled`, this authentication request is skipped, and  unrestricted access is granted.
+By setting `resource_path` to `disabled`, this authentication request is skipped, and unrestricted access is granted.
 
 ### topic_path
 
@@ -117,7 +117,7 @@ By setting `resource_path` to `disabled`, this authentication request is skipped
 * `routing_key`: the routing key of a published message (when the permission is `write`)
 or routing key of the queue binding (when the permission is `read`)
 
-Note: By setting `topic_path` to `disabled`, this authentication request is skipped, and  unrestricted access is granted.
+Note: By setting `topic_path` to `disabled`, this authentication request is skipped, and unrestricted access is granted.
 
 See [topic authorisation](http://www.rabbitmq.com/access-control.html#topic-authorisation) for more information
 about topic authorisation.
