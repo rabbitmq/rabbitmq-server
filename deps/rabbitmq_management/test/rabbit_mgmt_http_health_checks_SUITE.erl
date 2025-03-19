@@ -37,7 +37,10 @@ groups() ->
                         local_alarms_test,
                         metadata_store_initialized_test,
                         metadata_store_initialized_with_data_test,
-                        is_quorum_critical_single_node_test]}
+                        is_quorum_critical_single_node_test,
+                        quorum_queues_without_elected_leader_single_node_test,
+                        quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test
+     ]}
     ].
 
 all_tests() -> [
@@ -165,7 +168,8 @@ local_alarms_test(Config) ->
 
 
 is_quorum_critical_single_node_test(Config) ->
-    Check0 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
+    EndpointPath = "/health/checks/node-is-quorum-critical",
+    Check0 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(<<"single node cluster">>, maps:get(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
@@ -178,13 +182,14 @@ is_quorum_critical_single_node_test(Config) ->
                                                         durable   = true,
                                                         auto_delete = false,
                                                         arguments = Args})),
-    Check1 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
+    Check1 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(<<"single node cluster">>, maps:get(reason, Check1)),
 
     passed.
 
 is_quorum_critical_test(Config) ->
-    Check0 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
+    EndpointPath = "/health/checks/node-is-quorum-critical",
+    Check0 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(false, maps:is_key(reason, Check0)),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
@@ -198,7 +203,7 @@ is_quorum_critical_test(Config) ->
                                                         durable   = true,
                                                         auto_delete = false,
                                                         arguments = Args})),
-    Check1 = http_get(Config, "/health/checks/node-is-quorum-critical", ?OK),
+    Check1 = http_get(Config, EndpointPath, ?OK),
     ?assertEqual(false, maps:is_key(reason, Check1)),
 
     RaName = binary_to_atom(<<"%2F_", QName/binary>>, utf8),
@@ -207,7 +212,7 @@ is_quorum_critical_test(Config) ->
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server2),
     ok = rabbit_ct_broker_helpers:stop_node(Config, Server3),
 
-    Body = http_get_failed(Config, "/health/checks/node-is-quorum-critical"),
+    Body = http_get_failed(Config, EndpointPath),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
     ?assertEqual(true, maps:is_key(<<"reason">>, Body)),
     Queues = maps:get(<<"queues">>, Body),
@@ -217,6 +222,125 @@ is_quorum_critical_test(Config) ->
         end, Queues)),
 
     passed.
+
+quorum_queues_without_elected_leader_single_node_test(Config) ->
+    EndpointPath = "/health/checks/quorum-queues-without-elected-leaders/all-vhosts/",
+    Check0 = http_get(Config, EndpointPath, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check0)),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"quorum_queues_without_elected_leader">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        amqp_channel:call(Ch, #'queue.declare'{
+            queue       = QName,
+            durable     = true,
+            auto_delete = false,
+            arguments   = Args
+        })),
+
+    Check1 = http_get(Config, EndpointPath, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check1)),
+
+    RaSystem = quorum_queues,
+    QResource = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get, [QResource]),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server, [RaSystem, amqqueue:get_pid(Q1)]),
+
+    Body = http_get_failed(Config, EndpointPath),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body)),
+    Queues = maps:get(<<"queues">>, Body),
+    ?assert(lists:any(
+        fun(Item) ->
+            QName =:= maps:get(<<"name">>, Item)
+        end, Queues)),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, restart_server, [RaSystem, amqqueue:get_pid(Q1)]),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            try
+                Check2 = http_get(Config, EndpointPath, ?OK),
+                false =:= maps:is_key(reason, Check2)
+            catch _:_ ->
+                false
+            end
+        end),
+
+    passed.
+
+quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test(Config) ->
+    VH2 = <<"vh-2">>,
+    rabbit_ct_broker_helpers:add_vhost(Config, VH2),
+
+    EndpointPath1 = "/health/checks/quorum-queues-without-elected-leaders/vhost/%2f/",
+    EndpointPath2 = "/health/checks/quorum-queues-without-elected-leaders/vhost/vh-2/",
+    %% ^other
+    EndpointPath3 = "/health/checks/quorum-queues-without-elected-leaders/vhost/vh-2/pattern/%5Eother",
+
+    Check0 = http_get(Config, EndpointPath1, ?OK),
+    Check0 = http_get(Config, EndpointPath2, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check0)),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+        {<<"x-quorum-initial-group-size">>, long, 3}],
+    QName = <<"quorum_queues_without_elected_leader_across_all_virtual_hosts_single_node_test">>,
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+        amqp_channel:call(Ch, #'queue.declare'{
+            queue       = QName,
+            durable     = true,
+            auto_delete = false,
+            arguments   = Args
+        })),
+
+    Check1 = http_get(Config, EndpointPath1, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check1)),
+
+    RaSystem = quorum_queues,
+    QResource = rabbit_misc:r(<<"/">>, queue, QName),
+    {ok, Q1} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_queue, get, [QResource]),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, stop_server, [RaSystem, amqqueue:get_pid(Q1)]),
+
+    Body = http_get_failed(Config, EndpointPath1),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body)),
+    Queues = maps:get(<<"queues">>, Body),
+    ?assert(lists:any(
+        fun(Item) ->
+            QName =:= maps:get(<<"name">>, Item)
+        end, Queues)),
+
+    %% virtual host vh-2 is still fine
+    Check2 = http_get(Config, EndpointPath2, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check2)),
+
+    %% a different queue name pattern succeeds
+    Check3 = http_get(Config, EndpointPath3, ?OK),
+    ?assertEqual(false, maps:is_key(reason, Check3)),
+
+    _ = rabbit_ct_broker_helpers:rpc(Config, 0, ra, restart_server, [RaSystem, amqqueue:get_pid(Q1)]),
+    rabbit_ct_helpers:await_condition(
+        fun() ->
+            try
+                Check4 = http_get(Config, EndpointPath1, ?OK),
+                false =:= maps:is_key(reason, Check4)
+            catch _:_ ->
+                false
+            end
+        end),
+
+    rabbit_ct_broker_helpers:delete_vhost(Config, VH2),
+
+    passed.
+
 
 virtual_hosts_test(Config) ->
     VHost1 = <<"vhost1">>,
