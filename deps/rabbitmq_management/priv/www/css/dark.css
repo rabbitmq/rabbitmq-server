@@ -1,0 +1,282 @@
+:root {
+    color-scheme: dark;
+
+    --color-black-100: #ddd;
+
+    --color-grey-300: #666;
+    --color-grey-400: #444;
+    --color-grey-450: #555;
+    --color-grey-500: #777;
+    --color-grey-600: #999;
+    --color-grey-700: #bbb;
+    --color-grey-800: #ddd;
+    --color-grey-900: #f0f0f0;
+    
+    --color-white-100: #141414;
+    --color-white-200: #111;
+    --color-white-300: #222;
+    --color-white-400: #333;
+    --color-white-500: #444;
+    --color-white-600: #555;
+    --color-white-700: #666;
+    --color-white-800: #777;
+    
+    --color-orange-400: #cc4520;
+    --color-orange-500: #c05000;
+    
+    --color-red-300: #cc6262;
+    --color-red-400: #cc6666;
+    --color-red-500: #cc0000;
+    --color-red-600: #b23737;
+    --color-red-700: #733333;
+    
+    --color-green-300: #328f32;
+    --color-green-400: #2a8f5e;
+    --color-green-450: #5faa4d;
+    --color-green-500: #4a8a3a;
+    
+    --color-aqua-300: #2b6a80;
+    
+    --color-blue-300: #aaccff;
+    
+    --color-magenta-300: #99aaff;
+    --color-magenta-500: #6688cc;
+    --color-magenta-600: #7a4a8a;
+    
+    --color-pink-300: #b38fcc;
+    --color-pink-500: #cc3a8a;
+    
+    --color-yellow-200: #cc9900;
+    --color-yellow-300: #cccc4a;
+    --color-yellow-350: #cc8800;
+    --color-yellow-400: #aa8a4a;
+    --color-yellow-450: #b2b266;
+    --color-yellow-500: #cc8800;
+    
+    --color-purple-300: #6a7aaa;
+    --color-purple-400: #4a5faa;
+    --color-purple-700: #3a1f4a;
+    
+    --default-text-color: var(--color-grey-900);
+    --dafault-background-color: var(--color-white-100);
+
+    --a-default-text-color: var(--color-grey-800);
+    --a-default-hover-text-color: var(--color-orange-500);
+
+    --versions-abbr-background-color: var(--color-white-500);
+
+    --status-error-text-color: var(--color-red-500);
+    --status-timeout-text-color: var(--color-aqua-300);
+
+    --debug-p-text-color: var(--color-white-100);
+    --debug-p-background-color: var(--color-orange-500);
+
+    --header-background-color: var(--color-white-100);
+    --header-bottom-separator-color: var(--color-grey-700);
+
+    --menu-a-hover-text-color: var(--color-white-100);
+    --menu-a-hover-background-color: var(--color-orange-500);
+
+    --menu-a-selected-text-color: var(--color-white-100);
+    --menu-a-selected-background-color: var(--color-grey-700);
+
+    --rhs-background-color: var(--color-white-100);
+
+    --rhs-a-hover-text-color: var(--color-white-100);
+    --rhs-a-hover-background-color: var(--color-orange-500);
+    --rhs-a-selected-text-color: var(--color-white-100);
+    --rhs-a-selected-background-color: var(--color-grey-700);
+
+    --bold-text-color: var(--color-black-100);
+
+    --popup-options-link-background-color: var(--color-white-600);
+
+    --popup-owner-text-color: var(--color-white-100);
+    --popup-owner-background-color: var(--color-orange-500);
+
+    --rate-visibility-option-background-color: var(--color-white-400);
+    --rate-visibility-option-border-color: var(--color-white-500);
+
+    --rate-visibility-option-hover-background-color: var(--color-blue-300);
+    --rate-visibility-option-hover-background-gradient-first-color: var(--color-blue-300);
+    --rate-visibility-option-hover-background-gradient-second-color: var(--color-magenta-300);
+    --rate-visibility-option-hover-border-color: var(--color-magenta-500);
+
+    --rate-visibility-option-hidden--text-color: var(--color-grey-600);
+
+    --tag-link-text-color: var(--color-grey-800); 
+    --tag-link-hover-text-color: var(--color-orange-500); 
+    --argument-link-text-color: var(--color-grey-800);
+    --argument-link-hover-text-color: var(--color-orange-500);
+
+    --filter-p-warning-background-color: var(--color-yellow-350);
+    --filter-active-background-color: var(--color-aqua-300);
+    --filter-highlight-background-color: var(--color-aqua-300);
+
+    --table-th-text-color: var(--color-black-100);
+
+    --table-list-th-border-color: var(--color-white-700);
+    --table-list-td-border-color: var(--color-white-700);
+
+    --table-list-td-a-text-color: var(--color-black-100);
+    --table-list-td-a-hover-text-color: var(--color-orange-500);
+
+    --table-list-th-a-sort-text-color: var(--color-black-100);
+    --table-list-th-a-sort-text-color-arrow: var(--color-orange-500);
+
+    --table-argument-links-default-color: var(--color-grey-600);
+
+    --table-facts-and-legend-header-text-color: var(--color-black-100);
+    --table-facts-and-legend-header-border-color: var(--color-white-700);
+
+    --table-row-alt1-background-color: var(--color-white-800);
+    --table-row-alt1-background-gradient-first-color: var(--color-white-500);
+    --table-row-alt1-background-gradient-second-color: var(--color-white-300);
+
+    --table-row-alt2-background-color: var(--color-white-100);
+    --table-row-alt2-background-gradient-first-color: var(--color-white-200);
+    --table-row-alt2-background-gradient-second-color: var(--color-white-100);
+
+    --main-internal-purpose-default-text-color: var(--color-grey-500);
+
+    --div-memory-bar-border-color: var(--color-grey-400);
+
+    --sub-text-color: var(--color-grey-600);
+    --small-text-color: var(--color-grey-600);
+
+    --main-sub-a-text-color: var(--color-grey-600);
+    --main-sub-a-hover-text-color: var(--color-grey-800);
+    
+    --unknown-text-color: var(--color-grey-600);
+
+    --form-popup-options-background-color: var(--color-white-800);
+    --form-popup-options-border-color: var(--color-white-700);
+
+    --form-popup-warning-background-color: var(--color-yellow-200);
+
+    --form-popup-options-span-text-color: var(--color-white-100);
+    --form-popup-options-span-background-color: var(--color-grey-700);
+    --form-popup-options-span-hover-background-color: var(--color-orange-500);
+
+    --highlight-text-color: var(--color-grey-600);
+    --highlight-background-color: var(--color-grey-400);
+    
+    --highlight-strong-text-color: var(--color-grey-800);
+
+    --highlight-background-gradient-first-color: var(--color-white-500);
+    --highlight-background-gradient-second-color: var(--color-white-300);
+
+    --highlight-border-color: var(--color-white-300);
+
+    --section-h2-hover-text-color: var(--color-black-100);
+    --section-invisible-h2-background-color: var(--color-white-100);
+    --section-visible-h2-background-color: var(--color-white-200);
+
+    --input-border-color: var(--color-white-700);
+    --textarea-border-color: var(--color-white-700);
+
+    --man-d-text-color: var(--color-red-400);
+
+    --multifield-sub-border-color: var(--color-grey-400);
+    --multifield-sub-background-color: var(--color-white-200);
+
+    --label-radio-and-chackbox-border-color: var(--color-white-700);
+
+    --label-toggle-background-color: var(--color-orange-400);
+    --label-toggle-after-background-color: var(--color-white-100);
+
+    --input-toggle-intermediate-background-color: var(--color-yellow-500);
+
+    --input-toggle-checked-background-color: var(--color-green-400);
+
+    --grey-background-color: var(--color-white-500);
+    --yellow-background-color: var(--color-yellow-300);
+
+    --input-submit-text-color: var(--color-white-100);
+    --input-submit-background-color: var(--color-grey-700);
+
+    --input-submit-hover-background-color: var(--color-orange-500);
+
+    --button-disabled-background-color: var(--color-grey-500);
+    --button-disabled-hover-background-color: var(--color-grey-500);
+
+    --h3-bottom-border-color: var(--color-white-600);
+
+    --abbr-background-color: var(--color-aqua-300);
+    --abbr-warning-background-color: var(--color-red-500);
+
+    --abbr-status-grey-background-color: var(--color-grey-400);
+    --abbr-status-green-background-color: var(--color-green-300);
+    --abbr-status-yellow-background-color: var(--color-yellow-300);
+    --abbr-status-red-text-color: var(--color-white-100);
+    --abbr-status-red-background-color: var(--color-red-300);
+
+    --abbr-type-bottom-border-color: var(--color-grey-400);
+
+    --footer-border-color: var(--color-grey-700);
+
+    /* Bindings wrapper colors */
+
+    --bindings-wrapper-span-exchange-border-color: var(--color-grey-450);
+    --bindings-wrapper-span-queue-border-color: var(--color-grey-700);
+    --bindings-wrapper-td-span-queue-and-exchange-background-color: var(--color-white-100);
+
+    /* Status colors */
+
+    --status-grey-background-color: var(--color-grey-400);
+
+    --status-red-text-color: var(--color-white-100);
+    --status-red-background-color: var(--color-red-300);
+
+    --status-yellow-background-color: var(--color-yellow-300);
+
+    --status-green-background-color: var(--color-green-300);
+
+    --status-red-dark-text-color: var(--color-white-100);
+    --status-red-dark-background-color: var(--color-red-600);
+
+    --status-red-and-dark-red-childs-text-color: var(--color-white-100);
+    
+    /* Memory colors */
+
+    --memory-classic-background-color: var(--color-purple-700);
+    --memory-classic-right-border-color: var(--color-grey-450);
+
+    --memory-quorum-background-color: var(--color-magenta-600);
+    --memory-quorum-right-border-color: var(--color-grey-450);
+
+    --memory-stream-background-color: var(--color-pink-300);
+    --memory-stream-right-border-color: var(--color-grey-450);
+
+    --memory-binary-background-image: url(../img/bg-binary.png);
+    --memory-binary-right-border-color: var(--color-pink-500);
+
+    --memory-conn-background-color: var(--color-yellow-400);
+    --memory-conn-right-border-color: var(--color-yellow-450);
+
+    --memory-proc-background-color: var(--color-green-500);
+    --memory-proc-right-border-color: var(--color-green-450);
+
+    --memory-table-background-color: var(--color-purple-400);
+    --memory-table-right-border-color: var(--color-purple-300);
+
+    --memory-system-background-color: var(--color-grey-300);
+    --memory-system-right-border-color: var(--color-grey-450);
+
+    --memory-unused-background-color: var(--color-red-700);
+    --memory-unused-right-border-color: var(--color-grey-450);
+}
+
+/* Theme switcher */
+
+.theme-switcher[x-scheme="auto"]:after {
+    filter: invert(1);
+}
+  
+.theme-switcher[x-scheme="dark"]:after {
+    filter: invert(1);
+}
+  
+.theme-switcher[x-scheme="light"]:after {
+    filter: invert(1);
+}

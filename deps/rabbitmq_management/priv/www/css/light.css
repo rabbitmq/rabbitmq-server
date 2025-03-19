@@ -1,0 +1,282 @@
+:root {
+    color-scheme: light;
+
+    --color-black-100: #000;
+    
+    --color-grey-300: #999;
+    --color-grey-400: #ddd;
+    --color-grey-450: #bbb;
+    --color-grey-500: #aaa;
+    --color-grey-600: #888;
+    --color-grey-700: #666;
+    --color-grey-800: #444;
+    --color-grey-900: #484848;
+
+    --color-white-100: #fff;
+    --color-white-200: #f8f8f8;
+    --color-white-300: #e0e0e0;
+    --color-white-400: #fafafa;
+    --color-white-500: #f0f0f0;
+    --color-white-600: #e4e4e4;
+    --color-white-700: #ccc;
+    --color-white-800: #eee;
+
+    --color-orange-400: #ff5630;
+    --color-orange-500: #f60;
+
+    --color-red-300: #ff7a7a;
+    --color-red-400: #f88;
+    --color-red-500: #f00;
+    --color-red-600: #e24545;
+    --color-red-700: #955;
+
+    --color-green-300: #98f898;
+    --color-green-400: #36b37e;
+    --color-green-450: #79da66;
+    --color-green-500: #6abf59;
+
+    --color-aqua-300: #99ebff;
+
+    --color-blue-300: #ddf;
+
+    --color-magenta-300: #bbf;
+    --color-magenta-500: #88d;
+    --color-magenta-600: #9B59B6;
+
+    --color-pink-300: #D7BDE2;
+    --color-pink-500: #eb50a6;
+
+    --color-yellow-200: #ff9;
+    --color-yellow-300: #ffff7b;
+    --color-yellow-350: #ff8;
+    --color-yellow-400: #dada66;
+    --color-yellow-450: #ebeb8d;
+    --color-yellow-500: #ffab00;
+
+    --color-purple-300: #8d9ceb;
+    --color-purple-400: #6679da;
+    --color-purple-700: #512E5F;
+
+    --default-text-color: var(--color-grey-900);
+    --dafault-background-color: var(--color-white-100);
+
+    --a-default-text-color: var(--color-grey-800);
+    --a-default-hover-text-color: var(--color-orange-500);
+
+    --versions-abbr-background-color: var(--color-white-500);
+
+    --status-error-text-color: var(--color-red-500);
+    --status-timeout-text-color: var(--color-aqua-300);
+
+    --debug-p-text-color: var(--color-white-100);
+    --debug-p-background-color: var(--color-orange-500);
+
+    --header-background-color: var(--color-white-100);
+    --header-bottom-separator-color: var(--color-grey-700);
+
+    --menu-a-hover-text-color: var(--color-white-100);
+    --menu-a-hover-background-color: var(--color-orange-500);
+
+    --menu-a-selected-text-color: var(--color-white-100);
+    --menu-a-selected-background-color: var(--color-grey-700);
+
+    --rhs-background-color: var(--color-white-100);
+
+    --rhs-a-hover-text-color: var(--color-white-100);
+    --rhs-a-hover-background-color: var(--color-orange-500);
+    --rhs-a-selected-text-color: var(--color-white-100);
+    --rhs-a-selected-background-color: var(--color-grey-700);
+
+    --bold-text-color: var(--color-black-100);
+
+    --popup-options-link-background-color: var(--color-white-600);
+
+    --popup-owner-text-color: var(--color-white-100);
+    --popup-owner-background-color: var(--color-orange-500);
+
+    --rate-visibility-option-background-color: var(--color-white-400);
+    --rate-visibility-option-border-color: var(--color-white-500);
+
+    --rate-visibility-option-hover-background-color: var(--color-blue-300);
+    --rate-visibility-option-hover-background-gradient-first-color: var(--color-blue-300);
+    --rate-visibility-option-hover-background-gradient-second-color: var(--color-magenta-300);
+    --rate-visibility-option-hover-border-color: var(--color-magenta-500);
+
+    --rate-visibility-option-hidden--text-color: var(--color-grey-600);
+
+    --tag-link-text-color: var(--color-grey-800); 
+    --tag-link-hover-text-color: var(--color-orange-500); 
+    --argument-link-text-color: var(--color-grey-800);
+    --argument-link-hover-text-color: var(--color-orange-500);
+
+    --filter-p-warning-background-color: var(--color-yellow-350);
+    --filter-active-background-color: var(--color-aqua-300);
+    --filter-highlight-background-color: var(--color-aqua-300);
+
+    --table-th-text-color: var(--color-black-100);
+
+    --table-list-th-border-color: var(--color-white-700);
+    --table-list-td-border-color: var(--color-white-700);
+
+    --table-list-td-a-text-color: var(--color-black-100);
+    --table-list-td-a-hover-text-color: var(--color-orange-500);
+
+    --table-list-th-a-sort-text-color: var(--color-black-100);
+    --table-list-th-a-sort-text-color-arrow: var(--color-orange-500);
+
+    --table-argument-links-default-color: var(--color-grey-600);
+
+    --table-facts-and-legend-header-text-color: var(--color-black-100);
+    --table-facts-and-legend-header-border-color: var(--color-white-700);
+
+    --table-row-alt1-background-color: var(--color-white-800);
+    --table-row-alt1-background-gradient-first-color: var(--color-white-500);
+    --table-row-alt1-background-gradient-second-color: var(--color-white-300);
+
+    --table-row-alt2-background-color: var(--color-white-100);
+    --table-row-alt2-background-gradient-first-color: var(--color-white-200);
+    --table-row-alt2-background-gradient-second-color: var(--color-white-100);
+
+    --main-internal-purpose-default-text-color: var(--color-grey-500);
+
+    --div-memory-bar-border-color: var(--color-grey-400);
+
+    --sub-text-color: var(--color-grey-600);
+    --small-text-color: var(--color-grey-600);
+
+    --main-sub-a-text-color: var(--color-grey-600);
+    --main-sub-a-hover-text-color: var(--color-grey-800);
+    
+    --unknown-text-color: var(--color-grey-600);
+
+    --form-popup-options-background-color: var(--color-white-800);
+    --form-popup-options-border-color: var(--color-white-700);
+
+    --form-popup-warning-background-color: var(--color-yellow-200);
+
+    --form-popup-options-span-text-color: var(--color-white-100);
+    --form-popup-options-span-background-color: var(--color-grey-700);
+    --form-popup-options-span-hover-background-color: var(--color-orange-500);
+
+    --highlight-text-color: var(--color-grey-600);
+    --highlight-background-color: var(--color-grey-400);
+    
+    --highlight-strong-text-color: var(--color-grey-800);
+
+    --highlight-background-gradient-first-color: var(--color-white-500);
+    --highlight-background-gradient-second-color: var(--color-white-300);
+
+    --highlight-border-color: var(--color-white-300);
+
+    --section-h2-hover-text-color: var(--color-black-100);
+    --section-invisible-h2-background-color: var(--color-white-100);
+    --section-visible-h2-background-color: var(--color-white-200);
+
+    --input-border-color: var(--color-white-700);
+    --textarea-border-color: var(--color-white-700);
+
+    --man-d-text-color: var(--color-red-400);
+
+    --multifield-sub-border-color: var(--color-grey-400);
+    --multifield-sub-background-color: var(--color-white-200);
+
+    --label-radio-and-chackbox-border-color: var(--color-white-700);
+
+    --label-toggle-background-color: var(--color-orange-400);
+    --label-toggle-after-background-color: var(--color-white-100);
+
+    --input-toggle-intermediate-background-color: var(--color-yellow-500);
+
+    --input-toggle-checked-background-color: var(--color-green-400);
+
+    --grey-background-color: var(--color-white-500);
+    --yellow-background-color: var(--color-yellow-300);
+
+    --input-submit-text-color: var(--color-white-100);
+    --input-submit-background-color: var(--color-grey-700);
+
+    --input-submit-hover-background-color: var(--color-orange-500);
+
+    --button-disabled-background-color: var(--color-grey-500);
+    --button-disabled-hover-background-color: var(--color-grey-500);
+
+    --h3-bottom-border-color: var(--color-white-600);
+
+    --abbr-background-color: var(--color-aqua-300);
+    --abbr-warning-background-color: var(--color-red-500);
+
+    --abbr-status-grey-background-color: var(--color-grey-400);
+    --abbr-status-green-background-color: var(--color-green-300);
+    --abbr-status-yellow-background-color: var(--color-yellow-300);
+    --abbr-status-red-text-color: var(--color-white-100);
+    --abbr-status-red-background-color: var(--color-red-300);
+
+    --abbr-type-bottom-border-color: var(--color-grey-400);
+
+    --footer-border-color: var(--color-grey-700);
+
+    /* Bindings wrapper colors */
+
+    --bindings-wrapper-span-exchange-border-color: var(--color-grey-450);
+    --bindings-wrapper-span-queue-border-color: var(--color-grey-700);
+    --bindings-wrapper-td-span-queue-and-exchange-background-color: var(--color-white-100);
+
+    /* Status colors */
+
+    --status-grey-background-color: var(--color-grey-400);
+
+    --status-red-text-color: var(--color-white-100);
+    --status-red-background-color: var(--color-red-300);
+
+    --status-yellow-background-color: var(--color-yellow-300);
+
+    --status-green-background-color: var(--color-green-300);
+
+    --status-red-dark-text-color: var(--color-white-100);
+    --status-red-dark-background-color: var(--color-red-600);
+
+    --status-red-and-dark-red-childs-text-color: var(--color-white-100);
+    
+    /* Memory colors */
+
+    --memory-classic-background-color: var(--color-purple-700);
+    --memory-classic-right-border-color: var(--color-grey-450);
+
+    --memory-quorum-background-color: var(--color-magenta-600);
+    --memory-quorum-right-border-color: var(--color-grey-450);
+
+    --memory-stream-background-color: var(--color-pink-300);
+    --memory-stream-right-border-color: var(--color-grey-450);
+
+    --memory-binary-background-image: url(../img/bg-binary.png);
+    --memory-binary-right-border-color: var(--color-pink-500);
+
+    --memory-conn-background-color: var(--color-yellow-400);
+    --memory-conn-right-border-color: var(--color-yellow-450);
+
+    --memory-proc-background-color: var(--color-green-500);
+    --memory-proc-right-border-color: var(--color-green-450);
+
+    --memory-table-background-color: var(--color-purple-400);
+    --memory-table-right-border-color: var(--color-purple-300);
+
+    --memory-system-background-color: var(--color-grey-300);
+    --memory-system-right-border-color: var(--color-grey-450);
+
+    --memory-unused-background-color: var(--color-red-700);
+    --memory-unused-right-border-color: var(--color-grey-450);
+}
+
+/* Theme switcher */
+
+.theme-switcher[x-scheme="auto"]:after {
+    filter: invert(0);
+}
+  
+.theme-switcher[x-scheme="dark"]:after {
+    filter: invert(0);
+}
+  
+.theme-switcher[x-scheme="light"]:after {
+    filter: invert(0);
+}
