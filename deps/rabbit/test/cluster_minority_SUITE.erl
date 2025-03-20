@@ -9,6 +9,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([export_all, nowarn_export_all]).
 
@@ -389,9 +390,11 @@ remove_node_when_seed_node_is_leader(Config) ->
     ct:pal("Member A state: ~0p", [Pong]),
     case Pong of
         {pong, leader} ->
-            Ret = rabbit_control_helper:command(
-                    forget_cluster_node, A, [atom_to_list(B)], []),
-            ?assertEqual(ok, Ret);
+            ?awaitMatch(
+               ok,
+               rabbit_control_helper:command(
+                 forget_cluster_node, A, [atom_to_list(B)], []),
+               60000);
         Ret ->
             ct:pal("A is not the expected leader: ~p", [Ret]),
             {skip, "Node A was not a leader"}
