@@ -34,10 +34,11 @@ jobs:
       run: git fetch --tags
 
     - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.17
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ inputs.erlang_version }}
         elixir-version: ${{ inputs.elixir_version }}
+        version-type: strict
         hexpm-mirrors: |
           https://builds.hex.pm
           https://cdn.jsdelivr.net/hex
