@@ -303,18 +303,6 @@ mapped(cast, 'end', State) ->
 mapped(cast, {flow_link, OutHandle, Flow0, RenewWhenBelow}, State0) ->
     State = send_flow_link(OutHandle, Flow0, RenewWhenBelow, State0),
     {keep_state, State};
-<<<<<<< HEAD
-mapped(cast, {flow_session, Flow0 = #'v1_0.flow'{incoming_window = {uint, IncomingWindow}}},
-       #state{next_incoming_id = NII,
-              next_outgoing_id = NOI} = State) ->
-    Flow = Flow0#'v1_0.flow'{
-                   next_incoming_id = maybe_uint(NII),
-                   next_outgoing_id = uint(NOI),
-                   outgoing_window = ?UINT_OUTGOING_WINDOW},
-    ok = send(Flow, State),
-    {keep_state, State#state{incoming_window = IncomingWindow}};
-mapped(cast, #'v1_0.end'{error = Err}, State) ->
-=======
 mapped(cast, {flow_session, IncomingWindow, RenewWhenBelow}, State0) ->
     AutoFlow = case RenewWhenBelow of
                    never -> never;
@@ -324,8 +312,7 @@ mapped(cast, {flow_session, IncomingWindow, RenewWhenBelow}, State0) ->
                          auto_flow = AutoFlow},
     send_flow_session(State),
     {keep_state, State};
-mapped(cast, #'v1_0.end'{} = End, State) ->
->>>>>>> 35394625a (Auto widen session incoming-window in AMQP 1.0 client)
+mapped(cast, #'v1_0.end'{error = Err}, State) ->
     %% We receive the first end frame, reply and terminate.
     _ = send_end(State),
     % TODO: send notifications for links?
