@@ -21,6 +21,10 @@ on:
         # also used in the setup-beam step (same tag should work for both)
         description: OTP version (eg. `26`, `26.2.5.6`)
         default: 27
+      otp_build_version:
+        # OTP to compile RabbitMQ with; needs to match what setup-beam expects
+        description: OTP build version
+        default: 27
       build_arm:
         description: Build for ARM64 as well?
         type: boolean
@@ -37,6 +41,8 @@ jobs:
       matrix:
         otp_version:
         - ${{ github.event.inputs.otp_version || '27' }}
+        otp_build_version:
+        - ${{ github.event.inputs.otp_build_version || '27' }}
     runs-on: ubuntu-latest
     outputs:
       authorized: ${{ steps.authorized.outputs.authorized }}
@@ -56,7 +62,8 @@ jobs:
         if: steps.authorized.outputs.authorized == 'true'
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp_version }}
+          otp-version: ${{ matrix.otp_build_version }}
+          version-type: strict
           elixir-version: latest
       - name: make package-generic-unix
         if: steps.authorized.outputs.authorized == 'true'
