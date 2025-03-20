@@ -641,12 +641,7 @@ grow_then_shrink_coordinator_cluster(Config) ->
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    ok = rabbit_control_helper:command(stop_app, Server1),
-    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
-    ok = rabbit_control_helper:command(start_app, Server1),
-    ok = rabbit_control_helper:command(stop_app, Server2),
-    ok = rabbit_control_helper:command(join_cluster, Server2, [atom_to_list(Server0)], []),
-    ok = rabbit_control_helper:command(start_app, Server2),
+    _Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config),
 
     rabbit_ct_helpers:await_condition(
       fun() ->
@@ -683,29 +678,27 @@ grow_coordinator_cluster(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    ok = rabbit_control_helper:command(stop_app, Server1),
-    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
-    rabbit_control_helper:command(start_app, Server1),
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Server1, [Server0]),
     %% at this point there _probably_ won't be a stream coordinator member on
     %% Server1
 
     %% check we can add a new stream replica for the previously declare stream
     ?assertEqual(ok,
-                 rpc:call(Server1, rabbit_stream_queue, add_replica,
-                          [<<"/">>, Q, Server1])),
+                 rpc:call(Server0, rabbit_stream_queue, add_replica,
+                          [<<"/">>, Q, Server0])),
     %% also check we can declare a new stream when calling Server1
     Q2 = unicode:characters_to_binary([Q, <<"_2">>]),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
-                 declare(Config, Server1, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config1, Server0, Q2, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
     %% wait until the stream coordinator detects there is a new rabbit node
     %% and adds a new member on the new node
     rabbit_ct_helpers:await_condition(
       fun() ->
-              case rpc:call(Server0, ra, members,
-                            [{rabbit_stream_coordinator, Server0}]) of
+              case rpc:call(Server1, ra, members,
+                            [{rabbit_stream_coordinator, Server1}]) of
                   {_, Members, _} ->
                       Nodes = lists:sort([N || {_, N} <- Members]),
                       lists:sort([Server0, Server1]) == Nodes;
@@ -713,7 +706,7 @@ grow_coordinator_cluster(Config) ->
                       false
               end
       end, 60000),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    rabbit_ct_broker_helpers:rpc(Config1, 1, ?MODULE, delete_testcase_queue, [Q]).
 
 shrink_coordinator_cluster(Config) ->
     [Server0, Server1, Server2] =
@@ -979,19 +972,17 @@ consume_without_local_replica(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Q = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     %% Add another node to the cluster, but it won't have a replica
-    ok = rabbit_control_helper:command(stop_app, Server1),
-    ok = rabbit_control_helper:command(join_cluster, Server1, [atom_to_list(Server0)], []),
-    rabbit_control_helper:command(start_app, Server1),
+    Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Server1, [Server0]),
     timer:sleep(1000),
 
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config1, Server0),
     qos(Ch1, 10, false),
     ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:subscribe(Ch1, #'basic.consume'{queue = Q, consumer_tag = <<"ctag">>},
                                        self())),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_testcase_queue, [Q]).
+    rabbit_ct_broker_helpers:rpc(Config1, 1, ?MODULE, delete_testcase_queue, [Q]).
 
 consume(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
