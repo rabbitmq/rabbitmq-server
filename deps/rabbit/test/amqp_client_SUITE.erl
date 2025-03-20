@@ -5905,7 +5905,7 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
 session_flow_control_default_max_frame_size(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
-    {_, Session, LinkPair} = Init = init(Config),
+    {Connection, Session, LinkPair} = init(Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
@@ -5964,7 +5964,9 @@ session_flow_control_default_max_frame_size(Config) ->
     ok = amqp10_client:detach_link(Sender),
     ok = amqp10_client:detach_link(Receiver),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
-    ok = close(Init).
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
 
 %% Test session flow control with large messages split into multiple transfer frames.
 session_flow_control_small_max_frame_size(Config) ->
