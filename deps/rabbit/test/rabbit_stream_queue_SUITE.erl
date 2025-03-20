@@ -639,9 +639,9 @@ grow_then_shrink_coordinator_cluster(Config) ->
     Q = ?config(queue_name, Config),
 
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
-                 declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+                 declare(Config, Server1, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
 
-    _Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config),
+    _Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Server1, [Server0, Server2]),
 
     rabbit_ct_helpers:await_condition(
       fun() ->
@@ -655,17 +655,17 @@ grow_then_shrink_coordinator_cluster(Config) ->
               end
       end, 60000),
 
-    ok = rabbit_control_helper:command(stop_app, Server1),
-    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server1)], []),
+    ok = rabbit_control_helper:command(stop_app, Server0),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server1, [atom_to_list(Server0)], []),
     ok = rabbit_control_helper:command(stop_app, Server2),
-    ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server2)], []),
+    ok = rabbit_control_helper:command(forget_cluster_node, Server1, [atom_to_list(Server2)], []),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              case rpc:call(Server0, ra, members,
-                            [{rabbit_stream_coordinator, Server0}]) of
+              case rpc:call(Server1, ra, members,
+                            [{rabbit_stream_coordinator, Server1}]) of
                   {_, Members, _} ->
                       Nodes = lists:sort([N || {_, N} <- Members]),
-                      lists:sort([Server0]) == Nodes;
+                      lists:sort([Server1]) == Nodes;
                   _ ->
                       false
               end
