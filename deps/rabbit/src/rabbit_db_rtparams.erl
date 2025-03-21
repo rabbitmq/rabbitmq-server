@@ -113,11 +113,16 @@ set_in_khepri_tx(Key, Term) ->
     Path = khepri_rp_path(Key),
     Record = #runtime_parameters{key   = Key,
                                  value = Term},
-    TxApiVersion = rabbit_khepri:tx_api_version(),
+    UsesUniformWriteRet = try
+                              khepri_tx:api_uses(uniform_write_ret)
+                          catch
+                              error:undef ->
+                                  false
+                          end,
     case khepri_tx_adv:put(Path, Record) of
-        {ok, #{Path := #{data := Params}}} when TxApiVersion >= 1 ->
+        {ok, #{Path := #{data := Params}}} when UsesUniformWriteRet ->
             {old, Params#runtime_parameters.value};
-        {ok, #{data := Params}} when TxApiVersion =:= 0 ->
+        {ok, #{data := Params}} when not UsesUniformWriteRet ->
             {old, Params#runtime_parameters.value};
         {ok, _} ->
             new
