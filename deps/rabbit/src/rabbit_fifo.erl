@@ -2934,21 +2934,39 @@ do_checkpoints(Ts,
                           Smallest
                   end,
     MsgsTot = messages_total(MacState),
+    #{segments_range := SegRange,
+      num_segments := NumSegments} = ra_aux:log_stats(RaAux),
+    SegmentsMightBeDeletable = case SegRange of
+                            undefined ->
+                                false;
+                            {S, _E} ->
+                                NewSmallest > S
+                        end,
+    CanReclaimSegments = NumSegments > 1 andalso
+                         SegmentsMightBeDeletable,
+
     {CheckMinInterval, CheckMinIndexes, CheckMaxIndexes} =
         persistent_term:get(quorum_queue_checkpoint_config,
                             {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
     EnoughTimeHasPassed = TimeSince > CheckMinInterval,
 
-    %% enough time has passed and enough indexes have been committed
-    case (IndexesSince > MinIndexes andalso
-          EnoughTimeHasPassed) orelse
-         %% the queue is empty and some commands have been
-         %% applied since the last checkpoint
-         (MsgsTot == 0 andalso
-          IndexesSince > CheckMinIndexes andalso
-          EnoughTimeHasPassed) orelse
-         Force of
+    case EnoughTimeHasPassed andalso
+         (
+          %% condition 1: enough indexes have been comitted since the last
+          %% checkpoint
+          (IndexesSince > MinIndexes) orelse
+          %% condition 2 the queue is empty and _some_ commands (more than 64)
+          %% have been applied since the last checkpoint
+          (MsgsTot == 0 andalso
+           IndexesSince > 64) orelse
+          %% condition 3: there are segments and the number of entries in
+          %% segments is considerably larger than the number of messages
+          %% in the queue
+          CanReclaimSegments orelse
+          %% doing it anyway
+          Force
+         ) of
         true ->
             %% take fewer checkpoints the more messages there are on queue
             NextIndexes = min(max(MsgsTot, CheckMinIndexes), CheckMaxIndexes),

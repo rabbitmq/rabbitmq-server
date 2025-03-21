@@ -100,7 +100,7 @@
 % represents a partially applied module call
 
 -define(CHECK_MIN_INTERVAL_MS, 1000).
--define(CHECK_MIN_INDEXES, 4096).
+-define(CHECK_MIN_INDEXES, 4096 * 2).
 -define(CHECK_MAX_INDEXES, 666_667).
 
 -define(USE_AVG_HALF_LIFE, 10000.0).
