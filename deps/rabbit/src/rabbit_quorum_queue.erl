@@ -145,8 +145,9 @@
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
 -define(SNAPSHOT_INTERVAL, 8192). %% the ra default is 4096
-% -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
--define(MIN_CHECKPOINT_INTERVAL, 8192). %% the ra default is 16384
+%% setting a low default here to allow quorum queues to better chose themselves
+%% when to take a checkpoint
+-define(MIN_CHECKPOINT_INTERVAL, 64).
 -define(LEADER_HEALTH_CHECK_TIMEOUT, 5_000).
 -define(GLOBAL_LEADER_HEALTH_CHECK_TIMEOUT, 60_000).
 
