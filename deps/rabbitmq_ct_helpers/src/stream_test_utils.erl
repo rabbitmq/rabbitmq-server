@@ -77,6 +77,11 @@ subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit) ->
     {{response, 1, {subscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
+credit(Sock, Subscription, Credit) ->
+    CreditFrame = rabbit_stream_core:frame({credit, Subscription, Credit}),
+    ok = gen_tcp:send(Sock, CreditFrame),
+    ok.
+
 unsubscribe(Sock, C0, SubscriptionId) ->
     UnsubscribeFrame = rabbit_stream_core:frame({request, 1, {unsubscribe, SubscriptionId}}),
     ok = gen_tcp:send(Sock, UnsubscribeFrame),
@@ -149,20 +154,22 @@ sub_batch_entry_compressed(Sequence, Bodies) ->
     <<Sequence:64, 1:1, 1:3, 0:4, (length(Bodies)):16, (byte_size(Uncompressed)):32,
       CompressedLen:32, Compressed:CompressedLen/binary>>.
 
+
 receive_stream_commands(Sock, C0) ->
+    receive_stream_commands(gen_tcp, Sock, C0).
+
+receive_stream_commands(Transport, Sock, C0) ->
+    receive_stream_commands(Transport, Sock, C0, 10).
+
+receive_stream_commands(_Transport, _Sock, C0, 0) ->
+    rabbit_stream_core:next_command(C0);
+receive_stream_commands(Transport, Sock, C0, N) ->
     case rabbit_stream_core:next_command(C0) of
         empty ->
-            case gen_tcp:recv(Sock, 0, 5000) of
+            case Transport:recv(Sock, 0, 5000) of
                 {ok, Data} ->
                     C1 = rabbit_stream_core:incoming_data(Data, C0),
-                    case rabbit_stream_core:next_command(C1) of
-                        empty ->
-                            {ok, Data2} = gen_tcp:recv(Sock, 0, 5000),
-                            rabbit_stream_core:next_command(
-                              rabbit_stream_core:incoming_data(Data2, C1));
-                        Res ->
-                            Res
-                    end;
+                    receive_stream_commands(Transport, Sock, C1, N - 1);
                 {error, Err} ->
                     ct:fail("error receiving stream data ~w", [Err])
             end;
