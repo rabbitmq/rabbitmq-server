@@ -112,6 +112,7 @@
          get_ra_cluster_name/0,
          get_store_id/0,
          transfer_leadership/1,
+         fence/1,
 
          is_empty/0,
          create/2,
