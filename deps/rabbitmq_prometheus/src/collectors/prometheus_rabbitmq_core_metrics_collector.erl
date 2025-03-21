@@ -301,14 +301,25 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
-    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_RAW), Callback),
+    IncludedMFs = enabled_mfs_from_pdict(?METRICS_RAW),
+    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), IncludedMFs, Callback),
     collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
+    %% the detailed endpoint should emit queue_info only if queue metrics were requested
+    MFs = proplists:get_keys(IncludedMFs),
+    case lists:member(queue_coarse_metrics, MFs) orelse
+         lists:member(queue_consumer_count, MFs) orelse
+         lists:member(queue_metrics, MFs) of
+        true ->
+            emit_queue_info(?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), Callback);
+        false -> ok
+    end,
     %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(<<"detailed">>, Callback),
     ok;
 collect_mf('per-object', Callback) ->
     collect(true, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_queue_info(?METRIC_NAME_PREFIX, false, Callback),
     emit_identity_info(<<"per-object">>, Callback),
     ok;
 collect_mf('memory-breakdown', Callback) ->
@@ -405,6 +416,70 @@ identity_info(Endpoint) ->
             1
         }]
     }.
+
+emit_queue_info(Prefix, VHostsFilter, Callback) ->
+    Help = <<"A metric with a constant '1' value and labels that provide some queue details">>,
+
+    QInfos = lists:foldl(
+               fun(Q, Acc) ->
+                       #resource{virtual_host = VHost, name = Name} = QName = amqqueue:get_name(Q),
+                       case is_map(VHostsFilter) andalso maps:get(VHost, VHostsFilter) == false of
+                           true -> Acc;
+                           false ->
+                               QInfo0 = [{vhost, VHost}, {queue, Name}],
+                               case amqqueue:get_type(Q) of
+                                   rabbit_classic_queue = T ->
+                                       case amqqueue:qnode(Q) =:= node() of
+                                           true ->
+                                               QInfo = [{queue_type, T} | QInfo0],
+                                               [{QInfo, 1}|Acc];
+                                           false ->
+                                               %% skip non-local queues
+                                               Acc
+                                       end;
+                                   rabbit_quorum_queue = T ->
+                                       case rabbit_quorum_queue:infos(QName, [local_state]) of
+                                           [{local_state, not_member}] ->
+                                               %% skip quorum queues with no local member
+                                               Acc;
+                                           [{local_state, State}] ->
+                                               QInfo = [{queue_type, T}, {membership, State} | QInfo0],
+                                               [{QInfo, 1}|Acc];
+                                           _ ->
+                                               %% the queue might get deleted metrics are collected
+                                               Acc
+                                       end;
+                                   rabbit_stream_queue = T ->
+                                       case rabbit_stream_queue:info(Q, [leader,members]) of
+                                           [{leader, L}, {members, _}] when L =:= node() ->
+                                               QInfo = [{queue_type, T}, {membership, leader} | QInfo0],
+                                               [{QInfo, 1}|Acc];
+                                           [{leader, _}, {members, Members}] ->
+                                               case lists:member(node(), Members) of
+                                                   true ->
+                                                       QInfo = [{queue_type, stream}, {membership, follower} | QInfo0],
+                                                       [{QInfo, 1}|Acc];
+                                                   false ->
+                                                       %% skip stream queues with no local member
+                                                       Acc
+                                               end;
+                                           _ ->
+                                               %% the queue might get deleted metrics are collected
+                                               Acc
+                                       end;
+                                   T ->
+                                       case amqqueue:qnode(Q) =:= node() of
+                                           true ->
+                                               QInfo = [{queue_type, T} | QInfo0],
+                                               [{QInfo, 1}|Acc];
+                                           false ->
+                                               %% skip non-local queues
+                                               Acc
+                                       end
+                               end
+                       end
+               end, [], rabbit_amqqueue:list()),
+    Callback(prometheus_model_helpers:create_mf(<<Prefix/binary, "queue_info">>, Help, gauge, QInfos)).
 
 add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     MN = <<?METRIC_NAME_PREFIX/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
