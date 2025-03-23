@@ -21,6 +21,12 @@
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
+%% These shorthands for section qualifiers are defined in filtex-v1.0-wd09 §6.4.4.4
+-define(HEADER_SECTION, h).
+-define(MESSAGE_ANNOTATIONS_SECTION, m).
+-define(PROPERTIES_SECTION, p).
+-define(APPLICATION_PROPERTIES_SECTION, a).
+
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
@@ -38,12 +44,33 @@
 %% in enqueue messages. Used to ensure ordering of messages send from the
 %% same process
 
+-type msg_section() ::
+header |
+message_annotations |
+properties |
+application_properties.
+
+%% AMQP §3.2
+-type msg_section_short() ::
+?HEADER_SECTION |
+?MESSAGE_ANNOTATIONS_SECTION |
+?PROPERTIES_SECTION |
+?APPLICATION_PROPERTIES_SECTION.
+
+-type field_name() :: atom() | binary().
+
+-type filter_fields() :: [{msg_section(), field_name()}].
+
+%% Message metadata held in memory for consumers to filter on.
+-type msg_metadata() :: [{msg_section_short(), field_name(), term()}].
+
 -type msg_header() :: msg_size() |
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
                       #{size := msg_size(),
                         acquired_count => non_neg_integer(),
                         delivery_count => non_neg_integer(),
-                        expiry => milliseconds()}.
+                        expiry => milliseconds(),
+                        meta => msg_metadata()}.
 %% The message header:
 %% size: The size of the message payload in bytes.
 %% delivery_count: The number of unsuccessful delivery attempts.
@@ -116,6 +143,11 @@
 -define(DELIVERY_CHUNK_LIMIT_B, 128_000).
 
 -type milliseconds() :: non_neg_integer().
+-type timestamp() :: milliseconds().
+
+-type counter() :: non_neg_integer().
+-type return_counter() :: counter().
+
 -record(consumer_cfg,
         {meta = #{} :: consumer_meta(),
          pid :: pid(),
@@ -127,7 +159,9 @@
          %% command: `{credit, ReceiverDeliveryCount, Credit}'
          credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
-         priority = 0 :: integer()}).
+         priority = 0 :: integer(),
+         filter = [] :: rabbit_amqp_filtex:filter_expressions()
+        }).
 
 -record(consumer,
         {cfg = #consumer_cfg{},
@@ -138,7 +172,10 @@
          %% decremented for each delivery
          credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count()
+         delivery_count :: rabbit_queue_type:delivery_count(),
+         scanned_idxs = {0, 0} :: {HighPrio :: ra:index(),
+                                   NormalPrio :: ra:index()},
+         scanned_returns = 0 :: return_counter()
         }).
 
 -type consumer() :: #consumer{}.
@@ -169,12 +206,20 @@
          overflow_strategy = drop_head :: drop_head | reject_publish,
          max_length :: option(non_neg_integer()),
          max_bytes :: option(non_neg_integer()),
+         max_bytes_meta :: option(non_neg_integer()),
          %% whether single active consumer is on or not for this queue
          consumer_strategy = competing :: consumer_strategy(),
          %% the maximum number of unsuccessful delivery attempts permitted
          delivery_limit :: option(non_neg_integer()),
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
+         filter_enabled :: boolean(),
+         %% TODO Probably no need to store this filter here.
+         %% It should be good enough to store the 0.9.1 queue args filter table
+         %% in Khepri and to validate the consumer filter against this queue
+         %% filter in rabbit_quorum_queue when attaching the consumer.
+         %% Maybe still useful to expose effective filters in the Management UI?
+         filter_fields :: filter_fields(),
          unused_2 = ?NIL,
          unused_3 = ?NIL
         }).
@@ -182,13 +227,23 @@
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
-         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
+         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state() | rabbit_fifo_filter_q:state(),
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
-         returns = lqueue:new() :: lqueue:lqueue(term()),
+         returns = lqueue:new() :: lqueue:lqueue(term()) | gb_trees:tree(
+                                                             return_counter(),
+                                                             msg()),
+         %% * only used if filtering is enabled
+         %% * contains messages that are available and have a TTL set
+         %%   (we do not expire acquired messages)
+         filter_msgs_expiry = gb_trees:empty() :: gb_trees:tree(
+                                                    {timestamp(), ra:index()},
+                                                    %% reference into where this msg is stored
+                                                    hi | no | return_counter()),
          % a counter of enqueues - used to trigger shadow copy points
          % reset to 0 when release_cursor gets stored
-         enqueue_count = 0 :: non_neg_integer(),
+         enqueue_count = 0 :: counter(),
+         return_count = 0 :: return_counter(),
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
@@ -201,6 +256,11 @@
          unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
+         %% TODO should only be used for filtering enabled queues.
+         %% All active consumers including consumers that may be down or may contain 0 credits.
+         %% An auxiliary data structure used as the base service queue after a new message has
+         %% been enqueued.
+         consumers_q = priority_queue:new() :: priority_queue:q(),
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
@@ -223,8 +283,10 @@
                     checkpoint_max_indexes => non_neg_integer(),
                     max_length => non_neg_integer(),
                     max_bytes => non_neg_integer(),
+                    max_bytes_meta => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
+                    filter => false | filter_fields(),
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),
