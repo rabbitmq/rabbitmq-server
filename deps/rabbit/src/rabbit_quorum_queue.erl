@@ -371,6 +371,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
       single_active_consumer_on => single_active_consumer_on(Q),
+      filter => queue_filter(Q),
       created => erlang:system_time(millisecond)
      }.
 
@@ -392,6 +393,42 @@ single_active_consumer_on(Q) ->
         {bool, true} -> true;
         _            -> false
     end.
+
+%%TODO Allow defining any property or application-property and also a way
+%% to define "all properties" or "all application-properties"
+queue_filter(Q) ->
+    QArguments = amqqueue:get_arguments(Q),
+    case rabbit_misc:table_lookup(QArguments, <<"x-filter">>) of
+        {table, Filters} ->
+            case lists:filtermap(
+                   fun({<<"properties">>, _Type, <<"group-id">>}) ->
+                           {true, {properties, group_id}};
+                      (_) ->
+                           false
+                   end, Filters) of
+                [] ->
+                    false;
+                L ->
+                    L
+            end;
+        _ ->
+            false
+    end.
+
+%% TODO Allow more consumer filters.
+%% Error out if the consumer defines a filter which is not allowed on the queue.
+consumer_filter([], _Q) ->
+    {ok, []};
+consumer_filter(Filter = [{properties = Section, [{group_id = Field, _}]}], Q) ->
+    QFilter = queue_filter(Q),
+    case lists:member({Section, Field}, QFilter) of
+        true ->
+            {ok, Filter};
+        false ->
+            error
+    end;
+consumer_filter(_InvalidFilter, _Q) ->
+    error.
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
@@ -540,7 +577,9 @@ capabilities() ->
                           <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
+                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>,
+                          <<"x-filter">>
+                         ],
       consumer_arguments => [<<"x-priority">>],
       server_named => false}.
 
@@ -1004,52 +1043,61 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-    ConsumerMeta = #{ack => AckRequired,
-                     prefetch => Prefetch,
-                     args => Args,
-                     username => ActingUser,
-                     priority => Priority},
-    case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
-        {ok, _Infos, QState} ->
-            case single_active_consumer_on(Q) of
-                true ->
-                    %% get the leader from state
-                    case rabbit_fifo_client:query_single_active_consumer(QState) of
-                        {ok, SacResult} ->
-                            ActivityStatus = case SacResult of
-                                                 {value, {ConsumerTag, ChPid}} ->
-                                                     single_active;
-                                                 _ ->
-                                                     waiting
-                                             end,
+    FilterSpec = maps:get(filter, Spec, []),
+    case consumer_filter(FilterSpec, Q) of
+        error ->
+            {error, precondition_failed,
+             "invalid filter consuming from quorum ~ts: ~tp",
+             [rabbit_misc:rs(QName), FilterSpec]};
+        {ok, Filter} ->
+            ConsumerMeta = #{ack => AckRequired,
+                             prefetch => Prefetch,
+                             args => Args,
+                             username => ActingUser,
+                             priority => Priority,
+                             filter => Filter},
+            case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
+                {ok, _Infos, QState} ->
+                    case single_active_consumer_on(Q) of
+                        true ->
+                            %% get the leader from state
+                            case rabbit_fifo_client:query_single_active_consumer(QState) of
+                                {ok, SacResult} ->
+                                    ActivityStatus = case SacResult of
+                                                         {value, {ConsumerTag, ChPid}} ->
+                                                             single_active;
+                                                         _ ->
+                                                             waiting
+                                                     end,
+                                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
+                                                                         ExclusiveConsume,
+                                                                         AckRequired, QName,
+                                                                         Prefetch,
+                                                                         ActivityStatus == single_active,
+                                                                         ActivityStatus, Args),
+                                    emit_consumer_created(ChPid, ConsumerTag,
+                                                          ExclusiveConsume,
+                                                          AckRequired, QName,
+                                                          Prefetch, Args, none,
+                                                          ActingUser),
+                                    {ok, QState};
+                                Err ->
+                                    consume_error(Err, QName)
+                            end;
+                        false ->
                             rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
                                                                  ExclusiveConsume,
                                                                  AckRequired, QName,
-                                                                 Prefetch,
-                                                                 ActivityStatus == single_active,
-                                                                 ActivityStatus, Args),
-                            emit_consumer_created(ChPid, ConsumerTag,
-                                                  ExclusiveConsume,
-                                                  AckRequired, QName,
-                                                  Prefetch, Args, none,
-                                                  ActingUser),
-                            {ok, QState};
-                        Err ->
-                            consume_error(Err, QName)
+                                                                 Prefetch, true,
+                                                                 up, Args),
+                            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                  AckRequired, QName, Prefetch,
+                                                  Args, none, ActingUser),
+                            {ok, QState}
                     end;
-                false ->
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch, true,
-                                                         up, Args),
-                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, Prefetch,
-                                          Args, none, ActingUser),
-                    {ok, QState}
-            end;
-        Err ->
-            consume_error(Err, QName)
+                Err ->
+                    consume_error(Err, QName)
+            end
     end.
 
 consume_error({error, Reason}, QName) ->

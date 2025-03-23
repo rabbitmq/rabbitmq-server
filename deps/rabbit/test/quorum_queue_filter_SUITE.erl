@@ -1,0 +1,687 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
+%%
+
+-module(quorum_queue_filter_SUITE).
+
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_common/include/amqp10_filtex.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
+
+-compile([nowarn_export_all,
+          export_all]).
+
+-import(rabbit_ct_broker_helpers,
+        [rpc/4]).
+-import(rabbit_ct_helpers,
+        [eventually/1]).
+-import(amqp_utils,
+        [init/1,
+         close/1,
+         flush/1,
+         wait_for_credit/1,
+         wait_for_accepts/1,
+         detach_link_sync/1]).
+
+all() ->
+    [
+     {group, cluster_size_1}
+    ].
+
+groups() ->
+    [
+     {cluster_size_1, [shuffle],
+      [
+       message_groups_attach_empty_queue,
+       message_groups_attach_non_empty_queue,
+       message_groups_round_robin,
+       message_groups_requeue,
+       message_groups_same_filter,
+       ttl,
+       purge
+      ]}
+    ].
+
+init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(amqp10_client),
+    rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:merge_app_env(
+      Config, {rabbit, [{quorum_tick_interval, 1000},
+                        {stream_tick_interval, 1000}
+                       ]}).
+
+end_per_suite(Config) ->
+    Config.
+
+init_per_group(_Group, Config) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodename_suffix, Suffix}]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_group(_, Config) ->
+    rabbit_ct_helpers:run_teardown_steps(
+      Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    %% Assert that every testcase cleaned up.
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
+    %% Wait for sessions to terminate before starting the next test case.
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqp_session, list_local, []))),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% Consumers attach to an empty queue and filter messages by group-id.
+message_groups_attach_empty_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    FilterBlue = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                   {map, [{{symbol, <<"group-id">>}, {utf8, <<"blue">>}}]}},
+    {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver red">>, Address,
+                          unsettled, none, FilterRed),
+    {ok, ReceiverBlue} = amqp10_client:attach_receiver_link(
+                           Session, <<"receiver blue">>, Address,
+                           unsettled, none, FilterBlue),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"green">>},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t5">>, <<"m5">>))),
+    ok = wait_for_accepts(5),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    ok = amqp10_client:flow_link_credit(ReceiverBlue, 10, never, true),
+    receive {amqp10_msg, ReceiverBlue, M1} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M1)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverBlue, M2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverBlue, M5} ->
+                ?assertEqual(<<"m5">>, amqp10_msg:body_bin(M5)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M5)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverBlue, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(ReceiverRed, 10, never, true),
+    receive {amqp10_msg, ReceiverRed, M3} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+                ok = amqp10_client:accept_msg(ReceiverRed, M3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverRed, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = detach_link_sync(ReceiverBlue),
+    ok = detach_link_sync(ReceiverRed),
+    %% 1 green message
+    ?assertMatch({ok, #{message_count := 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Consumers attach to an non-empty queue and filter messages by group-id.
+message_groups_attach_non_empty_queue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"green">>},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t5">>, <<"m5">>))),
+    ok = wait_for_accepts(5),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    FilterBlue = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                   {map, [{{symbol, <<"group-id">>}, {utf8, <<"blue">>}}]}},
+    {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver red">>, Address,
+                          unsettled, none, FilterRed),
+    {ok, ReceiverBlue} = amqp10_client:attach_receiver_link(
+                           Session, <<"receiver blue">>, Address,
+                           unsettled, none, FilterBlue),
+
+    ok = amqp10_client:flow_link_credit(ReceiverBlue, 10, never, true),
+    receive {amqp10_msg, ReceiverBlue, M1} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M1)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverBlue, M2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverBlue, M5} ->
+                ?assertEqual(<<"m5">>, amqp10_msg:body_bin(M5)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M5)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverBlue, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(ReceiverRed, 10, never, true),
+    receive {amqp10_msg, ReceiverRed, M3} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+                ok = amqp10_client:accept_msg(ReceiverRed, M3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverRed, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = detach_link_sync(ReceiverBlue),
+    ok = detach_link_sync(ReceiverRed),
+    %% 1 green message
+    ?assertMatch({ok, #{message_count := 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+message_groups_round_robin(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, Address,
+                        settled, none, FilterRed),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, Address,
+                        settled, none, FilterRed),
+    {ok, Receiver3} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 3">>, Address,
+                        settled, none, FilterRed),
+
+    ok = amqp10_client:flow_link_credit(Receiver1, 10, never),
+    ok = amqp10_client:flow_link_credit(Receiver2, 10, never),
+    ok = amqp10_client:flow_link_credit(Receiver3, 10, never),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    flush(sender_credited),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = wait_for_accepts(3),
+
+    ReceiverMsg1 = receive {amqp10_msg, RecM1, M1} ->
+                               ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+                               RecM1
+                   after 5000 -> ct:fail({missing_msg, ?LINE})
+                   end,
+    ReceiverMsg2 = receive {amqp10_msg, RecM2, M2} ->
+                               ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+                               RecM2
+                   after 5000 -> ct:fail({missing_msg, ?LINE})
+                   end,
+    ReceiverMsg3 = receive {amqp10_msg, RecM3, M3} ->
+                               ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+                               RecM3
+                   after 5000 -> ct:fail({missing_msg, ?LINE})
+                   end,
+
+    %% We assert that RabbitMQ delivered the three red messages round robin.
+    %% However, we don't care which receiver received first.
+    ?assertEqual(lists:usort([Receiver1, Receiver2, Receiver3]),
+                 lists:usort([ReceiverMsg1, ReceiverMsg2, ReceiverMsg3])),
+
+    ok = detach_link_sync(Sender),
+    ok = detach_link_sync(Receiver1),
+    ok = detach_link_sync(Receiver2),
+    ok = detach_link_sync(Receiver3),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+message_groups_requeue(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    FilterBlue = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                   {map, [{{symbol, <<"group-id">>}, {utf8, <<"blue">>}}]}},
+    {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver red">>, Address,
+                          unsettled, none, FilterRed),
+    {ok, ReceiverBlue} = amqp10_client:attach_receiver_link(
+                           Session, <<"receiver blue">>, Address,
+                           unsettled, none, FilterBlue),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"green">>},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t5">>, <<"m5">>))),
+    ok = wait_for_accepts(5),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    ok = amqp10_client:flow_link_credit(ReceiverBlue, 10, never, true),
+    Msg1a = receive {amqp10_msg, ReceiverBlue, M1a} ->
+                        ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1a)),
+                        M1a
+            after 5000 -> ct:fail({missing_msg, ?LINE})
+            end,
+    Msg2 = receive {amqp10_msg, ReceiverBlue, M2} ->
+                       ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+                       M2
+           after 5000 -> ct:fail({missing_msg, ?LINE})
+           end,
+    Msg5a = receive {amqp10_msg, ReceiverBlue, M5a} ->
+                        ?assertEqual(<<"m5">>, amqp10_msg:body_bin(M5a)),
+                        M5a
+            after 5000 -> ct:fail({missing_msg, ?LINE})
+            end,
+    receive {amqp10_event, {link, ReceiverBlue, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(ReceiverRed, 10, never, true),
+    Msg3a = receive {amqp10_msg, ReceiverRed, M3a} ->
+                        ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3a)),
+                        M3a
+            after 5000 -> ct:fail({missing_msg, ?LINE})
+            end,
+    receive {amqp10_event, {link, ReceiverRed, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    flush(settling),
+    ok = amqp10_client:settle_msg(ReceiverRed, Msg3a, released),
+    ok = amqp10_client:settle_msg(ReceiverBlue, Msg2, accepted),
+    ok = amqp10_client:settle_msg(ReceiverBlue, Msg5a, released),
+    ok = amqp10_client:settle_msg(ReceiverBlue, Msg1a, released),
+
+    %% We expect to receive requeued messages in the requeued order.
+    ok = amqp10_client:flow_link_credit(ReceiverBlue, 10, never, true),
+    receive {amqp10_msg, ReceiverBlue, M5b} ->
+                ?assertEqual(<<"m5">>, amqp10_msg:body_bin(M5b)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M5b)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverBlue, M1b} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1b)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M1b)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverBlue, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(ReceiverRed, 10, never, true),
+    receive {amqp10_msg, ReceiverRed, M3b} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3b)),
+                ok = amqp10_client:accept_msg(ReceiverBlue, M3b)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, ReceiverRed, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = detach_link_sync(ReceiverBlue),
+    ok = detach_link_sync(ReceiverRed),
+    %% 1 green message
+    ?assertMatch({ok, #{message_count := 1}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Attach two consumers with the same filter.
+message_groups_same_filter(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, Address,
+                        unsettled, none, FilterRed),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, Address,
+                        unsettled, none, FilterRed),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = wait_for_accepts(4),
+    flush(sent),
+
+    ok = amqp10_client:flow_link_credit(Receiver1, 3, never),
+    Msg1 = receive {amqp10_msg, Receiver1, M1} ->
+                       ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+                       M1
+           after 5000 -> ct:fail({missing_msg, ?LINE})
+           end,
+    receive {amqp10_msg, Receiver1, M2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2))
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    Msg3 = receive {amqp10_msg, Receiver1, M3} ->
+                       ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+                       M3
+           after 5000 -> ct:fail({missing_msg, ?LINE})
+           end,
+    receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+    ok = amqp10_client_session:disposition(
+           Receiver1,
+           amqp10_msg:delivery_id(Msg1),
+           amqp10_msg:delivery_id(Msg3),
+           true, accepted),
+    {ok, M4} = amqp10_client:get_msg(Receiver1),
+    ?assertEqual(<<"m4">>, amqp10_msg:body_bin(M4)),
+    ok = amqp10_client:accept_msg(Receiver1, M4),
+
+    ok = detach_link_sync(Receiver1),
+    ok = detach_link_sync(Receiver2),
+    ok = detach_link_sync(Sender),
+    %% 1 green message
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+ttl(Config) ->
+    SourceQ = <<"source quorum queue">>,
+    DeadLetterQ = <<"dead letter queue">>,
+    SourceQAddr = rabbitmq_amqp_address:queue(SourceQ),
+    DeadLetterQAddr = rabbitmq_amqp_address:queue(DeadLetterQ),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, DeadLetterQ, #{}),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  SourceQ,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]},
+                                   <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                   <<"x-dead-letter-routing-key">> => {utf8, DeadLetterQ}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver red">>, SourceQAddr,
+                          unsettled, none, FilterRed),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, SourceQAddr),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_headers(
+                     #{ttl => 6000},
+                     amqp10_msg:set_properties(
+                       #{group_id => <<"red">>},
+                       amqp10_msg:new(<<"t1">>, <<"m1">>)))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_headers(
+                     #{ttl => 4000},
+                     amqp10_msg:set_properties(
+                       #{group_id => <<"red">>},
+                       amqp10_msg:new(<<"t2">>, <<"m2">>)))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_headers(
+                     #{ttl => 1},
+                     amqp10_msg:set_properties(
+                       #{group_id => <<"blue">>},
+                       amqp10_msg:new(<<"t3">>, <<"m3">>)))),
+    ok = wait_for_accepts(3),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    {ok, M1} = amqp10_client:get_msg(ReceiverRed),
+    {ok, M2} = amqp10_client:get_msg(ReceiverRed),
+    ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+    ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+    ok = amqp10_client:settle_msg(ReceiverRed, M1, released),
+    %% When we detach, M2 should also be requeued.
+    ok = detach_link_sync(ReceiverRed),
+
+    {ok, ReceiverDead} = amqp10_client:attach_receiver_link(
+                           Session, <<"dead letter queue receiver">>,
+                           DeadLetterQAddr, settled),
+
+    timer:sleep(5000),
+    ok = amqp10_client:flow_link_credit(ReceiverDead, 10, never, false),
+    receive {amqp10_msg, ReceiverDead, M3Dead} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3Dead))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverDead, M2Dead} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2Dead))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverDead, M1Dead} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1Dead))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = amqp10_client:flow_link_credit(ReceiverDead, 10, never, true),
+    receive {amqp10_event, {link, ReceiverDead, credit_exhausted}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = detach_link_sync(ReceiverDead),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, SourceQ)),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, DeadLetterQ)),
+    ok = close(Init).
+
+purge(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair,
+                  QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
+                                                             {symbol, <<"group-id">>}}]}
+                                  }}),
+
+    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
+    {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
+                          Session, <<"receiver red">>, Address,
+                          unsettled, none, FilterRed),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"blue">>},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:new(<<"t5">>, <<"m5">>))),
+    ok = wait_for_accepts(5),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    ok = amqp10_client:flow_link_credit(ReceiverRed, 3, never),
+    receive {amqp10_msg, ReceiverRed, M1} ->
+                ?assertEqual(<<"m1">>, amqp10_msg:body_bin(M1)),
+                ok = amqp10_client:accept_msg(ReceiverRed, M1)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverRed, M3} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3))
+                %% Keeps this message checked out.
+                %% Checked out messages should not get purged.
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, ReceiverRed, M4} ->
+                ?assertEqual(<<"m4">>, amqp10_msg:body_bin(M4)),
+                ok = amqp10_client:settle_msg(ReceiverRed, M4, released)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ?assertMatch({ok, #{message_count := 3}}, %% m2, m4, m5
+                 rabbitmq_amqp_client:purge_queue(LinkPair, QName)),
+    ok = detach_link_sync(ReceiverRed),
+    %% ready messages
+    ?assertMatch({ok, #{message_count := 1}}, %% m3
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).

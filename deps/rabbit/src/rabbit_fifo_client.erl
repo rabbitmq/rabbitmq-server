@@ -52,6 +52,7 @@
                    % status = up :: up | cancelled,
                    last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
+                   filter :: rabbit_amqp_filter:filter_expression(),
                    %% Remove this field when feature flag rabbitmq_4.0.0 becomes required.
                    delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} |
                                      credit_api_v2
@@ -165,7 +166,14 @@ enqueue(QName, Correlation, Msg,
                cfg = #cfg{soft_limit = SftLmt}} = State0) ->
     ServerId = pick_server(State0),
     % by default there is no correlation id
-    Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
+    %% TODO Check which metadata this queue filters on.
+    {utf8, GroupId} = mc:property(group_id, Msg),
+    %% TODO rabbit_fifo should provide this shorthand.
+    %% Probably it's best if rabbit_fifo_filter provides some client API
+    %% to map the subset of metadata to filter on (set via queue args) to
+    %% how to extract this from mc and store this in e3{}.
+    MsgMeta = [{_ShorthandPropertiesSection = p, group_id, GroupId}],
+    Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg, MsgMeta),
     ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
     IsSlow = map_size(Pending) >= SftLmt,
     State = State0#state{pending = Pending#{Seq => {Correlation, Cmd}},
@@ -418,12 +426,15 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
                                 false -> {credit_api_v1, 0}
                             end,
             ConsumerKey = maps:get(key, Reply, ConsumerId),
+            Filter = maps:get(filter, Meta),
             SDels = maps:update_with(
                       ConsumerTag,
-                      fun (C) -> C#consumer{ack = Ack} end,
+                      fun (C) -> C#consumer{ack = Ack,
+                                            filter = Filter} end,
                       #consumer{key = ConsumerKey,
                                 last_msg_id = LastMsgId,
                                 ack = Ack,
+                                filter = Filter,
                                 delivery_count = DeliveryCount},
                       CDels0),
             {ok, Reply, State0#state{leader = Leader,
