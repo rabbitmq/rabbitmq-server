@@ -17,6 +17,7 @@
          wait_for_credit/1,
          wait_for_accepts/1,
          send_messages/3, send_messages/4,
+         receive_messages/2,
          detach_link_sync/1,
          end_session_sync/1,
          wait_for_session_end/1,
@@ -111,6 +112,19 @@ send_messages(Sender, Left, Settled, BodySuffix) ->
             %% So, we must be defensive here and assume that the next amqp10_client:send/2 call might return {error, insufficient_credit}
             %% again causing us then to really wait to receive a credited event (instead of just processing an old credited event).
             send_messages(Sender, Left, Settled, BodySuffix)
+    end.
+
+receive_messages(Receiver, N) ->
+    receive_messages0(Receiver, N, []).
+
+receive_messages0(_Receiver, 0, Acc) ->
+    lists:reverse(Acc);
+receive_messages0(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            receive_messages0(Receiver, N - 1, [Msg | Acc])
+    after 30_000  ->
+              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
     end.
 
 detach_link_sync(Link) ->

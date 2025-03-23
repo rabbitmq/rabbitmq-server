@@ -37,6 +37,7 @@
          wait_for_credit/1,
          wait_for_accepts/1,
          send_messages/3, send_messages/4,
+         receive_messages/2,
          detach_link_sync/1,
          end_session_sync/1,
          wait_for_session_end/1,
@@ -6802,19 +6803,6 @@ drain_queue(Session, Address, N) ->
     flush("after drain"),
     ok = amqp10_client:detach_link(Receiver),
     {ok, Msgs}.
-
-receive_messages(Receiver, N) ->
-    receive_messages0(Receiver, N, []).
-
-receive_messages0(_Receiver, 0, Acc) ->
-    lists:reverse(Acc);
-receive_messages0(Receiver, N, Acc) ->
-    receive
-        {amqp10_msg, Receiver, Msg} ->
-            receive_messages0(Receiver, N - 1, [Msg | Acc])
-    after 30000  ->
-              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
-    end.
 
 count_received_messages(Receiver) ->
     count_received_messages0(Receiver, 0).

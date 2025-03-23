@@ -1337,7 +1337,8 @@ capabilities() ->
                                <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
                                %% Quorum policies
-                               <<"dead-letter-strategy">>, <<"target-group-size">>],
+                               <<"dead-letter-strategy">>, <<"target-group-size">>,
+                               <<"filter-field-names">>],
       queue_arguments => [<<"x-max-length-bytes">>, <<"x-queue-type">>,
                           <<"x-max-age">>, <<"x-stream-max-segment-size-bytes">>,
                           <<"x-initial-cluster-size">>, <<"x-queue-leader-locator">>],

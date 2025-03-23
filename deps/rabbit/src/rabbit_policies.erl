@@ -47,6 +47,7 @@ register() ->
                           {policy_validator, <<"stream-filter-size-bytes">>},
                           {policy_validator, <<"queue-leader-locator">>},
                           {policy_validator, <<"initial-cluster-size">>},
+                          {policy_validator, <<"filter-field-names">>},
                           {operator_policy_validator, <<"expires">>},
                           {operator_policy_validator, <<"message-ttl">>},
                           {operator_policy_validator, <<"max-length">>},
@@ -206,7 +207,18 @@ validate_policy0(<<"stream-filter-size-bytes">>, Value)
   when is_integer(Value), Value >= 16, Value =< 255 ->
     ok;
 validate_policy0(<<"stream-filter-size-bytes">>, Value) ->
-    {error, "~tp is not a valid filter size. Valid range is 16-255", [Value]}.
+    {error, "~tp is not a valid filter size. Valid range is 16-255", [Value]};
+
+validate_policy0(<<"filter-field-names">>, Value)
+  when is_list(Value) ->
+    try lists:foreach(fun(Name) ->
+                              rabbit_amqp_util:section_field_name_to_atom(Name)
+                      end, Value)
+    catch {unsupported_field_name, Name} ->
+              {error, "~tp is not a supported field name", [Name]}
+    end;
+validate_policy0(<<"filter-field-names">>, Value) ->
+    {error, "~tp is not a list of field names", [Value]}.
 
 merge_policy_value(<<"message-ttl">>, Val, OpVal) ->
     min(Val, OpVal);

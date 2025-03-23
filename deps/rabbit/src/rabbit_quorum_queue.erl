@@ -227,7 +227,13 @@ init(Q) when ?is_amqqueue(Q) ->
     %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
+    Filter = case filter_enabled(Q) of
+                 true ->
+                     filter_field_names(Q);
+                 false ->
+                     none
+             end,
+    {ok, rabbit_fifo_client:init(Servers, SoftLimit, Filter)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(_State) ->
@@ -256,6 +262,7 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
         ok ?= rabbit_queue_type_util:check_auto_delete(Q),
         ok ?= rabbit_queue_type_util:check_exclusive(Q),
         ok ?= rabbit_queue_type_util:check_non_durable(Q),
+        ok ?= check_queue_args(Q),
         start_cluster(Q)
     end.
 
@@ -386,6 +393,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
       single_active_consumer_on => single_active_consumer_on(Q),
+      filter_enabled => filter_enabled(Q),
       created => erlang:system_time(millisecond)
      }.
 
@@ -402,10 +410,96 @@ queue_arg_has_precedence(_Policy, QueueArg) ->
     QueueArg.
 
 single_active_consumer_on(Q) ->
+    is_queue_arg(<<"x-single-active-consumer">>, Q).
+
+check_queue_args(Q) ->
+    case filter_enabled(Q) andalso
+         single_active_consumer_on(Q) of
+        true ->
+            Name = amqqueue:get_name(Q),
+            {protocol_error, precondition_failed,
+             "queue arguments x-filter-enabled and x-single-active-consumer "
+             "are mutually exclusive for quorum ~ts",
+             [rabbit_misc:rs(Name)]};
+        false ->
+            ok
+    end.
+
+is_queue_arg(QArgument, Q) ->
     QArguments = amqqueue:get_arguments(Q),
-    case rabbit_misc:table_lookup(QArguments, <<"x-single-active-consumer">>) of
+    case rabbit_misc:table_lookup(QArguments, QArgument) of
         {bool, true} -> true;
         _            -> false
+    end.
+
+consumer_filter(Spec, Args, Q) ->
+    FilterSpec = maps:get(filter, Spec, []),
+    JmsSelector = case rabbit_misc:table_lookup(Args, <<"x-jms-selector">>) of
+                      undefined -> undefined;
+                      {longstr, Selector} -> Selector
+                  end,
+    FilterSpecDefined = FilterSpec =/= [],
+    JmsSelectorDefined = JmsSelector =/= undefined,
+    case {filter_enabled(Q), FilterSpecDefined, JmsSelectorDefined} of
+        {_, false, false} ->
+            {ok, none};
+        {_, true, true} ->
+            %% AMQP filter expressions and JMS message selectors
+            %% are mutually exclusive
+            error;
+        {true, true, false} ->
+            {ok, {property, FilterSpec}};
+        {true, false, true} ->
+            case parse_jms_selector(JmsSelector) of
+                {ok, Expr} ->
+                    {ok, {jms, Expr}};
+                error ->
+                    error
+            end;
+        {false, _, _} ->
+            QName = amqqueue:get_name(Q),
+            rabbit_log:warning("argument 'x-filter-enabled' must be 'true' "
+                               "for consumer to filter on quorum ~ts",
+                               [rabbit_misc:rs(QName)]),
+            error
+    end.
+
+parse_jms_selector(JmsSelector) ->
+    String = unicode:characters_to_list(JmsSelector),
+    case rabbit_jms_selector_lexer:string(String) of
+        {ok, Tokens, _EndLocation} ->
+            case rabbit_jms_selector_parser:parse(Tokens) of
+                {ok, _Expr} = Ok ->
+                    % rabbit_log:debug("~s:~s~nJmsSelector: ~p~nTokens: ~p~nExpr: ~p",
+                    %                  [?MODULE, ?FUNCTION_NAME, JmsSelector, Tokens, _Expr]),
+                    Ok;
+                {error, Reason} ->
+                    rabbit_log:warning("failed to parse JMS message selector '~s': ~p",
+                                       [JmsSelector, Reason]),
+                    error
+            end;
+        {error, {_Line, _Mod, ErrDescriptor}, _Locaction} ->
+            Reason = lists:flatten(leex:format_error(ErrDescriptor)),
+            rabbit_log:warning("failed to scan JMS message selector '~s': ~p",
+                               [JmsSelector, Reason]),
+            error
+    end.
+
+filter_enabled(Q) ->
+    is_queue_arg(<<"x-filter-enabled">>, Q).
+
+filter_field_names(Q) ->
+    case args_policy_lookup(<<"filter-field-names">>,
+                            fun policy_has_precedence/2,
+                            Q) of
+        FieldNames when is_list(FieldNames) ->
+            lists:map(fun({longstr, Name}) ->
+                              rabbit_amqp_util:section_field_name_to_atom(Name);
+                         (Name) when is_binary(Name) ->
+                              rabbit_amqp_util:section_field_name_to_atom(Name)
+                      end, FieldNames);
+        _ ->
+            []
     end.
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
@@ -555,8 +649,13 @@ capabilities() ->
                           <<"x-max-in-memory-bytes">>, <<"x-overflow">>,
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
-                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
+                          <<"x-message-ttl">>, <<"x-queue-leader-locator">>,
+                          <<"x-filter-enabled">>, <<"x-filter-field-names">>
+                         ],
       consumer_arguments => [<<"x-priority">>],
+      %% AMQP property filter expressions
+      %% https://groups.oasis-open.org/higherlogic/ws/public/document?document_id=66227
+      amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>],
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
@@ -1023,52 +1122,60 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-    ConsumerMeta = #{ack => AckRequired,
-                     prefetch => Prefetch,
-                     args => Args,
-                     username => ActingUser,
-                     priority => Priority},
-    case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
-        {ok, _Infos, QState} ->
-            case single_active_consumer_on(Q) of
-                true ->
-                    %% get the leader from state
-                    case rabbit_fifo_client:query_single_active_consumer(QState) of
-                        {ok, SacResult} ->
-                            ActivityStatus = case SacResult of
-                                                 {value, {ConsumerTag, ChPid}} ->
-                                                     single_active;
-                                                 _ ->
-                                                     waiting
-                                             end,
+    case consumer_filter(Spec, Args, Q) of
+        error ->
+            {error, precondition_failed,
+             "invalid filter for quorum ~ts: consumer spec: ~tp consumer args: ~tp",
+             [rabbit_misc:rs(QName), Spec, Args]};
+        {ok, Filter} ->
+            ConsumerMeta = #{ack => AckRequired,
+                             prefetch => Prefetch,
+                             args => Args,
+                             username => ActingUser,
+                             priority => Priority,
+                             filter => Filter},
+            case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
+                {ok, _Infos, QState} ->
+                    case single_active_consumer_on(Q) of
+                        true ->
+                            %% get the leader from state
+                            case rabbit_fifo_client:query_single_active_consumer(QState) of
+                                {ok, SacResult} ->
+                                    ActivityStatus = case SacResult of
+                                                         {value, {ConsumerTag, ChPid}} ->
+                                                             single_active;
+                                                         _ ->
+                                                             waiting
+                                                     end,
+                                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
+                                                                         ExclusiveConsume,
+                                                                         AckRequired, QName,
+                                                                         Prefetch,
+                                                                         ActivityStatus == single_active,
+                                                                         ActivityStatus, Args),
+                                    emit_consumer_created(ChPid, ConsumerTag,
+                                                          ExclusiveConsume,
+                                                          AckRequired, QName,
+                                                          Prefetch, Args, none,
+                                                          ActingUser),
+                                    {ok, QState};
+                                Err ->
+                                    consume_error(Err, QName)
+                            end;
+                        false ->
                             rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
                                                                  ExclusiveConsume,
                                                                  AckRequired, QName,
-                                                                 Prefetch,
-                                                                 ActivityStatus == single_active,
-                                                                 ActivityStatus, Args),
-                            emit_consumer_created(ChPid, ConsumerTag,
-                                                  ExclusiveConsume,
-                                                  AckRequired, QName,
-                                                  Prefetch, Args, none,
-                                                  ActingUser),
-                            {ok, QState};
-                        Err ->
-                            consume_error(Err, QName)
+                                                                 Prefetch, true,
+                                                                 up, Args),
+                            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                                  AckRequired, QName, Prefetch,
+                                                  Args, none, ActingUser),
+                            {ok, QState}
                     end;
-                false ->
-                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
-                                                         ExclusiveConsume,
-                                                         AckRequired, QName,
-                                                         Prefetch, true,
-                                                         up, Args),
-                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, Prefetch,
-                                          Args, none, ActingUser),
-                    {ok, QState}
-            end;
-        Err ->
-            consume_error(Err, QName)
+                Err ->
+                    consume_error(Err, QName)
+            end
     end.
 
 consume_error({error, Reason}, QName) ->

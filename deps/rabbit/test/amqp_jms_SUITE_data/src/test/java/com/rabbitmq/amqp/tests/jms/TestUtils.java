@@ -76,10 +76,18 @@ final class TestUtils {
     Hashtable<Object, Object> env = new Hashtable<>();
     env.put(Context.INITIAL_CONTEXT_FACTORY, "org.apache.qpid.jms.jndi.JmsInitialContextFactory");
 
-    String uri = brokerUri();
     // For a list of options, see
     // https://github.com/apache/qpid-jms/blob/main/qpid-jms-docs/Configuration.md#jms-configuration-options
-    uri = uri + "?jms.clientID=my-client-id";
+    String uri =
+        brokerUri()
+            + "?"
+            + "jms.clientID=my-client-id"
+            + "&jms.username="
+            + adminUsername()
+            + "&jms.password="
+            + adminPassword()
+            + "&jms.populateJMSXUserID=true"
+            + "&amqp.saslMechanisms=PLAIN";
     env.put("connectionfactory.testConnectionFactory", uri);
 
     env.putAll(extraEnv);
@@ -132,4 +140,44 @@ final class TestUtils {
   @Retention(RetentionPolicy.RUNTIME)
   @Documented
   @interface Classic {}
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface QueueArg {
+    String name();
+
+    String value();
+
+    Class<?> type() default String.class;
+  }
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface QueueArgList {
+    String name();
+
+    String[] values();
+  }
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface QueueArgBool {
+    String name();
+
+    boolean value();
+  }
+
+  @Target(ElementType.PARAMETER)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @interface QueueArgs {
+    QueueArg[] stringArgs() default {};
+
+    QueueArgList[] listArgs() default {};
+
+    QueueArgBool[] boolArgs() default {};
+  }
 }

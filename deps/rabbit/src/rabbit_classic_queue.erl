@@ -597,7 +597,9 @@ capabilities() ->
                                <<"max-age">>, <<"stream-max-segment-size-bytes">>,
                                <<"initial-cluster-size">>,
                                %% Quorum policies
-                               <<"delivery-limit">>, <<"dead-letter-strategy">>, <<"max-in-memory-length">>, <<"max-in-memory-bytes">>, <<"target-group-size">>],
+                               <<"delivery-limit">>, <<"dead-letter-strategy">>,
+                               <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
+                               <<"target-group-size">>, <<"filter-field-names">>],
       queue_arguments => [<<"x-expires">>, <<"x-message-ttl">>, <<"x-dead-letter-exchange">>,
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,

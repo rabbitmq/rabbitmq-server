@@ -14,6 +14,7 @@
 -export([
          init/1,
          init/2,
+         init/3,
          checkout/4,
          cancel_checkout/3,
          enqueue/3,
@@ -43,10 +44,11 @@
 -define(UNLIMITED_PREFETCH_COUNT, 2000). %% something large for ra
 %% controls the timer for closing cached segments
 -define(CACHE_SEG_TIMEOUT, 5000).
+-define(DEFAULT_MSG_PRIORITY, 4). %% defined in both AMQP and JMS
 
 -type seq() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
-
+-type filter() :: none | [rabbit_amqp_util:field_name()].
 
 -record(consumer, {key :: rabbit_fifo:consumer_key(),
                    % status = up :: up | cancelled,
@@ -59,7 +61,8 @@
 
 -record(cfg, {servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
-              timeout :: non_neg_integer()
+              timeout :: non_neg_integer(),
+              filter :: filter()
              }).
 
 -record(state, {cfg :: #cfg{},
@@ -100,10 +103,15 @@ init(Servers) ->
 %% @param MaxPending size defining the max number of pending commands.
 -spec init([ra:server_id()], non_neg_integer()) -> state().
 init(Servers, SoftLimit) ->
+    init(Servers, SoftLimit, none).
+
+-spec init([ra:server_id()], non_neg_integer(), filter()) -> state().
+init(Servers, SoftLimit, Filter) ->
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
     #state{cfg = #cfg{servers = Servers,
                       soft_limit = SoftLimit,
-                      timeout = Timeout * 1000}}.
+                      timeout = Timeout * 1000,
+                      filter = Filter}}.
 
 %% @doc Enqueues a message.
 %% @param QueueName Name of the queue.
@@ -162,10 +170,11 @@ enqueue(QName, Correlation, Msg,
                queue_status = go,
                next_seq = Seq,
                next_enqueue_seq = EnqueueSeq,
-               cfg = #cfg{soft_limit = SftLmt}} = State0) ->
+               cfg = #cfg{soft_limit = SftLmt,
+                          filter = Filter}} = State0) ->
     ServerId = pick_server(State0),
-    % by default there is no correlation id
-    Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg),
+    MsgMeta = msg_meta(Msg, Filter),
+    Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg, MsgMeta),
     ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
     IsSlow = map_size(Pending) >= SftLmt,
     State = State0#state{pending = Pending#{Seq => {Correlation, Cmd}},
@@ -772,7 +781,8 @@ handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
 -spec untracked_enqueue([ra:server_id()], term()) ->
     ok.
 untracked_enqueue([ServerId | _], Msg) ->
-    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg),
+    Meta = #{}, %TODO include fields to filter on
+    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg, Meta),
     ok = ra:pipeline_command(ServerId, Cmd),
     ok.
 
@@ -1119,3 +1129,36 @@ send_pending(Cid, #state{unsent_commands = Unsent} = State0) ->
 
 now_ms() ->
     erlang:system_time(millisecond).
+
+msg_meta(_Msg, none) ->
+    #{};
+msg_meta(Msg, FieldNames) ->
+    Fields = lists:filtermap(fun(Name) ->
+                                     case get_field_value(Name, Msg) of
+                                         undefined ->
+                                             false;
+                                         Val ->
+                                             {true, {Name, Val}}
+                                     end
+                             end, FieldNames),
+    maps:merge(mc:routing_headers(Msg, []),
+               maps:from_list(Fields)).
+
+get_field_value(durable, Msg) ->
+    mc:is_persistent(Msg);
+get_field_value(priority, Msg) ->
+    case mc:priority(Msg) of
+        undefined ->
+            ?DEFAULT_MSG_PRIORITY;
+        P ->
+            P
+    end;
+get_field_value(creation_time, Msg) ->
+    mc:timestamp(Msg);
+get_field_value(Name, Msg) ->
+    case mc:property(Name, Msg) of
+        {_Type, Val} ->
+            Val;
+        undefined ->
+            undefined
+    end.

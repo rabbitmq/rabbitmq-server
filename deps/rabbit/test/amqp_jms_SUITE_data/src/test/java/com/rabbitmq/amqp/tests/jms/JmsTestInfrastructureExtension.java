@@ -18,9 +18,11 @@ package com.rabbitmq.amqp.tests.jms;
 
 import static java.util.Collections.singletonMap;
 
+import com.rabbitmq.amqp.tests.jms.TestUtils.*;
 import com.rabbitmq.client.amqp.Connection;
 import com.rabbitmq.client.amqp.Environment;
 import com.rabbitmq.client.amqp.Management;
+import com.rabbitmq.client.amqp.Management.QueueSpecification;
 import com.rabbitmq.client.amqp.impl.AmqpEnvironmentBuilder;
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.Queue;
@@ -57,7 +59,7 @@ final class JmsTestInfrastructureExtension
   }
 
   private static Management.QueueType queueType(Parameter parameter) {
-    return parameter.isAnnotationPresent(TestUtils.Classic.class)
+    return parameter.isAnnotationPresent(Classic.class)
         ? Management.QueueType.CLASSIC
         : Management.QueueType.QUORUM;
   }
@@ -73,8 +75,29 @@ final class JmsTestInfrastructureExtension
           try (Environment environment = new AmqpEnvironmentBuilder().build();
               Connection connection =
                   environment.connectionBuilder().uri(TestUtils.brokerUri()).build()) {
+
             Management.QueueType type = queueType(parameter);
-            connection.management().queue(queueName).type(type).declare();
+            QueueSpecification queueSpec = connection.management().queue(queueName).type(type);
+
+            if (parameter.isAnnotationPresent(QueueArgs.class)) {
+              QueueArgs queueArgs = parameter.getAnnotation(QueueArgs.class);
+
+              for (QueueArg arg : queueArgs.stringArgs()) {
+                if (arg.type() == Boolean.class) {
+                  queueSpec = queueSpec.argument(arg.name(), Boolean.parseBoolean(arg.value()));
+                } else {
+                  queueSpec = queueSpec.argument(arg.name(), arg.value());
+                }
+              }
+              for (QueueArgBool arg : queueArgs.boolArgs()) {
+                queueSpec = queueSpec.argument(arg.name(), arg.value());
+              }
+              for (QueueArgList arg : queueArgs.listArgs()) {
+                queueSpec = queueSpec.argument(arg.name(), arg.values());
+              }
+            }
+
+            queueSpec.declare();
           }
           store(context).put("queueName", queueName);
           Context jndiContext = TestUtils.context(singletonMap("queue." + queueName, queueAddress));
