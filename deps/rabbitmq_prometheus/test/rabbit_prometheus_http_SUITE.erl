@@ -808,7 +808,8 @@ publish_via_stream_protocol(Stream, MsgPerBatch, Config) ->
     {ok, C5} = stream_test_utils:publish(S, C4, PublisherId2, SequenceFrom2, Payloads2),
 
     SubscriptionId = 97,
-    {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 1),
+    {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 0),
+    ok = stream_test_utils:credit(S, SubscriptionId, 1),
     %% delivery of first batch of messages
     {{deliver, SubscriptionId, _Bin1}, C7} = stream_test_utils:receive_stream_commands(S, C6),
     {ok, S, C7}.
