@@ -20,7 +20,6 @@
          close/1,
          discover/1,
          short_alias_of/1,
-         feature_flag_name/1,
          to_binary/1,
          default/0,
          default_alias/0,
@@ -335,15 +334,6 @@ short_alias_of(<<"stream">>) ->
 short_alias_of(_Other) ->
     undefined.
 
-feature_flag_name(<<"quorum">>) ->
-    quorum_queue;
-feature_flag_name(<<"classic">>) ->
-    undefined;
-feature_flag_name(<<"stream">>) ->
-    stream_queue;
-feature_flag_name(_) ->
-    undefined.
-
 %% If the client does not specify the type, the virtual host does not have any
 %% metadata default, and rabbit.default_queue_type is not set in the application env,
 %% use this type as the last resort.
@@ -374,7 +364,7 @@ to_binary(Other) ->
 
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
-is_enabled(Type) ->
+is_enabled(Type) when is_atom(Type) ->
     Type:is_enabled().
 
 -spec is_compatible(module(), boolean(), boolean(), boolean()) ->
