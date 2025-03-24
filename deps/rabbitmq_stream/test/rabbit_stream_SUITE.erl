@@ -1569,26 +1569,8 @@ wait_for_socket_close(Transport, S, Attempt) ->
             closed
     end.
 
-receive_commands(Transport, S, C0) ->
-    case rabbit_stream_core:next_command(C0) of
-        empty ->
-            case Transport:recv(S, 0, 5000) of
-                {ok, Data} ->
-                    C1 = rabbit_stream_core:incoming_data(Data, C0),
-                    case rabbit_stream_core:next_command(C1) of
-                        empty ->
-                            {ok, Data2} = Transport:recv(S, 0, 5000),
-                            rabbit_stream_core:next_command(
-                                rabbit_stream_core:incoming_data(Data2, C1));
-                        Res ->
-                            Res
-                    end;
-                {error, Err} ->
-                    ct:fail("error receiving data ~w", [Err])
-            end;
-        Res ->
-            Res
-    end.
+receive_commands(Transport, S, C) ->
+   stream_test_utils:receive_stream_commands(Transport, S, C).
 
 get_osiris_counters(Config) ->
     rabbit_ct_broker_helpers:rpc(Config,
