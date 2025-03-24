@@ -20,7 +20,6 @@
          close/1,
          discover/1,
          short_alias_of/1,
-         to_binary/1,
          default/0,
          default_alias/0,
          fallback/0,
@@ -299,7 +298,7 @@ discover(Other) when is_binary(Other) ->
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),
     Mod.
 
--spec short_alias_of(queue_type()) -> binary().
+-spec short_alias_of(queue_type()) -> undefined | binary().
 %% The opposite of discover/1: returns a short alias given a module name
 short_alias_of(<<"rabbit_quorum_queue">>) ->
     <<"quorum">>;
@@ -351,16 +350,6 @@ default() ->
 -spec default_alias() -> binary().
 default_alias() ->
     short_alias_of(default()).
-
--spec to_binary(module()) -> binary().
-to_binary(rabbit_classic_queue) ->
-    <<"classic">>;
-to_binary(rabbit_quorum_queue) ->
-    <<"quorum">>;
-to_binary(rabbit_stream_queue) ->
-    <<"stream">>;
-to_binary(Other) ->
-    atom_to_binary(Other).
 
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
