@@ -3577,7 +3577,7 @@ format(Config) ->
                                        ?FUNCTION_NAME, [QRecord, #{}]),
 
     %% test all up case
-    ?assertEqual(quorum, proplists:get_value(type, Fmt)),
+    ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt)),
     ?assertEqual(running, proplists:get_value(state, Fmt)),
     ?assertEqual(Server, proplists:get_value(leader, Fmt)),
     ?assertEqual(Server, proplists:get_value(node, Fmt)),
@@ -3594,7 +3594,7 @@ format(Config) ->
                                                ?FUNCTION_NAME, [QRecord, #{}]),
             ok = rabbit_control_helper:command(start_app, Server2),
             ok = rabbit_control_helper:command(start_app, Server3),
-            ?assertEqual(quorum, proplists:get_value(type, Fmt2)),
+            ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
             ?assertEqual(Server, proplists:get_value(node, Fmt2)),

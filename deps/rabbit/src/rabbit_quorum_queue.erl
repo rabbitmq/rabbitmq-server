@@ -1899,7 +1899,7 @@ format(Q, Ctx) when ?is_amqqueue(Q) ->
                             down
                     end
             end,
-    [{type, quorum},
+    [{type, rabbit_queue_type:short_alias_of(?MODULE)},
      {state, State},
      {node, LeaderNode},
      {members, Nodes},

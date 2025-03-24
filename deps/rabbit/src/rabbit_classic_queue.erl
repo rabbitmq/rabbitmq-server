@@ -251,7 +251,7 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
                 S ->
                     S
             end,
-    [{type, classic},
+    [{type, rabbit_queue_type:short_alias_of(?MODULE)},
      {state, State},
      {node, node(amqqueue:get_pid(Q))}].
 
