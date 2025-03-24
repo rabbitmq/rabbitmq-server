@@ -10,7 +10,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
--include_lib("rabbit/include/mc.hrl").
 
 -compile(export_all).
 
@@ -55,31 +54,31 @@ end_per_testcase(_Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-lookup_type_module(Config) ->
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, <<"classic">>)),
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, classic)),
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, rabbit_classic_queue)),
+lookup_type_module(_Config) ->
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, <<"param">>)),
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, param)),
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, runtime_parameter_test)),
 
-    ok = rabbit_registry:register(queue, <<"classic">>, rabbit_classic_queue),
+    ok = rabbit_registry:register(runtime_parameter, <<"param">>, rabbit_runtime_parameter_registry_test),
 
-    ?assertMatch({ok, rabbit_classic_queue}, rabbit_registry:lookup_type_module(queue, <<"classic">>)),
-    ?assertMatch({ok, rabbit_classic_queue}, rabbit_registry:lookup_type_module(queue, classic)),
-    ?assertMatch({ok, rabbit_classic_queue}, rabbit_registry:lookup_type_module(queue, rabbit_classic_queue)),
+    ?assertMatch({ok, rabbit_runtime_parameter_registry_test}, rabbit_registry:lookup_type_module(runtime_parameter, <<"param">>)),
+    ?assertMatch({ok, rabbit_runtime_parameter_registry_test}, rabbit_registry:lookup_type_module(runtime_parameter, param)),
+    ?assertMatch({ok, rabbit_runtime_parameter_registry_test}, rabbit_registry:lookup_type_module(runtime_parameter, rabbit_runtime_parameter_registry_test)),
 
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, quorum)).
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, another_param)).
 
-lookup_type_name(Config) ->
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_name(queue, <<"classic">>)),
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, classic)),
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(queue, rabbit_classic_queue)),
+lookup_type_name(_Config) ->
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_name(runtime_parameter, <<"param">>)),
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, param)),
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_module(runtime_parameter, runtime_parameter_test)),
 
-    ok = rabbit_registry:register(queue, <<"classic">>, rabbit_classic_queue),
+    ok = rabbit_registry:register(runtime_parameter, <<"param">>, rabbit_runtime_parameter_registry_test),
 
-    ?assertMatch({ok, <<"classic">>}, rabbit_registry:lookup_type_name(queue, <<"classic">>)),
-    ?assertMatch({ok, <<"classic">>}, rabbit_registry:lookup_type_name(queue, classic)),
-    ?assertMatch({ok, <<"classic">>}, rabbit_registry:lookup_type_name(queue, rabbit_classic_queue)),
+    ?assertMatch({ok, <<"param">>}, rabbit_registry:lookup_type_name(runtime_parameter, <<"param">>)),
+    ?assertMatch({ok, <<"param">>}, rabbit_registry:lookup_type_name(runtime_parameter, param)),
+    ?assertMatch({ok, <<"param">>}, rabbit_registry:lookup_type_name(runtime_parameter, rabbit_runtime_parameter_registry_test)),
 
-    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_name(queue, quorum)).
+    ?assertMatch({error, not_found}, rabbit_registry:lookup_type_name(runtime_parameter, another_param)).
 
 
 %% -------------------------------------------------------------------
