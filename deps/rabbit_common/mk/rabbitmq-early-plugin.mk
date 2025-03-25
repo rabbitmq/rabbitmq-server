@@ -4,7 +4,8 @@
 
 DIALYZER_OPTS ?= -Werror_handling -Wunmatched_returns -Wunknown
 
-dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(DEPS_DIR)/rabbitmq_cli/_build/dev/lib:$(dir $(shell elixir --eval ':io.format "~s~n", [:code.lib_dir :elixir ]'))
+dialyze: ELIXIR_LIBS = $(dir $(shell readlink -f `which elixir`))/../lib
+dialyze: ERL_LIBS = $(APPS_DIR):$(DEPS_DIR):$(ELIXIR_LIBS)
 
 # --------------------------------------------------------------------
 # Common Test flags.

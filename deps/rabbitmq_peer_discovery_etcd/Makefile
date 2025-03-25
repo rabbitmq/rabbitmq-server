@@ -1,6 +1,5 @@
 PROJECT = rabbitmq_peer_discovery_etcd
 PROJECT_DESCRIPTION = etcd-based RabbitMQ peer discovery backend
-PROJECT_MOD = rabbitmq_peer_discovery_etcd_app
 
 DEPS = rabbit_common rabbitmq_peer_discovery_common rabbit eetcd gun
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers ct_helper meck
