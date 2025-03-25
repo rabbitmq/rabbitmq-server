@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = 69fa181
+ERLANG_MK_VERSION = e13b4c7
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -669,6 +669,8 @@ define dep_autopatch_detect
 			echo mix; \
 		elif [ -f $(DEPS_DIR)/$1/rebar.lock -o -f $(DEPS_DIR)/$1/rebar.config ]; then \
 			echo rebar3; \
+		elif [ -f $(DEPS_DIR)/$1/Makefile ]; then \
+			echo noop; \
 		else \
 			exit 99; \
 		fi \
@@ -1784,7 +1786,12 @@ export ELIXIR
 
 ifeq ($(ELIXIR),system)
 # We expect 'elixir' to be on the path.
-ELIXIR_LIBS ?= $(dir $(shell readlink -f `which elixir`))/../lib
+ELIXIR_BIN ?= $(shell readlink -f `which elixir`)
+ELIXIR_LIBS ?= $(abspath $(dir $(ELIXIR_BIN))/../lib)
+# Fallback in case 'elixir' is a shim.
+ifeq ($(wildcard $(ELIXIR_LIBS)/elixir/),)
+ELIXIR_LIBS = $(abspath $(shell elixir -e 'IO.puts(:code.lib_dir(:elixir))')/../)
+endif
 ELIXIR_LIBS := $(ELIXIR_LIBS)
 export ELIXIR_LIBS
 ERL_LIBS := $(ERL_LIBS):$(ELIXIR_LIBS)
