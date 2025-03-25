@@ -51,6 +51,8 @@
 
 -export([disable_stats/1, enable_queue_totals/1]).
 
+-export([set_resp_not_found/2]).
+
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -1178,3 +1180,18 @@ catch_no_such_user_or_vhost(Fun, Replacement) ->
 %% error is thrown when the request is out of range
 sublist(List, S, L) when is_integer(L), L >= 0 ->
     lists:sublist(lists:nthtail(S-1, List), L).
+
+-spec set_resp_not_found(binary(), cowboy_req:req()) -> cowboy_req:req().
+set_resp_not_found(NotFoundBin, ReqData) ->
+    ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
+        not_found ->
+            <<"vhost_not_found">>;
+        _ ->
+            NotFoundBin
+    end,
+    ReqData1 = cowboy_req:set_resp_header(
+        <<"content-type">>, <<"application/json">>, ReqData),
+    cowboy_req:set_resp_body(rabbit_json:encode(#{
+        <<"error">> => <<"not_found">>,
+        <<"reason">> => ErrorMessage
+    }), ReqData1).
