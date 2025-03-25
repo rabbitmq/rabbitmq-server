@@ -277,14 +277,14 @@ format(Q, Ctx) ->
                                     down
                             end
                     end,
-            [{type, stream},
+            [{type, rabbit_queue_type:short_alias_of(?MODULE)},
              {state, State},
              {leader, LeaderNode},
              {online, Online},
              {members, Nodes},
              {node, node(Pid)}];
         _ ->
-            [{type, stream},
+            [{type, rabbit_queue_type:short_alias_of(?MODULE)},
              {state, down}]
     end.
 
