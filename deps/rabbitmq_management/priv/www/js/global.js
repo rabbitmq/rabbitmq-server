@@ -901,30 +901,8 @@ var oauth;
 /// this queue types are very well known to the server, at the very least
 /// this collection must be validated in terms of matching server queue
 /// types registry. I hope I will have time for this.
-
-/// this one defaults to classic, How can a queue be without type?
 var QUEUE_TYPE = function (queue) {
-    if (queue["arguments"]) {
-        if (queue["arguments"]["x-queue-type"]) {
-            return QUEUE_TYPE[queue["arguments"]["x-queue-type"]];
-        } else {
-            /// I observed that streams do not have
-            /// (at least always) x-queue-type
-            /// but all queues seems to be having
-            /// type field.
-            /// curiosuly is_[type] functions in main.js
-            /// rely on x-queue-type. is_stream might be
-            /// broken here.
-            if (queue.hasOwnProperty("type")) {
-                return QUEUE_TYPE[queue.type];
-            }
-            else {
-                return QUEUE_TYPE["classic"];
-            }
-        }
-    } else {
-        return QUEUE_TYPE["classic"];
-    }
+    return QUEUE_TYPE[get_queue_type(queue)];
 }
 // TODO: while this allows for custom queues
 // the proper way is to follow single source of truth
