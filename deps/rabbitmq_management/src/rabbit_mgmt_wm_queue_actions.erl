@@ -57,20 +57,6 @@ do_it(ReqData0, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
 
-<<<<<<< HEAD
-raise_not_found(ReqData, Context) ->
-    ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> 
-            "vhost_not_found";
-        _ ->
-            "queue_not_found"
-    end,
-    rabbit_mgmt_util:not_found(
-        rabbit_data_coercion:to_binary(ErrorMessage),
-        ReqData,
-        Context).
-=======
->>>>>>> dfe484be9 (Fix the exception logged by Cowboy caused by double reply (#13612))
 %%--------------------------------------------------------------------
 
 action(Else, _Q, ReqData, Context) ->

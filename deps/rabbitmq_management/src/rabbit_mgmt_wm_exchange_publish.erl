@@ -107,21 +107,6 @@ bad({{coordinator_unavailable, _}, _}, ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
-<<<<<<< HEAD
-raise_not_found(ReqData, Context) ->
-    ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
-        not_found -> 
-            "vhost_not_found";
-        _ ->
-            "exchange_not_found"
-    end,
-    rabbit_mgmt_util:not_found(
-        rabbit_data_coercion:to_binary(ErrorMessage),
-        ReqData,
-        Context).
-
-=======
->>>>>>> dfe484be9 (Fix the exception logged by Cowboy caused by double reply (#13612))
 %%--------------------------------------------------------------------
 
 decode(Payload, <<"string">>) -> Payload;
