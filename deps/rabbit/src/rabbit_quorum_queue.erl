@@ -971,10 +971,12 @@ dequeue(QName, NoAck, _LimiterPid, CTag0, QState0) ->
               rabbit_queue_type:consume_spec(),
               rabbit_fifo_client:state()) ->
     {ok, rabbit_fifo_client:state(), rabbit_queue_type:actions()} |
-    {error, global_qos_not_supported_for_queue_type | timeout}.
+    {error, atom(), Format :: string(), FormatArgs :: [term()]}.
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_quorum(Q) ->
-    {error, global_qos_not_supported_for_queue_type};
+    {error, not_implemented,
+     "~ts does not support global qos",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
     #{no_ack := NoAck,
       channel_pid := ChPid,
@@ -1008,45 +1010,57 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                      args => Args,
                      username => ActingUser,
                      priority => Priority},
-    {ok, _Infos, QState} = rabbit_fifo_client:checkout(ConsumerTag,
-                                                       Mode, ConsumerMeta,
-                                                       QState0),
-    case single_active_consumer_on(Q) of
-        true ->
-            %% get the leader from state
-            case rabbit_fifo_client:query_single_active_consumer(QState) of
-                {ok, SacResult} ->
-                    ActivityStatus = case SacResult of
-                                         {value, {ConsumerTag, ChPid}} ->
-                                             single_active;
-                                         _ ->
-                                             waiting
-                                     end,
+    case rabbit_fifo_client:checkout(
+           ConsumerTag, Mode, ConsumerMeta, QState0) of
+        {ok, _Infos, QState} ->
+            case single_active_consumer_on(Q) of
+                true ->
+                    %% get the leader from state
+                    case rabbit_fifo_client:query_single_active_consumer(QState) of
+                        {ok, SacResult} ->
+                            ActivityStatus = case SacResult of
+                                                 {value, {ConsumerTag, ChPid}} ->
+                                                     single_active;
+                                                 _ ->
+                                                     waiting
+                                             end,
+                            rabbit_core_metrics:consumer_created(
+                              ChPid, ConsumerTag, ExclusiveConsume,
+                              AckRequired, QName,
+                              Prefetch, ActivityStatus == single_active, %% Active
+                              ActivityStatus, Args),
+                            emit_consumer_created(
+                              ChPid, ConsumerTag, ExclusiveConsume,
+                              AckRequired, QName, Prefetch,
+                              Args, none, ActingUser),
+                            {ok, QState};
+                        Err ->
+                            consume_error(Err, QName)
+                    end;
+                false ->
                     rabbit_core_metrics:consumer_created(
                       ChPid, ConsumerTag, ExclusiveConsume,
                       AckRequired, QName,
-                      Prefetch, ActivityStatus == single_active, %% Active
-                      ActivityStatus, Args),
-                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                          AckRequired, QName, Prefetch,
-                                          Args, none, ActingUser),
-                    {ok, QState};
-                {error, Error} ->
-                    Error;
-                {timeout, _} ->
-                    {error, timeout}
+                      Prefetch, true, %% Active
+                      up, Args),
+                    emit_consumer_created(
+                      ChPid, ConsumerTag, ExclusiveConsume,
+                      AckRequired, QName, Prefetch,
+                      Args, none, ActingUser),
+                    {ok, QState}
             end;
-        false ->
-            rabbit_core_metrics:consumer_created(
-              ChPid, ConsumerTag, ExclusiveConsume,
-              AckRequired, QName,
-              Prefetch, true, %% Active
-              up, Args),
-            emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
-                                  AckRequired, QName, Prefetch,
-                                  Args, none, ActingUser),
-            {ok, QState}
+        Err ->
+            consume_error(Err, QName)
     end.
+
+consume_error({error, Reason}, QName) ->
+    {error, internal_error,
+     "failed consuming from quorum ~ts: ~tp",
+     [rabbit_misc:rs(QName), Reason]};
+consume_error({timeout, RaServerId}, QName) ->
+    {error, internal_error,
+     "timed out consuming from quorum ~ts: ~tp",
+     [rabbit_misc:rs(QName), RaServerId]}.
 
 cancel(_Q, #{consumer_tag := ConsumerTag} = Spec, State) ->
     maybe_send_reply(self(), maps:get(ok_msg, Spec, undefined)),

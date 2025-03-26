@@ -1494,12 +1494,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                                          topic_permission_cache = TopicPermCache},
                                    rabbit_global_counters:consumer_created(?PROTOCOL),
                                    {ok, [A], State1};
-                               {error, Reason} ->
-                                   protocol_error(
-                                     ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                     "Consuming from ~s failed: ~tp",
-                                     [rabbit_misc:rs(QName), Reason]);
-                               {protocol_error, _Type, Reason, Args} ->
+                               {error, _Type, Reason, Args} ->
                                    protocol_error(
                                      ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
                                      Reason, Args)
