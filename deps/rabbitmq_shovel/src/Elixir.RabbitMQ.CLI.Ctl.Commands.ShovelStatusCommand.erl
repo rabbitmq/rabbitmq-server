@@ -75,11 +75,18 @@ aliases() ->
     [].
 
 output({stream, ShovelStatus}, _Opts) ->
-    Formatted = [fmt_name(Name,
-                          fmt_status(Status,
-                                     #{type => Type,
-                                       last_changed => fmt_ts(Timestamp)}))
-                 || {Name, Type, Status, Timestamp} <- ShovelStatus],
+    Formatted = lists:map(fun ({Name, Type, Status, Timestamp}) ->
+                              fmt_name(Name,
+                                       fmt_status(Status,
+                                                  #{type => Type,
+                                                    last_changed => fmt_ts(Timestamp)}));
+                              %% Forward compatibility with >= 4.1
+                              ({Name, Type, Status, _Metrics, Timestamp}) ->
+                                  fmt_name(Name,
+                                       fmt_status(Status,
+                                                  #{type => Type,
+                                                    last_changed => fmt_ts(Timestamp)}))
+                          end, ShovelStatus),
     {stream, Formatted};
 output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).

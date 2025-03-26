@@ -45,6 +45,11 @@ status(Node) ->
 format(Node, {Name, Type, Info, TS}) ->
     [{node, Node}, {timestamp, format_ts(TS)}] ++
         format_name(Type, Name) ++
+        format_info(Info);
+%% Forward compatibility with >= 4.1
+format(Node, {Name, Type, Info, _Metrics, TS}) ->
+    [{node, Node}, {timestamp, format_ts(TS)}] ++
+        format_name(Type, Name) ++
         format_info(Info).
 
 format_name(static,  Name)          -> [{name,  Name},

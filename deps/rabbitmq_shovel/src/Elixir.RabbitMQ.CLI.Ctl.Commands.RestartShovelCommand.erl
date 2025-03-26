@@ -62,18 +62,23 @@ run([Name], #{node := Node, vhost := VHost}) ->
             case rabbit_shovel_status:find_matching_shovel(VHost, Name, Xs) of
                 undefined ->
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
-                Match ->
-                    {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} = Match,
-                    {_, HostingNode} = lists:keyfind(node, 1, Opts),
-                    case rabbit_misc:rpc_call(
-                        HostingNode, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
-                        {badrpc, _} = Error ->
-                            Error;
-                        {error, not_found} ->
-                            {error, rabbit_data_coercion:to_binary(ErrMsg)};
-                        ok -> ok
-                    end
+                {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} ->
+                    restart_shovel(ErrMsg, VHost, Name, Opts);
+                %% Forward compatibility with >= 4.1
+                {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
+                    restart_shovel(ErrMsg, VHost, Name, Opts)
             end
+    end.
+
+restart_shovel(ErrMsg, VHost, Name, Opts) ->
+    {_, HostingNode} = lists:keyfind(node, 1, Opts),
+    case rabbit_misc:rpc_call(
+        HostingNode, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
+        {badrpc, _} = Error ->
+            Error;
+        {error, not_found} ->
+            {error, rabbit_data_coercion:to_binary(ErrMsg)};
+        ok -> ok
     end.
 
 output(Output, _Opts) ->

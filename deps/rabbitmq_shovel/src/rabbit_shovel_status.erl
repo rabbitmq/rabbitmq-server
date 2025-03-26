@@ -191,7 +191,10 @@ inject_node_info(Node, Shovels) ->
 find_matching_shovel(VHost, Name, Shovels) ->
     case lists:filter(
         fun ({{V, S}, _Kind, _Status, _}) ->
-            VHost =:= V andalso Name =:= S
+                VHost =:= V andalso Name =:= S;
+            %% Forward compatibility with >= 4.1
+            ({{V, S}, _Kind, _Status, _Metrics, _}) ->
+                VHost =:= V andalso Name =:= S
         end, Shovels) of
             []  -> undefined;
         [S | _] -> S
