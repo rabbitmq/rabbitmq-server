@@ -1527,6 +1527,8 @@ gh_12635(Config) ->
     publish_confirm(Ch0, QQ),
     publish_confirm(Ch0, QQ),
 
+    %% a QQ will not take checkpoints more frequently than every 1s
+    timer:sleep(1000),
     %% force a checkpoint on leader
     ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, force_checkpoint]),
     rabbit_ct_helpers:await_condition(
