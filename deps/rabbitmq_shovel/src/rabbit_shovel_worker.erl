@@ -21,7 +21,7 @@
 -record(state, {name :: binary() | {rabbit_types:vhost(), binary()},
                 type :: static | dynamic,
                 config :: rabbit_shovel_behaviour:state(),
-                last_reported_status = running :: rabbit_shovel_status:blocked_status()}).
+                last_reported_status = {running, #{}} :: {rabbit_shovel_status:blocked_status(), rabbit_shovel_status:metrics()}}).
 
 start_link(Type, Name, Config) ->
     ShovelParameter = rabbit_shovel_util:get_shovel_parameter(Name),
@@ -224,7 +224,7 @@ human_readable_name(Name) ->
 maybe_report_blocked_status(#state{config = Config,
                                    last_reported_status = LastStatus} = State) ->
     case rabbit_shovel_behaviour:status(Config) of
-        ignore ->
+        {ignore, _} ->
             State;
         LastStatus ->
             State;
