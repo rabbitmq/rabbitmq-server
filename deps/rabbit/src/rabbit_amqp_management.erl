@@ -437,7 +437,13 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
                {{utf8, <<"durable">>}, {boolean, Durable}},
                {{utf8, <<"auto_delete">>}, {boolean, AutoDelete}},
                {{utf8, <<"exclusive">>}, {boolean, Exclusive}},
-               {{utf8, <<"type">>}, {utf8, rabbit_queue_type:to_binary(QType)}},
+               {{utf8, <<"type">>},
+                {utf8, case rabbit_queue_type:short_alias_of(QType) of
+                           undefined ->
+                               atom_to_binary(QType);
+                           ShortName ->
+                               ShortName
+                       end}},
                {{utf8, <<"arguments">>}, QArgs}
               ],
     KVList1 = if is_list(Replicas) ->
