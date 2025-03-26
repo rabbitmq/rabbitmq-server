@@ -297,8 +297,12 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
             %% TODO: track pids as they change
             State = ensure_monitor(QPid, QRef, State0),
             {ok, State#?STATE{pid = QPid}};
-        Err ->
-            Err
+        {error, exclusive_consume_unavailable} ->
+            {error, access_refused, "~ts in exclusive use",
+             [rabbit_misc:rs(QRef)]};
+        {error, Reason} ->
+            {error, internal_error, "failed consuming from classic ~ts: ~tp",
+             [rabbit_misc:rs(QRef), Reason]}
     end.
 
 %% Delete this function when feature flag rabbitmq_4.0.0 becomes required.

@@ -1506,10 +1506,9 @@ consume(Q, QoS, #state{
                                       State1 = State0#state{queue_states = QStates},
                                       State = maybe_set_queue_qos1(QoS, State1),
                                       {ok, State};
-                                  {error, Reason} = Err ->
-                                      ?LOG_ERROR("Failed to consume from ~s: ~p",
-                                                 [rabbit_misc:rs(QName), Reason]),
-                                      Err
+                                  {error, Type, Fmt, Args} ->
+                                      ?LOG_ERROR(Fmt, Args),
+                                      {error, Type}
                               end
                       end)
             end;
