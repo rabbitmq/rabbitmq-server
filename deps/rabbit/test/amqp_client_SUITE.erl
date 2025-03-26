@@ -201,7 +201,8 @@ groups() ->
        leader_transfer_stream_send,
        list_connections,
        detach_requeues_two_connections_classic_queue,
-       detach_requeues_two_connections_quorum_queue
+       detach_requeues_two_connections_quorum_queue,
+       attach_to_down_quorum_queue
       ]},
 
      {metrics, [shuffle],
@@ -6596,8 +6597,55 @@ bad_x_cc_annotation_exchange(Config) ->
     ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
+%% Attach a receiver to an unavailable quorum queue.
+attach_to_down_quorum_queue(Config) ->
+    QName = <<"q-down">>,
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    %% Create quorum queue with single replica on node 2.
+    {_, _, LinkPair2} = Init2 = init(2, Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair2,
+                QName,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                 <<"x-quorum-initial-group-size">> => {ulong, 1}
+                                }}),
+    ok = close(Init2),
+
+    %% Make quorum queue unavailable.
+    ok = rabbit_ct_broker_helpers:stop_broker(Config, 2),
+
+    OpnConf = connection_config(0, Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session0} = amqp10_client:begin_session_sync(Connection),
+    flush(attaching_receiver),
+    {ok, _Receiver} = amqp10_client:attach_receiver_link(
+                        Session0, <<"receiver">>, Address),
+    receive
+        {amqp10_event,
+         {session, Session0,
+          {ended,
+           #'v1_0.error'{
+              condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+              description = {utf8, Desc}}}}} ->
+            ?assertMatch(
+               <<"failed consuming from quorum queue 'q-down' in vhost '/'", _Reason/binary>>,
+               Desc)
+    after 9000 ->
+              ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = rabbit_ct_broker_helpers:start_broker(Config, 2),
+
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
+                       Session, <<"my link pair">>),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = close({Connection, Session, LinkPair}).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% internal
-%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 receive_all_messages(Receiver, Accept) ->
     receive_all_messages0(Receiver, Accept, []).
