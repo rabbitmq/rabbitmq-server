@@ -29,9 +29,9 @@ deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
     Status = rabbit_shovel_status:status(500),
-    {StaticStatusGroups, DynamicStatusGroups} = lists:foldl(fun({_,static,{S, _}, _}, {SMap, DMap}) ->
+    {StaticStatusGroups, DynamicStatusGroups} = lists:foldl(fun({_,static,{S, _}, _, _}, {SMap, DMap}) ->
                                                                     {maps:update_with(S, fun(C) -> C + 1 end, 1, SMap), DMap};
-                                                               ({_,dynamic,{S, _}, _}, {SMap, DMap}) ->
+                                                               ({_,dynamic,{S, _}, _, _}, {SMap, DMap}) ->
                                                                     {SMap, maps:update_with(S, fun(C) -> C + 1 end, 1, DMap)}
                                                             end, {#{}, #{}}, Status),
 
