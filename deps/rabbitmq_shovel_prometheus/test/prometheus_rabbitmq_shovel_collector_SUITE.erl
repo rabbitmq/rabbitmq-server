@@ -226,10 +226,10 @@ await_shovel(Name, Type) ->
 
 shovels_from_status(ExpectedState, dynamic) ->
     S = rabbit_shovel_status:status(),
-    [N || {{<<"/">>, N}, dynamic, {State, _}, _} <- S, State == ExpectedState];
+    [N || {{<<"/">>, N}, dynamic, {State, _}, _,  _} <- S, State == ExpectedState];
 shovels_from_status(ExpectedState, static) ->
     S = rabbit_shovel_status:status(),
-    [N || {N, static, {State, _}, _} <- S, State == ExpectedState].
+    [N || {N, static, {State, _}, _,  _} <- S, State == ExpectedState].
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).
