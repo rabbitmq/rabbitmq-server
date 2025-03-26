@@ -211,8 +211,7 @@
                   consume_spec(),
                   queue_state()) ->
     {ok, queue_state(), actions()} |
-    {error, term()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
 
 -callback cancel(amqqueue:amqqueue(),
                  cancel_spec(),
@@ -516,15 +515,14 @@ new(Q, State) when ?is_amqqueue(Q) ->
 
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
     {ok, state()} |
-    {error, term()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
 consume(Q, Spec, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
-        Err ->
+        Err = {error, _Type, _Fmt, _FmtArgs} ->
             Err
     end.
 

@@ -1354,39 +1354,23 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
     CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(ConsumerTag, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
-        rabbit_misc:protocol_error(
-              not_allowed, "reached maximum (~B) of consumers per channel", [MaxConsumers]);
+            rabbit_misc:protocol_error(
+              not_allowed,
+              "reached maximum (~B) of consumers per channel",
+              [MaxConsumers]);
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
             check_read_permitted(QueueName, User, AuthzContext),
-            ActualConsumerTag =
-                case ConsumerTag of
-                    <<>>  -> rabbit_guid:binary(rabbit_guid:gen_secure(),
-                                                "amq.ctag");
-                    Other -> Other
-                end,
-            case basic_consume(
-                   QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
-                   ExclusiveConsume, Args, NoWait, State) of
-                {ok, State1} ->
-                    {noreply, State1};
-                {error, exclusive_consume_unavailable} ->
-                    rabbit_misc:protocol_error(
-                      access_refused, "~ts in exclusive use",
-                      [rabbit_misc:rs(QueueName)]);
-                {error, global_qos_not_supported_for_queue_type} ->
-                    rabbit_misc:protocol_error(
-                      not_implemented, "~ts does not support global qos",
-                      [rabbit_misc:rs(QueueName)]);
-                {error, timeout} ->
-                    rabbit_misc:protocol_error(
-                      internal_error, "~ts timeout occurred during consume operation",
-                      [rabbit_misc:rs(QueueName)]);
-                {error, no_local_stream_replica_available} ->
-                    rabbit_misc:protocol_error(
-                      resource_error, "~ts does not have a running local replica",
-                      [rabbit_misc:rs(QueueName)])
-            end;
+            ActualTag = case ConsumerTag of
+                            <<>> ->
+                                rabbit_guid:binary(
+                                  rabbit_guid:gen_secure(), "amq.ctag");
+                            _ ->
+                                ConsumerTag
+                        end,
+            basic_consume(
+              QueueName, NoAck, ConsumerPrefetch, ActualTag,
+              ExclusiveConsume, Args, NoWait, State);
         {ok, _} ->
             %% Attempted reuse of consumer tag.
             rabbit_misc:protocol_error(
@@ -1685,11 +1669,11 @@ handle_method(_MethodRecord, _Content, _State) ->
 %% for why.
 basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
               ExclusiveConsume, Args, NoWait,
-              State = #ch{cfg = #conf{conn_pid = ConnPid,
-                                      user = #user{username = Username}},
-                          limiter = Limiter,
-                          consumer_mapping  = ConsumerMapping,
-                          queue_states = QueueStates0}) ->
+              State0 = #ch{cfg = #conf{conn_pid = ConnPid,
+                                       user = #user{username = Username}},
+                           limiter = Limiter,
+                           consumer_mapping = ConsumerMapping,
+                           queue_states = QueueStates0}) ->
     case rabbit_amqqueue:with_exclusive_access_or_die(
            QueueName, ConnPid,
            fun (Q) ->
@@ -1710,22 +1694,16 @@ basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualConsumerTag,
                     ActualConsumerTag,
                     {Q, {NoAck, ConsumerPrefetch, ExclusiveConsume, Args}},
                     ConsumerMapping),
-
-            State1 = State#ch{consumer_mapping = CM1,
-                              queue_states = QueueStates},
-            {ok, case NoWait of
-                     true  -> consumer_monitor(ActualConsumerTag, State1);
-                     false -> State1
-                 end};
-        {{error, exclusive_consume_unavailable} = E, _Q} ->
-            E;
-        {{error, global_qos_not_supported_for_queue_type} = E, _Q} ->
-            E;
-        {{error, no_local_stream_replica_available} = E, _Q} ->
-            E;
-        {{error, timeout} = E, _Q} ->
-            E;
-        {{protocol_error, Type, Reason, ReasonArgs}, _Q} ->
+            State1 = State0#ch{consumer_mapping = CM1,
+                               queue_states = QueueStates},
+            State = case NoWait of
+                        true ->
+                            consumer_monitor(ActualConsumerTag, State1);
+                        false ->
+                            State1
+                    end,
+            {noreply, State};
+        {{error, Type, Reason, ReasonArgs}, _Q} ->
             rabbit_misc:protocol_error(Type, Reason, ReasonArgs)
     end.
 

@@ -290,19 +290,23 @@ format(Q, Ctx) ->
 
 consume(Q, #{mode := {simple_prefetch, 0}}, _)
   when ?amqqueue_is_stream(Q) ->
-    {protocol_error, precondition_failed, "consumer prefetch count is not set for stream ~ts",
+    {error, precondition_failed,
+     "consumer prefetch count is not set for stream ~ts",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{no_ack := true,
              mode := {simple_prefetch, _}}, _)
   when ?amqqueue_is_stream(Q) ->
-    {protocol_error, not_implemented,
+    {error, not_implemented,
      "automatic acknowledgement not supported by stream ~ts",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, #{limiter_active := true}, _State)
   when ?amqqueue_is_stream(Q) ->
-    {error, global_qos_not_supported_for_queue_type};
+    {error, not_implemented,
+     "~ts does not support global qos",
+     [rabbit_misc:rs(amqqueue:get_name(Q))]};
 consume(Q, Spec, #stream_client{} = QState0)
   when ?amqqueue_is_stream(Q) ->
+    QName = amqqueue:get_name(Q),
     %% Messages should include the offset as a custom header.
     case get_local_pid(QState0) of
         {LocalPid, QState} when is_pid(LocalPid) ->
@@ -314,13 +318,10 @@ consume(Q, Spec, #stream_client{} = QState0)
               args := Args,
               ok_msg := OkMsg,
               acting_user := ActingUser} = Spec,
-            QName = amqqueue:get_name(Q),
             rabbit_log:debug("~s:~s Local pid resolved ~0p",
                              [?MODULE, ?FUNCTION_NAME, LocalPid]),
             case parse_offset_arg(
                    rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
-                {error, _} = Err ->
-                    Err;
                 {ok, OffsetSpec} ->
                     ConsumerPrefetchCount = case Mode of
                                                 {simple_prefetch, C} -> C;
@@ -344,12 +345,17 @@ consume(Q, Spec, #stream_client{} = QState0)
                     maybe_send_reply(ChPid, OkMsg),
                     _ = rabbit_stream_coordinator:register_local_member_listener(Q),
                     Filter = maps:get(filter, Spec, []),
-                    begin_stream(QState, ConsumerTag, OffsetSpec, Mode, AckRequired, Filter, filter_spec(Args))
+                    begin_stream(QState, ConsumerTag, OffsetSpec, Mode,
+                                 AckRequired, Filter, filter_spec(Args));
+                {error, Reason} ->
+                    {error, precondition_failed,
+                     "failed consuming from stream ~ts: ~tp",
+                     [rabbit_misc:rs(QName), Reason]}
             end;
         {undefined, _} ->
-            {protocol_error, precondition_failed,
+            {error, precondition_failed,
              "stream ~ts does not have a running replica on the local node",
-             [rabbit_misc:rs(amqqueue:get_name(Q))]}
+             [rabbit_misc:rs(QName)]}
     end.
 
 -spec parse_offset_arg(undefined |
