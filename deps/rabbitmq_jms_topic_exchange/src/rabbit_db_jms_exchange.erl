@@ -108,9 +108,9 @@ create_or_update_in_mnesia(XName, BindingKeyAndFun, ErrorFun) ->
 update_in_khepri(XName, BindingKeyAndFun, UpdateFun, ErrorFun) ->
     Path = khepri_jms_topic_exchange_path(XName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := BindingFuns, payload_version := DVersion}} ->
+        {ok, #{Path := #{data := BindingFuns, payload_version := Vsn}}} ->
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             Ret = rabbit_khepri:put(Path1, UpdateFun(BindingFuns, BindingKeyAndFun)),
             case Ret of
                 ok -> ok;

@@ -981,12 +981,17 @@ cluster_nodes(Config, Nodes) when is_list(Nodes) ->
               [Nodename]),
             cluster_nodes1(Config, SecNodeConfig, NodeConfigs1);
         false ->
-            [NodeConfig | NodeConfigs1] = NodeConfigs,
-            Nodename = ?config(nodename, NodeConfig),
-            ct:pal(
-              "Using node ~s as the cluster seed node",
-              [Nodename]),
-            cluster_nodes1(Config, NodeConfig, NodeConfigs1)
+            case NodeConfigs of
+                [NodeConfig, SeedNodeConfig | NodeConfigs1] ->
+                    Nodename = ?config(nodename, SeedNodeConfig),
+                    ct:pal(
+                      "Using node ~s as the cluster seed node",
+                      [Nodename]),
+                    cluster_nodes1(
+                      Config, SeedNodeConfig, [NodeConfig | NodeConfigs1]);
+                [_] ->
+                    Config
+            end
     end;
 cluster_nodes(Config, SeedNode) ->
     Nodenames = get_node_configs(Config, nodename),

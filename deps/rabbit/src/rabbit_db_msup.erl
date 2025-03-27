@@ -135,8 +135,8 @@ create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, Id) ->
                                 mirroring_pid = Overall,
                                 childspec     = ChildSpec},
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := #mirrored_sup_childspec{mirroring_pid = Pid},
-               payload_version := Vsn}} ->
+        {ok, #{Path := #{data := #mirrored_sup_childspec{mirroring_pid = Pid},
+                         payload_version := Vsn}}} ->
             case Overall of
                 Pid ->
                     Delegate;
@@ -160,6 +160,7 @@ create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, Id) ->
                     end
             end;
         _  ->
+            %% FIXME: Not atomic with the get above.
             ok = rabbit_khepri:put(Path, S),
             start
     end.

@@ -303,3 +303,9 @@ end}.
     {datatype, integer},
     {validators, ["non_negative_integer"]}
 ]}.
+
+{mapping, "message_interceptor.incoming.rabbit_mqtt_message_interceptor_client_id.annotation_key",
+          "rabbit.incoming_message_interceptors",
+          [{datatype, string},
+           {default, "x-opt-mqtt-client-id"}]
+}.

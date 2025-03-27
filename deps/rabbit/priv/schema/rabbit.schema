@@ -2658,23 +2658,102 @@ end}.
 {mapping, "message_interceptors.incoming.$interceptor.overwrite", "rabbit.incoming_message_interceptors", [
     {datatype, {enum, [true, false]}}]}.
 
+% Pseudo-key to include the interceptor in the list of interceptors.
+%  - If any other configuration is provided for the interceptor this
+%  configuration is not required.
+%  - If no other configuration is provided, this one is required so that the
+%  interceptor gets invoked.
+{mapping, "message_interceptors.incoming.$interceptor.enabled", "rabbit.incoming_message_interceptors", [
+    {datatype, {enum, [true]}}]}.
+
+{mapping, "message_interceptors.outgoing.$interceptor.enabled", "rabbit.outgoing_message_interceptors", [
+    {datatype, {enum, [true]}}]}.
+
+{mapping,
+    "message_interceptors.incoming.set_header_timestamp.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.rabbit_message_interceptor_routing_node.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+
+{mapping,
+    "message_interceptors.incoming.set_header_routing_node.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.rabbit_message_interceptor_timestamp.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+
 {translation, "rabbit.incoming_message_interceptors",
     fun(Conf) ->
-         case cuttlefish_variable:filter_by_prefix("message_interceptors", Conf) of
-             [] ->
-                 cuttlefish:unset();
-             L ->
-                 [begin
-                      Interceptor = list_to_atom(Interceptor0),
-                      case lists:member(Interceptor, [set_header_timestamp,
-                                                      set_header_routing_node]) of
-                          true ->
-                              {Interceptor, Overwrite};
-                          false ->
-                              cuttlefish:invalid(io_lib:format("~p is invalid", [Interceptor]))
-                      end
-                  end || {["message_interceptors", "incoming", Interceptor0, "overwrite"], Overwrite} <- L]
-         end
+        case cuttlefish_variable:filter_by_prefix("message_interceptors.incoming", Conf) of
+            [] ->
+                cuttlefish:unset();
+            L ->
+                InterceptorsConfig = [
+                    {Module0, Config, Value}
+                    || {["message_interceptors", "incoming", Module0, Config], Value} <- L
+                ],
+                {Result, Order0} = lists:foldl(
+                    fun({Interceptor0, Key0, Value}, {Acc, Order}) ->
+                        Interceptor = list_to_atom(Interceptor0),
+                        Key = list_to_atom(Key0),
+                        MapPutFun = fun(Old) -> maps:put(Key, Value, Old) end,
+                        % This Interceptor -> Module alias exists for
+                        % compatibility reasons
+                        Module = case Interceptor  of
+                                     set_header_timestamp ->
+                                         rabbit_message_interceptor_timestamp;
+                                     set_header_routing_node ->
+                                         rabbit_message_interceptor_routing_node;
+                                     _ ->
+                                         Interceptor
+                                 end,
+                        NewAcc = maps:update_with(Module,
+                                                  MapPutFun,
+                                                  #{Key => Value},
+                                                  Acc),
+                        {NewAcc, [Module| Order]}
+                    end,
+                    {#{}, []},
+                    InterceptorsConfig
+                ),
+                Order = lists:uniq(Order0),
+                [{O, maps:without([enabled], maps:get(O, Result))} || O <- Order]
+        end
+    end
+}.
+
+{translation, "rabbit.outgoing_message_interceptors",
+    fun(Conf) ->
+        case cuttlefish_variable:filter_by_prefix("message_interceptors.outgoing", Conf) of
+            [] ->
+                cuttlefish:unset();
+            L ->
+                InterceptorsConfig = [
+                    {Module0, Config, Value}
+                    || {["message_interceptors", "outgoing", Module0, Config], Value} <- L
+                ],
+                {Result, Order0} = lists:foldl(
+                    fun({Interceptor0, Key0, Value}, {Acc, Order}) ->
+                        Module = list_to_atom(Interceptor0),
+                        Key = list_to_atom(Key0),
+                        MapPutFun = fun(Old) -> maps:put(Key, Value, Old) end,
+                        NewAcc = maps:update_with(Module,
+                                                  MapPutFun,
+                                                  #{Key => Value},
+                                                  Acc),
+                        {NewAcc, [Module| Order]}
+                    end,
+                    {#{}, []},
+                    InterceptorsConfig
+                ),
+                Order = lists:uniq(Order0),
+                [{O, maps:without([enabled], maps:get(O, Result))} || O <- Order]
+        end
     end
 }.
 

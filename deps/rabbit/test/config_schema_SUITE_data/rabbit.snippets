@@ -1100,7 +1100,9 @@ credential_validator.regexp = ^abc\\d+",
   {message_interceptors,
    "message_interceptors.incoming.set_header_timestamp.overwrite = true",
    [{rabbit, [
-      {incoming_message_interceptors, [{set_header_timestamp, true}]}
+      {incoming_message_interceptors, [
+        {rabbit_message_interceptor_timestamp, #{overwrite => true}}
+       ]}
      ]}],
    []},
 
@@ -1110,8 +1112,54 @@ credential_validator.regexp = ^abc\\d+",
    message_interceptors.incoming.set_header_timestamp.overwrite = false
   ",
    [{rabbit, [
-      {incoming_message_interceptors, [{set_header_routing_node, false},
-                                       {set_header_timestamp, false}]}
+      {incoming_message_interceptors, [
+        {rabbit_message_interceptor_routing_node, #{overwrite => false}},
+        {rabbit_message_interceptor_timestamp, #{overwrite => false}}
+       ]}
+     ]}],
+   []},
+
+  % Enable key allows to configure interceptors with empty conf
+  {message_interceptors,
+  "
+   message_interceptors.incoming.set_header_routing_node.enabled = true
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [
+        {rabbit_message_interceptor_routing_node, #{}}
+       ]}
+     ]}],
+   []},
+
+  % An interceptor can be configured twice, with different options, both in
+  % incoming and outgoing group of interceptors
+  {message_interceptors,
+  "
+   message_interceptors.incoming.rabbit_message_interceptor_routing_node.overwrite = true
+   message_interceptors.outgoing.rabbit_message_interceptor_routing_node.enabled = true
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [
+        {rabbit_message_interceptor_routing_node, #{overwrite => true}}
+       ]},
+      {outgoing_message_interceptors, [
+        {rabbit_message_interceptor_routing_node, #{}}
+       ]}
+     ]}],
+   []},
+
+  % Given a parameter gets configured multiple times, last value prevails
+  {message_interceptors,
+  "
+   message_interceptors.incoming.set_header_routing_node.overwrite = true
+   message_interceptors.incoming.set_header_routing_node.overwrite = false
+   message_interceptors.incoming.set_header_routing_node.overwrite = true
+   message_interceptors.incoming.set_header_routing_node.overwrite = false
+  ",
+   [{rabbit, [
+      {incoming_message_interceptors, [
+        {rabbit_message_interceptor_routing_node, #{overwrite => false}}
+       ]}
      ]}],
    []},
 
