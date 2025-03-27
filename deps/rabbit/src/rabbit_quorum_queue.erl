@@ -1010,8 +1010,7 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                      args => Args,
                      username => ActingUser,
                      priority => Priority},
-    case rabbit_fifo_client:checkout(
-           ConsumerTag, Mode, ConsumerMeta, QState0) of
+    case rabbit_fifo_client:checkout(ConsumerTag, Mode, ConsumerMeta, QState0) of
         {ok, _Infos, QState} ->
             case single_active_consumer_on(Q) of
                 true ->
@@ -1024,29 +1023,30 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                                                  _ ->
                                                      waiting
                                              end,
-                            rabbit_core_metrics:consumer_created(
-                              ChPid, ConsumerTag, ExclusiveConsume,
-                              AckRequired, QName,
-                              Prefetch, ActivityStatus == single_active, %% Active
-                              ActivityStatus, Args),
-                            emit_consumer_created(
-                              ChPid, ConsumerTag, ExclusiveConsume,
-                              AckRequired, QName, Prefetch,
-                              Args, none, ActingUser),
+                            rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
+                                                                 ExclusiveConsume,
+                                                                 AckRequired, QName,
+                                                                 Prefetch,
+                                                                 ActivityStatus == single_active,
+                                                                 ActivityStatus, Args),
+                            emit_consumer_created(ChPid, ConsumerTag,
+                                                  ExclusiveConsume,
+                                                  AckRequired, QName,
+                                                  Prefetch, Args, none,
+                                                  ActingUser),
                             {ok, QState};
                         Err ->
                             consume_error(Err, QName)
                     end;
                 false ->
-                    rabbit_core_metrics:consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume,
-                      AckRequired, QName,
-                      Prefetch, true, %% Active
-                      up, Args),
-                    emit_consumer_created(
-                      ChPid, ConsumerTag, ExclusiveConsume,
-                      AckRequired, QName, Prefetch,
-                      Args, none, ActingUser),
+                    rabbit_core_metrics:consumer_created(ChPid, ConsumerTag,
+                                                         ExclusiveConsume,
+                                                         AckRequired, QName,
+                                                         Prefetch, true,
+                                                         up, Args),
+                    emit_consumer_created(ChPid, ConsumerTag, ExclusiveConsume,
+                                          AckRequired, QName, Prefetch,
+                                          Args, none, ActingUser),
                     {ok, QState}
             end;
         Err ->
