@@ -3873,7 +3873,7 @@ leader_transfer_credit(QName, QType, Credit, Config) ->
          QName,
          #{arguments => #{<<"x-queue-type">> => {utf8, QType},
                           <<"x-queue-leader-locator">> => {utf8, <<"client-local">>}}}),
-       60000),
+       60_000, 5000),
     ok = close(Init),
 
     OpnConf = connection_config(0, Config),
@@ -5456,7 +5456,7 @@ dead_letter_into_stream(Config) ->
          #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>},
                           <<"x-initial-cluster-size">> => {ulong, 1}
                          }}),
-       60000),
+       60_000, 5000),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session1, <<"receiver">>, <<"/amq/queue/", QName1/binary>>,
                        settled, configuration,
