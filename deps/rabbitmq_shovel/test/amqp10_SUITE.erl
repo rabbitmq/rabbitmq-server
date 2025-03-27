@@ -139,7 +139,7 @@ amqp10_destination(Config, AckMode) ->
               throw(timeout_waiting_for_deliver1)
     end,
 
-    [{test_shovel, static, {running, _Info}, _Time}] =
+    [{test_shovel, static, {running, _Info}, _Metrics, _Time}] =
         rabbit_ct_broker_helpers:rpc(Config, 0,
           rabbit_shovel_status, status, []),
     amqp10_client:detach_link(Receiver),
@@ -183,7 +183,7 @@ amqp10_source(Config, AckMode) ->
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
 
-    [{test_shovel, static, {running, _Info}, _Time}] =
+    [{test_shovel, static, {running, _Info}, _Metrics, _Time}] =
         rabbit_ct_broker_helpers:rpc(Config, 0,
           rabbit_shovel_status, status, []),
     rabbit_ct_client_helpers:close_channel(Chan).
@@ -267,7 +267,7 @@ setup_shovel(ShovelConfig) ->
     await_running_shovel(test_shovel).
 
 await_running_shovel(Name) ->
-    case [N || {N, _, {running, _}, _}
+    case [N || {N, _, {running, _}, _, _}
                       <- rabbit_shovel_status:status(),
                          N =:= Name] of
         [_] -> ok;

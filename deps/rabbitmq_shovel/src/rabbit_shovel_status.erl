@@ -36,12 +36,20 @@
               | {running, proplists:proplist()}
               | {terminated, term()}.
 -type blocked_status() :: running | flow | blocked.
+-type shovel_status() :: blocked_status() | ignore.
 
 -type name() :: binary() | {rabbit_types:vhost(), binary()}.
 -type type() :: static | dynamic.
--type status_tuple() :: {name(), type(), info(), calendar:datetime()}.
+-type metrics() :: #{remaining := rabbit_types:option(non_neg_integer()) | unlimited,
+                     remaining_unacked := rabbit_types:option(non_neg_integer()),
+                     pending := rabbit_types:option(non_neg_integer()),
+                     forwarded := rabbit_types:option(non_neg_integer())
+                    } | #{}.
+-type status_tuple_41x() :: {name(), type(), info(), metrics(), calendar:datetime()}.
+-type status_tuple_40x_and_older() :: {name(), type(), info(), calendar:datetime()}.
+-type status_tuple() :: status_tuple_41x() | status_tuple_40x_and_older().
 
--export_type([info/0, blocked_status/0]).
+-export_type([info/0, blocked_status/0, shovel_status/0, metrics/0]).
 
 -record(state, {timer}).
 -record(entry, {name :: name(),
@@ -49,6 +57,8 @@
                 info :: info(),
                 blocked_status = running :: blocked_status(),
                 blocked_at :: integer() | undefined,
+                metrics = #{} :: metrics(),
+
                 timestamp :: calendar:datetime()}).
 
 start_link() ->
@@ -58,7 +68,7 @@ start_link() ->
 report(Name, Type, Info) ->
     gen_server:cast(?SERVER, {report, Name, Type, Info, calendar:local_time()}).
 
--spec report_blocked_status(name(), blocked_status()) -> ok.
+-spec report_blocked_status(name(), {blocked_status(), metrics()} | blocked_status()) -> ok.
 report_blocked_status(Name, Status) ->
     gen_server:cast(?SERVER, {report_blocked_status, Name, Status, erlang:monotonic_time()}).
 
@@ -112,6 +122,7 @@ handle_call(status, _From, State) ->
     {reply, [{Entry#entry.name,
               Entry#entry.type,
               blocked_status_to_info(Entry),
+              Entry#entry.metrics,
               Entry#entry.timestamp}
              || Entry <- Entries], State};
 
@@ -120,6 +131,7 @@ handle_call({lookup, Name}, _From, State) ->
                [Entry] -> [{name, Name},
                            {type, Entry#entry.type},
                            {info, blocked_status_to_info(Entry)},
+                           {metrics, Entry#entry.metrics},
                            {timestamp, Entry#entry.timestamp}];
                [] -> not_found
            end,
@@ -141,6 +153,18 @@ handle_cast({report, Name, Type, Info, Timestamp}, State) ->
                         split_name(Name) ++ split_status(Info)),
     {noreply, State};
 
+handle_cast({report_blocked_status, Name, {Status, Metrics}, Timestamp}, State) ->
+    case Status of
+        flow ->
+            true = ets:update_element(?ETS_NAME, Name, [{#entry.blocked_status, flow},
+                                                        {#entry.metrics, Metrics},
+                                                        {#entry.blocked_at, Timestamp}]);
+        _ ->
+            true = ets:update_element(?ETS_NAME, Name, [{#entry.blocked_status, Status},
+                                                        {#entry.metrics, Metrics}])
+    end,
+    {noreply, State};
+%% used in tests
 handle_cast({report_blocked_status, Name, Status, Timestamp}, State) ->
     case Status of
         flow ->
@@ -178,22 +202,22 @@ code_change(_OldVsn, State, _Extra) ->
 inject_node_info(Node, Shovels) ->
     lists:map(
         %% starting
-        fun({Name, Type, State, Timestamp}) when is_atom(State) ->
+        fun({Name, Type, State, Metrics, Timestamp}) when is_atom(State) ->
              Opts = [{node, Node}],
-             {Name, Type, {State, Opts}, Timestamp};
+             {Name, Type, {State, Opts}, Metrics, Timestamp};
            %% terminated
-           ({Name, Type, {terminated, Reason}, Timestamp}) ->
-             {Name, Type, {terminated, Reason}, Timestamp};
+           ({Name, Type, {terminated, Reason}, Metrics, Timestamp}) ->
+             {Name, Type, {terminated, Reason}, Metrics, Timestamp};
             %% running
-           ({Name, Type, {State, Opts}, Timestamp}) ->
+           ({Name, Type, {State, Opts}, Metrics, Timestamp}) ->
              Opts1 = Opts ++ [{node, Node}],
-             {Name, Type, {State, Opts1}, Timestamp}
+             {Name, Type, {State, Opts1}, Metrics, Timestamp}
         end, Shovels).
 
 -spec find_matching_shovel(rabbit_types:vhost(), binary(), [status_tuple()]) -> status_tuple() | undefined.
 find_matching_shovel(VHost, Name, Shovels) ->
     case lists:filter(
-        fun ({{V, S}, _Kind, _Status, _}) ->
+        fun ({{V, S}, _Kind, _Status, _Metrics, _}) ->
             VHost =:= V andalso Name =:= S
         end, Shovels) of
             []  -> undefined;

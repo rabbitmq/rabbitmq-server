@@ -365,15 +365,17 @@ publish(IncomingTag, Method, Msg,
             ok = amqp_channel:call(OutboundChan, Method, Msg)
     end,
 
+    #{dest := Dst1} = State1 = rabbit_shovel_behaviour:incr_forwarded(State),
+
     rabbit_shovel_behaviour:decr_remaining_unacked(
       case AckMode of
           no_ack ->
-              rabbit_shovel_behaviour:decr_remaining(1, State);
+              rabbit_shovel_behaviour:decr_remaining(1, State1);
           on_confirm ->
-              State#{dest => Dst#{unacked => Unacked#{Seq => IncomingTag}}};
+              State1#{dest => Dst1#{unacked => Unacked#{Seq => IncomingTag}}};
           on_publish ->
-              State1 = rabbit_shovel_behaviour:ack(IncomingTag, false, State),
-              rabbit_shovel_behaviour:decr_remaining(1, State1)
+              State2 = rabbit_shovel_behaviour:ack(IncomingTag, false, State1),
+              rabbit_shovel_behaviour:decr_remaining(1, State2)
       end).
 
 control_throttle(State) ->

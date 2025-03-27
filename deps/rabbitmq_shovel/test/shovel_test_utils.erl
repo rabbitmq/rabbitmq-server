@@ -65,7 +65,8 @@ shovels_from_status() ->
 
 shovels_from_status(ExpectedState) ->
     S = rabbit_shovel_status:status(),
-    [N || {{<<"/">>, N}, dynamic, {State, _}, _} <- S, State == ExpectedState].
+    [N || {{<<"/">>, N}, dynamic, {State, _}, _, _} <- S, State == ExpectedState] ++
+        [N || {{<<"/">>, N}, dynamic, {State, _}, _} <- S, State == ExpectedState].
 
 get_shovel_status(Config, Name) ->
     get_shovel_status(Config, 0, Name).

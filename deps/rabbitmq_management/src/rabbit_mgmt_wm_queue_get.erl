@@ -29,11 +29,14 @@ allowed_methods(ReqData, Context) ->
 content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
-resource_exists(ReqData, Context) ->
-    {case rabbit_mgmt_wm_queue:queue(ReqData) of
-         not_found -> raise_not_found(ReqData, Context);
-         _         -> true
-     end, ReqData, Context}.
+resource_exists(ReqData0, Context) ->
+    case rabbit_mgmt_wm_queue:queue(ReqData0) of
+        not_found ->
+            ReqData1 = rabbit_mgmt_util:set_resp_not_found(<<"queue_not_found">>, ReqData0),
+            {false, ReqData1, Context};
+        _ ->
+            {true, ReqData0, Context}
+    end.
 
 allow_missing_post(ReqData, Context) ->
     {false, ReqData, Context}.
@@ -152,17 +155,6 @@ basic_get(Ch, Q, AckMode, Enc, Trunc) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_vhost(ReqData, Context).
 
-raise_not_found(ReqData, Context) ->
-    ErrorMessage = case rabbit_mgmt_util:vhost(ReqData) of
-        not_found ->
-            "vhost_not_found";
-        _ ->
-            "queue_not_found"
-    end,
-    rabbit_mgmt_util:not_found(
-        rabbit_data_coercion:to_binary(ErrorMessage),
-        ReqData,
-        Context).
 %%--------------------------------------------------------------------
 
 maybe_truncate(Payload, none)                         -> Payload;

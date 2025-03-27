@@ -42,7 +42,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -noinput -noshell -hidden -smp enable ^
 !RABBITMQ_CTL_ERL_ARGS! ^
 -run escript start ^
--escript main rabbitmqctl_escript ^
+-escript main Elixir.RabbitMQCtl ^
 -extra "%RABBITMQ_HOME%\escript\rabbitmq-streams" !STAR!
 
 if ERRORLEVEL 1 (

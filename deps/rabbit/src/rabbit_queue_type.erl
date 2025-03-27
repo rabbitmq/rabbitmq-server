@@ -20,8 +20,6 @@
          close/1,
          discover/1,
          short_alias_of/1,
-         feature_flag_name/1,
-         to_binary/1,
          default/0,
          default_alias/0,
          fallback/0,
@@ -213,8 +211,7 @@
                   consume_spec(),
                   queue_state()) ->
     {ok, queue_state(), actions()} |
-    {error, term()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
 
 -callback cancel(amqqueue:amqqueue(),
                  cancel_spec(),
@@ -300,7 +297,7 @@ discover(Other) when is_binary(Other) ->
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),
     Mod.
 
--spec short_alias_of(queue_type()) -> binary().
+-spec short_alias_of(queue_type()) -> undefined | binary().
 %% The opposite of discover/1: returns a short alias given a module name
 short_alias_of(<<"rabbit_quorum_queue">>) ->
     <<"quorum">>;
@@ -335,15 +332,6 @@ short_alias_of(<<"stream">>) ->
 short_alias_of(_Other) ->
     undefined.
 
-feature_flag_name(<<"quorum">>) ->
-    quorum_queue;
-feature_flag_name(<<"classic">>) ->
-    undefined;
-feature_flag_name(<<"stream">>) ->
-    stream_queue;
-feature_flag_name(_) ->
-    undefined.
-
 %% If the client does not specify the type, the virtual host does not have any
 %% metadata default, and rabbit.default_queue_type is not set in the application env,
 %% use this type as the last resort.
@@ -362,19 +350,9 @@ default() ->
 default_alias() ->
     short_alias_of(default()).
 
--spec to_binary(module()) -> binary().
-to_binary(rabbit_classic_queue) ->
-    <<"classic">>;
-to_binary(rabbit_quorum_queue) ->
-    <<"quorum">>;
-to_binary(rabbit_stream_queue) ->
-    <<"stream">>;
-to_binary(Other) ->
-    atom_to_binary(Other).
-
 %% is a specific queue type implementation enabled
 -spec is_enabled(module()) -> boolean().
-is_enabled(Type) ->
+is_enabled(Type) when is_atom(Type) ->
     Type:is_enabled().
 
 -spec is_compatible(module(), boolean(), boolean(), boolean()) ->
@@ -537,15 +515,14 @@ new(Q, State) when ?is_amqqueue(Q) ->
 
 -spec consume(amqqueue:amqqueue(), consume_spec(), state()) ->
     {ok, state()} |
-    {error, term()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
 consume(Q, Spec, State) ->
     #ctx{state = CtxState0} = Ctx = get_ctx(Q, State),
     Mod = amqqueue:get_type(Q),
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
-        Err ->
+        {error, _Type, _Fmt, _FmtArgs} = Err->
             Err
     end.
 

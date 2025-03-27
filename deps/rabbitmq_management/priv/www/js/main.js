@@ -1768,40 +1768,20 @@ function select_queue_type(queuetype) {
     update();
 }
 
+function get_queue_type (queue) {    
+    return queue.type;
+}
+
 function is_quorum(queue) {
-    if (queue["arguments"]) {
-        if (queue["arguments"]["x-queue-type"]) {
-            return queue["arguments"]["x-queue-type"] === "quorum";
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
+    return get_queue_type(queue) === "quorum";
 }
 
 function is_stream(queue) {
-    if (queue["arguments"]) {
-        if (queue["arguments"]["x-queue-type"]) {
-            return queue["arguments"]["x-queue-type"] === "stream";
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    }
+    return get_queue_type(queue) === "stream";
 }
 
 function is_classic(queue) {
-    if (queue["arguments"]) {
-        if (queue["arguments"]["x-queue-type"]) {
-            return queue["arguments"]["x-queue-type"] === "classic";
-        } else {
-            return true;
-        }
-    } else {
-        return true;
-    }
+    return get_queue_type(queue) === "classic";
 }
 
 function ensure_queues_chart_range() {

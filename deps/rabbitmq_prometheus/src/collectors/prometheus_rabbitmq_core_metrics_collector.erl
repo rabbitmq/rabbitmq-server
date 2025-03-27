@@ -301,14 +301,25 @@ register() ->
 deregister_cleanup(_) -> ok.
 
 collect_mf('detailed', Callback) ->
-    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_RAW), Callback),
+    IncludedMFs = enabled_mfs_from_pdict(?METRICS_RAW),
+    collect(true, ?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), IncludedMFs, Callback),
     collect(true, ?CLUSTER_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), enabled_mfs_from_pdict(?METRICS_CLUSTER), Callback),
+    %% the detailed endpoint should emit queue_info only if queue metrics were requested
+    MFs = proplists:get_keys(IncludedMFs),
+    case lists:member(queue_coarse_metrics, MFs) orelse
+         lists:member(queue_consumer_count, MFs) orelse
+         lists:member(queue_metrics, MFs) of
+        true ->
+            emit_queue_info(?DETAILED_METRIC_NAME_PREFIX, vhosts_filter_from_pdict(), Callback);
+        false -> ok
+    end,
     %% identity is here to enable filtering on a cluster name (as already happens in existing dashboards)
     emit_identity_info(<<"detailed">>, Callback),
     ok;
 collect_mf('per-object', Callback) ->
     collect(true, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
+    emit_queue_info(?METRIC_NAME_PREFIX, false, Callback),
     emit_identity_info(<<"per-object">>, Callback),
     ok;
 collect_mf('memory-breakdown', Callback) ->
@@ -405,6 +416,62 @@ identity_info(Endpoint) ->
             1
         }]
     }.
+
+membership(Pid, Members) when is_pid(Pid) ->
+    case node(Pid) =:= node() of
+        true ->
+            case is_process_alive(Pid) of
+                true -> leader;
+                false -> undefined
+            end;
+        false ->
+            case lists:member(node(), Members) of
+                true -> follower;
+                false -> not_a_member
+            end
+    end;
+membership({Name, Node}, Members) ->
+    case Node =:= node() of
+        true ->
+            case is_process_alive(whereis(Name)) of
+                true -> leader;
+                false -> undefined
+            end;
+        false ->
+            case lists:member(node(), Members) of
+                true -> follower;
+                false -> not_a_member
+            end
+    end;
+membership(_, _Members) ->
+    undefined.
+
+emit_queue_info(Prefix, VHostsFilter, Callback) ->
+    Help = <<"A metric with a constant '1' value and labels that provide some queue details">>,
+    QInfos = lists:foldl(
+               fun(Q, Acc) ->
+                       #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
+                       case is_map(VHostsFilter) andalso maps:get(VHost, VHostsFilter) == false of
+                           true -> Acc;
+                           false ->
+                               Type = amqqueue:get_type(Q),
+                               TypeState = amqqueue:get_type_state(Q),
+                               Members = maps:get(nodes, TypeState, []),
+                               case membership(amqqueue:get_pid(Q), Members) of
+                                   not_a_member ->
+                                       Acc;
+                                   Membership ->
+                                       QInfo = [
+                                                {vhost, VHost},
+                                                {queue, Name},
+                                                {queue_type, Type},
+                                                {membership, Membership}
+                                               ],
+                                       [{QInfo, 1}|Acc]
+                               end
+                       end
+               end, [], rabbit_amqqueue:list()),
+    Callback(prometheus_model_helpers:create_mf(<<Prefix/binary, "queue_info">>, Help, gauge, QInfos)).
 
 add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     MN = <<?METRIC_NAME_PREFIX/binary, (prometheus_model_helpers:metric_name(Name))/binary>>,
@@ -890,4 +957,3 @@ vhosts_filter_from_pdict() ->
             Enabled = maps:from_list([ {VHost, true} || VHost <- L ]),
             maps:merge(All, Enabled)
     end.
-

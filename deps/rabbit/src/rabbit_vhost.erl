@@ -166,19 +166,18 @@ do_add(Name, Metadata, ActingUser) ->
     case Metadata of
         #{default_queue_type := DQT} ->
             %% check that the queue type is known
-            rabbit_log:debug("Default queue type of virtual host '~ts' is ~tp", [Name, DQT]),
+            rabbit_log:debug("Default queue type of virtual host '~ts' is ~tp",
+                             [Name, DQT]),
             try rabbit_queue_type:discover(DQT) of
-                _ ->
-                    case rabbit_queue_type:feature_flag_name(DQT) of
-                        undefined -> ok;
-                        Flag when is_atom(Flag) ->
-                            case rabbit_feature_flags:is_enabled(Flag) of
-                                true  -> ok;
-                                false -> throw({error, queue_type_feature_flag_is_not_enabled})
-                            end
+                QueueType when is_atom(QueueType) ->
+                    case rabbit_queue_type:is_enabled(QueueType) of
+                        true ->
+                            ok;
+                        false ->
+                            throw({error, queue_type_feature_flag_is_not_enabled})
                     end
             catch _:_ ->
-                throw({error, invalid_queue_type, DQT})
+                      throw({error, invalid_queue_type, DQT})
             end;
         _ ->
             ok

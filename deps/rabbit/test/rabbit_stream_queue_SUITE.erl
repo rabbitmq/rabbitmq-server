@@ -1555,7 +1555,7 @@ format(Config) ->
                                        ?FUNCTION_NAME, [QRecord, #{}]),
 
     %% test all up case
-    ?assertEqual(stream, proplists:get_value(type, Fmt)),
+    ?assertEqual(<<"stream">>, proplists:get_value(type, Fmt)),
     ?assertEqual(running, proplists:get_value(state, Fmt)),
     ?assertEqual(Server, proplists:get_value(leader, Fmt)),
     ?assertEqual(Server, proplists:get_value(node, Fmt)),
@@ -1572,7 +1572,7 @@ format(Config) ->
                                                ?FUNCTION_NAME, [QRecord, #{}]),
             ok = rabbit_control_helper:command(start_app, Server3),
             ok = rabbit_control_helper:command(start_app, Server2),
-            ?assertEqual(stream, proplists:get_value(type, Fmt2)),
+            ?assertEqual(<<"stream">>, proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
             ?assertEqual(Server, proplists:get_value(node, Fmt2)),

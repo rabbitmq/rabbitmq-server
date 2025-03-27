@@ -100,8 +100,11 @@
 % represents a partially applied module call
 
 -define(CHECK_MIN_INTERVAL_MS, 1000).
--define(CHECK_MIN_INDEXES, 4096).
+-define(CHECK_MIN_INDEXES, 4096 * 2).
 -define(CHECK_MAX_INDEXES, 666_667).
+%% once these many bytes have been written since the last checkpoint
+%% we request a checkpoint irrespectively
+-define(CHECK_MAX_BYTES, 128_000_000).
 
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit

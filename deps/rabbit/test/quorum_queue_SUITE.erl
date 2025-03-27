@@ -80,6 +80,7 @@ groups() ->
                                             metrics_cleanup_on_leadership_takeover,
                                             metrics_cleanup_on_leader_crash,
                                             consume_in_minority,
+                                            get_in_minority,
                                             reject_after_leader_transfer,
                                             shrink_all,
                                             rebalance,
@@ -1030,25 +1031,48 @@ publish_and_restart(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 consume_in_minority(Config) ->
-    [Server0, Server1, Server2] =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server0, Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(
+                                    Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
-    RaName = binary_to_atom(<<"%2F_", QQ/binary>>, utf8),
+    RaName = binary_to_atom(<<"%2F_", QQ/binary>>),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    rabbit_quorum_queue:stop_server({RaName, Server1}),
-    rabbit_quorum_queue:stop_server({RaName, Server2}),
+    ok = rabbit_quorum_queue:stop_server({RaName, Server1}),
+    ok = rabbit_quorum_queue:stop_server({RaName, Server2}),
+
+    ?assertExit(
+       {{shutdown,
+         {connection_closing,
+          {server_initiated_close, 541,
+           <<"INTERNAL_ERROR - failed consuming from quorum queue "
+             "'consume_in_minority' in vhost '/'", _Reason/binary>>}}}, _},
+       amqp_channel:subscribe(Ch, #'basic.consume'{queue = QQ}, self())),
+
+    ok = rabbit_quorum_queue:restart_server({RaName, Server1}),
+    ok = rabbit_quorum_queue:restart_server({RaName, Server2}).
+
+get_in_minority(Config) ->
+    [Server0, Server1, Server2] = rabbit_ct_broker_helpers:get_node_configs(
+                                    Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    QQ = ?config(queue_name, Config),
+    RaName = binary_to_atom(<<"%2F_", QQ/binary>>),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    ok = rabbit_quorum_queue:stop_server({RaName, Server1}),
+    ok = rabbit_quorum_queue:stop_server({RaName, Server2}),
 
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 541, _}}}, _},
                 amqp_channel:call(Ch, #'basic.get'{queue = QQ,
                                                    no_ack = false})),
 
-    rabbit_quorum_queue:restart_server({RaName, Server1}),
-    rabbit_quorum_queue:restart_server({RaName, Server2}),
-    ok.
+    ok = rabbit_quorum_queue:restart_server({RaName, Server1}),
+    ok = rabbit_quorum_queue:restart_server({RaName, Server2}).
 
 single_active_consumer_priority_take_over(Config) ->
     check_quorum_queues_v4_compat(Config),
@@ -1527,6 +1551,8 @@ gh_12635(Config) ->
     publish_confirm(Ch0, QQ),
     publish_confirm(Ch0, QQ),
 
+    %% a QQ will not take checkpoints more frequently than every 1s
+    timer:sleep(1000),
     %% force a checkpoint on leader
     ok = rpc:call(Server0, ra, cast_aux_command, [{RaName, Server0}, force_checkpoint]),
     rabbit_ct_helpers:await_condition(
@@ -3577,7 +3603,7 @@ format(Config) ->
                                        ?FUNCTION_NAME, [QRecord, #{}]),
 
     %% test all up case
-    ?assertEqual(quorum, proplists:get_value(type, Fmt)),
+    ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt)),
     ?assertEqual(running, proplists:get_value(state, Fmt)),
     ?assertEqual(Server, proplists:get_value(leader, Fmt)),
     ?assertEqual(Server, proplists:get_value(node, Fmt)),
@@ -3594,7 +3620,7 @@ format(Config) ->
                                                ?FUNCTION_NAME, [QRecord, #{}]),
             ok = rabbit_control_helper:command(start_app, Server2),
             ok = rabbit_control_helper:command(start_app, Server3),
-            ?assertEqual(quorum, proplists:get_value(type, Fmt2)),
+            ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
             ?assertEqual(Server, proplists:get_value(node, Fmt2)),

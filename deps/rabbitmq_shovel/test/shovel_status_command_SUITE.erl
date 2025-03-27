@@ -82,11 +82,11 @@ run_starting(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
     case ?CMD:run([], Opts) of
-        {stream, [{{<<"/">>, <<"test">>}, dynamic, starting, _}]} ->
+        {stream, [{{<<"/">>, <<"test">>}, dynamic, starting, _, _}]} ->
             ok;
         {stream, []} ->
             throw(shovel_not_found);
-        {stream, [{{<<"/">>, <<"test">>}, dynamic, {running, _}, _}]} ->
+        {stream, [{{<<"/">>, <<"test">>}, dynamic, {running, _}, _, _}]} ->
             ct:pal("Shovel is already running, starting could not be tested!")
     end,
     shovel_test_utils:clear_param(Config, <<"test">>).
@@ -107,7 +107,7 @@ run_running(Config) ->
                    {<<"dest-queue">>, <<"dest">>}]),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Opts = #{node => A},
-    {stream, [{{<<"/">>, <<"test">>}, dynamic, {running, _}, _}]}
+    {stream, [{{<<"/">>, <<"test">>}, dynamic, {running, _}, _,  _}]}
         = ?CMD:run([], Opts),
     shovel_test_utils:clear_param(Config, <<"test">>).
 

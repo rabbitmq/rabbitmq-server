@@ -43,7 +43,7 @@ if not defined ERL_CRASH_DUMP_SECONDS (
 -kernel inet_dist_listen_min !RABBITMQ_CTL_DIST_PORT_MIN! ^
 -kernel inet_dist_listen_max !RABBITMQ_CTL_DIST_PORT_MAX! ^
 -run escript start ^
--escript main rabbitmqctl_escript ^
+-escript main Elixir.RabbitMQCtl ^
 -extra "%RABBITMQ_HOME%\escript\rabbitmq-upgrade" !STAR!
 
 if ERRORLEVEL 1 (
