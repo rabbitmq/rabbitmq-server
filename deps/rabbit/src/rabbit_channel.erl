@@ -110,7 +110,8 @@
           authz_context,
           max_consumers,  % taken from rabbit.consumer_max_per_channel
           %% defines how ofter gc will be executed
-          writer_gc_threshold
+          writer_gc_threshold,
+          msg_interceptor_ctx
          }).
 
 -record(pending_ack, {
@@ -509,7 +510,11 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
                             max_consumers = MaxConsumers,
-                            writer_gc_threshold = GCThreshold
+                            writer_gc_threshold = GCThreshold,
+                            msg_interceptor_ctx = #{protocol => amqp091,
+                                                    username => User#user.username,
+                                                    vhost => VHost,
+                                                    conn_name => ConnName}
                            },
                 limiter = Limiter,
                 tx                      = none,
@@ -813,6 +818,7 @@ get_consumer_timeout() ->
         _ ->
             undefined
     end.
+
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
@@ -1167,7 +1173,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                                 user = #user{username = Username} = User,
                                                 trace_state = TraceState,
                                                 authz_context = AuthzContext,
-                                                writer_gc_threshold = GCThreshold
+                                                writer_gc_threshold = GCThreshold,
+                                                msg_interceptor_ctx = MsgInterceptorCtx
                                                },
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
@@ -1206,7 +1213,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
             check_write_permitted_on_topics(Exchange, User, Message0, AuthzContext),
-            Message = rabbit_message_interceptor:intercept(Message0),
+            Message = rabbit_message_interceptor:intercept(Message0,
+                                                           MsgInterceptorCtx,
+                                                           incoming_message_interceptors),
             check_user_id_header(Message, User),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],

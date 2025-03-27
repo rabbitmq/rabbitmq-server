@@ -283,7 +283,8 @@
           max_handle :: link_handle(),
           max_incoming_window :: pos_integer(),
           max_link_credit :: pos_integer(),
-          max_queue_credit :: pos_integer()
+          max_queue_credit :: pos_integer(),
+          msg_interceptor_ctx :: map()
          }).
 
 -record(state, {
@@ -474,7 +475,11 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_handle = EffectiveHandleMax,
                            max_incoming_window = MaxIncomingWindow,
                            max_link_credit = MaxLinkCredit,
-                           max_queue_credit = MaxQueueCredit
+                           max_queue_credit = MaxQueueCredit,
+                           msg_interceptor_ctx = #{protocol => ?PROTOCOL,
+                                                   username => User#user.username,
+                                                   vhost => Vhost,
+                                                   conn_name => ConnName}
                           }}}.
 
 terminate(_Reason, #state{incoming_links = IncomingLinks,
@@ -2411,7 +2416,8 @@ incoming_link_transfer(
                              trace_state = Trace,
                              conn_name = ConnName,
                              channel_num = ChannelNum,
-                             max_link_credit = MaxLinkCredit}}) ->
+                             max_link_credit = MaxLinkCredit,
+                             msg_interceptor_ctx = MsgInterceptorCtx}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2436,7 +2442,9 @@ incoming_link_transfer(
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
-            Mc2 = rabbit_message_interceptor:intercept(Mc1),
+            Mc2 = rabbit_message_interceptor:intercept(Mc1,
+                                                       MsgInterceptorCtx,
+                                                       incoming_message_interceptors),
             check_user_id(Mc2, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),
