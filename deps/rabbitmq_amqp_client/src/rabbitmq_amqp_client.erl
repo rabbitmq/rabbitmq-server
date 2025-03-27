@@ -33,7 +33,7 @@
         set_token/2
        ].
 
--define(TIMEOUT, 20_000).
+-define(TIMEOUT, 30_000).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 
 -type arguments() :: #{binary() => {atom(), term()}}.
