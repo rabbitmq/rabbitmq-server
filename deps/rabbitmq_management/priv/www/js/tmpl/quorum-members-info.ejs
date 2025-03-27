@@ -1,0 +1,65 @@
+<% if (members_info) {
+var i = 0;
+var r = queue.raft;
+var l = r.log;
+delete members_info[queue.leader];
+%>
+<h3>Leader</h3>
+<table class="list">
+    <thead>
+        <tr>
+            <th>Node</th>
+            <th>Term</th>
+            <th>First Index</th>
+            <th>Last Index</th>
+            <th>Log Length</th>
+            <th>Last Applied</th>
+            <th>Commit Index</th>
+        </tr>
+    </thead>
+        <tr>
+       <td><%= fmt_string(queue.leader) %></td>
+       <td><%= fmt_string(r.current_term) %></td>
+       <td><%= fmt_string(l.first_index) %></td>
+       <td><%= fmt_string(l.last_index) %></td>
+       <td><%= fmt_string(l.last_index - l.first_index + 1) %></td>
+       <td><%= fmt_string(r.last_applied) %></td>
+       <td><%= fmt_string(r.commit_index) %></td>
+        </tr>
+
+</table>
+<h3>Followers </h3>
+<table class="list">
+    <thead>
+        <tr>
+            <th>Node</th>
+            <th>Status</th>
+            <th>Next Index</th>
+            <th>Match Index</th>
+            <th>Lag</th>
+            <th>Commit Index Sent</th>
+            <th>Voter Status</th>
+        </tr>
+    </thead>
+    <% for (var node in members_info) {
+       i++;
+       var m = members_info[node];
+       %>
+      <tr<%= alt_rows(i) %>>
+       <td><%= fmt_string(node) %></td>
+       <td><%= fmt_string(m.status) %></td>
+       <td><%= fmt_string(m.next_index) %></td>
+       <td><%= fmt_string(m.match_index) %></td>
+       <td><%= fmt_string(l.last_index - Math.max(l.first_index, m.match_index)) %></td>
+       <% if(m.hasOwnProperty('commit_index_sent')) { %>
+       <td><%= fmt_string(m.commit_index_sent) %></td>
+       <% } else { %>
+       <td><%= fmt_string("n/a") %></td>
+       <% } %>
+       <td><%= fmt_string(m.voter_status.membership) %></td>
+       </tr>
+       <% } %>
+</table>
+<% } else { %>
+<p>... no info ...</p>
+<% } %>

@@ -421,6 +421,17 @@
 </div>
 <% } %>
 
+<% if(is_quorum(queue) && queue.hasOwnProperty('raft')) { %>
+<div class="section-hidden">
+  <h2 class="updatable">Raft Info (Advanced) </h2>
+  <div class="hider updatable">
+<%= format('quorum-members-info', {'mode': 'queue',
+                                   'queue': queue,
+                                   'members_info': queue.members_info}) %>
+  </div>
+</div>
+<% } %>
+
 <% if(queue.reductions || queue.garbage_collection) { %>
 <div class="section-hidden">
 <h2>Runtime Metrics (Advanced)</h2>
