@@ -72,7 +72,7 @@ oauth_provider_to_map(OAuthProvider) ->
     end,
     case OAuthProvider#oauth_provider.end_session_endpoint of
         undefined -> Map0;
-        V -> maps:put(end_session_endpoint, V, Map0)
+        V -> maps:put(oauth_end_session_endpoint, V, Map0)
     end.
 
 skip_unknown_mgt_resource_servers(ManagementProps, OAuth2Resources) ->

@@ -18,7 +18,8 @@ logout:
     parameter:
       disable: false
       whitelist:
-        ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}/*
+        ${RABBITMQ_SCHEME}://${RABBITMQ_HOST}/* 
+        ${FAKEPORTAL_URL}
 login:
   serviceProviderKey: |
     -----BEGIN RSA PRIVATE KEY-----
@@ -125,8 +126,9 @@ oauth:
       id: admin
       secret: adminsecret
       authorized-grant-types: client_credentials
-      scope: none
-      authorities: uaa.admin,clients.admin,clients.read,clients.write,clients.secret,scim.write,scim.read,uaa.resource
+      scope: uaa.admin,clients.admin,clients.read,clients.write,clients.secret,scim.write,scim.read,uaa.resource,tokens.list 
+      authorities: uaa.admin,clients.admin,clients.read,clients.write,clients.secret,scim.write,scim.read,uaa.resource,tokens.list 
+      allowpublic: true
     mgt_api_client:
       id: mgt_api_client
       secret: mgt_api_client
@@ -146,7 +148,7 @@ oauth:
       secret: rabbit_idp_user
       authorized-grant-types: client_credentials
       authorities: uaa.resource,rabbitmq.tag:administrator
-      redirect-uri: ${RABBITMQ_URL}
+      redirect-uri: ${FAKEPORTAL_URL}
       autoapprove: true
       allowpublic: true
     mgt_api_client_2:
