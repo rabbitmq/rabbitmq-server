@@ -533,19 +533,56 @@ queue_consumer_count_single_vhost_per_object_test(Config) ->
 
     %% There should be exactly 2 metrics returned (2 queues in that vhost, `queue_consumer_count` has only single metric)
     ?assertEqual(#{rabbitmq_detailed_queue_consumers =>
-                       #{#{queue => "vhost-1-queue-with-consumer",vhost => "vhost-1"} => [1],
-                         #{queue => "vhost-1-queue-with-messages",vhost => "vhost-1"} => [0]}},
+                   #{#{queue => "vhost-1-queue-with-consumer",vhost => "vhost-1"} => [1],
+                     #{queue => "vhost-1-queue-with-messages",vhost => "vhost-1"} => [0]},
+                   rabbitmq_detailed_queue_info =>
+                   #{#{queue => "vhost-1-queue-with-consumer",
+                       vhost => "vhost-1",
+                       queue_type => "rabbit_classic_queue",
+                       membership => "leader"} => [1],
+                     #{queue => "vhost-1-queue-with-messages",
+                       vhost => "vhost-1",
+                       queue_type => "rabbit_classic_queue",
+                       membership => "leader"} => [1]}
+                  },
                  parse_response(Body)),
     ok.
 
 queue_consumer_count_all_vhosts_per_object_test(Config) ->
     Expected = #{rabbitmq_detailed_queue_consumers =>
-                     #{#{queue => "vhost-1-queue-with-consumer",vhost => "vhost-1"} => [1],
-                       #{queue => "vhost-1-queue-with-messages",vhost => "vhost-1"} => [0],
-                       #{queue => "vhost-2-queue-with-consumer",vhost => "vhost-2"} => [1],
-                       #{queue => "vhost-2-queue-with-messages",vhost => "vhost-2"} => [0],
-                       #{queue => "default-queue-with-consumer",vhost => "/"} => [1],
-                       #{queue => "default-queue-with-messages",vhost => "/"} => [0]}},
+                 #{#{queue => "vhost-1-queue-with-consumer",vhost => "vhost-1"} => [1],
+                   #{queue => "vhost-1-queue-with-messages",vhost => "vhost-1"} => [0],
+                   #{queue => "vhost-2-queue-with-consumer",vhost => "vhost-2"} => [1],
+                   #{queue => "vhost-2-queue-with-messages",vhost => "vhost-2"} => [0],
+                   #{queue => "default-queue-with-consumer",vhost => "/"} => [1],
+                   #{queue => "default-queue-with-messages",vhost => "/"} => [0]},
+
+                 rabbitmq_detailed_queue_info =>
+                 #{#{queue => "default-queue-with-consumer",
+                     vhost => "/",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1],
+                   #{queue => "default-queue-with-messages",
+                     vhost => "/",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1],
+                   #{queue => "vhost-1-queue-with-consumer",
+                     vhost => "vhost-1",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1],
+                   #{queue => "vhost-1-queue-with-messages",
+                     vhost => "vhost-1",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1],
+                   #{queue => "vhost-2-queue-with-consumer",
+                     vhost => "vhost-2",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1],
+                   #{queue => "vhost-2-queue-with-messages",
+                     vhost => "vhost-2",
+                     queue_type => "rabbit_classic_queue",
+                     membership => "leader"} => [1]}
+                },
 
     %% No vhost given, all should be returned
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=queue_consumer_count&per-object=1", [], 200),
