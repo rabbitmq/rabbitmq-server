@@ -385,14 +385,20 @@ search_groups(LDAP, Desc, GroupsBase, Scope, DN) ->
     end.
 
 search_nested_group(LDAP, Desc, GroupsBase, Scope, CurrentDN, TargetDN, Path) ->
-    case lists:member(CurrentDN, Path) of
+    Pred0 = fun(S) ->
+                string:equal(CurrentDN, S, true)
+            end,
+    case lists:any(Pred0, Path) of
         true  ->
             ?L("recursive cycle on DN ~ts while searching for group ~ts",
                [CurrentDN, TargetDN]),
             false;
         false ->
             GroupDNs = search_groups(LDAP, Desc, GroupsBase, Scope, CurrentDN),
-            case lists:member(TargetDN, GroupDNs) of
+            Pred1 = fun(S) ->
+                        string:equal(TargetDN, S, true)
+                    end,
+            case lists:any(Pred1, GroupDNs) of
                 true  ->
                     true;
                 false ->
