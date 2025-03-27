@@ -1354,10 +1354,9 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
     CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(ConsumerTag, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
-            rabbit_misc:protocol_error(
-              not_allowed,
-              "reached maximum (~B) of consumers per channel",
-              [MaxConsumers]);
+            rabbit_misc:protocol_error(not_allowed,
+                                       "reached maximum (~B) of consumers per channel",
+                                       [MaxConsumers]);
         error ->
             QueueName = qbin_to_resource(QueueNameBin, VHostPath),
             check_read_permitted(QueueName, User, AuthzContext),
@@ -1368,13 +1367,13 @@ handle_method(#'basic.consume'{queue        = QueueNameBin,
                             _ ->
                                 ConsumerTag
                         end,
-            basic_consume(
-              QueueName, NoAck, ConsumerPrefetch, ActualTag,
-              ExclusiveConsume, Args, NoWait, State);
+            basic_consume(QueueName, NoAck, ConsumerPrefetch, ActualTag,
+                          ExclusiveConsume, Args, NoWait, State);
         {ok, _} ->
             %% Attempted reuse of consumer tag.
-            rabbit_misc:protocol_error(
-              not_allowed, "attempt to reuse consumer tag '~ts'", [ConsumerTag])
+            rabbit_misc:protocol_error(not_allowed,
+                                       "attempt to reuse consumer tag '~ts'",
+                                       [ConsumerTag])
     end;
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},

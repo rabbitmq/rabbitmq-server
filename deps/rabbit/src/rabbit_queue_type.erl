@@ -522,7 +522,7 @@ consume(Q, Spec, State) ->
     case Mod:consume(Q, Spec, CtxState0) of
         {ok, CtxState} ->
             {ok, set_ctx(Q, Ctx#ctx{state = CtxState}, State)};
-        Err = {error, _Type, _Fmt, _FmtArgs} ->
+        {error, _Type, _Fmt, _FmtArgs} = Err->
             Err
     end.
 
