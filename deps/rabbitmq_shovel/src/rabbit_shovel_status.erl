@@ -45,7 +45,9 @@
                      pending := rabbit_types:option(non_neg_integer()),
                      forwarded := rabbit_types:option(non_neg_integer())
                     } | #{}.
--type status_tuple() :: {name(), type(), info(), metrics(), calendar:datetime()}.
+-type status_tuple_41x() :: {name(), type(), info(), metrics(), calendar:datetime()}.
+-type status_tuple_40x_and_older() :: {name(), type(), info(), calendar:datetime()}.
+-type status_tuple() :: status_tuple_41x() | status_tuple_40x_and_older().
 
 -export_type([info/0, blocked_status/0, shovel_status/0, metrics/0]).
 

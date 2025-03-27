@@ -76,21 +76,25 @@ run([Name], #{node := Node, vhost := VHost}) ->
                 undefined ->
                     try_force_removing(Node, VHost, Name, ActingUser),
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
-                Match ->
-                    {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} = Match,
-                    {_, HostingNode} = lists:keyfind(node, 1, Opts),
-                    case rabbit_misc:rpc_call(
-                        HostingNode, rabbit_shovel_util, delete_shovel, [VHost, Name, ActingUser]) of
-                        {badrpc, _} = Error ->
-                            Error;
-                        {error, not_found} ->
-                            try_force_removing(HostingNode, VHost, Name, ActingUser),
-                            {error, rabbit_data_coercion:to_binary(ErrMsg)};
-                        ok ->
-                            _ = try_clearing_runtime_parameter(Node, VHost, Name, ActingUser),
-                            ok
-                    end
+                {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node);
+                {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} ->
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node)
             end
+    end.
+
+delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node) ->
+    {_, HostingNode} = lists:keyfind(node, 1, Opts),
+    case rabbit_misc:rpc_call(
+        HostingNode, rabbit_shovel_util, delete_shovel, [VHost, Name, ActingUser]) of
+        {badrpc, _} = Error ->
+            Error;
+        {error, not_found} ->
+            try_force_removing(HostingNode, VHost, Name, ActingUser),
+            {error, rabbit_data_coercion:to_binary(ErrMsg)};
+        ok ->
+            _ = try_clearing_runtime_parameter(Node, VHost, Name, ActingUser),
+            ok
     end.
 
 switches() ->
