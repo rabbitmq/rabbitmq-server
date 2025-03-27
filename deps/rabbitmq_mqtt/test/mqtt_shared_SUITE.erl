@@ -1779,7 +1779,10 @@ default_queue_type(Config) ->
 
 incoming_message_interceptors(Config) ->
     Key = ?FUNCTION_NAME,
-    ok = rpc(Config, persistent_term, put, [Key, [{set_header_timestamp, false}]]),
+    ok = rpc(Config,
+             persistent_term,
+             put,
+             [Key, [{rabbit_message_interceptor_timestamp, #{overwrite => false}}]]),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
     CQName = <<"my classic queue">>,

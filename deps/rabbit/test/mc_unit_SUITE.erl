@@ -348,8 +348,10 @@ amqpl_amqp_bin_amqpl(_Config) ->
     Msg0 = mc:init(mc_amqpl, Content, annotations()),
 
     ok = persistent_term:put(incoming_message_interceptors,
-                             [{set_header_timestamp, false}]),
-    Msg = rabbit_message_interceptor:intercept(Msg0),
+                             [{rabbit_message_interceptor_timestamp, #{overwrite => false}}]),
+    Msg = rabbit_message_interceptor:intercept(Msg0,
+                                               #{},
+                                               incoming_message_interceptors),
 
     ?assertEqual(<<"exch">>, mc:exchange(Msg)),
     ?assertEqual([<<"apple">>], mc:routing_keys(Msg)),
