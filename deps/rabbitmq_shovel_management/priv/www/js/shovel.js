@@ -148,6 +148,19 @@ HELP['shovel-amqp10-auto-delete'] =
        <dt><code>After num messages</code></dt>\
        <dd>The shovel will delete itself after the given number of messages have been transferred.</dd>\
 </dl>';
+
+HELP['shovel-remaining-counter'] =
+    'When not <code>unlimited</code>: number of messages left to transfer before this shovel will be deleted.';
+
+HELP['shovel-remaining-unacked-counter'] =
+    'When ack mode is <code>on-confirm</code> and Remaining is not <code>unlimited</code>: number of messages not yet acknowledged at the source.';
+
+HELP['shovel-pending-counter'] =
+    'When destination connection is blocked or doesn\'t have enough credits: number of messages that were cached.';
+
+HELP['shovel-forwarded-counter'] =
+    'Number of forwarded messages.';
+
 function remove_params_with(sammy, prefix) {
     for (var i in sammy.params) {
         if(i.startsWith(prefix)) {

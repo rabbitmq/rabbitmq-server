@@ -17,6 +17,10 @@
     <th>Virtual Host</th>
 <% } %>
     <th>State</th>
+    <th>Remaining <span class="help" id="shovel-remaining-counter"></span></th>
+    <th>Remaining Unacked <span class="help" id="shovel-remaining-unacked-counter"></span></th>
+    <th>Pending <span class="help" id="shovel-pending-counter"></span></th>
+    <th>Forwarded <span class="help" id="shovel-forwarded-counter"></span></th>
     <th colspan="3">Source</th>
     <th colspan="3">Destination</th>
     <th>Last changed</th>
@@ -46,7 +50,11 @@
     </td>
     <td><%= shovel.timestamp %></td>
 <% } else { %>
-    <td><%= fmt_object_state(shovel) %></td>
+      <td><%= fmt_object_state(shovel) %></td>
+      <td><%= fmt_string(shovel.remaining) %></td>
+      <td><%= fmt_string(shovel.remaining_unacked) %></td>
+      <td><%= fmt_string(shovel.pending) %></td>
+      <td><%= fmt_string(shovel.forwarded) %></td>
       <td><%= fmt_string(shovel.src_protocol) %></td>
       <td><%= shovel.src_uri == undefined ? fmt_string(shovel.src_uri) : fmt_string(fmt_uri_with_credentials(shovel.src_uri)) %></td>
       <td><%= fmt_shovel_endpoint('src_', shovel) %></td>
