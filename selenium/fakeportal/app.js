@@ -1,5 +1,7 @@
 const express = require("express");
 const app = express();
+const fs = require('fs');
+const https = require('https');
 var path = require('path');
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
@@ -15,19 +17,38 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'html');
 
 app.get('/', function(req, res){
-  let id =  default_if_blank(req.query.client_id, client_id);
-  let secret =  default_if_blank(req.query.client_secret, client_secret);
-  res.render('rabbitmq', {
-    proxied_url: proxied_rabbitmq_url,
-    url: rabbitmq_url.replace(/\/?$/, '/') + "login",
-    name: rabbitmq_url + " for " + id,
-    access_token: access_token(id, secret)
-  });
-});
+  let id =  default_if_blank(req.query.client_id, client_id)
+  let secret =  default_if_blank(req.query.client_secret, client_secret)
+  if (id == 'undefined' || secret == 'undefined') {
+    res.render('unauthenticated')
+  }else {
+    res.render('rabbitmq', {
+      proxied_url: proxied_rabbitmq_url,
+      url: rabbitmq_url.replace(/\/?$/, '/') + "login",
+      name: rabbitmq_url + " for " + id,
+      access_token: access_token(id, secret)
+    })
+  }
+})
+
 app.get('/favicon.ico', (req, res) => res.status(204));
 
+app.get('/logout', function(req, res) {
+  const redirectUrl = uaa_url + '/logout.do?client_id=' + client_id + "&redirect=https://fakeportal:3000" 
+  console.debug("Received /logout request -> redirect to " + redirectUrl)
+  res.redirect(redirectUrl);
+})
 
-app.listen(port);
+https
+  .createServer(
+    {
+      cert: fs.readFileSync('/etc/fakeportal/server_fakeportal_certificate.pem'),
+      key: fs.readFileSync('/etc/fakeportal/server_fakeportal_key.pem')
+    },
+    app
+  )
+  .listen(port)
+
 console.log('Express started on port ' + port);
 
 function default_if_blank(value, defaultValue) {
