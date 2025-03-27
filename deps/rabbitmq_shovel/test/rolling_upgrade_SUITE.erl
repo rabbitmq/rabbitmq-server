@@ -101,7 +101,7 @@ child_id_format(Config) ->
     %%   Node 4: the secondary umbrella
     %%   ...
     %%
-    %% Therefore, `Pouet' will use the primary copy, `OldNode' the secondary
+    %% Therefore, `NewNode' will use the primary copy, `OldNode' the secondary
     %% umbrella, `NewRefNode' the primary copy, and `NodeWithQueues' the
     %% secondary umbrella.
 
