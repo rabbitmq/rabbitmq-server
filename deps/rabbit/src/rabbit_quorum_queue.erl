@@ -681,7 +681,7 @@ repair_leader_record(Q, Name) ->
             ok;
         _ ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("~ts: updating leader record to current node ~b",
+            rabbit_log:debug("~ts: updating leader record to current node ~ts",
                              [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
