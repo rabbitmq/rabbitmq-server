@@ -433,9 +433,11 @@ membership(Pid, Members) when is_pid(Pid) ->
 membership({Name, Node}, Members) ->
     case Node =:= node() of
         true ->
-            case is_process_alive(whereis(Name)) of
-                true -> leader;
-                false -> undefined
+            case whereis(Name) of
+                Pid when is_pid(Pid) ->
+                    leader;
+                _ ->
+                    undefined
             end;
         false ->
             case lists:member(node(), Members) of
