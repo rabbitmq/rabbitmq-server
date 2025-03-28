@@ -5,8 +5,9 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 -module(rabbit_mqtt_processor).
-
 -feature(maybe_expr, enable).
+
+-behaviour(rabbit_protocol_accessor).
 
 -export([info/2, init/4, process_packet/2,
          terminate/3, handle_pre_hibernate/0,
@@ -15,6 +16,9 @@
          remove_duplicate_client_id_connections/2,
          remove_duplicate_client_id_connections/3,
          update_trace/2, send_disconnect/2]).
+
+% `rabbit_protocol_accessor` behaviour callbacks
+-export([get_property/2]).
 
 -ifdef(TEST).
 -export([get_vhost_username/1,
@@ -1638,7 +1642,7 @@ publish_to_queues(
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
-    Msg = rabbit_message_interceptor:intercept(Msg0),
+    Msg = rabbit_incoming_message_interceptor:intercept(Msg0, ?MODULE, State),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
@@ -1954,6 +1958,17 @@ delete_queue(QName,
           ({absent, _Q, _State}) ->
               ok
       end).
+
+get_property(user, #state{auth_state = #auth_state{user = User}}) ->
+    User;
+get_property(vhost, #state{cfg = #cfg{vhost = VHost}}) ->
+    VHost;
+get_property(client_id, #state{cfg = #cfg{client_id = ClientId}}) ->
+    ClientId; 
+get_property(connection_name, #state{cfg = #cfg{conn_name = ConnName}}) ->
+    ConnName;
+get_property(_, _) ->
+    undefined.
 
 -spec handle_pre_hibernate() -> ok.
 handle_pre_hibernate() ->
