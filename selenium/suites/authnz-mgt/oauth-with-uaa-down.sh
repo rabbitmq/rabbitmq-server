@@ -7,5 +7,4 @@ TEST_CONFIG_PATH=/oauth
 PROFILES="uaa uaa-oauth-provider uaa-mgt-oauth-provider"
 
 source $SCRIPT/../../bin/suite_template $@
-initOnly uaa
 run
