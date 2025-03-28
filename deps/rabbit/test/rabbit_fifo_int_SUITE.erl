@@ -942,14 +942,17 @@ discard_next_delivery(ClusterName, State0, Wait) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-    UId = ra:new_uid(ra_lib:to_binary(ClusterName#resource.name)),
-    Confs = [#{id => Id,
-               uid => UId,
-               cluster_name => ClusterName#resource.name,
-               log_init_args => #{uid => UId},
-               initial_members => ServerIds,
-               initial_machine_version => rabbit_fifo:version(),
-               machine => {module, rabbit_fifo, RaFifoConfig}}
+    NameBin = ra_lib:to_binary(ClusterName#resource.name),
+    Confs = [begin
+                 UId = ra:new_uid(NameBin),
+                 #{id => Id,
+                   uid => UId,
+                   cluster_name => ClusterName#resource.name,
+                   log_init_args => #{uid => UId},
+                   initial_members => ServerIds,
+                   initial_machine_version => rabbit_fifo:version(),
+                   machine => {module, rabbit_fifo, RaFifoConfig}}
+             end
              || Id <- ServerIds],
     {ok, Started, _} = ra:start_cluster(?RA_SYSTEM, Confs),
     ?assertEqual(length(Started), length(ServerIds)),
