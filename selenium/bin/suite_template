@@ -13,7 +13,6 @@ tabs 1
 declare -i PADDING_LEVEL=0
 declare -i STEP=1
 declare -a REQUIRED_COMPONENTS
-declare -a INIT_ONLY_COMPONENTS
 
 find_selenium_dir() {
   TEST_PATH=$1
@@ -113,7 +112,6 @@ init_suite() {
 
   begin "Initializing suite $SUITE ..."
   print "> REQUIRED_COMPONENTS: ${REQUIRED_COMPONENTS[*]}"
-  print "> INIT_ONLY_COMPONENTS: ${INIT_ONLY_COMPONENTS[*]}"
   print "> TEST_CASES_DIR: ${TEST_CASES_DIR} "
   print "> TEST_CONFIG_DIR: ${TEST_CONFIG_DIR} "
   print "> DOCKER_NETWORK: ${DOCKER_NETWORK} "
@@ -220,37 +218,20 @@ wait_for_oidc_endpoint_docker() {
 calculate_rabbitmq_url() {
   echo "${RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
 }
-calculate_forward_proxy_url() {
-  PROXIED_URL=$1
-  PROXY_HOSTNAME=$2
-  PROXY_PORT=$3
-  SCHEME=$(echo "$PROXIED_URL" | cut -d: -f1)
-  PATH=$(echo "$PROXIED_URL" | cut -d/ -f4-)
-  echo "$SCHEME://$PROXY_HOSTNAME:$PROXY_PORT/$PATH"
-}
+
 wait_for_url() {
-  BASE_URL=$1  
+  BASE_URL=$1
   if [[ $BASE_URL == *"localhost"** ]]; then
-    wait_for_url_local $@ 
+    wait_for_url_local $BASE_URL
   else
-    wait_for_url_docker $@
+    wait_for_url_docker $BASE_URL
   fi
 }
 wait_for_url_local() {
   url=$1
-  proxy=${2:-none}
-  proxy_user=${3:-none}
-  proxy_pass=$4
-  curl_args="-L -f -v"
   max_retry=10
   counter=0
-  if [[ "$proxy" != "none" && "$proxy" != ""  ]]; then 
-    curl_args="--proxy ${proxy} ${curl_args}"
-  fi 
-  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
-    curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
-  fi 
-  until (curl $curl_args $url >/dev/null 2>&1)
+  until (curl -L -f -v $url >/dev/null 2>&1)
   do
     print "Waiting for $url to start (local)"
     sleep 5
@@ -263,14 +244,7 @@ wait_for_url_docker() {
   url=$1
   max_retry=10
   counter=0
-  curl_args="-L -f -v"
-  if [[ "$proxy" != "none"  && "$proxy" != "" ]]; then 
-    curl_args="--proxy ${proxy} ${curl_args}"
-  fi 
-  if [[ "$proxy_user" != "none" && "$proxy_user" != "" ]]; then 
-    curl_args="--proxy-user ${proxy_user}:${proxy_pass} ${curl_args}"
-  fi 
-  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 $curl_args $url >/dev/null 2>&1)
+  until (docker run --net ${DOCKER_NETWORK} --rm curlimages/curl:7.85.0 -L -f -v $url >/dev/null 2>&1)
   do
     print "Waiting for $url to start (docker)"
     sleep 5
@@ -403,8 +377,7 @@ profiles_with_local_or_docker() {
 generate_env_file() {
     begin "Generating env file ..."
     mkdir -p $CONF_DIR
-    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR ${ENV_FILE}.tmp    
-    grep -v '^#' ${ENV_FILE}.tmp > $ENV_FILE
+    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR $ENV_FILE    
     source $ENV_FILE    
     end "Finished generating env file."
 }
@@ -502,9 +475,6 @@ generate-client-keystore-if-required() {
   fi
 }
 
-initOnly() {
-  determine_init_only_components $@
-}
 run() {
   runWith rabbitmq
 }
@@ -555,12 +525,6 @@ elif [[ "$COMMAND" == "stop-rabbitmq" ]]
     test_local ${BASH_REMATCH[1]}
   fi
 }
-determine_init_only_components() {
-  for (( i=1; i<=$#; i++)) {
-    eval val='$'$i
-    INIT_ONLY_COMPONENTS+=( "$val" )
-  }
-}
 determine_required_components_including_rabbitmq() {
   for (( i=1; i<=$#; i++)) {
     eval val='$'$i
@@ -596,7 +560,7 @@ run_on_docker_with() {
   build_mocha_image
   start_selenium
 
-  trap "teardown_components" EXIT
+  trap teardown_components EXIT
 
   start_components
   test
@@ -673,27 +637,11 @@ ensure_components() {
 start_components() {
   for i in "${REQUIRED_COMPONENTS[@]}"
   do
-    local ret=$(is_init_only_component $i)
-    if [[ $ret == 1 ]]
-    then 
-      init="init_$i"
-      $init 
-    else  
-      start="start_$i"
-      $start
-    fi
+    start="start_$i"
+    $start
   done
 }
-is_init_only_component() {
-  for i in "${INIT_ONLY_COMPONENTS[@]}"
-  do
-    if [[ $i == $1 ]]
-    then 
-      return 1
-    fi
-  done
-  return 0
-}
+
 teardown_components() {
   skip_rabbitmq=${1:-false}
 
