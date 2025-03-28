@@ -214,6 +214,28 @@ join(RemoteNode, NodeType)
             end;
         {ok, already_member} ->
             {ok, already_member};
+        {error, {inconsistent_cluster, Msg}} = Error ->
+            case rabbit_khepri:is_enabled() of
+                true  ->
+                    Error;
+                false ->
+                    %% rabbit_mnesia:can_join_cluster/1 notice inconsistent_cluster,
+                    %% as RemoteNode thinks this node is already in the cluster.
+                    %% Attempt to leave the RemoteNode cluster, the discovery cluster,
+                    %% and simply retry the operation.
+                    rabbit_log:info("Mnesia: node ~tp thinks it's clustered "
+                                    "with node ~tp, but ~tp disagrees. ~tp will ask "
+                                    "to leave the cluster and try again.",
+                                    [RemoteNode, node(), node(), node()]),
+                    try
+                        ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
+                        join(RemoteNode, NodeType)
+                    catch
+                        _ ->
+                            rabbit_log:error(Msg),
+                            Error
+                    end
+            end;
         {error, _} = Error ->
             Error
     end.
