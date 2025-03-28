@@ -938,12 +938,6 @@ discard_next_delivery(ClusterName, State0, Wait) ->
     end.
 
 start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
-<<<<<<< HEAD
-    {ok, Started, _} = ra:start_cluster(?RA_SYSTEM,
-                                        ClusterName#resource.name,
-                                        {module, rabbit_fifo, RaFifoConfig},
-                                        ServerIds),
-=======
     NameBin = ra_lib:to_binary(ClusterName#resource.name),
     Confs = [begin
                  UId = ra:new_uid(NameBin),
@@ -957,7 +951,6 @@ start_cluster(ClusterName, ServerIds, RaFifoConfig) ->
              end
              || Id <- ServerIds],
     {ok, Started, _} = ra:start_cluster(?RA_SYSTEM, Confs),
->>>>>>> 789934958 (Fix flake(s) in rabbit_fifo_int_SUITE)
     ?assertEqual(length(Started), length(ServerIds)),
     ok.
 
