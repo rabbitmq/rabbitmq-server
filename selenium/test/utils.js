@@ -128,7 +128,20 @@ module.exports = {
     req.send()
     if (req.status == 200) return JSON.parse(req.responseText)
     else {
-      console.error(req.responseText)
+      console.error(JSON.stringify(req.statusText) + ", " + req.responseText)
+      throw new Error(req.responseText)
+    }
+  },
+
+  rest_get: (url, access_token) => {
+    const req = new XMLHttpRequest()
+    req.open('GET', url, false)
+    req.setRequestHeader('Accept', 'application/json')
+    req.setRequestHeader('Authorization', 'Bearer ' + access_token)
+    req.send()
+    if (req.status == 200) return JSON.parse(req.responseText)
+    else {
+      console.error(JSON.stringify(req.statusText) + ", " + req.responseText)
       throw new Error(req.responseText)
     }
   },
@@ -140,14 +153,13 @@ module.exports = {
       '&grant_type=client_credentials' +
       '&token_format=jwt' +
       '&response_type=token'
-
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     req.setRequestHeader('Accept', 'application/json')
     req.send(params)
     if (req.status == 200) return JSON.parse(req.responseText).access_token
     else {
-      console.error(req.responseText)
+      console.error(JSON.stringify(req.statusText) + ", " + req.responseText)
       throw new Error(req.responseText)
     }
   },

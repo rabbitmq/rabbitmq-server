@@ -1,32 +1,33 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
-const { buildDriver, captureScreensFor, teardown } = require('../../utils')
+const assert = require('assert')
+const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = require('../../utils')
 
+const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
-const FakePortalPage = require('../../pageobjects/FakePortalPage')
 
 describe('When a logged in user', function () {
   let overview
-  let fakePortal
+  let homePage
   let captureScreen
+  let idpLogin
 
   before(async function () {
     driver = buildDriver()
-    fakePortal = new FakePortalPage(driver)
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
-
-    await fakePortal.goToHome()
-    if (!await fakePortal.isLoaded()) {
-      throw new Error('Failed to load fakePortal')
-    }
-    await fakePortal.login()
+    await goToHome(driver);
     await overview.isLoaded()
+    assert.equal(await overview.getUser(), 'User rabbit_idp_user')    
   })
 
   it('logs out', async function () {
+    await homePage.clickToLogin()
+    await idpLogin.login('rabbit_admin', 'rabbit_admin')
+    await overview.isLoaded()
     await overview.logout()
-    await fakePortal.isLoaded()    
+    await homePage.isLoaded()
+
   })
 
   after(async function () {

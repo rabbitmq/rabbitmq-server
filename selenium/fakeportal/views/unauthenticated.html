@@ -1,0 +1,18 @@
+<h1> FakePortal </h1>
+
+<p>This is a portal used to test <b>Identity-Provider-based authentication</b>.
+This means users comes to RabbitMQ with a token already obtained without involving RabbitMQ
+management ui.
+</p>
+
+<p>This is the state of the Portal when the user is not authenticated yet.</p>
+<p>To get the fakeportal fully authenticated, pass two request parameters:
+  <ul>
+    <li>client_id</li>
+    <li>client_secret</li>
+  </ul> 
+ These credentitals are used to get an access token from UAA and send it to 
+RabbitMQ. 
+</p>
+
+

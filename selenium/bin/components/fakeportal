@@ -15,7 +15,10 @@ ensure_fakeportal() {
 }
 
 init_fakeportal() {
-  FAKEPORTAL_URL=${FAKEPORTAL_URL:-http://fakeportal:3000}
+  FAKEPORTAL_URL=${FAKEPORTAL_URL:-https://fakeportal:3000}
+  FAKEPORTAL_CONFIG_PATH=${FAKEPORTAL_CONFIG_PATH:-oauth/fakeportal}
+  FAKEPORTAL_CONFIG_DIR=$(realpath ${TEST_DIR}/${FAKEPORTAL_CONFIG_PATH})
+
   FAKEPORTAL_DIR=${SCRIPT}/../../fakeportal
   CLIENT_ID="${CLIENT_ID:-rabbit_idp_user}"
   CLIENT_SECRET="${CLIENT_SECRET:-rabbit_idp_user}"
@@ -32,6 +35,9 @@ init_fakeportal() {
   print "> CLIENT_ID: ${CLIENT_ID}"
   print "> CLIENT_SECRET: ${CLIENT_SECRET}"
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+
+  generate-ca-server-client-kpi fakeportal $FAKEPORTAL_CONFIG_DIR
+
 }
 start_fakeportal() {
   begin "Starting fakeportal ..."
@@ -39,6 +45,10 @@ start_fakeportal() {
   init_fakeportal
   kill_container_if_exist fakeportal
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
+
+  MOUNT_FAKEPORTAL_CONF_DIR=$CONF_DIR/fakeportal
+  mkdir -p $MOUNT_FAKEPORTAL_CONF_DIR
+  cp ${FAKEPORTAL_CONFIG_DIR}/*.pem $MOUNT_FAKEPORTAL_CONF_DIR
 
   docker run \
     --detach \
@@ -52,7 +62,8 @@ start_fakeportal() {
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
     --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
-    -v ${TEST_CONFIG_DIR}/uaa:/etc/uaa \
+    -v ${TEST_CONFIG_PATH}/uaa:/etc/uaa \
+    -v ${MOUNT_FAKEPORTAL_CONF_DIR}:/etc/fakeportal \
     -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeportal
 
