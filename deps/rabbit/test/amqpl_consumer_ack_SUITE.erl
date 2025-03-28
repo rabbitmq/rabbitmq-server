@@ -167,8 +167,9 @@ requeue_two_channels(QType, Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Ctag1 = <<"consumter tag 1">>,
     Ctag2 = <<"consumter tag 2">>,
-    Ch1 = rabbit_ct_client_helpers:open_channel(Config),
-    Ch2 = rabbit_ct_client_helpers:open_channel(Config),
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+    {ok, Ch1} = amqp_connection:open_channel(Conn),
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
 
     #'queue.declare_ok'{} = amqp_channel:call(
                               Ch1,
@@ -225,7 +226,7 @@ requeue_two_channels(QType, Config) ->
     assert_messages(QName, 4, 4, Config),
 
     %% Closing Ch1 should cause both messages to be requeued and delivered to the Ch2.
-    ok = rabbit_ct_client_helpers:close_channel(Ch1),
+    ok = amqp_channel:close(Ch1),
 
     receive {#'basic.deliver'{consumer_tag = C5},
              #amqp_msg{payload = <<"1">>}} ->
@@ -247,7 +248,9 @@ requeue_two_channels(QType, Config) ->
     assert_messages(QName, 0, 0, Config),
 
     ?assertMatch(#'queue.delete_ok'{},
-                 amqp_channel:call(Ch2, #'queue.delete'{queue = QName})).
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QName})),
+    amqp_connection:close(Conn),
+    ok.
 
 assert_messages(QNameBin, NumTotalMsgs, NumUnackedMsgs, Config) ->
     Vhost = ?config(rmq_vhost, Config),
