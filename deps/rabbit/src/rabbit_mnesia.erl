@@ -155,7 +155,7 @@ init() ->
 %% we cluster to its cluster.
 
 -spec can_join_cluster(node())
-                        -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+                      -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
 
 can_join_cluster(DiscoveryNode) ->
     ensure_mnesia_dir(),

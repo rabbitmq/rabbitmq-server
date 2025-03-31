@@ -50,7 +50,7 @@ ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
       RemoteNode :: node(),
       Ret :: Ok | Error,
       Ok :: {ok, [node()]} | {ok, already_member},
-      Error :: {error, {inconsistent_cluster, string()}}.
+      Error :: {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
 
 can_join(RemoteNode) ->
     ?LOG_INFO(
@@ -82,7 +82,7 @@ can_join_using_khepri(RemoteNode) ->
       NodeType :: node_type(),
       Ret :: Ok | Error,
       Ok :: ok | {ok, already_member},
-      Error :: {error, {inconsistent_cluster, string()}}.
+      Error :: {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
 %% @doc Adds this node to a cluster using `RemoteNode' to reach it.
 
 join(ThisNode, _NodeType) when ThisNode =:= node() ->
@@ -214,7 +214,7 @@ join(RemoteNode, NodeType)
             end;
         {ok, already_member} ->
             {ok, already_member};
-        {error, {inconsistent_cluster, Msg}} = Error ->
+        {error, {inconsistent_cluster, _Msg}} = Error ->
             case rabbit_khepri:is_enabled() of
                 true  ->
                     Error;
@@ -229,7 +229,9 @@ join(RemoteNode, NodeType)
                                     [RemoteNode, node(), node(), node()]),
                     ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
                     join(RemoteNode, NodeType)
-            end
+            end;
+        {error, _} = Error ->
+            Error
     end.
 
 join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
