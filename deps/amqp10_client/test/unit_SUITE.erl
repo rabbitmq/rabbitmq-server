@@ -30,7 +30,8 @@ groups() ->
        parse_uri_case4,
        parse_uri_case5,
        parse_uri_case6,
-       parse_uri_case7
+       parse_uri_case7,
+       parse_uri_case8
      ]}
     ].
 
@@ -51,60 +52,70 @@ parse_uri_case1(_) ->
   URI = "amqp://target.hostname:5672",
   {ok, Result} = amqp10_client:parse_uri(URI),
 
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672),
-  ?assertEqual(maps:get(sasl, Result), anon),
-  ?assertEqual(maps:get(tls_opts, Result, undefined), undefined).
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result), 5672),
+  ?assertEqual(anon, maps:get(sasl, Result), anon),
+  ?assertEqual(undefined, maps:get(tls_opts, Result, undefined), undefined).
 
 parse_uri_case2(_) ->
   URI = "amqps://target.hostname:5671",
   {ok, Result} = amqp10_client:parse_uri(URI),
 
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5671),
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5671, maps:get(port, Result)),
   ?assertMatch({secure_port, _}, maps:get(tls_opts, Result)).
 
 parse_uri_case3(_) ->
   URI = "amqp://target.hostname",
   {ok, Result} = amqp10_client:parse_uri(URI),
 
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672).
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)).
 
 parse_uri_case4(_) ->
   URI = "amqp://username:secre7@target.hostname",
   {ok, Result} = amqp10_client:parse_uri(URI),
 
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672),
-  ?assertEqual(maps:get(sasl, Result), {plain, <<"username">>, <<"secre7">>}).
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)),
+  ?assertEqual({plain, <<"username">>, <<"secre7">>}, maps:get(sasl, Result)).
 
 parse_uri_case5(_) ->
   URI = "amqp://username:secre7@target.hostname?container_id=container9&hostname=vhost:abc",
   {ok, Result} = amqp10_client:parse_uri(URI),
-  ct:pal("~tp", [Result]),
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672),
-  ?assertEqual(maps:get(sasl, Result), {plain, <<"username">>, <<"secre7">>}),
-  ?assertEqual(maps:get(container_id, Result), <<"container9">>),
-  ?assertEqual(maps:get(hostname, Result), <<"vhost:abc">>).
+
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)),
+  ?assertEqual({plain, <<"username">>, <<"secre7">>}, maps:get(sasl, Result)),
+  ?assertEqual(<<"container9">>, maps:get(container_id, Result)),
+  ?assertEqual(<<"vhost:abc">>, maps:get(hostname, Result)).
 
 parse_uri_case6(_) ->
   URI = "amqp://username:secre7@target.hostname?container_id=container7&vhost=abc",
   {ok, Result} = amqp10_client:parse_uri(URI),
-  ct:pal("~tp", [Result]),
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672),
-  ?assertEqual(maps:get(sasl, Result), {plain, <<"username">>, <<"secre7">>}),
-  ?assertEqual(maps:get(container_id, Result), <<"container7">>),
-  ?assertEqual(maps:get(hostname, Result), <<"vhost:abc">>).
+
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)),
+  ?assertEqual({plain, <<"username">>, <<"secre7">>}, maps:get(sasl, Result)),
+  ?assertEqual(<<"container7">>, maps:get(container_id, Result)),
+  ?assertEqual(<<"vhost:abc">>, maps:get(hostname, Result)).
 
 parse_uri_case7(_) ->
   URI = "amqp://username:secre7@target.hostname/abc?container_id=container5",
   {ok, Result} = amqp10_client:parse_uri(URI),
-  ct:pal("~tp", [Result]),
-  ?assertEqual(maps:get(address, Result), "target.hostname"),
-  ?assertEqual(maps:get(port, Result), 5672),
-  ?assertEqual(maps:get(sasl, Result), {plain, <<"username">>, <<"secre7">>}),
-  ?assertEqual(maps:get(container_id, Result), <<"container5">>),
-  ?assertEqual(maps:get(hostname, Result), <<"vhost:abc">>).
+
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)),
+  ?assertEqual({plain, <<"username">>, <<"secre7">>}, maps:get(sasl, Result)),
+  ?assertEqual(<<"container5">>, maps:get(container_id, Result)),
+  ?assertEqual(<<"vhost:abc">>, maps:get(hostname, Result)).
+
+parse_uri_case8(_) ->
+  URI = "amqp://username:secre7@target.hostname/abc?container_id=container10&hostname=vhost:def&vhost=ghi",
+  {ok, Result} = amqp10_client:parse_uri(URI),
+
+  ?assertEqual("target.hostname", maps:get(address, Result)),
+  ?assertEqual(5672, maps:get(port, Result)),
+  ?assertEqual({plain, <<"username">>, <<"secre7">>}, maps:get(sasl, Result)),
+  ?assertEqual(<<"container10">>, maps:get(container_id, Result)),
+  ?assertEqual(<<"vhost:ghi">>, maps:get(hostname, Result)).
