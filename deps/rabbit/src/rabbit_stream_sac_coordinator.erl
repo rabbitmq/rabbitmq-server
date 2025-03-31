@@ -229,7 +229,7 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                     of
                         {value, Consumer} ->
                             G1 = remove_from_group(Consumer, Group0),
-                            handle_consumer_removal(G1, Consumer, Stream, ConsumerName);
+                            handle_consumer_removal(G1, Stream, ConsumerName, Consumer#consumer.active);
                         false ->
                             {Group0, []}
                     end,
@@ -414,50 +414,44 @@ handle_connection_down(Pid,
             {State0, []};
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
-            %% iterate other the groups that this PID affects
-            maps:fold(fun({VirtualHost, Stream, ConsumerName}, _,
-                          {#?MODULE{groups = ConsumerGroups} = S0, Eff0}) ->
-                         case lookup_group(VirtualHost,
-                                           Stream,
-                                           ConsumerName,
-                                           ConsumerGroups)
-                         of
-                             undefined -> {S0, Eff0};
-                             #group{consumers = Consumers} ->
-                                 %% iterate over the consumers of the group
-                                 %% and unregister the ones from this PID.
-                                 %% It may not be optimal, computing the new active consumer
-                                 %% from the purged group and notifying the remaining consumers
-                                 %% appropriately should avoid unwanted notifications and even rebalancing.
-                                 lists:foldl(fun (#consumer{pid = P,
-                                                            subscription_id =
-                                                                SubId},
-                                                  {StateSub0, EffSub0})
-                                                     when P == Pid ->
-                                                     {StateSub1, ok, E} =
-                                                         ?MODULE:apply(#command_unregister_consumer{vhost
-                                                                                                        =
-                                                                                                        VirtualHost,
-                                                                                                    stream
-                                                                                                        =
-                                                                                                        Stream,
-                                                                                                    consumer_name
-                                                                                                        =
-                                                                                                        ConsumerName,
-                                                                                                    connection_pid
-                                                                                                        =
-                                                                                                        Pid,
-                                                                                                    subscription_id
-                                                                                                        =
-                                                                                                        SubId},
-                                                                       StateSub0),
-                                                     {StateSub1, EffSub0 ++ E};
-                                                 (_Consumer, Acc) -> Acc
-                                             end,
-                                             {S0, Eff0}, Consumers)
-                         end
-                      end,
-                      {State1, []}, Groups)
+            maps:fold(fun(G, _, Acc) ->
+                              handle_group_after_connection_down(Pid, Acc, G)
+                      end, {State1, []}, Groups)
+    end.
+
+handle_group_after_connection_down(Pid,
+                                {#?MODULE{groups = Groups0} = S0, Eff0},
+                                {VirtualHost, Stream, ConsumerName}) ->
+    case lookup_group(VirtualHost,
+                      Stream,
+                      ConsumerName,
+                      Groups0) of
+        undefined ->
+            {S0, Eff0};
+        #group{consumers = Consumers0} = G0 ->
+            %% remove the connection consumers from the group state
+            %% keep flags to know what happened
+            {Consumers1, ActiveRemoved, AnyRemoved} =
+            lists:foldl(
+              fun(#consumer{pid = P, active = S}, {L, ActiveFlag, _}) when P == Pid ->
+                      {L, S or ActiveFlag, true};
+                 (C, {L, ActiveFlag, AnyFlag}) ->
+                      {L ++ [C], ActiveFlag, AnyFlag}
+              end, {[], false, false}, Consumers0),
+
+            case AnyRemoved of
+                true ->
+                    G1 = G0#group{consumers = Consumers1},
+                    {G2, Effects} = handle_consumer_removal(G1, Stream, ConsumerName, ActiveRemoved),
+                    Groups1 = update_groups(VirtualHost,
+                                            Stream,
+                                            ConsumerName,
+                                            G2,
+                                            Groups0),
+                    {S0#?MODULE{groups = Groups1}, Effects ++ Eff0};
+                false ->
+                    {S0, Eff0}
+            end
     end.
 
 do_register_consumer(VirtualHost,
@@ -576,9 +570,9 @@ do_register_consumer(VirtualHost,
 handle_consumer_removal(#group{consumers = []} = G, _, _, _) ->
     {G, []};
 handle_consumer_removal(#group{partition_index = -1} = Group0,
-                        Consumer, Stream, ConsumerName) ->
-    case Consumer of
-        #consumer{active = true} ->
+                        Stream, ConsumerName, ActiveRemoved) ->
+    case ActiveRemoved of
+        true ->
             %% this is the active consumer we remove, computing the new one
             Group1 = compute_active_consumer(Group0),
             case lookup_active_consumer(Group1) of
@@ -589,11 +583,11 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
                     %% no active consumer found in the group, nothing to do
                     {Group1, []}
             end;
-        #consumer{active = false} ->
+        false ->
             %% not the active consumer, nothing to do.
             {Group0, []}
     end;
-handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
+handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
     case lookup_active_consumer(Group0) of
         {value,
          #consumer{pid = ActPid, subscription_id = ActSubId} =
@@ -612,7 +606,7 @@ handle_consumer_removal(Group0, Consumer, Stream, ConsumerName) ->
                                              Stream, ConsumerName, false, true)]}
             end;
         false ->
-            case Consumer#consumer.active of
+            case ActiveRemoved of
                 true ->
                     %% the active one is going away, picking a new one
                     #consumer{pid = P, subscription_id = SID} =
