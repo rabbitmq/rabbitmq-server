@@ -39,7 +39,9 @@
          link_handle/1,
          get_msg/1,
          get_msg/2,
-         parse_uri/1
+         parse_uri/1,
+         %% for tests
+         binary_without_leading_slash/1
         ]).
 
 -type snd_settle_mode() :: amqp10_client_session:snd_settle_mode().
@@ -412,14 +414,24 @@ parse_uri(Uri) ->
     end.
 
 parse_result(Map) ->
-    _ = case maps:get(path, Map, "/") of
-      "/" -> ok;
-      ""  -> ok;
-      _   -> throw(path_segment_not_supported)
-    end,
     Scheme   = maps:get(scheme, Map, "amqp"),
     UserInfo = maps:get(userinfo, Map, undefined),
     Host     = maps:get(host, Map),
+
+    %% AMQP 1.0 may not have the concept of virtual hosts but
+    %% Shovels and Erlang/BEAM-based apps connecting to RabbitMQ
+    %% need to be able to pass it, so treat any "non-default" path as a virtual host name
+    PathSegment = case maps:get(path, Map, "/") of
+        "/"    -> undefined;
+        ""     -> undefined;
+        Value0 -> binary_without_leading_slash(Value0)
+      end,
+      %% Note: this is not the same thing as a hostname at the TCP/IP level, that is, not 'address'.
+      DefaultHostname = case PathSegment of
+        undefined -> to_binary(Host);
+        Value1    -> list_to_binary(io_lib:format("vhost:~ts", [Value1]))
+      end,
+
     DefaultPort = case Scheme of
       "amqp"  -> 5672;
       "amqps" -> 5671
@@ -444,13 +456,15 @@ parse_result(Map) ->
                              Acc#{max_frame_size => list_to_integer(V)};
                         ("hostname", V, Acc) ->
                              Acc#{hostname => list_to_binary(V)};
+                        ("vhost", V, Acc) ->
+                            Acc#{hostname => list_to_binary(io_lib:format("vhost:~ts", [V]))};
                         ("container_id", V, Acc) ->
                              Acc#{container_id => list_to_binary(V)};
                         ("transfer_limit_margin", V, Acc) ->
                              Acc#{transfer_limit_margin => list_to_integer(V)};
                         (_, _, Acc) -> Acc
                      end, #{address => Host,
-                            hostname => to_binary(Host),
+                            hostname => DefaultHostname,
                             port => Port,
                             sasl => Sasl}, Query),
     case Scheme of
@@ -459,6 +473,15 @@ parse_result(Map) ->
             TlsOpts = parse_tls_opts(Query),
             Ret0#{tls_opts => {secure_port, TlsOpts}}
     end.
+
+-spec binary_without_leading_slash(binary() | string()) -> binary().
+binary_without_leading_slash(Bin) when is_binary(Bin) ->
+    case Bin of
+        <<"/", Rest/binary>> -> Rest;
+        Other -> Other
+    end;
+binary_without_leading_slash(Bin) when is_list(Bin) ->
+    ?FUNCTION_NAME(list_to_binary(Bin)).
 
 parse_usertoken(U) ->
     [User, Pass] = string:tokens(U, ":"),
@@ -558,6 +581,12 @@ parse_uri_test_() ->
                           hostname => <<"my_proxy">>,
                           sasl => {plain, <<"fred">>, <<"passw">>}}},
                    parse_uri("amqp://fred:passw@my_proxy:9876")),
+     %% treat URI path as a virtual host name
+     ?_assertEqual({ok, #{port => 5672,
+                          address => "my_host",
+                          sasl => anon,
+                          hostname => <<"vhost:my_path_segment:9876">>}},
+                   parse_uri("amqp://my_host/my_path_segment:9876")),
      ?_assertEqual(
         {ok, #{address => "my_proxy", port => 9876,
                hostname => <<"my_proxy">>,
@@ -597,9 +626,7 @@ parse_uri_test_() ->
                   "cacertfile=/etc/cacertfile.pem&certfile=/etc/certfile.pem&" ++
                   "keyfile=/etc/keyfile.key&fail_if_no_peer_cert=banana")),
      ?_assertEqual({error, plain_sasl_missing_userinfo},
-                   parse_uri("amqp://my_host:9876?sasl=plain")),
-     ?_assertEqual({error, path_segment_not_supported},
-                   parse_uri("amqp://my_host/my_path_segment:9876"))
+                   parse_uri("amqp://my_host:9876?sasl=plain"))
     ].
 
 -endif.
