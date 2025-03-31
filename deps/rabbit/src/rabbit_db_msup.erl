@@ -160,6 +160,7 @@ create_or_update_in_khepri(Group, Overall, Delegate, ChildSpec, Id) ->
                     end
             end;
         _  ->
+            %% FIXME: Not atomic with the get above.
             ok = rabbit_khepri:put(Path, S),
             start
     end.
