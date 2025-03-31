@@ -598,26 +598,16 @@ augment_infos_with_user_provided_connection_name(Infos,
     end.
 
 close(Transport,
-      #stream_connection{socket = S, virtual_host = VirtualHost,
-                         outstanding_requests = Requests},
+      #stream_connection{socket = S},
       #stream_connection_state{consumers = Consumers}) ->
     [begin
-         %% we discard the result (updated requests) because they are no longer used
-         _ = maybe_unregister_consumer(VirtualHost, Consumer,
-                                       single_active_consumer(Properties),
-                                       Requests),
          case Log of
              undefined ->
                  ok; %% segment may not be defined on subscription (single active consumer)
              L ->
                  osiris_log:close(L)
          end
-     end
-     || #consumer{log = Log,
-                  configuration =
-                      #consumer_configuration{properties = Properties}} =
-            Consumer
-            <- maps:values(Consumers)],
+     end || #consumer{log = Log} <- maps:values(Consumers)],
     Transport:shutdown(S, write),
     Transport:close(S).
 
