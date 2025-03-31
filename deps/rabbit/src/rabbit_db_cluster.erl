@@ -231,13 +231,15 @@ join(RemoteNode, NodeType)
                         ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
                         join(RemoteNode, NodeType)
                     catch
+                        %% Should we handle the catched error - my reasoning for
+                        %% ignoring it is that the error we want to show is the
+                        %% issue of joinging the cluster, not the potential error
+                        %% of leaving the cluster.
                         _ ->
                             rabbit_log:error(Msg),
                             Error
                     end
-            end;
-        {error, _} = Error ->
-            Error
+            end
     end.
 
 join_using_mnesia(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
