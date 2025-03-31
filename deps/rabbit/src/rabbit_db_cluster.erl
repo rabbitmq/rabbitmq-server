@@ -227,18 +227,8 @@ join(RemoteNode, NodeType)
                                     "with node ~tp, but ~tp disagrees. ~tp will ask "
                                     "to leave the cluster and try again.",
                                     [RemoteNode, node(), node(), node()]),
-                    try
-                        ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
-                        join(RemoteNode, NodeType)
-                    catch
-                        Exception ->
-                        %% Should we handle the catched error - my reasoning for
-                        %% ignoring it is that the error we want to show is the
-                        %% issue of joinging the cluster, not the potential error
-                        %% of leaving the cluster.
-                            rabbit_log:error(Msg),
-                            Exception
-                    end
+                    ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
+                    join(RemoteNode, NodeType)
             end
     end.
 
