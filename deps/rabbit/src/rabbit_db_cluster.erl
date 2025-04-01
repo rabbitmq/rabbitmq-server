@@ -227,7 +227,7 @@ join(RemoteNode, NodeType)
                                     "with node ~tp, but ~tp disagrees. ~tp will ask "
                                     "to leave the cluster and try again.",
                                     [RemoteNode, node(), node(), node()]),
-                    ok = rabbit_mnesia:leave_discover_cluster(RemoteNode),
+                    ok = rabbit_mnesia:leave_then_rediscover_cluster(RemoteNode),
                     join(RemoteNode, NodeType)
             end;
         {error, _} = Error ->

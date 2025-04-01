@@ -73,7 +73,7 @@
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
 %% Used internally in `rabbit_db_cluster'.
--export([members/0, leave_discover_cluster/1]).
+-export([members/0, leave_then_rediscover_cluster/1]).
 
 %% Used internally in `rabbit_khepri'.
 -export([mnesia_and_msg_store_files/0]).
@@ -922,7 +922,7 @@ remove_node_if_mnesia_running(Node) ->
             end
     end.
 
-leave_discover_cluster(DiscoveryNode) ->
+leave_then_rediscover_cluster(DiscoveryNode) ->
     {ClusterNodes, _, _} = discover_cluster([DiscoveryNode]),
     leave_cluster(rabbit_nodes:nodes_excl_me(ClusterNodes)).
 
