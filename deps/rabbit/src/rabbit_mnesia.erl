@@ -73,7 +73,7 @@
 -export([node_info/0, remove_node_if_mnesia_running/1]).
 
 %% Used internally in `rabbit_db_cluster'.
--export([members/0]).
+-export([members/0, leave_then_rediscover_cluster/1]).
 
 %% Used internally in `rabbit_khepri'.
 -export([mnesia_and_msg_store_files/0]).
@@ -155,7 +155,7 @@ init() ->
 %% we cluster to its cluster.
 
 -spec can_join_cluster(node())
-                        -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()}}.
+                      -> {ok, [node()]} | {ok, already_member} | {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
 
 can_join_cluster(DiscoveryNode) ->
     ensure_mnesia_dir(),
@@ -179,7 +179,6 @@ can_join_cluster(DiscoveryNode) ->
                     {ok, already_member};
                 false ->
                     Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
-                    rabbit_log:error(Msg),
                     {error, {inconsistent_cluster, Msg}}
             end
     end.
@@ -923,15 +922,19 @@ remove_node_if_mnesia_running(Node) ->
             end
     end.
 
-leave_cluster() ->
-    case rabbit_nodes:nodes_excl_me(cluster_nodes(all)) of
-        []       -> ok;
-        AllNodes -> case lists:any(fun leave_cluster/1, AllNodes) of
-                        true  -> ok;
-                        false -> e(no_running_cluster_nodes)
-                    end
-    end.
+leave_then_rediscover_cluster(DiscoveryNode) ->
+    {ClusterNodes, _, _} = discover_cluster([DiscoveryNode]),
+    leave_cluster(rabbit_nodes:nodes_excl_me(ClusterNodes)).
 
+leave_cluster() ->
+    leave_cluster(rabbit_nodes:nodes_excl_me(cluster_nodes(all))).
+leave_cluster([]) ->
+    ok;
+leave_cluster(Nodes) when is_list(Nodes)  ->
+    case lists:any(fun leave_cluster/1, Nodes) of
+        true  -> ok;
+        false -> e(no_running_cluster_nodes)
+    end;
 leave_cluster(Node) ->
     case rpc:call(Node,
                   rabbit_mnesia, remove_node_if_mnesia_running, [node()]) of
