@@ -435,8 +435,13 @@ handle_group_after_connection_down(Pid,
             lists:foldl(
               fun(#consumer{pid = P, active = S}, {L, ActiveFlag, _}) when P == Pid ->
                       {L, S or ActiveFlag, true};
-                 (C, {L, ActiveFlag, AnyFlag}) ->
-                      {L ++ [C], ActiveFlag, AnyFlag}
+                 (#consumer{pid = P, active = S} = C, {L, ActiveFlag, AnyFlag}) ->
+                      case is_alive(P) of
+                          true ->
+                              {L ++ [C], ActiveFlag, AnyFlag};
+                          false ->
+                              {L, S or ActiveFlag, true}
+                      end
               end, {[], false, false}, Consumers0),
 
             case AnyRemoved of
@@ -452,6 +457,15 @@ handle_group_after_connection_down(Pid,
                 false ->
                     {S0, Eff0}
             end
+    end.
+
+is_alive(Pid) ->
+    LocalNode = node(),
+    case node(Pid) of
+        LocalNode ->
+            is_process_alive(Pid);
+        OtherNode ->
+            rpc:call(OtherNode, erlang, is_process_alive, [Pid])
     end.
 
 do_register_consumer(VirtualHost,
