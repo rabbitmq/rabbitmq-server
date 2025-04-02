@@ -1401,10 +1401,19 @@ end}.
     ]}.
 
 {mapping, "cluster_formation.discovery_retry_limit", "rabbit.cluster_formation.discovery_retry_limit",
-    [
-     {datatype, integer},
-     {validators, ["non_zero_positive_integer"]}
-    ]}.
+    [{datatype, [{atom, unlimited}, integer]}]}.
+
+{translation, "rabbit.cluster_formation.discovery_retry_limit",
+ fun(Conf) ->
+   case cuttlefish:conf_get("cluster_formation.discovery_retry_limit", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      unlimited  -> unlimited;
+      Val when is_integer(Val) andalso Val > 0 -> Val;
+      _         -> cuttlefish:invalid("should be positive integer or 'unlimited'")
+  end
+ end
+}.
+
 {mapping, "cluster_formation.discovery_retry_interval", "rabbit.cluster_formation.discovery_retry_interval",
     [
      {datatype, integer},
