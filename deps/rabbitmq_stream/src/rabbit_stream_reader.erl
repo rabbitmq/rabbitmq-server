@@ -3221,7 +3221,9 @@ notify_connection_closed(#statem_data{
          {client_properties, ClientProperties}],
     rabbit_event:notify(connection_closed,
                         augment_infos_with_user_provided_connection_name(EventProperties,
-                                                                         Connection)).
+                                                                         Connection));
+notify_connection_closed(#statem_data{}) ->
+    ok.
 
 handle_frame_post_close(_Transport,
                         Connection,
