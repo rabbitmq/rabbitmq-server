@@ -520,13 +520,13 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 4.
+version() -> 5.
 
 which_module(_) ->
     ?MODULE.
 
 init(_Conf) ->
-    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}.
+    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator_v4:init_state()}.
 
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
@@ -564,11 +564,12 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
     end;
 apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
                                         monitors = Monitors0} = State0) ->
-    {SacState1, Reply, Effects0} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
+    Mod = sac_module(Meta),
+    {SacState1, Reply, Effects0} = Mod:apply(SacCommand, SacState0),
     {SacState2, Monitors1, Effects1} =
-         rabbit_stream_sac_coordinator:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+         Mod:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
     return(Meta, State0#?MODULE{single_active_consumer = SacState2,
-                                 monitors = Monitors1}, Reply, Effects1);
+                                monitors = Monitors1}, Reply, Effects1);
 apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,
@@ -629,7 +630,8 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                                                monitors = Monitors1}, ok, Effects0)
             end;
         {sac, Monitors1} ->
-            {SacState1, Effects} = rabbit_stream_sac_coordinator:handle_connection_down(Pid, SacState0),
+            Mod = sac_module(Meta),
+            {SacState1, Effects} = Mod:handle_connection_down(Pid, SacState0),
             return(Meta, State#?MODULE{single_active_consumer = SacState1,
                                        monitors = Monitors1}, ok, Effects);
         error ->
@@ -746,6 +748,11 @@ state_enter(leader, #?MODULE{streams = Streams,
                  [{monitor, process, P} || P <- Pids]];
 state_enter(_S, _) ->
     [].
+
+sac_module(#{machine_version := MachineVersion}) when MachineVersion =< 4 ->
+    rabbit_stream_sac_coordinator_v4;
+sac_module(_) ->
+    rabbit_stream_sac_coordinator.
 
 all_member_nodes(Streams) ->
     maps:keys(
@@ -2214,6 +2221,11 @@ machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
                                              end, Members)}
                 end, Streams0),
     {State#?MODULE{streams = Streams}, []};
+machine_version(4 = From, 5, #?MODULE{single_active_consumer = Sac0} = State) ->
+    rabbit_log:info("Stream coordinator machine version changes from 4 to 5, updating state."),
+    SacExport = rabbit_stream_sac_coordinator_v4:state_to_map(Sac0),
+    Sac1 = rabbit_stream_sac_coordinator:import_state(From, SacExport),
+    {State#?MODULE{single_active_consumer = Sac1}, []};
 machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),

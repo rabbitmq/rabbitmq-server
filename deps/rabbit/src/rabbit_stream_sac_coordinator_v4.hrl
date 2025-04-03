@@ -22,13 +22,12 @@
 -type subscription_id() :: byte().
 -type group_id() :: {vhost(), stream(), consumer_name()}.
 -type owner() :: binary().
--type consumer_status() :: active | waiting | deactivating.
 
 -record(consumer,
         {pid :: pid(),
          subscription_id :: subscription_id(),
          owner :: owner(), %% just a label
-         status :: consumer_status()}).
+         active :: boolean()}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(rabbit_stream_sac_coordinator,
