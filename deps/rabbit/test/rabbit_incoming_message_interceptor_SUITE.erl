@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(rabbit_message_interceptor_SUITE).
+-module(rabbit_incoming_message_interceptor_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -40,9 +40,9 @@ init_per_testcase(Testcase, Config0) ->
                     headers_no_overwrite -> false
                 end,
     Val = maps:to_list(
-            maps:from_keys([set_header_timestamp,
-                            set_header_routing_node],
-                           Overwrite)),
+            maps:from_keys([rabbit_header_timestamp_interceptor,
+                            rabbit_header_routing_node_interceptor],
+                           #{overwrite => Overwrite})),
     Config = rabbit_ct_helpers:merge_app_env(
                Config1, {rabbit, [{incoming_message_interceptors, Val}]}),
     rabbit_ct_helpers:run_steps(
