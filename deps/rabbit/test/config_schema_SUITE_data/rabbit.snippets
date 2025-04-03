@@ -274,7 +274,7 @@ cluster_formation.classic_config.nodes.peer2 = rabbit@hostname2",
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config}]},
         {cluster_nodes,{[rabbit@hostname2,rabbit@hostname1],disc}}]}],
   []},
- 
+
   {cluster_formation_module_dns_alias,
   "cluster_formation.peer_discovery_backend = dns
 cluster_formation.dns.hostname = discovery.eng.example.local",
@@ -287,7 +287,7 @@ cluster_formation.dns.hostname = discovery.eng.example.local",
              ]}]}
         ]}],
   []},
- 
+
  {cluster_formation_disk,
   "cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
    cluster_formation.classic_config.nodes.peer1 = rabbit@hostname1
@@ -758,17 +758,17 @@ tcp_listen_options.exit_on_close = false",
              {fail_if_no_peer_cert, false},
              {honor_ecc_order, true}]}]}],
   []},
-  
+
  {ssl_cert_login_from_cn,
   "ssl_cert_login_from = common_name",
   [{rabbit,[{ssl_cert_login_from, common_name}]}],
   []},
-  
+
  {ssl_cert_login_from_dn,
   "ssl_cert_login_from = distinguished_name",
   [{rabbit,[{ssl_cert_login_from, distinguished_name}]}],
   []},
- 
+
  {ssl_cert_login_from_san_dns,
   "ssl_cert_login_from      = subject_alternative_name
    ssl_cert_login_san_type  = dns
@@ -779,7 +779,7 @@ tcp_listen_options.exit_on_close = false",
       {ssl_cert_login_san_index, 0}
   ]}],
   []},
-  
+
 
   {ssl_options_bypass_pem_cache,
    "ssl_options.bypass_pem_cache = true",
@@ -837,6 +837,18 @@ tcp_listen_options.exit_on_close = false",
        [{cluster_formation,
             [{peer_discovery_backend,rabbit_peer_discovery_classic_config},
              {node_type,ram}]}]}],
+  []},
+ {cluster_formation_retry_limit_integer,
+  "cluster_formation.discovery_retry_limit = 500",
+  [{rabbit,
+       [{cluster_formation,
+            [{discovery_retry_limit, 500}]}]}],
+  []},
+ {cluster_formation_retry_limit_infinity,
+  "cluster_formation.discovery_retry_limit = unlimited",
+  [{rabbit,
+       [{cluster_formation,
+            [{discovery_retry_limit, unlimited}]}]}],
   []},
  {background_gc_enabled,
   "background_gc_enabled = true
