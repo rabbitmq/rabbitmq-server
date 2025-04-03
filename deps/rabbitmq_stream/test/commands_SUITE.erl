@@ -491,8 +491,8 @@ list_group_consumers_run(Config) ->
     {ok, Consumers1} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup1),
     ?assertEqual([[{subscription_id, 0}, {state, active}],
-                  [{subscription_id, 1}, {state, waiting}],
-                  [{subscription_id, 2}, {state, waiting}]],
+                  [{subscription_id, 1}, {state, inactive}],
+                  [{subscription_id, 2}, {state, inactive}]],
                  Consumers1),
 
     Stream2 = <<"list_group_consumers_run_2">>,
@@ -511,8 +511,8 @@ list_group_consumers_run(Config) ->
     {ok, Consumers2} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
     ?assertEqual([[{subscription_id, 3}, {state, active}],
-                  [{subscription_id, 4}, {state, waiting}],
-                  [{subscription_id, 5}, {state, waiting}]],
+                  [{subscription_id, 4}, {state, inactive}],
+                  [{subscription_id, 5}, {state, inactive}]],
                  Consumers2),
 
     delete_stream(S, Stream1, C),
