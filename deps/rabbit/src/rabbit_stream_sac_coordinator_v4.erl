@@ -465,14 +465,10 @@ state_to_map(#?STATE{groups = Groups, pids_groups = PidsGroups}) ->
 groups_to_map(Groups) when is_map(Groups) ->
     maps:fold(fun(K, V, Acc) ->
                       Acc#{K => group_to_map(V)}
-              end, #{}, Groups);
-groups_to_map(_) ->
-    #{}.
+              end, #{}, Groups).
 
 pids_groups_to_map(PidsGroups) when is_map(PidsGroups) ->
-    PidsGroups;
-pids_groups_to_map(_) ->
-    #{}.
+    PidsGroups.
 
 group_to_map(#group{consumers = Consumers, partition_index = Index}) ->
     OutConsumers = lists:foldl(fun(C, Acc) ->
