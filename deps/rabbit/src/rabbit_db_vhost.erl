@@ -167,7 +167,7 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
     Path = khepri_vhost_path(VHostName),
     Ret1 = rabbit_khepri:adv_get(Path),
     case Ret1 of
-        {ok, #{data := VHost0, payload_version := DVersion}} ->
+        {ok, #{Path := #{data := VHost0, payload_version := DVersion}}} ->
             VHost = vhost:merge_metadata(VHost0, Metadata),
             rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
             Path1 = khepri_path:combine_with_conditions(
@@ -443,10 +443,10 @@ update_in_mnesia_tx(VHostName, UpdateFun)
 update_in_khepri(VHostName, UpdateFun) ->
     Path = khepri_vhost_path(VHostName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := V, payload_version := DVersion}} ->
+        {ok, #{Path := #{data := V, payload_version := Vsn}}} ->
             V1 = UpdateFun(V),
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             case rabbit_khepri:put(Path1, V1) of
                 ok ->
                     V1;

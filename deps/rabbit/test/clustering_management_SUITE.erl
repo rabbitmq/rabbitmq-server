@@ -745,13 +745,13 @@ is_in_minority(Ret) ->
     ?assertMatch(match, re:run(Msg, ".*timed out.*minority.*", [{capture, none}])).
 
 reset_last_disc_node(Config) ->
-    Servers = [Rabbit, Hare | _] = cluster_members(Config),
+    [Rabbit, Hare | _] = cluster_members(Config),
 
     stop_app(Config, Hare),
     ?assertEqual(ok, change_cluster_node_type(Config, Hare, ram)),
     start_app(Config, Hare),
 
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, Servers, khepri_db) of
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, [Rabbit], khepri_db) of
         ok ->
             %% The reset works after the switch to Khepri because the RAM node was
             %% implicitly converted to a disc one as Khepri always writes data on disc.
