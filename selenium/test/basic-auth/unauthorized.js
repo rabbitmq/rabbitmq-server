@@ -19,7 +19,6 @@ describe('An user without management tag', function () {
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
-    //assert.ok(!await login.isPopupWarningDisplayed())
     await login.login('rabbit_no_management', 'guest')    
   })
 
@@ -44,9 +43,8 @@ describe('An user without management tag', function () {
       })
 
       it('should close popup warning', async function(){
-      await delay(1000)
-        const visible = await login.isPopupWarningDisplayed()
-        assert.ok(!visible)
+        await delay(1000)        
+        assert.ok(await login.isPopupWarningNotDisplayed())
       })
 
   })
