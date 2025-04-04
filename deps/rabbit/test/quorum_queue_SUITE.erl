@@ -2485,11 +2485,21 @@ confirm_availability_on_leader_change(Config) ->
     ok.
 
 wait_for_new_messages(Config, Node, Name, Increase) ->
+    wait_for_new_messages(Config, Node, Name, Increase, 60000).
+
+wait_for_new_messages(Config, Node, Name, Increase, Timeout) ->
     Infos = rabbit_ct_broker_helpers:rabbitmqctl_list(
               Config, Node, ["list_queues", "name", "messages"]),
-    [[Name, Msgs0]] = [Props || Props <- Infos, hd(Props) == Name],
-    Msgs = binary_to_integer(Msgs0),
-    queue_utils:wait_for_min_messages(Config, Name, Msgs + Increase).
+    case [Props || Props <- Infos, hd(Props) == Name] of
+        [[Name, Msgs0]] ->
+            Msgs = binary_to_integer(Msgs0),
+            queue_utils:wait_for_min_messages(Config, Name, Msgs + Increase);
+        _ when Timeout >= 0 ->
+            Sleep = 200,
+            timer:sleep(Sleep),
+            wait_for_new_messages(
+              Config, Node, Name, Increase, Timeout - Sleep)
+    end.
 
 flush(T) ->
     receive X ->
