@@ -95,7 +95,7 @@ start_docker_cluster_rabbitmq() {
     kill_container_if_exist rabbitmq1
     kill_container_if_exist rabbitmq2
 
-    mkdir -p $CONF_DIR/rabbitmq
+    mkdir -pv $CONF_DIR/rabbitmq/conf.d/
 
     RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
@@ -109,7 +109,6 @@ start_docker_cluster_rabbitmq() {
         fi
     fi
     if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
-        mkdir -p $CONF_DIR/rabbitmq/conf.d/
         cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/rabbitmq/conf.d/
     fi
     if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
@@ -187,7 +186,7 @@ start_docker_rabbitmq() {
     -v $CONF_DIR/rabbitmq/imports:/var/rabbitmq/imports \
     -v ${TEST_DIR}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
-    
+
   wait_for_message rabbitmq "Server startup complete"
   end "RabbitMQ ready"
 }

@@ -29,8 +29,7 @@ describe('An user without management tag', function () {
     if (!await homePage.isLoaded()) {
       throw new Error('Failed to login')
     }
-    const visible = await homePage.isWarningVisible()
-    assert.ok(visible)
+    assert.ok(await homePage.isWarningVisible())
   })
 
   it('should get "Not authorized" warning message and logout button but no login button', async function(){
@@ -47,7 +46,7 @@ describe('An user without management tag', function () {
       })
 
       it('should get redirected to home page again without error message', async function(){
-        await driver.sleep(250)        
+        await driver.sleep(250)
         const visible = await homePage.isWarningVisible()
         assert.ok(!visible)
       })
