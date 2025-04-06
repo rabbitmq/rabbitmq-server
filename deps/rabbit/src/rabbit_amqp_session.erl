@@ -10,7 +10,6 @@
 -compile({inline, [maps_update_with/4]}).
 
 -behaviour(gen_server).
--behaviour(rabbit_protocol_accessor).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -105,9 +104,6 @@
          handle_cast/2,
          handle_info/2,
          format_status/1]).
-
-% `rabbit_protocol_accessor` behaviour callbacks
--export([get_property/2]).
 
 -import(rabbit_amqp_util,
         [protocol_error/3]).
@@ -287,7 +283,8 @@
           max_handle :: link_handle(),
           max_incoming_window :: pos_integer(),
           max_link_credit :: pos_integer(),
-          max_queue_credit :: pos_integer()
+          max_queue_credit :: pos_integer(),
+          msg_interceptor_ctx :: map()
          }).
 
 -record(state, {
@@ -478,7 +475,10 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_handle = EffectiveHandleMax,
                            max_incoming_window = MaxIncomingWindow,
                            max_link_credit = MaxLinkCredit,
-                           max_queue_credit = MaxQueueCredit
+                           max_queue_credit = MaxQueueCredit,
+                           msg_interceptor_ctx = #{user => User,
+                                                   vhost => Vhost,
+                                                   conn_name => ConnName}
                           }}}.
 
 terminate(_Reason, #state{incoming_links = IncomingLinks,
@@ -2415,7 +2415,8 @@ incoming_link_transfer(
                              trace_state = Trace,
                              conn_name = ConnName,
                              channel_num = ChannelNum,
-                             max_link_credit = MaxLinkCredit}}) ->
+                             max_link_credit = MaxLinkCredit,
+                             msg_interceptor_ctx = MsgInterceptorCtx}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2440,7 +2441,9 @@ incoming_link_transfer(
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
-            Mc2 = rabbit_incoming_message_interceptor:intercept(Mc1, ?MODULE, State0),
+            Mc2 = rabbit_message_interceptor:intercept(Mc1,
+                                                       MsgInterceptorCtx,
+                                                       incoming),
             check_user_id(Mc2, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),
@@ -3877,15 +3880,6 @@ format_status(
               permission_cache => PermissionCache,
               topic_permission_cache => TopicPermissionCache},
     maps:update(state, State, Status).
-
-get_property(user, #state{cfg = #cfg{user = User}}) ->
-    User; 
-get_property(vhost, #state{cfg = #cfg{vhost = VHost}}) ->
-    VHost; 
-get_property(connection_name, #state{cfg = #cfg{conn_name = ConnectionName}}) ->
-    ConnectionName;
-get_property(_, _) ->
-    undefined.
 
 -spec info(pid()) ->
     {ok, rabbit_types:infos()} | {error, term()}.

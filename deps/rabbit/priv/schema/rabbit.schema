@@ -2658,12 +2658,15 @@ end}.
 {mapping, "message_interceptors.incoming.$interceptor.overwrite", "rabbit.incoming_message_interceptors", [
     {datatype, {enum, [true, false]}}]}.
 
-% Pseudo-key to include the interceptor in the list of interceptors. 
+% Pseudo-key to include the interceptor in the list of interceptors.
 %  - If any other configuration is provided for the interceptor this
-%  configuration is not required. 
+%  configuration is not required.
 %  - If no other configuration is provided, this one is required so that the
-%  interceptor gets invoked. 
+%  interceptor gets invoked.
 {mapping, "message_interceptors.incoming.$interceptor.enabled", "rabbit.incoming_message_interceptors", [
+    {datatype, {enum, [true]}}]}.
+
+{mapping, "message_interceptors.outgoing.$interceptor.enabled", "rabbit.outgoing_message_interceptors", [
     {datatype, {enum, [true]}}]}.
 
 {mapping, "message_interceptors.incoming.set_header_timestamp.overwrite", "rabbit.incoming_message_interceptors", [
@@ -2674,19 +2677,21 @@ end}.
 
 {translation, "rabbit.incoming_message_interceptors",
     fun(Conf) ->
-         case cuttlefish_variable:filter_by_prefix("message_interceptors.incoming", Conf) of
-             [] ->
-                 cuttlefish:unset();
-             L ->
-                InterceptorsConfig = [ 
+        case cuttlefish_variable:filter_by_prefix("message_interceptors.incoming", Conf) of
+            [] ->
+                cuttlefish:unset();
+            L ->
+                InterceptorsConfig = [
                     {Module0, Config, Value}
                     || {["message_interceptors", "incoming", Module0, Config], Value} <- L
                 ],
                 {Result, Order0} = lists:foldl(
-                    fun({Interceptor0, Key0, Value}, {Acc, Order}) -> 
+                    fun({Interceptor0, Key0, Value}, {Acc, Order}) ->
                         Interceptor = list_to_atom(Interceptor0),
                         Key = list_to_atom(Key0),
-                        MapPutFun = fun(Key, Value) -> fun(Old) -> maps:put(Key, Value, Old) end end,
+                        MapPutFun = fun(Old) -> maps:put(Key, Value, Old) end,
+                        % This Interceptor -> Module alias exists for
+                        % compatibility reasons
                         Module = case Interceptor  of
                             set_header_timestamp ->
                                 rabbit_header_timestamp_interceptor;
@@ -2695,10 +2700,10 @@ end}.
                             _ ->
                                 Interceptor
                         end,
-                        NewAcc = 
+                        NewAcc =
                             maps:update_with(
-                                Module, 
-                                MapPutFun(Key, Value), 
+                                Module,
+                                MapPutFun,
                                 #{Key => Value},
                                 Acc),
                         {NewAcc, [Module| Order]}
@@ -2708,7 +2713,39 @@ end}.
                 ),
                 Order = lists:uniq(Order0),
                 [{O, maps:without([enabled], maps:get(O, Result))} || O <- Order]
-         end
+        end
+    end
+}.
+
+{translation, "rabbit.outgoing_message_interceptors",
+    fun(Conf) ->
+        case cuttlefish_variable:filter_by_prefix("message_interceptors.outgoing", Conf) of
+            [] ->
+                cuttlefish:unset();
+            L ->
+                InterceptorsConfig = [
+                    {Module0, Config, Value}
+                    || {["message_interceptors", "outgoing", Module0, Config], Value} <- L
+                ],
+                {Result, Order0} = lists:foldl(
+                    fun({Interceptor0, Key0, Value}, {Acc, Order}) ->
+                        Module = list_to_atom(Interceptor0),
+                        Key = list_to_atom(Key0),
+                        MapPutFun = fun(Old) -> maps:put(Key, Value, Old) end,
+                        NewAcc =
+                            maps:update_with(
+                                Module,
+                                MapPutFun,
+                                #{Key => Value},
+                                Acc),
+                        {NewAcc, [Module| Order]}
+                    end,
+                    {#{}, []},
+                    InterceptorsConfig
+                ),
+                Order = lists:uniq(Order0),
+                [{O, maps:without([enabled], maps:get(O, Result))} || O <- Order]
+        end
     end
 }.
 

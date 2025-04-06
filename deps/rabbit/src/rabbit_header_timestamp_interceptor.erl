@@ -1,18 +1,18 @@
 -module(rabbit_header_timestamp_interceptor).
--behaviour(rabbit_incoming_message_interceptor).
+-behaviour(rabbit_message_interceptor).
 
 -include("mc.hrl").
 
 -define(HEADER_TIMESTAMP, <<"timestamp_in_ms">>).
 
 -export([
-    intercept/4
+    intercept/3
 ]).
 
-intercept(Msg0, _ProtoMod, _ProtoState, Config) ->
+intercept(Msg0, _MsgInterceptorCtx, Config) ->
     Ts = mc:get_annotation(?ANN_RECEIVED_AT_TIMESTAMP, Msg0),
     Overwrite = maps:get(overwrite, Config, false),
-    Msg = rabbit_incoming_message_interceptor:set_msg_annotation(
+    Msg = rabbit_message_interceptor:set_msg_annotation(
         Msg0,
         ?HEADER_TIMESTAMP,
         Ts,

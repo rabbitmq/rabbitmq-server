@@ -7,8 +7,6 @@
 
 -module(rabbit_channel).
 
--behaviour(rabbit_protocol_accessor).
-
 %% rabbit_channel processes represent an AMQP 0-9-1 channels.
 %%
 %% Connections parse protocol frames coming from clients and
@@ -62,9 +60,6 @@
          prioritise_call/4, prioritise_cast/3, prioritise_info/3,
          format_message_queue/2]).
 
-% `rabbit_protocol_accessor` behaviour callbacks
--export([get_property/2]).
-
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
 -export([get_vhost/1, get_user/1]).
@@ -115,7 +110,8 @@
           authz_context,
           max_consumers,  % taken from rabbit.consumer_max_per_channel
           %% defines how ofter gc will be executed
-          writer_gc_threshold
+          writer_gc_threshold,
+          msg_interceptor_ctx
          }).
 
 -record(pending_ack, {
@@ -514,7 +510,10 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
                             max_consumers = MaxConsumers,
-                            writer_gc_threshold = GCThreshold
+                            writer_gc_threshold = GCThreshold,
+                            msg_interceptor_ctx = #{user => User,
+                                                   vhost => VHost,
+                                                   conn_name => ConnName}
                            },
                 limiter = Limiter,
                 tx                      = none,
@@ -818,15 +817,6 @@ get_consumer_timeout() ->
         _ ->
             undefined
     end.
-
-get_property(user, #ch{cfg = #conf{user = User}}) ->
-    User; 
-get_property(vhost, #ch{cfg = #conf{virtual_host = VHost}}) ->
-    VHost; 
-get_property(connection_name, #ch{cfg = #conf{conn_name = ConnectionName}}) ->
-    ConnectionName;
-get_property(_, _) ->
-    undefined.
 
 %%---------------------------------------------------------------------------
 
@@ -1182,7 +1172,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                                 user = #user{username = Username} = User,
                                                 trace_state = TraceState,
                                                 authz_context = AuthzContext,
-                                                writer_gc_threshold = GCThreshold
+                                                writer_gc_threshold = GCThreshold,
+                                                msg_interceptor_ctx = MsgInterceptorCtx
                                                },
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
@@ -1221,7 +1212,9 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
             check_write_permitted_on_topics(Exchange, User, Message0, AuthzContext),
-            Message = rabbit_incoming_message_interceptor:intercept(Message0, ?MODULE, State),
+            Message = rabbit_message_interceptor:intercept(Message0,
+                                                           MsgInterceptorCtx,
+                                                           incoming),
             check_user_id_header(Message, User),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],

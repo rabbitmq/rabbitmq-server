@@ -7,8 +7,6 @@
 -module(rabbit_mqtt_processor).
 -feature(maybe_expr, enable).
 
--behaviour(rabbit_protocol_accessor).
-
 -export([info/2, init/4, process_packet/2,
          terminate/3, handle_pre_hibernate/0,
          handle_down/2, handle_queue_event/2,
@@ -16,9 +14,6 @@
          remove_duplicate_client_id_connections/2,
          remove_duplicate_client_id_connections/3,
          update_trace/2, send_disconnect/2]).
-
-% `rabbit_protocol_accessor` behaviour callbacks
--export([get_property/2]).
 
 -ifdef(TEST).
 -export([get_vhost_username/1,
@@ -97,7 +92,8 @@
          %% The database stores the MQTT subscription options in the binding arguments for:
          %% * v1 as Erlang record #mqtt_subscription_opts{}
          %% * v2 as AMQP 0.9.1 table
-         binding_args_v2 :: boolean()
+         binding_args_v2 :: boolean(),
+         msg_interceptor_ctx :: map()
         }).
 
 -record(state,
@@ -242,7 +238,11 @@ process_connect(
                           will_msg = WillMsg,
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound,
-                          binding_args_v2 = BindingArgsV2},
+                          binding_args_v2 = BindingArgsV2,
+                          msg_interceptor_ctx = #{user => User,
+                                                  vhost => VHost,
+                                                  conn_name => ConnName,
+                                                  client_id => ClientId}},
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx}},
@@ -1637,12 +1637,13 @@ publish_to_queues(
   #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
                     delivery_flow = Flow,
                     conn_name = ConnName,
-                    trace_state = TraceState},
+                    trace_state = TraceState,
+                    msg_interceptor_ctx = MsgInterceptorCtx},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
-    Msg = rabbit_incoming_message_interceptor:intercept(Msg0, ?MODULE, State),
+    Msg = rabbit_message_interceptor:intercept(Msg0, MsgInterceptorCtx, incoming),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
@@ -1958,17 +1959,6 @@ delete_queue(QName,
           ({absent, _Q, _State}) ->
               ok
       end).
-
-get_property(user, #state{auth_state = #auth_state{user = User}}) ->
-    User;
-get_property(vhost, #state{cfg = #cfg{vhost = VHost}}) ->
-    VHost;
-get_property(client_id, #state{cfg = #cfg{client_id = ClientId}}) ->
-    ClientId; 
-get_property(connection_name, #state{cfg = #cfg{conn_name = ConnName}}) ->
-    ConnName;
-get_property(_, _) ->
-    undefined.
 
 -spec handle_pre_hibernate() -> ok.
 handle_pre_hibernate() ->
