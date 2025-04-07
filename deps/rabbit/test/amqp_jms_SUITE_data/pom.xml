@@ -11,7 +11,7 @@
     <junit.jupiter.version>5.12.1</junit.jupiter.version>
     <assertj.version>3.27.3</assertj.version>
     <qpid-jms-client.version>2.7.0</qpid-jms-client.version>
-    <amqp-client.version>[0.5.0-SNAPSHOT,)</amqp-client.version>
+    <amqp-client.version>0.5.0</amqp-client.version>
     <logback.version>1.2.13</logback.version>
     <spotless.version>2.44.3</spotless.version>
     <google-java-format.version>1.26.0</google-java-format.version>
