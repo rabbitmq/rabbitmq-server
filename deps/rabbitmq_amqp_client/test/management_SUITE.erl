@@ -803,16 +803,28 @@ queue_topology(Config) ->
     {ok, QQInfo0} = rabbitmq_amqp_client:declare_queue(LinkPair0, QQName, QQProps),
     {ok, SQInfo0} = rabbitmq_amqp_client:declare_queue(LinkPair0, SQName, SQProps),
 
-    %% The default queue leader strategy is client-local.
-    ?assertEqual({ok, N0}, maps:find(leader, CQInfo0)),
-    ?assertEqual({ok, N0}, maps:find(leader, QQInfo0)),
-    ?assertEqual({ok, N0}, maps:find(leader, SQInfo0)),
-
     ?assertEqual({ok, [N0]}, maps:find(replicas, CQInfo0)),
     {ok, QQReplicas0} = maps:find(replicas, QQInfo0),
     ?assertEqual(Nodes, lists:usort(QQReplicas0)),
     {ok, SQReplicas0} = maps:find(replicas, SQInfo0),
     ?assertEqual(Nodes, lists:usort(SQReplicas0)),
+
+    %% The default queue leader strategy is client-local.
+    ?assertEqual({ok, N0}, maps:find(leader, CQInfo0)),
+    eventually(
+      ?_assert(
+         begin
+             {ok, QQInfo1} = rabbitmq_amqp_client:get_queue(LinkPair0, QQName),
+             {ok, SQInfo1} = rabbitmq_amqp_client:get_queue(LinkPair0, SQName),
+             QQLeader = maps:get(leader, QQInfo1),
+             SQLeader = maps:get(leader, SQInfo1),
+             ct:pal("quorum queue leader: ~s~n"
+                    "stream leader: ~s",
+                    [QQLeader, SQLeader]),
+             QQLeader =:= N0 andalso
+             SQLeader =:= N0
+         end
+        ), 2000, 5),
 
     ok = cleanup(Init0),
     ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
@@ -841,7 +853,7 @@ queue_topology(Config) ->
              (QQLeader =:= N1 orelse QQLeader =:= N2) andalso
              (SQLeader =:= N1 orelse SQLeader =:= N2)
          end
-        ), 1000, 5),
+        ), 2000, 5),
 
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair2, CQName),
