@@ -444,55 +444,40 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
                            ShortName ->
                                ShortName
                        end}},
-               {{utf8, <<"arguments">>}, QArgs}
+               {{utf8, <<"arguments">>}, QArgs},
+               {{utf8, <<"replicas">>},
+                {array, utf8, [{utf8, atom_to_binary(R)} || R <- Replicas]}
+               }
               ],
-    KVList1 = if is_list(Replicas) ->
-                     [{{utf8, <<"replicas">>},
-                       {array, utf8, [{utf8, atom_to_binary(R)} || R <- Replicas]}
-                      } | KVList0];
-                 Replicas =:= undefined ->
-                     KVList0
-              end,
     KVList = case Leader of
-                 undefined ->
-                     KVList1;
+                 none ->
+                     KVList0;
                  _ ->
                      [{{utf8, <<"leader">>},
                        {utf8, atom_to_binary(Leader)}
-                      } | KVList1]
+                      } | KVList0]
              end,
     {map, KVList}.
 
 %% The returned Replicas contain both online and offline replicas.
 -spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+    {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
-    case amqqueue:get_type(Q) of
-        rabbit_quorum_queue ->
-            [{leader, Leader0},
-             {members, Members}] = rabbit_queue_type:info(Q, [leader, members]),
-            Leader = case Leader0 of
-                         '' -> undefined;
-                         _ -> Leader0
-                     end,
-            {Leader, Members};
-        rabbit_stream_queue ->
-            #{name := StreamId} = amqqueue:get_type_state(Q),
-            case rabbit_stream_coordinator:members(StreamId) of
-                {ok, Members} ->
-                    maps:fold(fun(Node, {_Pid, writer}, {_, Replicas}) ->
-                                      {Node, [Node | Replicas]};
-                                 (Node, {_Pid, replica}, {Writer, Replicas}) ->
-                                      {Writer, [Node | Replicas]}
-                              end, {undefined, []}, Members);
-                {error, _} ->
-                    {undefined, undefined}
-            end;
-        _ ->
-            Pid = amqqueue:get_pid(Q),
-            Node = node(Pid),
-            {Node, [Node]}
-    end.
+    Leader = case amqqueue:get_pid(Q) of
+                 {_RaName, Node} ->
+                     Node;
+                 none ->
+                     none;
+                 Pid ->
+                     node(Pid)
+             end,
+    Replicas = case amqqueue:get_type_state(Q) of
+                   #{nodes := Nodes} ->
+                       Nodes;
+                   _ ->
+                       [Leader]
+               end,
+    {Leader, Replicas}.
 
 decode_exchange({map, KVList}) ->
     M = lists:foldl(
