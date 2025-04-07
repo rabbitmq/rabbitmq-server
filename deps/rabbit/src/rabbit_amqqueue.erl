@@ -464,8 +464,13 @@ filter_per_type(classic, Q) ->
 %% The assumption is all non-replicated queues
 %% are filtered before calling this with is_replicated/0
 rebalance_module(Q) ->
-    TypeModule = amqqueue:get_type(Q),
-    TypeModule:rebalance_module().
+    case rabbit_queue_type:rebalance_module(Q) of
+        undefined ->
+            rabbit_log:error("Undefined rebalance module for queue type: ~s", [amqqueue:get_type(Q)]),
+            {error, not_supported};
+        RBModule ->
+            RBModule
+    end.
 
 get_resource_name(#resource{name = Name}) ->
     Name.

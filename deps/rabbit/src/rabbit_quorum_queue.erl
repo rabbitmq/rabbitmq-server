@@ -79,9 +79,7 @@
 
 -export([queue_topology/1,
          policy_apply_to_name/0,
-         can_redeliver/0,
          is_replicated/0,
-         rebalance_module/0,
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
@@ -561,7 +559,9 @@ capabilities() ->
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
                           <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>],
-      server_named => false}.
+      server_named => false,
+      rebalance_module => ?MODULE,
+      can_redeliver => true}.
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
@@ -2274,14 +2274,8 @@ queue_topology(Q) ->
 policy_apply_to_name() ->
     <<"quorum_queues">>.
 
-can_redeliver() ->
-    true.
-
 is_replicated() ->
     true.
-
-rebalance_module() ->
-    ?MODULE.
 
 -spec drain([node()]) -> ok.
 drain(TransferCandidates) ->
@@ -2338,9 +2332,9 @@ stop_local_quorum_queue_followers() ->
     rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
 
 revive() ->
-    revive_local_queue_replicas().
+    revive_local_queue_members().
 
-revive_local_queue_replicas() ->
+revive_local_queue_members() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     %% NB: this function ignores the first argument so we can just pass the
     %% empty binary as the vhost name.

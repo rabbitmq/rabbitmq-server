@@ -62,6 +62,7 @@
          notify_decorators/1,
          publish_at_most_once/2,
          can_redeliver/2,
+         rebalance_module/1,
          stop/1,
          list_with_minimum_quorum/0,
          drain/1,
@@ -268,6 +269,7 @@
 -callback format(amqqueue:amqqueue(), Context :: map()) ->
     [{atom(), term()}].
 
+%% TODO: mandate keys
 -callback capabilities() ->
     #{atom() := term()}.
 
@@ -283,13 +285,9 @@
 
 %% -callback on_node_down(node()) -> ok.
 
--callback can_redeliver() -> boolean().
-
 -callback stop(rabbit_types:vhost()) -> ok.
 
 -callback is_replicated() -> boolean().
-
--callback rebalance_module() -> module() | {error, not_supported}.
 
 -callback list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 
@@ -894,9 +892,16 @@ queue_limit_error(Reason, ReasonArgs) ->
 can_redeliver(Q, State) ->
     case module(Q, State) of
         {ok, TypeModule} ->
-            TypeModule:can_redeliver();
+            Capabilities = TypeModule:capabilities(),
+            maps:get(can_redeliver, Capabilities, false);
         _ -> false
     end.
+
+-spec rebalance_module( amqqueue:amqqueue()) -> undefine | module().
+rebalance_module(Q) ->
+    TypeModule = amqqueue:get_type(Q),
+    Capabilities = TypeModule:capabilities(),
+    maps:get(rebalance_module, Capabilities, undefined).
 
 -spec stop(rabbit_types:vhost()) -> ok.
 stop(VHost) ->

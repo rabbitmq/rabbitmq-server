@@ -66,10 +66,8 @@
 
 -export([queue_topology/1,
          policy_apply_to_name/0,
-         can_redeliver/0,
          stop/1,
          is_replicated/0,
-         rebalance_module/0,
          list_with_minimum_quorum/0,
          drain/1,
          revive/0,
@@ -612,7 +610,9 @@ capabilities() ->
                                  false -> []
                              end,
       consumer_arguments => [<<"x-priority">>],
-      server_named => true}.
+      server_named => true,
+      rebalance_module => undefined,
+      can_redeliver => false}.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -711,9 +711,6 @@ queue_topology(Q) ->
 policy_apply_to_name() ->
     <<"classic_queues">>.
 
-can_redeliver() ->
-    false.
-
 stop(VHost) ->
     ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
     {ok, BQ} = application:get_env(rabbit, backing_queue_module),
@@ -721,9 +718,6 @@ stop(VHost) ->
 
 is_replicated() ->
     false.
-
-rebalance_module() ->
-    {error, not_supported}.
 
 list_with_minimum_quorum() ->
     [].
