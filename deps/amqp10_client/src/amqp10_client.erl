@@ -47,6 +47,7 @@
 
 -type terminus_durability() :: amqp10_client_session:terminus_durability().
 
+-type terminus_address() :: amqp10_client_session:terminus_address().
 -type target_def() :: amqp10_client_session:target_def().
 -type source_def() :: amqp10_client_session:source_def().
 
@@ -64,6 +65,7 @@
               snd_settle_mode/0,
               rcv_settle_mode/0,
               terminus_durability/0,
+              terminus_address/0,
               target_def/0,
               source_def/0,
               attach_role/0,
@@ -168,7 +170,7 @@ attach_sender_link_sync(Session, Name, Target) ->
 %% @doc Synchronously attach a link on 'Session'.
 %% This is a convenience function that awaits attached event
 %% for the link before returning.
--spec attach_sender_link_sync(pid(), binary(), binary(),
+-spec attach_sender_link_sync(pid(), binary(), terminus_address(),
                               snd_settle_mode()) ->
     {ok, link_ref()} | link_timeout.
 attach_sender_link_sync(Session, Name, Target, SettleMode) ->
@@ -177,7 +179,7 @@ attach_sender_link_sync(Session, Name, Target, SettleMode) ->
 %% @doc Synchronously attach a link on 'Session'.
 %% This is a convenience function that awaits attached event
 %% for the link before returning.
--spec attach_sender_link_sync(pid(), binary(), binary(),
+-spec attach_sender_link_sync(pid(), binary(), terminus_address(),
                               snd_settle_mode(), terminus_durability()) ->
     {ok, link_ref()} | link_timeout.
 attach_sender_link_sync(Session, Name, Target, SettleMode, Durability) ->
@@ -195,7 +197,7 @@ attach_sender_link_sync(Session, Name, Target, SettleMode, Durability) ->
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
--spec attach_sender_link(pid(), binary(), binary()) -> {ok, link_ref()}.
+-spec attach_sender_link(pid(), binary(), terminus_address()) -> {ok, link_ref()}.
 attach_sender_link(Session, Name, Target) ->
     % mixed should work with any type of msg
     attach_sender_link(Session, Name, Target, mixed).
@@ -204,7 +206,7 @@ attach_sender_link(Session, Name, Target) ->
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
--spec attach_sender_link(pid(), binary(), binary(),
+-spec attach_sender_link(pid(), binary(), terminus_address(),
                          snd_settle_mode()) ->
     {ok, link_ref()}.
 attach_sender_link(Session, Name, Target, SettleMode) ->
@@ -214,7 +216,7 @@ attach_sender_link(Session, Name, Target, SettleMode) ->
 %% This is asynchronous and will notify completion of the attach request to the
 %% caller using an amqp10_event of the following format:
 %% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
--spec attach_sender_link(pid(), binary(), binary(),
+-spec attach_sender_link(pid(), binary(), terminus_address(),
                          snd_settle_mode(), terminus_durability()) ->
     {ok, link_ref()}.
 attach_sender_link(Session, Name, Target, SettleMode, Durability) ->
