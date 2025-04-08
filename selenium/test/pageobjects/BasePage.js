@@ -152,16 +152,6 @@ module.exports = class BasePage {
     } catch(e) {
       return Promise.resolve(false)
     }
-    /*
-    let element = await driver.findElement(FORM_POPUP)
-    return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
-      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling / 2).then(function onWarningVisible(e) {
-          return Promise.resolve(true)
-      }, function onError(e) {
-          return Promise.resolve(false)
-      })
-      */
   }
   
   async isPopupWarningNotDisplayed() {

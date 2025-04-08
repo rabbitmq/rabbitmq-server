@@ -1,0 +1,46 @@
+
+HTTPD_DOCKER_IMAGE=httpd:latest
+
+ensure_devkeycloak-proxy() {
+  if docker ps | grep devkeycloak-proxy &> /dev/null; then
+     print "devkeycloak-proxy already running ..."
+ else
+   start_devkeycloak-proxy
+ fi
+}
+init_devkeycloak-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/devkeycloak-proxy
+  PROXY_HOSTNAME=devkeycloak-proxy 
+  PROXY_PORT=9092
+
+  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
+  print "> PROXY_PORT: ${PROXY_PORT}"
+  
+}
+
+start_devkeycloak-proxy() {
+  begin "Starting devkeycloak-proxy ..."
+
+  init_devkeycloak-proxy
+  kill_container_if_exist devkeycloak-proxy
+
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+  cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
+  
+  docker run \
+    --detach \
+    --name devkeycloak-proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 9092:9092 \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+  #wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
+  wait_for_message devkeycloak-proxy "initializing worker proxy:forward local"
+  end "devkeycloak-proxy is ready"
+}
