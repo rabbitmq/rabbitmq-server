@@ -12,7 +12,7 @@ ensure_keycloak() {
 init_keycloak() {
   KEYCLOAK_CONFIG_PATH=${KEYCLOAK_CONFIG_PATH:-oauth/keycloak}
   KEYCLOAK_CONFIG_DIR=$(realpath ${TEST_DIR}/${KEYCLOAK_CONFIG_PATH})
-  KEYCLOAK_URL=${OAUTH_PROVIDER_URL}
+  KEYCLOAK_URL=${KEYCLOAK_URL:-OAUTH_PROVIDER_URL}
 
   print "> KEYCLOAK_CONFIG_DIR: ${KEYCLOAK_CONFIG_DIR}"
   print "> KEYCLOAK_URL: ${KEYCLOAK_URL}"
@@ -42,8 +42,9 @@ start_keycloak() {
     --publish 8443:8443 \
 		--env KEYCLOAK_ADMIN=admin \
 		--env KEYCLOAK_ADMIN_PASSWORD=admin \
+    --env QUARKUS_HTTP_ACCESS_LOG_ENABLED=true \
 		-v ${MOUNT_KEYCLOAK_CONF_DIR}:/opt/keycloak/data/import/ \
-		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm \
+		${KEYCLOAK_DOCKER_IMAGE} start-dev --import-realm --log-level=INFO \
     --https-certificate-file=/opt/keycloak/data/import/server_keycloak_certificate.pem \
     --https-certificate-key-file=/opt/keycloak/data/import/server_keycloak_key.pem
 
