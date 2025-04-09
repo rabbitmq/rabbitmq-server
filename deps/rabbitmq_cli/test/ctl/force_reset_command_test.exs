@@ -31,14 +31,23 @@ defmodule ForceResetCommandTest do
   end
 
   test "run: force reset request to an active node with a stopped rabbit app succeeds", context do
-    add_vhost("some_vhost")
-    # ensure the vhost really does exist
-    assert vhost_exists?("some_vhost")
-    stop_rabbitmq_app()
-    assert :ok == @command.run([], context[:opts])
-    start_rabbitmq_app()
-    # check that the created vhost no longer exists
-    assert match?([_], list_vhosts())
+    node = get_rabbit_hostname()
+    case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
+      true ->
+        stop_rabbitmq_app()
+        assert {:error, ~c"Forced reset is unsupported with Khepri"} == @command.run([], context[:opts])
+        start_rabbitmq_app()
+
+      false ->
+        add_vhost("some_vhost")
+        # ensure the vhost really does exist
+        assert vhost_exists?("some_vhost")
+        stop_rabbitmq_app()
+        assert :ok == @command.run([], context[:opts])
+        start_rabbitmq_app()
+        # check that the created vhost no longer exists
+        assert match?([_], list_vhosts())
+    end
   end
 
   test "run: reset request to an active node with a running rabbit app fails", context do
@@ -49,7 +58,7 @@ defmodule ForceResetCommandTest do
 
     case :rabbit_misc.rpc_call(node, :rabbit_khepri, :is_enabled, []) do
       true ->
-        assert match?({:error, :rabbitmq_unexpectedly_running}, ret)
+        assert match?({:error, ~c"Forced reset is unsupported with Khepri"}, ret)
 
       false ->
         assert match?({:error, :mnesia_unexpectedly_running}, ret)
