@@ -35,8 +35,10 @@ end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(_, Config) ->
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodes_count, 2}
+        {rmq_nodes_count, 2},
+        {rmq_nodename_suffix, Suffix}
       ]),
     rabbit_ct_helpers:run_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
