@@ -655,3 +655,10 @@ end}.
     {datatype, {enum, [true, false]}},
     {include_default, false}
 ]}.
+
+%% Require authentication for the HTTP API reference page.
+
+{mapping, "management.require_auth_for_api_reference", "rabbitmq_management.require_auth_for_api_reference", [
+    {datatype, {enum, [true, false]}},
+    {include_default, false}
+]}.
