@@ -4380,8 +4380,11 @@ available_messages(QType, Config) ->
 
 incoming_message_interceptors(Config) ->
     Key = ?FUNCTION_NAME,
-    ok = rpc(Config, persistent_term, put, [Key, [{set_header_routing_node, false},
-                                                  {set_header_timestamp, false}]]),
+    ok = rpc(Config,
+             persistent_term,
+             put,
+             [Key, [{rabbit_header_routing_node_interceptor, #{overwrite => false}},
+                    {rabbit_header_timestamp_interceptor, #{overwrite => false}}]]),
     Stream = <<"my stream">>,
     QQName = <<"my quorum queue">>,
     {_, Session, LinkPair} = Init = init(Config),
