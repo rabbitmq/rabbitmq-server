@@ -50,7 +50,7 @@ malformed_request(Req, State) ->
 
 is_authorized(Req0=#{path := Path}, State)
         when Path =:= <<"/api/index.html">>; Path =:= <<"/cli/index.html">> ->
-    case application:get_env(rabbitmq_management, require_auth_for_api_desc_page) of
+    case application:get_env(rabbitmq_management, require_auth_for_api_reference) of
         {ok, true} ->
             %% We temporarily use #context{} here to make authorization work,
             %% and discard it immediately after since we only want to check
