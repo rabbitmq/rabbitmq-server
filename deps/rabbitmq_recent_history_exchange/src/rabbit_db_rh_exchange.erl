@@ -106,10 +106,10 @@ insert0_in_mnesia(Key, Cached, Message, Length) ->
 insert_in_khepri(XName, Message, Length) ->
     Path = khepri_recent_history_path(XName),
     case rabbit_khepri:adv_get(Path) of
-        {ok, #{data := Cached0, payload_version := DVersion}} ->
+        {ok, #{Path := #{data := Cached0, payload_version := Vsn}}} ->
             Cached = add_to_cache(Cached0, Message, Length),
             Path1 = khepri_path:combine_with_conditions(
-                      Path, [#if_payload_version{version = DVersion}]),
+                      Path, [#if_payload_version{version = Vsn}]),
             Ret = rabbit_khepri:put(Path1, Cached),
             case Ret of
                 ok ->
