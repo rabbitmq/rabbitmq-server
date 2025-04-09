@@ -123,10 +123,6 @@ run_command(Context) ->
             Reason
     end.
 
-do_run_command(#{command := Command, arg_map := #{help := true}} = Context)
-  when not is_map_key(alias, Command) ->
-    rabbit_cli_io:display_help(Context),
-    ok;
 do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
     erlang:apply(Mod, Fun, [Context]).
 

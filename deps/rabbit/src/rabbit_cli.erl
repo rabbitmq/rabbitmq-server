@@ -5,8 +5,6 @@
 
 -export([main/1,
          merge_argparse_def/2,
-         translate_aliases/1,
-         handle_alias/1,
          noop/1]).
 
 main(Args) ->
@@ -146,20 +144,9 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
 
 get_final_argparse_def(#{argparse_def := PartialArgparseDef} = Context) ->
     maybe
-        {ok, Aliases} ?= get_aliases(Context),
         {ok, FullArgparseDef} ?= get_full_argparse_def(Context),
-        ArgparseDef1 = merge_argparse_def(PartialArgparseDef, Aliases),
-        ArgparseDef2 = merge_argparse_def(ArgparseDef1, FullArgparseDef),
-        {ok, ArgparseDef2}
-    end.
-
-get_aliases(#{config := Config}) ->
-    Aliases = maps:get(aliases, Config, #{}),
-    case Aliases =:= #{} of
-        true ->
-            {ok, #{}};
-        false ->
-            {ok, #{commands => Aliases}}
+        ArgparseDef1 = merge_argparse_def(PartialArgparseDef, FullArgparseDef),
+        {ok, ArgparseDef1}
     end.
 
 get_full_argparse_def(#{connection := Connection}) ->
@@ -246,38 +233,6 @@ get_config_filename(unix) ->
     ConfigFilename = filename:join(
                        [XdgConfigHome, "rabbitmq", "rabbitmqctl.conf"]),
     ConfigFilename.
-
-%% -------------------------------------------------------------------
-%% Aliases handling.
-%% -------------------------------------------------------------------
-
-translate_aliases(Aliases) ->
-    Aliases1 = maps:from_list(Aliases),
-    Aliases2 = maps:map(
-                 fun(_Alias, CommandStr) ->
-                         Args = string:lexemes(CommandStr, " "),
-                         #{alias => Args,
-                           help => hidden,
-                           handler => {?MODULE, handle_alias}}
-                 end, Aliases1),
-    Aliases2.
-
-handle_alias(
-  #{progname := Progname,
-    argparse_def := ArgparseDef,
-    arg_map := ArgMap,
-    command := #{alias := Args}} = Context) ->
-    Options = #{progname => Progname},
-    case argparse:parse(Args, ArgparseDef, Options) of
-        {ok, ArgMap1, CmdPath1, Command1} ->
-            ArgMap2 = maps:merge(ArgMap1, ArgMap),
-            Context1 = Context#{arg_map => ArgMap2,
-                                cmd_path => CmdPath1,
-                                command => Command1},
-            rabbit_cli_commands:do_run_command(Context1);
-        {error, _} = Error ->
-            Error
-    end.
 
 %% -------------------------------------------------------------------
 %% Command execution.
