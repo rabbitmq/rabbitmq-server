@@ -1767,7 +1767,7 @@ incoming_message_interceptors(Config) ->
     ok = rpc(Config,
              persistent_term,
              put,
-             [Key, [{rabbit_header_timestamp_interceptor, #{overwrite => false}}]]),
+             [Key, [{rabbit_message_interceptor_timestamp, #{overwrite => false}}]]),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
     CQName = <<"my classic queue">>,

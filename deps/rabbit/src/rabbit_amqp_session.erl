@@ -476,7 +476,7 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_incoming_window = MaxIncomingWindow,
                            max_link_credit = MaxLinkCredit,
                            max_queue_credit = MaxQueueCredit,
-                           msg_interceptor_ctx = #{user => User,
+                           msg_interceptor_ctx = #{username => User#user.username,
                                                    vhost => Vhost,
                                                    conn_name => ConnName}
                           }}}.
@@ -2443,7 +2443,7 @@ incoming_link_transfer(
         {ok, X, RoutingKeys, Mc1, PermCache} ->
             Mc2 = rabbit_message_interceptor:intercept(Mc1,
                                                        MsgInterceptorCtx,
-                                                       incoming),
+                                                       incoming_message_interceptors),
             check_user_id(Mc2, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),

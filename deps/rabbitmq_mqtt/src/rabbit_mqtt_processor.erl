@@ -239,7 +239,7 @@ process_connect(
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound,
                           binding_args_v2 = BindingArgsV2,
-                          msg_interceptor_ctx = #{user => User,
+                          msg_interceptor_ctx = #{user => Username,
                                                   vhost => VHost,
                                                   conn_name => ConnName,
                                                   client_id => ClientId}},
@@ -1643,7 +1643,9 @@ publish_to_queues(
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
-    Msg = rabbit_message_interceptor:intercept(Msg0, MsgInterceptorCtx, incoming),
+    Msg = rabbit_message_interceptor:intercept(Msg0,
+                                               MsgInterceptorCtx,
+                                               incoming_message_interceptors),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),

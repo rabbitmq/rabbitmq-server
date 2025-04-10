@@ -2693,19 +2693,17 @@ end}.
                         % This Interceptor -> Module alias exists for
                         % compatibility reasons
                         Module = case Interceptor  of
-                            set_header_timestamp ->
-                                rabbit_header_timestamp_interceptor;
-                            set_header_routing_node ->
-                                rabbit_header_routing_node_interceptor;
-                            _ ->
-                                Interceptor
-                        end,
-                        NewAcc =
-                            maps:update_with(
-                                Module,
-                                MapPutFun,
-                                #{Key => Value},
-                                Acc),
+                                     set_header_timestamp ->
+                                         rabbit_message_interceptor_timestamp;
+                                     set_header_routing_node ->
+                                         rabbit_message_interceptor_routing_node;
+                                     _ ->
+                                         Interceptor
+                                 end,
+                        NewAcc = maps:update_with(Module,
+                                                  MapPutFun,
+                                                  #{Key => Value},
+                                                  Acc),
                         {NewAcc, [Module| Order]}
                     end,
                     {#{}, []},
@@ -2732,12 +2730,10 @@ end}.
                         Module = list_to_atom(Interceptor0),
                         Key = list_to_atom(Key0),
                         MapPutFun = fun(Old) -> maps:put(Key, Value, Old) end,
-                        NewAcc =
-                            maps:update_with(
-                                Module,
-                                MapPutFun,
-                                #{Key => Value},
-                                Acc),
+                        NewAcc = maps:update_with(Module,
+                                                  MapPutFun,
+                                                  #{Key => Value},
+                                                  Acc),
                         {NewAcc, [Module| Order]}
                     end,
                     {#{}, []},

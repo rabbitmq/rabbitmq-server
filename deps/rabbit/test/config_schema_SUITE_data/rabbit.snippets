@@ -1101,7 +1101,7 @@ credential_validator.regexp = ^abc\\d+",
    "message_interceptors.incoming.set_header_timestamp.overwrite = true",
    [{rabbit, [
       {incoming_message_interceptors, [
-        {rabbit_header_timestamp_interceptor, #{overwrite => true}}
+        {rabbit_message_interceptor_timestamp, #{overwrite => true}}
        ]}
      ]}],
    []},
@@ -1113,8 +1113,8 @@ credential_validator.regexp = ^abc\\d+",
   ",
    [{rabbit, [
       {incoming_message_interceptors, [
-        {rabbit_header_routing_node_interceptor, #{overwrite => false}},
-        {rabbit_header_timestamp_interceptor, #{overwrite => false}}
+        {rabbit_message_interceptor_routing_node, #{overwrite => false}},
+        {rabbit_message_interceptor_timestamp, #{overwrite => false}}
        ]}
      ]}],
    []},
