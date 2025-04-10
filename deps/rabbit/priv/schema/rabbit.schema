@@ -2669,11 +2669,23 @@ end}.
 {mapping, "message_interceptors.outgoing.$interceptor.enabled", "rabbit.outgoing_message_interceptors", [
     {datatype, {enum, [true]}}]}.
 
-{mapping, "message_interceptors.incoming.set_header_timestamp.overwrite", "rabbit.incoming_message_interceptors", [
-    {datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.set_header_timestamp.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.rabbit_message_interceptor_routing_node.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
 
-{mapping, "message_interceptors.incoming.set_header_routing_node.overwrite", "rabbit.incoming_message_interceptors", [
-    {datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.set_header_routing_node.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
+{mapping,
+    "message_interceptors.incoming.rabbit_message_interceptor_timestamp.overwrite",
+    "rabbit.incoming_message_interceptors",
+    [{datatype, {enum, [true, false]}}]}.
 
 {translation, "rabbit.incoming_message_interceptors",
     fun(Conf) ->
