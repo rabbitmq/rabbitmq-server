@@ -43,8 +43,8 @@ setup(_) ->
 -spec all_ra_systems() -> [ra_system_name()].
 
 all_ra_systems() ->
-    [quorum_queues,
-     coordination].
+    [coordination,
+     quorum_queues].
 
 -spec are_running() -> AreRunning when
       AreRunning :: boolean().
@@ -165,7 +165,10 @@ ensure_stopped() ->
     ?LOG_DEBUG(
        "Stopping Ra systems",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
-    lists:foreach(fun ensure_ra_system_stopped/1, all_ra_systems()),
+    %% lists:reverse/1 is used to stop systems in the same order as would be
+    %% done if the ra application was terminated.
+    lists:foreach(fun ensure_ra_system_stopped/1,
+                  lists:reverse(all_ra_systems())),
     ?LOG_DEBUG(
        "Ra systems stopped",
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),

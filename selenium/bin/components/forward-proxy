@@ -1,0 +1,47 @@
+
+HTTPD_DOCKER_IMAGE=httpd:latest
+
+ensure_forward-proxy() {
+  if docker ps | grep forward-proxy &> /dev/null; then
+     print "forward-proxy already running ..."
+ else
+   start_forward-proxy
+ fi
+}
+init_forward-proxy() {
+  HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/forward-proxy
+  PROXY_HOSTNAME=forward-proxy 
+  PROXY_PORT=9092 
+
+  print "> HTTPD_CONFIG: ${HTTPD_CONFIG_DIR}"
+  print "> OAUTH_PROVIDER_URL: ${OAUTH_PROVIDER_URL}"
+  print "> PROXY_HOSTNAME: ${PROXY_HOSTNAME}"
+  print "> PROXY_PORT: ${PROXY_PORT}"
+  
+}
+
+start_forward-proxy() {
+  begin "Starting forward-proxy ..."
+
+  init_forward-proxy
+  kill_container_if_exist forward-proxy
+
+  MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
+
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+  cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
+  
+  docker run \
+    --detach \
+    --name forward-proxy \
+    --net ${DOCKER_NETWORK} \
+    --publish 9092:9092 \
+    --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
+    ${HTTPD_DOCKER_IMAGE}
+
+  #wait_for_url $OAUTH_PROVIDER_URL ${FORWARD_PROXY_URL}
+  wait_for_message forward-proxy "initializing worker proxy:forward local"
+  end "forward-proxy is ready"
+}

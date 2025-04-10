@@ -3,15 +3,16 @@ const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 const fsp = fs.promises
 const path = require('path')
 const { By, Key, until, Builder, logging, Capabilities } = require('selenium-webdriver')
+const proxy = require('selenium-webdriver/proxy')
 require('chromedriver')
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
 const assert = require('assert')
 
+const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const uaaUrl = process.env.UAA_URL || 'http://localhost:8080'
 const baseUrl = randomly_pick_baseurl(process.env.RABBITMQ_URL) || 'http://localhost:15672/'
 const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
-const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
 const profiles = process.env.PROFILES || ''

@@ -298,6 +298,9 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
 init_per_testcase(Testcase, Config) ->
     ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
+    SameKhepriMacVers = (
+      rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
+        Config, khepri_machine)),
     case Testcase of
         node_removal_is_not_quorum_critical when IsMixed ->
             {skip, "node_removal_is_not_quorum_critical isn't mixed versions compatible"};
@@ -325,6 +328,9 @@ init_per_testcase(Testcase, Config) ->
         leader_locator_balanced_random_maintenance when IsMixed ->
             {skip, "leader_locator_balanced_random_maintenance isn't mixed versions compatible because "
              "delete_declare isn't mixed versions reliable"};
+        leadership_takeover when not SameKhepriMacVers ->
+            {skip, "leadership_takeover will fail with a mix of Khepri state "
+             "machine versions"};
         reclaim_memory_with_wrong_queue_type when IsMixed ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
@@ -2063,7 +2069,7 @@ recover_from_single_failure(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0).
 
 recover_from_multiple_failures(Config) ->
-    [Server, Server1, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server1, Server, Server2] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
@@ -2360,7 +2366,7 @@ channel_handles_ra_event(Config) ->
     ?assertEqual(2, basic_get_tag(Ch1, Q2, false)).
 
 declare_during_node_down(Config) ->
-    [Server, DownServer, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(
+    [DownServer, Server, _] = Servers = rabbit_ct_broker_helpers:get_node_configs(
                                           Config, nodename),
 
     stop_node(Config, DownServer),
@@ -2692,7 +2698,7 @@ delete_member_member_already_deleted(Config) ->
     ok.
 
 delete_member_during_node_down(Config) ->
-    [Server, DownServer, Remove] = Servers = rabbit_ct_broker_helpers:get_node_configs(
+    [DownServer, Server, Remove] = Servers = rabbit_ct_broker_helpers:get_node_configs(
                                                Config, nodename),
 
     stop_node(Config, DownServer),
@@ -2747,7 +2753,7 @@ cleanup_data_dir(Config) ->
     %% trying to delete a queue in minority. A case clause there had gone
     %% previously unnoticed.
 
-    [Server1, Server2, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server2, Server1, Server3] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -3594,7 +3600,12 @@ format(Config) ->
     %% tests rabbit_quorum_queue:format/2
     Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Server = hd(Nodes),
+    Server = case Nodes of
+                 [N] ->
+                     N;
+                 [_, N | _] ->
+                     N
+             end,
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     Q = ?config(queue_name, Config),
@@ -3613,7 +3624,9 @@ format(Config) ->
                                        ?FUNCTION_NAME, [QRecord, #{}]),
 
     %% test all up case
-    ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt)),
+    ?assertMatch(
+       T when T =:= <<"quorum">> orelse T =:= quorum,
+       proplists:get_value(type, Fmt)),
     ?assertEqual(running, proplists:get_value(state, Fmt)),
     ?assertEqual(Server, proplists:get_value(leader, Fmt)),
     ?assertEqual(Server, proplists:get_value(node, Fmt)),
@@ -3622,15 +3635,17 @@ format(Config) ->
 
     case length(Nodes) of
         3 ->
-            [_, Server2, Server3] = Nodes,
-            ok = rabbit_control_helper:command(stop_app, Server2),
+            [Server1, _Server2, Server3] = Nodes,
+            ok = rabbit_control_helper:command(stop_app, Server1),
             ok = rabbit_control_helper:command(stop_app, Server3),
 
             Fmt2 = rabbit_ct_broker_helpers:rpc(Config, Server, rabbit_quorum_queue,
                                                ?FUNCTION_NAME, [QRecord, #{}]),
-            ok = rabbit_control_helper:command(start_app, Server2),
+            ok = rabbit_control_helper:command(start_app, Server1),
             ok = rabbit_control_helper:command(start_app, Server3),
-            ?assertEqual(<<"quorum">>, proplists:get_value(type, Fmt2)),
+            ?assertMatch(
+               T when T =:= <<"quorum">> orelse T =:= quorum,
+               proplists:get_value(type, Fmt2)),
             ?assertEqual(minority, proplists:get_value(state, Fmt2)),
             ?assertEqual(Server, proplists:get_value(leader, Fmt2)),
             ?assertEqual(Server, proplists:get_value(node, Fmt2)),

@@ -266,7 +266,8 @@ start_cluster(Q) ->
                                     #{nodes => [LeaderNode | FollowerNodes]}),
 
     Versions = [V || {ok, V} <- erpc:multicall(FollowerNodes,
-                                               rabbit_fifo, version, [])],
+                                               rabbit_fifo, version, [],
+                                               ?RPC_TIMEOUT)],
     MinVersion = lists:min([rabbit_fifo:version() | Versions]),
 
     rabbit_log:debug("Will start up to ~w replicas for quorum queue ~ts with "
@@ -583,6 +584,7 @@ handle_tick(QName,
       fun() ->
               try
                   {ok, Q} = rabbit_amqqueue:lookup(QName),
+                  ok = repair_leader_record(Q, Name),
                   Reductions = reductions(Name),
                   rabbit_core_metrics:queue_stats(QName, NumReadyMsgs,
                                                   NumCheckedOut, NumMessages,
@@ -636,12 +638,12 @@ handle_tick(QName,
                                             end}
                            | Infos0],
                   rabbit_core_metrics:queue_stats(QName, Infos),
-                  ok = repair_leader_record(Q, Name),
                   case repair_amqqueue_nodes(Q) of
                       ok ->
                           ok;
                       repaired ->
-                          rabbit_log:debug("Repaired quorum queue ~ts amqqueue record", [rabbit_misc:rs(QName)])
+                          rabbit_log:debug("Repaired quorum queue ~ts amqqueue record",
+                                           [rabbit_misc:rs(QName)])
                   end,
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
@@ -1763,8 +1765,9 @@ i(leader, Q) -> leader(Q);
 i(open_files, Q) when ?is_amqqueue(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     Nodes = get_connected_nodes(Q),
-    {Data, _} = rpc:multicall(Nodes, ?MODULE, open_files, [Name]),
-    lists:flatten(Data);
+    [Info || {ok, {_, _} = Info} <-
+             erpc:multicall(Nodes, ?MODULE, open_files,
+                            [Name], ?RPC_TIMEOUT)];
 i(single_active_consumer_pid, Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     case ra:local_query(QPid, fun rabbit_fifo:query_single_active_consumer/1) of
@@ -1883,7 +1886,8 @@ online(Q) when ?is_amqqueue(Q) ->
     Nodes = get_connected_nodes(Q),
     {Name, _} = amqqueue:get_pid(Q),
     [node(Pid) || {ok, Pid} <-
-                  erpc:multicall(Nodes, erlang, whereis, [Name]),
+                  erpc:multicall(Nodes, erlang, whereis,
+                                 [Name], ?RPC_TIMEOUT),
                   is_pid(Pid)].
 
 format(Q, Ctx) when ?is_amqqueue(Q) ->

@@ -65,9 +65,12 @@
 -define(INITIAL_DELIVERY_COUNT, ?UINT_MAX - 2).
 
 -type link_name() :: binary().
--type link_address() :: binary().
+%% https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-address-string
+%% or
+%% https://docs.oasis-open.org/amqp/anonterm/v1.0/anonterm-v1.0.html
+-type terminus_address() :: binary() | null.
 -type link_role() :: sender | receiver.
--type link_target() :: {pid, pid()} | binary() | undefined.
+-type link_target() :: {pid, pid()} | terminus_address() | undefined.
 %% "The locally chosen handle is referred to as the output handle." [2.6.2]
 -type output_handle() :: link_handle().
 %% "The remotely chosen handle is referred to as the input handle." [2.6.2]
@@ -75,9 +78,9 @@
 
 -type terminus_durability() :: none | configuration | unsettled_state.
 
--type target_def() :: #{address => link_address(),
+-type target_def() :: #{address => terminus_address(),
                         durable => terminus_durability()}.
--type source_def() :: #{address => link_address(),
+-type source_def() :: #{address => terminus_address(),
                         durable => terminus_durability()}.
 
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
@@ -112,6 +115,7 @@
               terminus_durability/0,
               attach_args/0,
               attach_role/0,
+              terminus_address/0,
               target_def/0,
               source_def/0,
               filter/0,

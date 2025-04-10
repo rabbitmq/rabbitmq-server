@@ -57,7 +57,8 @@ jobs:
       uses: dsaltares/fetch-gh-release-asset@master
       if: inputs.mixed_clusters
       with:
-        version: 'tags/v4.0.5'
+        repo: 'rabbitmq/server-packages'
+        version: 'tags/alphas.1744021065493'
         regex: true
         file: "rabbitmq-server-generic-unix-\\d.+\\.tar\\.xz"
         target: ./

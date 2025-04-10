@@ -497,6 +497,48 @@
   ], [rabbitmq_management]
  },
 
+ %%
+ %% Restrictions
+ %%
+
+  {restrictions_quorum_queue_replica_operations_disabled_case1,
+   "management.restrictions.quorum_queue_replica_operations.disabled = true",
+   [
+    {rabbitmq_management, [
+                           {restrictions, [
+                                {quorum_queue_replica_operations, [
+                                    {disabled, true}
+                                ]}
+                           ]}
+                          ]}
+   ], [rabbitmq_management]
+  },
+
+  {restrictions_operator_policy_changes_disabled_case1,
+   "management.restrictions.operator_policy_changes.disabled = true",
+   [
+    {rabbitmq_management, [
+                           {restrictions, [
+                                {operator_policy_changes, [
+                                    {disabled, true}
+                                ]}
+                           ]}
+                          ]}
+   ], [rabbitmq_management]
+  },
+
+ %%
+ %% Exotic options
+ %%
+
+  {auth_for_http_api_reference_case1,
+   "management.require_auth_for_api_reference = true",
+   [
+    {rabbitmq_management, [
+                           {require_auth_for_api_reference, true}
+                          ]}
+   ], [rabbitmq_management]
+  },
 
  %%
  %% Legacy listener configuration

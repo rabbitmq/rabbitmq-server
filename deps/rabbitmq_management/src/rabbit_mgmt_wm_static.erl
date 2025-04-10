@@ -11,9 +11,11 @@
 -module(rabbit_mgmt_wm_static).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 -export([init/2]).
 -export([malformed_request/2]).
+-export([is_authorized/2]).
 -export([forbidden/2]).
 -export([content_types_provided/2]).
 -export([resource_exists/2]).
@@ -45,6 +47,21 @@ do_init(Req, App, Path) ->
 
 malformed_request(Req, State) ->
     cowboy_static:malformed_request(Req, State).
+
+is_authorized(Req0=#{path := Path}, State)
+        when Path =:= <<"/api/index.html">>; Path =:= <<"/cli/index.html">> ->
+    case application:get_env(rabbitmq_management, require_auth_for_api_reference) of
+        {ok, true} ->
+            %% We temporarily use #context{} here to make authorization work,
+            %% and discard it immediately after since we only want to check
+            %% whether the user authenticates successfully.
+            {Res, Req, _} = rabbit_mgmt_util:is_authorized(Req0, #context{}),
+            {Res, Req, State};
+        _ ->
+            {true, Req0, State}
+    end;
+is_authorized(Req, State) ->
+    {true, Req, State}.
 
 forbidden(Req, State) ->
     cowboy_static:forbidden(Req, State).

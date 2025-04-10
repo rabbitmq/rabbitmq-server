@@ -101,7 +101,12 @@ format(Node, Info, Chs) ->
                      [Ch || Ch <- Chs,
                             pget(name, pget(connection_details, Ch))
                                 =:= pget(local_connection, Info)]) of
-                  [Ch] -> [{local_channel, Ch}];
+                  [Ch|_] ->
+                      %% we iterate on responses from many nodes; if the link
+                      %% was restarted on another node, we might get duplicates;
+                      %% we don't really know which one is the most up-to-date
+                      %% so let's just take the first one
+                      [{local_channel, Ch}];
                   []   -> []
               end,
     [{node, Node} | format_info(Info)] ++ LocalCh.
