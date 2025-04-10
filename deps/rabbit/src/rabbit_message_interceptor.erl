@@ -3,7 +3,8 @@
 -export([intercept/3,
          set_msg_annotation/4]).
 
--type protocol() :: amqp091 | amqp | mqttv3 | mqttv5.
+-type protocol() :: amqp091 | amqp | mqtt310 | mqtt311 | mqtt50.
+
 -type msg_interceptor_ctx() :: #{protocol := protocol(),
                                  vhost := binary(),
                                  username := binary(),

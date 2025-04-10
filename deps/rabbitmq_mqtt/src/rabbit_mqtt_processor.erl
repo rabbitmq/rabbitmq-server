@@ -215,9 +215,10 @@ process_connect(
         %% To simplify logic, we decide at connection establishment time to stick
         %% with either binding args v1 or v2 for the lifetime of the connection.
         BindingArgsV2 = rabbit_feature_flags:is_enabled('rabbitmq_4.1.0'),
+        AtomProtoVer = proto_integer_to_atom(ProtoVer),
         S = #state{
                cfg = #cfg{socket = Socket,
-                          proto_ver = proto_integer_to_atom(ProtoVer),
+                          proto_ver = AtomProtoVer,
                           clean_start = CleanStart,
                           session_expiry_interval_secs = SessionExpiry,
                           ssl_login_name = SslLoginName,
@@ -239,7 +240,8 @@ process_connect(
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound,
                           binding_args_v2 = BindingArgsV2,
-                          msg_interceptor_ctx = #{user => Username,
+                          msg_interceptor_ctx = #{protocol => AtomProtoVer,
+                                                  username => Username,
                                                   vhost => VHost,
                                                   conn_name => ConnName,
                                                   client_id => ClientId}},

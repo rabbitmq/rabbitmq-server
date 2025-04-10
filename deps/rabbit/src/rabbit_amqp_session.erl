@@ -476,7 +476,8 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_incoming_window = MaxIncomingWindow,
                            max_link_credit = MaxLinkCredit,
                            max_queue_credit = MaxQueueCredit,
-                           msg_interceptor_ctx = #{username => User#user.username,
+                           msg_interceptor_ctx = #{protocol => amqp,
+                                                   username => User#user.username,
                                                    vhost => Vhost,
                                                    conn_name => ConnName}
                           }}}.
