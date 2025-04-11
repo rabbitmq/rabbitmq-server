@@ -296,6 +296,11 @@ join_when_ram_node_type_is_permitted_by_default_khepri(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
+    IsPermitted = rabbit_ct_broker_helpers:rpc(
+                    Config, NodeA,
+                    rabbit_deprecated_features, is_permitted,
+                    [ram_node_type]),
+
     ok = rabbit_control_helper:command(stop_app, NodeA),
     ?assertMatch(
        {error, 70,
@@ -304,6 +309,12 @@ join_when_ram_node_type_is_permitted_by_default_khepri(Config) ->
          join_cluster, NodeA,
          [atom_to_list(NodeB)], [{"--ram", true}])),
     ok = rabbit_control_helper:command(start_app, NodeA),
+
+    ?assertEqual(
+       IsPermitted,
+       rabbit_ct_broker_helpers:rpc(
+         Config, NodeA,
+         rabbit_deprecated_features, is_permitted, [ram_node_type])),
 
     ?assertEqual([NodeA], get_all_nodes(Config, NodeA)),
     ?assertEqual([NodeB], get_all_nodes(Config, NodeB)),
@@ -357,6 +368,11 @@ join_when_ram_node_type_is_not_permitted_from_conf_khepri(Config) ->
     [NodeA, NodeB] = rabbit_ct_broker_helpers:get_node_configs(
                        Config, nodename),
 
+    IsPermitted = rabbit_ct_broker_helpers:rpc(
+                    Config, NodeA,
+                    rabbit_deprecated_features, is_permitted,
+                    [ram_node_type]),
+
     ok = rabbit_control_helper:command(stop_app, NodeA),
     ?assertMatch(
        {error, 70,
@@ -365,6 +381,12 @@ join_when_ram_node_type_is_not_permitted_from_conf_khepri(Config) ->
          join_cluster, NodeA,
          [atom_to_list(NodeB)], [{"--ram", true}])),
     ok = rabbit_control_helper:command(start_app, NodeA),
+
+    ?assertEqual(
+       IsPermitted,
+       rabbit_ct_broker_helpers:rpc(
+         Config, NodeA,
+         rabbit_deprecated_features, is_permitted, [ram_node_type])),
 
     ?assertEqual([NodeA], get_all_nodes(Config, NodeA)),
     ?assertEqual([NodeB], get_all_nodes(Config, NodeB)),
