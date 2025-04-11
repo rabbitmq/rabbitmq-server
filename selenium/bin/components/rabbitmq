@@ -69,20 +69,22 @@ start_local_rabbitmq() {
   RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
+  RABBITMQ_ENABLED_PLUGINS=`cat /tmp/etc/rabbitmq/enabled_plugins |  cut -d "[" -f2 | cut -d "]" -f1`
+  print "> EFFECTIVE PLUGINS: $RABBITMQ_ENABLED_PLUGINS"
+
   ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
-  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   RESULT=$?
-  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   if [ $RESULT -eq 0 ]; then
-    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"
-  	gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
+    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"    
+    gmake --directory=${RABBITMQ_SERVER_ROOT}  \
+        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
-      RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG
+        RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG run-broker
   else
-    gmake --directory=${RABBITMQ_SERVER_ROOT} run-broker \
-  		RABBITMQ_ENABLED_PLUGINS_FILE=/tmp/etc/rabbitmq/enabled_plugins \
-  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF
+    gmake --directory=${RABBITMQ_SERVER_ROOT} \
+        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
+  		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF run-broker
   fi
   print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
 
