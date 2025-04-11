@@ -214,8 +214,7 @@ define test_rabbitmq_config_with_tls
           {keyfile,    "$(TEST_TLS_CERTS_DIR_in_config)/server/key.pem"},
           {verify, verify_peer},
           {fail_if_no_peer_cert, false},
-          {honor_cipher_order, true},
-		  {keep_secrets, true}]}
+          {honor_cipher_order, true}]}
     ]},
   {rabbitmq_management, [
       {listener, [
