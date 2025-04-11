@@ -527,12 +527,7 @@ configure_logger(Context) ->
     %% We can now install the new handlers. The function takes care of
     %% removing previously configured handlers (after installing the new
     %% ones to ensure we don't loose a message).
-    ok = install_handlers(Handlers),
-
-    %% Let's log a message per log level (if debug logging is enabled). This
-    %% is handy if the user wants to verify the configuration is what he
-    %% expects.
-    ok = maybe_log_test_messages(LogConfig3).
+    ok = install_handlers(Handlers).
 
 -spec get_log_configuration_from_app_env() -> log_config().
 
@@ -1690,34 +1685,3 @@ get_less_severe_level(LevelA, LevelB) ->
         lt -> LevelA;
         _  -> LevelB
     end.
-
--spec maybe_log_test_messages(log_config()) -> ok.
-
-maybe_log_test_messages(
-  #{per_category := #{prelaunch := #{level := debug}}}) ->
-    log_test_messages();
-maybe_log_test_messages(
-  #{global := #{level := debug}}) ->
-    log_test_messages();
-maybe_log_test_messages(_) ->
-    ok.
-
--spec log_test_messages() -> ok.
-
-log_test_messages() ->
-    ?LOG_DEBUG("Logging: testing debug log level",
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_INFO("Logging: testing info log level",
-              #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_NOTICE("Logging: testing notice log level",
-                #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_WARNING("Logging: testing warning log level",
-                 #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_ERROR("Logging: testing error log level",
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_CRITICAL("Logging: testing critical log level",
-                  #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_ALERT("Logging: testing alert log level",
-               #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}),
-    ?LOG_EMERGENCY("Logging: testing emergency log level",
-                   #{domain => ?RMQLOG_DOMAIN_PRELAUNCH}).
