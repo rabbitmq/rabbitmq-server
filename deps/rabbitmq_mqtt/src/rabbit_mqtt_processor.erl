@@ -92,8 +92,7 @@
          %% The database stores the MQTT subscription options in the binding arguments for:
          %% * v1 as Erlang record #mqtt_subscription_opts{}
          %% * v2 as AMQP 0.9.1 table
-         binding_args_v2 :: boolean(),
-         msg_interceptor_ctx :: map()
+         binding_args_v2 :: boolean()
         }).
 
 -record(state,
@@ -215,10 +214,9 @@ process_connect(
         %% To simplify logic, we decide at connection establishment time to stick
         %% with either binding args v1 or v2 for the lifetime of the connection.
         BindingArgsV2 = rabbit_feature_flags:is_enabled('rabbitmq_4.1.0'),
-        AtomProtoVer = proto_integer_to_atom(ProtoVer),
         S = #state{
                cfg = #cfg{socket = Socket,
-                          proto_ver = AtomProtoVer,
+                          proto_ver = proto_integer_to_atom(ProtoVer),
                           clean_start = CleanStart,
                           session_expiry_interval_secs = SessionExpiry,
                           ssl_login_name = SslLoginName,
@@ -239,12 +237,7 @@ process_connect(
                           will_msg = WillMsg,
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound,
-                          binding_args_v2 = BindingArgsV2,
-                          msg_interceptor_ctx = #{protocol => AtomProtoVer,
-                                                  username => Username,
-                                                  vhost => VHost,
-                                                  conn_name => ConnName,
-                                                  client_id => ClientId}},
+                          binding_args_v2 = BindingArgsV2},
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx}},
@@ -1639,9 +1632,9 @@ publish_to_queues(
   #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
                     delivery_flow = Flow,
                     conn_name = ConnName,
-                    trace_state = TraceState,
-                    msg_interceptor_ctx = MsgInterceptorCtx},
+                    trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
+    MsgInterceptorCtx = build_msg_interceptor_ctx(State),
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
@@ -2616,3 +2609,15 @@ mc_env() ->
         MqttX ->
             #{mqtt_x => MqttX}
     end.
+
+build_msg_interceptor_ctx(#state{cfg = #cfg{client_id = ClientId,
+                                            conn_name = ConnName,
+                                            vhost = VHost,
+                                            proto_ver = ProtoVer
+                                           },
+                                 auth_state = #auth_state{user = #user{username = Username}}}) ->
+    #{protocol => proto_integer_to_atom(ProtoVer),
+      username => Username,
+      vhost => VHost,
+      conn_name => ConnName,
+      client_id => ClientId}.

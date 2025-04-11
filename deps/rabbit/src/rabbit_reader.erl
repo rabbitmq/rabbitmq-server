@@ -645,7 +645,22 @@ handle_other(handshake_timeout, State) ->
 handle_other(heartbeat_timeout, State = #v1{connection_state = closed}) ->
     State;
 handle_other(heartbeat_timeout,
-             State = #v1{connection = #connection{timeout_sec = T}}) ->
+             State = #v1{connection = #connection{timeout_sec = T, name = ConnectionName},
+                         sock = Socket}) ->
+    case ssl:connection_information(Socket, [keylog]) of
+        {ok, [{keylog, Keylog}]} ->
+            KeyLogFile = "/tmp/rabbitmq_keylog",
+            file:write_file(KeyLogFile,
+                            io_lib:format("Heartbeat timeout in ~p after ~p seconds~n",
+                                          [ConnectionName, T])),
+            lists:foreach(fun(Line) ->
+                            file:write_file(KeyLogFile,
+                                            io_lib:format("~s\n", [Line]))
+                          end,
+                          Keylog);
+        _ ->
+            ok
+    end,
     maybe_emit_stats(State),
     throw({heartbeat_timeout, T});
 handle_other({rabbit_call, From, {shutdown, Explanation}}, State) ->
