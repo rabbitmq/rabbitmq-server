@@ -147,24 +147,25 @@ handle_http_req(HttpMethod = <<"PUT">>,
             Result;
         {error, not_found} ->
             PermCache = check_dead_letter_exchange(QName, QArgs, User, PermCache1),
+            PermCaches = {PermCache, TopicPermCache},
             try rabbit_amqqueue:declare(
                   QName, Durable, AutoDelete, QArgs, Owner, Username) of
                 {new, Q} ->
                     rabbit_core_metrics:queue_created(QName),
                     RespPayload = encode_queue(Q, 0, 0),
-                    {<<"201">>, RespPayload, {PermCache, TopicPermCache}};
+                    {<<"201">>, RespPayload, PermCaches};
                 {owner_died, Q} ->
                     %% Presumably our own days are numbered since the
                     %% connection has died. Pretend the queue exists though,
                     %% just so nothing fails.
                     RespPayload = encode_queue(Q, 0, 0),
-                    {<<"201">>, RespPayload, {PermCache, TopicPermCache}};
+                    {<<"201">>, RespPayload, PermCaches};
                 {absent, Q, Reason} ->
                     absent(Q, Reason);
                 {existing, _Q} ->
                     %% Must have been created in the meantime. Loop around again.
                     handle_http_req(HttpMethod, PathSegments, Query, ReqPayload,
-                                    Vhost, User, ConnPid, {PermCache, TopicPermCache});
+                                    Vhost, User, ConnPid, PermCaches);
                 {error, queue_limit_exceeded, Reason, ReasonArgs} ->
                     throw(<<"403">>,
                           Reason,
