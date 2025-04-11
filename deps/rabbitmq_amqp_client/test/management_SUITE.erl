@@ -52,6 +52,7 @@ groups() ->
        bad_exchange_property,
        bad_exchange_type,
        get_queue_not_found,
+       declare_queues_concurrently,
        declare_queue_default_queue_type,
        declare_queue_empty_name,
        declare_queue_line_feed,
@@ -431,6 +432,40 @@ get_queue_not_found(Config) ->
     ?assertEqual(#'v1_0.amqp_value'{content = {utf8, <<"queue '", QName/binary, "' in vhost '/' not found">>}},
                  amqp10_msg:body(Resp)),
     ok = cleanup(Init).
+
+declare_queues_concurrently(Config) ->
+    NumQueues = 5,
+    {Pid1, Ref1} = spawn_monitor(?MODULE, declare_queues, [Config, NumQueues]),
+    {Pid2, Ref2} = spawn_monitor(?MODULE, declare_queues, [Config, NumQueues]),
+    receive {'DOWN', Ref1, process, Pid1, Reason1} ->
+                ?assertEqual(normal, Reason1)
+    end,
+    receive {'DOWN', Ref2, process, Pid2, Reason2} ->
+                ?assertEqual(normal, Reason2)
+    end,
+
+    ?assertEqual(NumQueues, count_queues(Config)),
+
+    Init = {_, LinkPair} = init(Config),
+    lists:foreach(fun(N) ->
+                          Bin = integer_to_binary(N),
+                          QName = <<"queue-", Bin/binary>>,
+                          {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName)
+                  end, lists:seq(1, NumQueues)),
+    ok = cleanup(Init).
+
+declare_queues(Config, Num) ->
+    Init = {_, LinkPair} = init(Config),
+    ok = declare_queues0(LinkPair, Num),
+    ok = cleanup(Init).
+
+declare_queues0(_LinkPair, 0) ->
+    ok;
+declare_queues0(LinkPair, Left) ->
+    Bin = integer_to_binary(Left),
+    QName = <<"queue-", Bin/binary>>,
+    ?assertMatch({ok, _}, rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{})),
+    declare_queues0(LinkPair, Left - 1).
 
 declare_queue_default_queue_type(Config) ->
     Node = get_node_config(Config, 0, nodename),
@@ -859,11 +894,11 @@ pipeline(Config) ->
     %% because RabbitMQ grants us 8 link credits initially.
     Num = 8,
     pipeline0(Num, LinkPair, <<"PUT">>, {map, []}),
-    eventually(?_assertEqual(Num, rpc(Config, rabbit_amqqueue, count, [])), 200, 20),
+    eventually(?_assertEqual(Num, count_queues(Config)), 200, 20),
     flush(queues_created),
 
     pipeline0(Num, LinkPair, <<"DELETE">>, null),
-    eventually(?_assertEqual(0, rpc(Config, rabbit_amqqueue, count, [])), 200, 20),
+    eventually(?_assertEqual(0, count_queues(Config)), 200, 20),
     flush(queues_deleted),
 
     ok = cleanup(Init).
@@ -1115,3 +1150,6 @@ gen_server_state(Pid) ->
     L1 = lists:last(L0),
     {data, L2} = lists:last(L1),
     proplists:get_value("State", L2).
+
+count_queues(Config) ->
+    rpc(Config, rabbit_amqqueue, count, []).
