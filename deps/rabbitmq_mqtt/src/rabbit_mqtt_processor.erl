@@ -2616,7 +2616,7 @@ build_msg_interceptor_ctx(#state{cfg = #cfg{client_id = ClientId,
                                             proto_ver = ProtoVer
                                            },
                                  auth_state = #auth_state{user = #user{username = Username}}}) ->
-    #{protocol => proto_integer_to_atom(ProtoVer),
+    #{protocol => ProtoVer,
       username => Username,
       vhost => VHost,
       conn_name => ConnName,
