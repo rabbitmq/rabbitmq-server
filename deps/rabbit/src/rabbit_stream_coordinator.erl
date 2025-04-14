@@ -835,17 +835,18 @@ maybe_resize_coordinator_cluster(MachineVersion) ->
                                                   [?MODULE, New]),
                                   add_member(Members, New)
                           end,
-                          case MemberNodes -- RabbitNodes of
-                              [] ->
-                                  ok;
-                              [Old | _]  when length(RabbitNodes) > 0 ->
-                                  %% this ought to be rather rare as the stream
-                                  %% coordinator member is now removed as part
-                                  %% of the forget_cluster_node command
-                                  rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
-                                                  "deleting: ~w", [?MODULE, Old]),
-                                  remove_member(Leader, Members, Old)
-                          end,
+                          _ = case MemberNodes -- RabbitNodes of
+                                  [] ->
+                                      ok;
+                                  [Old | _]  when length(RabbitNodes) > 0 ->
+                                      %% this ought to be rather rare as the stream
+                                      %% coordinator member is now removed as part
+                                      %% of the forget_cluster_node command
+                                      rabbit_log:info("~ts: Rabbit node(s) removed "
+                                                      "from the cluster, "
+                                                      "deleting: ~w", [?MODULE, Old]),
+                                      remove_member(Leader, Members, Old)
+                              end,
                           maybe_handle_stale_nodes(MemberNodes, RabbitNodes,
                                                    MachineVersion);
                           _ ->
