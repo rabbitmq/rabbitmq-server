@@ -384,6 +384,17 @@
 ## properties that may conflict or significantly change queue behavior and semantics, such as the 'exclusive' field.
 # quorum_queue.property_equivalence.relaxed_checks_on_redeclaration = true
 
+## Sets the initial quorum queue replica count for newly declared quorum queues.
+## This value can be overridden using the 'x-quorum-initial-group-size' queue argument
+## at declaration time.
+# quorum_queue.initial_cluster_size = 3
+
+## Sets the maximum number of unconfirmed messages a channel can send
+## before publisher flow control is triggered.
+## The current default is configured to provide good performance and stability
+## when there are multiple publishers sending to the same quorum queue.
+# quorum_queue.commands_soft_limit = 32
+
 ## Changes classic queue storage implementation version.
 ## In 4.0.x, version 2 is the default and this is a forward compatibility setting,
 ## that is, it will be useful when a new version is developed.
