@@ -1067,6 +1067,20 @@ credential_validator.regexp = ^abc\\d+",
      ]}],
    []},
 
+  {quorum_cluster_size,
+   "quorum_queue.cluster_size = 3",
+   [{rabbit, [
+      {quorum_cluster_size, 3}
+     ]}],
+   []},
+
+  {quorum_commands_soft_limit,
+   "quorum_queue.commands_soft_limit = 32",
+   [{rabbit, [
+      {quorum_commands_soft_limit, 32}
+     ]}],
+   []},
+
   %%
   %% Runtime parameters
   %%
