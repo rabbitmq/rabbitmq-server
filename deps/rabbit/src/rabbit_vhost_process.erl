@@ -13,7 +13,7 @@
 %% to vhost process registry. If vhost process PID is in the registry and the
 %% process is alive - the vhost is considered running.
 
-%% On termination, the ptocess will notify of vhost going down.
+%% On termination, the process will notify of vhost going down.
 
 %% The process will also check periodically if the vhost is still
 %% present in the database and stop the vhost supervision tree when it
@@ -35,7 +35,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    rabbit_log:debug("Recovering data for VHost ~ts", [VHost]),
+    rabbit_log:debug("Recovering data for vhost ~ts", [VHost]),
     try
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),
