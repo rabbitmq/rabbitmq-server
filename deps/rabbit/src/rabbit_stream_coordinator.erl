@@ -15,7 +15,7 @@
          apply/3,
          state_enter/2,
          init_aux/1,
-         handle_aux/6,
+         handle_aux/5,
          tick/2,
          version/0,
          which_module/1,
@@ -629,11 +629,19 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                     return(Meta, State#?MODULE{streams = Streams0,
                                                monitors = Monitors1}, ok, Effects0)
             end;
-        {sac, Monitors1} ->
+        {sac, Monitors1} when MachineVersion < 5 orelse Reason =/= noconnection ->
+            %% A connection went down, v5+ treats noconnection differently but
+            %% v4- does not.
             Mod = sac_module(Meta),
             {SacState1, Effects} = Mod:handle_connection_down(Pid, SacState0),
             return(Meta, State#?MODULE{single_active_consumer = SacState1,
-                                       monitors = Monitors1}, ok, Effects);
+                                       monitors = Monitors1}, ok, [Effects0 ++ Effects]);
+        {sac, Monitors1} when Reason =:= noconnection ->
+            %% the node of a connection got disconnected
+            Mod = sac_module(Meta),
+            {SacState1, Effects} = Mod:handle_connection_node_disconnected(Pid, SacState0),
+            return(Meta, State#?MODULE{single_active_consumer = SacState1,
+                                       monitors = Monitors1}, ok, [Effects0 ++ Effects]);
         error ->
             return(Meta, State, ok, Effects0)
     end;
@@ -687,9 +695,11 @@ apply(#{machine_version := MachineVersion} = Meta,
         _ ->
             return(Meta, State0, stream_not_found, [])
     end;
-apply(Meta, {nodeup, Node} = Cmd,
+apply(#{machine_version := MachineVersion} = Meta,
+      {nodeup, Node} = Cmd,
       #?MODULE{monitors = Monitors0,
-               streams = Streams0} = State)  ->
+               streams = Streams0,
+               single_active_consumer = Sac0} = State)  ->
     %% reissue monitors for all disconnected members
     {Effects0, Monitors} =
         maps:fold(
@@ -703,14 +713,23 @@ apply(Meta, {nodeup, Node} = Cmd,
                           {Acc, Mon}
                   end
           end, {[], Monitors0}, Streams0),
-    {Streams, Effects} =
+    {Streams, Effects1} =
         maps:fold(fun (Id, S0, {Ss, E0}) ->
                           S1 = update_stream(Meta, Cmd, S0),
                           {S, E} = evaluate_stream(Meta, S1, E0),
                           {Ss#{Id => S}, E}
                   end, {Streams0, Effects0}, Streams0),
+
+    {Sac1, Effects2} = case MachineVersion > 5 of
+                           true ->
+                               SacMod = sac_module(Meta),
+                               SacMod:handle_node_reconnected(Sac0, Effects1);
+                           false ->
+                               {Sac0, Effects1}
+                       end,
     return(Meta, State#?MODULE{monitors = Monitors,
-                               streams = Streams}, ok, Effects);
+                               streams = Streams,
+                               single_active_consumer = Sac1}, ok, Effects2);
 apply(Meta, {machine_version, From, To}, State0) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, "
                     ++ "applying incremental upgrade.", [From, To]),
@@ -721,6 +740,12 @@ apply(Meta, {machine_version, From, To}, State0) ->
                                             {S1, Eff0 ++ Eff1}
                                     end, {State0, []}, lists:seq(From, To - 1)),
     return(Meta, State1, ok, Effects);
+apply(Meta, {timeout, {sac, node_disconnected, #{connection_pid := Pid}}},
+      #?MODULE{single_active_consumer = SacState0} = State0) ->
+    Mod = sac_module(Meta),
+    {SacState1, Effects} = Mod:forget_connection(Pid, SacState0),
+    return(Meta, State0#?MODULE{single_active_consumer = SacState1}, ok,
+           Effects);
 apply(Meta, UnkCmd, State) ->
     rabbit_log:debug("~ts: unknown command ~W",
                      [?MODULE, UnkCmd, 10]),
@@ -787,7 +812,7 @@ members() ->
             end
     end.
 
-maybe_resize_coordinator_cluster() ->
+maybe_resize_coordinator_cluster(MachineVersion) ->
     spawn(fun() ->
                   RabbitIsRunning = rabbit:is_running(),
                   case members() of
@@ -813,18 +838,37 @@ maybe_resize_coordinator_cluster() ->
                           case MemberNodes -- RabbitNodes of
                               [] ->
                                   ok;
-                              [Old | _]  ->
+                              [Old | _]  when length(RabbitNodes) > 0 ->
                                   %% this ought to be rather rare as the stream
                                   %% coordinator member is now removed as part
                                   %% of the forget_cluster_node command
                                   rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
                                                   "deleting: ~w", [?MODULE, Old]),
                                   remove_member(Leader, Members, Old)
-                          end;
-                      _ ->
+                          end,
+                          maybe_handle_stale_nodes(MemberNodes, RabbitNodes,
+                                                   MachineVersion);
+                          _ ->
                           ok
                   end
           end).
+
+maybe_handle_stale_nodes(MemberNodes, ExpectedNodes,
+                         MachineVersion) when MachineVersion > 4 ->
+    case MemberNodes -- ExpectedNodes of
+        [] ->
+            ok;
+        Stale when length(ExpectedNodes) > 0 ->
+            rabbit_log:debug("Stale nodes detected in stream SAC "
+                             "coordinator: ~w. Purging state.",
+                             [Stale]),
+            %% TODO SAC pipeline command to purge state from stale nodes
+            ok;
+        _ ->
+            ok
+    end;
+maybe_handle_stale_nodes(_, _, _) ->
+    ok.
 
 add_member(Members, Node) ->
     MinMacVersion = erpc:call(Node, ?MODULE, version, []),
@@ -899,65 +943,62 @@ init_aux(_Name) ->
 
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
-           #aux{resizer = undefined} = Aux, LogState, _) ->
-    Pid = maybe_resize_coordinator_cluster(),
-    {no_reply, Aux#aux{resizer = Pid}, LogState, [{monitor, process, aux, Pid}]};
+           #aux{resizer = undefined} = Aux, RaAux) ->
+    MachineVersion = ra_aux:effective_machine_version(RaAux),
+    Pid = maybe_resize_coordinator_cluster(MachineVersion),
+    {no_reply, Aux#aux{resizer = Pid}, RaAux, [{monitor, process, aux, Pid}]};
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
-           AuxState, LogState, _) ->
+           AuxState, RaAux) ->
     %% Coordinator resizing is still happening, let's ignore this tick event
-    {no_reply, AuxState, LogState};
+    {no_reply, AuxState, RaAux};
 handle_aux(leader, _, {down, Pid, _},
-           #aux{resizer = Pid} = Aux, LogState, _) ->
+           #aux{resizer = Pid} = Aux, RaAux) ->
     %% Coordinator resizing has finished
-    {no_reply, Aux#aux{resizer = undefined}, LogState};
+    {no_reply, Aux#aux{resizer = undefined}, RaAux};
 handle_aux(leader, _, {start_writer, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'start_writer'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_start_writer(StreamId, Args, Conf),
-    run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(starting, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {start_replica, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'start_replica'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_start_replica(StreamId, Args, Conf),
-    run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(starting, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {stop, StreamId, #{node := Node,
                                          epoch := Epoch} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'stop'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_stop_member(StreamId, Args, Conf),
-    run_action(stopping, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(stopping, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'update_mnesia'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_mnesia(StreamId, Args, Conf),
-    run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_retention, StreamId, Args, _Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'update_retention'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_retention(StreamId, Args),
-    run_action(update_retention, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(update_retention, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'delete_member'"
                      " for ~ts ~ts", [?MODULE, StreamId, Node]),
     ActionFun = phase_delete_member(StreamId, Args, Conf),
-    run_action(delete_member, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(delete_member, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, fail_active_actions,
-           #aux{actions = Actions} = Aux, LogState,
-           #?MODULE{streams = Streams}) ->
+           #aux{actions = Actions} = Aux, RaAux) ->
     %% this bit of code just creates an exclude map of currently running
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
@@ -965,14 +1006,15 @@ handle_aux(leader, _, fail_active_actions,
                               || {P, {S, _, _}} <- maps_to_list(Actions),
                              is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
+    #?MODULE{streams = Streams} = ra_aux:machine_state(RaAux),
     fail_active_actions(Streams, Exclude),
-    {no_reply, Aux, LogState, []};
+    {no_reply, Aux, RaAux, []};
 handle_aux(leader, _, {down, Pid, normal},
-           #aux{actions = Monitors} = Aux, LogState, _) ->
+           #aux{actions = Monitors} = Aux, RaAux) ->
     %% action process finished normally, just remove from actions map
-    {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)}, LogState, []};
+    {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)}, RaAux, []};
 handle_aux(leader, _, {down, Pid, Reason},
-           #aux{actions = Monitors0} = Aux, LogState, _) ->
+           #aux{actions = Monitors0} = Aux, RaAux) ->
     %% An action has failed - report back to the state machine
     case maps:get(Pid, Monitors0, undefined) of
         {StreamId, Action, #{node := Node, epoch := Epoch} = Args} ->
@@ -983,13 +1025,13 @@ handle_aux(leader, _, {down, Pid, Reason},
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
             {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)},
-             LogState, []};
+             RaAux, []};
         undefined ->
             %% should this ever happen?
-            {no_reply, Aux, LogState, []}
+            {no_reply, Aux, RaAux, []}
     end;
-handle_aux(_, _, _, AuxState, LogState, _) ->
-    {no_reply, AuxState, LogState}.
+handle_aux(_, _, _, AuxState, RaAux) ->
+    {no_reply, AuxState, RaAux}.
 
 overview(#?MODULE{streams = Streams,
                   monitors = Monitors,
@@ -1025,7 +1067,7 @@ stream_overview0(#stream{epoch = Epoch,
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
-           ActionFun, #aux{actions = Actions0} = Aux, Log) ->
+           ActionFun, #aux{actions = Actions0} = Aux, RaAux) ->
     Coordinator = self(),
     Pid = spawn_link(fun() ->
                              ActionFun(),
@@ -1033,7 +1075,7 @@ run_action(Action, StreamId, #{node := _Node,
                      end),
     Effects = [{monitor, process, aux, Pid}],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
-    {no_reply, Aux#aux{actions = Actions}, Log, Effects}.
+    {no_reply, Aux#aux{actions = Actions}, RaAux, Effects}.
 
 wrap_reply(From, Reply) ->
     [{reply, From, {wrap_reply, Reply}}].

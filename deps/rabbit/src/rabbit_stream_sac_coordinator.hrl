@@ -23,22 +23,27 @@
 -type group_id() :: {vhost(), stream(), consumer_name()}.
 -type owner() :: binary().
 -type consumer_status() :: active | waiting | deactivating.
+-type consumer_connectivity() :: connected | disconnected | forgotten.
 
 -record(consumer,
         {pid :: pid(),
          subscription_id :: subscription_id(),
          owner :: owner(), %% just a label
-         status :: consumer_status()}).
+         status :: {consumer_connectivity(), consumer_status()}}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(rabbit_stream_sac_coordinator,
-        {groups :: #{group_id() => #group{}},
-         pids_groups ::
-             #{connection_pid() =>
-                   #{group_id() => true}}, %% inner map acts as a set
+        {groups :: groups(),
+         pids_groups :: pids_groups(),
          %% future extensibility
          reserved_1,
          reserved_2}).
+
+-type group() :: #group{}.
+-type groups() :: #{group_id() => group()}.
+%% inner map acts as a set
+-type pids_groups() :: #{connection_pid() => #{group_id() => true}}.
+
 %% commands
 -record(command_register_consumer,
         {vhost :: vhost(),
@@ -57,3 +62,5 @@
 -record(command_activate_consumer,
         {vhost :: vhost(), stream :: stream(),
          consumer_name :: consumer_name()}).
+-record(command_connection_reconnected,
+        {pid :: connection_pid()}).
