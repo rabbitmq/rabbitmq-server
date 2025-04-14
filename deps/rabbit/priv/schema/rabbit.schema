@@ -2610,6 +2610,15 @@ end}.
 {mapping, "quorum_queue.property_equivalence.relaxed_checks_on_redeclaration", "rabbit.quorum_relaxed_checks_on_redeclaration", [
     {datatype, {enum, [true, false]}}]}.
 
+{mapping, "quorum_queue.initial_cluster_size", "rabbit.quorum_cluster_size", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
+
+{mapping, "quorum_queue.commands_soft_limit", "rabbit.quorum_commands_soft_limit", [
+  {datatype, integer},
+  {validators, ["non_zero_positive_integer"]}
+]}.
 
 %%
 %% Quorum Queue membership reconciliation
