@@ -586,11 +586,11 @@ handle_node_reconnected(#?MODULE{pids_groups = PidsGroups0,
 
 -spec forget_connection(connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
-forget_connection(_ConnPid, _State0) ->
+forget_connection(_ConnPid, State0) ->
     %% TODO SAC forget connection
     %% mark connection consumers as forgotten
     %% re-evaluate SAC for affected groups
-    ok.
+    {State0, []}.
 
 handle_group_after_connection_down(Pid,
                                    {#?MODULE{groups = Groups0} = S0, Eff0},
