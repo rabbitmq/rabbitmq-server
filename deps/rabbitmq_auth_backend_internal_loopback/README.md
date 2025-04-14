@@ -11,7 +11,7 @@ As of 4.1.0, this plugin is distributed with RabbitMQ. Enable it with
 
 ## Documentation
 
-[See LDAP guide](https://www.rabbitmq.com/ldap.html) on rabbitmq.com.
+[See the Access Control guide](https://www.rabbitmq.com/access-control.html) on rabbitmq.com.
 
 
 ## Building from Source
