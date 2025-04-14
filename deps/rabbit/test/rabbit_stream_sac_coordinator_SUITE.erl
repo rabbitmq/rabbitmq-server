@@ -492,9 +492,9 @@ handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_tes
                        consumer(Pid1, 1, active),
                        consumer(Pid2, 2, waiting)]),
     State0 = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}]),
-                    Pid2 => maps:from_list([{GroupId, true}])}),
+                   #{Pid0 => maps:from_list([{GroupId, true}]),
+                     Pid1 => maps:from_list([{GroupId, true}]),
+                     Pid2 => maps:from_list([{GroupId, true}])}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
      Effects1} =
@@ -573,6 +573,163 @@ import_state_v4_test(_) ->
 
     ok.
 
+handle_connection_node_disconnected_test(_) ->
+    Stream = <<"stream">>,
+    ConsumerName = <<"app">>,
+    GroupId = {<<"/">>, Stream, ConsumerName},
+    Pid0 = self(),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid1, 1, active),
+                       consumer(Pid2, 2, waiting)]),
+    State0 = state(#{GroupId => Group},
+                   #{Pid0 => #{GroupId => true},
+                     Pid1 => #{GroupId => true},
+                     Pid2 => #{GroupId => true}}),
+
+    {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = _State1,
+     [Effect1]} =
+    ?MOD:handle_connection_node_disconnected(Pid1, State0),
+    assertSize(2, PidsGroups1),
+    assertSize(1, maps:get(Pid0, PidsGroups1)),
+    assertSize(1, maps:get(Pid2, PidsGroups1)),
+    ?assertEqual({timer, {sac, node_disconnected, #{connection_pid => Pid1}},
+                  60_000},
+                 Effect1),
+    assertHasGroup(GroupId,
+                   cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                              consumer(Pid1, 1, {disconnected, active}),
+                              consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    ok.
+
+handle_node_reconnected_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    CName = <<"app">>,
+
+    S0 = <<"s0">>,
+    GId0 = {<<"/">>, S0, CName},
+    Group0 = cgroup(0, [consumer(Pid0, 0, {connected, active}),
+                        consumer(Pid1, 1, {disconnected, waiting}),
+                        consumer(Pid2, 2, {connected, waiting})]),
+
+    S1 = <<"s1">>,
+    GId1 = {<<"/">>, S1, CName},
+    Group1 = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                        consumer(Pid1, 1, {disconnected, active}),
+                        consumer(Pid2, 2, {connected, waiting})]),
+
+    S2 = <<"s2">>,
+    GId2 = {<<"/">>, S2, CName},
+    Group2 = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                        consumer(Pid1, 1, {disconnected, waiting}),
+                        consumer(Pid2, 2, {connected, active})]),
+
+    Groups0 = #{GId0 => Group0,
+                GId1 => Group1,
+                GId2 => Group2},
+    State0 = state(Groups0,
+                   #{Pid0 => #{GId0 => true, GId1 => true, GId2 => true},
+                     Pid2 => #{GId0 => true, GId1 => true, GId2 => true}}),
+    {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = _State1,
+     Effects1} =
+    ?MOD:handle_node_reconnected(State0, []),
+
+    ?assertEqual(Groups0, Groups1),
+    ?assertEqual(#{Pid0 => #{GId0 => true, GId1 => true, GId2 => true},
+                   Pid1 => #{GId0 => true, GId1 => true, GId2 => true},
+                   Pid2 => #{GId0 => true, GId1 => true, GId2 => true}},
+                 PidsGroups1),
+
+    ?assertEqual([{mod_call,rabbit_stream_sac_coordinator,send_message,
+                   [Pid1,{sac,check_connection,#{}}]},
+                  {monitor, process, Pid1},
+                  {monitor, node, node(Pid1)}],
+                 Effects1),
+
+    ok.
+
+connection_reconnected_simple_disconnected_becomes_connected_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {disconnected, active}),
+                    consumer(Pid1, 1, {connected, waiting}),
+                    consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+
+    Cmd = connection_reconnection_command(Pid0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, active}),
+                                consumer(Pid1, 1, {connected, waiting}),
+                                consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+connection_reconnected_simple_active_should_be_first_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    %% disconnected for a while, got first in consumer array
+    %% because consumers arrived and left
+    Group = cgroup([consumer(Pid0, 0, {disconnected, waiting}),
+                    consumer(Pid1, 1, {connected, active}),
+                    consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+
+    Cmd = connection_reconnection_command(Pid0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid1, 1, {connected, active}),
+                                consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+connection_reconnected_super_disconnected_becomes_connected_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {disconnected, waiting}),
+                       consumer(Pid1, 1, {connected, waiting}),
+                       consumer(Pid2, 2, {connected, active})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+
+    Cmd = connection_reconnection_command(Pid0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                                   consumer(Pid1, 1, {connected, waiting}),
+                                   consumer(Pid2, 2, {connected, deactivating})]),
+                   Groups1),
+
+    assertSendMessageSteppingDownEffect(Pid2, 2, stream(), name(), Eff),
+    ok.
+
+group_id() ->
+    {<<"/">>, stream(), name()}.
+
+stream() ->
+    <<"sO">>.
+
+name() ->
+    <<"app">>.
+
 apply_ensure_monitors(Mod, Cmd, State0) ->
     {State1, _, _} = Mod:apply(Cmd, State0),
     {State2, _, _} = Mod:ensure_monitors(Cmd, State1, #{}, []),
@@ -592,11 +749,13 @@ assertHasGroup(GroupId, Group, Groups) ->
     G = maps:get(GroupId, Groups),
     ?assertEqual(Group, G).
 
-consumer(Pid, SubId, Status) ->
+consumer(Pid, SubId, {Connectivity, Status}) ->
     #consumer{pid = Pid,
               subscription_id = SubId,
               owner = <<"owning connection label">>,
-              status = Status}.
+              status = {Connectivity, Status}};
+consumer(Pid, SubId, Status) ->
+    consumer(Pid, SubId, {connected, Status}).
 
 cgroup(Consumers) ->
     cgroup(-1, Consumers).
@@ -640,6 +799,9 @@ activate_consumer_command(Stream, ConsumerName) ->
     #command_activate_consumer{vhost = <<"/">>,
                                stream = Stream,
                                consumer_name = ConsumerName}.
+
+connection_reconnection_command(Pid) ->
+    #command_connection_reconnected{pid = Pid}.
 
 assertSendMessageEffect(Pid, SubId, Stream, ConsumerName, Active, [Effect]) ->
     ?assertEqual({mod_call,
