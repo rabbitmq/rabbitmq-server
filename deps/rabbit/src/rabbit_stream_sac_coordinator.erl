@@ -18,9 +18,11 @@
 
 -include("rabbit_stream_sac_coordinator.hrl").
 
--opaque command() ::
-    #command_register_consumer{} | #command_unregister_consumer{} |
-    #command_activate_consumer{} | #command_connection_reconnected{}.
+-opaque command() :: #command_register_consumer{} |
+                     #command_unregister_consumer{} |
+                     #command_activate_consumer{} |
+                     #command_connection_reconnected{}.
+
 -opaque state() :: #?MODULE{}.
 
 -export_type([state/0,
@@ -46,6 +48,11 @@
          overview/1,
          import_state/2]).
 
+%% exported for unit tests only
+-ifdef(TEST).
+-export([compute_pid_group_dependencies/1]).
+-endif.
+
 -import(rabbit_stream_coordinator, [ra_local_query/1]).
 
 -define(ACTIVE, active).
@@ -55,6 +62,10 @@
 -define(CONNECTED, connected).
 -define(DISCONNECTED, disconnected).
 -define(FORGOTTTEN, forgotten).
+
+-define(CONN_ACT, {?CONNECTED, ?ACTIVE}).
+-define(CONN_WAIT, {?CONNECTED, ?WAITING}).
+-define(DISCONN_ACT, {?DISCONNECTED, ?ACTIVE}).
 
 
 %% Single Active Consumer API
@@ -120,15 +131,11 @@ unregister_consumer(VirtualHost,
                                                   SubscriptionId}}).
 
 -spec activate_consumer(binary(), binary(), binary()) -> ok.
-activate_consumer(VirtualHost, Stream, ConsumerName) ->
+activate_consumer(VH, Stream, Name) ->
     process_command({sac,
-                     #command_activate_consumer{vhost =
-                                                VirtualHost,
-                                                stream =
-                                                Stream,
-                                                consumer_name
-                                                =
-                                                ConsumerName}}).
+                     #command_activate_consumer{vhost =VH,
+                                                stream = Stream,
+                                                consumer_name= Name}}).
 
 -spec connection_reconnected(connection_pid()) -> ok.
 connection_reconnected(Pid) ->
@@ -275,16 +282,24 @@ apply(#command_activate_consumer{vhost = VirtualHost,
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};
-            Group0 ->
-                Group1 = update_consumers(Group0, {?CONNECTED, ?WAITING}),
-                #consumer{pid = Pid, subscription_id = SubId} =
-                    evaluate_active_consumer(Group1),
-                Group2 = update_consumer_state_in_group(Group1, Pid, SubId,
-                                                        {?CONNECTED, ?ACTIVE}),
-                {Group2, [notify_consumer_effect(Pid, SubId, Stream, ConsumerName, true)]}
+            G0 ->
+                G1 = update_connected_consumers(G0, ?CONN_WAIT),
+                case evaluate_active_consumer(G1) of
+                    undefined ->
+                        {G1, []};
+                    #consumer{status = {?DISCONNECTED, _}} ->
+                        %% we keep it this way, the consumer may come back
+                        {G1, []};
+                    #consumer{pid = Pid, subscription_id = SubId} ->
+                        G2 = update_consumer_state_in_group(G1, Pid,
+                                                            SubId,
+                                                            ?CONN_ACT),
+                        {G2, [notify_consumer_effect(Pid, SubId, Stream,
+                                                     ConsumerName, true)]}
+                end
         end,
-    StreamGroups1 =
-        update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
+    StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                  G, StreamGroups0),
     {State0#?MODULE{groups = StreamGroups1}, ok, Eff};
 apply(#command_connection_reconnected{pid = Pid},
       #?MODULE{groups = Groups0} = State0) ->
@@ -345,12 +360,15 @@ maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
                     {G1, []}
             end
     end;
-maybe_rebalance_group(#group{partition_index = _} = G, {_VH, S, Name}) ->
-    %% TODO re-use logic from do_register_consumer
+maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
+                      {_VH, S, Name}) ->
     case lookup_active_consumer(G) of
-        {value,
-         #consumer{pid = ActPid, subscription_id = ActSubId} = CurrentActive} ->
+        {value, #consumer{pid = ActPid,
+                          subscription_id = ActSubId} = CurrentActive} ->
             case evaluate_active_consumer(G) of
+                undefined ->
+                    %% no-one to select
+                    {G, []};
                 CurrentActive ->
                     %% the current active stays the same
                     {G, []};
@@ -369,8 +387,33 @@ maybe_rebalance_group(#group{partition_index = _} = G, {_VH, S, Name}) ->
             end;
         false ->
             %% no active consumer in the (non-empty) group,
-            %% we are waiting for the reply of a former active
-            {G, []}
+            case lists:search(fun(#consumer{status = Status}) ->
+                                      Status =:= {?CONNECTED, ?DEACTIVATING}
+                              end, Consumers) of
+                {value, _Deactivating} ->
+                    %%  we are waiting for the reply of a former active
+                    %%  nothing to do
+                    {G, []};
+                _ ->
+                    %% nothing going on in the group
+                    %% a {disconnected, active} may have become {forgotten, active}
+                    %% we must select a new active
+                    case evaluate_active_consumer(G) of
+                        undefined ->
+                            %% no-one to select
+                            {G, []};
+                        #consumer{pid = ActPid, subscription_id = ActSubId} ->
+                            {update_consumer_state_in_group(G,
+                                                            ActPid,
+                                                            ActSubId,
+                                                            {?CONNECTED, ?ACTIVE}),
+                             [notify_consumer_effect(ActPid,
+                                                     ActSubId,
+                                                     S,
+                                                     Name,
+                                                     true)]}
+                    end
+            end
     end.
 
 -spec consumer_groups(binary(), [atom()], state()) -> {ok, [term()]}.
@@ -586,11 +629,38 @@ handle_node_reconnected(#?MODULE{pids_groups = PidsGroups0,
 
 -spec forget_connection(connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
-forget_connection(_ConnPid, State0) ->
-    %% TODO SAC forget connection
-    %% mark connection consumers as forgotten
-    %% re-evaluate SAC for affected groups
-    {State0, []}.
+forget_connection(Pid, #?MODULE{groups = Groups} = State0) ->
+    {State1, Eff} =
+        maps:fold(fun(G, _, {St, Eff}) ->
+                          handle_group_forget_connection(Pid, St, Eff, G)
+                  end, {State0, []}, Groups),
+    {State1, Eff}.
+
+handle_group_forget_connection(Pid, #?MODULE{groups = Groups0} = S0,
+                               Eff0, {VH, S, Name} = K) ->
+    case lookup_group(VH, S, Name, Groups0) of
+        undefined ->
+            {S0, Eff0};
+        #group{consumers = Consumers0} = G0 ->
+            {Consumers1, Updated} =
+                lists:foldr(
+                  fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
+                        when P == Pid ->
+                          {[C#consumer{status = {?FORGOTTTEN, St}} | L], true};
+                     (C, {L, UpdatedFlag}) ->
+                          {[C | L], UpdatedFlag or false}
+                  end, {[], false}, Consumers0),
+
+            case Updated of
+                true ->
+                    G1 = G0#group{consumers = Consumers1},
+                    {G2, Eff} = maybe_rebalance_group(G1, K),
+                    Groups1 = update_groups(VH, S, Name, G2, Groups0),
+                    {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+                false ->
+                    {S0, Eff0}
+            end
+    end.
 
 handle_group_after_connection_down(Pid,
                                    {#?MODULE{groups = Groups0} = S0, Eff0},
@@ -710,8 +780,7 @@ do_register_consumer(VirtualHost,
                      Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
-    Group0 =
-        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+    Group0 = lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
     Consumer =
         case lookup_active_consumer(Group0) of
@@ -727,12 +796,9 @@ do_register_consumer(VirtualHost,
                           status = {?CONNECTED, ?ACTIVE}}
         end,
     Group1 = add_to_group(Consumer, Group0),
-    StreamGroups1 =
-        update_groups(VirtualHost,
-                      Stream,
-                      ConsumerName,
-                      Group1,
-                      StreamGroups0),
+    StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                  Group1,
+                                  StreamGroups0),
 
     #consumer{status = Status} = Consumer,
     Effects =
@@ -753,8 +819,7 @@ do_register_consumer(VirtualHost,
                      Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
-    Group0 =
-        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+    Group0 = lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
     {Group1, Effects} =
         case Group0 of
@@ -770,47 +835,16 @@ do_register_consumer(VirtualHost,
                  [notify_consumer_effect(ConnectionPid, SubscriptionId,
                                          Stream, ConsumerName, true)]};
             _G ->
-                %% whatever the current state is, the newcomer will be passive
-                Consumer0 =
-                    #consumer{pid = ConnectionPid,
-                              owner = Owner,
-                              subscription_id = SubscriptionId,
-                              status = {?CONNECTED, ?WAITING}},
+                Consumer0 = #consumer{pid = ConnectionPid,
+                                      owner = Owner,
+                                      subscription_id = SubscriptionId,
+                                      status = {?CONNECTED, ?WAITING}},
                 G1 = add_to_group(Consumer0, Group0),
-
-                case lookup_active_consumer(G1) of
-                    {value,
-                     #consumer{pid = ActPid, subscription_id = ActSubId} =
-                         CurrentActive} ->
-                        case evaluate_active_consumer(G1) of
-                            CurrentActive ->
-                                %% the current active stays the same
-                                {G1, []};
-                            _ ->
-                                %% there's a change, telling the active it's not longer active
-                                {update_consumer_state_in_group(G1,
-                                                                ActPid,
-                                                                ActSubId,
-                                                                {?CONNECTED, ?DEACTIVATING}),
-                                 [notify_consumer_effect(ActPid,
-                                                         ActSubId,
-                                                         Stream,
-                                                         ConsumerName,
-                                                         false,
-                                                         true)]}
-                        end;
-                    false ->
-                        %% no active consumer in the (non-empty) group,
-                        %% we are waiting for the reply of a former active
-                        {G1, []}
-                end
+                maybe_rebalance_group(G1, {VirtualHost, Stream, ConsumerName})
         end,
-    StreamGroups1 =
-        update_groups(VirtualHost,
-                      Stream,
-                      ConsumerName,
-                      Group1,
-                      StreamGroups0),
+        StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                      Group1,
+                                      StreamGroups0),
     {value, #consumer{status = Status}} =
         lookup_consumer(ConnectionPid, SubscriptionId, Group1),
     {State#?MODULE{groups = StreamGroups1}, {ok, is_active(Status)}, Effects}.
@@ -837,10 +871,11 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
     end;
 handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
     case lookup_active_consumer(Group0) of
-        {value,
-         #consumer{pid = ActPid, subscription_id = ActSubId} =
-             CurrentActive} ->
+        {value, #consumer{pid = ActPid,
+                          subscription_id = ActSubId} = CurrentActive} ->
             case evaluate_active_consumer(Group0) of
+                undefined ->
+                    {Group0, []};
                 CurrentActive ->
                     %% the current active stays the same
                     {Group0, []};
@@ -857,12 +892,15 @@ handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
             case ActiveRemoved of
                 true ->
                     %% the active one is going away, picking a new one
-                    #consumer{pid = P, subscription_id = SID} =
-                        evaluate_active_consumer(Group0),
-                    {update_consumer_state_in_group(Group0, P, SID,
-                                                    {?CONNECTED, ?ACTIVE}),
-                     [notify_consumer_effect(P, SID,
-                                             Stream, ConsumerName, true)]};
+                    case evaluate_active_consumer(Group0) of
+                        undefined ->
+                            {Group0, []};
+                        #consumer{pid = P, subscription_id = SID} ->
+                            {update_consumer_state_in_group(Group0, P, SID,
+                                                            {?CONNECTED, ?ACTIVE}),
+                             [notify_consumer_effect(P, SID,
+                                                     Stream, ConsumerName, true)]}
+                    end;
                 false ->
                     %% no active consumer in the (non-empty) group,
                     %% we are waiting for the reply of a former active
@@ -925,29 +963,74 @@ has_consumers_from_pid(#group{consumers = Consumers}, Pid) ->
               end,
               Consumers).
 
-compute_active_consumer(#group{consumers = Crs,
-                               partition_index = -1} = Group)
+compute_active_consumer(#group{partition_index = -1,
+                               consumers = Crs} = Group)
     when length(Crs) == 0 ->
     Group;
 compute_active_consumer(#group{partition_index = -1,
-                               consumers = [Consumer0]} = Group0) ->
-    %% TODO activate only if CONNECTED
-    Consumer1 = Consumer0#consumer{status = {?CONNECTED, ?ACTIVE}},
-    Group0#group{consumers = [Consumer1]};
-compute_active_consumer(#group{partition_index = -1,
-                               consumers = [Consumer0 | T]} =
-                            Group0) ->
-    %% TODO activate only if CONNECTED
-    Consumer1 = Consumer0#consumer{status = {?CONNECTED, ?ACTIVE}},
-    Consumers = lists:map(fun(C) -> C#consumer{status = {?CONNECTED, ?WAITING}} end, T),
-    Group0#group{consumers = [Consumer1] ++ Consumers}.
+                               consumers = Consumers} = G) ->
+    case lists:search(fun(#consumer{status = S}) ->
+                              S =:= {?DISCONNECTED, ?ACTIVE}
+                      end, Consumers) of
+        {value, _DisconnectedActive} ->
+            G;
+        false ->
+            case evaluate_active_consumer(G) of
+                undefined ->
+                    ok;
+                #consumer{pid = Pid, subscription_id = SubId} ->
+                    Consumers1 =
+                        lists:foldr(
+                          fun(#consumer{pid = P, subscription_id = SID} = C, L)
+                                when P =:= Pid andalso SID =:= SubId ->
+                                  %% change status of new active
+                                  [C#consumer{status = ?CONN_ACT} | L];
+                             (#consumer{status = {?CONNECTED, _}} = C, L) ->
+                                  %% other connected consumers are set to "waiting"
+                                  [C#consumer{status = ?CONN_WAIT} | L];
+                             (C, L) ->
+                                  %% other consumers stay the same
+                                  [C | L]
+                          end, [], Consumers),
+                    G#group{consumers = Consumers1}
+            end
+    end.
 
-evaluate_active_consumer(#group{partition_index = PartitionIndex,
+evaluate_active_consumer(#group{consumers = Consumers})
+    when length(Consumers) == 0 ->
+    undefined;
+evaluate_active_consumer(#group{consumers = Consumers} = G) ->
+    case lists:search(fun(#consumer{status = S}) ->
+                              S =:= ?DISCONN_ACT
+                      end, Consumers) of
+        {value, C} ->
+            C;
+        _ ->
+            do_evaluate_active_consumer(G#group{consumers = eligible(Consumers)})
+    end.
+
+do_evaluate_active_consumer(#group{partition_index = -1,
                                 consumers = Consumers})
+    when length(Consumers) == 0 ->
+    undefined;
+do_evaluate_active_consumer(#group{partition_index = -1,
+                                consumers = [Consumer]}) ->
+    Consumer;
+do_evaluate_active_consumer(#group{partition_index = -1,
+                                consumers = [Consumer | _]}) ->
+    Consumer;
+do_evaluate_active_consumer(#group{partition_index = PartitionIndex,
+                                   consumers = Consumers})
     when PartitionIndex >= 0 ->
-    %% TODO activate only if CONNECTED
     ActiveConsumerIndex = PartitionIndex rem length(Consumers),
     lists:nth(ActiveConsumerIndex + 1, Consumers).
+
+eligible(Consumers) ->
+    lists:filter(fun(#consumer{status = {?CONNECTED, _}}) ->
+                         true;
+                    (_) ->
+                         false
+                 end, Consumers).
 
 lookup_consumer(ConnectionPid, SubscriptionId,
                 #group{consumers = Consumers}) ->
@@ -994,9 +1077,11 @@ update_consumer_state_in_group(#group{consumers = Consumers0} = G,
                     Consumers0),
     G#group{consumers = CS1}.
 
-update_consumers(#group{consumers = Consumers0} = G, NewStatus) ->
-    Consumers1 = lists:map(fun(C) ->
-                                   C#consumer{status = NewStatus}
+update_connected_consumers(#group{consumers = Consumers0} = G, NewStatus) ->
+    Consumers1 = lists:map(fun(#consumer{status = {?CONNECTED, _}} = C) ->
+                                   C#consumer{status = NewStatus};
+                              (C) ->
+                                   C
                            end, Consumers0),
     G#group{consumers = Consumers1}.
 
