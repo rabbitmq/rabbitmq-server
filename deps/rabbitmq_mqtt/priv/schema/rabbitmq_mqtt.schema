@@ -304,8 +304,27 @@ end}.
     {validators, ["non_negative_integer"]}
 ]}.
 
-{mapping, "message_interceptor.incoming.rabbit_mqtt_message_interceptor_client_id.annotation_key",
-          "rabbit.incoming_message_interceptors",
-          [{datatype, string},
-           {default, "x-opt-mqtt-client-id"}]
+%%
+%% Message interceptors
+%%
+{mapping, "mqtt.message_interceptors.incoming.set_client_id_annotation.enabled", "rabbitmq_mqtt.incoming_message_interceptors", [
+    {datatype, {enum, [true, false]}}]}.
+
+{translation, "rabbitmq_mqtt.incoming_message_interceptors",
+ fun(Conf) ->
+         case cuttlefish_variable:filter_by_prefix("mqtt.message_interceptors", Conf) of
+             [] ->
+                 cuttlefish:unset();
+             L ->
+                 [begin
+                      Interceptor = list_to_atom(Interceptor0),
+                      case Interceptor of
+                          set_client_id_annotation ->
+                              {rabbit_mqtt_message_interceptor_client_id, #{}};
+                          _ ->
+                              cuttlefish:invalid(io_lib:format("~p is invalid", [Interceptor]))
+                      end
+                  end || {["mqtt", "message_interceptors", "incoming", Interceptor0, "enabled"], true} <- L]
+         end
+ end
 }.

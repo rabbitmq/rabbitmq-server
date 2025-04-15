@@ -1655,10 +1655,11 @@ persist_static_configuration() ->
     persist_static_configuration(
       [classic_queue_index_v2_segment_entry_count,
        classic_queue_store_v2_max_cache_size,
-       classic_queue_store_v2_check_crc32,
-       incoming_message_interceptors,
-       outgoing_message_interceptors
+       classic_queue_store_v2_check_crc32
       ]),
+
+    Interceptors = application:get_env(?MODULE, incoming_message_interceptors, []),
+    ok = rabbit_message_interceptor:add(Interceptors, incoming_message_interceptors),
 
     %% Disallow the following two cases:
     %% 1. Negative values

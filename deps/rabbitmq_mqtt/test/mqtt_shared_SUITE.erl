@@ -1779,12 +1779,14 @@ default_queue_type(Config) ->
 
 incoming_message_interceptors(Config) ->
     Key = ?FUNCTION_NAME,
-    ok = rpc(Config,
-             persistent_term,
-             put,
-             [Key, [{rabbit_message_interceptor_timestamp, #{overwrite => false}}]]),
+    ok = rpc(Config, persistent_term, put,
+             [Key, [
+                    {rabbit_message_interceptor_timestamp, #{overwrite => false}},
+                    {rabbit_mqtt_message_interceptor_client_id, #{}}
+                   ]]),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
+    Payload = Topic = atom_to_binary(?FUNCTION_NAME),
+    ClientId = <<"🆔"/utf8>>,
     CQName = <<"my classic queue">>,
     Stream = <<"my stream">>,
     declare_queue(Ch, CQName, [{<<"x-queue-type">>, longstr, <<"classic">>}]),
@@ -1801,14 +1803,18 @@ incoming_message_interceptors(Config) ->
      #amqp_msg{payload = Payload,
                props = #'P_basic'{
                           timestamp = Secs,
-                          headers = [{<<"timestamp_in_ms">>, long, Millis} | _]
+                          headers = Headers
                          }}
     } = amqp_channel:call(Ch, #'basic.get'{queue = CQName}),
 
+    {<<"timestamp_in_ms">>, long, Millis} = lists:keyfind(<<"timestamp_in_ms">>, 1, Headers),
     ?assert(Secs < NowSecs + 4),
     ?assert(Secs > NowSecs - 4),
     ?assert(Millis < NowMillis + 4000),
     ?assert(Millis > NowMillis - 4000),
+
+    ?assertEqual({<<"x-opt-mqtt-client-id">>, longstr, ClientId},
+                 lists:keyfind(<<"x-opt-mqtt-client-id">>, 1, Headers)),
 
     #'basic.qos_ok'{}  = amqp_channel:call(Ch, #'basic.qos'{prefetch_count = 1}),
     CTag = <<"my ctag">>,
@@ -1822,9 +1828,10 @@ incoming_message_interceptors(Config) ->
     receive {#'basic.deliver'{consumer_tag = CTag},
              #amqp_msg{payload = Payload,
                        props = #'P_basic'{
-                                  headers = [{<<"timestamp_in_ms">>, long, Millis} | _XHeaders]
+                                  headers = [{<<"timestamp_in_ms">>, long, Millis} | XHeaders]
                                  }}} ->
-                ok
+                ?assertEqual({<<"x-opt-mqtt-client-id">>, longstr, ClientId},
+                             lists:keyfind(<<"x-opt-mqtt-client-id">>, 1, XHeaders))
     after ?TIMEOUT -> ct:fail(missing_deliver)
     end,
 

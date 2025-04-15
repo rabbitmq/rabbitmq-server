@@ -284,7 +284,7 @@
           max_incoming_window :: pos_integer(),
           max_link_credit :: pos_integer(),
           max_queue_credit :: pos_integer(),
-          msg_interceptor_ctx :: map()
+          msg_interceptor_ctx :: rabbit_message_interceptor:context()
          }).
 
 -record(state, {
@@ -477,9 +477,9 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
                            max_link_credit = MaxLinkCredit,
                            max_queue_credit = MaxQueueCredit,
                            msg_interceptor_ctx = #{protocol => ?PROTOCOL,
-                                                   username => User#user.username,
                                                    vhost => Vhost,
-                                                   conn_name => ConnName}
+                                                   username => User#user.username,
+                                                   connection_name => ConnName}
                           }}}.
 
 terminate(_Reason, #state{incoming_links = IncomingLinks,
@@ -2442,12 +2442,12 @@ incoming_link_transfer(
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
+            check_user_id(Mc1, User),
+            TopicPermCache = check_write_permitted_on_topics(
+                               X, User, RoutingKeys, TopicPermCache0),
             Mc2 = rabbit_message_interceptor:intercept(Mc1,
                                                        MsgInterceptorCtx,
                                                        incoming_message_interceptors),
-            check_user_id(Mc2, User),
-            TopicPermCache = check_write_permitted_on_topics(
-                               X, User, RoutingKeys, TopicPermCache0),
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
