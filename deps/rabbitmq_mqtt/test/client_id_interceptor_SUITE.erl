@@ -7,7 +7,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(util,
-        [connect/3]).
+        [connect/2]).
 
 all() ->
     [{group, intercept}].
@@ -22,8 +22,7 @@ init_per_suite(Config) ->
     rabbit_ct_helpers:run_setup_steps(Config).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
-
+    Config.
 init_per_testcase(Testcase, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config0, [{rmq_nodename_suffix, Testcase}]),
@@ -31,12 +30,12 @@ init_per_testcase(Testcase, Config0) ->
             maps:from_keys([rabbit_mqtt_message_interceptor_client_id],
                            #{annotation_key => <<"x-client_id">>})),
     Config2 = rabbit_ct_helpers:merge_app_env(
-               Config1, {rabbit, [{incoming_message_interceptors, Val}]}),
+                Config1, {rabbit, [{incoming_message_interceptors, Val}]}),
     Config3 = rabbit_ct_helpers:run_steps(
-      Config2,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps() ++
-      [fun start_amqp10_client_app/1]),
+                Config2,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                rabbit_ct_client_helpers:setup_steps() ++
+                [fun start_amqp10_client_app/1]),
     rabbit_ct_helpers:testcase_started(Config3, Testcase).
 
 end_per_testcase(Testcase, Config0) ->
@@ -51,68 +50,48 @@ start_amqp10_client_app(Config) ->
     Config.
 
 incoming(Config) ->
+    Host = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    ClientId = Container = atom_to_binary(?FUNCTION_NAME),
+
+    %% With AMQP 1.0
+    OpnConf = #{address => Host,
+                port => Port,
+                container_id => Container,
+                sasl => {plain, <<"guest">>, <<"guest">>}},
+    {ok, Connection1} = amqp10_client:open_connection(OpnConf),
+    {ok, Session1} = amqp10_client:begin_session(Connection1),
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Session1, <<"pair">>),
+    QName = <<"queue for AMQP 1.0 client">>,
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    ok = rabbitmq_amqp_client:bind_queue(LinkPair, QName, <<"amq.topic">>, <<"topic.1">>, #{}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session1, <<"test-receiver">>,
+                       rabbitmq_amqp_address:queue(QName),
+                       unsettled, configuration),
+
+    C = connect(ClientId, Config),
+    Correlation = <<"some correlation ID">>,
+    ContentType = <<"text/plain">>,
+    RequestPayload = <<"my request">>,
+    {ok, _} = emqtt:publish(C, <<"topic/1">>,
+                            #{'Content-Type' => ContentType,
+                              'Correlation-Data' => Correlation},
+                            RequestPayload, [{qos, 1}]),
+
+    {ok, Msg1} = amqp10_client:get_msg(Receiver),
+    Props = amqp10_msg:message_annotations(Msg1),
+    ?assertMatch(ClientId, maps:get(<<"x-client_id">>, Props)),
+
+    % With AMQP 0.9
     Ch = rabbit_ct_client_helpers:open_channel(Config),
 
-    QQ = <<"qq1">>,
-    Topic = <<"mytopic">>,
-
-    declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    bind(Ch, QQ, Topic),
-
-    ClientId = ?FUNCTION_NAME,
-    C = connect(ClientId, Config, [{max_inflight, 200},
-                                   {retry_interval, 2}]),
-
-    ?_assertMatch({ok, _}, emqtt:publish(C, Topic, <<"1">>, [{qos, 1}])),
     ?_assertMatch({#'basic.get_ok'{},
                    #amqp_msg{props = #'P_basic'{headers = [{<<"x-client_id">>,
                                                             longstr,
                                                             <<"incoming">>}]} }},
-                  amqp_channel:call(Ch, #'basic.get'{queue = QQ, no_ack = true})),
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session(Connection),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"test-receiver">>, <<"qq1">>),
+                  amqp_channel:call(Ch, #'basic.get'{queue = QName, no_ack = true})),
 
-    receive M ->
-        ct:log("Received message: ~p", [M]),
-        ok
-    after 5000 ->
-        ct:log("Timeout waiting for message")
-    end,
-
-    %% grant some credit to the remote sender but don't auto-renew it
-    ok = amqp10_client:flow_link_credit(Receiver, 5, never),
-
-    %% wait for a delivery
-    receive
-        {amqp10_msg, Receiver, InMsg} ->
-            ct:log("Received message: ~p", [InMsg]),
-            ok
-    after 2000 ->
-          exit(delivery_timeout)
-    end.
-
-
-declare_queue(Ch, QueueName, Args)
-  when is_pid(Ch), is_binary(QueueName), is_list(Args) ->
-    #'queue.declare_ok'{} = amqp_channel:call(
-                              Ch, #'queue.declare'{
-                                     queue = QueueName,
-                                     durable = true,
-                                     arguments = Args}).
-
-bind(Ch, QueueName, Topic)
-  when is_pid(Ch), is_binary(QueueName), is_binary(Topic) ->
-    #'queue.bind_ok'{} = amqp_channel:call(
-                           Ch, #'queue.bind'{queue       = QueueName,
-                                             exchange    = <<"amq.topic">>,
-                                             routing_key = Topic}).
-
-connection_config(Config) ->
-    Host = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    #{address => Host,
-      port => Port,
-      container_id => <<"my container">>,
-      sasl => {plain, <<"guest">>, <<"guest">>}}.
+    rabbit_ct_client_helpers:close_channel(Ch),
+    emqtt:disconnect(C).
