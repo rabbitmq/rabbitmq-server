@@ -10,8 +10,8 @@
 %% On start this process will try to recover the vhost data and
 %% processes structure (queues and message stores).
 %% If recovered successfully, the process will save it's PID
-%% to vhost process registry. If vhost process PID is in the registry and the
-%% process is alive - the vhost is considered running.
+%% to the virtual host process registry. If the virtual host PID is in the registry and the
+%% process is alive, then the vhost is considered to be running.
 
 %% On termination, the ptocess will notify of vhost going down.
 
@@ -35,7 +35,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    rabbit_log:debug("Recovering data for VHost ~ts", [VHost]),
+    rabbit_log:debug("Recovering data for virtual host ~ts", [VHost]),
     try
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),
