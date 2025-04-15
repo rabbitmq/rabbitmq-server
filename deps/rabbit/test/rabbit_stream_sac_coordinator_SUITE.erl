@@ -221,7 +221,7 @@ super_stream_partition_sac_test(_) ->
 ensure_monitors_test(_) ->
     GroupId = {<<"/">>, <<"stream">>, <<"app">>},
     Group = cgroup([consumer(self(), 0, true), consumer(self(), 1, false)]),
-    State0 = state(#{GroupId => Group}),
+    State0 = state(#{GroupId => Group}, #{}),
     Monitors0 = #{},
     Command0 =
         register_consumer_command(<<"stream">>, -1, <<"app">>, self(), 0),
@@ -300,9 +300,7 @@ handle_connection_down_sac_should_get_activated_test(_) ->
     Group = cgroup([consumer(Pid0, 0, active),
                     consumer(Pid1, 1, waiting),
                     consumer(Pid0, 2, waiting)]),
-    State0 = state(#{GroupId => Group},
-                   #{Pid0 => maps:from_list([{GroupId, true}]),
-                     Pid1 => maps:from_list([{GroupId, true}])}),
+    State0 = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
      Effects1} = ?MOD:handle_connection_down(Pid0, State0),
@@ -327,9 +325,7 @@ handle_connection_down_sac_active_does_not_change_test(_) ->
     Group = cgroup([consumer(Pid1, 0, active),
                     consumer(Pid0, 1, waiting),
                     consumer(Pid0, 2, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} = ?MOD:handle_connection_down(Pid0, State),
@@ -346,8 +342,7 @@ handle_connection_down_sac_no_more_consumers_test(_) ->
     Pid0 = self(),
     Group = cgroup([consumer(Pid0, 0, active),
                     consumer(Pid0, 1, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} = ?MOD:handle_connection_down(Pid0, State),
@@ -389,9 +384,7 @@ handle_connection_down_super_stream_active_stays_test(_) ->
                        consumer(Pid0, 1, active),
                        consumer(Pid1, 2, waiting),
                        consumer(Pid1, 3, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} = ?MOD:handle_connection_down(Pid1, State),
@@ -414,9 +407,7 @@ handle_connection_down_super_stream_active_changes_test(_) ->
                        consumer(Pid1, 1, active),
                        consumer(Pid0, 2, waiting),
                        consumer(Pid1, 3, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} =
@@ -440,9 +431,7 @@ handle_connection_down_super_stream_activate_in_remaining_connection_test(_) ->
                        consumer(Pid0, 1, active),
                        consumer(Pid1, 2, waiting),
                        consumer(Pid1, 3, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} = ?MOD:handle_connection_down(Pid0, State),
@@ -467,9 +456,7 @@ handle_connection_down_super_stream_no_active_removed_or_present_test(_) ->
                        consumer(Pid0, 1, waiting),
                        consumer(Pid1, 2, waiting),
                        consumer(Pid1, 3, waiting)]),
-    State = state(#{GroupId => Group},
-                  #{Pid0 => maps:from_list([{GroupId, true}]),
-                    Pid1 => maps:from_list([{GroupId, true}])}),
+    State = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups, groups = Groups},
      Effects} = ?MOD:handle_connection_down(Pid0, State),
@@ -491,10 +478,7 @@ handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_tes
     Group = cgroup(1, [consumer(Pid0, 0, waiting),
                        consumer(Pid1, 1, active),
                        consumer(Pid2, 2, waiting)]),
-    State0 = state(#{GroupId => Group},
-                   #{Pid0 => maps:from_list([{GroupId, true}]),
-                     Pid1 => maps:from_list([{GroupId, true}]),
-                     Pid2 => maps:from_list([{GroupId, true}])}),
+    State0 = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
      Effects1} =
@@ -583,10 +567,7 @@ handle_connection_node_disconnected_test(_) ->
     Group = cgroup(1, [consumer(Pid0, 0, waiting),
                        consumer(Pid1, 1, active),
                        consumer(Pid2, 2, waiting)]),
-    State0 = state(#{GroupId => Group},
-                   #{Pid0 => #{GroupId => true},
-                     Pid1 => #{GroupId => true},
-                     Pid2 => #{GroupId => true}}),
+    State0 = state(#{GroupId => Group}),
 
     {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = _State1,
      [Effect1]} =
@@ -631,6 +612,7 @@ handle_node_reconnected_test(_) ->
     Groups0 = #{GId0 => Group0,
                 GId1 => Group1,
                 GId2 => Group2},
+    %% Pid2 is missing from PIDs to groups dependency mapping
     State0 = state(Groups0,
                    #{Pid0 => #{GId0 => true, GId1 => true, GId2 => true},
                      Pid2 => #{GId0 => true, GId1 => true, GId2 => true}}),
@@ -662,7 +644,7 @@ connection_reconnected_simple_disconnected_becomes_connected_test(_) ->
                     consumer(Pid2, 2, {connected, waiting})]),
 
     Groups0 = #{GId => Group},
-    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+    State0 = state(Groups0),
 
     Cmd = connection_reconnection_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
@@ -686,7 +668,7 @@ connection_reconnected_simple_active_should_be_first_test(_) ->
                     consumer(Pid2, 2, {connected, waiting})]),
 
     Groups0 = #{GId => Group},
-    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+    State0 = state(Groups0),
 
     Cmd = connection_reconnection_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
@@ -708,7 +690,7 @@ connection_reconnected_super_disconnected_becomes_connected_test(_) ->
                        consumer(Pid2, 2, {connected, active})]),
 
     Groups0 = #{GId => Group},
-    State0 = state(Groups0, #{Pid0 => #{GId => true}}),
+    State0 = state(Groups0),
 
     Cmd = connection_reconnection_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
@@ -719,6 +701,239 @@ connection_reconnected_super_disconnected_becomes_connected_test(_) ->
                    Groups1),
 
     assertSendMessageSteppingDownEffect(Pid2, 2, stream(), name(), Eff),
+    ok.
+
+forget_connection_simple_disconnected_becomes_forgotten_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {disconnected, active}),
+                    consumer(Pid1, 1, {connected, waiting}),
+                    consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid0, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {forgotten, active}),
+                                consumer(Pid1, 1, {connected, active}),
+                                consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertSendMessageEffect(Pid1, 1, stream(), name(), true, Eff),
+    ok.
+
+forget_connection_super_disconnected_becomes_forgotten_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 1, {disconnected, active}),
+                       consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid1, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                                   consumer(Pid1, 1, {forgotten, active}),
+                                   consumer(Pid2, 2, {connected, active})]),
+                   Groups1),
+
+    assertSendMessageEffect(Pid2, 2, stream(), name(), true, Eff),
+    ok.
+
+register_consumer_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, waiting}),
+                    consumer(Pid1, 1, {disconnected, active}),
+                    consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = register_consumer_command(stream(), -1, name(), Pid0, 3),
+    {#?STATE{groups = Groups1}, {ok, false}, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid1, 1, {disconnected, active}),
+                                consumer(Pid0, 2, {connected, waiting}),
+                                consumer(Pid0, 3, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+register_consumer_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 1, {disconnected, active}),
+                       consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = register_consumer_command(stream(), -1, name(), Pid0, 3),
+    {#?STATE{groups = Groups1}, {ok, false}, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                                   consumer(Pid1, 1, {disconnected, active}),
+                                   consumer(Pid0, 2, {connected, waiting}),
+                                   consumer(Pid0, 3, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+unregister_consumer_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, waiting}),
+                    consumer(Pid1, 1, {disconnected, active}),
+                    consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = unregister_consumer_command(stream(), name(), Pid0, 2),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid1, 1, {disconnected, active})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+unregister_consumer_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 1, {disconnected, active}),
+                       consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = unregister_consumer_command(stream(), name(), Pid0, 0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup(1, [consumer(Pid1, 1, {disconnected, active}),
+                                   consumer(Pid0, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+activate_consumer_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, waiting}),
+                    consumer(Pid1, 1, {disconnected, active}),
+                    consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid1, 1, {disconnected, active}),
+                                consumer(Pid0, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+active_consumer_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 1, {disconnected, active}),
+                       consumer(Pid0, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                                   consumer(Pid1, 1, {disconnected, active}),
+                                   consumer(Pid0, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+handle_connection_down_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, waiting}),
+                    consumer(Pid1, 0, {disconnected, active}),
+                    consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(Pid2, State0),
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid1, 0, {disconnected, active})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+handle_connection_down_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 0, {disconnected, active}),
+                       consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:handle_connection_down(Pid0, State0),
+    assertHasGroup(GId, cgroup(1, [consumer(Pid1, 0, {disconnected, active}),
+                                   consumer(Pid2, 0, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+handle_connection_node_disconnected_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, waiting}),
+                    consumer(Pid1, 0, {disconnected, active}),
+                    consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    {#?STATE{groups = Groups1}, Eff} =
+    ?MOD:handle_connection_node_disconnected(Pid2, State0),
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid1, 0, {disconnected, active}),
+                                consumer(Pid2, 0, {disconnected, waiting})]),
+                   Groups1),
+    assertNodeDisconnectedTimerEffect(Pid2, Eff),
+    ok.
+
+handle_connection_node_disconnected_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 0, {disconnected, active}),
+                       consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    {#?STATE{groups = Groups1}, Eff} =
+    ?MOD:handle_connection_node_disconnected(Pid0, State0),
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {disconnected, waiting}),
+                                   consumer(Pid1, 0, {disconnected, active}),
+                                   consumer(Pid2, 0, {connected, waiting})]),
+                   Groups1),
+    assertNodeDisconnectedTimerEffect(Pid0, Eff),
     ok.
 
 group_id() ->
@@ -767,7 +982,7 @@ state() ->
     state(#{}).
 
 state(Groups) ->
-    state(Groups, #{}).
+    state(Groups, ?MOD:compute_pid_group_dependencies(Groups)).
 
 state(Groups, PidsGroups) ->
     #?STATE{groups = Groups, pids_groups = PidsGroups}.
@@ -827,4 +1042,10 @@ assertSendMessageSteppingDownEffect(Pid, SubId, Stream, ConsumerName, [Effect]) 
                       consumer_name => ConsumerName,
                       active => false,
                       stepping_down => true}}]},
+                 Effect).
+
+assertNodeDisconnectedTimerEffect(Pid, [Effect]) ->
+    ?assertMatch({timer,
+                  {sac, node_disconnected, #{connection_pid := Pid}},
+                  _},
                  Effect).
