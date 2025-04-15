@@ -1634,15 +1634,14 @@ publish_to_queues(
                     conn_name = ConnName,
                     trace_state = TraceState},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
-    MsgInterceptorCtx = build_msg_interceptor_ctx(State),
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
-    Msg = rabbit_message_interceptor:intercept(Msg0,
-                                               MsgInterceptorCtx,
-                                               incoming_message_interceptors),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
+            Msg = rabbit_message_interceptor:intercept(Msg0,
+                                                       msg_interceptor_ctx(State),
+                                                       incoming_message_interceptors),
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(Msg, QNames, ConnName, Username, TraceState),
@@ -2539,6 +2538,17 @@ message_redelivered(_, _, _) ->
 is_success(ReasonCode) ->
     ReasonCode < ?RC_UNSPECIFIED_ERROR.
 
+msg_interceptor_ctx(#state{cfg = #cfg{client_id = ClientId,
+                                      conn_name = ConnName,
+                                      vhost = VHost,
+                                      proto_ver = ProtoVer},
+                           auth_state = #auth_state{user = #user{username = Username}}}) ->
+    #{protocol => ProtoVer,
+      vhost => VHost,
+      username => Username,
+      connection_name => ConnName,
+      client_id => ClientId}.
+
 -spec format_status(state()) -> map().
 format_status(
   #state{queue_states = QState,
@@ -2609,15 +2619,3 @@ mc_env() ->
         MqttX ->
             #{mqtt_x => MqttX}
     end.
-
-build_msg_interceptor_ctx(#state{cfg = #cfg{client_id = ClientId,
-                                            conn_name = ConnName,
-                                            vhost = VHost,
-                                            proto_ver = ProtoVer
-                                           },
-                                 auth_state = #auth_state{user = #user{username = Username}}}) ->
-    #{protocol => ProtoVer,
-      username => Username,
-      vhost => VHost,
-      conn_name => ConnName,
-      client_id => ClientId}.

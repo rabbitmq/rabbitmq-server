@@ -111,7 +111,7 @@
           max_consumers,  % taken from rabbit.consumer_max_per_channel
           %% defines how ofter gc will be executed
           writer_gc_threshold,
-          msg_interceptor_ctx
+          msg_interceptor_ctx :: rabbit_message_interceptor:context()
          }).
 
 -record(pending_ack, {
@@ -493,6 +493,10 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
     {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
     MaxConsumers = application:get_env(rabbit, consumer_max_per_channel, infinity),
+    MsgInterceptorCtx = #{protocol => amqp091,
+                          vhost => VHost,
+                          username => User#user.username,
+                          connection_name => ConnName},
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -511,11 +515,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             authz_context = OptionalVariables,
                             max_consumers = MaxConsumers,
                             writer_gc_threshold = GCThreshold,
-                            msg_interceptor_ctx = #{protocol => amqp091,
-                                                    username => User#user.username,
-                                                    vhost => VHost,
-                                                    conn_name => ConnName}
-                           },
+                            msg_interceptor_ctx = MsgInterceptorCtx},
                 limiter = Limiter,
                 tx                      = none,
                 next_tag                = 1,
@@ -1213,10 +1213,10 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
             check_write_permitted_on_topics(Exchange, User, Message0, AuthzContext),
+            check_user_id_header(Message0, User),
             Message = rabbit_message_interceptor:intercept(Message0,
                                                            MsgInterceptorCtx,
                                                            incoming_message_interceptors),
-            check_user_id_header(Message, User),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
