@@ -1,1 +1,2 @@
-[rabbitmq_management].
+[rabbitmq_management,rabbitmq_stream,rabbitmq_stream_common,rabbitmq_stream_management,
+rabbitmq_top,rabbitmq_tracing,rabbitmq_federation_management,rabbitmq_shovel_management].
