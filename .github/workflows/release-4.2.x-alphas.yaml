@@ -21,7 +21,7 @@ jobs:
       - name: Trigger a 4.0.x alpha build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.RABBITMQCI_BOT_TOKEN }}
+          token: ${{ secrets.MK_RELEASE_AUTOMATION_TOKEN }}
           repository: ${{ env.DEV_WORKFLOW_REPOSITORY }}
           event-type: "new_4.2.x_alpha"
           client-payload: |-
