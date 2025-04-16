@@ -21,7 +21,8 @@
 -opaque command() :: #command_register_consumer{} |
                      #command_unregister_consumer{} |
                      #command_activate_consumer{} |
-                     #command_connection_reconnected{}.
+                     #command_connection_reconnected{} |
+                     #command_purge_nodes{}.
 
 -opaque state() :: #?MODULE{}.
 
@@ -47,6 +48,7 @@
          group_consumers/5,
          overview/1,
          import_state/2]).
+-export([make_purge_nodes/1]).
 
 %% exported for unit tests only
 -ifdef(TEST).
@@ -84,25 +86,13 @@ register_consumer(VirtualHost,
                   ConnectionPid,
                   Owner,
                   SubscriptionId) ->
-    process_command({sac,
-                     #command_register_consumer{vhost =
-                                                VirtualHost,
-                                                stream =
-                                                Stream,
-                                                partition_index
-                                                =
-                                                PartitionIndex,
-                                                consumer_name
-                                                =
-                                                ConsumerName,
-                                                connection_pid
-                                                =
-                                                ConnectionPid,
-                                                owner =
-                                                Owner,
-                                                subscription_id
-                                                =
-                                                SubscriptionId}}).
+    process_command(#command_register_consumer{vhost = VirtualHost,
+                                               stream = Stream,
+                                               partition_index = PartitionIndex,
+                                               consumer_name = ConsumerName,
+                                               connection_pid = ConnectionPid,
+                                               owner = Owner,
+                                               subscription_id = SubscriptionId}).
 
 -spec unregister_consumer(binary(),
                           binary(),
@@ -115,35 +105,24 @@ unregister_consumer(VirtualHost,
                     ConsumerName,
                     ConnectionPid,
                     SubscriptionId) ->
-    process_command({sac,
-                     #command_unregister_consumer{vhost =
-                                                  VirtualHost,
-                                                  stream =
-                                                  Stream,
-                                                  consumer_name
-                                                  =
-                                                  ConsumerName,
-                                                  connection_pid
-                                                  =
-                                                  ConnectionPid,
-                                                  subscription_id
-                                                  =
-                                                  SubscriptionId}}).
+    process_command(#command_unregister_consumer{vhost = VirtualHost,
+                                                 stream = Stream,
+                                                 consumer_name = ConsumerName,
+                                                 connection_pid = ConnectionPid,
+                                                 subscription_id = SubscriptionId}).
 
 -spec activate_consumer(binary(), binary(), binary()) -> ok.
 activate_consumer(VH, Stream, Name) ->
-    process_command({sac,
-                     #command_activate_consumer{vhost =VH,
-                                                stream = Stream,
-                                                consumer_name= Name}}).
+    process_command(#command_activate_consumer{vhost =VH,
+                                               stream = Stream,
+                                               consumer_name= Name}).
 
 -spec connection_reconnected(connection_pid()) -> ok.
 connection_reconnected(Pid) ->
-    process_command({sac,
-                     #command_connection_reconnected{pid = Pid}}).
+    process_command(#command_connection_reconnected{pid = Pid}).
 
 process_command(Cmd) ->
-    case rabbit_stream_coordinator:process_command(Cmd) of
+    case rabbit_stream_coordinator:process_command(wrap_cmd(Cmd)) of
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
@@ -151,6 +130,10 @@ process_command(Cmd) ->
                                [Cmd, Err]),
             Err
     end.
+
+-spec wrap_cmd(command()) -> {sac, command()}.
+wrap_cmd(Cmd) ->
+    {sac, Cmd}.
 
 %% return the current groups for a given virtual host
 -spec consumer_groups(binary(), [atom()]) ->
@@ -306,7 +289,30 @@ apply(#command_connection_reconnected{pid = Pid},
                           handle_group_connection_reconnected(Pid, St, Eff, G)
                   end, {State0, []}, Groups0),
 
+    {State1, ok, Eff};
+apply(#command_purge_nodes{nodes = Nodes}, State0) ->
+    {State1, Eff} = lists:foldl(fun(N, {S0, Eff0}) ->
+                                        {S1, Eff1} = purge_node(N, S0),
+                                        {S1, Eff1 ++ Eff0}
+                                end, {State0, []}, Nodes),
     {State1, ok, Eff}.
+
+purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
+    PidsGroups =
+        maps:fold(fun(K, #group{consumers = Consumers}, Acc) ->
+                          lists:foldl(fun(#consumer{pid = Pid}, AccIn)
+                                            when node(Pid) =:= Node ->
+                                              PG0 = maps:get(Pid, AccIn, #{}),
+                                              PG1 = PG0#{K => true},
+                                              AccIn#{Pid => PG1};
+                                         (_, AccIn) ->
+                                              AccIn
+                                      end, Acc, Consumers)
+                  end, #{}, Groups0),
+    maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
+                      {S1, Eff1} = handle_connection_down0(Pid, S0, Groups),
+                      {S1, Eff1 ++ Eff0}
+              end, {State0, []}, PidsGroups).
 
 handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
                                     Eff0, {VH, S, Name} = K) ->
@@ -573,6 +579,7 @@ ensure_monitors(#command_connection_reconnected{pid = Pid},
      Monitors#{Pid => sac},
      [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
+%% TODO sac: ensure the pid-group mapping after purge_nodes?
     {State0, Monitors, Effects}.
 
 -spec handle_connection_down(connection_pid(), state()) ->
@@ -584,10 +591,13 @@ handle_connection_down(Pid,
             {State0, []};
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
-            maps:fold(fun(G, _, Acc) ->
-                              handle_group_after_connection_down(Pid, Acc, G)
-                      end, {State1, []}, Groups)
+            handle_connection_down0(Pid, State1, Groups)
     end.
+
+handle_connection_down0(Pid, State, Groups) ->
+    maps:fold(fun(G, _, Acc) ->
+                      handle_group_after_connection_down(Pid, Acc, G)
+              end, {State, []}, Groups).
 
 -spec handle_connection_node_disconnected(connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
@@ -729,6 +739,10 @@ handle_group_after_connection_node_disconnected(ConnPid,
 import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
     #?MODULE{groups = map_to_groups(Groups),
              pids_groups = map_to_pids_groups(PidsGroups)}.
+
+- spec make_purge_nodes([node()]) -> command().
+make_purge_nodes(Nodes) ->
+    wrap_cmd(#command_purge_nodes{nodes = Nodes}).
 
 map_to_groups(Groups) when is_map(Groups) ->
     maps:fold(fun(K, V, Acc) ->
