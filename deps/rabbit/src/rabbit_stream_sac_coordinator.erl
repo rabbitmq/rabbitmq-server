@@ -740,7 +740,7 @@ import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
     #?MODULE{groups = map_to_groups(Groups),
              pids_groups = map_to_pids_groups(PidsGroups)}.
 
-- spec make_purge_nodes([node()]) -> command().
+- spec make_purge_nodes([node()]) -> {sac, command()}.
 make_purge_nodes(Nodes) ->
     wrap_cmd(#command_purge_nodes{nodes = Nodes}).
 
