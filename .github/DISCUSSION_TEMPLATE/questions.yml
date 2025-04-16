@@ -29,6 +29,9 @@ body:
     attributes:
       label: RabbitMQ version used
       options:
+        - 4.1.0
+        - 4.0.9
+        - 4.0.8
         - 4.0.7
         - 4.0.6
         - 4.0.5
@@ -42,6 +45,7 @@ body:
     attributes:
       label: Erlang version used
       options:
+        - 27.3.x
         - 27.2.x
         - 27.1.x
         - 27.0.x
