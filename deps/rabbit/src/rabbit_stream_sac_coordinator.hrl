@@ -64,3 +64,5 @@
          consumer_name :: consumer_name()}).
 -record(command_connection_reconnected,
         {pid :: connection_pid()}).
+-record(command_purge_nodes,
+        {nodes :: [node()]}).
