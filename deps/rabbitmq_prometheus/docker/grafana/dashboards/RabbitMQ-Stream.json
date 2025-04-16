@@ -119,9 +119,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -138,7 +136,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_publishers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_publishers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -187,9 +185,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -206,7 +202,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -257,9 +253,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -276,7 +270,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -326,9 +320,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -345,7 +337,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_consumers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_consumers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -394,9 +386,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -413,7 +403,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -464,9 +454,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -483,7 +471,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_access_refused_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_authentication_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_frame_too_large_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_internal_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_precondition_failed_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_publisher_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_authentication_failure_loopback_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_challenge_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_mechanism_not_supported_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_not_available_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_unknown_frame_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_vhost_access_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})\n",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_access_refused_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_authentication_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_frame_too_large_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_internal_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_precondition_failed_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_publisher_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_authentication_failure_loopback_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_challenge_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_mechanism_not_supported_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_not_available_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_unknown_frame_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}) +\n\nsum by(rabbitmq_cluster) (rabbitmq_global_stream_error_vhost_access_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})\n",
           "instant": false,
           "interval": "",
           "legendFormat": "",
@@ -675,23 +663,17 @@
       },
       "id": 16,
       "options": {
-        "displayLabels": [
-          "value"
-        ],
+        "displayLabels": ["value"],
         "legend": {
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": false,
-          "values": [
-            "value"
-          ]
+          "values": ["value"]
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -708,7 +690,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_node) (rabbitmq_global_publishers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (rabbitmq_global_publishers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -900,9 +882,7 @@
       },
       "id": 17,
       "options": {
-        "displayLabels": [
-          "value"
-        ],
+        "displayLabels": ["value"],
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
@@ -910,9 +890,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -929,7 +907,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_received_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1121,9 +1099,7 @@
       },
       "id": 18,
       "options": {
-        "displayLabels": [
-          "value"
-        ],
+        "displayLabels": ["value"],
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
@@ -1132,9 +1108,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -1151,7 +1125,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_confirmed_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1343,9 +1317,7 @@
       },
       "id": 19,
       "options": {
-        "displayLabels": [
-          "value"
-        ],
+        "displayLabels": ["value"],
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
@@ -1353,9 +1325,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -1372,7 +1342,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_node) (rabbitmq_global_consumers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (rabbitmq_global_consumers{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1564,9 +1534,7 @@
       },
       "id": 20,
       "options": {
-        "displayLabels": [
-          "value"
-        ],
+        "displayLabels": ["value"],
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
@@ -1574,9 +1542,7 @@
         },
         "pieType": "pie",
         "reduceOptions": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "fields": "",
           "values": false
         },
@@ -1593,7 +1559,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"}))",
+          "expr": "sort_desc(sum by(rabbitmq_node) (irate(rabbitmq_global_messages_delivered_total{protocol=\"stream\"}[60s]) * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"}))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1861,12 +1827,7 @@
       "id": 3,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "min",
-            "last"
-          ],
+          "calcs": ["mean", "max", "min", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2109,12 +2070,7 @@
       "id": 5,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "min",
-            "last"
-          ],
+          "calcs": ["mean", "max", "min", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2360,12 +2316,7 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "min",
-            "last"
-          ],
+          "calcs": ["mean", "max", "min", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2611,12 +2562,7 @@
       "id": 9,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "min",
-            "last"
-          ],
+          "calcs": ["mean", "max", "min", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2862,12 +2808,7 @@
       "id": 11,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max",
-            "min",
-            "last"
-          ],
+          "calcs": ["mean", "max", "min", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -2951,9 +2892,7 @@
       "id": 23,
       "options": {
         "legend": {
-          "calcs": [
-            "last"
-          ],
+          "calcs": ["last"],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true
@@ -2970,7 +2909,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_access_refused_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_access_refused_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "interval": "",
           "legendFormat": "access_refused",
           "refId": "A"
@@ -2981,7 +2920,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_authentication_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_authentication_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "error_authentication_failure",
@@ -2993,7 +2932,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_frame_too_large_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_frame_too_large_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "frame_too_large",
@@ -3005,7 +2944,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_internal_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_internal_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "internal_error",
@@ -3017,7 +2956,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_precondition_failed_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_precondition_failed_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "precondition_failed",
@@ -3029,7 +2968,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_publisher_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_publisher_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "publisher_does_not_exist",
@@ -3041,7 +2980,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_authentication_failure_loopback_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_authentication_failure_loopback_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "sasl_authentication_failure_loopback",
@@ -3053,7 +2992,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_challenge_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_challenge_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "sasl_challenge",
@@ -3065,7 +3004,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_error_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "sasl_error",
@@ -3077,7 +3016,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_mechanism_not_supported_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_sasl_mechanism_not_supported_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "sasl_mechanism_not_supported",
@@ -3089,7 +3028,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "stream_already_exists",
@@ -3101,7 +3040,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "stream_does_not_exist",
@@ -3113,7 +3052,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_not_available_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_stream_not_available_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "stream_not_available",
@@ -3125,7 +3064,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_already_exists_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "subscription_id_already_exists",
@@ -3137,7 +3076,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_subscription_id_does_not_exist_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "subscription_id_does_not_exist",
@@ -3149,7 +3088,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_unknown_frame_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_unknown_frame_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "error_unknown_frame",
@@ -3161,7 +3100,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "exemplar": true,
-          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_vhost_access_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\"})",
+          "expr": "sum by(rabbitmq_cluster) (rabbitmq_global_stream_error_vhost_access_failure_total{protocol=\"stream\"} * on(instance, job) group_left(rabbitmq_cluster, rabbitmq_node) rabbitmq_identity_info{rabbitmq_cluster=\"$rabbitmq_cluster\", namespace=\"$namespace\",rabbitmq_endpoint=\"$endpoint\"})",
           "hide": false,
           "interval": "",
           "legendFormat": "vhost_access_failure",
@@ -3174,10 +3113,7 @@
   ],
   "refresh": "15s",
   "schemaVersion": 39,
-  "tags": [
-    "rabbitmq-stream",
-    "rabbitmq-prometheus"
-  ],
+  "tags": ["rabbitmq-stream", "rabbitmq-prometheus"],
   "templating": {
     "list": [
       {
@@ -3222,6 +3158,30 @@
         "useTags": false
       },
       {
+        "allowCustomValue": false,
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(rabbitmq_identity_info{namespace=\"$namespace\", rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_endpoint!=\"memory-breakdown\"},rabbitmq_endpoint)",
+        "description": "https://www.rabbitmq.com/docs/prometheus#default-endpoint",
+        "hide": 2,
+        "includeAll": false,
+        "label": "Endpoint",
+        "name": "endpoint",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(rabbitmq_identity_info{namespace=\"$namespace\", rabbitmq_cluster=\"$rabbitmq_cluster\", rabbitmq_endpoint!=\"memory-breakdown\"},rabbitmq_endpoint)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      },
+      {
         "current": {},
         "datasource": {
           "type": "prometheus",
@@ -3254,13 +3214,7 @@
     "to": "now"
   },
   "timepicker": {
-    "refresh_intervals": [
-      "15s",
-      "30s",
-      "1m",
-      "5m",
-      "10m"
-    ]
+    "refresh_intervals": ["15s", "30s", "1m", "5m", "10m"]
   },
   "timezone": "",
   "title": "RabbitMQ-Stream",
