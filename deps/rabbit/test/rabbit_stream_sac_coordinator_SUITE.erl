@@ -660,7 +660,7 @@ connection_reconnected_simple_disconnected_becomes_connected_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    Cmd = connection_reconnection_command(Pid0),
+    Cmd = connection_reconnected_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
 
     assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, active}),
@@ -684,7 +684,7 @@ connection_reconnected_simple_active_should_be_first_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    Cmd = connection_reconnection_command(Pid0),
+    Cmd = connection_reconnected_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
 
     assertHasGroup(GId, cgroup([consumer(Pid1, 1, {connected, active}),
@@ -706,7 +706,7 @@ connection_reconnected_super_disconnected_becomes_connected_test(_) ->
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
 
-    Cmd = connection_reconnection_command(Pid0),
+    Cmd = connection_reconnected_command(Pid0),
     {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
 
     assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
@@ -738,7 +738,7 @@ forget_connection_simple_disconnected_becomes_forgotten_test(_) ->
     assertSendMessageEffect(Pid1, 1, stream(), name(), true, Eff),
     ok.
 
-forget_connection_super_disconnected_becomes_forgotten_test(_) ->
+forget_connection_super_stream_disconnected_becomes_forgotten_test(_) ->
     Pid0 = spawn(fun() -> ok end),
     Pid1 = spawn(fun() -> ok end),
     Pid2 = spawn(fun() -> ok end),
@@ -950,8 +950,153 @@ handle_connection_node_disconnected_super_stream_disconn_active_block_rebalancin
     assertNodeDisconnectedTimerEffect(Pid0, Eff),
     ok.
 
+connection_reconnected_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {disconnected, waiting}),
+                    consumer(Pid1, 0, {disconnected, active}),
+                    consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = connection_reconnected_command(Pid0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid1, 0, {disconnected, active}),
+                                consumer(Pid0, 0, {connected, waiting}),
+                                consumer(Pid2, 0, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+connection_reconnected_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {disconnected, active}),
+                       consumer(Pid1, 0, {disconnected, waiting}),
+                       consumer(Pid2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = connection_reconnected_command(Pid1),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {disconnected, active}),
+                                   consumer(Pid1, 0, {connected, waiting}),
+                                   consumer(Pid2, 0, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+forget_connection_simple_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, {disconnected, waiting}),
+                    consumer(Pid1, {connected, waiting}),
+                    consumer(Pid2, {disconnected, active})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid0, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid2, {disconnected, active}),
+                                consumer(Pid0, {forgotten, waiting}),
+                                consumer(Pid1, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+forget_connection_super_stream_disconn_active_block_rebalancing_test(_) ->
+    Pid0 = spawn(fun() -> ok end),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, {disconnected, waiting}),
+                       consumer(Pid1, {connected, waiting}),
+                       consumer(Pid2, {disconnected, active})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid0, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, {forgotten, waiting}),
+                                   consumer(Pid1, {connected, waiting}),
+                                   consumer(Pid2, {disconnected, active})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+purge_nodes_test(_) ->
+    N0 = node(),
+    {ok, N1Pid, N1} = peer:start(#{
+        name => ?FUNCTION_NAME,
+        connection => standard_io,
+        shutdown => close
+    }),
+
+    N0P0 = spawn(N0, fun() -> ok end),
+    N0P1 = spawn(N0, fun() -> ok end),
+    N0P2 = spawn(N0, fun() -> ok end),
+    N1P0 = spawn(N1, fun() -> ok end),
+    N1P1 = spawn(N1, fun() -> ok end),
+    N1P2 = spawn(N1, fun() -> ok end),
+
+    S0 = <<"s0">>,
+    S1 = <<"s1">>,
+    S2 = <<"s2">>,
+
+    GId0 = group_id(S0),
+    GId1 = group_id(S1),
+    GId2 = group_id(S2),
+
+    Group0 = cgroup([consumer(N1P0, {disconnected, active}),
+                     consumer(N0P1, {connected, waiting}),
+                     consumer(N0P2, {connected, waiting})]),
+
+    Group1 = cgroup(1, [consumer(N1P1, {disconnected, waiting}),
+                        consumer(N1P2, {disconnected, active}),
+                        consumer(N0P0, {connected, waiting})]),
+
+    Group2 = cgroup([consumer(N0P0, {connected, active}),
+                     consumer(N0P1, {connected, waiting}),
+                     consumer(N0P2, {connected, waiting})]),
+
+
+    State0 = state(#{GId0 => Group0, GId1 => Group1, GId2 => Group2}),
+    Cmd = purge_nodes_command([N1]),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertSize(3, Groups1),
+    assertHasGroup(GId0, cgroup([consumer(N0P1, {connected, active}),
+                                 consumer(N0P2, {connected, waiting})]),
+                   Groups1),
+    assertHasGroup(GId1, cgroup(1, [consumer(N0P0, {connected, active})]),
+                   Groups1),
+    assertHasGroup(GId2, cgroup([consumer(N0P0, {connected, active}),
+                                 consumer(N0P1, {connected, waiting}),
+                                 consumer(N0P2, {connected, waiting})]),
+                   Groups1),
+
+    assertSize(2, Eff),
+    assertContainsSendMessageEffect(N0P1, S0, true, Eff),
+    assertContainsSendMessageEffect(N0P0, S1, true, Eff),
+
+    _ = peer:stop(N1Pid),
+    ok.
+
 group_id() ->
-    {<<"/">>, stream(), name()}.
+    group_id(stream()).
+
+group_id(S) ->
+    {<<"/">>, S, name()}.
 
 stream() ->
     <<"sO">>.
@@ -977,6 +1122,9 @@ assertEmpty(Data) ->
 assertHasGroup(GroupId, Group, Groups) ->
     G = maps:get(GroupId, Groups),
     ?assertEqual(Group, G).
+
+consumer(Pid, Status) ->
+    consumer(Pid, 0, Status).
 
 consumer(Pid, SubId, {Connectivity, Status}) ->
     #consumer{pid = Pid,
@@ -1029,8 +1177,31 @@ activate_consumer_command(Stream, ConsumerName) ->
                                stream = Stream,
                                consumer_name = ConsumerName}.
 
-connection_reconnection_command(Pid) ->
+connection_reconnected_command(Pid) ->
     #command_connection_reconnected{pid = Pid}.
+
+purge_nodes_command(Nodes) ->
+    #command_purge_nodes{nodes = Nodes}.
+
+
+assertContainsSendMessageEffect(Pid, Stream, Active, Effects) ->
+    assertContainsSendMessageEffect(Pid, 0, Stream, name(), Active, Effects).
+
+assertContainsSendMessageEffect(Pid, SubId, Stream, ConsumerName, Active,
+                                Effects) ->
+    Contains = lists:any(fun(Eff) ->
+                                 Eff =:= {mod_call,
+                                          rabbit_stream_sac_coordinator,
+                                          send_message,
+                                          [Pid,
+                                           {sac,
+                                            #{subscription_id => SubId,
+                                              stream => Stream,
+                                              consumer_name => ConsumerName,
+                                              active => Active}}]}
+              end, Effects),
+    ?assert(Contains).
+
 
 assertSendMessageEffect(Pid, SubId, Stream, ConsumerName, Active, [Effect]) ->
     ?assertEqual({mod_call,

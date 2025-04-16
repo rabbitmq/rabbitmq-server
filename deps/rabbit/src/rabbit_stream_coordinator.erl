@@ -812,7 +812,7 @@ members() ->
             end
     end.
 
-maybe_resize_coordinator_cluster(MachineVersion) ->
+maybe_resize_coordinator_cluster(LeaderPid, MachineVersion) ->
     spawn(fun() ->
                   RabbitIsRunning = rabbit:is_running(),
                   case members() of
@@ -848,14 +848,15 @@ maybe_resize_coordinator_cluster(MachineVersion) ->
                                       remove_member(Leader, Members, Old)
                               end,
                           maybe_handle_stale_nodes(MemberNodes, RabbitNodes,
+                                                   LeaderPid,
                                                    MachineVersion);
-                          _ ->
+                      _ ->
                           ok
                   end
           end).
 
 maybe_handle_stale_nodes(MemberNodes, ExpectedNodes,
-                         MachineVersion) when MachineVersion > 4 ->
+                         LeaderPid, MachineVersion) when MachineVersion > 4 ->
     case MemberNodes -- ExpectedNodes of
         [] ->
             ok;
@@ -863,12 +864,13 @@ maybe_handle_stale_nodes(MemberNodes, ExpectedNodes,
             rabbit_log:debug("Stale nodes detected in stream SAC "
                              "coordinator: ~w. Purging state.",
                              [Stale]),
-            %% TODO SAC pipeline command to purge state from stale nodes
+            Mod = sac_module(MachineVersion),
+            ra:pipeline_command(LeaderPid, Mod:make_purge_nodes(Stale)),
             ok;
         _ ->
             ok
     end;
-maybe_handle_stale_nodes(_, _, _) ->
+maybe_handle_stale_nodes(_, _, _, _) ->
     ok.
 
 add_member(Members, Node) ->
@@ -945,8 +947,9 @@ init_aux(_Name) ->
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
            #aux{resizer = undefined} = Aux, RaAux) ->
+    Leader = ra_aux:leader_id(RaAux),
     MachineVersion = ra_aux:effective_machine_version(RaAux),
-    Pid = maybe_resize_coordinator_cluster(MachineVersion),
+    Pid = maybe_resize_coordinator_cluster(Leader, MachineVersion),
     {no_reply, Aux#aux{resizer = Pid}, RaAux, [{monitor, process, aux, Pid}]};
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
            AuxState, RaAux) ->
