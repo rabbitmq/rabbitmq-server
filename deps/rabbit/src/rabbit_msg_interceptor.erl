@@ -4,12 +4,13 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(rabbit_message_interceptor).
+-module(rabbit_msg_interceptor).
 
 %% client API
--export([intercept/3,
-         add/2,
-         remove/2]).
+-export([intercept_incoming/2,
+         intercept_outgoing/2,
+         add/1,
+         remove/1]).
 %% helpers for behaviour implementations
 -export([set_annotation/4]).
 
@@ -20,37 +21,49 @@
                      username := rabbit_types:username(),
                      connection_name := binary(),
                      atom() => term()}.
--type group() :: incoming_message_interceptors |
-                 outgoing_message_interceptors.
 -type config() :: #{atom() => term()}.
 -type interceptor() :: {module(), config()}.
+-type interceptors() :: [interceptor()].
+-type stage() :: incoming | outgoing.
 
+-define(KEY, message_interceptors).
 
 -export_type([context/0]).
 
--callback intercept(mc:state(), context(), group(), config()) ->
+-callback intercept(mc:state(), context(), stage(), config()) ->
     mc:state().
 
--spec intercept(mc:state(), context(), group()) ->
+-spec intercept_incoming(mc:state(), context()) ->
     mc:state().
-intercept(Msg, Ctx, Group) ->
-    Interceptors = persistent_term:get(Group, []),
+intercept_incoming(Msg, Ctx) ->
+    intercept(Msg, Ctx, incoming).
+
+-spec intercept_outgoing(mc:state(), context()) ->
+    mc:state().
+intercept_outgoing(Msg, Ctx) ->
+    intercept(Msg, Ctx, outgoing).
+
+intercept(Msg, Ctx, Stage) ->
+    Interceptors = persistent_term:get(?KEY),
     lists:foldl(fun({Mod, Config}, Msg0) ->
-                        Mod:intercept(Msg0, Ctx, Group, Config)
+                        Mod:intercept(Msg0, Ctx, Stage, Config)
                 end, Msg, Interceptors).
 
--spec set_annotation(mc:state(), mc:ann_key(), mc:ann_value(), boolean()) ->
+-spec set_annotation(mc:state(), mc:ann_key(), mc:ann_value(),
+                     Overwrite :: boolean()) ->
     mc:state().
-set_annotation(Msg, Key, Value, Overwrite) ->
-    case {mc:x_header(Key, Msg), Overwrite} of
-        {Val, false} when Val =/= undefined ->
-            Msg;
+set_annotation(Msg, Key, Value, true) ->
+    mc:set_annotation(Key, Value, Msg);
+set_annotation(Msg, Key, Value, false) ->
+    case mc:x_header(Key, Msg) of
+        undefined ->
+            mc:set_annotation(Key, Value, Msg);
         _ ->
-            mc:set_annotation(Key, Value, Msg)
+            Msg
     end.
 
--spec add([interceptor()], group()) -> ok.
-add(Interceptors, Group) ->
+-spec add(interceptors()) -> ok.
+add(Interceptors) ->
     %% validation
     lists:foreach(fun({Mod, #{}}) ->
                           case erlang:function_exported(Mod, intercept, 4) of
@@ -58,8 +71,8 @@ add(Interceptors, Group) ->
                               false -> error(Mod)
                           end
                   end, Interceptors),
-    persistent_term:put(Group, persistent_term:get(Group, []) ++ Interceptors).
+    persistent_term:put(?KEY, persistent_term:get(?KEY, []) ++ Interceptors).
 
--spec remove([interceptor()], group()) -> ok.
-remove(Interceptors, Group) ->
-    persistent_term:put(Group, persistent_term:get(Group, []) -- Interceptors).
+-spec remove(interceptors()) -> ok.
+remove(Interceptors) ->
+    persistent_term:put(?KEY, persistent_term:get(?KEY, []) -- Interceptors).

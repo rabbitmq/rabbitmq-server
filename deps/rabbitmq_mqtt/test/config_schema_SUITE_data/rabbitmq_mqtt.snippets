@@ -176,8 +176,8 @@
   {message_interceptor_enabled,
    "mqtt.message_interceptors.incoming.set_client_id_annotation.enabled = true",
    [{rabbitmq_mqtt, [
-      {incoming_message_interceptors, [
-        {rabbit_mqtt_message_interceptor_client_id, #{}}
+      {message_interceptors, [
+        {rabbit_mqtt_msg_interceptor_client_id, #{}}
       ]}
      ]}],
    []},
@@ -185,7 +185,7 @@
   {message_interceptor_disabled,
    "mqtt.message_interceptors.incoming.set_client_id_annotation.enabled = false",
    [{rabbitmq_mqtt, [
-      {incoming_message_interceptors, []}
+      {message_interceptors, []}
      ]}],
    []}
 

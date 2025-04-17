@@ -1658,8 +1658,8 @@ persist_static_configuration() ->
        classic_queue_store_v2_check_crc32
       ]),
 
-    Interceptors = application:get_env(?MODULE, incoming_message_interceptors, []),
-    ok = rabbit_message_interceptor:add(Interceptors, incoming_message_interceptors),
+    Interceptors = application:get_env(?MODULE, message_interceptors, []),
+    ok = rabbit_msg_interceptor:add(Interceptors),
 
     %% Disallow the following two cases:
     %% 1. Negative values

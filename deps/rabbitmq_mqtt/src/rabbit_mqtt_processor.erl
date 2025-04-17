@@ -1639,9 +1639,8 @@ publish_to_queues(
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            Msg = rabbit_message_interceptor:intercept(Msg0,
-                                                       msg_interceptor_ctx(State),
-                                                       incoming_message_interceptors),
+            Ctx = msg_interceptor_ctx(State),
+            Msg = rabbit_msg_interceptor:intercept_incoming(Msg0, Ctx),
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(Msg, QNames, ConnName, Username, TraceState),
@@ -2072,7 +2071,9 @@ deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
                         true -> ?QOS_1;
                         false -> ?QOS_0
                     end,
-    McMqtt = mc:convert(mc_mqtt, Mc, mc_env()),
+    McMqtt0 = mc:convert(mc_mqtt, Mc, mc_env()),
+    MsgIcptCtx = msg_interceptor_ctx(State0),
+    McMqtt = rabbit_msg_interceptor:intercept_outgoing(McMqtt0, MsgIcptCtx),
     MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
     {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
