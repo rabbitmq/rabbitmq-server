@@ -720,10 +720,11 @@ apply(#{machine_version := MachineVersion} = Meta,
                           {Ss#{Id => S}, E}
                   end, {Streams0, Effects0}, Streams0),
 
-    {Sac1, Effects2} = case MachineVersion > 5 of
+    {Sac1, Effects2} = case MachineVersion > 4 of
                            true ->
                                SacMod = sac_module(Meta),
-                               SacMod:handle_node_reconnected(Sac0, Effects1);
+                               SacMod:handle_node_reconnected(Node,
+                                                              Sac0, Effects1);
                            false ->
                                {Sac0, Effects1}
                        end,
