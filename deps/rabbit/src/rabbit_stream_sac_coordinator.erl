@@ -42,7 +42,7 @@
          ensure_monitors/4,
          handle_connection_down/2,
          handle_connection_node_disconnected/2,
-         handle_node_reconnected/2,
+         handle_node_reconnected/3,
          forget_connection/2,
          consumer_groups/3,
          group_consumers/5,
@@ -298,17 +298,7 @@ apply(#command_purge_nodes{nodes = Nodes}, State0) ->
     {State1, ok, Eff}.
 
 purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
-    PidsGroups =
-        maps:fold(fun(K, #group{consumers = Consumers}, Acc) ->
-                          lists:foldl(fun(#consumer{pid = Pid}, AccIn)
-                                            when node(Pid) =:= Node ->
-                                              PG0 = maps:get(Pid, AccIn, #{}),
-                                              PG1 = PG0#{K => true},
-                                              AccIn#{Pid => PG1};
-                                         (_, AccIn) ->
-                                              AccIn
-                                      end, Acc, Consumers)
-                  end, #{}, Groups0),
+    PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
     maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
                       {S1, Eff1} = handle_connection_down0(Pid, S0, Groups),
                       {S1, Eff1 ++ Eff0}
@@ -578,8 +568,15 @@ ensure_monitors(#command_connection_reconnected{pid = Pid},
     {State#?MODULE{pids_groups = AllPidsGroups},
      Monitors#{Pid => sac},
      [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
+ensure_monitors(#command_purge_nodes{},
+                #?MODULE{groups = Groups} = State,
+                Monitors,
+                Effects) ->
+    AllPidsGroups = compute_pid_group_dependencies(Groups),
+    {State#?MODULE{pids_groups = AllPidsGroups},
+     Monitors,
+     Effects};
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
-%% TODO sac: ensure the pid-group mapping after purge_nodes?
     {State0, Monitors, Effects}.
 
 -spec handle_connection_down(connection_pid(), state()) ->
@@ -619,21 +616,21 @@ handle_connection_node_disconnected(ConnPid,
                                #{connection_pid => ConnPid}}, T}]}
     end.
     
--spec handle_node_reconnected(state(), ra_machine:effects()) ->
+-spec handle_node_reconnected(node(), state(), ra_machine:effects()) ->
     {state(), ra_machine:effects()}.
-handle_node_reconnected(#?MODULE{pids_groups = PidsGroups0,
+handle_node_reconnected(Node,
+                        #?MODULE{pids_groups = PidsGroups0,
                                  groups = Groups0} = State0,
                         Effects0) ->
-    AllPidsGroups = compute_pid_group_dependencies(Groups0),
-    NotMonitored = maps:keys(AllPidsGroups) -- maps:keys(PidsGroups0),
+    NodePidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
+    PidsGroups1 = maps:merge(PidsGroups0, NodePidsGroups),
     Effects1 =
         lists:foldr(fun(P, Acc) ->
                             [notify_connection_effect(P),
-                             {monitor, process, P},
-                             {monitor, node, node(P)} | Acc]
-                    end, Effects0, NotMonitored),
+                             {monitor, process, P} | Acc]
+                    end, Effects0, maps:keys(NodePidsGroups)),
 
-    {State0#?MODULE{pids_groups = AllPidsGroups}, Effects1}.
+    {State0#?MODULE{pids_groups = PidsGroups1}, Effects1}.
 
 -spec forget_connection(connection_pid(), state()) ->
     {state(), ra_machine:effects()}.
@@ -1117,3 +1114,17 @@ compute_pid_group_dependencies(Groups) ->
                                           AccIn#{Pid => PG1}
                                   end, Acc, Cs)
               end, #{}, Groups).
+
+-spec compute_node_pid_group_dependencies(node(), groups()) -> pids_groups().
+compute_node_pid_group_dependencies(Node, Groups) ->
+    maps:fold(fun(K, #group{consumers = Consumers}, Acc) ->
+                      lists:foldl(fun(#consumer{pid = Pid}, AccIn)
+                                        when node(Pid) =:= Node ->
+                                          PG0 = maps:get(Pid, AccIn, #{}),
+                                          PG1 = PG0#{K => true},
+                                          AccIn#{Pid => PG1};
+                                     (_, AccIn) ->
+                                          AccIn
+                                  end, Acc, Consumers)
+              end, #{}, Groups).
+
