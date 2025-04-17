@@ -120,7 +120,7 @@ cluster_size_1_tests() ->
      ,max_packet_size_unauthenticated
      ,max_packet_size_authenticated
      ,default_queue_type
-     ,incoming_message_interceptors
+     ,message_interceptors
      ,utf8
      ,retained_message_conversion
      ,bind_exchange_to_exchange
@@ -1777,13 +1777,15 @@ default_queue_type(Config) ->
     ok = emqtt:disconnect(C2),
     ok = rabbit_ct_broker_helpers:delete_vhost(Config, Vhost).
 
-incoming_message_interceptors(Config) ->
-    Key = ?FUNCTION_NAME,
+message_interceptors(Config) ->
     ok = rpc(Config, persistent_term, put,
-             [Key, [
-                    {rabbit_message_interceptor_timestamp, #{overwrite => false}},
-                    {rabbit_mqtt_message_interceptor_client_id, #{}}
-                   ]]),
+             [message_interceptors,
+              [
+               {rabbit_mqtt_msg_interceptor_client_id, #{}},
+               {rabbit_msg_interceptor_timestamp, #{overwrite => false,
+                                                    incoming => true,
+                                                    outgoing => true}}
+              ]]),
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     Payload = Topic = atom_to_binary(?FUNCTION_NAME),
     ClientId = <<"🆔"/utf8>>,
@@ -1807,11 +1809,14 @@ incoming_message_interceptors(Config) ->
                          }}
     } = amqp_channel:call(Ch, #'basic.get'{queue = CQName}),
 
-    {<<"timestamp_in_ms">>, long, Millis} = lists:keyfind(<<"timestamp_in_ms">>, 1, Headers),
-    ?assert(Secs < NowSecs + 4),
-    ?assert(Secs > NowSecs - 4),
-    ?assert(Millis < NowMillis + 4000),
-    ?assert(Millis > NowMillis - 4000),
+    {_, long, ReceivedTs} = lists:keyfind(<<"timestamp_in_ms">>, 1, Headers),
+    ?assert(Secs < NowSecs + 9),
+    ?assert(Secs > NowSecs - 9),
+    ?assert(ReceivedTs < NowMillis + 9000),
+    ?assert(ReceivedTs > NowMillis - 9000),
+    {_, long, SentTs} = lists:keyfind(<<"x-opt-rabbitmq-sent-time">>, 1, Headers),
+    ?assert(SentTs < NowMillis + 9000),
+    ?assert(SentTs > NowMillis - 9000),
 
     ?assertEqual({<<"x-opt-mqtt-client-id">>, longstr, ClientId},
                  lists:keyfind(<<"x-opt-mqtt-client-id">>, 1, Headers)),
@@ -1828,16 +1833,20 @@ incoming_message_interceptors(Config) ->
     receive {#'basic.deliver'{consumer_tag = CTag},
              #amqp_msg{payload = Payload,
                        props = #'P_basic'{
-                                  headers = [{<<"timestamp_in_ms">>, long, Millis} | XHeaders]
+                                  headers = [{<<"timestamp_in_ms">>, long, ReceivedTs} | XHeaders]
                                  }}} ->
                 ?assertEqual({<<"x-opt-mqtt-client-id">>, longstr, ClientId},
-                             lists:keyfind(<<"x-opt-mqtt-client-id">>, 1, XHeaders))
+                             lists:keyfind(<<"x-opt-mqtt-client-id">>, 1, XHeaders)),
+
+                {_, long, SentTs1} = lists:keyfind(<<"x-opt-rabbitmq-sent-time">>, 1, XHeaders),
+                ?assert(SentTs1 < NowMillis + 9000),
+                ?assert(SentTs1 > NowMillis - 9000)
     after ?TIMEOUT -> ct:fail(missing_deliver)
     end,
 
     delete_queue(Ch, Stream),
     delete_queue(Ch, CQName),
-    true = rpc(Config, persistent_term, erase, [Key]),
+    ok = rpc(Config, persistent_term, put, [message_interceptors, []]),
     ok = emqtt:disconnect(C),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 

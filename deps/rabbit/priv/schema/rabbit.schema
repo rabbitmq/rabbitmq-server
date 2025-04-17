@@ -2664,27 +2664,52 @@ end}.
 %%
 %% Message interceptors
 %%
-{mapping, "message_interceptors.incoming.$interceptor.overwrite", "rabbit.incoming_message_interceptors", [
+
+{mapping, "message_interceptors.$stage.$name.$key", "rabbit.message_interceptors", [
     {datatype, {enum, [true, false]}}]}.
 
-{translation, "rabbit.incoming_message_interceptors",
+{translation, "rabbit.message_interceptors",
  fun(Conf) ->
          case cuttlefish_variable:filter_by_prefix("message_interceptors", Conf) of
              [] ->
                  cuttlefish:unset();
              L ->
-                 [begin
-                      Interceptor = list_to_atom(Interceptor0),
-                      Mod = case Interceptor of
-                                set_header_timestamp ->
-                                    rabbit_message_interceptor_timestamp;
-                                set_header_routing_node ->
-                                    rabbit_message_interceptor_routing_node;
-                                _ ->
-                                    cuttlefish:invalid(io_lib:format("~p is invalid", [Interceptor]))
-                            end,
-                      {Mod, #{overwrite => Overwrite}}
-                  end || {["message_interceptors", "incoming", Interceptor0, "overwrite"], Overwrite} <- L]
+                 lists:foldr(
+                   fun({["message_interceptors", "incoming", "set_header_routing_node", "overwrite"], Overwrite}, Acc)
+                         when is_boolean(Overwrite) ->
+                           Mod = rabbit_msg_interceptor_routing_node,
+                           Cfg = #{overwrite => Overwrite},
+                           [{Mod, Cfg} | Acc];
+                      ({["message_interceptors", "incoming", "set_header_timestamp", "overwrite"], Overwrite}, Acc)
+                        when is_boolean(Overwrite) ->
+                           Mod = rabbit_msg_interceptor_timestamp,
+                           Cfg = #{incoming => true,
+                                   overwrite => Overwrite},
+                           case lists:keytake(Mod, 1, Acc) of
+                               false ->
+                                   [{Mod, Cfg} | Acc];
+                               {value, {Mod, Cfg1}, Acc1} ->
+                                   Cfg2 = maps:merge(Cfg1, Cfg),
+                                   [{Mod, Cfg2} | Acc1]
+                           end;
+                      ({["message_interceptors", "outgoing", "timestamp", "enabled"], Enabled}, Acc) ->
+                           case Enabled of
+                               true ->
+                                   Mod = rabbit_msg_interceptor_timestamp,
+                                   Cfg = #{outgoing => true},
+                                   case lists:keytake(Mod, 1, Acc) of
+                                       false ->
+                                           [{Mod, Cfg} | Acc];
+                                       {value, {Mod, Cfg1}, Acc1} ->
+                                           Cfg2 = maps:merge(Cfg1, Cfg),
+                                           [{Mod, Cfg2} | Acc1]
+                                   end;
+                               false ->
+                                   Acc
+                           end;
+                      (Other, _Acc) ->
+                           cuttlefish:invalid(io_lib:format("~p is invalid", [Other]))
+                   end, [], L)
          end
  end
 }.

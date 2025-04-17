@@ -4,19 +4,16 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(rabbit_message_interceptor_routing_node).
--behaviour(rabbit_message_interceptor).
+-module(rabbit_msg_interceptor_routing_node).
+-behaviour(rabbit_msg_interceptor).
 
--define(HEADER_ROUTING_NODE, <<"x-routed-by">>).
+-define(KEY, <<"x-routed-by">>).
 
 -export([intercept/4]).
 
-intercept(Msg, _Ctx, incoming_message_interceptors, Config) ->
+intercept(Msg, _Ctx, incoming, Config) ->
     Node = atom_to_binary(node()),
     Overwrite = maps:get(overwrite, Config),
-    rabbit_message_interceptor:set_annotation(Msg,
-                                              ?HEADER_ROUTING_NODE,
-                                              Node,
-                                              Overwrite);
-intercept(Msg, _Ctx, _Group, _Config) ->
+    rabbit_msg_interceptor:set_annotation(Msg, ?KEY, Node, Overwrite);
+intercept(Msg, _Ctx, _Stage, _Config) ->
     Msg.

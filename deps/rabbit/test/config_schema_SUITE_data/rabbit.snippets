@@ -1111,11 +1111,21 @@ credential_validator.regexp = ^abc\\d+",
   %% Message interceptors
   %%
 
-  {single_message_interceptor,
+  {single_incoming_message_interceptor,
    "message_interceptors.incoming.set_header_timestamp.overwrite = true",
    [{rabbit, [
-      {incoming_message_interceptors, [
-        {rabbit_message_interceptor_timestamp, #{overwrite => true}}
+      {message_interceptors, [
+        {rabbit_msg_interceptor_timestamp, #{incoming => true,
+                                             overwrite => true}}
+      ]}
+     ]}],
+   []},
+
+  {single_outgoing_message_interceptor,
+   "message_interceptors.outgoing.timestamp.enabled = true",
+   [{rabbit, [
+      {message_interceptors, [
+        {rabbit_msg_interceptor_timestamp, #{outgoing => true}}
       ]}
      ]}],
    []},
@@ -1124,11 +1134,14 @@ credential_validator.regexp = ^abc\\d+",
   "
    message_interceptors.incoming.set_header_routing_node.overwrite = false
    message_interceptors.incoming.set_header_timestamp.overwrite = false
+   message_interceptors.outgoing.timestamp.enabled = true
   ",
    [{rabbit, [
-      {incoming_message_interceptors, [
-        {rabbit_message_interceptor_routing_node, #{overwrite => false}},
-        {rabbit_message_interceptor_timestamp, #{overwrite => false}}
+      {message_interceptors, [
+        {rabbit_msg_interceptor_routing_node, #{overwrite => false}},
+        {rabbit_msg_interceptor_timestamp, #{incoming => true,
+                                             overwrite => false,
+                                             outgoing => true}}
       ]}
      ]}],
    []},
