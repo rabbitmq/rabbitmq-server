@@ -119,7 +119,7 @@ groups() ->
        available_messages_classic_queue,
        available_messages_quorum_queue,
        available_messages_stream,
-       incoming_message_interceptors,
+       message_interceptors,
        trace_classic_queue,
        trace_stream,
        user_id,
@@ -4378,13 +4378,12 @@ available_messages(QType, Config) ->
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
-incoming_message_interceptors(Config) ->
-    Key = ?FUNCTION_NAME,
-    ok = rpc(Config,
-             persistent_term,
-             put,
-             [Key, [{rabbit_message_interceptor_routing_node, #{overwrite => false}},
-                    {rabbit_message_interceptor_timestamp, #{overwrite => false}}]]),
+message_interceptors(Config) ->
+    Key = message_interceptors,
+    ok = rpc(Config, persistent_term, put,
+             [Key, [{rabbit_msg_interceptor_routing_node, #{overwrite => false}},
+                    {rabbit_msg_interceptor_timestamp, #{overwrite => false,
+                                                         incoming => true}}]]),
     Stream = <<"my stream">>,
     QQName = <<"my quorum queue">>,
     {_, Session, LinkPair} = Init = init(Config),
@@ -4431,7 +4430,7 @@ incoming_message_interceptors(Config) ->
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, Stream),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QQName),
     ok = close(Init),
-    true = rpc(Config, persistent_term, erase, [Key]).
+    ok = rpc(Config, persistent_term, put, [Key, []]).
 
 trace_classic_queue(Config) ->
     trace(atom_to_binary(?FUNCTION_NAME), <<"classic">>, Config).

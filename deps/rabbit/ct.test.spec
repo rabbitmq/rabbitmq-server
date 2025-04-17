@@ -115,7 +115,7 @@
 ,   rabbit_fifo_prop_SUITE
 ,   rabbit_fifo_v0_SUITE
 ,   rabbit_local_random_exchange_SUITE
-,   rabbit_message_interceptor_SUITE
+,   rabbit_msg_interceptor_SUITE
 ,   rabbit_stream_coordinator_SUITE
 ,   rabbit_stream_sac_coordinator_SUITE
 ,   rabbitmq_4_0_deprecations_SUITE

@@ -347,11 +347,11 @@ amqpl_amqp_bin_amqpl(_Config) ->
                        payload_fragments_rev = [<<"data">>]},
     Msg0 = mc:init(mc_amqpl, Content, annotations()),
 
-    ok = persistent_term:put(incoming_message_interceptors,
-                             [{rabbit_message_interceptor_timestamp, #{overwrite => false}}]),
-    Msg = rabbit_message_interceptor:intercept(Msg0,
-                                               #{},
-                                               incoming_message_interceptors),
+    ok = persistent_term:put(
+           message_interceptors,
+           [{rabbit_msg_interceptor_timestamp, #{incoming => true,
+                                                 overwrite => false}}]),
+    Msg = rabbit_msg_interceptor:intercept_incoming(Msg0, #{}),
 
     ?assertEqual(<<"exch">>, mc:exchange(Msg)),
     ?assertEqual([<<"apple">>], mc:routing_keys(Msg)),
@@ -452,7 +452,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
     ?assertEqual(RoutingHeaders,
                  maps:remove(<<"timestamp_in_ms">>, RoutingHeaders2)),
 
-    true = persistent_term:erase(incoming_message_interceptors).
+    ok = persistent_term:put(message_interceptors, []).
 
 amqpl_cc_amqp_bin_amqpl(_Config) ->
     Headers = [{<<"CC">>, array, [{longstr, <<"q1">>},

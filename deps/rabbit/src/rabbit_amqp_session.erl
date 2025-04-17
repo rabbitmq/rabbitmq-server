@@ -284,7 +284,7 @@
           max_incoming_window :: pos_integer(),
           max_link_credit :: pos_integer(),
           max_queue_credit :: pos_integer(),
-          msg_interceptor_ctx :: rabbit_message_interceptor:context()
+          msg_interceptor_ctx :: rabbit_msg_interceptor:context()
          }).
 
 -record(state, {
@@ -2164,7 +2164,8 @@ handle_deliver(ConsumerTag, AckRequired,
                                          conn_name = ConnName,
                                          channel_num = ChannelNum,
                                          user = #user{username = Username},
-                                         trace_state = Trace}}) ->
+                                         trace_state = Trace,
+                                         msg_interceptor_ctx = MsgIcptCtx}}) ->
     Handle = ctag_to_handle(ConsumerTag),
     case OutgoingLinks0 of
         #{Handle := #outgoing_link{queue_type = QType,
@@ -2180,7 +2181,8 @@ handle_deliver(ConsumerTag, AckRequired,
                           message_format = ?UINT(?MESSAGE_FORMAT),
                           settled = SendSettled},
             Mc1 = mc:convert(mc_amqp, Mc0),
-            Mc = mc:set_annotation(redelivered, Redelivered, Mc1),
+            Mc2 = mc:set_annotation(redelivered, Redelivered, Mc1),
+            Mc = rabbit_msg_interceptor:intercept_outgoing(Mc2, MsgIcptCtx),
             Sections = mc:protocol_state(Mc),
             validate_message_size(Sections, MaxMessageSize),
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
@@ -2417,7 +2419,7 @@ incoming_link_transfer(
                              conn_name = ConnName,
                              channel_num = ChannelNum,
                              max_link_credit = MaxLinkCredit,
-                             msg_interceptor_ctx = MsgInterceptorCtx}}) ->
+                             msg_interceptor_ctx = MsgIcptCtx}}) ->
 
     {PayloadBin, DeliveryId, Settled} =
     case MultiTransfer of
@@ -2445,9 +2447,7 @@ incoming_link_transfer(
             check_user_id(Mc1, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),
-            Mc2 = rabbit_message_interceptor:intercept(Mc1,
-                                                       MsgInterceptorCtx,
-                                                       incoming_message_interceptors),
+            Mc2 = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},

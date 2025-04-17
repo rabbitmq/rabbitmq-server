@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(rabbit_message_interceptor_SUITE).
+-module(rabbit_msg_interceptor_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -15,17 +15,19 @@
 
 all() ->
     [
-     {group, tests}
+     {group, cluster_size_1}
     ].
 
 groups() ->
     [
-     {tests, [shuffle], [headers_overwrite,
-                         headers_no_overwrite
-                        ]}
+     {cluster_size_1, [shuffle],
+      [incoming_overwrite,
+       incoming_no_overwrite,
+       outgoing]}
     ].
 
 init_per_suite(Config) ->
+    {ok, _} = application:ensure_all_started(rabbitmq_amqp_client),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:run_setup_steps(Config).
 
@@ -35,16 +37,20 @@ end_per_suite(Config) ->
 init_per_testcase(Testcase, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config0, [{rmq_nodename_suffix, Testcase}]),
-    Overwrite = case Testcase of
-                    headers_overwrite -> true;
-                    headers_no_overwrite -> false
-                end,
-    Val = maps:to_list(
-            maps:from_keys([rabbit_message_interceptor_timestamp,
-                            rabbit_message_interceptor_routing_node],
-                           #{overwrite => Overwrite})),
+    Val = case Testcase of
+              incoming_overwrite ->
+                  [{rabbit_msg_interceptor_routing_node, #{overwrite => true}},
+                   {rabbit_msg_interceptor_timestamp, #{incoming => true,
+                                                        overwrite => true}}];
+              incoming_no_overwrite ->
+                  [{rabbit_msg_interceptor_routing_node, #{overwrite => false}},
+                   {rabbit_msg_interceptor_timestamp, #{incoming => true,
+                                                        overwrite => false}}];
+              outgoing ->
+                  [{rabbit_msg_interceptor_timestamp, #{outgoing => true}}]
+          end,
     Config = rabbit_ct_helpers:merge_app_env(
-               Config1, {rabbit, [{incoming_message_interceptors, Val}]}),
+               Config1, {rabbit, [{message_interceptors, Val}]}),
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_broker_helpers:setup_steps() ++
@@ -57,13 +63,13 @@ end_per_testcase(Testcase, Config0) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-headers_overwrite(Config) ->
-    headers(true, Config).
+incoming_overwrite(Config) ->
+    incoming(true, Config).
 
-headers_no_overwrite(Config) ->
-    headers(false, Config).
+incoming_no_overwrite(Config) ->
+    incoming(false, Config).
 
-headers(Overwrite, Config) ->
+incoming(Overwrite, Config) ->
     Server = atom_to_binary(rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename)),
     Payload = QName = atom_to_binary(?FUNCTION_NAME),
     Ch = rabbit_ct_client_helpers:open_channel(Config),
@@ -80,13 +86,13 @@ headers(Overwrite, Config) ->
                   #amqp_msg{payload = Payload,
                             props = #'P_basic'{
                                        timestamp = Secs,
-                                       headers = [{<<"timestamp_in_ms">>, long, Ms},
+                                       headers = [{<<"timestamp_in_ms">>, long, ReceivedMs},
                                                   {<<"x-routed-by">>, longstr, Server}]
                                       }}}
-                   when Ms < NowMs + 4000 andalso
-                        Ms > NowMs - 4000 andalso
-                        Secs < NowSecs + 4 andalso
-                        Secs > NowSecs - 4,
+                   when ReceivedMs < NowMs + 5000 andalso
+                        ReceivedMs > NowMs - 5000 andalso
+                        Secs < NowSecs + 5 andalso
+                        Secs > NowSecs - 5,
                  amqp_channel:call(Ch, #'basic.get'{queue = QName})))
     end,
     AssertHeaders(),
@@ -110,3 +116,29 @@ headers(Overwrite, Config) ->
 
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok.
+
+outgoing(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+    {_, Session, LinkPair} = Init = amqp_utils:init(Config),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address, settled),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(
+                     Session, <<"sender">>, Address, settled),
+    ok = amqp_utils:wait_for_credit(Sender),
+
+    Now = os:system_time(millisecond),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag">>, <<"msg">>, true)),
+
+    {ok, Msg} = amqp10_client:get_msg(Receiver),
+    #{<<"x-opt-rabbitmq-sent-time">> := Sent} = amqp10_msg:message_annotations(Msg),
+    ct:pal("client sent message at ~b~nRabbitMQ sent message at ~b",
+           [Now, Sent]),
+    ?assert(Sent > Now - 5000),
+    ?assert(Sent < Now + 5000),
+
+    ok = amqp10_client:detach_link(Sender),
+    ok = amqp10_client:detach_link(Receiver),
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
+    ok = amqp_utils:close(Init).
