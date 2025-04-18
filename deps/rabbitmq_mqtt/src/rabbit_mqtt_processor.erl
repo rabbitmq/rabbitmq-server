@@ -92,7 +92,8 @@
          %% The database stores the MQTT subscription options in the binding arguments for:
          %% * v1 as Erlang record #mqtt_subscription_opts{}
          %% * v2 as AMQP 0.9.1 table
-         binding_args_v2 :: boolean()
+         binding_args_v2 :: boolean(),
+         msg_interceptor_ctx :: rabbit_msg_interceptor:context()
         }).
 
 -record(state,
@@ -214,9 +215,15 @@ process_connect(
         %% To simplify logic, we decide at connection establishment time to stick
         %% with either binding args v1 or v2 for the lifetime of the connection.
         BindingArgsV2 = rabbit_feature_flags:is_enabled('rabbitmq_4.1.0'),
+        ProtoVerAtom = proto_integer_to_atom(ProtoVer),
+        MsgIcptCtx = #{protocol => ProtoVerAtom,
+                       vhost => VHost,
+                       username => Username,
+                       connection_name => ConnName,
+                       client_id => ClientId},
         S = #state{
                cfg = #cfg{socket = Socket,
-                          proto_ver = proto_integer_to_atom(ProtoVer),
+                          proto_ver = ProtoVerAtom,
                           clean_start = CleanStart,
                           session_expiry_interval_secs = SessionExpiry,
                           ssl_login_name = SslLoginName,
@@ -237,7 +244,8 @@ process_connect(
                           will_msg = WillMsg,
                           max_packet_size_outbound = MaxPacketSize,
                           topic_alias_maximum_outbound = TopicAliasMaxOutbound,
-                          binding_args_v2 = BindingArgsV2},
+                          binding_args_v2 = BindingArgsV2,
+                          msg_interceptor_ctx = MsgIcptCtx},
                auth_state = #auth_state{
                                user = User,
                                authz_ctx = AuthzCtx}},
@@ -1632,15 +1640,15 @@ publish_to_queues(
   #state{cfg = #cfg{exchange = ExchangeName = #resource{name = ExchangeNameBin},
                     delivery_flow = Flow,
                     conn_name = ConnName,
-                    trace_state = TraceState},
+                    trace_state = TraceState,
+                    msg_interceptor_ctx = MsgIcptCtx},
          auth_state = #auth_state{user = #user{username = Username}}} = State) ->
     Anns = #{?ANN_EXCHANGE => ExchangeNameBin,
              ?ANN_ROUTING_KEYS => [mqtt_to_amqp(Topic)]},
     Msg0 = mc:init(mc_mqtt, MqttMsg, Anns, mc_env()),
     case rabbit_exchange:lookup(ExchangeName) of
         {ok, Exchange} ->
-            Ctx = msg_interceptor_ctx(State),
-            Msg = rabbit_msg_interceptor:intercept_incoming(Msg0, Ctx),
+            Msg = rabbit_msg_interceptor:intercept_incoming(Msg0, MsgIcptCtx),
             QNames0 = rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}),
             QNames = drop_local(QNames0, State),
             rabbit_trace:tap_in(Msg, QNames, ConnName, Username, TraceState),
@@ -2066,13 +2074,13 @@ deliver_to_client(Msgs, Ack, State) ->
                 end, State, Msgs).
 
 deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
-                      AckRequired, State0) ->
+                      AckRequired,
+                      #state{cfg = #cfg{msg_interceptor_ctx = MsgIcptCtx}} = State0) ->
     SubscriberQoS = case AckRequired of
                         true -> ?QOS_1;
                         false -> ?QOS_0
                     end,
     McMqtt0 = mc:convert(mc_mqtt, Mc, mc_env()),
-    MsgIcptCtx = msg_interceptor_ctx(State0),
     McMqtt = rabbit_msg_interceptor:intercept_outgoing(McMqtt0, MsgIcptCtx),
     MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
@@ -2538,17 +2546,6 @@ message_redelivered(_, _, _) ->
 -spec is_success(reason_code()) -> boolean().
 is_success(ReasonCode) ->
     ReasonCode < ?RC_UNSPECIFIED_ERROR.
-
-msg_interceptor_ctx(#state{cfg = #cfg{client_id = ClientId,
-                                      conn_name = ConnName,
-                                      vhost = VHost,
-                                      proto_ver = ProtoVer},
-                           auth_state = #auth_state{user = #user{username = Username}}}) ->
-    #{protocol => ProtoVer,
-      vhost => VHost,
-      username => Username,
-      connection_name => ConnName,
-      client_id => ClientId}.
 
 -spec format_status(state()) -> map().
 format_status(

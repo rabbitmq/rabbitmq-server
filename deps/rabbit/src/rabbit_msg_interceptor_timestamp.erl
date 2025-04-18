@@ -16,15 +16,15 @@
 
 -export([intercept/4]).
 
-intercept(Msg0, _Ctx, incoming, #{incoming := _True} = Config) ->
-    Overwrite = maps:get(overwrite, Config),
+intercept(Msg0, _Ctx, incoming, #{incoming := _True} = Cfg) ->
+    Overwrite = maps:get(overwrite, Cfg),
     Ts = mc:get_annotation(?ANN_RECEIVED_AT_TIMESTAMP, Msg0),
     Msg = rabbit_msg_interceptor:set_annotation(Msg0, ?KEY_INCOMING, Ts, Overwrite),
     set_timestamp(Msg, Ts, Overwrite);
 intercept(Msg, _Ctx, outgoing, #{outgoing := _True}) ->
     Ts = os:system_time(millisecond),
     mc:set_annotation(?KEY_OUTGOING, Ts, Msg);
-intercept(Msg, _MsgInterceptorCtx, _Stage, _Config) ->
+intercept(Msg, _MsgIcptCtx, _Stage, _Cfg) ->
     Msg.
 
 set_timestamp(Msg, Ts, true) ->
