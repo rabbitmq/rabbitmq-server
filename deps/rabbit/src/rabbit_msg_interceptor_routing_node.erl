@@ -11,9 +11,9 @@
 
 -export([intercept/4]).
 
-intercept(Msg, _Ctx, incoming, Config) ->
+intercept(Msg, _Ctx, incoming, Cfg) ->
     Node = atom_to_binary(node()),
-    Overwrite = maps:get(overwrite, Config),
+    Overwrite = maps:get(overwrite, Cfg),
     rabbit_msg_interceptor:set_annotation(Msg, ?KEY, Node, Overwrite);
-intercept(Msg, _Ctx, _Stage, _Config) ->
+intercept(Msg, _Ctx, _Stage, _Cfg) ->
     Msg.
