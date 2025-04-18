@@ -559,7 +559,19 @@ consolidate_reads([], Acc) ->
 read_many_file3(MsgIds, CState = #client_msstate{ file_handles_ets = FileHandlesEts,
                                                   client_ref       = Ref }, Acc, File) ->
     mark_handle_closed(FileHandlesEts, File, Ref),
-    read_many_disk(MsgIds, CState, Acc).
+    %% We go back to reading from the cache rather than from disk
+    %% because it is possible that messages are not in a perfect
+    %% order of cache->disk. For example, a fanout message written
+    %% to a previous file by another queue, but then referenced by
+    %% our main queue in between newly written messages: our main
+    %% queue would write MsgA, MsgB, MsgFanout, MsgC, MsgD to the
+    %% current file, then when trying to read from that same current
+    %% file, it would get MsgA and MsgB from the cache; MsgFanout
+    %% from the previous file; and MsgC and MsgD from the cache
+    %% again. So the correct action here is not to continue reading
+    %% from disk but instead to go back to the cache to get MsgC
+    %% and MsgD.
+    read_many_cache(MsgIds, CState, Acc).
 
 -spec contains(rabbit_types:msg_id(), client_msstate()) -> boolean().
 
