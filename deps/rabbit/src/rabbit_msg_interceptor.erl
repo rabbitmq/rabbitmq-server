@@ -45,8 +45,8 @@ intercept_outgoing(Msg, Ctx) ->
 
 intercept(Msg, Ctx, Stage) ->
     Interceptors = persistent_term:get(?KEY),
-    lists:foldl(fun({Mod, Config}, Msg0) ->
-                        Mod:intercept(Msg0, Ctx, Stage, Config)
+    lists:foldl(fun({Mod, Cfg}, Msg0) ->
+                        Mod:intercept(Msg0, Ctx, Stage, Cfg)
                 end, Msg, Interceptors).
 
 -spec set_annotation(mc:state(), mc:ann_key(), mc:ann_value(),

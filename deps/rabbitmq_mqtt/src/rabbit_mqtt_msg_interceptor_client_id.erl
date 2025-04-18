@@ -16,5 +16,5 @@ intercept(Msg, #{protocol := Proto, client_id := ClientId}, incoming, _Cfg)
        Proto =:= mqtt311 orelse
        Proto =:= mqtt310 ->
     mc:set_annotation(?KEY, ClientId, Msg);
-intercept(Msg, _Ctx, _Stage, _Config) ->
+intercept(Msg, _Ctx, _Stage, _Cfg) ->
     Msg.
