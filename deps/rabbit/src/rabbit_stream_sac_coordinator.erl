@@ -18,9 +18,12 @@
 
 -include("rabbit_stream_sac_coordinator.hrl").
 
--opaque command() ::
-    #command_register_consumer{} | #command_unregister_consumer{} |
-    #command_activate_consumer{}.
+-opaque command() :: #command_register_consumer{} |
+                     #command_unregister_consumer{} |
+                     #command_activate_consumer{} |
+                     #command_connection_reconnected{} |
+                     #command_purge_nodes{}.
+
 -opaque state() :: #?MODULE{}.
 
 -export_type([state/0,
@@ -31,17 +34,41 @@
          unregister_consumer/5,
          activate_consumer/3,
          consumer_groups/2,
-         group_consumers/4]).
+         group_consumers/4,
+         connection_reconnected/1]).
 -export([apply/2,
          init_state/0,
          send_message/2,
          ensure_monitors/4,
          handle_connection_down/2,
+         handle_connection_node_disconnected/2,
+         handle_node_reconnected/3,
+         forget_connection/2,
          consumer_groups/3,
          group_consumers/5,
-         overview/1]).
+         overview/1,
+         import_state/2]).
+-export([make_purge_nodes/1]).
+
+%% exported for unit tests only
+-ifdef(TEST).
+-export([compute_pid_group_dependencies/1]).
+-endif.
 
 -import(rabbit_stream_coordinator, [ra_local_query/1]).
+
+-define(ACTIVE, active).
+-define(WAITING, waiting).
+-define(DEACTIVATING, deactivating).
+
+-define(CONNECTED, connected).
+-define(DISCONNECTED, disconnected).
+-define(FORGOTTTEN, forgotten).
+
+-define(CONN_ACT, {?CONNECTED, ?ACTIVE}).
+-define(CONN_WAIT, {?CONNECTED, ?WAITING}).
+-define(DISCONN_ACT, {?DISCONNECTED, ?ACTIVE}).
+
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -59,25 +86,13 @@ register_consumer(VirtualHost,
                   ConnectionPid,
                   Owner,
                   SubscriptionId) ->
-    process_command({sac,
-                     #command_register_consumer{vhost =
-                                                VirtualHost,
-                                                stream =
-                                                Stream,
-                                                partition_index
-                                                =
-                                                PartitionIndex,
-                                                consumer_name
-                                                =
-                                                ConsumerName,
-                                                connection_pid
-                                                =
-                                                ConnectionPid,
-                                                owner =
-                                                Owner,
-                                                subscription_id
-                                                =
-                                                SubscriptionId}}).
+    process_command(#command_register_consumer{vhost = VirtualHost,
+                                               stream = Stream,
+                                               partition_index = PartitionIndex,
+                                               consumer_name = ConsumerName,
+                                               connection_pid = ConnectionPid,
+                                               owner = Owner,
+                                               subscription_id = SubscriptionId}).
 
 -spec unregister_consumer(binary(),
                           binary(),
@@ -90,34 +105,24 @@ unregister_consumer(VirtualHost,
                     ConsumerName,
                     ConnectionPid,
                     SubscriptionId) ->
-    process_command({sac,
-                     #command_unregister_consumer{vhost =
-                                                  VirtualHost,
-                                                  stream =
-                                                  Stream,
-                                                  consumer_name
-                                                  =
-                                                  ConsumerName,
-                                                  connection_pid
-                                                  =
-                                                  ConnectionPid,
-                                                  subscription_id
-                                                  =
-                                                  SubscriptionId}}).
+    process_command(#command_unregister_consumer{vhost = VirtualHost,
+                                                 stream = Stream,
+                                                 consumer_name = ConsumerName,
+                                                 connection_pid = ConnectionPid,
+                                                 subscription_id = SubscriptionId}).
 
 -spec activate_consumer(binary(), binary(), binary()) -> ok.
-activate_consumer(VirtualHost, Stream, ConsumerName) ->
-    process_command({sac,
-                     #command_activate_consumer{vhost =
-                                                VirtualHost,
-                                                stream =
-                                                Stream,
-                                                consumer_name
-                                                =
-                                                ConsumerName}}).
+activate_consumer(VH, Stream, Name) ->
+    process_command(#command_activate_consumer{vhost =VH,
+                                               stream = Stream,
+                                               consumer_name= Name}).
+
+-spec connection_reconnected(connection_pid()) -> ok.
+connection_reconnected(Pid) ->
+    process_command(#command_connection_reconnected{pid = Pid}).
 
 process_command(Cmd) ->
-    case rabbit_stream_coordinator:process_command(Cmd) of
+    case rabbit_stream_coordinator:process_command(wrap_cmd(Cmd)) of
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
@@ -125,6 +130,10 @@ process_command(Cmd) ->
                                [Cmd, Err]),
             Err
     end.
+
+-spec wrap_cmd(command()) -> {sac, command()}.
+wrap_cmd(Cmd) ->
+    {sac, Cmd}.
 
 %% return the current groups for a given virtual host
 -spec consumer_groups(binary(), [atom()]) ->
@@ -229,7 +238,9 @@ apply(#command_unregister_consumer{vhost = VirtualHost,
                     of
                         {value, Consumer} ->
                             G1 = remove_from_group(Consumer, Group0),
-                            handle_consumer_removal(G1, Stream, ConsumerName, Consumer#consumer.active);
+                            handle_consumer_removal(
+                              G1, Stream, ConsumerName,
+                              is_active(Consumer#consumer.status));
                         false ->
                             {Group0, []}
                     end,
@@ -252,15 +263,152 @@ apply(#command_activate_consumer{vhost = VirtualHost,
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};
-            Group ->
-                #consumer{pid = Pid, subscription_id = SubId} =
-                    evaluate_active_consumer(Group),
-                    Group1 = update_consumer_state_in_group(Group, Pid, SubId, true),
-                {Group1, [notify_consumer_effect(Pid, SubId, Stream, ConsumerName, true)]}
+            G0 ->
+                G1 = update_connected_consumers(G0, ?CONN_WAIT),
+                case evaluate_active_consumer(G1) of
+                    undefined ->
+                        {G1, []};
+                    #consumer{status = {?DISCONNECTED, _}} ->
+                        %% we keep it this way, the consumer may come back
+                        {G1, []};
+                    #consumer{pid = Pid, subscription_id = SubId} ->
+                        G2 = update_consumer_state_in_group(G1, Pid,
+                                                            SubId,
+                                                            ?CONN_ACT),
+                        {G2, [notify_consumer_effect(Pid, SubId, Stream,
+                                                     ConsumerName, true)]}
+                end
         end,
-    StreamGroups1 =
-        update_groups(VirtualHost, Stream, ConsumerName, G, StreamGroups0),
-    {State0#?MODULE{groups = StreamGroups1}, ok, Eff}.
+    StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                  G, StreamGroups0),
+    {State0#?MODULE{groups = StreamGroups1}, ok, Eff};
+apply(#command_connection_reconnected{pid = Pid},
+      #?MODULE{groups = Groups0} = State0) ->
+    {State1, Eff} =
+        maps:fold(fun(G, _, {St, Eff}) ->
+                          handle_group_connection_reconnected(Pid, St, Eff, G)
+                  end, {State0, []}, Groups0),
+
+    {State1, ok, Eff};
+apply(#command_purge_nodes{nodes = Nodes}, State0) ->
+    {State1, Eff} = lists:foldl(fun(N, {S0, Eff0}) ->
+                                        {S1, Eff1} = purge_node(N, S0),
+                                        {S1, Eff1 ++ Eff0}
+                                end, {State0, []}, Nodes),
+    {State1, ok, Eff}.
+
+purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
+    PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
+    maps:fold(fun(Pid, Groups, {S0, Eff0}) ->
+                      {S1, Eff1} = handle_connection_down0(Pid, S0, Groups),
+                      {S1, Eff1 ++ Eff0}
+              end, {State0, []}, PidsGroups).
+
+handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
+                                    Eff0, {VH, S, Name} = K) ->
+    %% TODO sac: handle forgotten_active case (reconciliate state with current active)
+    case lookup_group(VH, S, Name, Groups0) of
+        undefined ->
+            {S0, Eff0};
+        #group{consumers = Consumers0} = G0 ->
+            {Consumers1, Updated} =
+                lists:foldr(
+                  fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
+                        when P == Pid ->
+                          {[C#consumer{status = {?CONNECTED, St}} | L], true};
+                     (C, {L, UpdatedFlag}) ->
+                          {[C | L], UpdatedFlag or false}
+                  end, {[], false}, Consumers0),
+
+            case Updated of
+                true ->
+                    G1 = G0#group{consumers = Consumers1},
+                    {G2, Eff} = maybe_rebalance_group(G1, K),
+                    Groups1 = update_groups(VH, S, Name, G2, Groups0),
+                    {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+                false ->
+                    {S0, Eff0}
+            end
+    end.
+
+maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
+                      {_VH, S, Name}) ->
+    case lookup_active_consumer(G0) of
+        {value, ActiveConsumer} ->
+            %% there is already an active consumer, we just re-arrange
+            %% the group to make sure the active consumer is the first in the array
+            Consumers1 = lists:filter(fun(C) ->
+                                              not same_consumer(C, ActiveConsumer)
+                                      end, Consumers0),
+            G1 = G0#group{consumers = [ActiveConsumer | Consumers1]},
+            {G1, []};
+        _ ->
+            %% no active consumer
+            G1 = compute_active_consumer(G0),
+            case lookup_active_consumer(G1) of
+                {value, #consumer{pid = Pid, subscription_id = SubId}} ->
+                    %% creating the side effect to notify the new active consumer
+                    {G1, [notify_consumer_effect(Pid, SubId, S, Name, true)]};
+                _ ->
+                    %% no active consumer found in the group, nothing to do
+                    {G1, []}
+            end
+    end;
+maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
+                      {_VH, S, Name}) ->
+    case lookup_active_consumer(G) of
+        {value, #consumer{pid = ActPid,
+                          subscription_id = ActSubId} = CurrentActive} ->
+            case evaluate_active_consumer(G) of
+                undefined ->
+                    %% no-one to select
+                    {G, []};
+                CurrentActive ->
+                    %% the current active stays the same
+                    {G, []};
+                _ ->
+                    %% there's a change, telling the active it's not longer active
+                    {update_consumer_state_in_group(G,
+                                                    ActPid,
+                                                    ActSubId,
+                                                    {?CONNECTED, ?DEACTIVATING}),
+                     [notify_consumer_effect(ActPid,
+                                             ActSubId,
+                                             S,
+                                             Name,
+                                             false,
+                                             true)]}
+            end;
+        false ->
+            %% no active consumer in the (non-empty) group,
+            case lists:search(fun(#consumer{status = Status}) ->
+                                      Status =:= {?CONNECTED, ?DEACTIVATING}
+                              end, Consumers) of
+                {value, _Deactivating} ->
+                    %%  we are waiting for the reply of a former active
+                    %%  nothing to do
+                    {G, []};
+                _ ->
+                    %% nothing going on in the group
+                    %% a {disconnected, active} may have become {forgotten, active}
+                    %% we must select a new active
+                    case evaluate_active_consumer(G) of
+                        undefined ->
+                            %% no-one to select
+                            {G, []};
+                        #consumer{pid = ActPid, subscription_id = ActSubId} ->
+                            {update_consumer_state_in_group(G,
+                                                            ActPid,
+                                                            ActSubId,
+                                                            {?CONNECTED, ?ACTIVE}),
+                             [notify_consumer_effect(ActPid,
+                                                     ActSubId,
+                                                     S,
+                                                     Name,
+                                                     true)]}
+                    end
+            end
+    end.
 
 -spec consumer_groups(binary(), [atom()], state()) -> {ok, [term()]}.
 consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
@@ -311,7 +459,7 @@ group_consumers(VirtualHost,
         #{GroupId := #group{consumers = Consumers}} ->
             Cs = lists:foldr(fun(#consumer{subscription_id = SubId,
                                            owner = Owner,
-                                           active = Active},
+                                           status = Status},
                                  Acc) ->
                                 Record =
                                     lists:foldr(fun (subscription_id, RecAcc) ->
@@ -322,12 +470,8 @@ group_consumers(VirtualHost,
                                                         [{connection_name,
                                                           Owner}
                                                          | RecAcc];
-                                                    (state, RecAcc)
-                                                        when Active ->
-                                                        [{state, active}
-                                                         | RecAcc];
                                                     (state, RecAcc) ->
-                                                        [{state, inactive}
+                                                        [{state, cli_consumer_status_label(Status)}
                                                          | RecAcc];
                                                     (Unknown, RecAcc) ->
                                                         [{Unknown,
@@ -342,6 +486,13 @@ group_consumers(VirtualHost,
         _ ->
             {error, not_found}
     end.
+
+cli_consumer_status_label({?FORGOTTTEN, _}) ->
+   inactive;
+cli_consumer_status_label({_, ?ACTIVE}) ->
+   active;
+cli_consumer_status_label(_) ->
+   inactive.
 
 -spec ensure_monitors(command(),
                       state(),
@@ -402,6 +553,29 @@ ensure_monitors(#command_unregister_consumer{vhost = VirtualHost,
                                 maps:put(Pid, PidGroup1, PidsGroups0)},
              Monitors, Effects}
     end;
+ensure_monitors(#command_connection_reconnected{pid = Pid},
+                #?MODULE{pids_groups = PidsGroups,
+                         groups = Groups} = State,
+                Monitors,
+                Effects)
+  when not is_map_key(Pid, Monitors) orelse
+       not is_map_key(Pid, PidsGroups) ->
+    %% the connection PID should be monitored
+    %% the inconsistency can happen when a forgotten connection comes back,
+    %% we must re-compute the connection PID / group dependency mapping
+    %% and re-issue the monitor
+    AllPidsGroups = compute_pid_group_dependencies(Groups),
+    {State#?MODULE{pids_groups = AllPidsGroups},
+     Monitors#{Pid => sac},
+     [{monitor, process, Pid}, {monitor, node, node(Pid)} | Effects]};
+ensure_monitors(#command_purge_nodes{},
+                #?MODULE{groups = Groups} = State,
+                Monitors,
+                Effects) ->
+    AllPidsGroups = compute_pid_group_dependencies(Groups),
+    {State#?MODULE{pids_groups = AllPidsGroups},
+     Monitors,
+     Effects};
 ensure_monitors(_, #?MODULE{} = State0, Monitors, Effects) ->
     {State0, Monitors, Effects}.
 
@@ -414,14 +588,88 @@ handle_connection_down(Pid,
             {State0, []};
         {Groups, PidsGroups1} ->
             State1 = State0#?MODULE{pids_groups = PidsGroups1},
-            maps:fold(fun(G, _, Acc) ->
-                              handle_group_after_connection_down(Pid, Acc, G)
-                      end, {State1, []}, Groups)
+            handle_connection_down0(Pid, State1, Groups)
+    end.
+
+handle_connection_down0(Pid, State, Groups) ->
+    maps:fold(fun(G, _, Acc) ->
+                      handle_group_after_connection_down(Pid, Acc, G)
+              end, {State, []}, Groups).
+
+-spec handle_connection_node_disconnected(connection_pid(), state()) ->
+    {state(), ra_machine:effects()}.
+handle_connection_node_disconnected(ConnPid,
+                                    #?MODULE{pids_groups = PidsGroups0} = State0) ->
+    case maps:take(ConnPid, PidsGroups0) of
+        error ->
+            {State0, []};
+        {Groups, PidsGroups1} ->
+            State1 = State0#?MODULE{pids_groups = PidsGroups1},
+            State2 =
+                maps:fold(fun(G, _, Acc) ->
+                                  handle_group_after_connection_node_disconnected(
+                                    ConnPid, Acc, G)
+                          end, State1, Groups),
+            %% TODO configure timeout to forget connection from disconnected node
+            T = 60_000,
+            {State2, [{timer, {sac, node_disconnected,
+                               #{connection_pid => ConnPid}}, T}]}
+    end.
+    
+-spec handle_node_reconnected(node(), state(), ra_machine:effects()) ->
+    {state(), ra_machine:effects()}.
+handle_node_reconnected(Node,
+                        #?MODULE{pids_groups = PidsGroups0,
+                                 groups = Groups0} = State0,
+                        Effects0) ->
+    NodePidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
+    PidsGroups1 = maps:merge(PidsGroups0, NodePidsGroups),
+    Effects1 =
+        lists:foldr(fun(P, Acc) ->
+                            [notify_connection_effect(P),
+                             {monitor, process, P} | Acc]
+                    end, Effects0, maps:keys(NodePidsGroups)),
+
+    {State0#?MODULE{pids_groups = PidsGroups1}, Effects1}.
+
+-spec forget_connection(connection_pid(), state()) ->
+    {state(), ra_machine:effects()}.
+forget_connection(Pid, #?MODULE{groups = Groups} = State0) ->
+    {State1, Eff} =
+        maps:fold(fun(G, _, {St, Eff}) ->
+                          handle_group_forget_connection(Pid, St, Eff, G)
+                  end, {State0, []}, Groups),
+    {State1, Eff}.
+
+handle_group_forget_connection(Pid, #?MODULE{groups = Groups0} = S0,
+                               Eff0, {VH, S, Name} = K) ->
+    case lookup_group(VH, S, Name, Groups0) of
+        undefined ->
+            {S0, Eff0};
+        #group{consumers = Consumers0} = G0 ->
+            {Consumers1, Updated} =
+                lists:foldr(
+                  fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
+                        when P == Pid ->
+                          {[C#consumer{status = {?FORGOTTTEN, St}} | L], true};
+                     (C, {L, UpdatedFlag}) ->
+                          {[C | L], UpdatedFlag or false}
+                  end, {[], false}, Consumers0),
+
+            case Updated of
+                true ->
+                    G1 = G0#group{consumers = Consumers1},
+                    {G2, Eff} = maybe_rebalance_group(G1, K),
+                    Groups1 = update_groups(VH, S, Name, G2, Groups0),
+                    {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+                false ->
+                    {S0, Eff0}
+            end
     end.
 
 handle_group_after_connection_down(Pid,
-                                {#?MODULE{groups = Groups0} = S0, Eff0},
-                                {VirtualHost, Stream, ConsumerName}) ->
+                                   {#?MODULE{groups = Groups0} = S0, Eff0},
+                                   {VirtualHost, Stream, ConsumerName}) ->
     case lookup_group(VirtualHost,
                       Stream,
                       ConsumerName,
@@ -432,17 +680,20 @@ handle_group_after_connection_down(Pid,
             %% remove the connection consumers from the group state
             %% keep flags to know what happened
             {Consumers1, ActiveRemoved, AnyRemoved} =
-            lists:foldl(
-              fun(#consumer{pid = P, active = S}, {L, ActiveFlag, _}) when P == Pid ->
-                      {L, S or ActiveFlag, true};
-                 (C, {L, ActiveFlag, AnyFlag}) ->
-                      {L ++ [C], ActiveFlag, AnyFlag}
-              end, {[], false, false}, Consumers0),
+                lists:foldl(
+                  fun(#consumer{pid = P, status = S}, {L, ActiveFlag, _})
+                        when P == Pid ->
+                          {L, is_active(S) or ActiveFlag, true};
+                     (C, {L, ActiveFlag, AnyFlag}) ->
+                          {L ++ [C], ActiveFlag, AnyFlag}
+                  end, {[], false, false}, Consumers0),
 
             case AnyRemoved of
                 true ->
                     G1 = G0#group{consumers = Consumers1},
-                    {G2, Effects} = handle_consumer_removal(G1, Stream, ConsumerName, ActiveRemoved),
+                    {G2, Effects} = handle_consumer_removal(G1, Stream,
+                                                            ConsumerName,
+                                                            ActiveRemoved),
                     Groups1 = update_groups(VirtualHost,
                                             Stream,
                                             ConsumerName,
@@ -454,6 +705,82 @@ handle_group_after_connection_down(Pid,
             end
     end.
 
+handle_group_after_connection_node_disconnected(ConnPid,
+                                                #?MODULE{groups = Groups0} = S0,
+                                                {VirtualHost, Stream, ConsumerName}) ->
+    case lookup_group(VirtualHost,
+                      Stream,
+                      ConsumerName,
+                      Groups0) of
+        undefined ->
+            S0;
+        #group{consumers = Cs0} = G0 ->
+            Cs1 = lists:foldr(fun(#consumer{status = {_, St},
+                                            pid = Pid} = C0,
+                                  Acc) when Pid =:= ConnPid ->
+                                      C1 = C0#consumer{status = {?DISCONNECTED, St}},
+                                      [C1 | Acc];
+                                 (C, Acc) ->
+                                      [C | Acc]
+                              end, [], Cs0),
+            G1 = G0#group{consumers = Cs1},
+            Groups1 = update_groups(VirtualHost,
+                                    Stream,
+                                    ConsumerName,
+                                    G1,
+                                    Groups0),
+            S0#?MODULE{groups = Groups1}
+    end.
+
+-spec import_state(ra_machine:version(), map()) -> state().
+import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
+    #?MODULE{groups = map_to_groups(Groups),
+             pids_groups = map_to_pids_groups(PidsGroups)}.
+
+- spec make_purge_nodes([node()]) -> {sac, command()}.
+make_purge_nodes(Nodes) ->
+    wrap_cmd(#command_purge_nodes{nodes = Nodes}).
+
+map_to_groups(Groups) when is_map(Groups) ->
+    maps:fold(fun(K, V, Acc) ->
+                      Acc#{K => map_to_group(V)}
+              end, #{}, Groups);
+map_to_groups(_) ->
+    #{}.
+
+map_to_pids_groups(PidsGroups) when is_map(PidsGroups) ->
+    PidsGroups;
+map_to_pids_groups(_) ->
+    #{}.
+
+map_to_group(#{<<"consumers">> := Consumers, <<"partition_index">> := Index}) ->
+    C = lists:foldl(fun(V, Acc) ->
+                            Acc ++ [map_to_consumer(V)]
+                    end, [], Consumers),
+    #group{consumers = C,
+           partition_index = Index}.
+
+map_to_consumer(#{<<"pid">> := Pid, <<"subscription_id">> := SubId,
+                  <<"owner">> := Owner, <<"active">> := Active}) ->
+    #consumer{pid = Pid,
+              subscription_id = SubId,
+              owner = Owner,
+              status = active_to_status(Active)}.
+
+active_to_status(true) ->
+    {?CONNECTED, ?ACTIVE};
+active_to_status(false) ->
+    {?CONNECTED, ?WAITING}.
+
+is_active({?FORGOTTTEN, _}) ->
+    false;
+is_active({_, ?ACTIVE}) ->
+    true;
+is_active({_, ?DEACTIVATING}) ->
+    true;
+is_active(_) ->
+    false.
+
 do_register_consumer(VirtualHost,
                      Stream,
                      -1 = _PartitionIndex,
@@ -462,8 +789,7 @@ do_register_consumer(VirtualHost,
                      Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
-    Group0 =
-        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+    Group0 = lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
     Consumer =
         case lookup_active_consumer(Group0) of
@@ -471,32 +797,29 @@ do_register_consumer(VirtualHost,
                 #consumer{pid = ConnectionPid,
                           owner = Owner,
                           subscription_id = SubscriptionId,
-                          active = false};
+                          status = {?CONNECTED, ?WAITING}};
             false ->
                 #consumer{pid = ConnectionPid,
                           subscription_id = SubscriptionId,
                           owner = Owner,
-                          active = true}
+                          status = {?CONNECTED, ?ACTIVE}}
         end,
     Group1 = add_to_group(Consumer, Group0),
-    StreamGroups1 =
-        update_groups(VirtualHost,
-                      Stream,
-                      ConsumerName,
-                      Group1,
-                      StreamGroups0),
+    StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                  Group1,
+                                  StreamGroups0),
 
-    #consumer{active = Active} = Consumer,
+    #consumer{status = Status} = Consumer,
     Effects =
-        case Active of
-            true ->
+        case Status of
+            {_, ?ACTIVE} ->
                 [notify_consumer_effect(ConnectionPid, SubscriptionId,
-                                        Stream, ConsumerName, Active)];
+                                        Stream, ConsumerName, is_active(Status))];
             _ ->
                 []
         end,
 
-    {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects};
+    {State#?MODULE{groups = StreamGroups1}, {ok, is_active(Status)}, Effects};
 do_register_consumer(VirtualHost,
                      Stream,
                      _PartitionIndex,
@@ -505,8 +828,7 @@ do_register_consumer(VirtualHost,
                      Owner,
                      SubscriptionId,
                      #?MODULE{groups = StreamGroups0} = State) ->
-    Group0 =
-        lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
+    Group0 = lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0),
 
     {Group1, Effects} =
         case Group0 of
@@ -516,56 +838,25 @@ do_register_consumer(VirtualHost,
                     #consumer{pid = ConnectionPid,
                               owner = Owner,
                               subscription_id = SubscriptionId,
-                              active = true},
+                              status = {?CONNECTED, ?ACTIVE}},
                 G1 = add_to_group(Consumer0, Group0),
                 {G1,
                  [notify_consumer_effect(ConnectionPid, SubscriptionId,
                                          Stream, ConsumerName, true)]};
             _G ->
-                %% whatever the current state is, the newcomer will be passive
-                Consumer0 =
-                    #consumer{pid = ConnectionPid,
-                              owner = Owner,
-                              subscription_id = SubscriptionId,
-                              active = false},
+                Consumer0 = #consumer{pid = ConnectionPid,
+                                      owner = Owner,
+                                      subscription_id = SubscriptionId,
+                                      status = {?CONNECTED, ?WAITING}},
                 G1 = add_to_group(Consumer0, Group0),
-
-                case lookup_active_consumer(G1) of
-                    {value,
-                     #consumer{pid = ActPid, subscription_id = ActSubId} =
-                         CurrentActive} ->
-                        case evaluate_active_consumer(G1) of
-                            CurrentActive ->
-                                %% the current active stays the same
-                                {G1, []};
-                            _ ->
-                                %% there's a change, telling the active it's not longer active
-                                {update_consumer_state_in_group(G1,
-                                                                ActPid,
-                                                                ActSubId,
-                                                                false),
-                                 [notify_consumer_effect(ActPid,
-                                                         ActSubId,
-                                                         Stream,
-                                                         ConsumerName,
-                                                         false,
-                                                         true)]}
-                        end;
-                    false ->
-                        %% no active consumer in the (non-empty) group,
-                        %% we are waiting for the reply of a former active
-                        {G1, []}
-                end
+                maybe_rebalance_group(G1, {VirtualHost, Stream, ConsumerName})
         end,
-    StreamGroups1 =
-        update_groups(VirtualHost,
-                      Stream,
-                      ConsumerName,
-                      Group1,
-                      StreamGroups0),
-    {value, #consumer{active = Active}} =
+        StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
+                                      Group1,
+                                      StreamGroups0),
+    {value, #consumer{status = Status}} =
         lookup_consumer(ConnectionPid, SubscriptionId, Group1),
-    {State#?MODULE{groups = StreamGroups1}, {ok, Active}, Effects}.
+    {State#?MODULE{groups = StreamGroups1}, {ok, is_active(Status)}, Effects}.
 
 handle_consumer_removal(#group{consumers = []} = G, _, _, _) ->
     {G, []};
@@ -589,10 +880,11 @@ handle_consumer_removal(#group{partition_index = -1} = Group0,
     end;
 handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
     case lookup_active_consumer(Group0) of
-        {value,
-         #consumer{pid = ActPid, subscription_id = ActSubId} =
-             CurrentActive} ->
+        {value, #consumer{pid = ActPid,
+                          subscription_id = ActSubId} = CurrentActive} ->
             case evaluate_active_consumer(Group0) of
+                undefined ->
+                    {Group0, []};
                 CurrentActive ->
                     %% the current active stays the same
                     {Group0, []};
@@ -601,7 +893,7 @@ handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
                     {update_consumer_state_in_group(Group0,
                                                     ActPid,
                                                     ActSubId,
-                                                    false),
+                                                    {?CONNECTED, ?DEACTIVATING}),
                      [notify_consumer_effect(ActPid, ActSubId,
                                              Stream, ConsumerName, false, true)]}
             end;
@@ -609,17 +901,24 @@ handle_consumer_removal(Group0, Stream, ConsumerName, ActiveRemoved) ->
             case ActiveRemoved of
                 true ->
                     %% the active one is going away, picking a new one
-                    #consumer{pid = P, subscription_id = SID} =
-                        evaluate_active_consumer(Group0),
-                    {update_consumer_state_in_group(Group0, P, SID, true),
-                     [notify_consumer_effect(P, SID,
-                                             Stream, ConsumerName, true)]};
+                    case evaluate_active_consumer(Group0) of
+                        undefined ->
+                            {Group0, []};
+                        #consumer{pid = P, subscription_id = SID} ->
+                            {update_consumer_state_in_group(Group0, P, SID,
+                                                            {?CONNECTED, ?ACTIVE}),
+                             [notify_consumer_effect(P, SID,
+                                                     Stream, ConsumerName, true)]}
+                    end;
                 false ->
                     %% no active consumer in the (non-empty) group,
                     %% we are waiting for the reply of a former active
                     {Group0, []}
             end
     end.
+
+notify_connection_effect(Pid) ->
+    mod_call_effect(Pid, {sac, check_connection, #{}}).
 
 notify_consumer_effect(Pid, SubId, Stream, Name, Active) ->
     notify_consumer_effect(Pid, SubId, Stream, Name, Active, false).
@@ -670,28 +969,74 @@ has_consumers_from_pid(#group{consumers = Consumers}, Pid) ->
               end,
               Consumers).
 
-compute_active_consumer(#group{consumers = Crs,
-                               partition_index = -1} =
-                            Group)
+compute_active_consumer(#group{partition_index = -1,
+                               consumers = Crs} = Group)
     when length(Crs) == 0 ->
     Group;
 compute_active_consumer(#group{partition_index = -1,
-                               consumers = [Consumer0]} =
-                            Group0) ->
-    Consumer1 = Consumer0#consumer{active = true},
-    Group0#group{consumers = [Consumer1]};
-compute_active_consumer(#group{partition_index = -1,
-                               consumers = [Consumer0 | T]} =
-                            Group0) ->
-    Consumer1 = Consumer0#consumer{active = true},
-    Consumers = lists:map(fun(C) -> C#consumer{active = false} end, T),
-    Group0#group{consumers = [Consumer1] ++ Consumers}.
+                               consumers = Consumers} = G) ->
+    case lists:search(fun(#consumer{status = S}) ->
+                              S =:= {?DISCONNECTED, ?ACTIVE}
+                      end, Consumers) of
+        {value, _DisconnectedActive} ->
+            G;
+        false ->
+            case evaluate_active_consumer(G) of
+                undefined ->
+                    ok;
+                #consumer{pid = Pid, subscription_id = SubId} ->
+                    Consumers1 =
+                        lists:foldr(
+                          fun(#consumer{pid = P, subscription_id = SID} = C, L)
+                                when P =:= Pid andalso SID =:= SubId ->
+                                  %% change status of new active
+                                  [C#consumer{status = ?CONN_ACT} | L];
+                             (#consumer{status = {?CONNECTED, _}} = C, L) ->
+                                  %% other connected consumers are set to "waiting"
+                                  [C#consumer{status = ?CONN_WAIT} | L];
+                             (C, L) ->
+                                  %% other consumers stay the same
+                                  [C | L]
+                          end, [], Consumers),
+                    G#group{consumers = Consumers1}
+            end
+    end.
 
-evaluate_active_consumer(#group{partition_index = PartitionIndex,
+evaluate_active_consumer(#group{consumers = Consumers})
+    when length(Consumers) == 0 ->
+    undefined;
+evaluate_active_consumer(#group{consumers = Consumers} = G) ->
+    case lists:search(fun(#consumer{status = S}) ->
+                              S =:= ?DISCONN_ACT
+                      end, Consumers) of
+        {value, C} ->
+            C;
+        _ ->
+            do_evaluate_active_consumer(G#group{consumers = eligible(Consumers)})
+    end.
+
+do_evaluate_active_consumer(#group{partition_index = -1,
                                 consumers = Consumers})
+    when length(Consumers) == 0 ->
+    undefined;
+do_evaluate_active_consumer(#group{partition_index = -1,
+                                consumers = [Consumer]}) ->
+    Consumer;
+do_evaluate_active_consumer(#group{partition_index = -1,
+                                consumers = [Consumer | _]}) ->
+    Consumer;
+do_evaluate_active_consumer(#group{partition_index = PartitionIndex,
+                                   consumers = Consumers})
     when PartitionIndex >= 0 ->
     ActiveConsumerIndex = PartitionIndex rem length(Consumers),
     lists:nth(ActiveConsumerIndex + 1, Consumers).
+
+eligible(Consumers) ->
+    lists:filter(fun(#consumer{status = {?CONNECTED, _}}) ->
+                         true;
+                    (_) ->
+                         false
+                 end, Consumers).
 
 lookup_consumer(ConnectionPid, SubscriptionId,
                 #group{consumers = Consumers}) ->
@@ -701,7 +1046,7 @@ lookup_consumer(ConnectionPid, SubscriptionId,
                  Consumers).
 
 lookup_active_consumer(#group{consumers = Consumers}) ->
-    lists:search(fun(#consumer{active = Active}) -> Active end,
+    lists:search(fun(#consumer{status = Status}) -> is_active(Status) end,
                  Consumers).
 
 update_groups(_VirtualHost,
@@ -727,16 +1072,24 @@ update_groups(VirtualHost,
 update_consumer_state_in_group(#group{consumers = Consumers0} = G,
                                Pid,
                                SubId,
-                               NewState) ->
+                               NewStatus) ->
     CS1 = lists:map(fun(C0) ->
                        case C0 of
                            #consumer{pid = Pid, subscription_id = SubId} ->
-                               C0#consumer{active = NewState};
+                               C0#consumer{status = NewStatus};
                            C -> C
                        end
                     end,
                     Consumers0),
     G#group{consumers = CS1}.
+
+update_connected_consumers(#group{consumers = Consumers0} = G, NewStatus) ->
+    Consumers1 = lists:map(fun(#consumer{status = {?CONNECTED, _}} = C) ->
+                                   C#consumer{status = NewStatus};
+                              (C) ->
+                                   C
+                           end, Consumers0),
+    G#group{consumers = Consumers1}.
 
 mod_call_effect(Pid, Msg) ->
     {mod_call, rabbit_stream_sac_coordinator, send_message, [Pid, Msg]}.
@@ -745,3 +1098,33 @@ mod_call_effect(Pid, Msg) ->
 send_message(ConnectionPid, Msg) ->
     ConnectionPid ! Msg,
     ok.
+
+same_consumer(#consumer{pid = Pid, subscription_id = SubId},
+              #consumer{pid = Pid, subscription_id = SubId}) ->
+    true;
+same_consumer(_, _) ->
+    false.
+
+-spec compute_pid_group_dependencies(groups()) -> pids_groups().
+compute_pid_group_dependencies(Groups) ->
+    maps:fold(fun(K, #group{consumers = Cs}, Acc) ->
+                      lists:foldl(fun(#consumer{pid = Pid}, AccIn) ->
+                                          PG0 = maps:get(Pid, AccIn, #{}),
+                                          PG1 = PG0#{K => true},
+                                          AccIn#{Pid => PG1}
+                                  end, Acc, Cs)
+              end, #{}, Groups).
+
+-spec compute_node_pid_group_dependencies(node(), groups()) -> pids_groups().
+compute_node_pid_group_dependencies(Node, Groups) ->
+    maps:fold(fun(K, #group{consumers = Consumers}, Acc) ->
+                      lists:foldl(fun(#consumer{pid = Pid}, AccIn)
+                                        when node(Pid) =:= Node ->
+                                          PG0 = maps:get(Pid, AccIn, #{}),
+                                          PG1 = PG0#{K => true},
+                                          AccIn#{Pid => PG1};
+                                     (_, AccIn) ->
+                                          AccIn
+                                  end, Acc, Consumers)
+              end, #{}, Groups).
+
