@@ -79,7 +79,7 @@ trace_large_message(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 max_packet_size_unauthenticated(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 max_packet_size_authenticated(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 default_queue_type(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
-incoming_message_interceptors(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+message_interceptors(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 utf8(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 retained_message_conversion(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 bind_exchange_to_exchange(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).

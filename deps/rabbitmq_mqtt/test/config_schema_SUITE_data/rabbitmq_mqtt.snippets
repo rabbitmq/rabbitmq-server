@@ -171,5 +171,22 @@
   "mqtt.topic_alias_maximum = 0",
   [{rabbitmq_mqtt,[
       {topic_alias_maximum, 0}]}],
-   [rabbitmq_mqtt]}
+   [rabbitmq_mqtt]},
+
+  {message_interceptor_enabled,
+   "mqtt.message_interceptors.incoming.set_client_id_annotation.enabled = true",
+   [{rabbitmq_mqtt, [
+      {message_interceptors, [
+        {rabbit_mqtt_msg_interceptor_client_id, #{}}
+      ]}
+     ]}],
+   []},
+
+  {message_interceptor_disabled,
+   "mqtt.message_interceptors.incoming.set_client_id_annotation.enabled = false",
+   [{rabbitmq_mqtt, [
+      {message_interceptors, []}
+     ]}],
+   []}
+
 ].

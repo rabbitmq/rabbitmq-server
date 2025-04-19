@@ -35,7 +35,8 @@ start(normal, []) ->
     Result.
 
 stop(_) ->
-    rabbit_mqtt_sup:stop_listeners().
+    rabbit_mqtt_sup:stop_listeners(),
+    rabbit_msg_interceptor:remove(mqtt_message_interceptors()).
 
 -spec emit_connection_info_all([node()], rabbit_types:info_keys(), reference(), pid()) -> term().
 emit_connection_info_all(Nodes, Items, Ref, AggregatorPid) ->
@@ -115,9 +116,14 @@ persist_static_configuration() ->
     assert_valid_max_packet_size(MaxSizeAuth),
     {ok, MaxMsgSize} = application:get_env(rabbit, max_message_size),
     ?assert(MaxSizeAuth =< MaxMsgSize),
-    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth).
+    ok = persistent_term:put(?PERSISTENT_TERM_MAX_PACKET_SIZE_AUTHENTICATED, MaxSizeAuth),
+
+    ok = rabbit_msg_interceptor:add(mqtt_message_interceptors()).
 
 assert_valid_max_packet_size(Val) ->
     ?assert(is_integer(Val) andalso
             Val > 0 andalso
             Val =< ?MAX_PACKET_SIZE).
+
+mqtt_message_interceptors() ->
+    application:get_env(?APP_NAME, message_interceptors, []).

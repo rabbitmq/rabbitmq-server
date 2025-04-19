@@ -110,7 +110,8 @@
           authz_context,
           max_consumers,  % taken from rabbit.consumer_max_per_channel
           %% defines how ofter gc will be executed
-          writer_gc_threshold
+          writer_gc_threshold,
+          msg_interceptor_ctx :: rabbit_msg_interceptor:context()
          }).
 
 -record(pending_ack, {
@@ -492,6 +493,10 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
     OptionalVariables = extract_variable_map_from_amqp_params(AmqpParams),
     {ok, GCThreshold} = application:get_env(rabbit, writer_gc_threshold),
     MaxConsumers = application:get_env(rabbit, consumer_max_per_channel, infinity),
+    MsgIcptCtx = #{protocol => amqp091,
+                   vhost => VHost,
+                   username => User#user.username,
+                   connection_name => ConnName},
     State = #ch{cfg = #conf{state = starting,
                             protocol = Protocol,
                             channel = Channel,
@@ -509,8 +514,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                             consumer_timeout = ConsumerTimeout,
                             authz_context = OptionalVariables,
                             max_consumers = MaxConsumers,
-                            writer_gc_threshold = GCThreshold
-                           },
+                            writer_gc_threshold = GCThreshold,
+                            msg_interceptor_ctx = MsgIcptCtx},
                 limiter = Limiter,
                 tx                      = none,
                 next_tag                = 1,
@@ -657,13 +662,14 @@ handle_cast({deliver_reply, _K, _Del},
     noreply(State);
 handle_cast({deliver_reply, _K, _Msg}, State = #ch{reply_consumer = none}) ->
     noreply(State);
-handle_cast({deliver_reply, Key, Msg},
-            State = #ch{cfg = #conf{writer_pid = WriterPid},
+handle_cast({deliver_reply, Key, Mc},
+            State = #ch{cfg = #conf{writer_pid = WriterPid,
+                                    msg_interceptor_ctx = MsgIcptCtx},
                         next_tag = DeliveryTag,
                         reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
-    Content = mc:protocol_state(mc:convert(mc_amqpl, Msg)),
-    ExchName = mc:exchange(Msg),
-    [RoutingKey | _] = mc:routing_keys(Msg),
+    ExchName = mc:exchange(Mc),
+    [RoutingKey | _] = mc:routing_keys(Mc),
+    Content = outgoing_content(Mc, MsgIcptCtx),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.deliver'{consumer_tag = ConsumerTag,
@@ -813,6 +819,7 @@ get_consumer_timeout() ->
         _ ->
             undefined
     end.
+
 %%---------------------------------------------------------------------------
 
 reply(Reply, NewState) -> {reply, Reply, next_state(NewState), hibernate}.
@@ -1167,7 +1174,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
                                                 user = #user{username = Username} = User,
                                                 trace_state = TraceState,
                                                 authz_context = AuthzContext,
-                                                writer_gc_threshold = GCThreshold
+                                                writer_gc_threshold = GCThreshold,
+                                                msg_interceptor_ctx = MsgIcptCtx
                                                },
                                    tx               = Tx,
                                    confirm_enabled  = ConfirmEnabled,
@@ -1206,8 +1214,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
             check_write_permitted_on_topics(Exchange, User, Message0, AuthzContext),
-            Message = rabbit_message_interceptor:intercept(Message0),
-            check_user_id_header(Message, User),
+            check_user_id_header(Message0, User),
+            Message = rabbit_msg_interceptor:intercept_incoming(Message0, MsgIcptCtx),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
             [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
@@ -2592,15 +2600,15 @@ handle_deliver(CTag, Ack, Msgs, State) when is_list(Msgs) ->
                 end, State, Msgs).
 
 handle_deliver0(ConsumerTag, AckRequired,
-                {QName, QPid, _MsgId, Redelivered, MsgCont0} = Msg,
+                {QName, QPid, _MsgId, Redelivered, Mc} = Msg,
                State = #ch{cfg = #conf{writer_pid = WriterPid,
-                                       writer_gc_threshold = GCThreshold},
+                                       writer_gc_threshold = GCThreshold,
+                                       msg_interceptor_ctx = MsgIcptCtx},
                            next_tag   = DeliveryTag,
                            queue_states = Qs}) ->
-    Exchange = mc:exchange(MsgCont0),
-    [RoutingKey | _] = mc:routing_keys(MsgCont0),
-    MsgCont = mc:convert(mc_amqpl, MsgCont0),
-    Content = mc:protocol_state(MsgCont),
+    Exchange = mc:exchange(Mc),
+    [RoutingKey | _] = mc:routing_keys(Mc),
+    Content = outgoing_content(Mc, MsgIcptCtx),
     Deliver = #'basic.deliver'{consumer_tag = ConsumerTag,
                                delivery_tag = DeliveryTag,
                                redelivered  = Redelivered,
@@ -2621,12 +2629,11 @@ handle_deliver0(ConsumerTag, AckRequired,
     record_sent(deliver, QueueType, ConsumerTag, AckRequired, Msg, State).
 
 handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
-                 Msg0 = {_QName, _QPid, _MsgId, Redelivered, MsgCont0},
+                 Msg0 = {_QName, _QPid, _MsgId, Redelivered, Mc},
                  QueueType, State) ->
-    Exchange = mc:exchange(MsgCont0),
-    [RoutingKey | _] = mc:routing_keys(MsgCont0),
-    MsgCont = mc:convert(mc_amqpl, MsgCont0),
-    Content = mc:protocol_state(MsgCont),
+    Exchange = mc:exchange(Mc),
+    [RoutingKey | _] = mc:routing_keys(Mc),
+    Content = outgoing_content(Mc, State#ch.cfg#conf.msg_interceptor_ctx),
     ok = rabbit_writer:send_command(
            WriterPid,
            #'basic.get_ok'{delivery_tag  = DeliveryTag,
@@ -2636,6 +2643,11 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
                            message_count = MessageCount},
            Content),
     {noreply, record_sent(get, QueueType, DeliveryTag, not(NoAck), Msg0, State)}.
+
+outgoing_content(Mc, MsgIcptCtx) ->
+    Mc1 = mc:convert(mc_amqpl, Mc),
+    Mc2 = rabbit_msg_interceptor:intercept_outgoing(Mc1, MsgIcptCtx),
+    mc:protocol_state(Mc2).
 
 init_tick_timer(State = #ch{tick_timer = undefined}) ->
     {ok, Interval} = application:get_env(rabbit, channel_tick_interval),

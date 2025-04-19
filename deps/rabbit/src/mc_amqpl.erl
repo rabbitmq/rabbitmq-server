@@ -462,7 +462,6 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
                                                 priority = Priority0,
                                                 delivery_mode = DeliveryMode0} = B0} = C,
                Anns) ->
-    %% Add any x- annotations as headers
     H0 = case H00 of
              undefined -> [];
              _ ->
@@ -474,6 +473,7 @@ protocol_state(#content{properties = #'P_basic'{headers = H00,
                    _ ->
                        H0
                end,
+    %% Add any x- annotations as headers
     Headers1 = maps:fold(
                  fun (<<"x-", _/binary>> = Key, Val, H) when is_integer(Val) ->
                          [{Key, long, Val} | H];
