@@ -5,7 +5,7 @@ for RabbitMQ for basic authentication for only (loopback) localhost connections.
 
 ## Installation
 
-As of 4.1.0, this plugin is distributed with RabbitMQ. Enable it with
+As of 4.1.1, this plugin is distributed with RabbitMQ. Enable it with
 
     rabbitmq-plugins enable rabbitmq_auth_backend_internal_loopback
 

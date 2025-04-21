@@ -46,11 +46,6 @@
 
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
 
--ifdef(TEST).
--export([extract_user_permission_params/2,
-         extract_topic_permission_params/2]).
--endif.
-
 -import(rabbit_data_coercion, [to_atom/1, to_list/1, to_binary/1]).
 
 %%----------------------------------------------------------------------------
