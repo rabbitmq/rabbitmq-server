@@ -2645,8 +2645,8 @@ handle_basic_get(WriterPid, DeliveryTag, NoAck, MessageCount,
     {noreply, record_sent(get, QueueType, DeliveryTag, not(NoAck), Msg0, State)}.
 
 outgoing_content(Mc, MsgIcptCtx) ->
-    Mc1 = mc:convert(mc_amqpl, Mc),
-    Mc2 = rabbit_msg_interceptor:intercept_outgoing(Mc1, MsgIcptCtx),
+    Mc1 = rabbit_msg_interceptor:intercept_outgoing(Mc, MsgIcptCtx),
+    Mc2 = mc:convert(mc_amqpl, Mc1),
     mc:protocol_state(Mc2).
 
 init_tick_timer(State = #ch{tick_timer = undefined}) ->

@@ -2073,15 +2073,15 @@ deliver_to_client(Msgs, Ack, State) ->
                         deliver_one_to_client(Msg, Ack, S)
                 end, State, Msgs).
 
-deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc} = Delivery,
+deliver_one_to_client({QNameOrType, QPid, QMsgId, _Redelivered, Mc0} = Delivery,
                       AckRequired,
                       #state{cfg = #cfg{msg_interceptor_ctx = MsgIcptCtx}} = State0) ->
     SubscriberQoS = case AckRequired of
                         true -> ?QOS_1;
                         false -> ?QOS_0
                     end,
-    McMqtt0 = mc:convert(mc_mqtt, Mc, mc_env()),
-    McMqtt = rabbit_msg_interceptor:intercept_outgoing(McMqtt0, MsgIcptCtx),
+    Mc = rabbit_msg_interceptor:intercept_outgoing(Mc0, MsgIcptCtx),
+    McMqtt = mc:convert(mc_mqtt, Mc, mc_env()),
     MqttMsg = #mqtt_msg{qos = PublisherQos} = mc:protocol_state(McMqtt),
     QoS = effective_qos(PublisherQos, SubscriberQoS),
     {SettleOp, State1} = maybe_publish_to_client(MqttMsg, Delivery, QoS, State0),
