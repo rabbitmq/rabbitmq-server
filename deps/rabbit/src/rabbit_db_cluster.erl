@@ -279,7 +279,7 @@ forget_member_using_khepri(_Node, true) ->
        #{domain => ?RMQLOG_DOMAIN_DB}),
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
-    rabbit_khepri:leave_cluster(Node).
+    rabbit_khepri:remove_member(Node).
 
 %% -------------------------------------------------------------------
 %% Cluster update.
