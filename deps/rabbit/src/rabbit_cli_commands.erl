@@ -7,7 +7,8 @@
 
 -export([argparse_def/0, run_command/1, do_run_command/1]).
 -export([cmd_list_exchanges/1,
-         cmd_import_definitions/1]).
+         cmd_import_definitions/1,
+         cmd_top/1]).
 
 -rabbitmq_command(
    {#{cli => ["declare", "exchange"],
@@ -37,6 +38,11 @@
     [argparse_def_file_input,
      #{help => "Import definitions",
        handler => {?MODULE, cmd_import_definitions}}]}).
+
+-rabbitmq_command(
+   {#{cli => ["top"]},
+    [#{help => "Top-like interactive view",
+       handler => {?MODULE, cmd_top}}]}).
 
 argparse_def() ->
     #{argparse_def := ArgparseDef} = get_discovered_commands(),
@@ -185,4 +191,25 @@ cmd_import_definitions(#{arg_map := ArgMap, io := IO}) ->
             ok;
         {error, _} = Error ->
             Error
+    end.
+
+cmd_top(#{io := IO} = Context) ->
+    Top = spawn_link(fun() -> run_top(IO) end),
+    wait_quit(Context, Top).
+
+run_top(IO) ->
+    receive
+        quit ->
+            ok
+    after 1000 ->
+              rabbit_cli_io:format(IO, "Refresh~n", []),
+              run_top(IO)
+    end.
+
+wait_quit(#{arg_map := _ArgMap, io := _IO}, Top) ->
+    receive
+        {keypress, _} ->
+            erlang:unlink(Top),
+            Top ! quit,
+            ok
     end.
