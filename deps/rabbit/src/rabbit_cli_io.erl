@@ -12,6 +12,7 @@
          start_record_stream/4,
          push_new_record/3,
          end_record_stream/2,
+         send_keyboard_input/3,
          read_file/2]).
 -export([init/1,
          handle_call/3,
@@ -21,7 +22,9 @@
          code_change/3]).
 
 -record(?MODULE, {progname,
-                  record_streams = #{}}).
+                  record_streams = #{},
+                  kbd_reader = undefined,
+                  kbd_subscribers = []}).
 
 start_link(Progname) ->
     gen_server:start_link(rabbit_cli_io, #{progname => Progname}, []).
@@ -92,6 +95,14 @@ end_record_stream({transport, Transport}, #{name := Name}) ->
 end_record_stream(IO, #{name := Name}) ->
     gen_server:cast(IO, {?FUNCTION_NAME, Name}).
 
+send_keyboard_input({transport, Transport}, ArgMap, Subscriber) ->
+    Transport ! {io_call, self(), {?FUNCTION_NAME, ArgMap, Subscriber}},
+    receive Ret -> Ret end;
+send_keyboard_input(IO, ArgMap, Subscriber)
+  when is_pid(IO) andalso
+       is_map(ArgMap) ->
+    gen_server:call(IO, {?FUNCTION_NAME, ArgMap, Subscriber}).
+
 read_file({transport, Transport}, ArgMap) ->
     Transport ! {io_call, self(), {?FUNCTION_NAME, ArgMap}},
     receive Ret -> Ret end;
@@ -116,14 +127,21 @@ handle_call(
 
     {ok, State2} = format_record_stream_start(Name, State1),
 
-    {noreply, State2};
+    {noreply, State2, compute_timeout(State2)};
+handle_call(
+  {send_keyboard_input, _ArgMap, Subscriber},
+  _From,
+  #?MODULE{kbd_subscribers = Subscribers} = State) ->
+    Subscribers1 = [Subscriber | Subscribers],
+    State1 = State#?MODULE{kbd_subscribers = Subscribers1},
+    {reply, ok, State1, compute_timeout(State1)};
 handle_call({read_file, ArgMap}, From, State) ->
     {ok, State1} = do_read_file(ArgMap, From, State),
-    {noreply, State1};
+    {noreply, State1, compute_timeout(State1)};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    {reply, ok, State, compute_timeout(State)}.
 
 handle_cast(
   {display_help, #{cmd_path := CmdPath, argparse_def := ArgparseDef}},
@@ -134,27 +152,50 @@ handle_cast(
                 command => tl(CmdPath)},
     Help = argparse:help(ArgparseDef, Options),
     io:format("~s~n", [Help]),
-    {noreply, State};
+    {noreply, State, compute_timeout(State)};
 handle_cast({format, Format, Args}, State) ->
     io:format(Format, Args),
-    {noreply, State};
+    {noreply, State, compute_timeout(State)};
 handle_cast({push_new_record, Name, Record}, State) ->
     {ok, State1} = format_record(Name, Record, State),
-    {noreply, State1};
+    {noreply, State1, compute_timeout(State1)};
 handle_cast({end_record_stream, Name}, State) ->
     {ok, State1} = format_record_stream_end(Name, State),
-    {noreply, State1};
+    {noreply, State1, compute_timeout(State1)};
 handle_cast(_Request, State) ->
-    {noreply, State}.
+    {noreply, State, compute_timeout(State)}.
 
+handle_info(timeout, #?MODULE{kbd_reader = Reader} = State)
+  when is_pid(Reader) ->
+    {noreply, State};
+handle_info(timeout, #?MODULE{kbd_subscribers = []} = State) ->
+    {noreply, State};
+handle_info(timeout, #?MODULE{kbd_subscribers = Subscribers} = State) ->
+    Parent = self(),
+    Reader = spawn_link(
+               fun() ->
+                       Ret = io:read(""),
+                       lists:foreach(
+                         fun(Sub) ->
+                                 Sub ! {keypress, Ret}
+                         end, Subscribers),
+                       erlang:unlink(Parent)
+               end, Subscribers),
+    State1 = State#?MODULE{kbd_reader = Reader},
+    {noreply, State1, compute_timeout(State1)};
 handle_info(_Info, State) ->
-    {noreply, State}.
+    {noreply, State, compute_timeout(State)}.
 
 terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+compute_timeout(#?MODULE{kbd_subscribers = []}) ->
+    infinity;
+compute_timeout(#?MODULE{kbd_subscribers = _}) ->
+    0.
 
 format_record_stream_start(
   Name,
