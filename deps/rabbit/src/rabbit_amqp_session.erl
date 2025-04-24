@@ -3200,7 +3200,9 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
             %% 0.9.1 uses second based timestamps
             Arg = {<<"x-stream-offset">>, timestamp, Ts div 1000},
             {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
-        {utf8, Spec} ->
+        {Type, Spec}
+          when Type =:= utf8 orelse
+               Type =:= symbol ->
             %% next, last, first and "10m" etc
             Arg = {<<"x-stream-offset">>, longstr, Spec},
             {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
@@ -3242,6 +3244,12 @@ parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, Acc)
         false ->
             Acc
     end;
+parse_filters(Filter = {{symbol, ?FILTER_NAME_JMS}, {described, Descriptor, {utf8, JmsSelector}}},
+              {EffectiveFilters, ConsumerFilter, ConsumerArgs})
+  when Descriptor =:= {symbol, ?DESCRIPTOR_NAME_SELECTOR_FILTER} orelse
+       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER} ->
+    Arg = {<<"x-jms-selector">>, longstr, JmsSelector},
+    {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
 parse_filters(Filter = {{symbol, _Key}, Value},
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case rabbit_amqp_filtex:validate(Value) of

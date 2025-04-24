@@ -21,11 +21,6 @@
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
-%% These shorthands for section qualifiers are defined in filtex-v1.0-wd09 §6.4.4.4
--define(HEADER_SECTION, h).
--define(MESSAGE_ANNOTATIONS_SECTION, m).
--define(PROPERTIES_SECTION, p).
--define(APPLICATION_PROPERTIES_SECTION, a).
 
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
@@ -44,25 +39,16 @@
 %% in enqueue messages. Used to ensure ordering of messages send from the
 %% same process
 
--type msg_section() ::
-header |
-message_annotations |
-properties |
-application_properties.
+-type consumer_filter() :: none |
+                           {property, rabbit_amqp_filter:filter_expressions()} |
+                           {jms, ParsedSelector :: term()}.
 
-%% AMQP §3.2
--type msg_section_short() ::
-?HEADER_SECTION |
-?MESSAGE_ANNOTATIONS_SECTION |
-?PROPERTIES_SECTION |
-?APPLICATION_PROPERTIES_SECTION.
-
--type field_name() :: atom() | binary().
-
--type filter_fields() :: [{msg_section(), field_name()}].
+-type filter_field() :: atom() | binary().
+-type filter_fields() :: [filter_field()].
+-type simple_type() :: atom() | binary() | number().
 
 %% Message metadata held in memory for consumers to filter on.
--type msg_metadata() :: [{msg_section_short(), field_name(), term()}].
+-type msg_metadata() :: #{filter_field() => simple_type()}.
 
 -type msg_header() :: msg_size() |
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
@@ -119,7 +105,8 @@ application_properties.
                            username => binary(),
                            prefetch => non_neg_integer(),
                            args => list(),
-                           priority => non_neg_integer()
+                           priority => non_neg_integer(),
+                           filter => consumer_filter()
                           }.
 %% static meta data associated with a consumer
 
@@ -160,7 +147,7 @@ application_properties.
          credit_mode :: credited | credit_mode(),
          lifetime = once :: once | auto,
          priority = 0 :: integer(),
-         filter = [] :: rabbit_amqp_filtex:filter_expressions()
+         filter = none :: consumer_filter()
         }).
 
 -record(consumer,
@@ -214,12 +201,6 @@ application_properties.
          expires :: option(milliseconds()),
          msg_ttl :: option(milliseconds()),
          filter_enabled :: boolean(),
-         %% TODO Probably no need to store this filter here.
-         %% It should be good enough to store the 0.9.1 queue args filter table
-         %% in Khepri and to validate the consumer filter against this queue
-         %% filter in rabbit_quorum_queue when attaching the consumer.
-         %% Maybe still useful to expose effective filters in the Management UI?
-         filter_fields :: filter_fields(),
          unused_2 = ?NIL,
          unused_3 = ?NIL
         }).
@@ -286,7 +267,7 @@ application_properties.
                     max_bytes_meta => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
-                    filter => false | filter_fields(),
+                    filter => filter_fields(),
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),

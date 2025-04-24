@@ -8,7 +8,7 @@
 
 -behaviour(gen_statem).
 
--include("amqp10_client.hrl").
+-include("amqp10_client_internal.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -ifdef(TEST).

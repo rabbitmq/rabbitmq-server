@@ -10,6 +10,7 @@
 -module(amqp_filtex_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_filtex.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
@@ -148,8 +149,10 @@ properties_section(Config) ->
                     {{symbol, <<"group-sequence">>}, {uint, 16#ff_ff_ff_ff}},
                     {{symbol, <<"reply-to-group-id">>}, {utf8, <<"other group ID">>}}
                    ],
-    Filter1 = #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
-                ?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter1}},
+    Filter1 = #{<<"from start">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
+                                            value = {symbol, <<"first">>}},
+                <<"props">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
+                                       value = {map, PropsFilter1}}},
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, Address,
                         settled, configuration, Filter1),

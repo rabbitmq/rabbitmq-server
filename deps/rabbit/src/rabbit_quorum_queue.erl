@@ -208,7 +208,7 @@ init(Q) when ?is_amqqueue(Q) ->
     %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
+    {ok, rabbit_fifo_client:init(Servers, SoftLimit, filter_fields(Q))}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(_State) ->
@@ -371,7 +371,7 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
       queue_resource => QName,
       become_leader_handler => {?MODULE, become_leader, [QName]},
       single_active_consumer_on => single_active_consumer_on(Q),
-      filter => queue_filter(Q),
+      filter => filter_fields(Q),
       created => erlang:system_time(millisecond)
      }.
 
@@ -394,41 +394,119 @@ single_active_consumer_on(Q) ->
         _            -> false
     end.
 
-%%TODO Allow defining any property or application-property and also a way
-%% to define "all properties" or "all application-properties"
-queue_filter(Q) ->
-    QArguments = amqqueue:get_arguments(Q),
-    case rabbit_misc:table_lookup(QArguments, <<"x-filter">>) of
-        {table, Filters} ->
-            case lists:filtermap(
-                   fun({<<"properties">>, _Type, <<"group-id">>}) ->
-                           {true, {properties, group_id}};
-                      (_) ->
-                           false
-                   end, Filters) of
-                [] ->
-                    false;
-                L ->
-                    L
-            end;
-        _ ->
-            false
+consumer_filter(Spec, Args, Q) ->
+    FilterSpec = maps:get(filter, Spec, []),
+    JmsSelector = case rabbit_misc:table_lookup(Args, <<"x-jms-selector">>) of
+                      undefined -> undefined;
+                      {longstr, Selector} -> Selector
+                  end,
+    FilterSpecDefined = FilterSpec =/= [],
+    JmsSelectorDefined = JmsSelector =/= undefined,
+    case {FilterSpecDefined, JmsSelectorDefined} of
+        {false, false} ->
+            {ok, none};
+        {true, true} ->
+            %% AMQP filter expressions and JMS message selectors are mutually exclusive
+            error;
+        {true, false} ->
+            consumer_filter_from_filtex(FilterSpec, Q);
+        {false, true} ->
+            consumer_filter_from_jms_selector(JmsSelector, Q)
     end.
 
-%% TODO Allow more consumer filters.
-%% Error out if the consumer defines a filter which is not allowed on the queue.
-consumer_filter([], _Q) ->
-    {ok, []};
-consumer_filter(Filter = [{properties = Section, [{group_id = Field, _}]}], Q) ->
-    QFilter = queue_filter(Q),
-    case lists:member({Section, Field}, QFilter) of
+consumer_filter_from_filtex([_|_] = Filter, Q) ->
+    QFilterFields = filter_fields(Q),
+    case lists:all(fun({_Section, Props}) ->
+                           lists:all(fun({Field, _Expr}) ->
+                                             lists:member(Field, QFilterFields)
+                                     end, Props)
+                   end, Filter) of
         true ->
-            {ok, Filter};
+            {ok, {property, Filter}};
         false ->
+            rabbit_log:warning(
+              "invalid AMQP property filter for quorum ~ts with filter fields ~tp: ~tp",
+              [rabbit_misc:rs(amqqueue:get_name(Q)), QFilterFields, Filter]),
             error
-    end;
-consumer_filter(_InvalidFilter, _Q) ->
-    error.
+    end.
+
+consumer_filter_from_jms_selector(JmsSelector, Q) ->
+    QFilterFields = filter_fields(Q),
+    case parse_jms_selector(JmsSelector) of
+        {ok, Expr} ->
+            %%TODO
+            %% * map JMS fields to AMQP fields
+            %% * validate that the quorum queue is configured to filter on these fields
+            %% => traverse identifiers in the tree
+            {ok, {jms, Expr}};
+        error ->
+            error
+    end.
+
+parse_jms_selector(JmsSelector) ->
+    String = unicode:characters_to_list(JmsSelector),
+    case rabbit_jms_selector_lexer:string(String) of
+        {ok, Tokens, _EndLocation} ->
+            case rabbit_jms_selector_parser:parse(Tokens) of
+                {ok, _Expr} = Ok ->
+                    % rabbit_log:debug("~s:~s~nJmsSelector: ~p~nTokens: ~p~nExpr: ~p",
+                    %                  [?MODULE, ?FUNCTION_NAME, JmsSelector, Tokens, _Expr]),
+                    Ok;
+                {error, Reason} ->
+                    rabbit_log:warning("failed to parse JMS Selector '~s': ~p",
+                                       [JmsSelector, Reason]),
+                    error
+            end;
+        {error, {_Line, _Mod, ErrDescriptor}, _Locaction} ->
+            Reason = lists:flatten(leex:format_error(ErrDescriptor)),
+            rabbit_log:warning("failed to scan JMS selector '~s': ~p",
+                               [JmsSelector, Reason]),
+            error
+    end.
+
+%%TODO Allow a way to define "all headers", "all properties", and/or "all application-properties"?
+filter_fields(Q) ->
+    QArgs = amqqueue:get_arguments(Q),
+    %% well known field names of header section and properties section
+    L = case rabbit_misc:table_lookup(QArgs, <<"x-filter-field-names">>) of
+            {array, Array0} ->
+                lists:map(fun({longstr, FieldName}) ->
+                                  amqp_field_name_to_atom(FieldName)
+                          end, Array0);
+            _ ->
+                []
+        end,
+    %% arbitrary keys of application-properties section
+    case rabbit_misc:table_lookup(QArgs, <<"x-filter-keys">>) of
+        {array, Array1} ->
+            Fs = lists:map(fun({longstr, Key}) ->
+                                   Key
+                           end, Array1),
+            L ++ Fs;
+        _ ->
+            L
+    end.
+
+%% header section
+amqp_field_name_to_atom(<<"durable">>) -> durable;
+amqp_field_name_to_atom(<<"priority">>) -> priority;
+amqp_field_name_to_atom(<<"ttl">>) -> ttl;
+amqp_field_name_to_atom(<<"first-acquirer">>) -> first_acquirer;
+amqp_field_name_to_atom(<<"delivery-count">>) -> delivery_count;
+%% properties section
+amqp_field_name_to_atom(<<"message-id">>) -> message_id;
+amqp_field_name_to_atom(<<"user-id">>) -> user_id;
+amqp_field_name_to_atom(<<"to">>) -> to;
+amqp_field_name_to_atom(<<"subject">>) -> subject;
+amqp_field_name_to_atom(<<"reply-to">>) -> reply_to;
+amqp_field_name_to_atom(<<"correlation-id">>) -> correlation_id;
+amqp_field_name_to_atom(<<"content-type">>) -> content_type;
+amqp_field_name_to_atom(<<"content-encoding">>) -> content_encoding;
+amqp_field_name_to_atom(<<"absolute-expiry-time">>) -> absolute_expiry_time;
+amqp_field_name_to_atom(<<"creation-time">>) -> creation_time;
+amqp_field_name_to_atom(<<"group-id">>) -> group_id;
+amqp_field_name_to_atom(<<"group-sequence">>) -> group_sequence;
+amqp_field_name_to_atom(<<"reply-to-group-id">>) -> reply_to_group_id.
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
                         Prefetch, Active, ActivityStatus, Args) ->
@@ -578,7 +656,7 @@ capabilities() ->
                           <<"x-single-active-consumer">>, <<"x-queue-type">>,
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
                           <<"x-message-ttl">>, <<"x-queue-leader-locator">>,
-                          <<"x-filter">>
+                          <<"x-filter-field-names">>, <<"x-filter-keys">>
                          ],
       consumer_arguments => [<<"x-priority">>],
       server_named => false}.
@@ -1043,12 +1121,11 @@ consume(Q, Spec, QState0) when ?amqqueue_is_quorum(Q) ->
                    _ ->
                        0
                end,
-    FilterSpec = maps:get(filter, Spec, []),
-    case consumer_filter(FilterSpec, Q) of
+    case consumer_filter(Spec, Args, Q) of
         error ->
             {error, precondition_failed,
-             "invalid filter consuming from quorum ~ts: ~tp",
-             [rabbit_misc:rs(QName), FilterSpec]};
+             "invalid filter for quorum ~ts: consumer spec: ~tp consumer args: ~tp",
+             [rabbit_misc:rs(QName), Spec, Args]};
         {ok, Filter} ->
             ConsumerMeta = #{ack => AckRequired,
                              prefetch => Prefetch,
