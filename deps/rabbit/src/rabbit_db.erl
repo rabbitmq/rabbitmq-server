@@ -328,7 +328,7 @@ list_in_khepri(Path) ->
       Objects :: [term()].
 
 list_in_khepri(Path, Options) ->
-    case rabbit_khepri:match(Path, Options) of
+    case rabbit_khepri:get_many(Path, Options) of
         {ok, Map} -> maps:values(Map);
         _         -> []
     end.

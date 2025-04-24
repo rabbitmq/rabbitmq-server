@@ -265,6 +265,6 @@ child_id_format(Config) ->
             ?assertMatch(
                {ok, #{Path := _}},
                rabbit_ct_broker_helpers:rpc(
-                 Config, NewNode, rabbit_khepri, list,
-                 [Pattern]))
+                 Config, NewNode, rabbit_khepri, get_many,
+                 [Pattern ++ [?KHEPRI_WILDCARD_STAR]]))
     end.

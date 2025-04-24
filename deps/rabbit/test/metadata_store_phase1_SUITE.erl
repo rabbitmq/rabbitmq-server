@@ -272,7 +272,7 @@ end_per_testcase(Testcase, Config) ->
       TableDefs),
 
     %% Clear all data in Khepri.
-    ok = rabbit_khepri:clear_store(),
+    ok = rabbit_khepri:delete("*"),
 
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -2719,4 +2719,4 @@ check_storage(khepri, none, Content) ->
     rabbit_khepri:info(),
     Path = [#if_all{conditions = [?KHEPRI_WILDCARD_STAR_STAR,
                                   #if_has_data{}]}],
-    ?assertEqual({ok, Content}, rabbit_khepri:match(Path)).
+    ?assertEqual({ok, Content}, rabbit_khepri:get_many(Path)).
