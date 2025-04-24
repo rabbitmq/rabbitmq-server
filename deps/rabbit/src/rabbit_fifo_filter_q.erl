@@ -128,7 +128,7 @@ filter_msg0(RaTs, Filter, {Idx, Hdr = #{meta := Meta}, Iter}) ->
             %% Message expired.
             filter_msg0(RaTs, Filter, gb_trees:next(Iter));
         _ ->
-            case rabbit_fifo_filter:filter(Filter, Meta) of
+            case rabbit_fifo_filter:eval(Filter, Meta) of
                 true ->
                     ?MSG(Idx, Hdr);
                 false ->

@@ -14,6 +14,7 @@
 -export([
          init/1,
          init/2,
+         init/3,
          checkout/4,
          cancel_checkout/3,
          enqueue/3,
@@ -46,13 +47,12 @@
 
 -type seq() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
-
+-type filter_fields() :: [atom() | binary()].
 
 -record(consumer, {key :: rabbit_fifo:consumer_key(),
                    % status = up :: up | cancelled,
                    last_msg_id :: seq() | -1 | undefined,
                    ack = false :: boolean(),
-                   filter :: rabbit_amqp_filter:filter_expression(),
                    %% Remove this field when feature flag rabbitmq_4.0.0 becomes required.
                    delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} |
                                      credit_api_v2
@@ -60,7 +60,8 @@
 
 -record(cfg, {servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
-              timeout :: non_neg_integer()
+              timeout :: non_neg_integer(),
+              filter_fields :: filter_fields()
              }).
 
 -record(state, {cfg :: #cfg{},
@@ -101,10 +102,15 @@ init(Servers) ->
 %% @param MaxPending size defining the max number of pending commands.
 -spec init([ra:server_id()], non_neg_integer()) -> state().
 init(Servers, SoftLimit) ->
+    init(Servers, SoftLimit, []).
+
+-spec init([ra:server_id()], non_neg_integer(), filter_fields()) -> state().
+init(Servers, SoftLimit, FilterFields) ->
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
     #state{cfg = #cfg{servers = Servers,
                       soft_limit = SoftLimit,
-                      timeout = Timeout * 1000}}.
+                      timeout = Timeout * 1000,
+                      filter_fields = FilterFields}}.
 
 %% @doc Enqueues a message.
 %% @param QueueName Name of the queue.
@@ -163,16 +169,10 @@ enqueue(QName, Correlation, Msg,
                queue_status = go,
                next_seq = Seq,
                next_enqueue_seq = EnqueueSeq,
-               cfg = #cfg{soft_limit = SftLmt}} = State0) ->
+               cfg = #cfg{soft_limit = SftLmt,
+                          filter_fields = FilterFields}} = State0) ->
     ServerId = pick_server(State0),
-    % by default there is no correlation id
-    %% TODO Check which metadata this queue filters on.
-    {utf8, GroupId} = mc:property(group_id, Msg),
-    %% TODO rabbit_fifo should provide this shorthand.
-    %% Probably it's best if rabbit_fifo_filter provides some client API
-    %% to map the subset of metadata to filter on (set via queue args) to
-    %% how to extract this from mc and store this in e3{}.
-    MsgMeta = [{_ShorthandPropertiesSection = p, group_id, GroupId}],
+    MsgMeta = msg_meta(Msg, FilterFields),
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg, MsgMeta),
     ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
     IsSlow = map_size(Pending) >= SftLmt,
@@ -426,15 +426,12 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
                                 false -> {credit_api_v1, 0}
                             end,
             ConsumerKey = maps:get(key, Reply, ConsumerId),
-            Filter = maps:get(filter, Meta),
             SDels = maps:update_with(
                       ConsumerTag,
-                      fun (C) -> C#consumer{ack = Ack,
-                                            filter = Filter} end,
+                      fun (C) -> C#consumer{ack = Ack} end,
                       #consumer{key = ConsumerKey,
                                 last_msg_id = LastMsgId,
                                 ack = Ack,
-                                filter = Filter,
                                 delivery_count = DeliveryCount},
                       CDels0),
             {ok, Reply, State0#state{leader = Leader,
@@ -783,7 +780,8 @@ handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
 -spec untracked_enqueue([ra:server_id()], term()) ->
     ok.
 untracked_enqueue([ServerId | _], Msg) ->
-    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg),
+    Meta = #{}, %TODO include fields to filter on
+    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg, Meta),
     ok = ra:pipeline_command(ServerId, Cmd),
     ok.
 
@@ -1130,3 +1128,26 @@ send_pending(Cid, #state{unsent_commands = Unsent} = State0) ->
 
 now_ms() ->
     erlang:system_time(millisecond).
+
+msg_meta(_Msg, []) ->
+    #{};
+msg_meta(Msg, Fields) ->
+    %% TODO Support all header and properties.
+    %% TODO Query only routing_headers, if necessary.
+    Headers = mc:routing_headers(Msg, []),
+    L = lists:filtermap(fun(FieldName) when is_atom(FieldName) ->
+                                case mc:property(FieldName, Msg) of
+                                    {_Type, Val} ->
+                                        {true, {FieldName, Val}};
+                                    undefined ->
+                                        false
+                                end;
+                           (Key) when is_binary(Key) ->
+                                case Headers of
+                                    #{Key := Val} ->
+                                        {true, {Key, Val}};
+                                    _ ->
+                                        false
+                                end
+                        end, Fields),
+    maps:from_list(L).

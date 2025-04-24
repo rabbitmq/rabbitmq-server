@@ -228,12 +228,10 @@ update_config(Conf, State) ->
                            false ->
                                competing
                        end,
-    {FilterEnabled, FilterFields} = case maps:get(filter, Conf, false) of
-                                        false ->
-                                            {false, []};
-                                        [_|_] = Fields ->
-                                            {true, Fields}
-                                    end,
+    FilterEnabled = case maps:get(filter, Conf, []) of
+                        [] -> false;
+                        [_|_] -> true
+                    end,
     Cfg = State#?STATE.cfg,
 
     LastActive = maps:get(created, Conf, undefined),
@@ -246,8 +244,7 @@ update_config(Conf, State) ->
                                delivery_limit = DeliveryLimit,
                                expires = Expires,
                                msg_ttl = MsgTTL,
-                               filter_enabled = FilterEnabled,
-                               filter_fields = FilterFields},
+                               filter_enabled = FilterEnabled},
                  last_active = LastActive}.
 
 % msg_ids are scoped per consumer
@@ -2223,7 +2220,7 @@ filter_returns0(RaTs, Filter,
             %% Message expired.
             filter_returns0(RaTs, Filter, gb_trees:next(Iter));
         _ ->
-            case rabbit_fifo_filter:filter(Filter, Meta) of
+            case rabbit_fifo_filter:eval(Filter, Meta) of
                 true ->
                     {ReturnCount, Msg};
                 false ->
@@ -2649,7 +2646,7 @@ update_consumer(Meta, ConsumerKey, {Tag, Pid}, ConsumerMeta,
                    _ ->
                        Credit = included_credit(Mode),
                        DeliveryCount = initial_delivery_count(Mode),
-                       Filter = maps:get(filter, ConsumerMeta, []),
+                       Filter = maps:get(filter, ConsumerMeta, none),
                        #consumer{cfg = #consumer_cfg{tag = Tag,
                                                      pid = Pid,
                                                      lifetime = Life,

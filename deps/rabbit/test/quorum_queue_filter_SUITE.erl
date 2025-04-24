@@ -8,8 +8,9 @@
 -module(quorum_queue_filter_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_filtex.hrl").
--include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
 
 -compile([nowarn_export_all,
           export_all]).
@@ -28,20 +29,25 @@
 
 all() ->
     [
-     {group, cluster_size_1}
+     {group, property_filter_expression},
+     {group, jms_message_selector}
     ].
 
 groups() ->
     [
-     {cluster_size_1, [shuffle],
+     {property_filter_expression, [shuffle],
       [
-       message_groups_attach_empty_queue,
-       message_groups_attach_non_empty_queue,
-       message_groups_round_robin,
-       message_groups_requeue,
-       message_groups_same_filter,
-       ttl,
-       purge
+       property_message_groups_attach_empty_queue,
+       property_message_groups_attach_non_empty_queue,
+       property_message_groups_round_robin,
+       property_message_groups_requeue,
+       property_message_groups_same_filter,
+       property_ttl,
+       property_purge
+      ]},
+     {jms_message_selector, [shuffle],
+      [
+       jms_application_properties
       ]}
     ].
 
@@ -82,23 +88,24 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% Consumers attach to an empty queue and filter messages by group-id.
-message_groups_attach_empty_queue(Config) ->
+property_message_groups_attach_empty_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
     {_, Session, LinkPair} = Init = init(Config),
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(
-                  LinkPair,
-                  QName,
+                  LinkPair, QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {array, symbol,
+                                                                  [{symbol, <<"group-id">>}]}
                                   }}),
 
-    FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
-                  {map, [{{symbol, <<"group-id">>}, {utf8, <<"red">>}}]}},
-    FilterBlue = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
-                   {map, [{{symbol, <<"group-id">>}, {utf8, <<"blue">>}}]}},
+    FilterRed = #{<<"red filter">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
+                                              value = {map, [{{symbol, <<"group-id">>},
+                                                              {utf8, <<"red">>}}]}}},
+    FilterBlue = #{<<"blue filter">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
+                                                value = {map, [{{symbol, <<"group-id">>},
+                                                                {utf8, <<"blue">>}}]}}},
     {ok, ReceiverRed} = amqp10_client:attach_receiver_link(
                           Session, <<"receiver red">>, Address,
                           unsettled, none, FilterRed),
@@ -170,7 +177,7 @@ message_groups_attach_empty_queue(Config) ->
     ok = close(Init).
 
 %% Consumers attach to an non-empty queue and filter messages by group-id.
-message_groups_attach_non_empty_queue(Config) ->
+property_message_groups_attach_non_empty_queue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
@@ -179,8 +186,7 @@ message_groups_attach_non_empty_queue(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
@@ -257,7 +263,7 @@ message_groups_attach_non_empty_queue(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
 
-message_groups_round_robin(Config) ->
+property_message_groups_round_robin(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
@@ -266,8 +272,7 @@ message_groups_round_robin(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
     FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
@@ -332,7 +337,7 @@ message_groups_round_robin(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
 
-message_groups_requeue(Config) ->
+property_message_groups_requeue(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
@@ -341,8 +346,7 @@ message_groups_requeue(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
     FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
@@ -452,7 +456,7 @@ message_groups_requeue(Config) ->
     ok = close(Init).
 
 %% Attach two consumers with the same filter.
-message_groups_same_filter(Config) ->
+property_message_groups_same_filter(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
@@ -461,8 +465,7 @@ message_groups_same_filter(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
     FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
@@ -530,7 +533,7 @@ message_groups_same_filter(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
 
-ttl(Config) ->
+property_ttl(Config) ->
     SourceQ = <<"source quorum queue">>,
     DeadLetterQ = <<"dead letter queue">>,
     SourceQAddr = rabbitmq_amqp_address:queue(SourceQ),
@@ -542,8 +545,7 @@ ttl(Config) ->
                   LinkPair,
                   SourceQ,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]},
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]},
                                    <<"x-dead-letter-exchange">> => {utf8, <<>>},
                                    <<"x-dead-letter-routing-key">> => {utf8, DeadLetterQ}
                                   }}),
@@ -616,7 +618,7 @@ ttl(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, DeadLetterQ)),
     ok = close(Init).
 
-purge(Config) ->
+property_purge(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
     Address = rabbitmq_amqp_address:queue(QName),
 
@@ -625,8 +627,7 @@ purge(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter">> => {map, [{{symbol, <<"properties">>},
-                                                             {symbol, <<"group-id">>}}]}
+                                   <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
     FilterRed = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
@@ -683,5 +684,74 @@ purge(Config) ->
     ok = detach_link_sync(ReceiverRed),
     %% ready messages
     ?assertMatch({ok, #{message_count := 1}}, %% m3
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
+    ok = close(Init).
+
+%% Consumers filter messages by application-properties.
+jms_application_properties(Config) ->
+    QName = atom_to_binary(?FUNCTION_NAME),
+    Address = rabbitmq_amqp_address:queue(QName),
+
+    {_, Session, LinkPair} = Init = init(Config),
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(
+                  LinkPair, QName,
+                  #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-keys">> => {list, [{utf8, <<"color">>},
+                                                                  {utf8, <<"weight">>}]}
+                                  }}),
+
+    RedHeavy = #{<<"jms-selector">> => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+                                               value = {utf8, <<"color = 'red' AND weight > 10">>}}},
+    NotRed = #{<<"jms-selector">> => #filter{descriptor = ?DESCRIPTOR_NAME_SELECTOR_FILTER,
+                                             value = {utf8, <<"not color = 'red'">>}}},
+    {ok, R1} = amqp10_client:attach_receiver_link(Session, <<"r1">>, Address,
+                                                  unsettled, none, RedHeavy),
+    {ok, R2} = amqp10_client:attach_receiver_link(Session, <<"r2">>, Address,
+                                                  unsettled, none, NotRed),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
+    ok = wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"color">> => <<"red">>,
+                       <<"weight">> => 5},
+                     amqp10_msg:new(<<"t1">>, <<"m1">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"color">> => <<"green">>,
+                       <<"weight">> => 20},
+                     amqp10_msg:new(<<"t2">>, <<"m2">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"color">> => <<"red">>,
+                       <<"weight">> => 20},
+                     amqp10_msg:new(<<"t3">>, <<"m3">>))),
+    ok = wait_for_accepts(3),
+    ok = detach_link_sync(Sender),
+    flush(sent),
+
+    ok = amqp10_client:flow_link_credit(R1, 10, never, true),
+    receive {amqp10_msg, R1, M3} ->
+                ?assertEqual(<<"m3">>, amqp10_msg:body_bin(M3)),
+                ok = amqp10_client:accept_msg(R1, M3)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R1, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(R2, 10, never, true),
+    receive {amqp10_msg, R2, M2} ->
+                ?assertEqual(<<"m2">>, amqp10_msg:body_bin(M2)),
+                ok = amqp10_client:accept_msg(R2, M2)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R2, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = detach_link_sync(R1),
+    ok = detach_link_sync(R2),
+    ?assertMatch({ok, #{message_count := 1}}, % m1
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
