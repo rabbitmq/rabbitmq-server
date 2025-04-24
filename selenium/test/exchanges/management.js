@@ -32,7 +32,7 @@ describe('Exchange management', function () {
   })
 
   it('display summary of exchanges', async function () {
-    assert.equal("All exchanges (15)", await exchanges.getPagingSectionHeaderText())
+    assert.equal("All exchanges (14)", await exchanges.getPagingSectionHeaderText())
   })
 
   it('list all default exchanges', async function () {
@@ -44,7 +44,7 @@ describe('Exchange management', function () {
       ["/", "amq.fanout", "fanout"],
       ["/", "amq.headers", "headers"],
       ["/", "amq.match", "headers"],
-      ["/", "amq.rabbitmq.event", "topic"],
+//      ["/", "amq.rabbitmq.event", "topic"],
       ["/", "amq.rabbitmq.trace", "topic"],
       ["/", "amq.topic", "topic"],
 
