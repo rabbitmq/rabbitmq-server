@@ -402,7 +402,7 @@ match_user_permissions_in_mnesia_tx(Username, VHostName) ->
 
 match_user_permissions_in_khepri('_' = _Username, '_' = _VHostName) ->
     Path = khepri_user_permission_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:match(Path) of
+    case rabbit_khepri:get_many(Path) of
         {ok, Map} ->
             maps:values(Map);
         _ ->
