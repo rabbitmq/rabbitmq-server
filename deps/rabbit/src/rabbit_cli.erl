@@ -17,20 +17,14 @@ run_cli(Args) ->
         Progname = escript:script_name(),
         ok ?= add_rabbitmq_code_path(Progname),
 
-        {ok, IO} ?= rabbit_cli_io:start_link(Progname),
-
-        try
-            do_run_cli(Progname, Args, IO)
-        after
-            rabbit_cli_io:stop(IO)
-        end
+        do_run_cli(Progname, Args)
     end.
 
-do_run_cli(Progname, Args, IO) ->
+do_run_cli(Progname, Args) ->
     PartialArgparseDef = argparse_def(),
     Context0 = #{progname => Progname,
                  args => Args,
-                 io => IO,
+                 group_leader => erlang:group_leader(),
                  argparse_def => PartialArgparseDef},
     maybe
         {ok,
@@ -239,7 +233,8 @@ get_config_filename(unix) ->
 %% -------------------------------------------------------------------
 
 run_command(#{connection := Connection} = Context) ->
-    rabbit_cli_transport:run_command(Connection, Context);
+    rabbit_cli_transport:rpc(
+      Connection, rabbit_cli_commands, run_command, [Context]);
 run_command(Context) ->
     rabbit_cli_commands:run_command(Context).
 

@@ -51,19 +51,23 @@ init(Req, State) ->
     {cowboy_websocket, Req, State, #{idle_timeout => 30000}}.
 
 websocket_init(State) ->
-    {ok, Runner} = rabbit_cli_ws_runner:start_link(
-                     self(), {transport, self()}),
+    {ok, Runner} = rabbit_cli_ws_runner:start_link(self()),
     State1 = State#{runner => Runner},
     {ok, State1}.
 
 websocket_handle({binary, RequestBin}, State) ->
+    %% HTTP message from the client side.
     Request = binary_to_term(RequestBin),
     case Request of
-        {io_reply, From, Ret} ->
-            From ! Ret,
-            {ok, State};
+        % {io_reply, From, Ret} ->
+        %     From ! Ret,
+        %     {ok, State};
         {call, From, Call} ->
             handle_ws_call(Call, From, State),
+            {ok, State};
+        {msg, To, Msg} ->
+            % logger:alert("Message to ~0p: ~p", [To, Msg]),
+            To ! Msg,
             {ok, State};
         _ ->
             logger:alert("Unknown request: ~p", [Request]),
@@ -75,12 +79,17 @@ websocket_handle(_Frame, State) ->
     logger:alert("Frame: ~p", [_Frame]),
     {ok, State}.
 
-websocket_info({io_call, _From, _Msg} = Call, State) ->
-    ReplyBin = term_to_binary(Call),
-    Frame = {binary, ReplyBin},
-    {[Frame], State};
-websocket_info({io_cast, _Msg} = Call, State) ->
-    ReplyBin = term_to_binary(Call),
+% websocket_info({io_call, _From, _Msg} = Call, State) ->
+%     ReplyBin = term_to_binary(Call),
+%     Frame = {binary, ReplyBin},
+%     {[Frame], State};
+% websocket_info({io_cast, _Msg} = Call, State) ->
+%     ReplyBin = term_to_binary(Call),
+%     Frame = {binary, ReplyBin},
+%     {[Frame], State};
+websocket_info({io_request, _From, _ReplyAs, _Request} = IoRequest, State) ->
+    % logger:alert("WS/cowboy: ~p", [IoRequest]),
+    ReplyBin = term_to_binary({msg, group_leader, IoRequest}),
     Frame = {binary, ReplyBin},
     {[Frame], State};
 websocket_info({reply, Ret, From}, State) ->

@@ -2,8 +2,7 @@
 -behaviour(gen_server).
 
 -export([connect/1,
-         rpc/4,
-         run_command/2]).
+         rpc/4]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -16,7 +15,8 @@
                stream :: gun:stream_ref(),
                stream_ready = false :: boolean(),
                pending = [] :: [any()],
-               io :: pid()
+               pending_io_requests = #{} :: map(),
+               group_leader :: pid()
               }).
 
 connect(#{arg_map := #{node := NodenameOrUri}} = Context) ->
@@ -33,11 +33,6 @@ rpc(Nodename, Mod, Func, Args) when is_atom(Nodename) ->
     rpc_using_erldist(Nodename, Mod, Func, Args);
 rpc(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
     rpc_using_transport(TransportPid, Mod, Func, Args).
-
-run_command(Nodename, Context) when is_atom(Nodename) ->
-    run_command_using_erldist(Nodename, Context);
-run_command(TransportPid, Context) when is_pid(TransportPid) ->
-    run_command_using_transport(TransportPid, Context).
 
 %% -------------------------------------------------------------------
 %% Erlang distribution.
@@ -96,9 +91,6 @@ complete_nodename(Nodename) ->
 rpc_using_erldist(Nodename, Mod, Func, Args) ->
     erpc:call(Nodename, Mod, Func, Args).
 
-run_command_using_erldist(Nodename, Context) ->
-    erpc:call(Nodename, rabbit_cli_commands, run_command, [Context]).
-
 %% -------------------------------------------------------------------
 %% HTTP(S) transport.
 %% -------------------------------------------------------------------
@@ -109,17 +101,14 @@ connect_using_transport(Context) ->
 rpc_using_transport(TransportPid, Mod, Func, Args) when is_pid(TransportPid) ->
     gen_server:call(TransportPid, {rpc, {Mod, Func, Args}}).
 
-run_command_using_transport(TransportPid, Context) when is_pid(TransportPid) ->
-    gen_server:call(TransportPid, {run_command, Context}).
-
-init(#{arg_map := #{node := Uri}, io := IO}) ->
+init(#{arg_map := #{node := Uri}, group_leader := GL}) ->
     maybe
         {ok, _} ?= application:ensure_all_started(gun),
         #{host := Host, port := Port} = UriMap = uri_string:parse(Uri),
         {ok, ConnPid} ?= gun:open(Host, Port),
         State = #http{uri = UriMap,
-                      conn = ConnPid,
-                      io = IO},
+                      group_leader = GL,
+                      conn = ConnPid},
         %logger:alert("Transport: State=~p", [State]),
         {ok, State}
     end.
@@ -127,6 +116,7 @@ init(#{arg_map := #{node := Uri}, io := IO}) ->
 handle_call(
   Request, From,
   #http{stream_ready = true} = State) ->
+    %% HTTP message to the server side.
     send_call(Request, From, State),
     {noreply, State};
 handle_call(
@@ -163,26 +153,53 @@ handle_info(
     {noreply, State1};
 handle_info(
   {gun_ws, ConnPid, StreamRef, {binary, ReplyBin}},
-  #http{conn = ConnPid, stream = StreamRef, io = IO} = State) ->
+  #http{conn = ConnPid,
+        stream = StreamRef,
+        group_leader = GL,
+        pending_io_requests = Pending} = State) ->
+    %% HTTP message from the server side.
     Reply = binary_to_term(ReplyBin),
-    case Reply of
-        {io_call, From, Msg} ->
-            %logger:alert("IO call from WS: ~p -> ~p", [Msg, From]),
-            Ret = gen_server:call(IO, Msg),
-            RequestBin = term_to_binary({io_reply, From, Ret}),
-            Frame = {binary, RequestBin},
-            gun:ws_send(ConnPid, StreamRef, Frame);
-        {io_cast, Msg} ->
-            %logger:alert("IO cast from WS: ~p", [Msg]),
-            gen_server:cast(IO, Msg);
-        {ret, From, Ret} ->
-            %logger:alert("Reply from WS: ~p -> ~p", [Ret, From]),
-            gen_server:reply(From, Ret);
-        _Other ->
-            %logger:alert("Reply from WS: ~p", [_Other]),
-            ok
-    end,
-    {noreply, State};
+    State1 = case Reply of
+                 % {io_call, From, Msg} ->
+                 %     %logger:alert("IO call from WS: ~p -> ~p", [Msg, From]),
+                 %     Ret = gen_server:call(IO, Msg),
+                 %     RequestBin = term_to_binary({io_reply, From, Ret}),
+                 %     Frame = {binary, RequestBin},
+                 %     gun:ws_send(ConnPid, StreamRef, Frame);
+                 % {io_cast, Msg} ->
+                 %     %logger:alert("IO cast from WS: ~p", [Msg]),
+                 %     gen_server:cast(IO, Msg);
+                 {msg, group_leader, {io_request, RemoteFrom, ReplyAs, Request} = _Msg} ->
+                     % logger:alert("Message from WS: ~p", [Msg]),
+                     Ref = erlang:make_ref(),
+                     IoRequest1 = {io_request, self(), Ref, Request},
+                     GL ! IoRequest1,
+                     Pending1 = Pending#{Ref => {RemoteFrom, ReplyAs}},
+                     State#http{pending_io_requests = Pending1};
+                 {ret, From, Ret} ->
+                     %logger:alert("Reply from WS: ~p -> ~p", [Ret, From]),
+                     gen_server:reply(From, Ret),
+                     State;
+                 _Other ->
+                     %logger:alert("Reply from WS: ~p", [_Other]),
+                     State
+             end,
+    {noreply, State1};
+handle_info(
+  {io_reply, ReplyAs, Reply} = _IoReply,
+  #http{conn = ConnPid,
+        stream = StreamRef,
+        pending_io_requests = Pending} = State) ->
+    % logger:alert("io_reply to WS: ~p", [IoReply]),
+    {RemoteFrom, RemoteReplyAs} = maps:get(ReplyAs, Pending),
+    Msg = {io_reply, RemoteReplyAs, Reply},
+    RequestBin = term_to_binary({msg, RemoteFrom, Msg}),
+    Frame = {binary, RequestBin},
+    gun:ws_send(ConnPid, StreamRef, Frame),
+
+    Pending1 = maps:remove(ReplyAs, Pending),
+    State1 = State#http{pending_io_requests = Pending1},
+    {noreply, State1};
 handle_info(_Info, State) ->
     %logger:alert("Transport(info): ~p", [_Info]),
     {noreply, State}.
