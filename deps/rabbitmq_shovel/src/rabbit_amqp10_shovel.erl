@@ -445,6 +445,4 @@ bin_to_hex(Bin) ->
 is_amqp10_compat(T) ->
     is_binary(T) orelse
     is_number(T) orelse
-    %% TODO: not all lists are compatible
-    is_list(T) orelse
     is_boolean(T).
