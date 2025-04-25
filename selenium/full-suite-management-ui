@@ -19,3 +19,4 @@ mgt/definitions.sh
 mgt/exchanges.sh
 mgt/limits.sh
 mgt/mgt-only-exchanges.sh
+mgt/queuesAndStreams.sh

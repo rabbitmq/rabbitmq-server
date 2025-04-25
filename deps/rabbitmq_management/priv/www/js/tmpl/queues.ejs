@@ -1,9 +1,9 @@
 
 <h1>Queues</h1>
-<div class="section">
+<div class="section" id="queues-paging-section">
   <%= paginate_ui(queues, 'queues') %>
 </div>
-<div class="updatable">
+<div class="updatable" id="queues-table-section">
 <% if (queues.items.length > 0) { %>
 <table class="list">
  <thead>
@@ -222,7 +222,7 @@
 </div>
 
 <% if (ac.canAccessVhosts()) { %>
-<div class="section-hidden">
+<div class="section-hidden" id="add-new-queue">
   <h2>Add a new queue</h2>
   <div class="hider">
     <form action="#/queues" method="put">
