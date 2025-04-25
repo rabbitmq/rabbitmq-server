@@ -142,7 +142,8 @@ run_command(Context) ->
 do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
     erlang:apply(Mod, Fun, [Context]).
 
-cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
+cmd_list_exchanges(#{progname := Progname, arg_map := ArgMap}) ->
+    logger:alert("CLI: running list exchanges"),
     InfoKeys = rabbit_exchange:info_keys() -- [user_who_performed_action],
     Fields = lists:map(
                fun
@@ -163,35 +164,42 @@ cmd_list_exchanges(#{arg_map := ArgMap, io := IO}) ->
                    (Key) ->
                        #{name => Key, type => term}
                end, InfoKeys),
-    case rabbit_cli_io:start_record_stream(IO, exchanges, Fields, ArgMap) of
-        {ok, Stream} ->
-            Exchanges = rabbit_exchange:list(),
-            lists:foreach(
-              fun(Exchange) ->
-                      Record0 = rabbit_exchange:info(Exchange, InfoKeys),
-                      Record1 = lists:sublist(Record0, length(Fields)),
-                      Record2 = [case Value of
-                                     #resource{name = N} ->
-                                         N;
-                                     _ ->
-                                         Value
-                                 end || {_Key, Value} <- Record1],
-                      rabbit_cli_io:push_new_record(IO, Stream, Record2)
-              end, Exchanges),
-            rabbit_cli_io:end_record_stream(IO, Stream),
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+    {ok, IO} = rabbit_cli_io:start_link(Progname),
+    Ret = case rabbit_cli_io:start_record_stream(IO, exchanges, Fields, ArgMap) of
+              {ok, Stream} ->
+                  Exchanges = rabbit_exchange:list(),
+                  lists:foreach(
+                    fun(Exchange) ->
+                            Record0 = rabbit_exchange:info(Exchange, InfoKeys),
+                            Record1 = lists:sublist(Record0, length(Fields)),
+                            Record2 = [case Value of
+                                           #resource{name = N} ->
+                                               N;
+                                           _ ->
+                                               Value
+                                       end || {_Key, Value} <- Record1],
+                            rabbit_cli_io:push_new_record(IO, Stream, Record2)
+                    end, Exchanges),
+                  rabbit_cli_io:end_record_stream(IO, Stream),
+                  ok;
+              {error, _} = Error ->
+                  Error
+          end,
+    rabbit_cli_io:stop(IO),
+    Ret.
 
-cmd_import_definitions(#{arg_map := ArgMap, io := IO}) ->
-    case rabbit_cli_io:read_file(IO, ArgMap) of
-        {ok, Data} ->
-            rabbit_cli_io:format(IO, "Import definitions:~n  ~s~n", [Data]),
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+cmd_import_definitions(#{progname := Progname, arg_map := ArgMap}) ->
+    {ok, IO} = rabbit_cli_io:start_link(Progname),
+    %% TODO: Use a wrapper above `file' to proxy through transport.
+    Ret = case rabbit_cli_io:read_file(IO, ArgMap) of
+              {ok, Data} ->
+                  rabbit_cli_io:format(IO, "Import definitions:~n  ~s~n", [Data]),
+                  ok;
+              {error, _} = Error ->
+                  Error
+          end,
+    rabbit_cli_io:stop(IO),
+    Ret.
 
 cmd_top(#{io := IO} = Context) ->
     Top = spawn_link(fun() -> run_top(IO) end),
