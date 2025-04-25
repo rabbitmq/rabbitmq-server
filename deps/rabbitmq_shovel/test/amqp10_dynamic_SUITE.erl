@@ -27,7 +27,8 @@ groups() ->
           autodelete_amqp091_dest_on_confirm,
           autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
-          simple_amqp10_src
+          simple_amqp10_src,
+          amqp091_to_amqp10_with_dead_lettering
         ]},
       {with_map_config, [], [
           simple,
@@ -94,6 +95,29 @@ simple_amqp10_dest(Config) ->
       fun (Sess) ->
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>,
                                       <<"src-queue">>)
+      end).
+
+amqp091_to_amqp10_with_dead_lettering(Config) ->
+    Dest = ?config(destq, Config),
+    Src = ?config(srcq, Config),
+    TmpQ = <<"tmp">>,
+    with_session(Config,
+      fun (Sess) ->
+              {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"my link pair">>),
+              {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, TmpQ,
+                                               #{arguments =>#{<<"x-max-length">> => {uint, 0},
+                                                               <<"x-dead-letter-exchange">> => {utf8, <<"">>},
+                                                               <<"x-dead-letter-routing-key">> => {utf8, Src}}}),
+              {ok, Sender} = amqp10_client:attach_sender_link(Sess,
+                                                              <<"sender-tmp">>,
+                                                              <<"/queues/", TmpQ/binary>>,
+                                                              unsettled,
+                                                              unsettled_state),
+              ok = await_amqp10_event(link, Sender, attached),
+              expect_empty(Sess, TmpQ),
+              test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>, <<"src-queue">>),
+              %% publish to tmp, it should be dead-lettered to src and then shovelled to dest
+              _ = publish_expect(Sess, TmpQ, Dest, <<"tag1">>, <<"hello">>)
       end).
 
 test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
