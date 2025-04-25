@@ -62,7 +62,11 @@ module.exports = {
     chromeCapabilities.set('goog:chromeOptions', {
       args: [
           "--lang=en",
-          "--disable-search-engine-choice-screen"
+          "--disable-search-engine-choice-screen",
+          "--disable-popup-blocking",
+          "--credentials_enable_service=false",
+          "--profile.password_manager_enabled=false",
+          "--profile.password_manager_leak_detection=false"
       ]
     });
     driver = builder
