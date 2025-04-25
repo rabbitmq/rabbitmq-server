@@ -44,7 +44,6 @@ describe('Exchange management', function () {
       ["/", "amq.fanout", "fanout"],
       ["/", "amq.headers", "headers"],
       ["/", "amq.match", "headers"],
-//      ["/", "amq.rabbitmq.event", "topic"],
       ["/", "amq.rabbitmq.trace", "topic"],
       ["/", "amq.topic", "topic"],
 
