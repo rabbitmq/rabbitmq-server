@@ -44,6 +44,7 @@ module.exports = class BasePage {
   async selectRefreshOption(option) {
     return this.selectOption(SELECT_REFRESH, option)
   }
+  
   async waitForOverviewTab() {
     await this.driver.sleep(250)
     return this.waitForDisplayed(OVERVIEW_TAB)
@@ -119,6 +120,11 @@ module.exports = class BasePage {
     const select = await new Select(selectable)
     return select.selectByVisibleText(text)
   }
+  async selectOptionByValue(locator, value) {
+    let selectable = await this.waitForDisplayed(locator)
+    const select = await new Select(selectable)
+    return select.selectByValue(value)
+  }
 
   async getSelectableVhosts() {
     const table_model = await this.getSelectableOptions(SELECT_VHOSTS)
@@ -152,6 +158,16 @@ module.exports = class BasePage {
     } catch(e) {
       return Promise.resolve(false)
     }
+    /*
+    let element = await driver.findElement(FORM_POPUP)
+    return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
+      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
+      this.polling / 2).then(function onWarningVisible(e) {
+          return Promise.resolve(true)
+      }, function onError(e) {
+          return Promise.resolve(false)
+      })
+      */
   }
   
   async isPopupWarningNotDisplayed() {
