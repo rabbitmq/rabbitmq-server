@@ -280,7 +280,7 @@ listener(#listener{node = Node, protocol = Protocol,
      {ip_address, ip(IPAddress)},
      {port, Port},
      {socket_opts, format_socket_opts(Opts)},
-     {ssl, is_ssl_socket(Opts)}
+     {tls, has_tls_enabled(Opts)}
     ].
 
 web_context(Props0) ->
@@ -288,7 +288,7 @@ web_context(Props0) ->
     Props   = proplists:delete(ssl_opts, Props0),
     [{ssl_opts, format_socket_opts(SslOpts)} | Props].
 
-is_ssl_socket(Opts) ->
+has_tls_enabled(Opts) ->
     S = proplists:get_value(socket_opts, Opts, Opts),
     (proplists:get_value(ssl_opts, S, undefined) =/= undefined) orelse
     (proplists:get_value(cacertfile, S, undefined) =/= undefined) orelse

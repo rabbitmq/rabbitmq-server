@@ -252,7 +252,7 @@
 <% } %>
     <th>Bound to</th>
     <th>Port</th>
-    <th>SSL</th>
+    <th>TLS</th>
   </tr>
   <%
       for (var i = 0; i < overview.listeners.length; i++) {
@@ -265,7 +265,7 @@
 <% } %>
     <td><%= listener.ip_address %></td>
     <td><%= listener.port %></td>
-    <td class="c"><%= fmt_boolean(listener.ssl || false) %></td>
+    <td class="c"><%= fmt_boolean(listener.tls || false) %></td>
   </tr>
   <% } %>
 </table>
