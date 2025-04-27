@@ -10,7 +10,15 @@ dispatcher_add(function(sammy) {
                         'consumers': '/stream/connections/' + vhost + '/' + name + '/consumers',
                         'publishers': '/stream/connections/' + vhost + '/' + name + '/publishers'},
                         'streamConnection', '#/stream/connections');
-            });
+    });
+    sammy.get('#/stream/super-streams', function() {
+        render({'vhosts': '/vhosts'}, 'superStreams', '#/stream/super-streams')
+    });
+    sammy.put('#/stream/super-streams', function() {
+            put_cast_params(this, '/stream/super-streams/:vhost/:name',
+                            ['name', 'pattern', 'policy'], ['priority'], []);
+            location.href = "/#/queues";
+    });
     // not exactly dispatcher stuff, but we have to make sure this is called before
     // HTTP requests are made in case of refresh of the queue page
     QUEUE_EXTRA_CONTENT_REQUESTS.push(function(vhost, queue) {
@@ -33,6 +41,7 @@ dispatcher_add(function(sammy) {
 });
 
 NAVIGATION['Stream Connections'] = ['#/stream/connections', "monitoring"];
+NAVIGATION['Super Streams'] = ['#/stream/super-streams', "management"];
 
 var ALL_STREAM_CONNECTION_COLUMNS =
      {'Overview': [['user',   'User name', true],
