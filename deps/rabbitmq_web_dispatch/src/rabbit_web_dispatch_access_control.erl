@@ -136,11 +136,12 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
                        false -> {false, ReqData, "Not_Authorized"}
                      end
              end,
-    AuthProps = [{password, Password}] ++ case vhost(ReqData) of
+    {IP, _} = cowboy_req:peer(ReqData),
+
+    AuthProps = [{password, Password}, {sockOrAddr, IP}] ++ case vhost(ReqData) of
         VHost when is_binary(VHost) -> [{vhost, VHost}];
         _                           -> []
     end,
-    {IP, _} = cowboy_req:peer(ReqData),
 
 	{ok, AuthBackends} = get_auth_backends(),
 
