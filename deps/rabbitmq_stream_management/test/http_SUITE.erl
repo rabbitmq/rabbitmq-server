@@ -10,13 +10,20 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
 
+-import(rabbit_mgmt_test_util, [
+                                http_put/4
+                               ]).
+
 -compile(export_all).
 
 all() ->
     [{group, non_parallel_tests}].
 
 groups() ->
-    [{non_parallel_tests, [], [stream_management]}].
+    [{non_parallel_tests, [], [
+                               stream_management,
+                               create_super_stream
+                              ]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -27,6 +34,7 @@ init_per_suite(Config) ->
         true ->
             {skip, "suite is not mixed versions compatible"};
         _ ->
+            inets:start(),
             rabbit_ct_helpers:log_environment(),
             Config1 =
                 rabbit_ct_helpers:set_config(Config,
@@ -107,6 +115,30 @@ stream_management(Config) ->
                                 {"STREAM_PORT_TLS=~b", [StreamPortTlsNode]},
                                 {"MANAGEMENT_PORT=~b", [ManagementPortNode]}]),
     {ok, _} = MakeResult.
+
+create_super_stream(Config) ->
+    http_put(Config, "/stream/super-streams/%2F/carrots", #{partitions => 3,
+                                                            'binding-keys' => "streamA"},
+             ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/carrots", #{partitions => "this is not a partition"},
+             ?BAD_REQUEST),
+    http_put(Config, "/stream/super-streams/%2F/carrots", #{partitions => 3},
+             {group, '2xx'}),
+    http_put(Config, "/stream/super-streams/%2F/cucumber", #{'binding-keys' => "fresh-cucumber"},
+             {group, '2xx'}),
+    http_put(Config, "/stream/super-streams/%2F/aubergine",
+             #{partitions => 3,
+               arguments => #{'max-length-bytes' => 1000000,
+                              'max-age' => <<"1h">>,
+                              'stream-max-segment-size' => 500,
+                              'initial-cluster-size' => 2,
+                              'queue-leader-locator' => <<"client-local">>}},
+             {group, '2xx'}),
+    http_put(Config, "/stream/super-streams/%2F/watermelon",
+             #{partitions => 3,
+               arguments => #{'queue-leader-locator' => <<"remote">>}},
+             ?BAD_REQUEST),
+    ok.
 
 get_stream_port(Config) ->
     rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stream).
