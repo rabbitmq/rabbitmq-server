@@ -79,9 +79,13 @@ is_internal_property(_Other) -> false.
 is_internal_none_password(password, none) -> true;
 is_internal_none_password(_, _) -> false.
 
+is_sockOrAddr(sockOrAddr) -> true;
+is_sockOrAddr(_) -> false.
+
 extract_other_credentials(AuthProps) ->
-  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K) and 
-                                                  not is_internal_none_password(K, V)],
+  PublicAuthProps = [{K,V} || {K,V} <-AuthProps, not is_internal_property(K) and
+                                                  not is_internal_none_password(K, V) and
+                                                  not is_sockOrAddr(K)],
   case PublicAuthProps of
     [] -> resolve_using_persisted_credentials(AuthProps);
     _ -> PublicAuthProps
