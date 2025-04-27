@@ -96,5 +96,3 @@ end}.
     {datatype, atom}
 ]}.
 
-%{mapping, "management.test_config", "rabbitmq_management.test_config",
-%    [{datatype, {enum, [true, false]}}]}.

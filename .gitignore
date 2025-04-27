@@ -37,6 +37,7 @@ elvis
 !/deps/rabbitmq_amqp_client/
 !/deps/rabbitmq_auth_backend_cache/
 !/deps/rabbitmq_auth_backend_http/
+!/deps/rabbitmq_auth_backend_internal_loopback/
 !/deps/rabbitmq_auth_backend_ldap/
 !/deps/rabbitmq_auth_backend_oauth2/
 !/deps/rabbitmq_auth_mechanism_ssl/
