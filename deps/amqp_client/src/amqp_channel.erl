@@ -384,6 +384,10 @@ init([Driver, Connection, ChannelNumber, Consumer, Identity]) ->
 handle_call(open, From, State) ->
     {noreply, rpc_top_half(#'channel.open'{}, none, From, none, noflow, State)};
 %% @private
+handle_call(flush, _From, State) ->
+    flush_writer(State),
+    {noreply, State};
+%% @private
 handle_call({close, Code, Text}, From, State) ->
     handle_close(Code, Text, From, State);
 %% @private
