@@ -1,7 +1,8 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log } = require('../utils')
+const { getManagementUrl, createVhost, deleteVhost } = require('../mgt-api')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -46,6 +47,27 @@ describe('Virtual Hosts in Admin tab', function () {
     assert.equal("/", await vhostTab.getName())
   })
 
+  describe('given there is a new virtualhost with a tag', async function() {
+    let vhost = "test_" + Math.floor(Math.random() * 1000)
+    before(async function() {
+      createVhost(getManagementUrl(), vhost, "selenium", "selenium-tag")
+      await overview.clickOnAdminTab()
+      await adminTab.clickOnVhosts()      
+    })
+    it('vhost is listed', async function () {      
+      await vhostsTab.searchForVhosts(vhost)
+      let vhostTable = await doWhile(async function() {
+        return vhostsTab.getVhostsTable()
+      }, function(table) {
+        return table.length > 0 && vhost.localeCompare(table[0][0])        
+      })
+      log("vhostTable: " + vhostTable)
+    })
+    after(async function () {
+      deleteVhost(getManagementUrl(), vhost)
+    })
+
+  })
 
   after(async function () {
     await teardown(driver, this, captureScreen)
