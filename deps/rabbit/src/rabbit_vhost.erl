@@ -146,6 +146,7 @@ add(VHost, ActingUser) ->
     rabbit_types:ok_or_error(any()).
 add(Name, Description, Tags, ActingUser) ->
     add(Name, #{description => Description,
+                default_queue_type => rabbit_queue_type:default_alias(),
                 tags => Tags}, ActingUser).
 
 -spec add(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
