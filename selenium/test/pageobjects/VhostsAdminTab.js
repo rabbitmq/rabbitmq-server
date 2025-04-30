@@ -2,15 +2,18 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 
 const AdminTab = require('./AdminTab')
 
+const MAIN_SECTION = By.css('div#main div#vhosts.section')
+
 const SELECTED_VHOSTS_ON_RHM = By.css('div#rhs ul li a[href="#/vhosts"]')
 const FILTER_VHOST = By.css('div#main div.filter input#filter')
 const CHECKBOX_REGEX = By.css('div#main div.filter input#filter-regex-mode')
 
 const VHOSTS_TABLE_ROWS = By.css('div#main table.list tbody tr')
+const TABLE_SECTION = By.css('div#main table.list')
 
 module.exports = class VhostsAdminTab extends AdminTab {
   async isLoaded () {
-    await this.waitForDisplayed(SELECTED_VHOSTS_ON_RHM)
+    await this.waitForDisplayed(MAIN_SECTION)
   }
   async searchForVhosts(vhost, regex = false) {
     await this.sendKeys(FILTER_VHOST, vhost)
@@ -32,5 +35,7 @@ module.exports = class VhostsAdminTab extends AdminTab {
      }
      throw "Vhost " + vhost + " not found"
   }
-
+  async getVhostsTable(firstNColumns) {
+    return this.getTable(TABLE_SECTION, firstNColumns)
+  }
 }
