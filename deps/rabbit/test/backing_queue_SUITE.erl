@@ -29,6 +29,7 @@
     variable_queue_dropfetchwhile,
     variable_queue_dropwhile_restart,
     variable_queue_dropwhile_sync_restart,
+    variable_queue_restart_large_seq_id,
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
@@ -1420,6 +1421,45 @@ variable_queue_dropwhile_sync_restart2(VQ0, QName) ->
     true = rabbit_variable_queue:is_empty(VQ5),
 
     VQ5.
+
+variable_queue_restart_large_seq_id(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, variable_queue_restart_large_seq_id1, [Config]).
+
+variable_queue_restart_large_seq_id1(Config) ->
+    with_fresh_variable_queue(
+      fun variable_queue_restart_large_seq_id2/2,
+      ?config(variable_queue_type, Config)).
+
+variable_queue_restart_large_seq_id2(VQ0, QName) ->
+    Count = 1,
+
+    %% publish and consume a message
+    VQ1 = publish_fetch_and_ack(Count, 0, VQ0),
+    %% should be empty now
+    true = rabbit_variable_queue:is_empty(VQ1),
+
+    _VQ2 = rabbit_variable_queue:terminate(shutdown, VQ1),
+    Terms = variable_queue_read_terms(QName),
+    Count = proplists:get_value(next_seq_id, Terms),
+
+    %% set a very high next_seq_id as if 100M messages have been
+    %% published and consumed
+    Terms2 = lists:keyreplace(next_seq_id, 1, Terms, {next_seq_id, 100_000_000}),
+
+    {TInit, VQ3} =
+        timer:tc(
+          fun() -> variable_queue_init(test_amqqueue(QName, true), Terms2) end,
+          millisecond),
+    %% even with a very high next_seq_id start of an empty queue
+    %% should be quick (few milliseconds, but let's give it 100ms, to
+    %% avoid flaking on slow servers)
+    {true, _} = {TInit < 100, TInit},
+
+    %% should be empty now
+    true = rabbit_variable_queue:is_empty(VQ3),
+
+    VQ3.
 
 variable_queue_ack_limiting(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
