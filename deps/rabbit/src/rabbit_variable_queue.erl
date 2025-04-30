@@ -1172,7 +1172,13 @@ expand_delta(_SeqId, #delta { count       = Count,
 
 init(IsDurable, IndexState, StoreState, DeltaCount, DeltaBytes, Terms,
      PersistentClient, TransientClient, VHost) ->
-    {LowSeqId, HiSeqId, IndexState1} = rabbit_classic_queue_index_v2:bounds(IndexState),
+    NextSeqIdHint =
+        case Terms of
+            non_clean_shutdown -> undefined;
+            _ -> proplists:get_value(next_seq_id, Terms)
+        end,
+
+    {LowSeqId, HiSeqId, IndexState1} = rabbit_classic_queue_index_v2:bounds(IndexState, NextSeqIdHint),
 
     {NextSeqId, NextDeliverSeqId, DeltaCount1, DeltaBytes1} =
         case Terms of
