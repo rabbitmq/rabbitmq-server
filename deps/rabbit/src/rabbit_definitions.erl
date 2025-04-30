@@ -1081,12 +1081,10 @@ list_vhosts() ->
 
 vhost_definition(VHost) ->
     Name = vhost:get_name(VHost),
-    DQT = rabbit_queue_type:short_alias_of(rabbit_vhost:default_queue_type(Name)),
     #{
         <<"name">> => Name,
         <<"limits">> => vhost:get_limits(VHost),
-        <<"metadata">> => vhost:get_metadata(VHost),
-        <<"default_queue_type">> => DQT
+        <<"metadata">> => vhost:get_metadata(VHost)
     }.
 
 list_users() ->
