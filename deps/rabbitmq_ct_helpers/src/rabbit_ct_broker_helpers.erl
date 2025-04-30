@@ -1036,24 +1036,20 @@ share_dist_and_proxy_ports_map(Config) ->
 configured_metadata_store(Config) ->
     case rabbit_ct_helpers:get_config(Config, metadata_store) of
         khepri ->
-            {khepri, []};
-        {khepri, _FFs0} = Khepri ->
-            Khepri;
+            khepri;
         mnesia ->
             mnesia;
         _ ->
             case os:getenv("RABBITMQ_METADATA_STORE") of
-                "khepri" ->
-                    {khepri, []};
-                _ ->
-                    mnesia
+                "khepri" -> khepri;
+                _        -> mnesia
             end
     end.
 
 configure_metadata_store(Config) ->
     ct:log("Configuring metadata store..."),
     Value = rabbit_ct_helpers:get_app_env(
-              Config, rabbit, forced_feature_flags_on_init, undefined),
+                Config, rabbit, forced_feature_flags_on_init, undefined),
     MetadataStore = configured_metadata_store(Config),
     Config1 = rabbit_ct_helpers:set_config(
                 Config, {metadata_store, MetadataStore}),
@@ -1070,32 +1066,32 @@ configure_metadata_store(Config) ->
             case Value of
                 undefined ->
                     rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         {rel, [khepri_db], []}}]});
+                        Config1,
+                        {rabbit,
+                        [{forced_feature_flags_on_init,
+                            {rel, [khepri_db], []}}]});
                 _ ->
                     rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         [khepri_db | Value]}]})
+                        Config1,
+                        {rabbit,
+                        [{forced_feature_flags_on_init,
+                            [khepri_db | Value]}]})
             end;
         mnesia ->
             ct:log("Enabling Mnesia metadata store"),
             case Value of
                 undefined ->
                     rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         {rel, [], [khepri_db]}}]});
+                        Config1,
+                        {rabbit,
+                        [{forced_feature_flags_on_init,
+                            {rel, [], [khepri_db]}}]});
                 _ ->
                     rabbit_ct_helpers:merge_app_env(
-                      Config1,
-                      {rabbit,
-                       [{forced_feature_flags_on_init,
-                         Value -- [khepri_db]}]})
+                        Config1,
+                        {rabbit,
+                        [{forced_feature_flags_on_init,
+                            Value -- [khepri_db]}]})
             end
     end.
 
