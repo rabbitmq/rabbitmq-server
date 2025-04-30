@@ -56,12 +56,13 @@ describe('Virtual Hosts in Admin tab', function () {
     })
     it('vhost is listed', async function () {      
       await vhostsTab.searchForVhosts(vhost)
-      let vhostTable = await doWhile(async function() {
+      await doWhile(async function() {
         return vhostsTab.getVhostsTable()
       }, function(table) {
         return table.length > 0 && vhost.localeCompare(table[0][0])        
       })
-      log("vhostTable: " + vhostTable)
+      await vhostsTab.clickOnSelectColumns()
+      await vhostsTab.getSelectableTableColumns()
     })
     after(async function () {
       deleteVhost(getManagementUrl(), vhost)
