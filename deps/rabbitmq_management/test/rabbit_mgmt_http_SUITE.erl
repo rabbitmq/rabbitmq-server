@@ -2126,7 +2126,6 @@ definitions_vhost_metadata_test(Config) ->
     ?assertEqual(#{
         name => VHostName,
         description => Desc,
-        default_queue_type => DQT,
         tags => Tags,
         metadata => Metadata
     }, VH),
