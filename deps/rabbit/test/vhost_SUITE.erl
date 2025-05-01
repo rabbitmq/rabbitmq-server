@@ -307,13 +307,14 @@ vhost_update_default_queue_type_undefined(Config) ->
     VHost = <<"update-default_queue_type-with-undefined-test">>,
     Description = <<"rmqfpas-105 test vhost">>,
     Tags = [replicate, private],
-    DefaultQueueType = quorum,
+    VhostDefaultQueueType = quorum,
+    NodeDefaultQueueType = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type, default_alias, []),
     Trace = false,
     ActingUser = <<"acting-user">>,
     try
         ?assertMatch(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
 
-        PutVhostArgs0 = [VHost, Description, Tags, DefaultQueueType, Trace, ActingUser],
+        PutVhostArgs0 = [VHost, Description, Tags, VhostDefaultQueueType, Trace, ActingUser],
         ?assertMatch(ok,
                      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, put_vhost, PutVhostArgs0)),
 
@@ -322,7 +323,7 @@ vhost_update_default_queue_type_undefined(Config) ->
                      rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, put_vhost, PutVhostArgs1)),
 
         V = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_vhost, lookup, [VHost]),
-        ?assertMatch(#{default_queue_type := DefaultQueueType}, vhost:get_metadata(V))
+        ?assertMatch(#{default_queue_type := NodeDefaultQueueType}, vhost:get_metadata(V))
     after
         rabbit_ct_broker_helpers:delete_vhost(Config, VHost)
     end.
