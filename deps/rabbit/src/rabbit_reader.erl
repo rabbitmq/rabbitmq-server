@@ -421,12 +421,12 @@ log_connection_exception(Severity, Name, Duration, {connection_closed_abruptly, 
     log_connection_exception_with_severity(Severity, Fmt,
                                            [self(), Name, Duration]);
 %% failed connection.tune negotiations
-log_connection_exception(Severity, Name, Duration, {handshake_error, tuning,
+log_connection_exception(Severity, Name, _Duration, {handshake_error, tuning,
                                                     {exit, #amqp_error{explanation = Explanation},
                                                      _Method, _Stacktrace}}) ->
     Fmt = "closing AMQP connection ~tp (~ts):~n"
           "failed to negotiate connection parameters: ~ts",
-    log_connection_exception_with_severity(Severity, Fmt, [self(), Name, Duration, Explanation]);
+    log_connection_exception_with_severity(Severity, Fmt, [self(), Name, Explanation]);
 log_connection_exception(Severity, Name, Duration, {sasl_required, ProtocolId}) ->
     Fmt = "closing AMQP 1.0 connection (~ts, duration: '~ts'): RabbitMQ requires SASL "
           "security layer (expected protocol ID 3, but client sent protocol ID ~b)",
