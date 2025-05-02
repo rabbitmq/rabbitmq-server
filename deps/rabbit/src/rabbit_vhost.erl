@@ -178,7 +178,6 @@ add(VHost, ActingUser) ->
     rabbit_types:ok_or_error(any()).
 add(Name, Description, Tags, ActingUser) ->
     add(Name, #{description => Description,
-                default_queue_type => rabbit_queue_type:default_alias(),
                 tags => Tags}, ActingUser).
 
 -spec add(vhost:name(), vhost:metadata(), rabbit_types:username()) ->
@@ -190,8 +189,16 @@ add(Name, Metadata, ActingUser) ->
             catch(do_add(Name, Metadata, ActingUser))
     end.
 
-do_add(Name, Metadata, ActingUser) ->
+do_add(Name, Metadata0, ActingUser) ->
     ok = is_over_vhost_limit(Name),
+
+    Metadata = case maps:is_key(default_queue_type, Metadata0) of
+        true ->
+            Metadata0;
+        false ->
+            Metadata0#{default_queue_type => rabbit_queue_type:default_alias()}
+    end,
+
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
