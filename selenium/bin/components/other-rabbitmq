@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+
+init_other_rabbitmq() {
+  RABBITMQ_CONFIG_DIR=${TEST_CONFIG_DIR}
+  RABBITMQ_DOCKER_IMAGE=${RABBITMQ_DOCKER_IMAGE:-rabbitmq}
+  OTHER_RABBITMQ_HOSTNAME=${OTHER_RABBITMQ_HOSTNAME:-other-rabbitmq}
+
+  print "> RABBITMQ_CONFIG_DIR: ${RABBITMQ_CONFIG_DIR}"
+  print "> RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
+  print "> OTHER_RABBITMQ_HOSTNAME: ${OTHER_RABBITMQ_HOSTNAME}"
+  
+  [[ -z "${OAUTH_SERVER_CONFIG_BASEDIR}" ]] || print "> OAUTH_SERVER_CONFIG_BASEDIR: ${OAUTH_SERVER_CONFIG_BASEDIR}"
+  [[ -z "${OAUTH_SERVER_CONFIG_DIR}" ]] || print "> OAUTH_SERVER_CONFIG_DIR: ${OAUTH_SERVER_CONFIG_DIR}"
+
+  if [[ ! -d "${RABBITMQ_CONFIG_DIR}/certs" ]]; then 
+    mkdir ${RABBITMQ_CONFIG_DIR}/certs
+  fi 
+  generate-ca-server-client-kpi ${OTHER_RABBITMQ_HOSTNAME} $RABBITMQ_CONFIG_DIR/certs
+  generate-server-keystore-if-required ${OTHER_RABBITMQ_HOSTNAME} $RABBITMQ_CONFIG_DIR/certs
+  generate-client-keystore-if-required ${OTHER_RABBITMQ_HOSTNAME} $RABBITMQ_CONFIG_DIR/certs
+  generate-truststore-if-required ${OTHER_RABBITMQ_HOSTNAME} $RABBITMQ_CONFIG_DIR/certs
+}
+
+start_other_rabbitmq() {
+  if [[ "$PROFILES_FOR_OTHER" == *"docker"* ]]; then
+    start_docker_other_rabbitmq    
+  else
+    start_local_rabbitmq
+  fi
+}
+stop_other_rabbitmq() {
+  if [[ "$PROFILES_FOR_OTHER" == *"docker"* ]]; then
+    kill_container_if_exist "$component"
+  else
+    stop_local_rabbitmq
+  fi
+}
+
+save_logs_other_rabbitmq() {
+    if [[ "$PROFILES_FOR_OTHER" == *"docker"* ]]; then
+        if [[ "$PROFILES_FOR_OTHER" == *"cluster"* ]]; then
+            docker compose -f $CONF_DIR/rabbitmq/other-compose.yml logs > $LOGS/other-rabbitmq.log
+        else
+            save_container_logs "other-rabbitmq"
+        fi
+    fi
+}
+stop_local_other_rabbitmq() {
+    RABBITMQ_SERVER_ROOT=$(realpath ../)
+    gmake --directory=${RABBITMQ_SERVER_ROOT} stop-node
+}
+
+start_local_other_rabbitmq() {
+  begin "Starting ${OTHER_RABBITMQ_HOSTNAME} rabbitmq ..."
+
+  init_other_rabbitmq
+
+  RABBITMQ_SERVER_ROOT=$(realpath ../)
+  
+  MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
+  MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
+
+  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" 
+
+  ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE /tmp/other$MOUNT_RABBITMQ_CONF
+
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_RABBITMQ_CONF"
+  cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/other/etc/rabbitmq/
+  RABBITMQ_ENABLED_PLUGINS=`cat /tmp/other/etc/rabbitmq/enabled_plugins | tr -d " \t\n\r" | awk -F'[][]' '{print $2}'`
+  print "> EFFECTIVE PLUGINS: $RABBITMQ_ENABLED_PLUGINS"
+
+  ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE /tmp/other$MOUNT_ADVANCED_CONFIG
+  RESULT=$?
+  if [ $RESULT -eq 0 ]; then
+    print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_ADVANCED_CONFIG"    
+    gmake --directory=${RABBITMQ_SERVER_ROOT}  \
+        RABBITMQ_NODENAME=${OTHER_RABBITMQ_NODENAME} \
+        RABBITMQ_DIST_PORT=7001 \
+        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
+  		RABBITMQ_CONFIG_FILE=/tmp/other$MOUNT_RABBITMQ_CONF \
+        RABBITMQ_ADVANCED_CONFIG_FILE=/tmp/other$MOUNT_ADVANCED_CONFIG run-broker
+  else
+    gmake --directory=${RABBITMQ_SERVER_ROOT} \
+        RABBITMQ_NODENAME=${OTHER_RABBITMQ_NODENAME} \
+        RABBITMQ_DIST_PORT=7001 \
+        RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
+  		RABBITMQ_CONFIG_FILE=/tmp/other$MOUNT_RABBITMQ_CONF run-broker
+  fi
+  print "> RABBITMQ_TEST_DIR: ${RABBITMQ_CONFIG_DIR}"
+
+
+}
+start_docker_other_rabbitmq() {
+  begin "Starting other-rabbitmq in docker ..."
+
+  init_other_rabbitmq
+  kill_container_if_exist other_rabbitmq
+
+  mkdir -pv $CONF_DIR/other-rabbitmq/conf.d/
+
+  RABBITMQ_TEST_DIR="/var/rabbitmq" 
+  ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE $CONF_DIR/other-rabbitmq/rabbitmq.conf
+  print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/other-rabbitmq/rabbitmq.conf"
+  ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE $CONF_DIR/other-rabbitmq/advanced.config
+  RESULT=$?
+  if [ $RESULT -eq 0 ]; then
+      if [ -s $RESULT ]; then
+          print "> EFFECTIVE ADVANCED_CONFIG_FILE: $CONF_DIR/other-rabbitmq/advanced.config"
+      else
+          rm $CONF_DIR/rabbitmq/advanced.config
+      fi
+  fi
+  if [ -f ${RABBITMQ_CONFIG_DIR}/logging.conf ]; then
+      cp ${RABBITMQ_CONFIG_DIR}/logging.conf $CONF_DIR/other-rabbitmq/conf.d/
+  fi
+  if [ -f ${RABBITMQ_CONFIG_DIR}/enabled_plugins ]; then
+      cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins $CONF_DIR/other-rabbitmq
+  fi
+  if [ -d "${RABBITMQ_CONFIG_DIR}/certs" ]; then
+      cp -r ${RABBITMQ_CONFIG_DIR}/certs $CONF_DIR/other-rabbitmq
+  fi
+  if [ -d ${RABBITMQ_CONFIG_DIR}/imports ]; then
+      cp -r ${RABBITMQ_CONFIG_DIR}/imports $CONF_DIR/other-rabbitmq
+  fi
+
+  print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
+
+  docker run \
+    --detach \
+    --name ${OTHER_RABBITMQ_HOSTNAME} \
+    --net ${DOCKER_NETWORK} \
+    -p 5674:5672 \
+    -p 5673:5671 \
+    -p 15674:15672 \
+    -p 15673:15671 \
+    -v $CONF_DIR/other-rabbitmq/:/etc/rabbitmq \
+    -v $CONF_DIR/other-rabbitmq/imports:/var/rabbitmq/imports \
+    -v ${TEST_DIR}:/config \
+    ${RABBITMQ_DOCKER_IMAGE}
+
+  wait_for_message ${OTHER_RABBITMQ_HOSTNAME} "Server startup complete"
+  end "RabbitMQ ${OTHER_RABBITMQ_HOSTNAME} ready"
+}

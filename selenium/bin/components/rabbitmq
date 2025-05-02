@@ -66,23 +66,25 @@ start_local_rabbitmq() {
   MOUNT_RABBITMQ_CONF="/etc/rabbitmq/rabbitmq.conf"
   MOUNT_ADVANCED_CONFIG="/etc/rabbitmq/advanced.config"
 
-  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
+  RABBITMQ_TEST_DIR="${RABBITMQ_CONFIG_DIR}" ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_RABBITMQ_CONF
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_RABBITMQ_CONF"
   cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/etc/rabbitmq/
   RABBITMQ_ENABLED_PLUGINS=`cat /tmp/etc/rabbitmq/enabled_plugins | tr -d " \t\n\r" | awk -F'[][]' '{print $2}'`
   print "> EFFECTIVE PLUGINS: $RABBITMQ_ENABLED_PLUGINS"
 
-  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
+  ${BIN_DIR}/gen-advanced-config "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE /tmp$MOUNT_ADVANCED_CONFIG
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp$MOUNT_ADVANCED_CONFIG"    
     gmake --directory=${RABBITMQ_SERVER_ROOT}  \
+        RABBITMQ_NODENAME="$RABBITMQ_NODENAME" \
         RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF \
         RABBITMQ_ADVANCED_CONFIG_FILE=/tmp$MOUNT_ADVANCED_CONFIG run-broker
   else
     gmake --directory=${RABBITMQ_SERVER_ROOT} \
+        RABBITMQ_NODENAME="$RABBITMQ_NODENAME" \
         RABBITMQ_ENABLED_PLUGINS="$RABBITMQ_ENABLED_PLUGINS" \
   		RABBITMQ_CONFIG_FILE=/tmp$MOUNT_RABBITMQ_CONF run-broker
   fi
@@ -99,9 +101,10 @@ start_docker_cluster_rabbitmq() {
 
     mkdir -pv $CONF_DIR/rabbitmq/conf.d/
 
-    RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+    RABBITMQ_TEST_DIR="/var/rabbitmq" 
+    ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
     print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-    ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
+    ${BIN_DIR}/gen-advanced-config "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
     RESULT=$?
     if [ $RESULT -eq 0 ]; then
         if [ -s $RESULT ]; then
@@ -150,9 +153,10 @@ start_docker_rabbitmq() {
 
   mkdir -pv $CONF_DIR/rabbitmq/conf.d/
 
-  RABBITMQ_TEST_DIR="/var/rabbitmq" ${BIN_DIR}/gen-rabbitmq-conf ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
+  RABBITMQ_TEST_DIR="/var/rabbitmq" 
+  ${BIN_DIR}/gen-rabbitmq-conf "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/rabbitmq.conf
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: $CONF_DIR/rabbitmq/rabbitmq.conf"
-  ${BIN_DIR}/gen-advanced-config ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
+  ${BIN_DIR}/gen-advanced-config "${PROFILES}" ${RABBITMQ_CONFIG_DIR} $ENV_FILE $CONF_DIR/rabbitmq/advanced.config
   RESULT=$?
   if [ $RESULT -eq 0 ]; then
       if [ -s $RESULT ]; then
