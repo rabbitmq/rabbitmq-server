@@ -17,7 +17,7 @@ module.exports = class VhostsAdminTab extends AdminTab {
   }
   async searchForVhosts(vhost, regex = false) {
     await this.sendKeys(FILTER_VHOST, vhost)
-    await this.sendKeys(FILTER_VHOST, Key.RETURN)
+    //await this.sendKeys(FILTER_VHOST, Key.RETURN)
     if (regex) {
       await this.click(CHECKBOX_REGEX)
     }
@@ -31,7 +31,7 @@ module.exports = class VhostsAdminTab extends AdminTab {
      const links = await vhost_rows.findElements(By.css("td a"))
      for (let link of links) {
        let text = await link.getText()
-       if ( text === "/" ) return link.click()
+       if ( text === vhost ) return link.click()
      }
      throw "Vhost " + vhost + " not found"
   }
