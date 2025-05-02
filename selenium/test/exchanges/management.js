@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doWhile } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -65,6 +65,41 @@ describe('Exchange management', function () {
     await exchange.isLoaded()
     assert.equal("amq.fanout", await exchange.getName())
   })
+
+  it('queue selectable columns', async function () {  
+    await overview.clickOnOverviewTab()
+    await overview.clickOnExchangesTab()
+    await doWhile(async function() { return exchanges.getExchangesTable() },
+      function(table) { 
+        return table.length > 0
+    })
+
+    await exchanges.clickOnSelectTableColumns()
+    let table = await exchanges.getSelectableTableColumns()
+    
+    assert.equal(2, table.length)
+    let overviewGroup = { 
+        "name" : "Overview:",
+        "columns": [
+          {"name:":"Type","id":"checkbox-exchanges-type"},
+          {"name:":"Features (with policy)","id":"checkbox-exchanges-features"},
+          {"name:":"Features (no policy)","id":"checkbox-exchanges-features_no_policy"},
+          {"name:":"Policy","id":"checkbox-exchanges-policy"}
+        ]
+    }    
+    assert.equal(JSON.stringify(table[0]), JSON.stringify(overviewGroup))
+    
+    let messageRatesGroup = { 
+      "name" : "Message rates:",
+      "columns": [
+        {"name:":"rate in","id":"checkbox-exchanges-rate-in"},
+        {"name:":"rate out","id":"checkbox-exchanges-rate-out"}
+      ]
+    }
+    assert.equal(JSON.stringify(table[1]), JSON.stringify(messageRatesGroup))
+      
+  })
+
 
   after(async function () {
     await teardown(driver, this, captureScreen)
