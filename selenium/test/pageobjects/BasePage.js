@@ -13,11 +13,13 @@ const EXCHANGES_TAB = By.css('div#menu ul#tabs li#exchanges')
 const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
 const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
-const FORM_POPUP = By.css('div.form-popup-warn')
-const FORM_POPUP_CLOSE_BUTTON = By.css('div.form-popup-warn span#close')
+const FORM_POPUP_WARNING = By.css('div.form-popup-warn')
+const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span#close')
 
+const FORM_POPUP_OPTIONS = By.css('div.form-popup-options')
 const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
 const TABLE_COLUMNS_POPUP = By.css('div.form-popup-options table.form')
+const FORM_POPUP_OPTIONS_CLOSE_BUTTON = By.css('div.form-popup-options span#close')
 
 module.exports = class BasePage {
   driver
@@ -157,7 +159,7 @@ module.exports = class BasePage {
   }
   async isPopupWarningDisplayed() {
     try  {      
-      let element = await driver.findElement(FORM_POPUP)
+      let element = await driver.findElement(FORM_POPUP_WARNING)
       return element.isDisplayed()
     } catch(e) {
       return Promise.resolve(false)
@@ -175,7 +177,7 @@ module.exports = class BasePage {
   }
   
   async isPopupWarningNotDisplayed() {
-    return this.isElementNotVisible(FORM_POPUP)
+    return this.isElementNotVisible(FORM_POPUP_WARNING)
   }
 
   async isElementNotVisible(locator) {
@@ -195,13 +197,13 @@ module.exports = class BasePage {
     }
   }
   async getPopupWarning() {
-    let element = await driver.findElement(FORM_POPUP)
+    let element = await driver.findElement(FORM_POPUP_WARNING)
     return this.driver.wait(until.elementIsVisible(element), this.timeout,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
   }
   async closePopupWarning() {
-    return this.click(FORM_POPUP_CLOSE_BUTTON)
+    return this.click(FORM_POPUP_WARNING_CLOSE_BUTTON)
   }
   async clickOnSelectTableColumns() {
     return this.click(ADD_MINUS_BUTTON)
@@ -210,23 +212,27 @@ module.exports = class BasePage {
     const table = await this.waitForDisplayed(TABLE_COLUMNS_POPUP)
     const rows = await table.findElements(By.css('tbody tr'))
     let table_model = []
-    console.log("Found "+ rows.length + " rows")
     for (let i = 1; i < rows.length; i++) { // skip first row      
       let groupNameLabel = await rows[i].findElement(By.css('th label'))
       let groupName = await groupNameLabel.getText()
-      console.log("Found group "+ groupName )
       let columns = await rows[i].findElements(By.css('td label'))
       let table_row = []
-      console.log("Found "+ columns.length + " columns")
       for (let column of columns) {
         let checkbox = await column.findElement(By.css('input'))
         table_row.push({"name:" : await column.getText(), "id" : await checkbox.getAttribute("id")})
       }
       let group = {"name": groupName, "columns": table_row}
-      console.log("Add group " + group)
       table_model.push(group)
     }
     return table_model
+  }
+  async selectTableColumnsById(arrayOfColumnsIds) {
+    const table = await this.waitForDisplayed(TABLE_COLUMNS_POPUP)
+    for (let id of arrayOfColumnsIds) {
+      let checkbox = await table.findElement(By.css('tbody tr input#'+id))
+      await checkbox.click()
+    }
+    await this.click(FORM_POPUP_OPTIONS_CLOSE_BUTTON)
   }
 
   async isDisplayed(locator) {

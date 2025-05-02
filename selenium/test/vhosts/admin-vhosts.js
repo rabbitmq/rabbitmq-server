@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log, delay } = require('../utils')
 const { getManagementUrl, createVhost, deleteVhost } = require('../mgt-api')
 
 const LoginPage = require('../pageobjects/LoginPage')
@@ -51,15 +51,51 @@ describe('Virtual Hosts in Admin tab', function () {
     await overview.clickOnOverviewTab()
     await overview.clickOnAdminTab()
     await adminTab.clickOnVhosts()
+    await doWhile(async function() { return vhostsTab.getVhostsTable() },
+      function(table) { return table.length>1 })
+
     await vhostsTab.clickOnSelectTableColumns()
     let table = await vhostsTab.getSelectableTableColumns()
-    log("Table: " + table)
-    await doWhile(async function() {
-      return vhostsTab.getVhostsTable()
-    }, function(table) {
-      return table.length > 0 && vhost.localeCompare(table[0][0])      
-    })
+    
+    assert.equal(4, table.length)
+    let overviewGroup = { 
+        "name" : "Overview:",
+        "columns": [
+          {"name:":"Default queue type","id":"checkbox-vhosts-default-queue-type"},
+          {"name:":"Cluster state","id":"checkbox-vhosts-cluster-state"},
+          {"name:":"Description","id":"checkbox-vhosts-description"},
+          {"name:":"Tags","id":"checkbox-vhosts-tags"}
+        ]
+      }
+    assert.equal(JSON.stringify(table[0]), JSON.stringify(overviewGroup))
+    let messagesGroup = { 
+      "name" : "Messages:",
+      "columns": [
+        {"name:":"Ready","id":"checkbox-vhosts-msgs-ready"},
+        {"name:":"Unacknowledged","id":"checkbox-vhosts-msgs-unacked"},
+        {"name:":"Total","id":"checkbox-vhosts-msgs-total"}
+      ]
+    }
+    assert.equal(JSON.stringify(table[1]), JSON.stringify(messagesGroup))
+    let networkGroup = { 
+      "name" : "Network:",
+      "columns": [
+        {"name:":"From client","id":"checkbox-vhosts-from_client"},
+        {"name:":"To client","id":"checkbox-vhosts-to_client"}
+      ]
+    }
+    assert.equal(JSON.stringify(table[2]), JSON.stringify(networkGroup))
+    let messageRatesGroup = { 
+      "name" : "Message rates:",
+      "columns": [
+        {"name:":"publish","id":"checkbox-vhosts-rate-publish"},
+        {"name:":"deliver / get","id":"checkbox-vhosts-rate-deliver"}
+      ]
+    }
+    assert.equal(JSON.stringify(table[3]), JSON.stringify(messageRatesGroup))
+  
   })
+  
   describe('given there is a new virtualhost with a tag', async function() {
     let vhost = "test_" + Math.floor(Math.random() * 1000)
     before(async function() {
@@ -70,16 +106,19 @@ describe('Virtual Hosts in Admin tab', function () {
       await adminTab.clickOnVhosts()
     })
     it('vhost is listed with tag', async function () {  
-      log("Searching for vhost")
-      await vhostsTab.searchForVhosts(vhost)      
-      await vhostsTab.clickOnSelectTableColumns()
-      let table = vhostsTab.getSelectableTableColumns()
-      log("Table: " + table)
-      await doWhile(async function() {
-        return vhostsTab.getVhostsTable()
-      }, function(table) {
-        return table.length > 0 && vhost.localeCompare(table[0][0])      
+      log("Searching for vhost " + vhost)
+      await doWhile(async function() { return vhostsTab.searchForVhosts(vhost) },
+      function(table) { 
+        return table.length==1 && table[1][0].localeCompare(vhost)
       })
+      log("Found vhost " + vhost)
+      await vhostsTab.selectTableColumnsById(["checkbox-vhosts-tags"])
+      
+      await doWhile(async function() { return vhostsTab.getVhostsTable() },
+      function(table) { 
+        return table.length==1 && table[1][3].localeCompare("selenium-tag")
+      })
+
     })
     after(async function () {
       log("Deleting vhost")
@@ -87,6 +126,7 @@ describe('Virtual Hosts in Admin tab', function () {
     })
 
   })
+  
 
   after(async function () {
     await teardown(driver, this, captureScreen)

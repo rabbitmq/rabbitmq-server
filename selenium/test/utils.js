@@ -62,7 +62,7 @@ module.exports = {
     }
     let chromeCapabilities = Capabilities.chrome();
     const options = new chrome.Options()
-    chromeCapabilities.setAcceptInsecureCerts(true);    
+    chromeCapabilities.setAcceptInsecureCerts(true);  
     chromeCapabilities.set('goog:chromeOptions', {
       excludeSwitches: [ // disable info bar
         'enable-automation',
@@ -71,7 +71,8 @@ module.exports = {
         'profile.password_manager_enabled' : false      
       },
       args: [
-          "--guest",
+          "--enable-automation",
+          "guest",
           "disable-infobars",
           "--disable-notifications",
           "--lang=en",
@@ -87,7 +88,7 @@ module.exports = {
     });
     driver = builder
       .forBrowser('chrome')
-      .setChromeOptions(options.excludeSwitches('enable-automation'))
+      //.setChromeOptions(options.excludeSwitches("disable-popup-blocking", "enable-automation"))
       .withCapabilities(chromeCapabilities)
       .build()
     driver.manage().setTimeouts( { pageLoad: 35000 } )
