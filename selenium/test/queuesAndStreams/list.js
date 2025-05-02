@@ -51,7 +51,6 @@ describe('Queues and Streams management', function () {
 
     await queuesAndStreams.clickOnSelectTableColumns()
     let table = await queuesAndStreams.getSelectableTableColumns()
-    console.log("table: " + JSON.stringify(table))
     
     assert.equal(4, table.length)
     let overviewGroup = { 
