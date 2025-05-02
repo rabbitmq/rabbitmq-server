@@ -68,10 +68,10 @@ module.exports = {
         'enable-automation',
       ],
       prefs: {
-        'profile.managed_default_content_settings.popups' : 2,
-        'profile.managed_default_content_settings.notifications' : 2,
+        'profile.password_manager_enabled' : false      
       },
       args: [
+          "--guest",
           "disable-infobars",
           "--disable-notifications",
           "--lang=en",

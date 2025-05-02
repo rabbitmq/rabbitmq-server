@@ -10,9 +10,6 @@ const CHECKBOX_REGEX = By.css('div#main div.filter input#filter-regex-mode')
 
 const VHOSTS_TABLE_ROWS = By.css('div#main table.list tbody tr')
 const TABLE_SECTION = By.css('div#main table.list')
-const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
-
-const TABLE_COLUMNS_POPUP = By.css('div.form-popup-options')
 
 module.exports = class VhostsAdminTab extends AdminTab {
   async isLoaded () {
@@ -41,10 +38,5 @@ module.exports = class VhostsAdminTab extends AdminTab {
   async getVhostsTable(firstNColumns) {
     return this.getTable(TABLE_SECTION, firstNColumns)
   }
-  async clickOnSelectColumns() {
-    return this.click(ADD_MINUS_BUTTON)
-  }
-  async getSelectableTableColumns() {
-    return this.waitForDisplayed(TABLE_COLUMNS_POPUP)
-  }
+
 }
