@@ -29,7 +29,7 @@ describe('Virtual Hosts in Admin tab', function () {
     if (!await overview.isLoaded()) {
       throw new Error('Failed to login')
     }
-
+    await overview.selectRefreshOption("Do not refresh")
   })
 
   it('find default vhost', async function () {
@@ -38,6 +38,7 @@ describe('Virtual Hosts in Admin tab', function () {
     assert.equal(true, await vhostsTab.hasVhosts("/"))
   })
   it('find default vhost and view it', async function () {
+    await overview.clickOnOverviewTab()
     await overview.clickOnAdminTab()
     await adminTab.clickOnVhosts()
     await vhostsTab.clickOnVhost(await vhostsTab.searchForVhosts("/"), "/")
@@ -46,25 +47,42 @@ describe('Virtual Hosts in Admin tab', function () {
     }
     assert.equal("/", await vhostTab.getName())
   })
-
+  it('vhost selectable columns', async function () {  
+    await overview.clickOnOverviewTab()
+    await overview.clickOnAdminTab()
+    await adminTab.clickOnVhosts()
+    await vhostsTab.clickOnSelectTableColumns()
+    let table = await vhostsTab.getSelectableTableColumns()
+    log("Table: " + table)
+    await doWhile(async function() {
+      return vhostsTab.getVhostsTable()
+    }, function(table) {
+      return table.length > 0 && vhost.localeCompare(table[0][0])      
+    })
+  })
   describe('given there is a new virtualhost with a tag', async function() {
     let vhost = "test_" + Math.floor(Math.random() * 1000)
     before(async function() {
+      log("Creating vhost")
       createVhost(getManagementUrl(), vhost, "selenium", "selenium-tag")
+      await overview.clickOnOverviewTab()
       await overview.clickOnAdminTab()
-      await adminTab.clickOnVhosts()      
+      await adminTab.clickOnVhosts()
     })
-    it('vhost is listed', async function () {      
-      await vhostsTab.searchForVhosts(vhost)
+    it('vhost is listed with tag', async function () {  
+      log("Searching for vhost")
+      await vhostsTab.searchForVhosts(vhost)      
+      await vhostsTab.clickOnSelectTableColumns()
+      let table = vhostsTab.getSelectableTableColumns()
+      log("Table: " + table)
       await doWhile(async function() {
         return vhostsTab.getVhostsTable()
       }, function(table) {
-        return table.length > 0 && vhost.localeCompare(table[0][0])        
+        return table.length > 0 && vhost.localeCompare(table[0][0])      
       })
-      await vhostsTab.clickOnSelectColumns()
-      await vhostsTab.getSelectableTableColumns()
     })
     after(async function () {
+      log("Deleting vhost")
       deleteVhost(getManagementUrl(), vhost)
     })
 
