@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 
-TEST_PATH=${1:?"First parameter must be the test path"}
-TEMPLATE_FILE_PREFIX=${2:?"Second parameter must be the template file prefix"}
-TEMPLATE_FILE_SUFFIX=${3:-""}
+PROFILES=${1:?"First parameter must be a space-separated list of profiles"}
+TEST_PATH=${2:?"First parameter must be the test path"}
+TEMPLATE_FILE_PREFIX=${3:?"Second parameter must be the template file prefix"}
+TEMPLATE_FILE_SUFFIX=${4:-""}
 TEST_PARENT_PATH="$(dirname "$TEST_PATH")"
+
+if [[ ! -z "${DEBUG}" ]]; then
+  set -x
+fi
 
 find_templates_files() {
   find_template_files_in $TEST_PARENT_PATH
