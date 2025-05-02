@@ -27,6 +27,7 @@ all() ->
 groups() ->
     ClusterSize1Tests = [
         vhost_is_created_with_default_limits,
+        vhost_is_created_with_default_queue_type,
         vhost_is_created_with_operator_policies,
         vhost_is_created_with_default_user,
         single_node_vhost_deletion_forces_connection_closure,
@@ -463,8 +464,35 @@ vhost_is_created_with_default_limits(Config) ->
                                 rabbit_vhost_limit, list, [VHost]))
     after
         rabbit_ct_broker_helpers:rpc(
+            Config, 0,
+            application, unset_env, [rabbit, default_limits])
+    end.
+
+vhost_is_created_with_default_queue_type(Config) ->
+    VHost = atom_to_binary(?FUNCTION_NAME),
+    QName = atom_to_binary(?FUNCTION_NAME),
+    ?assertEqual(ok, rabbit_ct_broker_helpers:rpc(Config, 0,
+                            application, set_env, [rabbit, default_queue_type, rabbit_quorum_queue])),
+    try
+        ?assertEqual(ok, rabbit_ct_broker_helpers:add_vhost(Config, VHost)),
+        rabbit_ct_broker_helpers:set_full_permissions(Config, <<"guest">>, VHost),
+        ?assertEqual(<<"quorum">>, rabbit_ct_broker_helpers:rpc(Config, 0,
+                                rabbit_vhost, default_queue_type, [VHost])),
+        V = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_vhost, get, [VHost]),
+        ct:pal("Vhost metadata: ~p", [V]),
+        ?assertEqual(<<"quorum">>, maps:get(default_queue_type, vhost:get_metadata(V))),
+
+        Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+        {ok, Chan} = amqp_connection:open_channel(Conn),
+        amqp_channel:call(Chan, #'queue.declare'{queue = QName, durable = true}),
+        QNameRes = rabbit_misc:r(VHost, queue, QName),
+        {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [QNameRes]),
+        ?assertMatch(rabbit_quorum_queue, amqqueue:get_type(Q)),
+        close_connections([Conn])
+    after
+        rabbit_ct_broker_helpers:rpc(
           Config, 0,
-          application, unset_env, [rabbit, default_limits])
+          application, unset_env, [rabbit, default_queue_type])
     end.
 
 vhost_is_created_with_operator_policies(Config) ->
