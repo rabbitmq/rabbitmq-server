@@ -151,7 +151,9 @@ module.exports = class BasePage {
       let columns = await row.findElements(By.css('td'))
       let table_row = []
       for (let column of columns) {
-        if (table_row.length < firstNColumns) table_row.push(await column.getText())
+        if (firstNColumns == undefined || table_row.length < firstNColumns) {
+          table_row.push(await column.getText())
+        }
       }
       table_model.push(table_row)
     }
@@ -227,6 +229,7 @@ module.exports = class BasePage {
     return table_model
   }
   async selectTableColumnsById(arrayOfColumnsIds) {
+    await this.clickOnSelectTableColumns()
     const table = await this.waitForDisplayed(TABLE_COLUMNS_POPUP)
     for (let id of arrayOfColumnsIds) {
       let checkbox = await table.findElement(By.css('tbody tr input#'+id))

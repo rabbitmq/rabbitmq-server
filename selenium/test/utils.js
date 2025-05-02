@@ -135,16 +135,16 @@ module.exports = {
     let ret
     do {
       try {
-        console.log("Calling doCallback (attempts:" + attempts + ") ... ")
+        //console.log("Calling doCallback (attempts:" + attempts + ") ... ")
         ret = await doCallback()
-        console.log("Calling booleanCallback (attempts:" + attempts + ") with arg " + ret + " ... ")
+        //console.log("Calling booleanCallback (attempts:" + attempts + ") with arg " + ret + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
         console.log("Caught " + error + " on doWhile callback...")
         
       }finally {
         if (!done) {
-          console.log("Waiting until next attempt")
+          //console.log("Waiting until next attempt")
           await module.exports.delay(delayMs)
         }
       }     

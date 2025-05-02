@@ -47,12 +47,16 @@ describe('Virtual Hosts in Admin tab', function () {
     }
     assert.equal("/", await vhostTab.getName())
   })
+    
   it('vhost selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnAdminTab()
     await adminTab.clickOnVhosts()
+    await vhostsTab.searchForVhosts("/")
     await doWhile(async function() { return vhostsTab.getVhostsTable() },
-      function(table) { return table.length>1 })
+      function(table) { 
+        return table.length>0
+      })
 
     await vhostsTab.clickOnSelectTableColumns()
     let table = await vhostsTab.getSelectableTableColumns()
@@ -107,16 +111,18 @@ describe('Virtual Hosts in Admin tab', function () {
     })
     it('vhost is listed with tag', async function () {  
       log("Searching for vhost " + vhost)
-      await doWhile(async function() { return vhostsTab.searchForVhosts(vhost) },
+      await vhostsTab.searchForVhosts(vhost)
+      await doWhile(async function() { return vhostsTab.getVhostsTable()},
       function(table) { 
-        return table.length==1 && table[1][0].localeCompare(vhost)
+        log("table: "+ JSON.stringify(table) + " table[0][0]:" + table[0][0])
+        return table.length==1 && table[0][0].localeCompare(vhost) == 0
       })
       log("Found vhost " + vhost)
       await vhostsTab.selectTableColumnsById(["checkbox-vhosts-tags"])
       
       await doWhile(async function() { return vhostsTab.getVhostsTable() },
       function(table) { 
-        return table.length==1 && table[1][3].localeCompare("selenium-tag")
+        return table.length==1 && table[0][3].localeCompare("selenium-tag") == 0
       })
 
     })
