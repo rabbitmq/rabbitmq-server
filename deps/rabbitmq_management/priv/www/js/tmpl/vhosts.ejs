@@ -1,12 +1,12 @@
 <h1>Virtual Hosts</h1>
 
-<div class="section">
+<div class="section" id="vhosts">
   <h2>All virtual hosts</h2>
   <div class="hider">
 <%= filter_ui(vhosts) %>
   <div class="updatable">
 <% if (vhosts.length > 0) { %>
-<table class="list">
+<table class="list" >
   <thead>
   <tr>
     <%= group_heading('vhosts', 'Overview', [true, true, true]) %>
