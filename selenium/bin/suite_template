@@ -34,6 +34,7 @@ SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
 CONF_DIR=${CONF_DIR_PREFIX:-/tmp}/selenium/${SUITE}
 LOGS=${CONF_DIR}/logs
 ENV_FILE=$CONF_DIR/.env
+OTHER_ENV_FILE=$CONF_DIR/.other.env
 
 rm -rf $CONF_DIR
 
@@ -50,6 +51,9 @@ parse_arguments() {
     if [[ "$1" == "start-rabbitmq" ]]
     then
       echo "start-rabbitmq"
+    elif [[ "$1" == "start-other-rabbitmq" ]]
+      then
+      echo "start-other-rabbitmq"
     elif [[ "$1" == "start-others" ]]
       then
       echo "start-others"
@@ -120,6 +124,7 @@ init_suite() {
   PROFILES="${PROFILES} ${ADDON_PROFILES}"
   print "> (=) final PROFILES: ${PROFILES} "
   print "> ENV_FILE: ${ENV_FILE} "
+  print "> OTHER_ENV_FILE: ${OTHER_ENV_FILE} "
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite"
 
@@ -217,6 +222,9 @@ wait_for_oidc_endpoint_docker() {
 }
 calculate_rabbitmq_url() {
   echo "${RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
+}
+calculate_other_rabbitmq_url() {
+  echo "${OTHER_RABBITMQ_SCHEME:-http}://$1${PUBLIC_RABBITMQ_PATH:-$RABBITMQ_PATH}"
 }
 calculate_forward_proxy_url() {
   PROXIED_URL=$1
@@ -401,13 +409,27 @@ profiles_with_local_or_docker() {
     echo "$PROFILES"
   fi
 }
+other_profiles_with_local_or_docker() {
+  if [[ "$PROFILES_FOR_OTHER" != *"local"* && "$PROFILES_FOR_OTHER" != *"docker"* ]]; then
+    echo "$PROFILES_FOR_OTHER docker"
+  else
+    echo "$PROFILES_FOR_OTHER"
+  fi
+}
 generate_env_file() {
-    begin "Generating env file ..."
+    begin "Generating env file from profiles ${PROFILES} ..."
     mkdir -p $CONF_DIR
-    ${BIN_DIR}/gen-env-file $TEST_CONFIG_DIR ${ENV_FILE}.tmp
+    ${BIN_DIR}/gen-env-file "${PROFILES}" $TEST_CONFIG_DIR ${ENV_FILE}.tmp
     grep -v '^#' ${ENV_FILE}.tmp > $ENV_FILE
     source $ENV_FILE    
     end "Finished generating env file."
+}
+generate_other_env_file() {
+    begin "Generating other env file from profiles ${PROFILES_FOR_OTHER} "
+    mkdir -p $CONF_DIR
+    ${BIN_DIR}/gen-env-file "${PROFILES_FOR_OTHER}" $TEST_CONFIG_DIR ${OTHER_ENV_FILE}.tmp
+    grep -v '^#' ${OTHER_ENV_FILE}.tmp > $OTHER_ENV_FILE    
+    end "Finished generating other env file."
 }
 generate-ca-server-client-kpi() {
   NAME=$1
@@ -529,13 +551,21 @@ run_local_with() {
   generate_env_file
   build_mocha_image
 
+  if [[ "$PROFILES_FOR_OTHER" != "" ]]
+  then 
+    export PROFILES_FOR_OTHER="local ${PROFILES_FOR_OTHER}"
+    generate_other_env_file
+  fi 
 
   if [[ "$COMMAND" == "start-rabbitmq" ]]
   then
     start_local_rabbitmq
-elif [[ "$COMMAND" == "stop-rabbitmq" ]]
+  elif [[ "$COMMAND" == "stop-rabbitmq" ]]
   then
     stop_local_rabbitmq
+  elif [[ "$COMMAND" == "start-other-rabbitmq" ]]
+  then
+    start_local_other_rabbitmq
   elif [[ "$COMMAND" == "start-others" ]]
   then
     start_local_others
@@ -588,6 +618,12 @@ run_on_docker_with() {
   build_mocha_image
   start_selenium
 
+  if [[ "$PROFILES_FOR_OTHER" != "" ]]
+  then 
+    export PROFILES_FOR_OTHER=`other_profiles_with_local_or_docker`
+    generate_other_env_file    
+  fi 
+
   trap "teardown_components" EXIT
 
   start_components
@@ -625,14 +661,21 @@ test_local() {
   begin "Running local test ${1:-}"
 
   RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq:15672}
+  OTHER_RABBITMQ_HOST=${OTHER_RABBITMQ_HOST:-none}
   PUBLIC_RABBITMQ_HOST=${PUBLIC_RABBITMQ_HOST:-$RABBITMQ_HOST}
+  OTHER_PUBLIC_RABBITMQ_HOST=${OTHER_PUBLIC_RABBITMQ_HOST:-$OTHER_RABBITMQ_HOST}  
+
   export RABBITMQ_URL=$(calculate_rabbitmq_url $PUBLIC_RABBITMQ_HOST)
+  export OTHER_RABBITMQ_URL=$(calculate_rabbitmq_url $OTHER_PUBLIC_RABBITMQ_HOST)
   export RABBITMQ_HOSTNAME=${RABBITMQ_HOSTNAME:-rabbitmq}
   export RABBITMQ_AMQP_USERNAME=${RABBITMQ_AMQP_USERNAME}
   export RABBITMQ_AMQP_PASSWORD=${RABBITMQ_AMQP_PASSWORD}
   export SELENIUM_TIMEOUT=${SELENIUM_TIMEOUT:-20000}
   export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
-  
+    
+  generate_node_extra_ca_cert
+  MOUNT_NODE_EXTRA_CA_CERTS=${RABBITMQ_CERTS}/node_ca_certs.pem
+
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
   print "> RABBITMQ_HOST: ${RABBITMQ_HOST}"
@@ -642,8 +685,6 @@ test_local() {
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
   print "> UAA_URL: ${UAA_URL}"
   print "> FAKE_PORTAL_URL: ${FAKE_PORTAL_URL}"
-  print "> OAUTH_NODE_EXTRA_CA_CERTS: ${OAUTH_NODE_EXTRA_CA_CERTS}"
-  MOUNT_NODE_EXTRA_CA_CERTS=${TEST_DIR}/${OAUTH_NODE_EXTRA_CA_CERTS}
   print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
 
   export RUN_LOCAL=true
@@ -695,4 +736,16 @@ save_components_logs() {
     print "Saving logs for component $component"
   done
   end "Finished saving logs"
+}
+generate_node_extra_ca_cert() {  
+  echo "Generating $RABBITMQ_CERTS/node_ca_certs.pem ..."
+  rm -f $RABBITMQ_CERTS/node_ca_certs.pem  
+  env | while IFS= read -r line; do
+    value=${line#*=}
+    name=${line%%=*}
+    if [[ $name == *NODE_EXTRA_CA_CERTS ]]
+    then
+      cat ${TEST_DIR}/${value} >> $RABBITMQ_CERTS/node_ca_certs.pem      
+    fi 
+  done  
 }
