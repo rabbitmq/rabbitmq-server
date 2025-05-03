@@ -14,7 +14,7 @@ mkdir -p $parentdir
 
 echo "" > $FINAL_CONFIG_FILE
 
-for f in $($SCRIPT/find-template-files $UAA_PATH "uaa" "yml")
+for f in $($SCRIPT/find-template-files "${PROFILES}" $UAA_PATH "uaa" "yml")
 do
   envsubst < $f  >> $FINAL_CONFIG_FILE
 done
