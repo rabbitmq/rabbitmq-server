@@ -44,18 +44,11 @@ describe('Queues and Streams management', function () {
   it('queue selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnQueuesTab()
-<<<<<<< HEAD
-    let queueName = "test_" + Math.floor(Math.random() * 1000)
-    await queuesAndStreams.ensureAddQueueSectionIsVisible()
-    
-    await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
-    
-=======
+
     await queuesAndStreams.ensureAddQueueSectionIsVisible()
     let queueName = "test_" + Math.floor(Math.random() * 1000)
     await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
 
->>>>>>> 7653b6522 (Fix test)
     await doWhile(async function() { return queuesAndStreams.getQueuesTable() },
       function(table) { 
         return table.length > 0
