@@ -132,10 +132,7 @@ vhost_definitions(ReqData, VHostName, Context) ->
     ProductName = rabbit:product_name(),
     ProductVersion = rabbit:product_version(),
 
-    DQT = rabbit_queue_type:short_alias_of(rabbit_vhost:default_queue_type(VHostName)),
-    %% note: the type changes to a map
-    VHost1 = rabbit_queue_type:inject_dqt(VHost),
-    Metadata = maps:get(metadata, VHost1),
+    Metadata = vhost:get_metadata(VHost),
 
     TopLevelDefsAndMetadata = [
         {rabbit_version, rabbit_data_coercion:to_binary(Vsn)},
@@ -147,7 +144,6 @@ vhost_definitions(ReqData, VHostName, Context) ->
         {explanation, rabbit_data_coercion:to_binary(io_lib:format("Definitions of virtual host '~ts'", [VHostName]))},
         {metadata, Metadata},
         {description, vhost:get_description(VHost)},
-        {default_queue_type, DQT},
         {limits, vhost:get_limits(VHost)}
     ],
     Result = TopLevelDefsAndMetadata ++ retain_whitelisted(Contents),
@@ -288,7 +284,7 @@ export_name(_Name)                -> true.
 
 rw_state() ->
     [{users,              [name, password_hash, hashing_algorithm, tags, limits]},
-     {vhosts,             [name, description, tags, default_queue_type, metadata]},
+     {vhosts,             [name, description, tags, metadata]},
      {permissions,        [user, vhost, configure, write, read]},
      {topic_permissions,  [user, vhost, exchange, write, read]},
      {parameters,         [vhost, component, name, value]},
