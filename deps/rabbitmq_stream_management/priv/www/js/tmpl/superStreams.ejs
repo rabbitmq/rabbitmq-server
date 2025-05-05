@@ -1,0 +1,70 @@
+<h2> Super Streams </h2>
+
+<% if (ac.canAccessVhosts()) { %>
+<div class="section">
+  <h2>Add a new super stream</h2>
+  <div class="hider">
+    <form action="#/stream/super-streams" method="put">
+      <table class="form">
+<% if (display.vhosts) { %>
+        <tr>
+          <th><label>Virtual host:</label></th>
+          <td>
+            <select name="vhost">
+              <% for (var i = 0; i < vhosts.length; i++) { %>
+              <option value="<%= fmt_string(vhosts[i].name) %>" <%= (vhosts[i].name === current_vhost) ? 'selected="selected"' : '' %>><%= fmt_string(vhosts[i].name) %></option>
+              <% } %>
+            </select>
+          </td>
+        </tr>
+<% } else { %>
+        <tr><td><input type="hidden" name="vhost" value="<%= fmt_string(vhosts[0].name) %>"/></td></tr>
+<% } %>
+        <tr>
+          <th><label>Name:</label></th>
+          <td><input type="text" name="name"/><span class="mand">*</span></td>
+        </tr>
+        <tr>
+          <th>
+            <label>
+              <select name="has-partitions" class="narrow controls-appearance">
+                <option value="partitions" selected="selected">Partitions:</option>
+                <option value="binding-keys">Binding keys:</option>
+              </select>
+            </label>
+          </th>
+          <td>
+            <div id="partitions-div">
+              <input type="partitions" name="partitions" />
+              <span class="mand">*</span><br/>
+            </div>
+            <div id="binding-keys-div" style="display: none;">
+              <input type="binding-keys" name="binding-keys" />
+              <span class="mand">*</span><br/>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th><label>Arguments:</label></th>
+          <td>
+            <div class="multifield" id="arguments"></div>
+            <table class="argument-links">
+              <tr>
+                <td>Add</td>
+                <td>
+                  <span class="argument-link" field="arguments" key="max-length-bytes" type="number">Max length bytes</span> <span class="help" id="queue-max-length-bytes"></span>
+                  | <span class="argument-link" field="arguments" key="max-age" type="string">Max time retention</span><span class="help" id="queue-max-age"></span>
+                  | <span class="argument-link" field="arguments" key="stream-max-segment-size-bytes" type="number">Max segment size in bytes</span><span class="help" id="queue-stream-max-segment-size-bytes"></span></br>
+                  | <span class="argument-link" field="arguments" key="initial-cluster-size" type="number">Initial cluster size</span><span class="help" id="queue-initial-cluster-size"></span>
+                  | <span class="argument-link" field="arguments" key="queue-leader-locator" type="string">Leader locator</span><span class="help" id="queue-leader-locator"></span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Add super stream"/>
+    </form>
+  </div>
+</div>
+<% } %>

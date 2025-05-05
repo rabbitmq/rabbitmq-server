@@ -406,7 +406,7 @@ stream_queue_arguments(ArgumentsAcc, Arguments)
 stream_queue_arguments(ArgumentsAcc,
                        #{<<"max-length-bytes">> := Value} = Arguments) ->
     stream_queue_arguments([{<<"x-max-length-bytes">>, long,
-                             binary_to_integer(Value)}]
+                             rabbit_data_coercion:to_integer(Value)}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"max-length-bytes">>, Arguments));
 stream_queue_arguments(ArgumentsAcc,
@@ -418,14 +418,14 @@ stream_queue_arguments(ArgumentsAcc,
                        #{<<"stream-max-segment-size-bytes">> := Value} =
                        Arguments) ->
     stream_queue_arguments([{<<"x-stream-max-segment-size-bytes">>, long,
-                             binary_to_integer(Value)}]
+                             rabbit_data_coercion:to_integer(Value)}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"stream-max-segment-size-bytes">>,
                                        Arguments));
 stream_queue_arguments(ArgumentsAcc,
                        #{<<"initial-cluster-size">> := Value} = Arguments) ->
     stream_queue_arguments([{<<"x-initial-cluster-size">>, long,
-                             binary_to_integer(Value)}]
+                             rabbit_data_coercion:to_integer(Value)}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"initial-cluster-size">>, Arguments));
 stream_queue_arguments(ArgumentsAcc,
@@ -437,7 +437,7 @@ stream_queue_arguments(ArgumentsAcc,
 stream_queue_arguments(ArgumentsAcc,
                        #{<<"stream-filter-size-bytes">> := Value} = Arguments) ->
     stream_queue_arguments([{<<"x-stream-filter-size-bytes">>, long,
-                             binary_to_integer(Value)}]
+                             rabbit_data_coercion:to_integer(Value)}]
                            ++ ArgumentsAcc,
                            maps:remove(<<"stream-filter-size-bytes">>, Arguments));
 stream_queue_arguments(ArgumentsAcc, _Arguments) ->
