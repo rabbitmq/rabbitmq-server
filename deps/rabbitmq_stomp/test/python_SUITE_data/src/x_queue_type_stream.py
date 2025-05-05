@@ -10,7 +10,7 @@ import base
 import time
 import os
 import re
-import urllib.request, json
+import rabbitman
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -34,11 +34,16 @@ class TestUserGeneratedQueueName(base.BaseTest):
                     'id': 1234,
                     'prefetch-count': 10
                 },
-               ack="client"
+                ack="client"
                 )
 
         # let the stream queue some time to start
         time.sleep(5)
+
+        client = rabbitman.Client(f'http://localhost:{(os.environ["MGMT_PORT"])}', 'guest', 'guest')
+        queue = client.get_queues_by_vhost_and_name("/", queueName)
+
+        self.assertEqual(queue['type'], 'stream')
 
         connection = pika.BlockingConnection(
                 pika.ConnectionParameters(host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
