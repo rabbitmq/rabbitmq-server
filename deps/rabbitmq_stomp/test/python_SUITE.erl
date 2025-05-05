@@ -31,13 +31,11 @@ groups() ->
     ].
 
 init_per_suite(Config) ->
-    DataDir = ?config(data_dir, Config),
     {ok, _} = rabbit_ct_helpers:exec(["pip", "install", "-r", requirements_path(Config),
                                                         "--target", deps_path(Config)]),
     Config.
 
 end_per_suite(Config) ->
-    DataDir = ?config(data_dir, Config),
     ok = file:del_dir_r(deps_path(Config)),
     Config.
 
@@ -82,8 +80,10 @@ run(Config, Test) ->
     StompPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp),
     StompPortTls = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_stomp_tls),
     AmqpPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    MgmtPort = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_mgmt),
     NodeName = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
     os:putenv("AMQP_PORT", integer_to_list(AmqpPort)),
+    os:putenv("MGMT_PORT", integer_to_list(MgmtPort)),
     os:putenv("STOMP_PORT", integer_to_list(StompPort)),
     os:putenv("STOMP_PORT_TLS", integer_to_list(StompPortTls)),
     os:putenv("RABBITMQ_NODENAME", atom_to_list(NodeName)),
