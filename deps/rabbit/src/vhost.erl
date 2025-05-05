@@ -215,7 +215,8 @@ disable_protection_from_deletion(VHost) ->
 -spec new_metadata(binary(), [atom()], rabbit_queue_type:queue_type() | 'undefined') -> metadata().
 new_metadata(Description, Tags, undefined) ->
     #{description => Description,
-      tags => Tags};
+        default_queue_type => rabbit_queue_type:default_alias(),
+        tags => Tags};
 new_metadata(Description, Tags, DefaultQueueType) ->
     #{description => Description,
       tags => Tags,

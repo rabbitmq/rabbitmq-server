@@ -57,6 +57,38 @@ recover(VHost) ->
     ok = rabbit_file:ensure_dir(VHostStubFile),
     ok = file:write_file(VHostStubFile, VHost),
     ok = ensure_config_file(VHost),
+
+    %% in the past, a vhost didn't necessarily have a default queue type
+    %% and queues declared in that vhost defaulted to the type configured
+    %% on the node level (in the config file). Now each vhost has its default
+    %% queue type in the metadata. For vhosts updated from older versions,
+    %% we need to add the default type to the metadata
+    case rabbit_db_vhost:get(VHost) of
+        undefined ->
+            rabbit_log:warning("Cannot check metadata for vhost '~ts' during recovery, record not found.",
+                [VHost]);
+        VHostRecord ->
+            Metadata = vhost:get_metadata(VHostRecord),
+            case maps:is_key(default_queue_type, Metadata) of
+                true ->
+                    rabbit_log:debug("Default queue type for vhost '~ts' is ~p.",
+                        [VHost, maps:get(default_queue_type, Metadata)]),
+                    ok;
+                false ->
+                    DefaultType = rabbit_queue_type:default_alias(),
+                    rabbit_log:info("Setting missing default queue type to '~p' for vhost '~ts'.",
+                        [DefaultType, VHost]),
+                    case rabbit_db_vhost:merge_metadata(VHost, #{default_queue_type => DefaultType}) of
+                        {ok, _UpdatedVHostRecord} ->
+                            ok;
+                        {error, Reason} ->
+                            % Log the error but continue recovery
+                            rabbit_log:warning("Failed to set the default queue type for vhost '~ts': ~p",
+                                [VHost, Reason])
+                    end
+            end
+    end,
+
     {Recovered, Failed} = rabbit_amqqueue:recover(VHost),
     AllQs = Recovered ++ Failed,
     QNames = [amqqueue:get_name(Q) || Q <- AllQs],
@@ -157,8 +189,16 @@ add(Name, Metadata, ActingUser) ->
             catch(do_add(Name, Metadata, ActingUser))
     end.
 
-do_add(Name, Metadata, ActingUser) ->
+do_add(Name, Metadata0, ActingUser) ->
     ok = is_over_vhost_limit(Name),
+
+    Metadata = case maps:is_key(default_queue_type, Metadata0) of
+        true ->
+            Metadata0;
+        false ->
+            Metadata0#{default_queue_type => rabbit_queue_type:default_alias()}
+    end,
+
     Description = maps:get(description, Metadata, undefined),
     Tags = maps:get(tags, Metadata, []),
 
