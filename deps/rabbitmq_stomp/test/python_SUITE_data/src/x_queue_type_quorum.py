@@ -10,7 +10,7 @@ import base
 import time
 import os
 import re
-
+import rabbitman
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -33,6 +33,11 @@ class TestUserGeneratedQueueName(base.BaseTest):
 
         # let the quorum queue some time to start
         time.sleep(5)
+
+        client = rabbitman.Client(f'http://localhost:{(os.environ["MGMT_PORT"])}', 'guest', 'guest')
+        queue = client.get_queues_by_vhost_and_name("/", queueName)
+
+        self.assertEqual(queue['type'], 'quorum')
 
         connection = pika.BlockingConnection(
                 pika.ConnectionParameters(host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
