@@ -11,7 +11,6 @@
 -include_lib("proper/include/proper.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--include("rabbit_memory.hrl").
 -include("rabbit.hrl").
 
 -compile(export_all).
@@ -26,7 +25,6 @@
 all() ->
     [
         {group, parallel_tests},
-        {group, parse_mem_limit},
         {group, gen_server2},
         {group, date_time}
     ].
@@ -52,12 +50,6 @@ groups() ->
             name_type,
             get_erl_path,
             hexify
-        ]},
-        {parse_mem_limit, [parallel], [
-            parse_mem_limit_relative_exactly_max,
-            parse_mem_relative_above_max,
-            parse_mem_relative_integer,
-            parse_mem_relative_invalid
         ]},
         {gen_server2, [parallel], [
             stats_timer_is_working,
@@ -253,46 +245,6 @@ gen_server2_stop(_) ->
     ?assertEqual(false, erlang:is_process_alive(TestServer)),
     ?assertEqual({'EXIT', noproc}, (catch gen_server:stop(TestServer))),
     ok.
-
-parse_mem_limit_relative_exactly_max(_Config) ->
-    MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
-    case MemLimit of
-        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
-        _ ->    ct:fail(
-                    "Expected memory limit to be ~tp, but it was ~tp",
-                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
-                )
-    end.
-
-parse_mem_relative_above_max(_Config) ->
-    MemLimit = vm_memory_monitor:parse_mem_limit(1.01),
-    case MemLimit of
-        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
-        _ ->    ct:fail(
-                    "Expected memory limit to be ~tp, but it was ~tp",
-                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
-                )
-    end.
-
-parse_mem_relative_integer(_Config) ->
-    MemLimit = vm_memory_monitor:parse_mem_limit(1),
-    case MemLimit of
-        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
-        _ ->    ct:fail(
-                    "Expected memory limit to be ~tp, but it was ~tp",
-                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
-                )
-    end.
-
-parse_mem_relative_invalid(_Config) ->
-    MemLimit = vm_memory_monitor:parse_mem_limit([255]),
-    case MemLimit of
-        ?DEFAULT_VM_MEMORY_HIGH_WATERMARK -> ok;
-        _ ->    ct:fail(
-                    "Expected memory limit to be ~tp, but it was ~tp",
-                    [?DEFAULT_VM_MEMORY_HIGH_WATERMARK, MemLimit]
-                )
-    end.
 
 platform_and_version(_Config) ->
     MajorVersion = erlang:system_info(otp_release),
