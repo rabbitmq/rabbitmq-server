@@ -36,6 +36,8 @@ class TestRedelivered(base.BaseTest):
             self.assertTrue(listener2.wait(), "message not received again")
             self.assertEqual(1, len(listener2.messages))
             self.assertEqual('true', listener2.messages[0]['headers']['redelivered'])
+            mid = listener2.messages[0]['headers'][self.ack_id_source_header]
+            self.ack_message(conn2, mid, None)
         finally:
             conn2.disconnect()
 
