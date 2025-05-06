@@ -120,6 +120,27 @@ class TestParsing(unittest.TestCase):
         self.match(resp, self.cd.recv(4096).decode('utf-8'))
 
     @connect(['cd'])
+    def test_unicode(self):
+        cmd = ('\n'
+               'SUBSCRIBE\n'
+               'destination:/exchange/amq.fanout\n'
+               '\n\x00\n'
+               'SEND\n'
+               'destination:/exchange/amq.fanout\n'
+               'headꙕr1:valꙕe1\n\n'
+               'hello\n\x00')
+        self.cd.sendall(cmd.encode('utf-8'))
+        resp = ('MESSAGE\n'
+                'destination:/exchange/amq.fanout\n'
+                'message-id:Q_/exchange/amq.fanout@@session-(.*)\n'
+                'redelivered:false\n'
+                'headꙕr1:valꙕe1\n'
+                'content-length:6\n'
+                '\n'
+                'hello\n\0')
+        self.match(resp, self.cd.recv(4096).decode('utf-8'))
+
+    @connect(['cd'])
     def test_send_without_content_type_binary(self):
         msg = 'hello'
         cmd = ('\n'
