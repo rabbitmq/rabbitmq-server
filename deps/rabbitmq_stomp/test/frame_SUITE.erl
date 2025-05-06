@@ -92,13 +92,13 @@ parse_resume_mid_command(_) ->
     {ok, #stomp_frame{command = "COMMAND"}, _Rest} = parse(Second, Resume).
 
 parse_resume_mid_header_key(_) ->
-    First = "COMMAND\nheade",
+    First = "COMMAND\nheadꙕ",
     Second = "r1:value1\n\n\0",
     {more, Resume} = parse(First),
     {ok, Frame = #stomp_frame{command = "COMMAND"}, _Rest} =
         parse(Second, Resume),
     ?assertEqual({ok, "value1"},
-                 rabbit_stomp_frame:header(Frame, "header1")).
+                 rabbit_stomp_frame:header(Frame, binary_to_list(<<"headꙕr1"/utf8>>))).
 
 parse_resume_mid_header_val(_) ->
     First = "COMMAND\nheader1:val",
@@ -215,7 +215,7 @@ headers_escaping_roundtrip_without_trailing_lf(_) ->
 parse(Content) ->
     parse(Content, rabbit_stomp_frame:initial_state()).
 parse(Content, State) ->
-    rabbit_stomp_frame:parse(list_to_binary(Content), State).
+    rabbit_stomp_frame:parse(unicode:characters_to_binary(Content), State).
 
 parse_complete(Content) ->
     {ok, Frame = #stomp_frame{command = Command}, State} = parse(Content),
