@@ -503,6 +503,20 @@ handle_connection_down_super_stream_no_active_removed_or_present_test(_) ->
                    Groups),
     ok.
 
+register_consumer_with_different_partition_index_should_return_error_test(_) ->
+    Stream = <<"stream">>,
+    ConsumerName = <<"app">>,
+    ConnectionPid = self(),
+    Command0 =
+        register_consumer_command(Stream, -1, ConsumerName, ConnectionPid, 0),
+    State0 = state(),
+    {State1, {ok, true}, _} =
+        rabbit_stream_sac_coordinator:apply(Command0, State0),
+    Command1 =
+        register_consumer_command(Stream, 1, ConsumerName, ConnectionPid, 1),
+    {_, {error, partition_index_conflict}, []} =
+        rabbit_stream_sac_coordinator:apply(Command1, State1).
+
 assertSize(Expected, []) ->
     ?assertEqual(Expected, 0);
 assertSize(Expected, Map) when is_map(Map) ->
