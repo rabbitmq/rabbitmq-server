@@ -793,7 +793,7 @@ register_consumer_super_stream_disconn_active_block_rebalancing_test(_) ->
 
     Groups0 = #{GId => Group},
     State0 = state(Groups0),
-    Cmd = register_consumer_command(stream(), -1, name(), Pid0, 3),
+    Cmd = register_consumer_command(stream(), 1, name(), Pid0, 3),
     {#?STATE{groups = Groups1}, {ok, false}, Eff} = ?MOD:apply(Cmd, State0),
     assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
                                    consumer(Pid1, 1, {disconnected, active}),
