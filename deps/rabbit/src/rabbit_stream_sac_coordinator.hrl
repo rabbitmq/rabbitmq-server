@@ -27,7 +27,7 @@
         {pid :: pid(),
          subscription_id :: subscription_id(),
          owner :: owner(), %% just a label
-         active :: boolean()}).
+         active :: active | waiting | deactivating}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(rabbit_stream_sac_coordinator,
