@@ -73,7 +73,7 @@ simple_sac_test(_) ->
      {ok, Active1}, Effects1} =
         rabbit_stream_sac_coordinator:apply(Command0, State0),
     ?assert(Active1),
-    ?assertEqual([consumer(ConnectionPid, 0, true)], Consumers1),
+    ?assertEqual([consumer(ConnectionPid, 0, active)], Consumers1),
     assertSendMessageEffect(ConnectionPid, 0, Stream, ConsumerName, true, Effects1),
 
     Command1 =
@@ -83,8 +83,8 @@ simple_sac_test(_) ->
      {ok, Active2}, Effects2} =
         rabbit_stream_sac_coordinator:apply(Command1, State1),
     ?assertNot(Active2),
-    ?assertEqual([consumer(ConnectionPid, 0, true),
-                  consumer(ConnectionPid, 1, false)],
+    ?assertEqual([consumer(ConnectionPid, 0, active),
+                  consumer(ConnectionPid, 1, waiting)],
                  Consumers2),
     assertEmpty(Effects2),
 
@@ -95,9 +95,9 @@ simple_sac_test(_) ->
      {ok, Active3}, Effects3} =
         rabbit_stream_sac_coordinator:apply(Command2, State2),
     ?assertNot(Active3),
-    ?assertEqual([consumer(ConnectionPid, 0, true),
-                  consumer(ConnectionPid, 1, false),
-                  consumer(ConnectionPid, 2, false)],
+    ?assertEqual([consumer(ConnectionPid, 0, active),
+                  consumer(ConnectionPid, 1, waiting),
+                  consumer(ConnectionPid, 2, waiting)],
                  Consumers3),
     assertEmpty(Effects3),
 
@@ -107,8 +107,8 @@ simple_sac_test(_) ->
          State4,
      ok, Effects4} =
         rabbit_stream_sac_coordinator:apply(Command3, State3),
-    ?assertEqual([consumer(ConnectionPid, 1, true),
-                  consumer(ConnectionPid, 2, false)],
+    ?assertEqual([consumer(ConnectionPid, 1, active),
+                  consumer(ConnectionPid, 2, waiting)],
                  Consumers4),
     assertSendMessageEffect(ConnectionPid, 1, Stream, ConsumerName, true, Effects4),
 
@@ -118,7 +118,7 @@ simple_sac_test(_) ->
          State5,
      ok, Effects5} =
         rabbit_stream_sac_coordinator:apply(Command4, State4),
-    ?assertEqual([consumer(ConnectionPid, 2, true)], Consumers5),
+    ?assertEqual([consumer(ConnectionPid, 2, active)], Consumers5),
     assertSendMessageEffect(ConnectionPid, 2, Stream, ConsumerName, true, Effects5),
 
     Command5 =
@@ -143,7 +143,7 @@ super_stream_partition_sac_test(_) ->
      {ok, Active1}, Effects1} =
         rabbit_stream_sac_coordinator:apply(Command0, State0),
     ?assert(Active1),
-    ?assertEqual([consumer(ConnectionPid, 0, true)], Consumers1),
+    ?assertEqual([consumer(ConnectionPid, 0, active)], Consumers1),
     assertSendMessageEffect(ConnectionPid, 0, Stream, ConsumerName, true, Effects1),
 
     Command1 =
@@ -155,8 +155,8 @@ super_stream_partition_sac_test(_) ->
     %% never active on registration
     ?assertNot(Active2),
     %% all consumers inactive, until the former active one steps down and activates the new consumer
-    ?assertEqual([consumer(ConnectionPid, 0, false),
-                  consumer(ConnectionPid, 1, false)],
+    ?assertEqual([consumer(ConnectionPid, 0, deactivating),
+                  consumer(ConnectionPid, 1, waiting)],
                  Consumers2),
     assertSendMessageSteppingDownEffect(ConnectionPid, 0, Stream, ConsumerName, Effects2),
 
@@ -167,8 +167,8 @@ super_stream_partition_sac_test(_) ->
         rabbit_stream_sac_coordinator:apply(Command2, State2),
 
     %% 1 (partition index) % 2 (consumer count) = 1 (active consumer index)
-    ?assertEqual([consumer(ConnectionPid, 0, false),
-                  consumer(ConnectionPid, 1, true)],
+    ?assertEqual([consumer(ConnectionPid, 0, waiting),
+                  consumer(ConnectionPid, 1, active)],
                  Consumers3),
     assertSendMessageEffect(ConnectionPid, 1, Stream, ConsumerName, true, Effects3),
 
@@ -182,9 +182,9 @@ super_stream_partition_sac_test(_) ->
     ?assertNot(Active4),
     %% 1 (partition index) % 3 (consumer count) = 1 (active consumer index)
     %% the active consumer stays the same
-    ?assertEqual([consumer(ConnectionPid, 0, false),
-                  consumer(ConnectionPid, 1, true),
-                  consumer(ConnectionPid, 2, false)],
+    ?assertEqual([consumer(ConnectionPid, 0, waiting),
+                  consumer(ConnectionPid, 1, active),
+                  consumer(ConnectionPid, 2, waiting)],
                  Consumers4),
     assertEmpty(Effects4),
 
@@ -196,8 +196,8 @@ super_stream_partition_sac_test(_) ->
         rabbit_stream_sac_coordinator:apply(Command4, State4),
     %% 1 (partition index) % 2 (consumer count) = 1 (active consumer index)
     %% the active consumer will move from sub 1 to sub 2
-    ?assertEqual([consumer(ConnectionPid, 1, false),
-                  consumer(ConnectionPid, 2, false)],
+    ?assertEqual([consumer(ConnectionPid, 1, deactivating),
+                  consumer(ConnectionPid, 2, waiting)],
                  Consumers5),
 
     assertSendMessageSteppingDownEffect(ConnectionPid, 1, Stream, ConsumerName, Effects5),
@@ -208,8 +208,8 @@ super_stream_partition_sac_test(_) ->
      ok, Effects6} =
         rabbit_stream_sac_coordinator:apply(Command5, State5),
 
-    ?assertEqual([consumer(ConnectionPid, 1, false),
-                  consumer(ConnectionPid, 2, true)],
+    ?assertEqual([consumer(ConnectionPid, 1, waiting),
+                  consumer(ConnectionPid, 2, active)],
                  Consumers6),
     assertSendMessageEffect(ConnectionPid, 2, Stream, ConsumerName, true, Effects6),
 
@@ -219,7 +219,7 @@ super_stream_partition_sac_test(_) ->
          State7,
      ok, Effects7} =
         rabbit_stream_sac_coordinator:apply(Command6, State6),
-    ?assertEqual([consumer(ConnectionPid, 2, true)], Consumers7),
+    ?assertEqual([consumer(ConnectionPid, 2, active)], Consumers7),
     assertEmpty(Effects7),
 
     Command7 =
@@ -318,9 +318,9 @@ handle_connection_down_sac_should_get_activated_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup([consumer(Pid0, 0, true),
-                    consumer(Pid1, 1, false),
-                    consumer(Pid0, 2, false)]),
+    Group = cgroup([consumer(Pid0, 0, active),
+                    consumer(Pid1, 1, waiting),
+                    consumer(Pid0, 2, waiting)]),
     State0 = state(#{GroupId => Group},
                    #{Pid0 => maps:from_list([{GroupId, true}]),
                      Pid1 => maps:from_list([{GroupId, true}])}),
@@ -331,7 +331,7 @@ handle_connection_down_sac_should_get_activated_test(_) ->
     assertSize(1, PidsGroups1),
     assertSize(1, maps:get(Pid1, PidsGroups1)),
     assertSendMessageEffect(Pid1, 1, Stream, ConsumerName, true, Effects1),
-    assertHasGroup(GroupId, cgroup([consumer(Pid1, 1, true)]), Groups1),
+    assertHasGroup(GroupId, cgroup([consumer(Pid1, 1, active)]), Groups1),
     {#?STATE{pids_groups = PidsGroups2, groups = Groups2},
      Effects2} =
         rabbit_stream_sac_coordinator:handle_connection_down(Pid1, State1),
@@ -347,9 +347,9 @@ handle_connection_down_sac_active_does_not_change_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup([consumer(Pid1, 0, true),
-                    consumer(Pid0, 1, false),
-                    consumer(Pid0, 2, false)]),
+    Group = cgroup([consumer(Pid1, 0, active),
+                    consumer(Pid0, 1, waiting),
+                    consumer(Pid0, 2, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]),
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -360,7 +360,7 @@ handle_connection_down_sac_active_does_not_change_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertEmpty(Effects),
-    assertHasGroup(GroupId, cgroup([consumer(Pid1, 0, true)]), Groups),
+    assertHasGroup(GroupId, cgroup([consumer(Pid1, 0, active)]), Groups),
     ok.
 
 handle_connection_down_sac_no_more_consumers_test(_) ->
@@ -368,8 +368,8 @@ handle_connection_down_sac_no_more_consumers_test(_) ->
     ConsumerName = <<"app">>,
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
-    Group = cgroup([consumer(Pid0, 0, true),
-                    consumer(Pid0, 1, false)]),
+    Group = cgroup([consumer(Pid0, 0, active),
+                    consumer(Pid0, 1, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}])}),
 
@@ -387,8 +387,8 @@ handle_connection_down_sac_no_consumers_in_down_connection_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup([consumer(Pid1, 0, true),
-                    consumer(Pid1, 1, false)]),
+    Group = cgroup([consumer(Pid1, 0, active),
+                    consumer(Pid1, 1, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]), %% should not be there
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -400,7 +400,8 @@ handle_connection_down_sac_no_consumers_in_down_connection_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertEmpty(Effects),
-    assertHasGroup(GroupId, cgroup([consumer(Pid1, 0, true), consumer(Pid1, 1, false)]),
+    assertHasGroup(GroupId,
+                   cgroup([consumer(Pid1, 0, active), consumer(Pid1, 1, waiting)]),
                    Groups),
     ok.
 
@@ -410,10 +411,10 @@ handle_connection_down_super_stream_active_stays_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup(1, [consumer(Pid0, 0, false),
-                       consumer(Pid0, 1, true),
-                       consumer(Pid1, 2, false),
-                       consumer(Pid1, 3, false)]),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid0, 1, active),
+                       consumer(Pid1, 2, waiting),
+                       consumer(Pid1, 3, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]),
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -424,7 +425,8 @@ handle_connection_down_super_stream_active_stays_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid0, PidsGroups)),
     assertEmpty(Effects),
-    assertHasGroup(GroupId, cgroup(1, [consumer(Pid0, 0, false), consumer(Pid0, 1, true)]),
+    assertHasGroup(GroupId,
+                   cgroup(1, [consumer(Pid0, 0, waiting), consumer(Pid0, 1, active)]),
                    Groups),
     ok.
 
@@ -434,10 +436,10 @@ handle_connection_down_super_stream_active_changes_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup(1, [consumer(Pid0, 0, false),
-                       consumer(Pid1, 1, true),
-                       consumer(Pid0, 2, false),
-                       consumer(Pid1, 3, false)]),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid1, 1, active),
+                       consumer(Pid0, 2, waiting),
+                       consumer(Pid1, 3, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]),
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -448,7 +450,8 @@ handle_connection_down_super_stream_active_changes_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertSendMessageSteppingDownEffect(Pid1, 1, Stream, ConsumerName, Effects),
-    assertHasGroup(GroupId, cgroup(1, [consumer(Pid1, 1, false), consumer(Pid1, 3, false)]),
+    assertHasGroup(GroupId,
+                   cgroup(1, [consumer(Pid1, 1, deactivating), consumer(Pid1, 3, waiting)]),
                    Groups),
     ok.
 
@@ -458,10 +461,10 @@ handle_connection_down_super_stream_activate_in_remaining_connection_test(_) ->
     GroupId = {<<"/">>, Stream, ConsumerName},
     Pid0 = self(),
     Pid1 = spawn(fun() -> ok end),
-    Group = cgroup(1, [consumer(Pid0, 0, false),
-                       consumer(Pid0, 1, true),
-                       consumer(Pid1, 2, false),
-                       consumer(Pid1, 3, false)]),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid0, 1, active),
+                       consumer(Pid1, 2, waiting),
+                       consumer(Pid1, 3, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]),
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -472,7 +475,7 @@ handle_connection_down_super_stream_activate_in_remaining_connection_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertSendMessageEffect(Pid1, 3, Stream, ConsumerName, true, Effects),
-    assertHasGroup(GroupId, cgroup(1, [consumer(Pid1, 2, false), consumer(Pid1, 3, true)]),
+    assertHasGroup(GroupId, cgroup(1, [consumer(Pid1, 2, waiting), consumer(Pid1, 3, active)]),
                    Groups),
     ok.
 
@@ -485,10 +488,10 @@ handle_connection_down_super_stream_no_active_removed_or_present_test(_) ->
     %% this is a weird case that should not happen in the wild,
     %% we test the logic in the code nevertheless.
     %% No active consumer in the group
-    Group = cgroup(1, [consumer(Pid0, 0, false),
-                       consumer(Pid0, 1, false),
-                       consumer(Pid1, 2, false),
-                       consumer(Pid1, 3, false)]),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid0, 1, waiting),
+                       consumer(Pid1, 2, waiting),
+                       consumer(Pid1, 3, waiting)]),
     State = state(#{GroupId => Group},
                   #{Pid0 => maps:from_list([{GroupId, true}]),
                     Pid1 => maps:from_list([{GroupId, true}])}),
@@ -499,7 +502,7 @@ handle_connection_down_super_stream_no_active_removed_or_present_test(_) ->
     assertSize(1, PidsGroups),
     assertSize(1, maps:get(Pid1, PidsGroups)),
     assertEmpty(Effects),
-    assertHasGroup(GroupId, cgroup(1, [consumer(Pid1, 2, false), consumer(Pid1, 3, false)]),
+    assertHasGroup(GroupId, cgroup(1, [consumer(Pid1, 2, waiting), consumer(Pid1, 3, waiting)]),
                    Groups),
     ok.
 
@@ -516,6 +519,44 @@ register_consumer_with_different_partition_index_should_return_error_test(_) ->
         register_consumer_command(Stream, 1, ConsumerName, ConnectionPid, 1),
     {_, {error, partition_index_conflict}, []} =
         rabbit_stream_sac_coordinator:apply(Command1, State1).
+
+handle_connection_down_consumers_from_dead_connection_should_be_filtered_out_test(_) ->
+    Stream = <<"stream">>,
+    ConsumerName = <<"app">>,
+    GroupId = {<<"/">>, Stream, ConsumerName},
+    Pid0 = self(),
+    Pid1 = spawn(fun() -> ok end),
+    Pid2 = spawn(fun() -> ok end),
+    Group = cgroup(1, [consumer(Pid0, 0, waiting),
+                       consumer(Pid1, 1, active),
+                       consumer(Pid2, 2, waiting)]),
+    State0 = state(#{GroupId => Group},
+                  #{Pid0 => maps:from_list([{GroupId, true}]),
+                    Pid1 => maps:from_list([{GroupId, true}]),
+                    Pid2 => maps:from_list([{GroupId, true}])}),
+
+    {#?STATE{pids_groups = PidsGroups1, groups = Groups1} = State1,
+     Effects1} =
+    rabbit_stream_sac_coordinator:handle_connection_down(Pid0, State0),
+    assertSize(2, PidsGroups1),
+    assertSize(1, maps:get(Pid1, PidsGroups1)),
+    assertSize(1, maps:get(Pid2, PidsGroups1)),
+    assertSendMessageSteppingDownEffect(Pid1, 1, Stream, ConsumerName, Effects1),
+    assertHasGroup(GroupId,
+                   cgroup(1, [consumer(Pid1, 1, deactivating), consumer(Pid2, 2, waiting)]),
+                   Groups1),
+
+    {#?STATE{pids_groups = PidsGroups2, groups = Groups2},
+     Effects2} =
+    rabbit_stream_sac_coordinator:handle_connection_down(Pid1, State1),
+    assertSize(1, PidsGroups2),
+    assertSize(1, maps:get(Pid2, PidsGroups2)),
+    assertSendMessageEffect(Pid2, 2, Stream, ConsumerName, true, Effects2),
+    assertHasGroup(GroupId,
+                   cgroup(1, [consumer(Pid2, 2, active)]),
+                   Groups2),
+
+    ok.
 
 assertSize(Expected, []) ->
     ?assertEqual(Expected, 0);
