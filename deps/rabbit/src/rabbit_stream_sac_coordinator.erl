@@ -198,21 +198,23 @@ apply(#command_register_consumer{vhost = VirtualHost,
                                  owner = Owner,
                                  subscription_id = SubscriptionId},
       #?MODULE{groups = StreamGroups0} = State) ->
-    StreamGroups1 =
-        maybe_create_group(VirtualHost,
+    case maybe_create_group(VirtualHost,
                            Stream,
                            PartitionIndex,
                            ConsumerName,
-                           StreamGroups0),
-
-    do_register_consumer(VirtualHost,
-                         Stream,
-                         PartitionIndex,
-                         ConsumerName,
-                         ConnectionPid,
-                         Owner,
-                         SubscriptionId,
-                         State#?MODULE{groups = StreamGroups1});
+                           StreamGroups0) of
+        {ok, StreamGroups1} ->
+            do_register_consumer(VirtualHost,
+                                 Stream,
+                                 PartitionIndex,
+                                 ConsumerName,
+                                 ConnectionPid,
+                                 Owner,
+                                 SubscriptionId,
+                                 State#?MODULE{groups = StreamGroups1});
+        {error, Error} ->
+            {State, {error, Error}, []}
+    end;
 apply(#command_unregister_consumer{vhost = VirtualHost,
                                    stream = Stream,
                                    consumer_name = ConsumerName,
@@ -644,12 +646,15 @@ maybe_create_group(VirtualHost,
                    ConsumerName,
                    StreamGroups) ->
     case StreamGroups of
-        #{{VirtualHost, Stream, ConsumerName} := _Group} ->
-            StreamGroups;
+        #{{VirtualHost, Stream, ConsumerName} := #group{partition_index = PI}}
+            when PI =/= PartitionIndex ->
+            {error, partition_index_conflict};
+        #{{VirtualHost, Stream, ConsumerName} := _} ->
+            {ok, StreamGroups};
         SGS ->
-            maps:put({VirtualHost, Stream, ConsumerName},
-                     #group{consumers = [], partition_index = PartitionIndex},
-                     SGS)
+            {ok, maps:put({VirtualHost, Stream, ConsumerName},
+                          #group{consumers = [], partition_index = PartitionIndex},
+                          SGS)}
     end.
 
 lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
