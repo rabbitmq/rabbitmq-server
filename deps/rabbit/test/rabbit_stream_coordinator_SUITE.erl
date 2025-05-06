@@ -1363,7 +1363,7 @@ delete_replica_leader(_) ->
     ok.
 
 overview(_Config) ->
-    S0 = rabbit_stream_coordinator:init(undefined),
+    S0 = rabbit_stream_coordinator:init(#{machine_version => 5}),
     O0 = rabbit_stream_coordinator:overview(S0),
     ?assertMatch(#{num_monitors := 0,
                    num_streams := 0,
