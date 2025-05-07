@@ -1,6 +1,8 @@
 var container = require('rhea')  // https://github.com/amqp/rhea
 var fs = require('fs');
 var path = require('path');
+const {log, error} = require('./utils.js')
+
 var connectionOptions = getConnectionOptions()
 
 function getAmqpConnectionOptions() {
@@ -28,7 +30,7 @@ function getAmqpsConnectionOptions() {
 }
 function getConnectionOptions() {
   let scheme = process.env.RABBITMQ_AMQP_SCHEME || 'amqp'
-  console.log("Using AMQP protocol: " + scheme)
+  log("Using AMQP protocol: " + scheme)
   switch(scheme){
     case "amqp":
       return getAmqpConnectionOptions()

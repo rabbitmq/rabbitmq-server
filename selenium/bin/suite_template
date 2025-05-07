@@ -355,8 +355,8 @@ _test() {
   print "> FAKEPORTAL_URL: ${FAKEPORTAL_URL}"
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
 
-  print "> OAUTH_NODE_EXTRA_CA_CERTS: ${OAUTH_NODE_EXTRA_CA_CERTS}"
-  MOUNT_NODE_EXTRA_CA_CERTS=${TEST_DIR}/${OAUTH_NODE_EXTRA_CA_CERTS}
+  generate_node_extra_ca_cert
+  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node_ca_certs.pem
   print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
 
   docker run \
@@ -417,7 +417,7 @@ other_profiles_with_local_or_docker() {
   fi
 }
 generate_env_file() {
-    begin "Generating env file from profiles ${PROFILES} ..."
+    begin "Generating env file from profiles: [${PROFILES}] ..."
     mkdir -p $CONF_DIR
     ${BIN_DIR}/gen-env-file "${PROFILES}" $TEST_CONFIG_DIR ${ENV_FILE}.tmp
     grep -v '^#' ${ENV_FILE}.tmp > $ENV_FILE
@@ -425,7 +425,7 @@ generate_env_file() {
     end "Finished generating env file."
 }
 generate_other_env_file() {
-    begin "Generating other env file from profiles ${PROFILES_FOR_OTHER} "
+    begin "Generating other env file from profiles: [${PROFILES_FOR_OTHER}] "
     mkdir -p $CONF_DIR
     ${BIN_DIR}/gen-env-file "${PROFILES_FOR_OTHER}" $TEST_CONFIG_DIR ${OTHER_ENV_FILE}.tmp
     grep -v '^#' ${OTHER_ENV_FILE}.tmp > $OTHER_ENV_FILE    
@@ -674,7 +674,7 @@ test_local() {
   export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
     
   generate_node_extra_ca_cert
-  MOUNT_NODE_EXTRA_CA_CERTS=${RABBITMQ_CERTS}/node_ca_certs.pem
+  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node_ca_certs.pem
 
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
@@ -738,14 +738,16 @@ save_components_logs() {
   end "Finished saving logs"
 }
 generate_node_extra_ca_cert() {  
-  echo "Generating $RABBITMQ_CERTS/node_ca_certs.pem ..."
-  rm -f $RABBITMQ_CERTS/node_ca_certs.pem  
+  echo "Generating ${CONF_DIR}/node_ca_certs.pem ..."
+  rm -f ${CONF_DIR}/node_ca_certs.pem  
   env | while IFS= read -r line; do
     value=${line#*=}
     name=${line%%=*}
+    
     if [[ $name == *NODE_EXTRA_CA_CERTS ]]
     then
-      cat ${TEST_DIR}/${value} >> $RABBITMQ_CERTS/node_ca_certs.pem      
+      echo "Adding ${TEST_DIR}/${value} to ${CONF_DIR}/node_ca_certs.pem ..."
+      cat ${TEST_DIR}/${value} >> ${CONF_DIR}/node_ca_certs.pem      
     fi 
   done  
 }

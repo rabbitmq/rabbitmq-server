@@ -17,7 +17,7 @@ module.exports = class QueuePage extends BasePage {
   }
   async ensureDeleteQueueSectionIsVisible() {    
     await this.click(DELETE_SECTION)
-    return driver.findElement(DELETE_SECTION).isDisplayed()
+    return this.driver.findElement(DELETE_SECTION).isDisplayed()
   }
   async deleteQueue() {
     await this.click(DELETE_BUTTON)

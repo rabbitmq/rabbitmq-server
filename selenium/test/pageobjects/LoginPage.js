@@ -36,7 +36,7 @@ module.exports = class LoginPage extends BasePage {
   async getWarnings() {
     try
     {
-      return driver.findElements(WARNING)
+      return this.driver.findElements(WARNING)
     } catch (NoSuchElement) {
       return Promise.resolve([])
     }

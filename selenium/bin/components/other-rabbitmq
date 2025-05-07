@@ -28,14 +28,14 @@ start_other_rabbitmq() {
   if [[ "$PROFILES_FOR_OTHER" == *"docker"* ]]; then
     start_docker_other_rabbitmq    
   else
-    start_local_rabbitmq
+    start_local_other_rabbitmq
   fi
 }
 stop_other_rabbitmq() {
   if [[ "$PROFILES_FOR_OTHER" == *"docker"* ]]; then
-    kill_container_if_exist "$component"
+    kill_container_if_exist "${OTHER_RABBITMQ_HOSTNAME}"
   else
-    stop_local_rabbitmq
+    stop_local_other_rabbitmq
   fi
 }
 
@@ -44,7 +44,7 @@ save_logs_other_rabbitmq() {
         if [[ "$PROFILES_FOR_OTHER" == *"cluster"* ]]; then
             docker compose -f $CONF_DIR/rabbitmq/other-compose.yml logs > $LOGS/other-rabbitmq.log
         else
-            save_container_logs "other-rabbitmq"
+            save_container_logs "${OTHER_RABBITMQ_HOSTNAME}"
         fi
     fi
 }
@@ -129,13 +129,15 @@ start_docker_other_rabbitmq() {
   print "> RABBITMQ_TEST_DIR: /var/rabbitmq"
 
   docker run \
+    --rm \
     --detach \
     --name ${OTHER_RABBITMQ_HOSTNAME} \
     --net ${DOCKER_NETWORK} \
     -p 5674:5672 \
     -p 5673:5671 \
     -p 15674:15672 \
-    -p 15673:15671 \
+    -p 15675:15675 \
+    -p 5552:5552 \
     -v $CONF_DIR/other-rabbitmq/:/etc/rabbitmq \
     -v $CONF_DIR/other-rabbitmq/imports:/var/rabbitmq/imports \
     -v ${TEST_DIR}:/config \
