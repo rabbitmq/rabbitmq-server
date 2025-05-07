@@ -28,7 +28,7 @@ module.exports = class BasePage {
   interactionDelay
 
   constructor (webdriver) {
-    this.driver = webdriver
+    this.driver = webdriver.driver
     this.timeout = parseInt(process.env.SELENIUM_TIMEOUT) || 1000 // max time waiting to locate an element. Should be less that test timeout
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
@@ -50,13 +50,17 @@ module.exports = class BasePage {
     return this.selectOption(SELECT_REFRESH, option)
   }
   
+  async selectRefreshOptionByValue(option) {
+    return this.selectOptionByValue(SELECT_REFRESH, option)
+  }
+
   async waitForOverviewTab() {
     await this.driver.sleep(250)
     return this.waitForDisplayed(OVERVIEW_TAB)
   }
 
   async clickOnOverviewTab () {
-    return this.click(CONNECTIONS_TAB)
+    return this.click(OVERVIEW_TAB)
   }
 
   async clickOnConnectionsTab () {
@@ -130,7 +134,6 @@ module.exports = class BasePage {
     const select = await new Select(selectable)
     return select.selectByValue(value)
   }
-
   async getSelectableVhosts() {
     const table_model = await this.getSelectableOptions(SELECT_VHOSTS)
     let new_table_model = []
@@ -139,9 +142,11 @@ module.exports = class BasePage {
     }
     return new_table_model
   }
-
-
-
+  async selectVhost(vhost) {
+    let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
+    const select = await new Select(selectable)
+    return select.selectByValue(vhost)
+  }
   async getTable(tableLocator, firstNColumns, rowClass) {
     const table = await this.waitForDisplayed(tableLocator)
     const rows = await table.findElements(rowClass == undefined ? 
@@ -166,16 +171,7 @@ module.exports = class BasePage {
     } catch(e) {
       return Promise.resolve(false)
     }
-    /*
-    let element = await driver.findElement(FORM_POPUP)
-    return this.driver.wait(until.elementIsVisible(element), this.timeout / 2,
-      'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
-      this.polling / 2).then(function onWarningVisible(e) {
-          return Promise.resolve(true)
-      }, function onError(e) {
-          return Promise.resolve(false)
-      })
-      */
+  
   }
   
   async isPopupWarningNotDisplayed() {
@@ -199,7 +195,7 @@ module.exports = class BasePage {
     }
   }
   async getPopupWarning() {
-    let element = await driver.findElement(FORM_POPUP_WARNING)
+    let element = await this.driver.findElement(FORM_POPUP_WARNING)
     return this.driver.wait(until.elementIsVisible(element), this.timeout,
       'Timed out after [timeout=' + this.timeout + ';polling=' + this.polling + '] awaiting till visible ' + element,
       this.polling).getText().then((value) => value.substring(0, value.search('\n\nClose')))
@@ -362,9 +358,6 @@ module.exports = class BasePage {
     const alert = await this.driver.switchTo().alert();
     await this.driver.sleep(250)
     return alert.accept();
-  }
-  log(message) {
-    console.log(new Date() + " " + message)
   }
 
   capture () {

@@ -11,6 +11,7 @@ describe('A user with a JWT token', function () {
   let captureScreen
   let token
   let fakePortal
+  let driver
 
   before(async function () {
     driver = buildDriver()

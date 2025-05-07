@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -56,7 +56,6 @@ describe('Exchange management', function () {
       ["other", "amq.topic", "topic"]
     ]
     
-    console.log("e :" + actual_table)
     assert.deepEqual(actual_table, expected_table)
   })
 

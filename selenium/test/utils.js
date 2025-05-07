@@ -17,6 +17,7 @@ const hostname = process.env.RABBITMQ_HOSTNAME || 'localhost'
 const seleniumUrl = process.env.SELENIUM_URL || 'http://selenium:4444'
 const screenshotsDir = process.env.SCREENSHOTS_DIR || '/screens'
 const profiles = process.env.PROFILES || ''
+const debug = process.env.SELENIUM_DEBUG || false
 
 function randomly_pick_baseurl(baseUrl) {
     urls = baseUrl.split(",")
@@ -34,7 +35,7 @@ class CaptureScreenshot {
   }
 
   async shot (name) {
-    const image = await driver.takeScreenshot()
+    const image = await this.driver.takeScreenshot()
     const screenshotsSubDir = path.join(screenshotsDir, this.test)
     if (!fs.existsSync(screenshotsSubDir)) {
       await fsp.mkdir(screenshotsSubDir)
@@ -46,7 +47,7 @@ class CaptureScreenshot {
 
 module.exports = {
   log: (message) => {
-    console.log(new Date() + " " + message)
+    if (debug) console.log(new Date() + " " + message)
   },
   error: (message) => {
     console.error(new Date() + " " + message)
@@ -55,7 +56,7 @@ module.exports = {
     return profiles.includes(profile)
   },
 
-  buildDriver: (caps) => {
+  buildDriver: (url = baseUrl) => {
     builder = new Builder()
     if (!runLocal) {
       builder = builder.usingServer(seleniumUrl)
@@ -86,15 +87,23 @@ module.exports = {
           "profile.password_manager_leak_detection=false"
       ]
     });
-    driver = builder
+    let driver = builder
       .forBrowser('chrome')
       //.setChromeOptions(options.excludeSwitches("disable-popup-blocking", "enable-automation"))
       .withCapabilities(chromeCapabilities)
       .build()
     driver.manage().setTimeouts( { pageLoad: 35000 } )
-    return driver
+    return {
+      "driver": driver, 
+      "baseUrl": url
+    }
   },
-
+  updateDriver: (d, url) => {
+    return {
+      "driver" : d.driver, 
+      "baseUrl" : url
+    }
+  },
   getURLForProtocol: (protocol) => {
 
     switch(protocol) {
@@ -103,20 +112,21 @@ module.exports = {
     }
   },
 
-  goToHome: (driver) => {
-    return driver.get(baseUrl)
+  goToHome: (d) => {
+    module.exports.log("goToHome on " + d.baseUrl)
+    return d.driver.get(d.baseUrl)
   },
 
-  goToLogin: (driver, token) => {
-    return driver.get(baseUrl + '#/login?access_token=' + token)
+  goToLogin: (d, token) => {
+    return d.driver.get(d.baseUrl + '#/login?access_token=' + token)
   },
 
-  goToExchanges: (driver) => {
-    return driver.get(baseUrl + '#/exchanges')
+  goToExchanges: (d) => {
+    return d.driver.get(d.baseUrl + '#/exchanges')
   },
 
-  goTo: (driver, address) => {
-    return driver.get(address)
+  goTo: (d, address) => {
+    return d.get(address)
   },
 
   delay: async (msec, ref) => {
@@ -125,8 +135,8 @@ module.exports = {
     })
   },
 
-  captureScreensFor: (driver, test) => {
-    return new CaptureScreenshot(driver, require('path').basename(test))
+  captureScreensFor: (d, test) => {
+    return new CaptureScreenshot(d.driver, require('path').basename(test))
   },
 
   doWhile: async (doCallback, booleanCallback, delayMs = 1000, message = "doWhile failed") => {
@@ -135,16 +145,45 @@ module.exports = {
     let ret
     do {
       try {
-        //console.log("Calling doCallback (attempts:" + attempts + ") ... ")
+        module.exports.log("Calling doCallback (attempts:" + attempts + ") ... ")
         ret = await doCallback()
-        //console.log("Calling booleanCallback (attempts:" + attempts + ") with arg " + ret + " ... ")
+        module.exports.log("Calling booleanCallback (attempts:" + attempts 
+          + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        console.log("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on doWhile callback...")
         
       }finally {
         if (!done) {
-          //console.log("Waiting until next attempt")
+          module.exports.log("Waiting until next attempt")
+          await module.exports.delay(delayMs)
+        }
+      }     
+      attempts--
+    } while (attempts > 0 && !done)
+    if (!done) {
+      throw new Error(message)
+    }else {
+      return ret
+    }
+  },
+  retry: async (doCallback, booleanCallback, delayMs = 1000, message = "retry failed") => {
+    let done = false 
+    let attempts = 10
+    let ret
+    do {
+      try {
+        module.exports.log("Calling doCallback (attempts:" + attempts + ") ... ")
+        ret = doCallback()
+        module.exports.log("Calling booleanCallback (attempts:" + attempts 
+          + ") with arg " + JSON.stringify(ret) + " ... ")
+        done =  booleanCallback(ret)
+      }catch(error) {
+        module.exports.error("Caught " + error + " on doWhile callback...")
+        
+      }finally {
+        if (!done) {
+          module.exports.log("Waiting until next attempt")
           await module.exports.delay(delayMs)
         }
       }     
@@ -157,7 +196,7 @@ module.exports = {
     }
   },
 
-  idpLoginPage: (driver, preferredIdp) => {
+  idpLoginPage: (d, preferredIdp) => {
     if (!preferredIdp) {
       if (process.env.PROFILES.includes("uaa")) {
         preferredIdp = "uaa"
@@ -168,8 +207,8 @@ module.exports = {
       }
     }
     switch(preferredIdp) {
-      case "uaa": return new UAALoginPage(driver)
-      case "keycloak": return new KeycloakLoginPage(driver)
+      case "uaa": return new UAALoginPage(d)
+      case "keycloak": return new KeycloakLoginPage(d)
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
@@ -179,7 +218,7 @@ module.exports = {
     req.send()
     if (req.status == 200) return JSON.parse(req.responseText)
     else {
-      console.error(req.responseText)
+      module.exports.error(req.responseText)
       throw new Error(req.responseText)
     }
   },
@@ -198,7 +237,7 @@ module.exports = {
     req.send(params)
     if (req.status == 200) return JSON.parse(req.responseText).access_token
     else {
-      console.error(req.responseText)
+      module.exports.error(req.responseText)
       throw new Error(req.responseText)
     }
   },
@@ -212,10 +251,11 @@ module.exports = {
     }
   },
 
-  teardown: async (driver, test, captureScreen = null) => {
+  teardown: async (d, test, captureScreen = null) => {
+    driver = d.driver
     driver.manage().logs().get(logging.Type.BROWSER).then(function(entries) {
         entries.forEach(function(entry) {
-          console.log('[%s] %s', entry.level.name, entry.message);
+          module.exports.log('[%s] %s', entry.level.name, entry.message);
         })
      })
     if (test.currentTest) {
@@ -227,6 +267,14 @@ module.exports = {
       }
     }
     await driver.quit()
+  },
+
+  findTableRow: (table, booleanCallback) => {
+    if (!table) return false
+
+    let i = 0
+    while (i < table.length && !booleanCallback(table[i])) i++;      
+    return i < table.length ? table[i] : undefined
   }
 
 }
