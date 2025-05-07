@@ -31,11 +31,11 @@ module.exports = class QueuesAndStreamsPage extends BasePage {
   }
   async ensureAddQueueSectionIsVisible() {    
     await this.click(ADD_NEW_QUEUE_SECTION)
-    return driver.findElement(ADD_NEW_QUEUE_SECTION).isDisplayed()
+    return this.driver.findElement(ADD_NEW_QUEUE_SECTION).isDisplayed()
   }
   async ensureAllQueuesSectionIsVisible() {    
     await this.click(PAGING_SECTION)
-    return driver.findElement(PAGING_SECTION).isDisplayed()
+    return this.driver.findElement(PAGING_SECTION).isDisplayed()
   }  
   async fillInAddNewQueue(queueDetails) {
     await this.selectOptionByValue(FORM_QUEUE_TYPE, queueDetails.type)

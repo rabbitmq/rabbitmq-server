@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { tokenFor, openIdConfiguration } = require('../utils')
+const { log, tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
 const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
 
@@ -48,11 +48,11 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
-      console.log("oauthProviderUrl  : " + oauthProviderUrl)
+      log("oauthProviderUrl  : " + oauthProviderUrl)
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
-      console.log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
+      log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
       password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
-      console.log("Obtained access token : " + password)
+      log("Obtained access token : " + password)
     }
   })
 
@@ -78,7 +78,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
         closeAmqp(amqp.connection)
       }
     } catch (error) {
-      console.error("Failed to close amqp10 connection due to " + error);      
+      error("Failed to close amqp10 connection due to " + error);      
     }  
   })
 })

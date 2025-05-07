@@ -188,6 +188,7 @@ start_docker_rabbitmq() {
     -p 5671:5671 \
     -p 15672:15672 \
     -p 15671:15671 \
+    -p 5551:5551 \
     -v $CONF_DIR/rabbitmq/:/etc/rabbitmq \
     -v $CONF_DIR/rabbitmq/imports:/var/rabbitmq/imports \
     -v ${TEST_DIR}:/config \

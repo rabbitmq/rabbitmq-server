@@ -8,6 +8,7 @@ const SSOHomePage = require('../../pageobjects/SSOHomePage')
 describe('A user which accesses any protected URL without a session', function () {
   let homePage
   let captureScreen
+  let driver
 
   before(async function () {
     driver = buildDriver()
