@@ -28,7 +28,7 @@
 -export([settle/5, dequeue/5, consume/3, cancel/3]).
 -export([credit_v1/5, credit/6]).
 -export([purge/1]).
--export([stateless_deliver/2, deliver/3]).
+-export([deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
@@ -1084,12 +1084,6 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
             {channel, ChPid},
             {queue, QName},
             {user_who_performed_action, ActingUser}]).
-
--spec stateless_deliver(amqqueue:ra_server_id(), rabbit_types:delivery()) -> 'ok'.
-
-stateless_deliver(ServerId, Delivery) ->
-    ok = rabbit_fifo_client:untracked_enqueue([ServerId],
-                                              Delivery#delivery.message).
 
 deliver0(QName, undefined, Msg, QState0) ->
     case rabbit_fifo_client:enqueue(QName, Msg, QState0) of
