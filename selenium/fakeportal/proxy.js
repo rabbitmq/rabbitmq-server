@@ -1,5 +1,6 @@
 var http = require('http'),
     httpProxy = require('http-proxy');
+const {log, error} = require('./utils.js')    
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
 const rabbitmq_url = process.env.RABBITMQ_URL || 'http://0.0.0.0:15672/';
@@ -14,7 +15,7 @@ const port = process.env.PORT;
 var proxy = httpProxy.createProxyServer({});
 
 proxy.on('proxyReq', function(proxyReq, req, res, options) {
-  console.log("proxing " + req.url)
+  log("proxing " + req.url)
   if (req.url.endsWith("bootstrap.js")) {
     proxyReq.setHeader('Authorization', 'Bearer ' + access_token(client_id, client_secret));
   }
@@ -30,7 +31,7 @@ var server = http.createServer(function(req, res) {
     target: rabbitmq_url
   });
 });
-console.log("fakeproxy listening on port " + port + ".  RABBITMQ_URL=" + rabbitmq_url)
+log("fakeproxy listening on port " + port + ".  RABBITMQ_URL=" + rabbitmq_url)
 server.listen(port);
 
 
@@ -51,18 +52,19 @@ function access_token(id, secret) {
     '&token_format=jwt' +
     '&response_type=token';
 
-  console.debug("Sending " + url + " with params "+  params);
+  log("Sending " + url + " with params "+  params);
 
   req.open('POST', url, false);
   req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
   req.setRequestHeader('Accept', 'application/json');
   req.send(params);
-  console.log("Ret " + req.status)
+  log("Ret " + req.status)
   if (req.status == 200) {
     const token = JSON.parse(req.responseText).access_token;
-    console.log("Token => " + token)
+    log("Token => " + token)
     return token;
   } else {
+    error("Failed to get access token due to " + req.responseText)
     throw new Error(req.status + " : " + req.responseText);
   }
 }

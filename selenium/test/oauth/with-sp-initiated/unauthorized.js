@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, idpLoginPage, delay } = require('../../utils')
 
 const SSOHomePage = require('../../pageobjects/SSOHomePage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
@@ -11,6 +11,7 @@ describe('An user without management tag', function () {
   let idpLogin
   let overview
   let captureScreen
+  let driver
 
   before(async function () {
     driver = buildDriver()
@@ -46,7 +47,7 @@ describe('An user without management tag', function () {
       })
 
       it('should get redirected to home page again without error message', async function(){
-        await driver.sleep(250)
+        await delay(250)
         const visible = await homePage.isWarningVisible()
         assert.ok(!visible)
       })

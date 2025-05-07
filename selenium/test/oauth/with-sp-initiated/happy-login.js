@@ -11,6 +11,7 @@ describe('An user with administrator tag', function () {
   let idpLogin
   let overview
   let captureScreen
+  var driver
 
   before(async function () {
     driver = buildDriver()
