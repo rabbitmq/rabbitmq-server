@@ -68,7 +68,8 @@ groups() ->
        test_publisher_with_too_long_reference_errors,
        test_consumer_with_too_long_reference_errors,
        subscribe_unsubscribe_should_create_events,
-       test_stream_test_utils
+       test_stream_test_utils,
+       sac_subscription_with_partition_index_conflict_should_return_error
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -1068,6 +1069,52 @@ test_stream_test_utils(Config) ->
     {ok, C5} = stream_test_utils:delete_stream(S, C4, Stream),
     {ok, _} = stream_test_utils:close(S, C5),
     ok.
+
+sac_subscription_with_partition_index_conflict_should_return_error(Config) ->
+    T = gen_tcp,
+    App = <<"app-1">>,
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    Ss = atom_to_binary(?FUNCTION_NAME, utf8),
+    Partition = unicode:characters_to_binary([Ss, <<"-0">>]),
+    SsCreationFrame = request({create_super_stream, Ss, [Partition], [<<"0">>], #{}}),
+    ok = T:send(S, SsCreationFrame),
+    {Cmd1, C1} = receive_commands(T, S, C0),
+    ?assertMatch({response, 1, {create_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd1),
+
+    SacSubscribeFrame = request({subscribe, 0, Partition,
+                                 first, 1,
+                                 #{<<"single-active-consumer">> => <<"true">>,
+                                   <<"name">> => App}}),
+    ok = T:send(S, SacSubscribeFrame),
+    {Cmd2, C2} = receive_commands(T, S, C1),
+    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_OK}},
+                 Cmd2),
+    {Cmd3, C3} = receive_commands(T, S, C2),
+    ?assertMatch({request,0,{consumer_update,0,true}},
+                 Cmd3),
+
+    SsSubscribeFrame = request({subscribe, 1, Partition,
+                                 first, 1,
+                                 #{<<"super-stream">> => Ss,
+                                   <<"single-active-consumer">> => <<"true">>,
+                                   <<"name">> => App}}),
+    ok = T:send(S, SsSubscribeFrame),
+    {Cmd4, C4} = receive_commands(T, S, C3),
+    ?assertMatch({response, 1, {subscribe, ?RESPONSE_CODE_PRECONDITION_FAILED}},
+                 Cmd4),
+
+    {ok, C5} = stream_test_utils:unsubscribe(S, C4, 0),
+
+    SsDeletionFrame = request({delete_super_stream, Ss}),
+    ok = T:send(S, SsDeletionFrame),
+    {Cmd5, C5} = receive_commands(T, S, C5),
+    ?assertMatch({response, 1, {delete_super_stream, ?RESPONSE_CODE_OK}},
+                 Cmd5),
+
+    {ok, _} = stream_test_utils:close(S, C5),
+    ok.
+
 
 filtered_events(Config, EventType) ->
     Events = rabbit_ct_broker_helpers:rpc(Config, 0,
