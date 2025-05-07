@@ -312,7 +312,7 @@ discover(TypeDescriptor) ->
 
 -spec short_alias_of(TypeDescriptor) -> Ret when
       TypeDescriptor :: {utf8, binary()} | atom() | binary(),
-      Ret :: binary().
+      Ret :: binary() | undefined.
 %% AMQP 1.0 management client
 short_alias_of({utf8, TypeName}) ->
     short_alias_of(TypeName);
