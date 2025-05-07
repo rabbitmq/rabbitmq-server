@@ -9,6 +9,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-include("include/rabbit_memory.hrl").
+
 -compile(export_all).
 
 all() ->
@@ -22,7 +24,11 @@ groups() ->
           parse_line_linux,
           set_vm_memory_high_watermark_relative1,
           set_vm_memory_high_watermark_relative2,
-          set_vm_memory_high_watermark_absolute
+          set_vm_memory_high_watermark_absolute,
+          parse_mem_limit_relative_exactly_max,
+          parse_mem_relative_above_max,
+          parse_mem_relative_integer,
+          parse_mem_relative_invalid
         ]}
     ].
 
@@ -119,3 +125,43 @@ set_and_verify_vm_memory_high_watermark_absolute(MemLimit0) ->
             ct:fail("Expected memory high watermark to be ~tp but it was ~tp", [Interpreted, MemLimit])
     end,
     vm_memory_monitor:set_vm_memory_high_watermark(0.6).
+
+parse_mem_limit_relative_exactly_max(_Config) ->
+    MemLimit = vm_memory_monitor:parse_mem_limit(1.0),
+    case MemLimit of
+        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
+        _ ->    ct:fail(
+                    "Expected memory limit to be ~tp, but it was ~tp",
+                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
+                )
+    end.
+
+parse_mem_relative_above_max(_Config) ->
+    MemLimit = vm_memory_monitor:parse_mem_limit(1.01),
+    case MemLimit of
+        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
+        _ ->    ct:fail(
+                    "Expected memory limit to be ~tp, but it was ~tp",
+                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
+                )
+    end.
+
+parse_mem_relative_integer(_Config) ->
+    MemLimit = vm_memory_monitor:parse_mem_limit(1),
+    case MemLimit of
+        ?MAX_VM_MEMORY_HIGH_WATERMARK -> ok;
+        _ ->    ct:fail(
+                    "Expected memory limit to be ~tp, but it was ~tp",
+                    [?MAX_VM_MEMORY_HIGH_WATERMARK, MemLimit]
+                )
+    end.
+
+parse_mem_relative_invalid(_Config) ->
+    MemLimit = vm_memory_monitor:parse_mem_limit([255]),
+    case MemLimit of
+        ?DEFAULT_VM_MEMORY_HIGH_WATERMARK -> ok;
+        _ ->    ct:fail(
+                    "Expected memory limit to be ~tp, but it was ~tp",
+                    [?DEFAULT_VM_MEMORY_HIGH_WATERMARK, MemLimit]
+                )
+    end.
