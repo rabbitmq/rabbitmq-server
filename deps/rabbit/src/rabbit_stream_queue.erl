@@ -1430,19 +1430,23 @@ delivery_count_add(Count, N) ->
     serial_number:add(Count, N).
 
 -spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+    {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
-    #{name := StreamId} = amqqueue:get_type_state(Q),
-    case rabbit_stream_coordinator:members(StreamId) of
-        {ok, Members} ->
-            maps:fold(fun(Node, {_Pid, writer}, {_, Replicas}) ->
-                              {Node, [Node | Replicas]};
-                         (Node, {_Pid, replica}, {Writer, Replicas}) ->
-                              {Writer, [Node | Replicas]}
-                      end, {undefined, []}, Members);
-                {error, _} ->
-            {undefined, undefined}
-    end.
+    Leader = case amqqueue:get_pid(Q) of
+                 {_RaName, Node} ->
+                     Node;
+                 none ->
+                     none;
+                 Pid ->
+                     node(Pid)
+             end,
+    Replicas = case amqqueue:get_type_state(Q) of
+                   #{nodes := Nodes} ->
+                       Nodes;
+                   _ ->
+                       [Leader]
+               end,
+    {Leader, Replicas}.
 
 policy_apply_to_name() ->
     <<"streams">>.

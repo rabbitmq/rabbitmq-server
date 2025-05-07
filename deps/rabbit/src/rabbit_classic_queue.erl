@@ -702,7 +702,7 @@ send_queue_event(Pid, QName, Event) ->
     gen_server:cast(Pid, {queue_event, QName, Event}).
 
 -spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+    {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
     Pid = amqqueue:get_pid(Q),
     Node = node(Pid),

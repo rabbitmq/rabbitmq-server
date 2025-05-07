@@ -2253,7 +2253,7 @@ maybe_log_leader_health_check_result(Result) ->
     rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
 
 -spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+          {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
     Leader = case amqqueue:get_pid(Q) of
                  {_RaName, Node} ->
