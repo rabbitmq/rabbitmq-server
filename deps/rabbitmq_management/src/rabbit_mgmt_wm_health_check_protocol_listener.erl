@@ -34,13 +34,12 @@ resource_exists(ReqData, Context) ->
 
 to_json(ReqData, Context) ->
     Protocol = normalize_protocol(protocol(ReqData)),
-    Listeners = rabbit_networking:active_listeners(),
-    Local = [L || #listener{node = N} = L <- Listeners, N == node()],
-    ProtoListeners = [L || #listener{protocol = P} = L <- Local, atom_to_list(P) == Protocol],
+    Listeners = rabbit_networking:node_listeners(node()),
+    ProtoListeners = [L || #listener{protocol = P} = L <- Listeners, atom_to_list(P) == Protocol],
     case ProtoListeners of
         [] ->
             Msg = <<"No active listener">>,
-            failure(Msg, Protocol, [P || #listener{protocol = P} <- Local], ReqData, Context);
+            failure(Msg, Protocol, [P || #listener{protocol = P} <- Listeners], ReqData, Context);
         _ ->
             Body = #{status   => ok,
                      protocol => list_to_binary(Protocol)},
