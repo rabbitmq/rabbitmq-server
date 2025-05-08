@@ -194,6 +194,6 @@ start_docker_rabbitmq() {
     -v ${TEST_DIR}:/config \
     ${RABBITMQ_DOCKER_IMAGE}
 
-  wait_for_message rabbitmq "Server startup complete"
+  wait_for_message rabbitmq "Server startup complete"  
   end "RabbitMQ ready"
 }

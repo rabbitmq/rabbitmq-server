@@ -594,8 +594,8 @@ determine_required_components_including_rabbitmq() {
 }
 determine_required_components_excluding_rabbitmq() {
   for (( i=1; i<=$#; i++)) {
-    if [[ $i != "rabbitmq" ]]; then
-      eval val='$'$i
+    eval val='$'$i
+    if [[ "$val" != "rabbitmq" ]] && [[ "$val" != "other_rabbitmq" ]]; then
       REQUIRED_COMPONENTS+=( "$val" )
     fi
   }
