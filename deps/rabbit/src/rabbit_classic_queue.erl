@@ -64,8 +64,7 @@
          send_drained_credit_api_v1/4,
          send_credit_reply/7]).
 
--export([queue_topology/1,
-         policy_apply_to_name/0,
+-export([policy_apply_to_name/0,
          stop/1,
          list_with_minimum_quorum/0,
          drain/1,
@@ -701,13 +700,6 @@ send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->
 
 send_queue_event(Pid, QName, Event) ->
     gen_server:cast(Pid, {queue_event, QName, Event}).
-
--spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: node() | none, Replicas :: [node(),...]}.
-queue_topology(Q) ->
-    Pid = amqqueue:get_pid(Q),
-    Node = node(Pid),
-    {Node, [Node]}.
 
 policy_apply_to_name() ->
     <<"classic_queues">>.

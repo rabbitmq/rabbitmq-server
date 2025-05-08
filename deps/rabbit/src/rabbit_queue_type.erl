@@ -284,9 +284,6 @@
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
 
--callback queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
-
 -callback policy_apply_to_name() -> binary().
 
 %% -callback on_node_up(node()) -> ok.

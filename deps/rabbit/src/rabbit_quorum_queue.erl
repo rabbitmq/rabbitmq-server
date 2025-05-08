@@ -77,8 +77,7 @@
          force_vhost_queues_shrink_member_to_current_member/1,
          force_all_queues_shrink_member_to_current_member/0]).
 
--export([queue_topology/1,
-         policy_apply_to_name/0,
+-export([policy_apply_to_name/0,
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
@@ -2252,25 +2251,6 @@ maybe_log_leader_health_check_result([]) -> ok;
 maybe_log_leader_health_check_result(Result) ->
     Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
     rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
-
--spec queue_topology(amqqueue:amqqueue()) ->
-          {Leader :: node() | none, Replicas :: [node(),...]}.
-queue_topology(Q) ->
-    Leader = case amqqueue:get_pid(Q) of
-                 {_RaName, Node} ->
-                     Node;
-                 none ->
-                     none;
-                 Pid ->
-                     node(Pid)
-             end,
-    Replicas = case amqqueue:get_type_state(Q) of
-                   #{nodes := Nodes} ->
-                       Nodes;
-                   _ ->
-                       [Leader]
-               end,
-    {Leader, Replicas}.
 
 policy_apply_to_name() ->
     <<"quorum_queues">>.

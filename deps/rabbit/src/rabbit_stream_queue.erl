@@ -59,8 +59,7 @@
 
 -export([check_max_segment_size_bytes/1]).
 
--export([queue_topology/1,
-         policy_apply_to_name/0,
+-export([policy_apply_to_name/0,
          stop/1,
          drain/1,
          revive/0,
@@ -1429,25 +1428,6 @@ delivery_count_add(none, _) ->
     none;
 delivery_count_add(Count, N) ->
     serial_number:add(Count, N).
-
--spec queue_topology(amqqueue:amqqueue()) ->
-    {Leader :: node() | none, Replicas :: [node(),...]}.
-queue_topology(Q) ->
-    Leader = case amqqueue:get_pid(Q) of
-                 {_RaName, Node} ->
-                     Node;
-                 none ->
-                     none;
-                 Pid ->
-                     node(Pid)
-             end,
-    Replicas = case amqqueue:get_type_state(Q) of
-                   #{nodes := Nodes} ->
-                       Nodes;
-                   _ ->
-                       [Leader]
-               end,
-    {Leader, Replicas}.
 
 policy_apply_to_name() ->
     <<"streams">>.

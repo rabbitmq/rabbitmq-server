@@ -1325,14 +1325,14 @@ list_stream_queues_on(Node) when is_atom(Node) ->
 list_local_leaders() ->
     [ Q || Q <- list(),
          amqqueue:is_quorum(Q),
-         amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader(Q) =:= node()].
+         amqqueue:get_state(Q) =/= crashed, amqqueue:get_leader_node(Q) =:= node()].
 
 -spec list_local_followers() -> [amqqueue:amqqueue()].
 list_local_followers() ->
     [Q
       || Q <- list(),
          amqqueue:is_quorum(Q),
-         amqqueue:get_leader(Q) =/= node(),
+         amqqueue:get_leader_node(Q) =/= node(),
          lists:member(node(), get_quorum_nodes(Q)),
          rabbit_quorum_queue:is_recoverable(Q)
          ].
