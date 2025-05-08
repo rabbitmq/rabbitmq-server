@@ -384,7 +384,7 @@ protocol_listener_test(Config) ->
     Body0 = http_get_failed(Config, "/health/checks/protocol-listener/mqtt"),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
     ?assertEqual(true, maps:is_key(<<"reason">>, Body0)),
-    ?assertEqual(<<"mqtt">>, maps:get(<<"missing">>, Body0)),
+    ?assertEqual([<<"mqtt">>], maps:get(<<"missing">>, Body0)),
     ?assert(lists:member(<<"http">>, maps:get(<<"protocols">>, Body0))),
     ?assert(lists:member(<<"clustering">>, maps:get(<<"protocols">>, Body0))),
     ?assert(lists:member(<<"amqp">>, maps:get(<<"protocols">>, Body0))),
@@ -393,6 +393,14 @@ protocol_listener_test(Config) ->
     http_get_failed(Config, "/health/checks/protocol-listener/mqtts"),
     http_get_failed(Config, "/health/checks/protocol-listener/stomp"),
     http_get_failed(Config, "/health/checks/protocol-listener/stomp1.0"),
+
+    %% Multiple protocols may be supplied. The health check only returns OK if
+    %% all requested protocols are available.
+    Body1 = http_get_failed(Config, "/health/checks/protocol-listener/amqp,mqtt"),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body1)),
+    ?assertEqual(true, maps:is_key(<<"reason">>, Body1)),
+    ?assert(lists:member(<<"mqtt">>, maps:get(<<"missing">>, Body1))),
+    ?assert(lists:member(<<"amqp">>, maps:get(<<"protocols">>, Body1))),
 
     passed.
 

@@ -200,7 +200,7 @@ dispatcher() ->
      {"/health/checks/metadata-store/initialized/with-data",   rabbit_mgmt_wm_health_check_metadata_store_initialized_with_data, []},
      {"/health/checks/certificate-expiration/:within/:unit",   rabbit_mgmt_wm_health_check_certificate_expiration, []},
      {"/health/checks/port-listener/:port",                    rabbit_mgmt_wm_health_check_port_listener, []},
-     {"/health/checks/protocol-listener/:protocol",            rabbit_mgmt_wm_health_check_protocol_listener, []},
+     {"/health/checks/protocol-listener/:protocols",           rabbit_mgmt_wm_health_check_protocol_listener, []},
      {"/health/checks/virtual-hosts",                          rabbit_mgmt_wm_health_check_virtual_hosts, []},
      {"/health/checks/quorum-queues-without-elected-leaders/all-vhosts/",    rabbit_mgmt_wm_health_check_quorum_queues_without_elected_leaders_across_all_vhosts, []},
      {"/health/checks/quorum-queues-without-elected-leaders/vhost/:vhost/",  rabbit_mgmt_wm_health_check_quorum_queues_without_elected_leaders, []},
