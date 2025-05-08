@@ -37,7 +37,7 @@
 -export([update/2, store_queue/1, update_decorators/2, policy_changed/2]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_match/2, is_in_virtual_host/2]).
--export([is_replicated/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
+-export([is_replicable/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
 -export([list_local_quorum_queues/0, list_local_quorum_queue_names/0,
          list_local_stream_queues/0, list_stream_queues_on/1,
          list_local_leaders/0, list_local_followers/0, get_quorum_nodes/1,
@@ -421,7 +421,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
     maybe_rebalance(get_rebalance_lock(self()), Type, VhostSpec, QueueSpec).
 
 %% TODO: classic queues do not support rebalancing, it looks like they are simply
-%% filtered out with is_replicated(Q). Maybe error instead?
+%% filtered out with is_replicable(Q). Maybe error instead?
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     rabbit_log:info("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
                     [Type, VhostSpec, QueueSpec]),
@@ -429,7 +429,7 @@ maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- list(),
                         filter_per_type(Type, Q),
-                        is_replicated(Q),
+                        is_replicable(Q),
                         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
                             is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)],
     NumToRebalance = length(ToRebalance),
@@ -462,7 +462,7 @@ filter_per_type(classic, Q) ->
 %% for now because the original function will fail with
 %% bad clause if called with classical queue.
 %% The assumption is all non-replicated queues
-%% are filtered before calling this with is_replicated/0
+%% are filtered before calling this with is_replicable/0
 rebalance_module(Q) ->
     case rabbit_queue_type:rebalance_module(Q) of
         undefined ->
@@ -1922,11 +1922,10 @@ forget_node_for_queue(Q) ->
 run_backing_queue(QPid, Mod, Fun) ->
     gen_server2:cast(QPid, {run_backing_queue, Mod, Fun}).
 
--spec is_replicated(amqqueue:amqqueue()) -> boolean().
+-spec is_replicable(amqqueue:amqqueue()) -> boolean().
 
-is_replicated(Q) ->
-    TypeModule = amqqueue:get_type(Q),
-    TypeModule:is_replicated().
+is_replicable(Q) ->
+    rabbit_queue_type:is_replicable(Q).
 
 is_exclusive(Q) when ?amqqueue_exclusive_owner_is(Q, none) ->
     false;
@@ -1996,7 +1995,7 @@ filter_transient_queues_to_delete(Node) ->
             amqqueue:qnode(Q) == Node andalso
                 not rabbit_process:is_process_alive(amqqueue:get_pid(Q))
                 andalso (not amqqueue:is_classic(Q) orelse not amqqueue:is_durable(Q))
-                andalso (not is_replicated(Q)
+                andalso (not is_replicable(Q)
                          orelse is_dead_exclusive(Q))
                 andalso amqqueue:get_type(Q) =/= rabbit_mqtt_qos0_queue
     end.

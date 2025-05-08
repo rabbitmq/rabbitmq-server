@@ -79,7 +79,6 @@
 
 -export([queue_topology/1,
          policy_apply_to_name/0,
-         is_replicated/0,
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
@@ -561,7 +560,9 @@ capabilities() ->
       consumer_arguments => [<<"x-priority">>],
       server_named => false,
       rebalance_module => ?MODULE,
-      can_redeliver => true}.
+      can_redeliver => true,
+      is_replicable => true
+     }.
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
@@ -2273,9 +2274,6 @@ queue_topology(Q) ->
 
 policy_apply_to_name() ->
     <<"quorum_queues">>.
-
-is_replicated() ->
-    true.
 
 -spec drain([node()]) -> ok.
 drain(TransferCandidates) ->

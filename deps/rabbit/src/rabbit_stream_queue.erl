@@ -62,7 +62,6 @@
 -export([queue_topology/1,
          policy_apply_to_name/0,
          stop/1,
-         is_replicated/0,
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
@@ -1354,7 +1353,9 @@ capabilities() ->
       amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>],
       server_named => false,
       rebalance_module => ?MODULE,
-      can_redeliver => true}.
+      can_redeliver => true,
+      is_replicable => true
+     }.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     %% Not supported
@@ -1453,9 +1454,6 @@ policy_apply_to_name() ->
 
 stop(_VHost) ->
     ok.
-
-is_replicated() ->
-    true.
 
 drain(TransferCandidates) ->
     case whereis(rabbit_stream_coordinator) of

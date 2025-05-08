@@ -63,6 +63,7 @@
          publish_at_most_once/2,
          can_redeliver/2,
          rebalance_module/1,
+         is_replicable/1,
          stop/1,
          list_with_minimum_quorum/0,
          drain/1,
@@ -269,9 +270,16 @@
 -callback format(amqqueue:amqqueue(), Context :: map()) ->
     [{atom(), term()}].
 
-%% TODO: mandate keys
+%% TODO: replace binary() with real types?
 -callback capabilities() ->
-    #{atom() := term()}.
+    #{unsupported_policies := [binary()],
+      queue_arguments := [binary()],
+      consumer_arguments := [binary()],
+      amqp_capabilities => [binary()],
+      server_named := boolean(),
+      rebalance_module := module(),
+      can_redeliver := boolean(),
+      is_replicable := boolean()}.
 
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
@@ -286,8 +294,6 @@
 %% -callback on_node_down(node()) -> ok.
 
 -callback stop(rabbit_types:vhost()) -> ok.
-
--callback is_replicated() -> boolean().
 
 -callback list_with_minimum_quorum() -> [amqqueue:amqqueue()].
 
@@ -897,11 +903,17 @@ can_redeliver(Q, State) ->
         _ -> false
     end.
 
--spec rebalance_module( amqqueue:amqqueue()) -> undefine | module().
+-spec rebalance_module(amqqueue:amqqueue()) -> undefine | module().
 rebalance_module(Q) ->
     TypeModule = amqqueue:get_type(Q),
     Capabilities = TypeModule:capabilities(),
     maps:get(rebalance_module, Capabilities, undefined).
+
+-spec is_replicable(amqqueue:amqqueue()) -> undefine | module().
+is_replicable(Q) ->
+    TypeModule = amqqueue:get_type(Q),
+    Capabilities = TypeModule:capabilities(),
+    maps:get(is_replicable, Capabilities, false).
 
 -spec stop(rabbit_types:vhost()) -> ok.
 stop(VHost) ->
