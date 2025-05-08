@@ -27,32 +27,37 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 resource_exists(ReqData, Context) ->
-    {case protocol(ReqData) of
+    {case protocols(ReqData) of
          none -> false;
          _ -> true
      end, ReqData, Context}.
 
 to_json(ReqData, Context) ->
-    Protocol = normalize_protocol(protocol(ReqData)),
-    Listeners = rabbit_networking:active_listeners(),
-    Local = [L || #listener{node = N} = L <- Listeners, N == node()],
-    ProtoListeners = [L || #listener{protocol = P} = L <- Local, atom_to_list(P) == Protocol],
-    case ProtoListeners of
+    Protocols = string:split(protocols(ReqData), ",", all),
+    RequestedProtocols = sets:from_list(
+                           [normalize_protocol(P) || P <- Protocols],
+                           [{version, 2}]),
+    Listeners = rabbit_networking:node_listeners(node()),
+    ActiveProtocols = sets:from_list(
+                        [atom_to_list(P) || #listener{protocol = P} <- Listeners],
+                        [{version, 2}]),
+    MissingProtocols = sets:to_list(sets:subtract(RequestedProtocols, ActiveProtocols)),
+    case MissingProtocols of
         [] ->
-            Msg = <<"No active listener">>,
-            failure(Msg, Protocol, [P || #listener{protocol = P} <- Local], ReqData, Context);
+            Body = #{status    => ok,
+                     protocols => [list_to_binary(P) || P <- sets:to_list(ActiveProtocols)]},
+            rabbit_mgmt_util:reply(Body, ReqData, Context);
         _ ->
-            Body = #{status   => ok,
-                     protocol => list_to_binary(Protocol)},
-            rabbit_mgmt_util:reply(Body, ReqData, Context)
+            Msg = <<"No active listener">>,
+            failure(Msg, MissingProtocols, sets:to_list(ActiveProtocols), ReqData, Context)
     end.
 
 failure(Message, Missing, Protocols, ReqData, Context) ->
     Body = #{
         status    => failed,
         reason    => Message,
-        missing   => list_to_binary(Missing),
-        protocols => Protocols
+        missing   => [list_to_binary(P) || P <- Missing],
+        protocols => [list_to_binary(P) || P <- Protocols]
     },
     {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(Body, ReqData, Context),
     {stop, cowboy_req:reply(503, #{}, Response, ReqData1), Context1}.
@@ -60,8 +65,8 @@ failure(Message, Missing, Protocols, ReqData, Context) ->
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized(ReqData, Context).
 
-protocol(ReqData) ->
-    rabbit_mgmt_util:id(protocol, ReqData).
+protocols(ReqData) ->
+    rabbit_mgmt_util:id(protocols, ReqData).
 
 normalize_protocol(Protocol) ->
     case string:lowercase(binary_to_list(Protocol)) of

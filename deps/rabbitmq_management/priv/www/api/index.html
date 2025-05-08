@@ -1202,10 +1202,12 @@ or:
         <td></td>
         <td></td>
         <td></td>
-        <td class="path">/api/health/checks/protocol-listener/<i>protocol</i></td>
+        <td class="path">/api/health/checks/protocol-listener/<i>protocols</i></td>
         <td>
-          Responds a 200 OK if there is an active listener for the given protocol,
-          otherwise responds with a 503 Service Unavailable. Valid protocol names are: amqp091, amqp10, mqtt, stomp, web-mqtt, web-stomp.
+          Responds a 200 OK if all given protocols have active listeners,
+          otherwise responds with a 503 Service Unavailable. Multiple protocols
+          may be provided by separating the names with commas. Valid protocol
+          names are: amqp091, amqp10, mqtt, stomp, web-mqtt, web-stomp.
         </td>
       </tr>
       <tr>
