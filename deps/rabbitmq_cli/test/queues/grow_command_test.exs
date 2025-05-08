@@ -44,55 +44,55 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
   end
 
   test "validate: when one argument is provided, returns a failure" do
-    assert @command.validate(["quorum-queue-a"], %{}) == {:validation_failure, :not_enough_args}
+    assert @command.validate(["target@node"], %{}) == {:validation_failure, :not_enough_args}
   end
 
   test "validate: when a node and even are provided, returns a success" do
-    assert @command.validate(["quorum-queue-a", "even"], %{}) == :ok
+    assert @command.validate(["target@node", "even"], %{}) == :ok
   end
 
   test "validate: when a node and all are provided, returns a success" do
-    assert @command.validate(["quorum-queue-a", "all"], %{}) == :ok
+    assert @command.validate(["target@node", "all"], %{}) == :ok
   end
 
   test "validate: when a node and something else is provided, returns a failure" do
-    assert @command.validate(["quorum-queue-a", "banana"], %{}) ==
+    assert @command.validate(["target@node", "banana"], %{}) ==
              {:validation_failure, "strategy 'banana' is not recognised."}
   end
 
   test "validate: when three arguments are provided, returns a failure" do
-    assert @command.validate(["quorum-queue-a", "extra-arg", "another-extra-arg"], %{}) ==
+    assert @command.validate(["target@node", "extra-arg", "another-extra-arg"], %{}) ==
              {:validation_failure, :too_many_args}
   end
 
   test "validate: when membership promotable is provided, returns a success" do
-    assert @command.validate(["quorum-queue-a", "all"], %{membership: "promotable"}) == :ok
+    assert @command.validate(["target@node", "all"], %{membership: "promotable", queue_pattern: "qq.*"}) == :ok
   end
 
   test "validate: when membership voter is provided, returns a success" do
-    assert @command.validate(["quorum-queue-a", "all"], %{membership: "voter"}) == :ok
+    assert @command.validate(["target@node", "all"], %{membership: "voter", queue_pattern: "qq.*"}) == :ok
   end
 
   test "validate: when membership non_voter is provided, returns a success" do
-    assert @command.validate(["quorum-queue-a", "all"], %{membership: "non_voter"}) == :ok
+    assert @command.validate(["target@node", "all"], %{membership: "non_voter", queue_pattern: "qq.*"}) == :ok
   end
 
   test "validate: when wrong membership is provided, returns failure" do
-    assert @command.validate(["quorum-queue-a", "all"], %{membership: "banana"}) ==
+    assert @command.validate(["target@node", "all"], %{membership: "banana", queue_pattern: "qq.*"}) ==
              {:validation_failure, "voter status 'banana' is not recognised."}
   end
 
   test "validate: when target quorum cluster size greater than zero, returns a success" do
-    assert @command.validate([7, "all"], %{membership: "voter"}) == :ok
+    assert @command.validate([7, "all"], %{membership: "voter", queue_pattern: "qq.*"}) == :ok
   end
 
   test "validate: when target quorum cluster size is zero, returns failure" do
-    assert @command.validate([0, "all"], %{membership: "voter"}) ==
+    assert @command.validate([0, "all"], %{membership: "voter", queue_pattern: "qq.*"}) ==
              {:validation_failure, "target quorum cluster size '0' must be greater than 0."}
   end
 
   test "validate: when target quorum cluster size is less than zero, returns failure" do
-    assert @command.validate([-1, "all"], %{membership: "voter"}) ==
+    assert @command.validate([-1, "all"], %{membership: "voter", queue_pattern: "qq.*"}) ==
              {:validation_failure, "target quorum cluster size '-1' must be greater than 0."}
   end
 
@@ -102,7 +102,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
              {:badrpc, _},
              @command.run(
                ["target@node", "all"],
-               Map.merge(context[:opts], %{node: :jake@thedog})
+               Map.merge(context[:opts], %{node: :jake@thedog, queue_pattern: "qq.*"})
              )
            )
   end
@@ -113,7 +113,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
              {:badrpc, _},
              @command.run(
                [5, "all"],
-               Map.merge(context[:opts], %{node: :jake@thedog})
+               Map.merge(context[:opts], %{node: :jake@thedog, queue_pattern: "qq.*"})
              )
            )
   end
