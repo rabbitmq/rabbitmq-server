@@ -349,7 +349,7 @@ module.exports = class BasePage {
   async chooseFile (locator, file) {
     const element = await this.waitForDisplayed(locator)
     const remote = require('selenium-webdriver/remote');
-    driver.setFileDetector(new remote.FileDetector);
+    this.driver.setFileDetector(new remote.FileDetector);
     return element.sendKeys(file)
   }
   async acceptAlert () {

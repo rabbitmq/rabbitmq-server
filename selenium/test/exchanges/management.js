@@ -8,6 +8,8 @@ const OverviewPage = require('../pageobjects/OverviewPage')
 const ExchangesPage = require('../pageobjects/ExchangesPage')
 const ExchangePage = require('../pageobjects/ExchangePage')
 
+const DISABLE_METRICS = process.env.DISABLE_METRICS || false
+
 describe('Exchange management', function () {
   let login
   let exchanges
@@ -76,7 +78,6 @@ describe('Exchange management', function () {
     await exchanges.clickOnSelectTableColumns()
     let table = await exchanges.getSelectableTableColumns()
     
-    assert.equal(2, table.length)
     let overviewGroup = { 
         "name" : "Overview:",
         "columns": [
@@ -88,14 +89,18 @@ describe('Exchange management', function () {
     }    
     assert.equal(JSON.stringify(table[0]), JSON.stringify(overviewGroup))
     
-    let messageRatesGroup = { 
-      "name" : "Message rates:",
-      "columns": [
-        {"name:":"rate in","id":"checkbox-exchanges-rate-in"},
-        {"name:":"rate out","id":"checkbox-exchanges-rate-out"}
-      ]
+    if (!DISABLE_METRICS) {
+      assert.equal(table.length, 2)
+
+      let messageRatesGroup = { 
+        "name" : "Message rates:",
+        "columns": [
+          {"name:":"rate in","id":"checkbox-exchanges-rate-in"},
+          {"name:":"rate out","id":"checkbox-exchanges-rate-out"}
+        ]
+      }
+      assert.equal(JSON.stringify(table[1]), JSON.stringify(messageRatesGroup))
     }
-    assert.equal(JSON.stringify(table[1]), JSON.stringify(messageRatesGroup))
       
   })
 

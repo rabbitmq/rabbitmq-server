@@ -13,7 +13,7 @@ const TABLE_SECTION = By.css('div#main div#vhosts.section table.list')
 
 module.exports = class VhostsAdminTab extends AdminTab {
   async isLoaded () {
-    await this.waitForDisplayed(MAIN_SECTION)
+    return this.waitForDisplayed(MAIN_SECTION)
   }
   async searchForVhosts(vhost, regex = false) {
     await this.sendKeys(FILTER_VHOST, vhost)
