@@ -1823,13 +1823,22 @@ grow_queue(Config) ->
     %% shrink all queues again
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_all_queues_shrink_member_to_current_member, []),
-
     assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
 
     %% grow queues to quorum cluster size > '5' (limit = 5).
     TargetClusterSize_10 = 10,
     rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
-    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount).
+    assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
+
+    %% shrink all queues again
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% attempt to grow queues to quorum cluster size < '0'.
+    BadTargetClusterSize = -5,
+    ?assertEqual({error, bad_quorum_cluster_size},
+        rpc:call(Server0, rabbit_quorum_queue, grow, [BadTargetClusterSize, <<"/">>, <<".*">>, all])).
 
 assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
     [begin

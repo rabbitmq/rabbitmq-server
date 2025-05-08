@@ -1541,7 +1541,7 @@ grow(Node, VhostSpec, QueueSpec, Strategy, Membership) when is_atom(Node) ->
         is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ];
 
 grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
-  when is_integer(QuorumClusterSize) ->
+  when is_integer(QuorumClusterSize), QuorumClusterSize > 0 ->
     Running = rabbit_nodes:list_running(),
     TotalRunning = length(Running),
 
@@ -1570,7 +1570,14 @@ grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
             amqqueue:get_type(Q) == ?MODULE,
             matches_strategy(Strategy, get_nodes(Q)),
             is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
-            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)]).
+            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)]);
+
+grow(QuorumClusterSize, _VhostSpec, _QueueSpec, _Strategy, _Membership)
+  when is_integer(QuorumClusterSize) ->
+    rabbit_log:warning(
+            "cannot grow queues to a quorum cluster size less than zero (~tp)",
+            [QuorumClusterSize]),
+    {error, bad_quorum_cluster_size}.
 
 maybe_grow(Q, Node, Membership, Size) ->
     QName = amqqueue:get_name(Q),
