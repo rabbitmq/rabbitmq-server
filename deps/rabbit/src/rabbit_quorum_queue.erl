@@ -1515,29 +1515,20 @@ shrink_all(Node) ->
             amqqueue:get_type(Q) == ?MODULE,
             lists:member(Node, get_nodes(Q))].
 
-
+-spec grow(node() | integer(), binary(), binary(), all | even) ->
+    [{rabbit_amqqueue:name(),
+      {ok, pos_integer()} | {error, pos_integer(), term()}}].
 grow(Node, VhostSpec, QueueSpec, Strategy) ->
     grow(Node, VhostSpec, QueueSpec, Strategy, promotable).
 
--spec grow(node(), binary(), binary(), all | even, membership()) ->
+-spec grow(node() | integer(), binary(), binary(), all | even, membership()) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
-grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
+grow(Node, VhostSpec, QueueSpec, Strategy, Membership) when is_atom(Node) ->
     Running = rabbit_nodes:list_running(),
     [begin
          Size = length(get_nodes(Q)),
-         QName = amqqueue:get_name(Q),
-         ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
-                         [rabbit_misc:rs(QName), Node]),
-         case add_member(Q, Node, Membership) of
-             ok ->
-                 {QName, {ok, Size + 1}};
-             {error, Err} ->
-                 ?LOG_WARNING(
-                   "~ts: failed to add member (replica) on node ~w, error: ~w",
-                   [rabbit_misc:rs(QName), Node, Err]),
-                 {QName, {error, Size, Err}}
-         end
+         maybe_grow(Q, Node, Membership, Size)
      end
      || Q <- rabbit_amqqueue:list(),
         amqqueue:get_type(Q) == ?MODULE,
@@ -1547,7 +1538,53 @@ grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
         lists:member(Node, Running),
         matches_strategy(Strategy, get_nodes(Q)),
         is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
-        is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ].
+        is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec) ];
+
+grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
+  when is_integer(QuorumClusterSize) ->
+    Running = rabbit_nodes:list_running(),
+    TotalRunning = length(Running),
+
+    TargetQuorumClusterSize =
+        if QuorumClusterSize > TotalRunning ->
+            %% we cant grow beyond total running nodes
+            TotalRunning;
+        true ->
+            QuorumClusterSize
+        end,
+
+    lists:flatten(
+        [begin
+            QNodes = get_nodes(Q),
+            case length(QNodes) of
+                Size when Size < TargetQuorumClusterSize ->
+                    TargetAvailableNodes = Running -- QNodes,
+                    Node = hd(TargetAvailableNodes),
+                    maybe_grow(Q, Node, Membership, Size);
+                _ ->
+                    []
+            end
+        end
+        ||  _ <- lists:seq(1, TargetQuorumClusterSize),
+            Q <- rabbit_amqqueue:list(),
+            amqqueue:get_type(Q) == ?MODULE,
+            matches_strategy(Strategy, get_nodes(Q)),
+            is_match(amqqueue:get_vhost(Q), VhostSpec) andalso
+            is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)]).
+
+maybe_grow(Q, Node, Membership, Size) ->
+    QName = amqqueue:get_name(Q),
+    ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
+                    [rabbit_misc:rs(QName), Node]),
+    case add_member(Q, Node, Membership) of
+        ok ->
+            {QName, {ok, Size + 1}};
+        {error, Err} ->
+            ?LOG_WARNING(
+            "~ts: failed to add member (replica) on node ~w, error: ~w",
+            [rabbit_misc:rs(QName), Node, Err]),
+            {QName, {error, Size, Err}}
+    end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->
     {migrated, node()} | {not_migrated, atom()}.
