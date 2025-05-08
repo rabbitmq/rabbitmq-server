@@ -277,7 +277,7 @@
       consumer_arguments := [binary()],
       amqp_capabilities => [binary()],
       server_named := boolean(),
-      rebalance_module := module(),
+      rebalance_module := module() | undefined,
       can_redeliver := boolean(),
       is_replicable := boolean()}.
 

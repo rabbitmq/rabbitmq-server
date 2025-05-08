@@ -44,10 +44,7 @@
 -export([queue_topology/1,
          feature_flag_name/0,
          policy_apply_to_name/0,
-         can_redeliver/0,
          stop/1,
-         is_replicated/0,
-         rebalance_module/0,
          list_with_minimum_quorum/0,
          drain/1,
          revive/0,
@@ -235,10 +232,14 @@ format(Q, _Ctx) ->
     [{type, ?MODULE},
      {state, amqqueue:get_state(Q)}].
 
--spec capabilities() ->
-    #{atom() := term()}.
 capabilities() ->
-    #{}.
+    #{can_redeliver => false,
+      consumer_arguments => [],
+      is_replicable => false,
+      queue_arguments => [],
+      rebalance_module => undefined,
+      server_named => true,
+      unsupported_policies => []}.
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
@@ -328,17 +329,8 @@ feature_flag_name() ->
 policy_apply_to_name() ->
     <<"qos0_queues">>.
 
-can_redeliver() ->
-    false.
-
 stop(_VHost) ->
     ok.
-
-is_replicated() ->
-    false.
-
-rebalance_module() ->
-    {error, not_supported}.
 
 list_with_minimum_quorum() ->
     [].
