@@ -50,7 +50,8 @@ all_tests() -> [
                 metadata_store_initialized_with_data_test,
                 protocol_listener_test,
                 port_listener_test,
-                certificate_expiration_test
+                certificate_expiration_test,
+                is_in_service_test
                ].
 
 %% -------------------------------------------------------------------
@@ -446,6 +447,18 @@ certificate_expiration_test(Config) ->
     ?assertEqual(true, maps:is_key(<<"certfile">>, Expired)),
     ?assertEqual(true, maps:is_key(<<"certfile_expires_on">>, Expired)),
     ?assertEqual(true, maps:is_key(<<"interface">>, Expired)),
+
+    passed.
+
+is_in_service_test(Config) ->
+    Path = "/health/checks/is-in-service",
+    Check0 = http_get(Config, Path, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+
+    true = rabbit_ct_broker_helpers:mark_as_being_drained(Config, 0),
+    Body0 = http_get_failed(Config, Path),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 0),
 
     passed.
 

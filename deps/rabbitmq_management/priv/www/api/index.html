@@ -1242,6 +1242,19 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/health/checks/is-in-service</td>
+        <td>
+          Responds a 200 OK if the target node is booted, running, and ready to
+          serve clients, otherwise responds with a 503 Service Unavailable. If the
+          target node is being drained for maintenance then this check returns 503
+          Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/vhost-limits</td>
         <td>
             Lists per-vhost limits for all vhosts.
