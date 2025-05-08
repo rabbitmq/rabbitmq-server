@@ -70,10 +70,14 @@ between_expr -> additive_expr 'BETWEEN' additive_expr 'AND' additive_expr : {'be
 between_expr -> additive_expr 'NOT' 'BETWEEN' additive_expr 'AND' additive_expr : {'not_between', '$1', '$4', '$6'}.
 
 %% LIKE expression
-like_expr -> additive_expr 'LIKE' additive_expr : {'like', '$1', '$3', no_escape}.
-like_expr -> additive_expr 'LIKE' additive_expr 'ESCAPE' additive_expr : {'like', '$1', '$3', '$5'}.
-like_expr -> additive_expr 'NOT' 'LIKE' additive_expr : {'not_like', '$1', '$4', no_escape}.
-like_expr -> additive_expr 'NOT' 'LIKE' additive_expr 'ESCAPE' additive_expr : {'not_like', '$1', '$4', '$6'}.
+like_expr -> additive_expr 'LIKE' string :
+    {'like', '$1', process_like_pattern('$3'), no_escape}.
+like_expr -> additive_expr 'LIKE' string 'ESCAPE' string :
+    {'like', '$1', process_like_pattern('$3'), process_escape_char('$5')}.
+like_expr -> additive_expr 'NOT' 'LIKE' string :
+    {'not_like', '$1', process_like_pattern('$4'), no_escape}.
+like_expr -> additive_expr 'NOT' 'LIKE' string 'ESCAPE' string :
+    {'not_like', '$1', process_like_pattern('$4'), process_escape_char('$6')}.
 
 %% IN expression
 in_expr -> additive_expr 'IN' '(' string_list ')' : {'in', '$1', '$4'}.
@@ -117,3 +121,19 @@ literal -> boolean : {boolean, extract_value('$1')}.
 Erlang code.
 
 extract_value({_Token, _Line, Value}) -> Value.
+
+process_like_pattern({string, Line, Value}) ->
+    case unicode:characters_to_list(Value) of
+        L when is_list(L) ->
+            L;
+        _ ->
+            return_error(Line, "pattern-value in LIKE must be valid Unicode")
+    end.
+
+process_escape_char({string, Line, Value}) ->
+    case unicode:characters_to_list(Value) of
+        [SingleChar] ->
+            SingleChar;
+        _ ->
+            return_error(Line, "ESCAPE must be a single-character string literal")
+    end.

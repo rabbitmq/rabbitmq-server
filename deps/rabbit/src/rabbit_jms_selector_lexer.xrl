@@ -5,11 +5,13 @@
 %%% leex:file("rabbit_jms_selector_lexer.xrl", [deterministic]).
 
 Definitions.
-WHITESPACE  = [\s\t\n\r]
+WHITESPACE  = [\s\t\f\n\r]
 DIGIT       = [0-9]
 INT         = {DIGIT}+
-FLOAT       = {DIGIT}+\.{DIGIT}+([eE][\+\-]?{INT})?
-EXPONENT    = [0-9]+[eE][\+\-]?[0-9]+
+% Approximate numeric literal with a decimal
+FLOAT       = ({DIGIT}+\.{DIGIT}*|\.{DIGIT}+)([eE][\+\-]?{INT})?
+% Approximate numeric literal in scientific notation without a decimal
+EXPONENT    = {DIGIT}+[eE][\+\-]?{DIGIT}+
 IDENTIFIER  = [a-zA-Z_$][a-zA-Z0-9_$]*
 STRING      = '([^']|'')*'
 
@@ -54,8 +56,8 @@ Rules.
 
 % Literals
 {INT}         : {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
-{FLOAT}       : {token, {float, TokenLine, list_to_float(TokenChars)}}.
-{EXPONENT}    : {token, {float, TokenLine, list_to_float(TokenChars)}}.
+{FLOAT}       : {token, {float, TokenLine, list_to_float(to_float(TokenChars))}}.
+{EXPONENT}    : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
 {STRING}      : {token, {string, TokenLine, process_string(TokenChars)}}.
 {IDENTIFIER}  : {token, {identifier, TokenLine, list_to_binary(TokenChars)}}.
 
@@ -63,6 +65,29 @@ Rules.
 .             : {error, {illegal_character, TokenChars}}.
 
 Erlang code.
+
+%% "Approximate literals use the Java floating-point literal syntax."
+to_float([$. | _] = Chars) ->
+    %% . Digits [ExponentPart]
+    "0" ++ Chars;
+to_float(Chars) ->
+    %% Digits . [Digits] [ExponentPart]
+    case lists:last(Chars) of
+        $. ->
+            Chars ++ "0";
+        _ ->
+            Chars1 = string:lowercase(Chars),
+            Chars2 = string:replace(Chars1, ".e", ".0e"),
+            lists:flatten(Chars2)
+    end.
+
+parse_scientific_notation(Chars) ->
+    Str = string:lowercase(Chars),
+    {Before, After0} = lists:splitwith(fun(C) -> C =/= $e end, Str),
+    [$e | After] = After0,
+    Base = list_to_integer(Before),
+    Exp = list_to_integer(After),
+    Base * math:pow(10, Exp).
 
 process_string(Chars) ->
     %% remove surrounding quotes

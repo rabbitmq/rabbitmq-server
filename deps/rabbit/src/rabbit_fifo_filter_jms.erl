@@ -22,8 +22,8 @@ eval(Expression, Headers) ->
 eval0({Type, Value}, _Headers)
   when Type =:= integer orelse
        Type =:= float orelse
-       Type =:= boolean orelse
-       Type =:= string ->
+       Type =:= string orelse
+       Type =:= boolean ->
     Value;
 
 %% Identifier lookup
@@ -40,18 +40,16 @@ eval0({'and', Expr1, Expr2}, Headers) ->
             case eval0(Expr2, Headers) of
                 true -> true;
                 false -> false;
-                _ -> undefined
+                _Unknown -> undefined
             end;
         false ->
             % Short-circuit
             false;
-        undefined ->
+        _Unknown ->
             case eval0(Expr2, Headers) of
                 false -> false;
                 _ -> undefined
-            end;
-        _ ->
-            undefined
+            end
     end;
 %% Table 3-5 in
 %% https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#null-values
@@ -64,15 +62,13 @@ eval0({'or', Expr1, Expr2}, Headers) ->
             case eval0(Expr2, Headers) of
                 true -> true;
                 false -> false;
-                _ -> undefined
+                _Unknown -> undefined
             end;
-        undefined ->
+        _Unknown ->
             case eval0(Expr2, Headers) of
                 true -> true;
                 _ -> undefined
-            end;
-        _ ->
-            undefined
+            end
     end;
 %% Table 3-6 in
 %% https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#null-values
@@ -80,7 +76,7 @@ eval0({'not', Expr}, Headers) ->
     case eval0(Expr, Headers) of
         true -> false;
         false -> true;
-        _ -> undefined
+        _Unknown -> undefined
     end;
 
 %% Comparison operators
@@ -137,7 +133,7 @@ eval0({'not_between', Expr, From, To}, Headers) ->
 
 eval0({'in', Expr, ValueList}, Headers) ->
     Value = eval0(Expr, Headers),
-    is_in(Value, [eval0(Item, Headers) || Item <- ValueList]);
+    is_in(Value, ValueList);
 
 eval0({'not_in', Expr, ValueList}, Headers) ->
     case eval0({'in', Expr, ValueList}, Headers) of
@@ -148,12 +144,17 @@ eval0({'not_in', Expr, ValueList}, Headers) ->
 
 eval0({'like', Expr, Pattern, Escape}, Headers) ->
     Value = eval0(Expr, Headers),
-    PatternVal = eval0(Pattern, Headers),
-    EscapeVal = case Escape of
-                    no_escape -> no_escape;
-                    _ -> eval0(Escape, Headers)
-                end,
-    is_like(Value, PatternVal, EscapeVal);
+    case is_binary(Value) of
+        true ->
+            case unicode:characters_to_list(Value) of
+                L when is_list(L) ->
+                    like_match(L, Pattern, Escape);
+                _ ->
+                    undefined
+            end;
+        false ->
+            undefined
+    end;
 
 eval0({'not_like', Expr, Pattern, Escape}, Headers) ->
     case eval0({'like', Expr, Pattern, Escape}, Headers) of
@@ -168,26 +169,35 @@ eval0({'is_null', Expr}, Headers) ->
 eval0({'is_not_null', Expr}, Headers) ->
     eval0(Expr, Headers) =/= undefined;
 
-%% Default case for unknown expressions
-eval0(Value, _Headers)
-  when is_binary(Value) orelse
-       is_number(Value) orelse
-       is_boolean(Value) ->
-    Value;
-eval0(_, _) ->
+eval0(_UnexpectedExpression, _) ->
     undefined.
 
 %% Helper functions
 
 %% "Comparison or arithmetic with an unknown value always yields an unknown value."
-compare(_, undefined, _) -> undefined;
-compare(_, _, undefined) -> undefined;
-compare('=', Left, Right) -> Left == Right;
-compare('<>', Left, Right) -> Left /= Right;
-compare('>', Left, Right) -> Left > Right;
-compare('<', Left, Right) -> Left < Right;
-compare('>=', Left, Right) -> Left >= Right;
-compare('<=', Left, Right) -> Left =< Right.
+compare(_, undefined, _) ->
+    undefined;
+compare(_, _, undefined) ->
+    undefined;
+%% "Only like type values can be compared.
+%% One exception is that it is valid to compare exact numeric values and approximate numeric values.
+%% String and Boolean comparison is restricted to = and <>."
+compare('=', Left, Right) ->
+    Left == Right;
+compare('<>', Left, Right) ->
+    Left /= Right;
+compare('>', Left, Right) when is_number(Left) andalso is_number(Right) ->
+    Left > Right;
+compare('<', Left, Right) when is_number(Left) andalso is_number(Right) ->
+    Left < Right;
+compare('>=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+    Left >= Right;
+compare('<=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+    Left =< Right;
+compare(_, _, _) ->
+    %% "If the comparison of non-like type values is attempted,
+    %% the value of the operation is false."
+    false.
 
 arithmetic(_, undefined, _) ->
     undefined;
@@ -199,15 +209,7 @@ arithmetic('-', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left - Right;
 arithmetic('*', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left * Right;
-arithmetic('/', Left, Right) when Right =:= 0 andalso Left > 0 ->
-    infinity;
-arithmetic('/', Left, Right) when Right =:= 0 andalso Left < 0 ->
-    '-infinity';
-arithmetic('/', Left, Right) when Right =:= 0 andalso Left =:= 0 ->
-    'NaN';
-arithmetic('/', Left, Right) when is_integer(Left) andalso is_integer(Right) ->
-    Left div Right;
-arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) ->
+arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) andalso Right /= 0 ->
     Left / Right;
 arithmetic(_, _, _) ->
     undefined.
@@ -217,59 +219,48 @@ between(Value, From, To)
        From =:= undefined orelse
        To =:= undefined ->
     undefined;
-between(Value, From, To) ->
-    From =< Value andalso Value =< To.
+between(Value, From, To)
+  when is_number(Value) andalso
+       is_number(From) andalso
+       is_number(To) ->
+    From =< Value andalso Value =< To;
+between(_, _, _) ->
+    %% BETWEEN requires arithmetic expressions
+    %% "a string cannot be used in an arithmetic expression"
+    false.
 
 is_in(undefined, _) ->
     undefined;
 is_in(Value, List) ->
     lists:member(Value, List).
 
-is_like(Value, Pattern, Escape)
-  when is_binary(Value) andalso
-       is_binary(Pattern) ->
-    RegexPattern = like_to_regex(Pattern, Escape),
-    case re:run(Value, RegexPattern, [{capture, none}]) of
-        match -> true;
-        nomatch -> false
+like_match([], [], _) ->
+    true;
+like_match(_, [], _) ->
+    false;
+like_match([], [Char | _], _) when Char =/= $% ->
+    false;
+like_match([], [$% | PatRest], Escape) ->
+    %% String is empty, pattern starts with % - % can match empty string, continue with rest
+    like_match([], PatRest, Escape);
+like_match(S, [Escape, Char | PatRest], Escape) when Escape =/= no_escape ->
+    %% Found escape character, match the next character literally
+    case S of
+        [Char | StrRest] ->
+            like_match(StrRest, PatRest, Escape);
+        _ ->
+            false
     end;
-is_like(_, _, _) ->
-    undefined.
-
-%% Convert LIKE pattern to regex
-%%
-%% TODO compilation should happen when the consumer attaches.
-%% Should this happen within rabbit_jms_selector_parser.yrl?
-like_to_regex(Pattern, Escape) ->
-    {ok, Regex} = convert_like_to_regex(binary_to_list(Pattern), Escape),
-    {ok, MP} = re:compile(<<"^", Regex/binary, "$">>),
-    MP.
-
-convert_like_to_regex(Pattern, Escape) ->
-    convert_like_to_regex(Pattern, [], Escape).
-
-convert_like_to_regex([], Acc, _) ->
-    {ok, iolist_to_binary(lists:reverse(Acc))};
-convert_like_to_regex([Esc, Char | Rest], Acc, Esc) when Esc =/= no_escape ->
-    % Escaped character - take literally
-    convert_like_to_regex(Rest, [escape_regex_char(Char) | Acc], Esc);
-convert_like_to_regex([$% | Rest], Acc, Esc) ->
-    % % means any sequence of characters (including none)
-    convert_like_to_regex(Rest, [".*" | Acc], Esc);
-convert_like_to_regex([$_ | Rest], Acc, Esc) ->
-    % _ means any single character
-    convert_like_to_regex(Rest, [$. | Acc], Esc);
-convert_like_to_regex([Char | Rest], Acc, Esc) ->
-    % Regular character - escape for regex
-    convert_like_to_regex(Rest, [escape_regex_char(Char) | Acc], Esc).
-
-%% Escape special regex characters
-escape_regex_char(Char)
-  when Char =:= $. orelse Char =:= $* orelse Char =:= $+ orelse
-       Char =:= $? orelse Char =:= $^ orelse Char =:= $$ orelse
-       Char =:= $[ orelse Char =:= $] orelse Char =:= $( orelse
-       Char =:= $) orelse Char =:= ${ orelse Char =:= $} orelse
-       Char =:= $| orelse Char =:= $\\ ->
-    [$\\, Char];
-escape_regex_char(Char) ->
-    Char.
+like_match([_ | StrRest], [$_ | PatRest], Escape) ->
+    %% _ matches exactly 1 character
+    like_match(StrRest, PatRest, Escape);
+like_match(S, [$% | PatRest] = Pattern, Escape) ->
+    %% % matches 0 or more characters - try two paths:
+    %% 1. Skip % (match 0 characters)
+    like_match(S, PatRest, Escape) orelse
+    %% 2. Match current character and keep % in pattern for next iteration
+    like_match(tl(S), Pattern, Escape);
+like_match([Char | StrRest], [Char | PatRest], Escape) ->
+    like_match(StrRest, PatRest, Escape);
+like_match(_, Pattern, _) when is_list(Pattern) ->
+    false.
