@@ -1,6 +1,6 @@
 var http = require('http'),
     httpProxy = require('http-proxy');
-const {log, error} = require('./utils.js')    
+
 const XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest
 
 const rabbitmq_url = process.env.RABBITMQ_URL || 'http://0.0.0.0:15672/';
@@ -34,6 +34,13 @@ var server = http.createServer(function(req, res) {
 log("fakeproxy listening on port " + port + ".  RABBITMQ_URL=" + rabbitmq_url)
 server.listen(port);
 
+
+function log(message) {
+  console.log(new Date() + " " + message)
+}
+function error(message) {
+  console.error(new Date() + " " + message)
+}
 
 function default_if_blank(value, defaultValue) {
   if (typeof value === "undefined" || value === null || value == "") {
