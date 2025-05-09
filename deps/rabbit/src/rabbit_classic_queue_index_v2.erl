@@ -479,7 +479,7 @@ recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = DirBin },
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
     %% When resuming after a crash we need to double check the messages that are both
     %% in the v1 and v2 index (effectively the messages below the upper bound of the
-    %% v1 index that are about to be written to it).
+    %% v2 index that are about to be written to it).
     {_, V2HiSeqId, _} = bounds(State0, undefined),
     SkipFun = fun
         (SeqId, FunState0) when SeqId < V2HiSeqId ->
