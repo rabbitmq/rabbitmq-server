@@ -39,6 +39,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, "strategy '#{s}' is not recognised."}
   end
 
+  def validate([n, _], _)
+      when (is_integer(n) and n <= 0) do
+    {:validation_failure, "target quorum cluster size '#{n}' must be greater than 0."}
+  end
+
   def validate(_, %{membership: m})
       when not (m == "promotable" or
                   m == "non_voter" or
@@ -60,14 +65,22 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     )
   end
 
-  def run([node, strategy], %{
+  def run([node_or_quorum_cluster_size, strategy], %{
         node: node_name,
         vhost_pattern: vhost_pat,
         queue_pattern: queue_pat,
         membership: membership,
         errors_only: errors_only
       }) do
-    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
+
+    node_or_quorum_cluster_size =
+      if is_integer(node_or_quorum_cluster_size) do
+        node_or_quorum_cluster_size
+      else
+        to_atom(node_or_quorum_cluster_size)
+      end
+
+    args = [node_or_quorum_cluster_size, vhost_pat, queue_pat, to_atom(strategy)]
 
     args =
       case to_atom(membership) do
@@ -108,11 +121,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def usage,
     do:
-      "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
+      "grow <node | quorum_cluster_size> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
 
   def usage_additional do
     [
-      ["<node>", "node name to place replicas on"],
+      ["<node | quorum_cluster_size>", "node name to place replicas on or desired quorum cluster size"],
       [
         "<all | even>",
         "add a member for all matching queues or just those whose membership count is an even number"
