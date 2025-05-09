@@ -1269,6 +1269,29 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/health/checks/ready-to-serve-clients</td>
+        <td>
+          <p>
+            Responds a 200 OK if the target node is ready to serve clients, otherwise
+            responds with a 503 Service Unavailable. This check combines:
+          </p>
+          <ol>
+            <li>/api/health/checks/is-in-service</li>
+            <li>/api/health/checks/protocol-listener/amqp or /api/health/checks/protocol-listener/amqps</li>
+            <li>/api/health/checks/below-node-connection-limit</li>
+          </ol>
+          <p>
+            So this check will only return 200 OK if the target node is in service,
+            an AMQP or AMQPS listener is available and the target node has fewer active
+            AMQP and AMQPS connections that its configured limit.
+          </p>
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/vhost-limits</td>
         <td>
             Lists per-vhost limits for all vhosts.

@@ -209,6 +209,7 @@ dispatcher() ->
      {"/health/checks/node-is-quorum-critical",                rabbit_mgmt_wm_health_check_node_is_quorum_critical, []},
      {"/health/checks/is-in-service",                          rabbit_mgmt_wm_health_check_is_in_service, []},
      {"/health/checks/below-node-connection-limit",            rabbit_mgmt_wm_health_check_below_node_connection_limit, []},
+     {"/health/checks/ready-to-serve-clients",                 rabbit_mgmt_wm_health_check_ready_to_serve_clients, []},
      {"/reset",                                                rabbit_mgmt_wm_reset, []},
      {"/reset/:node",                                          rabbit_mgmt_wm_reset, []},
      {"/rebalance/queues",                                     rabbit_mgmt_wm_rebalance_queues, [{queues, all}]},
