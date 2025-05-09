@@ -1559,7 +1559,8 @@ grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
             case length(QNodes) of
                 Size when Size < TargetQuorumClusterSize ->
                     TargetAvailableNodes = Running -- QNodes,
-                    Node = hd(TargetAvailableNodes),
+                    N = length(TargetAvailableNodes),
+                    Node = lists:nth(rand:uniform(N), TargetAvailableNodes),
                     maybe_grow(Q, Node, Membership, Size);
                 _ ->
                     []
