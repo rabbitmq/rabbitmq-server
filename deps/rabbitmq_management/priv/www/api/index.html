@@ -1257,6 +1257,18 @@ or:
         <td></td>
         <td></td>
         <td></td>
+        <td class="path">/api/health/checks/below-node-connection-limit</td>
+        <td>
+          Responds a 200 OK if the target node has fewer connections to the AMQP
+          and AMQPS ports than the configured maximum, otherwise responds with a
+          503 Service Unavailable.
+        </td>
+      </tr>
+      <tr>
+        <td>X</td>
+        <td></td>
+        <td></td>
+        <td></td>
         <td class="path">/api/vhost-limits</td>
         <td>
             Lists per-vhost limits for all vhosts.
