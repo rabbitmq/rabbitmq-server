@@ -22,9 +22,6 @@
          sync/1, needs_sync/1, flush/1,
          bounds/2, next_segment_boundary/1]).
 
-%% Only used by tests
--export([bounds/1]).
-
 %% Used to upgrade/downgrade from/to the v1 index.
 -export([init_for_conversion/3]).
 -export([init_args/1]).
@@ -1190,13 +1187,6 @@ flush_pre_publish_cache(TargetRamCount, State) ->
 %% and highest possible bounds. In fact we HAVE to be inaccurate for
 %% the test suite to pass. This can probably be made more accurate
 %% in the future.
-
-%% `bounds/1` is only used by tests
--spec bounds(State) ->
-                       {non_neg_integer(), non_neg_integer(), State}
-                       when State::state().
-bounds(State) ->
-    bounds(State, undefined).
 
 -spec bounds(State, non_neg_integer() | undefined) ->
                        {non_neg_integer(), non_neg_integer(), State}
