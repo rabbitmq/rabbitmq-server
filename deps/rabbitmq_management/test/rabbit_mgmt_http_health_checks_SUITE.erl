@@ -51,7 +51,8 @@ all_tests() -> [
                 protocol_listener_test,
                 port_listener_test,
                 certificate_expiration_test,
-                is_in_service_test
+                is_in_service_test,
+                below_node_connection_limit_test
                ].
 
 %% -------------------------------------------------------------------
@@ -470,8 +471,36 @@ is_in_service_test(Config) ->
 
     passed.
 
+below_node_connection_limit_test(Config) ->
+    Path = "/health/checks/below-node-connection-limit",
+    Check0 = http_get(Config, Path, ?OK),
+    ?assertEqual(<<"ok">>, maps:get(status, Check0)),
+    ?assertEqual(0, maps:get(connections, Check0)),
+    ?assertEqual(<<"infinity">>, maps:get(limit, Check0)),
+
+    %% Set the connection limit low and open 'limit' connections.
+    Limit = 10,
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, application, set_env, [rabbit, connection_max, Limit]),
+    Connections = [rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0) || _ <- lists:seq(1, Limit)],
+    true = lists:all(fun(E) -> is_pid(E) end, Connections),
+    {error, not_allowed} = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0),
+
+    Body0 = http_get_failed(Config, Path),
+    ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
+    ?assertEqual(10, maps:get(<<"limit">>, Body0)),
+    ?assertEqual(10, maps:get(<<"connections">>, Body0)),
+
+    %% Clean up the connections and reset the limit.
+    [catch rabbit_ct_client_helpers:close_connection(C) || C <- Connections],
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0, application, set_env, [rabbit, connection_max, infinity]),
+
+    passed.
+
 http_get_failed(Config, Path) ->
     {ok, {{_, Code, _}, _, ResBody}} = req(Config, get, Path, [auth_header("guest", "guest")]),
+    ct:pal("GET ~s: ~w ~w", [Path, Code, ResBody]),
     ?assertEqual(Code, ?HEALTH_CHECK_FAILURE_STATUS),
     rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)).
 
