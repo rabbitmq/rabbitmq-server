@@ -11,6 +11,8 @@
 -export([to_json/2, content_types_provided/2]).
 -export([variances/2]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 
@@ -34,16 +36,15 @@ to_json(ReqData, Context) ->
     Limit = rabbit_misc:get_env(rabbit, connection_max, infinity),
     case ActiveConns < Limit of
         true ->
-            rabbit_mgmt_util:reply(
-              #{status => ok,
-                limit => Limit,
-                connections => ActiveConns}, ReqData, Context);
+            rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
         false ->
+            ?LOG_WARNING(
+              "Node connection limit is reached. Active connections: ~w, "
+              "limit: ~w",
+              [ActiveConns, Limit]),
             Body = #{
                 status => failed,
-                reason => <<"node connection limit is reached">>,
-                limit => Limit,
-                connections => ActiveConns
+                reason => <<"node connection limit is reached">>
             },
             {Response, ReqData1, Context1} = rabbit_mgmt_util:reply(
                                                Body, ReqData, Context),
