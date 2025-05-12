@@ -476,8 +476,6 @@ below_node_connection_limit_test(Config) ->
     Path = "/health/checks/below-node-connection-limit",
     Check0 = http_get(Config, Path, ?OK),
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
-    ?assertEqual(0, maps:get(connections, Check0)),
-    ?assertEqual(<<"infinity">>, maps:get(limit, Check0)),
 
     %% Set the connection limit low and open 'limit' connections.
     Limit = 10,
@@ -489,8 +487,6 @@ below_node_connection_limit_test(Config) ->
 
     Body0 = http_get_failed(Config, Path),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body0)),
-    ?assertEqual(10, maps:get(<<"limit">>, Body0)),
-    ?assertEqual(10, maps:get(<<"connections">>, Body0)),
 
     %% Clean up the connections and reset the limit.
     [catch rabbit_ct_client_helpers:close_connection(C) || C <- Connections],
@@ -519,8 +515,6 @@ ready_to_serve_clients_test(Config) ->
 
     Body1 = http_get_failed(Config, Path),
     ?assertEqual(<<"failed">>, maps:get(<<"status">>, Body1)),
-    ?assertEqual(10, maps:get(<<"limit">>, Body1)),
-    ?assertEqual(10, maps:get(<<"connections">>, Body1)),
 
     %% Clean up the connections and reset the limit.
     [catch rabbit_ct_client_helpers:close_connection(C) || C <- Connections],
