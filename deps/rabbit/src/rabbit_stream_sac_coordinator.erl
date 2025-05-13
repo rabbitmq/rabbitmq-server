@@ -68,7 +68,7 @@
 -define(CONN_ACT, {?CONNECTED, ?ACTIVE}).
 -define(CONN_WAIT, {?CONNECTED, ?WAITING}).
 -define(DISCONN_ACT, {?DISCONNECTED, ?ACTIVE}).
-
+-define(FORG_ACT, {?FORGOTTTEN, ?ACTIVE}).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -266,6 +266,15 @@ apply(#command_activate_consumer{vhost = VirtualHost,
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};
             G0 ->
+                %% keep track of the former active, if any
+                {ActPid, ActSubId} =
+                case lookup_active_consumer(G0) of
+                    {value, #consumer{pid = ActivePid,
+                                      subscription_id = ActiveSubId}} ->
+                        {ActivePid, ActiveSubId};
+                    _ ->
+                        {-1, -1}
+                end,
                 G1 = update_connected_consumers(G0, ?CONN_WAIT),
                 case evaluate_active_consumer(G1) of
                     undefined ->
@@ -277,8 +286,19 @@ apply(#command_activate_consumer{vhost = VirtualHost,
                         G2 = update_consumer_state_in_group(G1, Pid,
                                                             SubId,
                                                             ?CONN_ACT),
-                        {G2, [notify_consumer_effect(Pid, SubId, Stream,
-                                                     ConsumerName, true)]}
+                        %% do we need effects or not?
+                        Effects =
+                        case {Pid, SubId} of
+                            {ActPid, ActSubId} ->
+                                %% it is the same active consumer as before
+                                %% no need to notify it
+                                [];
+                            _ ->
+                                %% new active consumer, need to notify it
+                                [notify_consumer_effect(Pid, SubId, Stream,
+                                                        ConsumerName, true)]
+                        end,
+                        {G2, Effects}
                 end
         end,
     StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
@@ -308,30 +328,121 @@ purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
 
 handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
                                     Eff0, {VH, S, Name} = K) ->
-    %% TODO sac: handle forgotten_active case (reconciliate state with current active)
     case lookup_group(VH, S, Name, Groups0) of
         undefined ->
             {S0, Eff0};
-        #group{consumers = Consumers0} = G0 ->
-            {Consumers1, Updated} =
-                lists:foldr(
-                  fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
-                        when P == Pid ->
-                          {[C#consumer{status = {?CONNECTED, St}} | L], true};
-                     (C, {L, UpdatedFlag}) ->
-                          {[C | L], UpdatedFlag or false}
-                  end, {[], false}, Consumers0),
-
-            case Updated of
+        Group ->
+            case has_forgotten_active(Group, Pid) of
                 true ->
-                    G1 = G0#group{consumers = Consumers1},
-                    {G2, Eff} = maybe_rebalance_group(G1, K),
-                    Groups1 = update_groups(VH, S, Name, G2, Groups0),
-                    {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+                    %% a forgotten active is coming in the connection
+                    %% we need to reconcile the group,
+                    %% as there may have been 2 active consumers at a time
+                    handle_forgotten_active_reconnected(Pid, S0, Eff0, K);
                 false ->
-                    {S0, Eff0}
+                    do_handle_group_connection_reconnected(Pid, S0, Eff0, K)
             end
     end.
+
+do_handle_group_connection_reconnected(Pid, #?MODULE{groups = Groups0} = S0,
+                                       Eff0, {VH, S, Name} = K) ->
+    G0 = #group{consumers = Consumers0} = lookup_group(VH, S, Name, Groups0),
+    {Consumers1, Updated} =
+    lists:foldr(
+      fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
+            when P == Pid ->
+              {[C#consumer{status = {?CONNECTED, St}} | L], true};
+         (C, {L, UpdatedFlag}) ->
+              {[C | L], UpdatedFlag or false}
+      end, {[], false}, Consumers0),
+
+    case Updated of
+        true ->
+            G1 = G0#group{consumers = Consumers1},
+            {G2, Eff} = maybe_rebalance_group(G1, K),
+            Groups1 = update_groups(VH, S, Name, G2, Groups0),
+            {S0#?MODULE{groups = Groups1}, Eff ++ Eff0};
+        false ->
+            {S0, Eff0}
+    end.
+
+handle_forgotten_active_reconnected(Pid,
+                                    #?MODULE{groups = Groups0} = S0,
+                                    Eff0, {VH, S, Name}) ->
+    G0 = #group{consumers = Consumers0} = lookup_group(VH, S, Name, Groups0),
+    {Consumers1, Eff1} =
+    case has_disconnected_active(G0) of
+        true ->
+            %% disconnected active consumer in the group, no rebalancing possible
+            %% we update the disconnected active consumers
+            %% and tell them to step down
+            lists:foldr(fun(#consumer{status = St,
+                                      pid = P,
+                                      subscription_id = SID} = C, {Cs, Eff})
+                              when P =:= Pid andalso St =:= ?FORG_ACT ->
+                                {[C#consumer{status = ?CONN_WAIT} | Cs],
+                                 [notify_consumer_effect(Pid, SID, S,
+                                                         Name, false, true) | Eff]};
+                           (C, {Cs, Eff}) ->
+                                {[C | Cs], Eff}
+                        end, {[], Eff0}, Consumers0);
+        false ->
+            lists:foldr(fun(#consumer{status = St,
+                                      pid = P,
+                                      subscription_id = SID} = C, {Cs, Eff})
+                              when P =:= Pid andalso St =:= ?FORG_ACT ->
+                                %% update forgotten active
+                                %% tell it to step down
+                                {[C#consumer{status = ?CONN_WAIT} | Cs],
+                                 [notify_consumer_effect(P, SID, S,
+                                                         Name, false, true) | Eff]};
+                           (#consumer{status = {?FORGOTTTEN, _},
+                                      pid = P} = C, {Cs, Eff})
+                              when P =:= Pid ->
+                                %% update forgotten
+                                {[C#consumer{status = ?CONN_WAIT} | Cs], Eff};
+                           (#consumer{status = ?CONN_ACT,
+                                      pid = P,
+                                      subscription_id = SID} = C, {Cs, Eff}) ->
+                                %% update connected active
+                                %% tell it to step down
+                                {[C#consumer{status = ?CONN_WAIT} | Cs],
+                                 [notify_consumer_effect(P, SID, S,
+                                                         Name, false, true) | Eff]};
+                           (C, {Cs, Eff}) ->
+                                {[C | Cs], Eff}
+                        end, {[], Eff0}, Consumers0)
+    end,
+    G1 = G0#group{consumers = Consumers1},
+    Groups1 = update_groups(VH, S, Name, G1, Groups0),
+    {S0#?MODULE{groups = Groups1}, Eff1}.
+
+has_forgotten_active(#group{consumers = Consumers}, Pid) ->
+    case lists:search(fun(#consumer{status = ?FORG_ACT,
+                                    pid = P}) when P =:= Pid ->
+                              true;
+                         (_) -> false
+                      end, Consumers) of
+        false ->
+            false;
+        _ ->
+            true
+    end.
+
+has_disconnected_active(Group) ->
+    has_consumer_with_status(Group, ?DISCONN_ACT).
+
+has_consumer_with_status(#group{consumers = Consumers}, Status) ->
+    case lists:search(fun(#consumer{status = S}) when S =:= Status ->
+                              true;
+                         (_) -> false
+                      end, Consumers) of
+        false ->
+            false;
+        _ ->
+            true
+    end.
+
+
 
 maybe_rebalance_group(#group{partition_index = -1, consumers = Consumers0} = G0,
                       {_VH, S, Name}) ->

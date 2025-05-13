@@ -953,7 +953,7 @@ handle_connection_node_disconnected_super_stream_disconn_active_block_rebalancin
     assertNodeDisconnectedTimerEffect(Pid0, Eff),
     ok.
 
-connection_reconnected_simple_disconn_active_block_rebalancing_test(_) ->
+connection_reconnected_simple_disconn_active_blocks_rebalancing_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
     Pid2 = new_process(),
@@ -974,7 +974,73 @@ connection_reconnected_simple_disconn_active_block_rebalancing_test(_) ->
     assertEmpty(Eff),
     ok.
 
-connection_reconnected_super_stream_disconn_active_block_rebalancing_test(_) ->
+connection_reconnected_simple_forg_act_disconn_active_blocks_rebalancing_test(_) ->
+    P0 = new_process(),
+    P1 = new_process(),
+    P2 = new_process(),
+    GId = group_id(),
+    Group = cgroup([consumer(P0, 0, {forgotten, active}),
+                    consumer(P1, 0, {disconnected, active}),
+                    consumer(P2, 0, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = connection_reconnected_command(P0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup([consumer(P0, 0, {connected, waiting}),
+                                consumer(P1, 0, {disconnected, active}),
+                                consumer(P2, 0, {connected, waiting})]),
+                   Groups1),
+    assertSize(1, Eff),
+    assertContainsSendMessageSteppingDownEffect(P0, Eff),
+    ok.
+
+connection_reconnected_simple_forg_act_should_trigger_rebalancing_test(_) ->
+    P0 = new_process(),
+    P1 = new_process(),
+    P2 = new_process(),
+    GId = group_id(),
+    Group = cgroup([consumer(P0, {forgotten, active}),
+                    consumer(P1, {connected, active}),
+                    consumer(P2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    S0 = state(Groups0),
+    Cmd0 = connection_reconnected_command(P0),
+    {#?STATE{groups = Groups1} = S1, ok, Eff1} = ?MOD:apply(Cmd0, S0),
+
+    assertHasGroup(GId, cgroup([consumer(P0, {connected, waiting}),
+                                consumer(P1, {connected, waiting}),
+                                consumer(P2, {connected, waiting})]),
+                   Groups1),
+    assertSize(2, Eff1),
+    assertContainsSendMessageSteppingDownEffect(P0, 0, stream(), name(), Eff1),
+    assertContainsSendMessageSteppingDownEffect(P1, 0, stream(), name(), Eff1),
+
+    %% activation from the first consumer stepping down
+    Cmd1 = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups2} = S2, ok, Eff2} = ?MOD:apply(Cmd1, S1),
+    assertHasGroup(GId, cgroup([consumer(P0, {connected, active}),
+                                consumer(P1, {connected, waiting}),
+                                consumer(P2, {connected, waiting})]),
+                   Groups2),
+    assertSize(1, Eff2),
+    assertContainsActivateMessage(P0, Eff2),
+
+    %% activation from the second consumer stepping down
+    %% this is expected, but should not change the state
+    Cmd2 = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups3}, ok, Eff3} = ?MOD:apply(Cmd2, S2),
+    assertHasGroup(GId, cgroup([consumer(P0, {connected, active}),
+                                consumer(P1, {connected, waiting}),
+                                consumer(P2, {connected, waiting})]),
+                   Groups3),
+    assertEmpty(Eff3),
+
+    ok.
+
+connection_reconnected_super_stream_disconn_active_blocks_rebalancing_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
     Pid2 = new_process(),
@@ -995,7 +1061,73 @@ connection_reconnected_super_stream_disconn_active_block_rebalancing_test(_) ->
     assertEmpty(Eff),
     ok.
 
-forget_connection_simple_disconn_active_block_rebalancing_test(_) ->
+connection_reconnected_super_stream_forg_act_disconn_active_blocks_rebalancing_test(_) ->
+    P0 = new_process(),
+    P1 = new_process(),
+    P2 = new_process(),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(P0, {forgotten, active}),
+                       consumer(P1, {disconnected, active}),
+                       consumer(P2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = connection_reconnected_command(P0),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(P0, {connected, waiting}),
+                                   consumer(P1, {disconnected, active}),
+                                   consumer(P2, {connected, waiting})]),
+                   Groups1),
+    assertSize(1, Eff),
+    assertContainsSendMessageSteppingDownEffect(P0, Eff),
+    ok.
+
+connection_reconnected_super_stream_forg_act_should_trigger_rebalancing_test(_) ->
+    P0 = new_process(),
+    P1 = new_process(),
+    P2 = new_process(),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(P0, {forgotten, active}),
+                       consumer(P1, {connected, waiting}),
+                       consumer(P2, {connected, active})]),
+
+    Groups0 = #{GId => Group},
+    S0 = state(Groups0),
+    Cmd0 = connection_reconnected_command(P0),
+    {#?STATE{groups = Groups1} = S1, ok, Eff1} = ?MOD:apply(Cmd0, S0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(P0, {connected, waiting}),
+                                   consumer(P1, {connected, waiting}),
+                                   consumer(P2, {connected, waiting})]),
+                   Groups1),
+    assertSize(2, Eff1),
+    assertContainsSendMessageSteppingDownEffect(P0, 0, stream(), name(), Eff1),
+    assertContainsSendMessageSteppingDownEffect(P2, 0, stream(), name(), Eff1),
+
+    %% activation from the first consumer stepping down
+    Cmd1 = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups2} = S2, ok, Eff2} = ?MOD:apply(Cmd1, S1),
+    assertHasGroup(GId, cgroup(1, [consumer(P0, {connected, waiting}),
+                                   consumer(P1, {connected, active}),
+                                   consumer(P2, {connected, waiting})]),
+                   Groups2),
+    assertSize(1, Eff2),
+    assertContainsActivateMessage(P1, Eff2),
+
+    %% activation from the second consumer stepping down
+    %% this is expected, but should not change the state
+    Cmd2 = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups3}, ok, Eff3} = ?MOD:apply(Cmd2, S2),
+    assertHasGroup(GId, cgroup(1, [consumer(P0, {connected, waiting}),
+                                   consumer(P1, {connected, active}),
+                                   consumer(P2, {connected, waiting})]),
+                   Groups3),
+    assertEmpty(Eff3),
+
+    ok.
+
+forget_connection_simple_disconn_active_blocks_rebalancing_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
     Pid2 = new_process(),
@@ -1323,6 +1455,9 @@ stream() ->
 name() ->
     <<"app">>.
 
+sub_id() ->
+    0.
+
 apply_ensure_monitors(Mod, Cmd, State0) ->
     {State1, _, _} = Mod:apply(Cmd, State0),
     {State2, _, _} = Mod:ensure_monitors(Cmd, State1, #{}, []),
@@ -1343,7 +1478,7 @@ assertHasGroup(GroupId, Group, Groups) ->
     ?assertEqual(Group, G).
 
 consumer(Pid, Status) ->
-    consumer(Pid, 0, Status).
+    consumer(Pid, sub_id(), Status).
 
 consumer(Pid, SubId, {Connectivity, Status}) ->
     #consumer{pid = Pid,
@@ -1408,6 +1543,10 @@ assertContainsCheckConnectionEffect(Pid, Effects) ->
 assertContainsSendMessageEffect(Pid, Stream, Active, Effects) ->
     assertContainsSendMessageEffect(Pid, 0, Stream, name(), Active, Effects).
 
+assertContainsActivateMessage(Pid, Effects) ->
+    assertContainsSendMessageEffect(Pid, sub_id(), stream(), name(),
+                                    true, Effects).
+
 assertContainsSendMessageEffect(Pid, SubId, Stream, ConsumerName, Active,
                                 Effects) ->
     assertContainsSendMessageEffect(Pid, {sac,
@@ -1416,6 +1555,19 @@ assertContainsSendMessageEffect(Pid, SubId, Stream, ConsumerName, Active,
                                             consumer_name => ConsumerName,
                                             active => Active}},
                                     Effects).
+
+assertContainsSendMessageSteppingDownEffect(Pid, Effects) ->
+    assertContainsSendMessageSteppingDownEffect(Pid, sub_id(), stream(),
+                                                name(), Effects).
+
+assertContainsSendMessageSteppingDownEffect(Pid, SubId, Stream, ConsumerName,
+                                            Effects) ->
+    assertContainsSendMessageEffect(Pid, {sac,
+                                          #{subscription_id => SubId,
+                                            stream => Stream,
+                                            consumer_name => ConsumerName,
+                                            active => false,
+                                            stepping_down => true}}, Effects).
 
 assertContainsSendMessageEffect(Pid, Msg, Effects) ->
     assertContainsEffect({mod_call,
