@@ -5,6 +5,7 @@
 #
 name: OCI (make)
 on:
+<<<<<<< HEAD
   push:
     paths-ignore:
       - '.github/workflows/secondary-umbrella.yaml'
@@ -12,6 +13,17 @@ on:
       - '.github/workflows/update-otp-patches.yaml'
       - '.github/workflows/release-alphas.yaml'
       - '*.md'
+=======
+  pull_request:
+    paths:
+      - deps/**
+      - scripts/**
+      - Makefile
+      - plugins.mk
+      - rabbitmq-components.mk
+      - packaging/**
+      - .github/workflows/oci-make.yaml
+>>>>>>> 4efb3df39 (CI: tweak OCI build triggers)
   workflow_dispatch:
     inputs:
       otp_version:
@@ -25,7 +37,7 @@ on:
         default: false
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
-  VERSION: 4.1.0+${{ github.sha }}
+  VERSION: 4.2.0+${{ github.sha }}
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -37,6 +49,8 @@ jobs:
         - ${{ github.event.inputs.otp_version || '27' }}
     runs-on: ubuntu-latest
     outputs:
+      # When dependabot, or a user from a fork, creates PRs, secrets are not injected, and the OCI workflow can't push the image
+      # This check acts as a gate keeper
       authorized: ${{ steps.authorized.outputs.authorized }}
     steps:
       - name: CHECK IF IMAGE WILL PUSH
