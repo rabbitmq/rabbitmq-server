@@ -478,6 +478,7 @@ below_node_connection_limit_test(Config) ->
     ?assertEqual(<<"ok">>, maps:get(status, Check0)),
 
     %% Set the connection limit low and open 'limit' connections.
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     Limit = 10,
     rabbit_ct_broker_helpers:rpc(
       Config, 0, application, set_env, [rabbit, connection_max, Limit]),
@@ -506,6 +507,7 @@ ready_to_serve_clients_test(Config) ->
     true = rabbit_ct_broker_helpers:unmark_as_being_drained(Config, 0),
 
     %% Set the connection limit low and open 'limit' connections.
+    rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     Limit = 10,
     rabbit_ct_broker_helpers:rpc(
       Config, 0, application, set_env, [rabbit, connection_max, Limit]),
