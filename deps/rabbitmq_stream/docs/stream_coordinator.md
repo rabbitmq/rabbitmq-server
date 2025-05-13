@@ -41,7 +41,7 @@ sequenceDiagram
     C-)C1: {sac, sub 1, active = false, step down = true}
     deactivate C1
     C1->>C1: consumer update to client
-    C1->>C: active consumer in group
+    C1->>C: activate consumer in group
     C-)C2: {sac, sub 2, active = true}
     activate C2
     C2->>C2: consumer update to client
