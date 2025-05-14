@@ -82,8 +82,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
              {:validation_failure, "voter status 'banana' is not recognised."}
   end
 
-  test "validate: when target quorum cluster size greater than zero, returns a success" do
+  test "validate: when target quorum cluster size greater than zero and membership is voter, returns a success" do
     assert @command.validate([7, "all"], %{membership: "voter", queue_pattern: "qq.*"}) == :ok
+  end
+
+  test "validate: when target quorum cluster size greater than zero and membership is promotable, returns a success" do
+    assert @command.validate([5, "all"], %{membership: "promotable", queue_pattern: "qq.*"}) == :ok
   end
 
   test "validate: when target quorum cluster size is zero, returns failure" do
@@ -94,6 +98,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommandTest do
   test "validate: when target quorum cluster size is less than zero, returns failure" do
     assert @command.validate([-1, "all"], %{membership: "voter", queue_pattern: "qq.*"}) ==
              {:validation_failure, "target quorum cluster size '-1' must be greater than 0."}
+  end
+
+  test "validate: when target quorum cluster size is provided and membership is not voter, returns failure" do
+    assert @command.validate([5, "all"], %{membership: "non_voter", queue_pattern: "qq.*"}) ==
+             {:validation_failure, "voter status 'non_voter' must be 'voter' or 'promotable' to grow to target quorum cluster size '5'."}
   end
 
   @tag test_timeout: 3000

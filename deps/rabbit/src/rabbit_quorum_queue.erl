@@ -1581,17 +1581,41 @@ grow(QuorumClusterSize, _VhostSpec, _QueueSpec, _Strategy, _Membership)
     {error, bad_quorum_cluster_size}.
 
 maybe_grow(Q, Node, Membership, Size) ->
+    QNodes = get_nodes(Q),
+    maybe_grow(Q, Node, Membership, Size, QNodes).
+
+maybe_grow(Q, Node, Membership, Size, QNodes) ->
     QName = amqqueue:get_name(Q),
-    ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
-                    [rabbit_misc:rs(QName), Node]),
-    case add_member(Q, Node, Membership) of
-        ok ->
-            {QName, {ok, Size + 1}};
-        {error, Err} ->
+    {ok, RaName} = qname_to_internal_name(QName),
+    case check_all_memberships(RaName, QNodes, voter) of
+        true ->
+            ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
+                            [rabbit_misc:rs(QName), Node]),
+            case add_member(Q, Node, Membership) of
+                ok ->
+                    {QName, {ok, Size + 1}};
+                {error, Err} ->
+                    ?LOG_WARNING(
+                    "~ts: failed to add member (replica) on node ~w, error: ~w",
+                    [rabbit_misc:rs(QName), Node, Err]),
+                    {QName, {error, Size, Err}}
+            end;
+        false ->
+            Err = {error, non_voters_found},
             ?LOG_WARNING(
-            "~ts: failed to add member (replica) on node ~w, error: ~w",
-            [rabbit_misc:rs(QName), Node, Err]),
+                    "~ts: failed to add member (replica) on node ~w, error: ~w",
+                    [rabbit_misc:rs(QName), Node, Err]),
             {QName, {error, Size, Err}}
+    end.
+
+check_all_memberships(RaName, QNodes, CompareMembership) ->
+    case rpc:multicall(QNodes, ets, lookup, [ra_state, RaName]) of
+        {Result, []} ->
+            lists:all(
+                fun(M) -> M == CompareMembership end,
+                [Membership || [{_RaName, _RaState, Membership}] <- Result]);
+        _ ->
+            false
     end.
 
 -spec transfer_leadership(amqqueue:amqqueue(), node()) ->

@@ -1770,7 +1770,7 @@ dont_leak_file_handles(Config) ->
     ok.
 
 grow_queue(Config) ->
-    [Server0, Server1, _Server2, _Server3, _Server4] =
+    [Server0, Server1, Server2, _Server3, _Server4] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1803,34 +1803,41 @@ grow_queue(Config) ->
 
     %% grow queues to node 'Server1'
     TargetClusterSize_2 = 2,
-    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    Result1 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{ok,2}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{ok,2}},...]
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result1)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
 
     %% grow queues to quorum cluster size '2' has no effect
-    rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_2, <<"/">>, <<".*">>, all]),
+    Result2 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_2, <<"/">>, <<".*">>, all]),
+    ?assertEqual([], Result2),
     assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
 
     %% grow queues to quorum cluster size '3'
     TargetClusterSize_3 = 3,
-    rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_3, <<"/">>, <<".*">>, all]),
+    Result3 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_3, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result3)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_3, MsgCount),
 
     %% grow queues to quorum cluster size '5'
     TargetClusterSize_5 = 5,
-    rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
+    Result4 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all, voter]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result4)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
 
-    %% shrink all queues again
+    %% shrink all queues again down to 1 member
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_all_queues_shrink_member_to_current_member, []),
     assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
 
     %% grow queues to quorum cluster size > '5' (limit = 5).
     TargetClusterSize_10 = 10,
-    rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
+    Result5 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_10, <<"/">>, <<".*">>, all]),
+    ?assert(lists:all(fun({_, {R, _}}) -> R =:= ok end, Result5)),
     assert_grown_queues(QQs, Server0, TargetClusterSize_5, MsgCount),
 
-    %% shrink all queues again
+    %% shrink all queues again down to 1 member
     rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_all_queues_shrink_member_to_current_member, []),
     assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
@@ -1838,7 +1845,30 @@ grow_queue(Config) ->
     %% attempt to grow queues to quorum cluster size < '0'.
     BadTargetClusterSize = -5,
     ?assertEqual({error, bad_quorum_cluster_size},
-        rpc:call(Server0, rabbit_quorum_queue, grow, [BadTargetClusterSize, <<"/">>, <<".*">>, all])).
+        rpc:call(Server0, rabbit_quorum_queue, grow, [BadTargetClusterSize, <<"/">>, <<".*">>, all])),
+
+    %% shrink all queues again down to 1 member
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+        force_all_queues_shrink_member_to_current_member, []),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_1, MsgCount),
+
+    %% grow queues to node 'Server1': non_voter
+    rpc:call(Server0, rabbit_quorum_queue, grow, [Server1, <<"/">>, <<".*">>, all, non_voter]),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to node 'Server2': fail, non_voters found
+    Result6 = rpc:call(Server0, rabbit_quorum_queue, grow, [Server2, <<"/">>, <<".*">>, all, voter]),
+    %% [{{resource,<<"/">>,queue,<<"grow_queue">>},{error, 2, {error, non_voters_found}},
+    %%  {{resource,<<"/">>,queue,<<"grow_queue_alt">>},{error, 2, {error, non_voters_found}},...]
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result6)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount),
+
+    %% grow queues to target quorum cluster size '5': fail, non_voters found
+    Result7 = rpc:call(Server0, rabbit_quorum_queue, grow, [TargetClusterSize_5, <<"/">>, <<".*">>, all]),
+    ?assert(lists:all(
+        fun({_, Err}) -> Err =:= {error, TargetClusterSize_2, {error, non_voters_found}} end, Result7)),
+    assert_grown_queues(QQs, Server0, TargetClusterSize_2, MsgCount).
 
 assert_grown_queues(Qs, Node, TargetClusterSize, MsgCount) ->
     [begin
