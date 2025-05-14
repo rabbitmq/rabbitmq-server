@@ -43,12 +43,10 @@
                            {property, rabbit_amqp_filter:filter_expressions()} |
                            {jms, ParsedSelector :: term()}.
 
--type filter_field() :: atom() | binary().
--type filter_fields() :: [filter_field()].
 -type simple_type() :: atom() | binary() | number().
 
 %% Message metadata held in memory for consumers to filter on.
--type msg_metadata() :: #{filter_field() => simple_type()}.
+-type msg_metadata() :: #{atom() | binary() => simple_type()}.
 
 -type msg_header() :: msg_size() |
                       optimised_tuple(msg_size(), Expiry :: milliseconds()) |
@@ -267,7 +265,7 @@
                     max_bytes_meta => non_neg_integer(),
                     overflow_strategy => drop_head | reject_publish,
                     single_active_consumer_on => boolean(),
-                    filter => filter_fields(),
+                    filter_enabled => boolean(),
                     delivery_limit => non_neg_integer() | -1,
                     expires => non_neg_integer(),
                     msg_ttl => non_neg_integer(),

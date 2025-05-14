@@ -2,7 +2,7 @@
 -module(rabbit_jms_selector_parser).
 -file("rabbit_jms_selector_parser.erl", 3).
 -export([parse/1, parse_and_scan/1, format_error/1]).
--file("rabbit_jms_selector_parser.yrl", 121).
+-file("rabbit_jms_selector_parser.yrl", 122).
 
 extract_value({_Token, _Line, Value}) -> Value.
 
@@ -1474,7 +1474,7 @@ yeccpars2_14_(__Stack0) ->
 -compile({inline,yeccpars2_19_/1}).
 -dialyzer({nowarn_function, yeccpars2_19_/1}).
 -compile({nowarn_unused_function,  yeccpars2_19_/1}).
--file("rabbit_jms_selector_parser.yrl", 115).
+-file("rabbit_jms_selector_parser.yrl", 116).
 yeccpars2_19_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1484,7 +1484,7 @@ yeccpars2_19_(__Stack0) ->
 -compile({inline,yeccpars2_20_/1}).
 -dialyzer({nowarn_function, yeccpars2_20_/1}).
 -compile({nowarn_unused_function,  yeccpars2_20_/1}).
--file("rabbit_jms_selector_parser.yrl", 113).
+-file("rabbit_jms_selector_parser.yrl", 114).
 yeccpars2_20_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1498,13 +1498,14 @@ yeccpars2_20_(__Stack0) ->
 yeccpars2_21_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
-                                {identifier, extract_value(___1)}
+                               
+    {identifier, rabbit_amqp_util:jms_header_to_amqp_field_name(extract_value(___1))}
   end | __Stack].
 
 -compile({inline,yeccpars2_22_/1}).
 -dialyzer({nowarn_function, yeccpars2_22_/1}).
 -compile({nowarn_unused_function,  yeccpars2_22_/1}).
--file("rabbit_jms_selector_parser.yrl", 112).
+-file("rabbit_jms_selector_parser.yrl", 113).
 yeccpars2_22_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1514,7 +1515,7 @@ yeccpars2_22_(__Stack0) ->
 -compile({inline,yeccpars2_23_/1}).
 -dialyzer({nowarn_function, yeccpars2_23_/1}).
 -compile({nowarn_unused_function,  yeccpars2_23_/1}).
--file("rabbit_jms_selector_parser.yrl", 114).
+-file("rabbit_jms_selector_parser.yrl", 115).
 yeccpars2_23_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1826,4 +1827,4 @@ yeccpars2_86_(__Stack0) ->
   end | __Stack].
 
 
--file("rabbit_jms_selector_parser.yrl", 140).
+-file("rabbit_jms_selector_parser.yrl", 141).

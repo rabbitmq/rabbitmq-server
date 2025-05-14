@@ -36,7 +36,8 @@ groups() ->
        complex_expressions,
        case_sensitivity,
        whitespace_handling,
-       identifier_rules
+       identifier_rules,
+       jms_headers
       ]
      }].
 
@@ -645,6 +646,63 @@ identifier_rules(_Config) ->
     true = match("with_underscore = 'value'", Headers1),
     true = match("with$dollar = 'value'", Headers1),
     true = match("mixed_$_identifiers_$_123 = 'value'", Headers1).
+
+%% amqp-bindmap-jms-v1.0-wd10 §3.2
+jms_headers(_Config) ->
+    Headers = #{durable => true,
+                priority => 7,
+                message_id => <<"id-123">>,
+                creation_time => 1311704463521,
+                correlation_id => <<"id-456">>,
+                subject => <<"some subject">>,
+                user_id => <<"some user ID">>,
+                delivery_count => 2,
+                group_id => <<"some group ID">>,
+                group_sequence => 999
+               },
+    %%TODO JMS apps don't use booleans for JMSDeliveryMode
+    true = match("JMSDeliveryMode = TRUE", Headers),
+    false = match("JMSDeliveryMode = FALSE", Headers),
+
+    true = match("JMSPriority > 5", Headers),
+    true = match("JMSPriority = 7", Headers),
+    false = match("JMSPriority < 7", Headers),
+
+    true = match("JMSMessageID = 'id-123'", Headers),
+    false = match("JMSMessageID = 'wrong-id'", Headers),
+
+    true = match("JMSTimestamp = 1311704463521", Headers),
+    true = match("JMSTimestamp > 1000000000000", Headers),
+    false = match("JMSTimestamp < 1000000000000", Headers),
+
+    true = match("JMSCorrelationID = 'id-456'", Headers),
+    false = match("JMSCorrelationID = 'wrong-correlation'", Headers),
+
+    true = match("JMSType = 'some subject'", Headers),
+    true = match("JMSType LIKE '%subject'", Headers),
+    false = match("JMSType = 'wrong subject'", Headers),
+
+    true = match("JMSXUserID = 'some user ID'", Headers),
+    true = match("JMSXUserID LIKE 'some%'", Headers),
+    false = match("JMSXUserID = 'different user'", Headers),
+
+    true = match("JMSXDeliveryCount = 2", Headers),
+    true = match("JMSXDeliveryCount < 5", Headers),
+    false = match("JMSXDeliveryCount > 5", Headers),
+
+    true = match("JMSXGroupID = 'some group ID'", Headers),
+    true = match("JMSXGroupID LIKE '%group%'", Headers),
+    false = match("JMSXGroupID = 'different group'", Headers),
+
+    true = match("JMSXGroupSeq = 999", Headers),
+    true = match("JMSXGroupSeq > 500", Headers),
+    false = match("JMSXGroupSeq < 500", Headers),
+
+    %% Combined conditions
+    true = match("JMSPriority > 5 AND JMSType LIKE '%subject'", Headers),
+    true = match("JMSXDeliveryCount < 5 OR JMSXGroupSeq > 1000", Headers),
+    false = match("JMSMessageID = 'wrong-id' AND JMSCorrelationID = 'id-456'", Headers),
+    true = match("NOT (JMSXUserID = 'different user' OR JMSXGroupID = 'different group')", Headers).
 
 %%%===================================================================
 %%% Helpers

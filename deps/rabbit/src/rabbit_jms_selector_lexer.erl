@@ -1643,7 +1643,7 @@ yyaction_28(TokenChars, TokenLine) ->
 -compile({inline,yyaction_29/2}).
 -file("rabbit_jms_selector_lexer.xrl", 60).
 yyaction_29(TokenChars, TokenLine) ->
-     { token, { identifier, TokenLine, list_to_binary (TokenChars) } } .
+     { token, { identifier, TokenLine, unicode : characters_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_30/1}).
 -file("rabbit_jms_selector_lexer.xrl", 63).

@@ -96,6 +96,7 @@ property_message_groups_attach_empty_queue(Config) ->
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(
                   LinkPair, QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {array, symbol,
                                                                   [{symbol, <<"group-id">>}]}
                                   }}),
@@ -186,6 +187,7 @@ property_message_groups_attach_non_empty_queue(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
@@ -272,6 +274,7 @@ property_message_groups_round_robin(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
@@ -346,6 +349,7 @@ property_message_groups_requeue(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
@@ -465,6 +469,7 @@ property_message_groups_same_filter(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
@@ -545,6 +550,7 @@ property_ttl(Config) ->
                   LinkPair,
                   SourceQ,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]},
                                    <<"x-dead-letter-exchange">> => {utf8, <<>>},
                                    <<"x-dead-letter-routing-key">> => {utf8, DeadLetterQ}
@@ -627,6 +633,7 @@ property_purge(Config) ->
                   LinkPair,
                   QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                   <<"x-filter-enabled">> => true,
                                    <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
                                   }}),
 
@@ -696,21 +703,34 @@ jms_application_properties(Config) ->
     {ok, #{}} = rabbitmq_amqp_client:declare_queue(
                   LinkPair, QName,
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
-                                   <<"x-filter-keys">> => {list, [{utf8, <<"color">>},
-                                                                  {utf8, <<"weight">>}]}
+                                   <<"x-filter-enabled">> => true
                                   }}),
 
-    RedHeavy = #{<<"jms-selector">> => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
-                                               value = {utf8, <<"color = 'red' AND weight > 10">>}}},
-    NotRed = #{<<"jms-selector">> => #filter{descriptor = ?DESCRIPTOR_NAME_SELECTOR_FILTER,
-                                             value = {utf8, <<"not color = 'red'">>}}},
-    {ok, R1} = amqp10_client:attach_receiver_link(Session, <<"r1">>, Address,
-                                                  unsettled, none, RedHeavy),
-    {ok, R2} = amqp10_client:attach_receiver_link(Session, <<"r2">>, Address,
-                                                  unsettled, none, NotRed),
+    {ok, R1} = amqp10_client:attach_receiver_link(
+                 Session, <<"r1">>, Address, unsettled, none,
+                 jms_selector(<<"color = 'red' AND weight > 10">>)),
+    {ok, R2} = amqp10_client:attach_receiver_link(
+                 Session, <<"r2">>, Address, unsettled, none,
+                 jms_selector(<<"color = 'purple' OR color = 'green'">>)),
+    {ok, R3} = amqp10_client:attach_receiver_link(
+                 Session, <<"r3">>, Address, unsettled, none,
+                 jms_selector(<<"name LIKE 'prod%x'">>)),
+    {ok, R4} = amqp10_client:attach_receiver_link(
+                 Session, <<"r4">>, Address, unsettled, none,
+                 jms_selector(<<"price BETWEEN 24.0 AND 26.0">>)),
+    {ok, R5} = amqp10_client:attach_receiver_link(
+                 Session, <<"r5">>, Address, unsettled, none,
+                 jms_selector(<<"category IN ('grocery', 'food', 'edible')">>)),
+    {ok, R6} = amqp10_client:attach_receiver_link(
+                 Session, <<"r6">>, Address, unsettled, none,
+                 jms_selector(<<"description IS NULL AND price * 2 > 20.0">>)),
+    {ok, R7} = amqp10_client:attach_receiver_link(
+                 Session, <<"r7">>, Address, unsettled, none,
+                 jms_selector(<<"NOT available AND discount IS NULL">>)),
 
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
+
     ok = amqp10_client:send_msg(
            Sender, amqp10_msg:set_application_properties(
                      #{<<"color">> => <<"red">>,
@@ -726,7 +746,42 @@ jms_application_properties(Config) ->
                      #{<<"color">> => <<"red">>,
                        <<"weight">> => 20},
                      amqp10_msg:new(<<"t3">>, <<"m3">>))),
-    ok = wait_for_accepts(3),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"name">> => <<"product-x">>,
+                       <<"price">> => 18.5,
+                       <<"category">> => <<"electronics">>,
+                       <<"available">> => true},
+                     amqp10_msg:new(<<"t4">>, <<"m4">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"name">> => <<"service-y">>,
+                       <<"price">> => 25.0,
+                       <<"category">> => <<"service">>,
+                       <<"description">> => <<"Premium service">>,
+                       <<"available">> => false},
+                     amqp10_msg:new(<<"t5">>, <<"m5">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"name">> => <<"product-z">>,
+                       <<"price">> => 8.75,
+                       <<"category">> => <<"food">>,
+                       <<"available">> => true,
+                       <<"discount">> => 0.25},
+                     amqp10_msg:new(<<"t6">>, <<"m6">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"name">> => <<"item-special">>,
+                       <<"price">> => 12.0,
+                       <<"available">> => true},
+                     amqp10_msg:new(<<"t7">>, <<"m7">>))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_application_properties(
+                     #{<<"name">> => <<"clearance-item">>,
+                       <<"price">> => 5.0,
+                       <<"available">> => false},
+                     amqp10_msg:new(<<"t8">>, <<"m8">>))),
+    ok = wait_for_accepts(8),
     ok = detach_link_sync(Sender),
     flush(sent),
 
@@ -750,8 +805,64 @@ jms_application_properties(Config) ->
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
 
-    ok = detach_link_sync(R1),
-    ok = detach_link_sync(R2),
+    ok = amqp10_client:flow_link_credit(R3, 10, never, true),
+    receive {amqp10_msg, R3, M4} ->
+                ?assertEqual(<<"m4">>, amqp10_msg:body_bin(M4)),
+                ok = amqp10_client:accept_msg(R3, M4)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R3, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(R4, 10, never, true),
+    receive {amqp10_msg, R4, M5} ->
+                ?assertEqual(<<"m5">>, amqp10_msg:body_bin(M5)),
+                ok = amqp10_client:accept_msg(R4, M5)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R4, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(R5, 10, never, true),
+    receive {amqp10_msg, R5, M6} ->
+                ?assertEqual(<<"m6">>, amqp10_msg:body_bin(M6)),
+                ok = amqp10_client:accept_msg(R5, M6)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R5, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(R6, 10, never, true),
+    receive {amqp10_msg, R6, M7} ->
+                ?assertEqual(<<"m7">>, amqp10_msg:body_bin(M7)),
+                ok = amqp10_client:accept_msg(R6, M7)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R6, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(R7, 10, never, true),
+    receive {amqp10_msg, R7, M8} ->
+                ?assertEqual(<<"m8">>, amqp10_msg:body_bin(M8)),
+                ok = amqp10_client:accept_msg(R7, M8)
+    after 5000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, R7, credit_exhausted}} -> ok
+    after 5000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    lists:foreach(fun(R) ->
+                          ok = detach_link_sync(R) end,
+                  [R1, R2, R3, R4, R5, R6, R7]),
+
     ?assertMatch({ok, #{message_count := 1}}, % m1
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init).
+
+jms_selector(String) ->
+    #{<<"jms-selector">> => #filter{descriptor = ?DESCRIPTOR_NAME_SELECTOR_FILTER,
+                                    value = {utf8, String}}}.

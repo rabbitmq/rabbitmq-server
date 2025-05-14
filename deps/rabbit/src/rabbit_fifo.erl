@@ -228,10 +228,7 @@ update_config(Conf, State) ->
                            false ->
                                competing
                        end,
-    FilterEnabled = case maps:get(filter, Conf, []) of
-                        [] -> false;
-                        [_|_] -> true
-                    end,
+    FilterEnabled = maps:get(filter_enabled, Conf, false),
     Cfg = State#?STATE.cfg,
 
     LastActive = maps:get(created, Conf, undefined),

@@ -110,7 +110,8 @@ primary -> literal : '$1'.
 primary -> identifier_expr : '$1'.
 
 %% Identifiers (header fields or property references)
-identifier_expr -> identifier : {identifier, extract_value('$1')}.
+identifier_expr -> identifier :
+    {identifier, rabbit_amqp_util:jms_header_to_amqp_field_name(extract_value('$1'))}.
 
 %% Literals
 literal -> integer : {integer, extract_value('$1')}.

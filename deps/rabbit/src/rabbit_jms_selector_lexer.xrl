@@ -59,7 +59,7 @@ Rules.
 {FLOAT}       : {token, {float, TokenLine, list_to_float(to_float(TokenChars))}}.
 {EXPONENT}    : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
 {STRING}      : {token, {string, TokenLine, process_string(TokenChars)}}.
-{IDENTIFIER}  : {token, {identifier, TokenLine, list_to_binary(TokenChars)}}.
+{IDENTIFIER}  : {token, {identifier, TokenLine, unicode:characters_to_binary(TokenChars)}}.
 
 % Catch any other characters as errors
 .             : {error, {illegal_character, TokenChars}}.

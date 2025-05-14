@@ -47,7 +47,7 @@
 
 -type seq() :: non_neg_integer().
 -type milliseconds() :: non_neg_integer().
--type filter_fields() :: [atom() | binary()].
+-type filter() :: none | [atom()].
 
 -record(consumer, {key :: rabbit_fifo:consumer_key(),
                    % status = up :: up | cancelled,
@@ -61,7 +61,7 @@
 -record(cfg, {servers = [] :: [ra:server_id()],
               soft_limit = ?SOFT_LIMIT :: non_neg_integer(),
               timeout :: non_neg_integer(),
-              filter_fields :: filter_fields()
+              filter :: filter()
              }).
 
 -record(state, {cfg :: #cfg{},
@@ -102,15 +102,15 @@ init(Servers) ->
 %% @param MaxPending size defining the max number of pending commands.
 -spec init([ra:server_id()], non_neg_integer()) -> state().
 init(Servers, SoftLimit) ->
-    init(Servers, SoftLimit, []).
+    init(Servers, SoftLimit, none).
 
--spec init([ra:server_id()], non_neg_integer(), filter_fields()) -> state().
-init(Servers, SoftLimit, FilterFields) ->
+-spec init([ra:server_id()], non_neg_integer(), filter()) -> state().
+init(Servers, SoftLimit, Filter) ->
     Timeout = application:get_env(kernel, net_ticktime, 60) + 5,
     #state{cfg = #cfg{servers = Servers,
                       soft_limit = SoftLimit,
                       timeout = Timeout * 1000,
-                      filter_fields = FilterFields}}.
+                      filter = Filter}}.
 
 %% @doc Enqueues a message.
 %% @param QueueName Name of the queue.
@@ -170,9 +170,9 @@ enqueue(QName, Correlation, Msg,
                next_seq = Seq,
                next_enqueue_seq = EnqueueSeq,
                cfg = #cfg{soft_limit = SftLmt,
-                          filter_fields = FilterFields}} = State0) ->
+                          filter = Filter}} = State0) ->
     ServerId = pick_server(State0),
-    MsgMeta = msg_meta(Msg, FilterFields),
+    MsgMeta = msg_meta(Msg, Filter),
     Cmd = rabbit_fifo:make_enqueue(self(), EnqueueSeq, Msg, MsgMeta),
     ok = ra:pipeline_command(ServerId, Cmd, Seq, low),
     IsSlow = map_size(Pending) >= SftLmt,
@@ -1129,25 +1129,16 @@ send_pending(Cid, #state{unsent_commands = Unsent} = State0) ->
 now_ms() ->
     erlang:system_time(millisecond).
 
-msg_meta(_Msg, []) ->
+msg_meta(_Msg, none) ->
     #{};
-msg_meta(Msg, Fields) ->
-    %% TODO Support all header and properties.
-    %% TODO Query only routing_headers, if necessary.
-    Headers = mc:routing_headers(Msg, []),
-    L = lists:filtermap(fun(FieldName) when is_atom(FieldName) ->
-                                case mc:property(FieldName, Msg) of
-                                    {_Type, Val} ->
-                                        {true, {FieldName, Val}};
-                                    undefined ->
-                                        false
-                                end;
-                           (Key) when is_binary(Key) ->
-                                case Headers of
-                                    #{Key := Val} ->
-                                        {true, {Key, Val}};
-                                    _ ->
-                                        false
-                                end
-                        end, Fields),
-    maps:from_list(L).
+msg_meta(Msg, FieldNames) ->
+    Fields = lists:filtermap(fun(Name) ->
+                                     case mc:property(Name, Msg) of
+                                         {_Type, Val} ->
+                                             {true, {Name, Val}};
+                                         undefined ->
+                                             false
+                                     end
+                             end, FieldNames),
+    maps:merge(mc:routing_headers(Msg, []),
+               maps:from_list(Fields)).
