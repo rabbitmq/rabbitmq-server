@@ -44,6 +44,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, "target quorum cluster size '#{n}' must be greater than 0."}
   end
 
+  def validate([n, _], %{membership: m})
+      when (is_integer(n) and not (m == "voter" or m == "promotable")) do
+    {:validation_failure, "voter status '#{m}' must be 'voter' or 'promotable' to grow to target quorum cluster size '#{n}'."}
+  end
+
   def validate(_, %{membership: m})
       when not (m == "promotable" or
                   m == "non_voter" or
