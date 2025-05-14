@@ -5,15 +5,6 @@
 #
 name: OCI (make)
 on:
-<<<<<<< HEAD
-  push:
-    paths-ignore:
-      - '.github/workflows/secondary-umbrella.yaml'
-      - '.github/workflows/update-elixir-patches.yaml'
-      - '.github/workflows/update-otp-patches.yaml'
-      - '.github/workflows/release-alphas.yaml'
-      - '*.md'
-=======
   pull_request:
     paths:
       - deps/**
@@ -23,7 +14,6 @@ on:
       - rabbitmq-components.mk
       - packaging/**
       - .github/workflows/oci-make.yaml
->>>>>>> 4efb3df39 (CI: tweak OCI build triggers)
   workflow_dispatch:
     inputs:
       otp_version:
