@@ -68,7 +68,8 @@
 %% for testing and debugging
 -export([eval_listeners/3,
          replay/1,
-         state/0]).
+         state/0,
+         sac_state/0]).
 
 -import(rabbit_queue_type_util, [
                                  erpc_call/5
@@ -277,6 +278,16 @@ state() ->
         Any ->
             Any
     end.
+
+%% for debugging
+sac_state() ->
+    case state() of
+        S when is_record(S, ?MODULE) ->
+            sac_state(S);
+        R ->
+            R
+    end.
+
 
 writer_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_writer_pid, [StreamId]},
