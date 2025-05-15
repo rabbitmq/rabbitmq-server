@@ -70,6 +70,8 @@
 -define(DISCONN_ACT, {?DISCONNECTED, ?ACTIVE}).
 -define(FORG_ACT, {?FORGOTTTEN, ?ACTIVE}).
 
+-define(DISCONNECTED_TIMEOUT_MS, 60_000).
+
 %% Single Active Consumer API
 -spec register_consumer(binary(),
                         binary(),
@@ -723,8 +725,8 @@ handle_connection_node_disconnected(ConnPid,
                                   handle_group_after_connection_node_disconnected(
                                     ConnPid, Acc, G)
                           end, State1, Groups),
-            %% TODO configure timeout to forget connection from disconnected node
-            T = 60_000,
+            T = application:get_env(rabbit, stream_sac_disconnected_timeout,
+                                    ?DISCONNECTED_TIMEOUT_MS),
             {State2, [{timer, {sac, node_disconnected,
                                #{connection_pid => ConnPid}}, T}]}
     end.
