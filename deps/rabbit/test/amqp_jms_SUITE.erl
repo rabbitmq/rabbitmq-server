@@ -42,7 +42,9 @@ groups() ->
        message_types_jms_to_jms,
        message_types_jms_to_amqp,
        temporary_queue_rpc,
-       temporary_queue_delete
+       temporary_queue_delete,
+       message_selector_application_properties,
+       message_selector_header_fields
       ]
      }].
 
@@ -132,6 +134,12 @@ temporary_queue_rpc(Config) ->
     ok = run_jms_test(?FUNCTION_NAME, Config).
 
 temporary_queue_delete(Config) ->
+    ok = run_jms_test(?FUNCTION_NAME, Config).
+
+message_selector_application_properties(Config) ->
+    ok = run_jms_test(?FUNCTION_NAME, Config).
+
+message_selector_header_fields(Config) ->
     ok = run_jms_test(?FUNCTION_NAME, Config).
 
 %% -------------------------------------------------------------------

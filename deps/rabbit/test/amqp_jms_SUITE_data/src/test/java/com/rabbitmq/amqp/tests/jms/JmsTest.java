@@ -21,7 +21,7 @@ import static com.rabbitmq.amqp.tests.jms.TestUtils.protonConnection;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
-import com.rabbitmq.amqp.tests.jms.TestUtils.Classic;
+import com.rabbitmq.amqp.tests.jms.TestUtils.*;
 import com.rabbitmq.qpid.protonj2.client.Client;
 import com.rabbitmq.qpid.protonj2.client.Delivery;
 import com.rabbitmq.qpid.protonj2.client.Receiver;
@@ -191,6 +191,126 @@ public class JmsTest {
       } catch (IllegalStateRuntimeException expectedException) {
         assertThat(expectedException).hasMessage("Temporary destination has been deleted");
       }
+    }
+  }
+
+  // Test that consumers can filter on application-specific properties
+  @Test
+  public void message_selector_application_properties(
+          @QueueArgs(boolArgs = {@QueueArgBool(name = "x-filter-enabled", value = true)})
+          Queue queue) throws Exception {
+      try (Connection connection = factory.createConnection()) {
+          Session session = connection.createSession();
+          connection.start();
+
+          testSelector(session, queue, "price = 19.99", new int[]{1});
+          testSelector(session, queue, "age >= 30", new int[]{2, 3, 5});
+          testSelector(session, queue, "premium = TRUE AND price < 40.0", new int[]{2, 5});
+          testSelector(session, queue, "region = 'Europe' OR region = 'Asia'", new int[]{1, 2});
+          testSelector(session, queue, "priority BETWEEN 2 AND 4", new int[]{1, 4, 5});
+          testSelector(session, queue, "region IN ('Australia', 'North America')", new int[]{4, 5});
+          testSelector(session, queue, "region LIKE '%America'", new int[]{4});
+          testSelector(session, queue, "region IS NULL", new int[]{3});
+          testSelector(session, queue, "category is not null", new int[]{4, 5});
+          testSelector(session, queue,
+                  "age > 30 AND premium = true OR price < 15.0 AND region LIKE '%America'",
+                  new int[]{2, 3, 4, 5});
+      }
+   }
+
+   private void testSelector(Session session, Queue queue, String selector, int[] expectedMsgIds) throws Exception {
+       MessageProducer producer = session.createProducer(queue);
+
+       sendTestMessage(session, producer, 1, 25, 19.99, 3, false, "Europe", null);
+       sendTestMessage(session, producer, 2, 35, 29.99, 1, true, "Asia", null);
+       sendTestMessage(session, producer, 3, 42, 49.99, 5, true, null, null);
+       sendTestMessage(session, producer, 4, 18, 9.99, 2, false, "North America", "Electronics");
+       sendTestMessage(session, producer, 5, 50, 39.99, 4, true, "Australia", "Books");
+
+       MessageConsumer consumer = session.createConsumer(queue, selector);
+
+       // Collect received messages
+       List<Integer> receivedMessageIds = new ArrayList<>();
+       for (int i = 0; i < expectedMsgIds.length; i++) {
+           Message message = consumer.receive(9000);
+           if (message != null) {
+               TextMessage textMessage = (TextMessage) message;
+               receivedMessageIds.add(Integer.parseInt(textMessage.getText().split(" ")[1]));
+           } else {
+               break;
+           }
+       }
+
+       // Verify no additional unexpected messages
+       Message unexpectedMessage = consumer.receive(20);
+       assertThat(unexpectedMessage).isNull();
+
+       assertThat(receivedMessageIds).containsExactly(
+               Arrays.stream(expectedMsgIds).boxed().toArray(Integer[]::new));
+
+       consumer.close();
+       producer.close();
+
+       // Clear the queue after the test
+       MessageConsumer cleanupConsumer = session.createConsumer(queue);
+       int remainingMessages = 5 - expectedMsgIds.length;
+       for (int i = 0; i < remainingMessages; i++) {
+           Message msg = cleanupConsumer.receive(9000);
+           assertThat(msg).isNotNull();
+       }
+       cleanupConsumer.close();
+   }
+
+   private void sendTestMessage(
+           Session session,
+           MessageProducer producer,
+           int messageId,
+           int age,
+           double price,
+           int priority,
+           boolean premium,
+           String region,
+           String category) throws JMSException {
+
+       TextMessage message = session.createTextMessage("Message " + messageId);
+       message.setIntProperty("age", age);
+       message.setDoubleProperty("price", price);
+       message.setIntProperty("priority", priority);
+       message.setBooleanProperty("premium", premium);
+       if (region != null) {
+           message.setStringProperty("region", region);
+       }
+       if (category != null) {
+           message.setStringProperty("category", category);
+       }
+       producer.send(message);
+   }
+
+  // Test that consumers can filter on header fields
+  @Test
+  public void message_selector_header_fields(
+          @QueueArgs(
+          boolArgs = {
+              @QueueArgBool(name = "x-filter-enabled", value = true)
+          },
+          listArgs = {
+              @QueueArgList(name = "x-filter-field-names", values = {"message-id", "correlation-id", "subject"})
+          }
+          )
+          Queue queue) throws Exception {
+      try (Connection connection = factory.createConnection()) {
+          Session session = connection.createSession();
+          MessageProducer producer = session.createProducer(queue);
+      MessageConsumer consumer = session.createConsumer(queue);
+      connection.start();
+
+      //TODO
+
+      String msg1 = "msg1";
+      TextMessage textMessage = session.createTextMessage(msg1);
+      producer.send(textMessage);
+      TextMessage receivedTextMessage = (TextMessage) consumer.receive(5000);
+      assertThat(receivedTextMessage.getText()).isEqualTo(msg1);
     }
   }
 }
