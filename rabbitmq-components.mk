@@ -51,14 +51,14 @@ dep_khepri_mnesia_migration = hex 0.8.0
 dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.8
 dep_prometheus = hex 4.11.0
-dep_ra = hex 2.16.9
+dep_ra = git https://github.com/rabbitmq/ra expose-ra-counters
 dep_ranch = hex 2.2.0
 dep_recon = hex 2.5.6
 dep_redbug = hex 2.0.7
 dep_systemd = hex 0.6.1
 dep_thoas = hex 1.2.1
 dep_observer_cli = hex 1.8.2
-dep_seshat = git https://github.com/rabbitmq/seshat v0.6.1
+dep_seshat = git https://github.com/rabbitmq/seshat prometheus-support
 dep_stdout_formatter = hex 0.2.4
 dep_sysmon_handler = hex 1.3.0
 
