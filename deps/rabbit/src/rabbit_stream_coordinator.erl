@@ -512,7 +512,7 @@ start_coordinator_cluster() ->
                      "initial machine version ~b",
                      [Nodes, MinVersion]),
     case ra:start_cluster(?RA_SYSTEM,
-                          [make_ra_conf(Node, Nodes, MinVersion)
+                          [make_system_conf(Node, Nodes, MinVersion)
                            || Node <- Nodes]) of
         {ok, Started, _} ->
             rabbit_log:debug("Started stream coordinator on ~w", [Started]),
@@ -536,7 +536,11 @@ version() -> 5.
 which_module(_) ->
     ?MODULE.
 
-init(_Conf) ->
+init(#{machine_version := MacVersion} = Conf) when MacVersion >= 5 ->
+    SacConf = maps:get(sac_conf, Conf, #{}),
+    #?MODULE{single_active_consumer =
+             rabbit_stream_sac_coordinator:init_state(SacConf)};
+init(_) ->
     #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator_v4:init_state()}.
 
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
@@ -799,7 +803,8 @@ all_member_nodes(Streams) ->
         end, #{}, Streams)).
 
 tick(_Ts, _State) ->
-    [{aux, maybe_resize_coordinator_cluster}].
+    [{aux, maybe_resize_coordinator_cluster},
+     {aux, maybe_update_sac_configuration}].
 
 members() ->
     %% TODO: this can be replaced with a ra_leaderboard
@@ -876,13 +881,25 @@ maybe_handle_stale_nodes(MemberNodes, ExpectedNodes,
             rabbit_log:debug("Stale nodes detected in stream SAC "
                              "coordinator: ~w. Purging state.",
                              [Stale]),
-            Mod = sac_module(MachineVersion),
-            ra:pipeline_command(LeaderPid, Mod:make_purge_nodes(Stale)),
+            ra:pipeline_command(LeaderPid, sac_make_purge_nodes(Stale)),
             ok;
         _ ->
             ok
     end;
 maybe_handle_stale_nodes(_, _, _, _) ->
+    ok.
+
+maybe_update_sac_configuration(RaAux, MacVersion) when MacVersion >= 5 ->
+    #?MODULE{single_active_consumer = SacState} = ra_aux:machine_state(RaAux),
+    case sac_check_conf_change(SacState) of
+        {new, UpdatedConf} ->
+            Leader = ra_aux:leader_id(RaAux),
+            ra:pipeline_command(Leader, sac_make_update_conf(UpdatedConf)),
+            ok;
+        _ ->
+            ok
+    end;
+maybe_update_sac_configuration(_, _) ->
     ok.
 
 add_member(Members, Node) ->
@@ -966,6 +983,11 @@ handle_aux(leader, _, maybe_resize_coordinator_cluster,
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
            AuxState, RaAux) ->
     %% Coordinator resizing is still happening, let's ignore this tick event
+    {no_reply, AuxState, RaAux};
+handle_aux(leader, _, maybe_update_sac_configuration,
+           AuxState, RaAux) ->
+    MachineVersion = ra_aux:effective_machine_version(RaAux),
+    maybe_update_sac_configuration(RaAux, MachineVersion),
     {no_reply, AuxState, RaAux};
 handle_aux(leader, _, {down, Pid, _},
            #aux{resizer = Pid} = Aux, RaAux) ->
@@ -1328,6 +1350,11 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
 format_ra_event(ServerId, Evt) ->
     {stream_coordinator_event, ServerId, Evt}.
 
+make_system_conf(Node, Nodes, MinMacVersion) ->
+    RaConf = make_ra_conf(Node, Nodes, MinMacVersion),
+    SacConf = make_sac_conf(MinMacVersion),
+    RaConf#{sac_conf => SacConf}.
+
 make_ra_conf(Node, Nodes, MinMacVersion) ->
     UId = ra:new_uid(ra_lib:to_binary(?MODULE)),
     Formatter = {?MODULE, format_ra_event, []},
@@ -1345,6 +1372,11 @@ make_ra_conf(Node, Nodes, MinMacVersion) ->
       machine => {module, ?MODULE, #{}},
       initial_machine_version => MinMacVersion,
       ra_event_formatter => Formatter}.
+
+make_sac_conf(MinMacVersion) when MinMacVersion >= 5 ->
+    sac_make_conf();
+make_sac_conf(_) ->
+    #{}.
 
 filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamId,
                                                                     members = Members0}) ->
@@ -2420,3 +2452,15 @@ maps_to_list(M) ->
 
 ra_local_query(QueryFun) ->
     ra:local_query({?MODULE, node()}, QueryFun, infinity).
+
+sac_make_conf() ->
+    rabbit_stream_sac_coordinator:make_conf().
+
+sac_make_purge_nodes(Nodes) ->
+    rabbit_stream_sac_coordinator:make_purge_nodes(Nodes).
+
+sac_make_update_conf(Conf) ->
+    rabbit_stream_sac_coordinator:make_update_conf(Conf).
+
+sac_check_conf_change(SacState) ->
+    rabbit_stream_sac_coordinator:check_conf_change(SacState).

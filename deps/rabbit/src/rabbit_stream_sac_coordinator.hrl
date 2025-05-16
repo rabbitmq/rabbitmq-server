@@ -24,6 +24,7 @@
 -type owner() :: binary().
 -type consumer_status() :: active | waiting | deactivating.
 -type consumer_connectivity() :: connected | disconnected | forgotten.
+-type conf() :: map().
 
 -record(consumer,
         {pid :: pid(),
@@ -35,6 +36,7 @@
 -record(rabbit_stream_sac_coordinator,
         {groups :: groups(),
          pids_groups :: pids_groups(),
+         conf :: conf(),
          %% future extensibility
          reserved_1,
          reserved_2}).
@@ -66,3 +68,5 @@
         {pid :: connection_pid()}).
 -record(command_purge_nodes,
         {nodes :: [node()]}).
+-record(command_update_conf,
+        {conf :: conf()}).

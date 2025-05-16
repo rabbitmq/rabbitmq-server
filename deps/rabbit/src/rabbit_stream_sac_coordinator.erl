@@ -22,7 +22,8 @@
                      #command_unregister_consumer{} |
                      #command_activate_consumer{} |
                      #command_connection_reconnected{} |
-                     #command_purge_nodes{}.
+                     #command_purge_nodes{} |
+                     #command_update_conf{}.
 
 -opaque state() :: #?MODULE{}.
 
@@ -37,7 +38,7 @@
          group_consumers/4,
          connection_reconnected/1]).
 -export([apply/2,
-         init_state/0,
+         init_state/1,
          send_message/2,
          ensure_monitors/4,
          handle_connection_down/2,
@@ -47,8 +48,11 @@
          consumer_groups/3,
          group_consumers/5,
          overview/1,
-         import_state/2]).
--export([make_purge_nodes/1]).
+         import_state/2,
+         make_conf/0,
+         check_conf_change/1]).
+-export([make_purge_nodes/1,
+         make_update_conf/1]).
 
 %% exported for unit tests only
 -ifdef(TEST).
@@ -70,6 +74,8 @@
 -define(DISCONN_ACT, {?DISCONNECTED, ?ACTIVE}).
 -define(FORG_ACT, {?FORGOTTTEN, ?ACTIVE}).
 
+-define(DISCONNECTED_TIMEOUT_APP_KEY, stream_sac_disconnected_timeout).
+-define(DISCONNECTED_TIMEOUT_CONF_KEY, disconnected_timeout).
 -define(DISCONNECTED_TIMEOUT_MS, 60_000).
 
 %% Single Active Consumer API
@@ -195,9 +201,12 @@ overview(#?MODULE{groups = Groups}) ->
                  Groups),
     #{num_groups => map_size(Groups), groups => GroupsOverview}.
 
--spec init_state() -> state().
-init_state() ->
-    #?MODULE{groups = #{}, pids_groups = #{}}.
+-spec init_state(map()) -> state().
+init_state(Conf) ->
+    DisconTimeout = maps:get(?DISCONNECTED_TIMEOUT_CONF_KEY, Conf,
+                             ?DISCONNECTED_TIMEOUT_MS),
+    #?MODULE{groups = #{}, pids_groups = #{},
+             conf = #{?DISCONNECTED_TIMEOUT_CONF_KEY => DisconTimeout}}.
 
 -spec apply(command(), state()) ->
                {state(), term(), ra_machine:effects()}.
@@ -319,7 +328,9 @@ apply(#command_purge_nodes{nodes = Nodes}, State0) ->
                                         {S1, Eff1} = purge_node(N, S0),
                                         {S1, Eff1 ++ Eff0}
                                 end, {State0, []}, Nodes),
-    {State1, ok, Eff}.
+    {State1, ok, Eff};
+apply(#command_update_conf{conf = NewConf}, State) ->
+    {State#?MODULE{conf = NewConf}, ok, []}.
 
 purge_node(Node, #?MODULE{groups = Groups0} = State0) ->
     PidsGroups = compute_node_pid_group_dependencies(Node, Groups0),
@@ -725,8 +736,7 @@ handle_connection_node_disconnected(ConnPid,
                                   handle_group_after_connection_node_disconnected(
                                     ConnPid, Acc, G)
                           end, State1, Groups),
-            T = application:get_env(rabbit, stream_sac_disconnected_timeout,
-                                    ?DISCONNECTED_TIMEOUT_MS),
+            T = disconnected_timeout(State2),
             {State2, [{timer, {sac, node_disconnected,
                                #{connection_pid => ConnPid}}, T}]}
     end.
@@ -850,11 +860,42 @@ handle_group_after_connection_node_disconnected(ConnPid,
 -spec import_state(ra_machine:version(), map()) -> state().
 import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
     #?MODULE{groups = map_to_groups(Groups),
-             pids_groups = map_to_pids_groups(PidsGroups)}.
+             pids_groups = map_to_pids_groups(PidsGroups),
+             conf = #{disconnected_timeout => ?DISCONNECTED_TIMEOUT_MS}}.
+
+-spec make_conf() -> conf().
+make_conf() ->
+    #{?DISCONNECTED_TIMEOUT_CONF_KEY => lookup_disconnected_timeout()}.
+
+-spec check_conf_change(state()) -> {new, conf()} | unchanged.
+check_conf_change(#?MODULE{conf = Conf}) ->
+    DisconTimeout = lookup_disconnected_timeout(),
+    case Conf of
+        #{?DISCONNECTED_TIMEOUT_CONF_KEY := DT}
+          when DT /= DisconTimeout ->
+            {new, #{?DISCONNECTED_TIMEOUT_CONF_KEY => DisconTimeout}};
+        C when is_map_key(?DISCONNECTED_TIMEOUT_CONF_KEY, C) == false ->
+            {new, #{?DISCONNECTED_TIMEOUT_CONF_KEY => DisconTimeout}};
+        _ ->
+            unchanged
+    end.
 
 - spec make_purge_nodes([node()]) -> {sac, command()}.
 make_purge_nodes(Nodes) ->
     wrap_cmd(#command_purge_nodes{nodes = Nodes}).
+
+- spec make_update_conf(conf()) -> {sac, command()}.
+make_update_conf(Conf) ->
+    wrap_cmd(#command_update_conf{conf = Conf}).
+
+lookup_disconnected_timeout() ->
+    application:get_env(rabbit, ?DISCONNECTED_TIMEOUT_APP_KEY,
+                        ?DISCONNECTED_TIMEOUT_MS).
+
+disconnected_timeout(#?MODULE{conf = #{?DISCONNECTED_TIMEOUT_CONF_KEY := T}}) ->
+    T;
+disconnected_timeout(_) ->
+    ?DISCONNECTED_TIMEOUT_MS.
 
 map_to_groups(Groups) when is_map(Groups) ->
     maps:fold(fun(K, V, Acc) ->

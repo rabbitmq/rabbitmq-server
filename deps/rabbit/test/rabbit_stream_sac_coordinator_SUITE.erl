@@ -61,6 +61,17 @@ end_per_testcase(_TestCase, _Config) ->
     meck:unload(),
     ok.
 
+check_conf_test(_) ->
+    K = disconnected_timeout,
+    Def = 60_000,
+    ?assertMatch({new, #{K := Def}},
+                 ?MOD:check_conf_change(state_with_conf(#{}))),
+    ?assertMatch({new, #{K := Def}},
+                 ?MOD:check_conf_change(state_with_conf(#{K => 42}))),
+    ?assertMatch(unchanged,
+                 ?MOD:check_conf_change(state_with_conf(#{K => Def}))),
+    ok.
+
 simple_sac_test(_) ->
     Stream = <<"stream">>,
     ConsumerName = <<"app">>,
@@ -1502,6 +1513,9 @@ state(Groups) ->
 
 state(Groups, PidsGroups) ->
     #?STATE{groups = Groups, pids_groups = PidsGroups}.
+
+state_with_conf(Conf) ->
+    #?STATE{conf = Conf}.
 
 register_consumer_command(Stream,
                           PartitionIndex,
