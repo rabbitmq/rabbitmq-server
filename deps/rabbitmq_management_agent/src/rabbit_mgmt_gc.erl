@@ -36,7 +36,7 @@ handle_info(start_gc, State) ->
     gc_queues(),
     gc_exchanges(),
     gc_nodes(),
-    {noreply, start_timer(State)}.
+    {noreply, start_timer(State), hibernate}.
 
 terminate(_Reason, #state{timer = TRef}) ->
     _ = erlang:cancel_timer(TRef),
