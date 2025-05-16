@@ -63,13 +63,13 @@ init_per_group(Group, Config) ->
                                                {aten,
                                                 [{poll_interval,
                                                   1000}]})
+       end,
+       fun(StepConfig) ->
+               rabbit_ct_helpers:merge_app_env(StepConfig,
+                                               {rabbit,
+                                                [{stream_sac_disconnected_timeout,
+                                                  2000}]})
        end]
-       % fun(StepConfig) ->
-       %         rabbit_ct_helpers:merge_app_env(StepConfig,
-       %                                         {rabbit,
-       %                                          [{stream_sac_disconnected_timeout,
-       %                                            2000}]})
-       % end]
       ++ rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
@@ -110,6 +110,7 @@ simple_sac_consumer_should_get_disconnected_on_partition(Config) ->
     rabbit_ct_broker_helpers:block_traffic_between(F1, F2),
 
     wait_for_disconnected_consumer(Config, S),
+    wait_for_forgotten_consumer(Config, S),
 
     rabbit_ct_broker_helpers:allow_traffic_between(F1, L),
     rabbit_ct_broker_helpers:allow_traffic_between(F1, F2),
