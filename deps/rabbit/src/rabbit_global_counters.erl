@@ -183,15 +183,15 @@ init(Labels) ->
 
 init(Labels = [{protocol, Protocol}, {queue_type, QueueType}], Extra) ->
     _ = seshat:new_group(?MODULE),
-    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra),
+    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra, Labels),
     persistent_term:put({?MODULE, Protocol, QueueType}, Counters);
 init(Labels = [{protocol, Protocol}], Extra) ->
     _ = seshat:new_group(?MODULE),
-    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra),
+    Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra, Labels),
     persistent_term:put({?MODULE, Protocol}, Counters);
 init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], DeadLetterCounters) ->
     _ = seshat:new_group(?MODULE),
-    Counters = seshat:new(?MODULE, Labels, DeadLetterCounters),
+    Counters = seshat:new(?MODULE, Labels, DeadLetterCounters, Labels),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
 overview() ->
