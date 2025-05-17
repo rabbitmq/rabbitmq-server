@@ -41,6 +41,16 @@
          notify_decorators/1
         ]).
 
+-export([queue_topology/1,
+         feature_flag_name/0,
+         policy_apply_to_name/0,
+         stop/1,
+         list_with_minimum_quorum/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0]).
+
 %% Stateful rabbit_queue_type callbacks are unsupported by this queue type.
 -define(STATEFUL_CALLBACKS,
         [
@@ -222,10 +232,14 @@ format(Q, _Ctx) ->
     [{type, ?MODULE},
      {state, amqqueue:get_state(Q)}].
 
--spec capabilities() ->
-    #{atom() := term()}.
 capabilities() ->
-    #{}.
+    #{can_redeliver => false,
+      consumer_arguments => [],
+      is_replicable => false,
+      queue_arguments => [],
+      rebalance_module => undefined,
+      server_named => true,
+      unsupported_policies => []}.
 
 -spec info(amqqueue:amqqueue(), all_keys | rabbit_types:info_keys()) ->
     rabbit_types:infos().
@@ -301,3 +315,34 @@ dequeue(A1,A2,A3,A4,A5) ->
 
 state_info(A1) ->
     ?UNSUPPORTED([A1]).
+
+-spec queue_topology(amqqueue:amqqueue()) ->
+    {Leader :: undefined | node(), Replicas :: undefined | [node(),...]}.
+queue_topology(Q) ->
+    Pid = amqqueue:get_pid(Q),
+    Node = node(Pid),
+    {Node, [Node]}.
+
+feature_flag_name() ->
+    undefined.
+
+policy_apply_to_name() ->
+    <<"qos0_queues">>.
+
+stop(_VHost) ->
+    ok.
+
+list_with_minimum_quorum() ->
+    [].
+
+drain(_TransferCandidates) ->
+    ok.
+
+revive() ->
+    ok.
+
+queue_vm_stats_sups() ->
+    {[], []}.
+
+queue_vm_ets() ->
+    {[], []}.

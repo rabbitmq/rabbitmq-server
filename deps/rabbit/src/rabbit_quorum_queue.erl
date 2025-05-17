@@ -77,6 +77,12 @@
          force_vhost_queues_shrink_member_to_current_member/1,
          force_all_queues_shrink_member_to_current_member/0]).
 
+-export([policy_apply_to_name/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0]).
+
 %% for backwards compatibility
 -export([file_handle_leader_reservation/1,
          file_handle_other_reservation/0,
@@ -97,6 +103,15 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+
+-rabbit_boot_step(
+   {rabbit_quorum_queue_type,
+    [{description, "Quorum queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"quorum">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"quorum">>]}},
+     {requires, rabbit_registry}]}).
 
 -type msg_id() :: non_neg_integer().
 -type qmsg() :: {rabbit_types:r('queue'), pid(), msg_id(), boolean(),
@@ -166,7 +181,7 @@
             [operator_policy_validator, <<"target-group-size">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
             [policy_merge_strategy, <<"target-group-size">>, ?MODULE]}},
-     {requires, rabbit_registry},
+     {requires, [rabbit_registry]},
      {enables, recovery}]}).
 
 validate_policy(Args) ->
@@ -542,7 +557,11 @@ capabilities() ->
                           <<"x-quorum-initial-group-size">>, <<"x-delivery-limit">>,
                           <<"x-message-ttl">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>],
-      server_named => false}.
+      server_named => false,
+      rebalance_module => ?MODULE,
+      can_redeliver => true,
+      is_replicable => true
+     }.
 
 rpc_delete_metrics(QName) ->
     ets:delete(queue_coarse_metrics, QName),
@@ -2232,3 +2251,91 @@ maybe_log_leader_health_check_result([]) -> ok;
 maybe_log_leader_health_check_result(Result) ->
     Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
     rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
+
+policy_apply_to_name() ->
+    <<"quorum_queues">>.
+
+-spec drain([node()]) -> ok.
+drain(TransferCandidates) ->
+    _ = transfer_leadership(TransferCandidates),
+    _ = stop_local_quorum_queue_followers(),
+    ok.
+
+transfer_leadership([]) ->
+    rabbit_log:warning("Skipping leadership transfer of quorum queues: no candidate "
+                       "(online, not under maintenance) nodes to transfer to!");
+transfer_leadership(_TransferCandidates) ->
+    %% we only transfer leadership for QQs that have local leaders
+    Queues = rabbit_amqqueue:list_local_leaders(),
+    rabbit_log:info("Will transfer leadership of ~b quorum queues with current leader on this node",
+                    [length(Queues)]),
+    [begin
+        Name = amqqueue:get_name(Q),
+        rabbit_log:debug("Will trigger a leader election for local quorum queue ~ts",
+                         [rabbit_misc:rs(Name)]),
+        %% we trigger an election and exclude this node from the list of candidates
+        %% by simply shutting its local QQ replica (Ra server)
+        RaLeader = amqqueue:get_pid(Q),
+        rabbit_log:debug("Will stop Ra server ~tp", [RaLeader]),
+        case rabbit_quorum_queue:stop_server(RaLeader) of
+            ok     ->
+                rabbit_log:debug("Successfully stopped Ra server ~tp", [RaLeader]);
+            {error, nodedown} ->
+                rabbit_log:error("Failed to stop Ra server ~tp: target node was reported as down")
+        end
+     end || Q <- Queues],
+    rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
+
+%% TODO: I just copied it over, it looks like was always called inside maintenance so...
+-spec stop_local_quorum_queue_followers() -> ok.
+stop_local_quorum_queue_followers() ->
+    Queues = rabbit_amqqueue:list_local_followers(),
+    rabbit_log:info("Will stop local follower replicas of ~b quorum queues on this node",
+                    [length(Queues)]),
+    [begin
+        Name = amqqueue:get_name(Q),
+        rabbit_log:debug("Will stop a local follower replica of quorum queue ~ts",
+                         [rabbit_misc:rs(Name)]),
+        %% shut down Ra nodes so that they are not considered for leader election
+        {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
+        RaNode = {RegisteredName, node()},
+        rabbit_log:debug("Will stop Ra server ~tp", [RaNode]),
+        case rabbit_quorum_queue:stop_server(RaNode) of
+            ok     ->
+                rabbit_log:debug("Successfully stopped Ra server ~tp", [RaNode]);
+            {error, nodedown} ->
+                rabbit_log:error("Failed to stop Ra server ~tp: target node was reported as down")
+        end
+     end || Q <- Queues],
+    rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
+
+revive() ->
+    revive_local_queue_members().
+
+revive_local_queue_members() ->
+    Queues = rabbit_amqqueue:list_local_followers(),
+    %% NB: this function ignores the first argument so we can just pass the
+    %% empty binary as the vhost name.
+    {Recovered, Failed} = rabbit_quorum_queue:recover(<<>>, Queues),
+    rabbit_log:debug("Successfully revived ~b quorum queue replicas",
+                     [length(Recovered)]),
+    case length(Failed) of
+        0 ->
+            ok;
+        NumFailed ->
+            rabbit_log:error("Failed to revive ~b quorum queue replicas",
+                             [NumFailed])
+    end,
+
+    rabbit_log:info("Restart of local quorum queue replicas is complete"),
+    ok.
+
+queue_vm_stats_sups() ->
+    {[quorum_queue_procs,
+      quorum_queue_dlx_procs],
+     [[ra_server_sup_sup],
+      [rabbit_fifo_dlx_sup]]}.
+
+queue_vm_ets() ->
+    {[quorum_ets],
+     [[ra_log_ets]]}.

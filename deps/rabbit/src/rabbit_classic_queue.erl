@@ -64,7 +64,25 @@
          send_drained_credit_api_v1/4,
          send_credit_reply/7]).
 
+-export([policy_apply_to_name/0,
+         stop/1,
+         list_with_minimum_quorum/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0]).
+
 -export([validate_policy/1]).
+
+-rabbit_boot_step(
+   {rabbit_classic_queue_type,
+    [{description, "Classic queue: queue type"},
+     {mfa,      {rabbit_registry, register,
+                    [queue, <<"classic">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [queue, <<"classic">>]}},
+     {requires, rabbit_registry},
+     {enables,     ?MODULE}]}).
 
 -rabbit_boot_step(
    {?MODULE,
@@ -74,7 +92,7 @@
             [policy_validator, <<"queue-master-locator">>, ?MODULE]}},
      {mfa, {rabbit_registry, register,
             [operator_policy_validator, <<"queue-master-locator">>, ?MODULE]}},
-     {requires, rabbit_registry},
+     {requires, [rabbit_classic_queue_type]},
      {enables, recovery}]}).
 
 validate_policy(Args) ->
@@ -590,7 +608,11 @@ capabilities() ->
                                  false -> []
                              end,
       consumer_arguments => [<<"x-priority">>],
-      server_named => true}.
+      server_named => true,
+      rebalance_module => undefined,
+      can_redeliver => false,
+      is_replicable => false
+     }.
 
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
@@ -678,3 +700,33 @@ send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->
 
 send_queue_event(Pid, QName, Event) ->
     gen_server:cast(Pid, {queue_event, QName, Event}).
+
+policy_apply_to_name() ->
+    <<"classic_queues">>.
+
+stop(VHost) ->
+    ok = rabbit_amqqueue_sup_sup:stop_for_vhost(VHost),
+    {ok, BQ} = application:get_env(rabbit, backing_queue_module),
+    ok = BQ:stop(VHost).
+
+list_with_minimum_quorum() ->
+    [].
+
+drain(_TransferCandidates) ->
+    ok.
+
+revive() ->
+    ok.
+
+queue_vm_stats_sups() ->
+    {[queue_procs], [rabbit_vm:all_vhosts_children(rabbit_amqqueue_sup_sup)]}.
+
+%% return nothing because of this line in rabbit_vm:
+%% {msg_index,            MsgIndexETS + MsgIndexProc},
+%% it mixes procs and ets,
+%% TODO: maybe instead of separating sups and ets
+%% I need vm_memory callback that just
+%% returns proplist? And rabbit_vm calculates
+%% Other as usual by substraction.
+queue_vm_ets() ->
+    {[], []}.

@@ -266,8 +266,8 @@ messages_dead_lettered(Reason, QueueType, DeadLetterStrategy, Num) ->
             end,
     counters:add(fetch(QueueType, DeadLetterStrategy), Index, Num).
 
-messages_dead_lettered_confirmed(rabbit_quorum_queue, at_least_once, Num) ->
-    counters:add(fetch(rabbit_quorum_queue, at_least_once), ?MESSAGES_DEAD_LETTERED_CONFIRMED, Num).
+messages_dead_lettered_confirmed(QTypeModule, at_least_once, Num) ->
+    counters:add(fetch(QTypeModule, at_least_once), ?MESSAGES_DEAD_LETTERED_CONFIRMED, Num).
 
 fetch(Protocol) ->
     persistent_term:get({?MODULE, Protocol}).

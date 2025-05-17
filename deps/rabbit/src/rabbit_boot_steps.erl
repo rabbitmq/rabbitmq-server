@@ -4,6 +4,8 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
+%% README: https://github.com/rabbitmq/internals/blob/master/rabbit_boot_process.md
+%%
 
 -module(rabbit_boot_steps).
 

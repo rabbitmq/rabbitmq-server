@@ -537,16 +537,7 @@ redeliver0(#pending{delivery = Msg0,
     [rabbit_amqqueue:name()].
 clients_redeliver(Qs, QTypeState) ->
     lists:filter(fun(Q) ->
-                         case rabbit_queue_type:module(Q, QTypeState) of
-                             {ok, rabbit_quorum_queue} ->
-                                 % If #enqueue{} Raft command does not get applied
-                                 % rabbit_fifo_client will resend.
-                                 true;
-                             {ok, rabbit_stream_queue} ->
-                                 true;
-                             _ ->
-                                 false
-                         end
+                         rabbit_queue_type:can_redeliver(Q, QTypeState)
                  end, Qs).
 
 maybe_set_timer(#state{timer = TRef} = State)

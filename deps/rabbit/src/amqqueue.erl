@@ -28,7 +28,8 @@
          set_decorators/2,
          % exclusive_owner
          get_exclusive_owner/1,
-         get_leader/1,
+         get_leader_node/1,
+         get_nodes/1,
          % name (#resource)
          get_name/1,
          set_name/2,
@@ -387,9 +388,21 @@ set_decorators(#amqqueue{} = Queue, Decorators) ->
 get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) ->
     Owner.
 
--spec get_leader(amqqueue_v2()) -> node().
+-spec get_leader_node(amqqueue_v2()) -> node() | none.
 
-get_leader(#amqqueue{type = rabbit_quorum_queue, pid = {_, Leader}}) -> Leader.
+get_leader_node(#amqqueue{pid = {_, Leader}}) -> Leader;
+get_leader_node(#amqqueue{pid = none}) -> none;
+get_leader_node(#amqqueue{pid = Pid}) -> node(Pid).
+
+-spec get_nodes(amqqueue_v2()) -> [node(),...].
+
+get_nodes(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} ->
+            Nodes;
+        _ ->
+            [get_leader_node(Q)]
+    end.
 
 % operator_policy
 

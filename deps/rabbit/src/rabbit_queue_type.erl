@@ -60,7 +60,16 @@
          arguments/1,
          arguments/2,
          notify_decorators/1,
-         publish_at_most_once/2
+         publish_at_most_once/2,
+         can_redeliver/2,
+         rebalance_module/1,
+         is_replicable/1,
+         stop/1,
+         list_with_minimum_quorum/0,
+         drain/1,
+         revive/0,
+         queue_vm_stats_sups/0,
+         queue_vm_ets/0
          ]).
 
 -export([
@@ -75,7 +84,7 @@
 %% sequence number typically
 -type correlation() :: term().
 -type arguments() :: queue_arguments | consumer_arguments.
--type queue_type() :: rabbit_classic_queue | rabbit_quorum_queue | rabbit_stream_queue | module().
+-type queue_type() ::  module().
 %% see AMQP 1.0 §2.6.7
 -type delivery_count() :: sequence_no().
 -type credit() :: uint().
@@ -83,10 +92,6 @@
 -define(STATE, ?MODULE).
 
 -define(DOWN_KEYS, [name, durable, auto_delete, arguments, pid, type, state]).
-
-%% TODO resolve all registered queue types from registry
--define(QUEUE_MODULES, [rabbit_classic_queue, rabbit_quorum_queue, rabbit_stream_queue]).
--define(KNOWN_QUEUE_TYPES, [<<"classic">>, <<"quorum">>, <<"stream">>]).
 
 -type credit_reply_action() :: {credit_reply, rabbit_types:ctag(), delivery_count(), credit(),
                                 Available :: non_neg_integer(), Drain :: boolean()}.
@@ -265,72 +270,60 @@
 -callback format(amqqueue:amqqueue(), Context :: map()) ->
     [{atom(), term()}].
 
+%% TODO: replace binary() with real types?
 -callback capabilities() ->
-    #{atom() := term()}.
+    #{unsupported_policies := [binary()],
+      queue_arguments := [binary()],
+      consumer_arguments := [binary()],
+      amqp_capabilities => [binary()],
+      server_named := boolean(),
+      rebalance_module := module() | undefined,
+      can_redeliver := boolean(),
+      is_replicable := boolean()}.
 
 -callback notify_decorators(amqqueue:amqqueue()) ->
     ok.
+
+-callback policy_apply_to_name() -> binary().
+
+%% -callback on_node_up(node()) -> ok.
+
+%% -callback on_node_down(node()) -> ok.
+
+-callback stop(rabbit_types:vhost()) -> ok.
+
+-callback list_with_minimum_quorum() -> [amqqueue:amqqueue()].
+
+-callback drain([node()]) -> ok.
+
+-callback revive() -> ok.
+
+%% used by rabbit_vm to emit queue process
+%% (currently memory and binary) stats
+-callback queue_vm_stats_sups() -> {StatsKeys :: [atom()], SupsNames:: [[atom()]]}.
+
+-callback queue_vm_ets() -> {StatsKeys :: [atom()], ETSNames:: [[atom()]]}.
 
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
     fallback();
 discover(undefined) ->
     fallback();
-%% TODO: should this use a registry that's populated on boot?
-discover(<<"quorum">>) ->
-    rabbit_quorum_queue;
-discover(rabbit_quorum_queue) ->
-    rabbit_quorum_queue;
-discover(<<"classic">>) ->
-    rabbit_classic_queue;
-discover(rabbit_classic_queue) ->
-    rabbit_classic_queue;
-discover(rabbit_stream_queue) ->
-    rabbit_stream_queue;
-discover(<<"stream">>) ->
-    rabbit_stream_queue;
-discover(Other) when is_atom(Other) ->
-    discover(rabbit_data_coercion:to_binary(Other));
-discover(Other) when is_binary(Other) ->
-    T = rabbit_registry:binary_to_type(Other),
-    rabbit_log:debug("Queue type discovery: will look up a module for type '~tp'", [T]),
-    {ok, Mod} = rabbit_registry:lookup_module(queue, T),
-    Mod.
+discover(TypeDescriptor) ->
+    {ok, TypeModule} = rabbit_registry:lookup_type_module(queue, TypeDescriptor),
+    TypeModule.
 
--spec short_alias_of(queue_type()) -> undefined | binary().
-%% The opposite of discover/1: returns a short alias given a module name
-short_alias_of(<<"rabbit_quorum_queue">>) ->
-    <<"quorum">>;
-short_alias_of(rabbit_quorum_queue) ->
-    <<"quorum">>;
+-spec short_alias_of(TypeDescriptor) -> Ret when
+      TypeDescriptor :: {utf8, binary()} | atom() | binary(),
+      Ret :: binary() | undefined.
 %% AMQP 1.0 management client
-short_alias_of({utf8, <<"quorum">>}) ->
-    <<"quorum">>;
-short_alias_of(<<"rabbit_classic_queue">>) ->
-    <<"classic">>;
-short_alias_of(rabbit_classic_queue) ->
-    <<"classic">>;
-%% AMQP 1.0 management client
-short_alias_of({utf8, <<"classic">>}) ->
-    <<"classic">>;
-short_alias_of(<<"rabbit_stream_queue">>) ->
-    <<"stream">>;
-short_alias_of(rabbit_stream_queue) ->
-    <<"stream">>;
-%% AMQP 1.0 management client
-short_alias_of({utf8, <<"stream">>}) ->
-    <<"stream">>;
-%% for cases where this function is used for
-%% formatting of values that already might use these
-%% short aliases
-short_alias_of(<<"quorum">>) ->
-    <<"quorum">>;
-short_alias_of(<<"classic">>) ->
-    <<"classic">>;
-short_alias_of(<<"stream">>) ->
-    <<"stream">>;
-short_alias_of(_Other) ->
-    undefined.
+short_alias_of({utf8, TypeName}) ->
+    short_alias_of(TypeName);
+short_alias_of(TypeDescriptor) ->
+    case rabbit_registry:lookup_type_name(queue, TypeDescriptor) of
+        {ok, TypeName} -> TypeName;
+        _ -> undefined
+    end.
 
 %% If the client does not specify the type, the virtual host does not have any
 %% metadata default, and rabbit.default_queue_type is not set in the application env,
@@ -826,14 +819,13 @@ qref(Q) when ?is_amqqueue(Q) ->
 known_queue_type_modules() ->
     Registered = rabbit_registry:lookup_all(queue),
     {_, Modules} = lists:unzip(Registered),
-    ?QUEUE_MODULES ++ Modules.
+    Modules.
 
 -spec known_queue_type_names() -> [binary()].
 known_queue_type_names() ->
     Registered = rabbit_registry:lookup_all(queue),
     {QueueTypes, _} = lists:unzip(Registered),
-    QTypeBins = lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes),
-    ?KNOWN_QUEUE_TYPES ++ QTypeBins.
+    lists:map(fun(X) -> atom_to_binary(X) end, QueueTypes).
 
 inject_dqt(VHost) when ?is_vhost(VHost) ->
     inject_dqt(vhost:to_map(VHost));
@@ -897,3 +889,59 @@ check_cluster_queue_limit(Q) ->
 
 queue_limit_error(Reason, ReasonArgs) ->
     {error, queue_limit_exceeded, Reason, ReasonArgs}.
+
+-spec can_redeliver(queue_name(), state()) ->
+    {ok, module()} | {error, not_found}.
+can_redeliver(Q, State) ->
+    case module(Q, State) of
+        {ok, TypeModule} ->
+            Capabilities = TypeModule:capabilities(),
+            maps:get(can_redeliver, Capabilities, false);
+        _ -> false
+    end.
+
+-spec rebalance_module(amqqueue:amqqueue()) -> undefine | module().
+rebalance_module(Q) ->
+    TypeModule = amqqueue:get_type(Q),
+    Capabilities = TypeModule:capabilities(),
+    maps:get(rebalance_module, Capabilities, undefined).
+
+-spec is_replicable(amqqueue:amqqueue()) -> undefine | module().
+is_replicable(Q) ->
+    TypeModule = amqqueue:get_type(Q),
+    Capabilities = TypeModule:capabilities(),
+    maps:get(is_replicable, Capabilities, false).
+
+-spec stop(rabbit_types:vhost()) -> ok.
+stop(VHost) ->
+    %% original rabbit_amqqueue:stop doesn't do any catches or try after
+    _ = [TypeModule:stop(VHost) || {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)],
+    ok.
+
+list_with_minimum_quorum() ->
+    lists:append([TypeModule:list_with_minimum_quorum()
+                  || {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)]).
+
+drain(TransferCandidates) ->
+    _ = [TypeModule:drain(TransferCandidates) ||
+            {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)],
+    ok.
+
+revive() ->
+    _ = [TypeModule:revive() ||
+            {_Type, TypeModule} <- rabbit_registry:lookup_all(queue)],
+    ok.
+
+queue_vm_stats_sups() ->
+    lists:foldl(fun({_TypeName, TypeModule}, {KeysAcc, SupsAcc}) ->
+                        {Keys, Sups} = TypeModule:queue_vm_stats_sups(),
+                        {KeysAcc ++ Keys, SupsAcc ++ Sups}
+                end,
+                {[], []}, rabbit_registry:lookup_all(queue)).
+
+queue_vm_ets() ->
+    lists:foldl(fun({_TypeName, TypeModule}, {KeysAcc, SupsAcc}) ->
+                        {Keys, Tables} = TypeModule:queue_vm_ets(),
+                        {KeysAcc ++ Keys, SupsAcc ++ Tables}
+                end,
+                {[], []}, rabbit_registry:lookup_all(queue)).
