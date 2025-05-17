@@ -47,6 +47,7 @@ setup() ->
     setup_metrics(telemetry_registry()),
     setup_metrics('per-object'),
     setup_metrics('memory-breakdown'),
+    setup_metrics('raft'),
     setup_metrics('detailed').
 
 setup_metrics(Registry) ->
@@ -88,6 +89,11 @@ gen_response(<<"GET">>, Request) ->
 gen_response(_, Request) ->
     Request.
 
+gen_metrics_response(raft, Request) ->
+    {Code, RespHeaders, Body} = reply(raft, Request),
+
+    Headers = to_cowboy_headers(RespHeaders),
+    cowboy_req:reply(Code, maps:from_list(Headers), Body, Request);
 gen_metrics_response(Registry, Request) ->
     {Code, RespHeaders, Body} = reply(Registry, Request),
 
@@ -119,6 +125,18 @@ format_metrics(Request, Registry) ->
                                                                  <<"gzip">>]),
     encode_format(ContentType, binary_to_list(Encoding), Scrape, Registry).
 
+render_format(ContentType, raft = Registry) ->
+    Scrape = prometheus_summary:observe_duration(
+               Registry,
+               ?SCRAPE_DURATION,
+               [Registry, ContentType],
+               % fun () -> seshat:prom_format(ra, "raft", [term, snapshot_index, last_applied, commit_index, last_written_index, commit_latency, num_segments]) end),
+               fun () -> seshat:prom_format(ra, "raft") end),
+    prometheus_summary:observe(Registry,
+                               ?SCRAPE_SIZE,
+                               [Registry, ContentType],
+                               iolist_size(Scrape)),
+    Scrape;
 render_format(ContentType, Registry) ->
     Scrape = prometheus_summary:observe_duration(
                Registry,
