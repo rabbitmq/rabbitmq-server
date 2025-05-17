@@ -15,7 +15,7 @@ ifneq ($(filter rabbitmq_cli,$(BUILD_DEPS) $(DEPS)),)
 RMQ_ERLC_OPTS += -pa $(DEPS_DIR)/rabbitmq_cli/ebin
 endif
 
-RMQ_ERLC_OPTS += +deterministic
+RMQ_ERLC_OPTS ?= +deterministic
 
 # Push our compilation options to both the normal and test ERLC_OPTS.
 ERLC_OPTS += $(RMQ_ERLC_OPTS)
