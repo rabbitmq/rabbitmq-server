@@ -128,11 +128,14 @@ queue_with_totals(ReqData) ->
 
 queue_with_totals(VHost, QName) ->
     Name = rabbit_misc:r(VHost, queue, QName),
+    %% this somehow shares fields with mgmt_format:queue :-/
     case rabbit_amqqueue:lookup(Name) of
-        {ok, Q}            -> QueueInfo = rabbit_amqqueue:info(Q,
+        {ok, Q}            -> QueueInfo0 = rabbit_amqqueue:info(Q,
                                     [name, durable, auto_delete, exclusive,
                                     owner_pid, arguments, type, state,
                                     policy, totals, online, type_specific]),
-                              rabbit_mgmt_format:queue_info(QueueInfo);
+                              QueueInfo1 = QueueInfo0 ++ [{internal, amqqueue:is_internal(Q)},
+                                                          {internal_owner, rabbit_mgmt_format:internal_owner(amqqueue:internal_owner(Q))}],
+                              rabbit_mgmt_format:queue_info(QueueInfo1);
         {error, not_found} -> not_found
     end.
