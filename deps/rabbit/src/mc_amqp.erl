@@ -251,30 +251,29 @@ routing_headers(Msg, Opts) ->
     List = application_properties_as_simple_map(Msg, X),
     maps:from_list(List).
 
-get_property(durable, Msg) ->
-    case Msg of
-        #msg_body_encoded{header = #'v1_0.header'{durable = Durable}}
-          when is_boolean(Durable) ->
-            Durable;
+get_property(durable, #msg_body_encoded{header = Header} = Msg) ->
+    case Header of
+        #'v1_0.header'{durable = D} when is_boolean(D) ->
+            D;
         _ ->
             %% fallback in case the source protocol was old AMQP 0.9.1
             case message_annotation(<<"x-basic-delivery-mode">>, Msg, undefined) of
-                {ubyte, 1} ->
-                    false;
+                {ubyte, 2} ->
+                    true;
                 _ ->
-                    true
+                    false
             end
     end;
-get_property(timestamp, Msg) ->
-    case Msg of
-        #msg_body_encoded{properties = #'v1_0.properties'{creation_time = {timestamp, Ts}}} ->
+get_property(timestamp, #msg_body_encoded{properties = Properties}) ->
+    case Properties of
+        #'v1_0.properties'{creation_time = {timestamp, Ts}} ->
             Ts;
         _ ->
             undefined
     end;
-get_property(ttl, Msg) ->
-    case Msg of
-        #msg_body_encoded{header = #'v1_0.header'{ttl = {uint, Ttl}}} ->
+get_property(ttl, #msg_body_encoded{header = Header} = Msg) ->
+    case Header of
+        #'v1_0.header'{ttl = {uint, Ttl}} ->
             Ttl;
         _ ->
             %% fallback in case the source protocol was AMQP 0.9.1
@@ -286,9 +285,9 @@ get_property(ttl, Msg) ->
                     undefined
             end
     end;
-get_property(priority, Msg) ->
-    case Msg of
-        #msg_body_encoded{header = #'v1_0.header'{priority = {ubyte, Priority}}} ->
+get_property(priority, #msg_body_encoded{header = Header} = Msg) ->
+    case Header of
+        #'v1_0.header'{priority = {ubyte, Priority}} ->
             Priority;
         _ ->
             %% fallback in case the source protocol was AMQP 0.9.1
@@ -319,10 +318,7 @@ protocol_state(#msg_body_encoded{header = Header0,
     [encode(Sections), BareAndFooter];
 protocol_state(#v1{message_annotations = MA0,
                    bare_and_footer = BareAndFooter}, Anns) ->
-    Durable = case Anns of
-                  #{?ANN_DURABLE := D} -> D;
-                  _ -> true
-              end,
+    Durable = maps:get(?ANN_DURABLE, Anns, true),
     Priority = case Anns of
                    #{?ANN_PRIORITY := P}
                      when is_integer(P) ->
@@ -667,7 +663,9 @@ binary_part_bare_and_footer(Payload, Start) ->
     binary_part(Payload, Start, byte_size(Payload) - Start).
 
 update_header_from_anns(undefined, Anns) ->
-    update_header_from_anns(#'v1_0.header'{durable = true}, Anns);
+    Durable = maps:get(?ANN_DURABLE, Anns, true),
+    Header = #'v1_0.header'{durable = Durable},
+    update_header_from_anns(Header, Anns);
 update_header_from_anns(Header, Anns) ->
     DeliveryCount = case Anns of
                         #{delivery_count := C} -> C;
