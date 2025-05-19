@@ -512,7 +512,7 @@ start_coordinator_cluster() ->
                      "initial machine version ~b",
                      [Nodes, MinVersion]),
     case ra:start_cluster(?RA_SYSTEM,
-                          [make_system_conf(Node, Nodes, MinVersion)
+                          [make_ra_conf(Node, Nodes, MinVersion)
                            || Node <- Nodes]) of
         {ok, Started, _} ->
             rabbit_log:debug("Started stream coordinator on ~w", [Started]),
@@ -1350,11 +1350,6 @@ phase_update_mnesia(StreamId, Args, #{reference := QName,
 format_ra_event(ServerId, Evt) ->
     {stream_coordinator_event, ServerId, Evt}.
 
-make_system_conf(Node, Nodes, MinMacVersion) ->
-    RaConf = make_ra_conf(Node, Nodes, MinMacVersion),
-    SacConf = make_sac_conf(MinMacVersion),
-    RaConf#{sac_conf => SacConf}.
-
 make_ra_conf(Node, Nodes, MinMacVersion) ->
     UId = ra:new_uid(ra_lib:to_binary(?MODULE)),
     Formatter = {?MODULE, format_ra_event, []},
@@ -1369,7 +1364,7 @@ make_ra_conf(Node, Nodes, MinMacVersion) ->
       initial_members => Members,
       log_init_args => #{uid => UId},
       tick_timeout => TickTimeout,
-      machine => {module, ?MODULE, #{}},
+      machine => {module, ?MODULE, #{sac_conf => make_sac_conf(MinMacVersion)}},
       initial_machine_version => MinMacVersion,
       ra_event_formatter => Formatter}.
 
