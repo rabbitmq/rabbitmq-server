@@ -1,0 +1,106 @@
+   <table class="facts facts-l">
+      <tr>
+        <th>State</th>
+        <td><%= fmt_object_state(queue) %></td>
+      </tr>
+      <% if(queue.consumers) { %>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumers) %></td>
+      </tr>
+      <% } else if(queue.hasOwnProperty('consumer_details')) { %>
+      <tr>
+        <th>Consumers</th>
+        <td><%= fmt_string(queue.consumer_details.length) %></td>
+      </tr>
+      <% } %>
+      <% if(queue.hasOwnProperty('publishers')) { %>
+      <tr>
+        <th>Publishers</th>
+        <td><%= fmt_string(queue.publishers) %></td>
+      </tr>
+      <% } %>
+      <tr>
+        <th>Open files</th>
+        <td><%= fmt_table_short(queue.open_files) %></td>
+      </tr>
+      <% if (queue.hasOwnProperty('delivery_limit')) { %>
+      <tr>
+        <th>Delivery limit <span class="help" id="queue-delivery-limit"></th>
+        <td><%= fmt_string(queue.delivery_limit) %></td>
+      </tr>
+      <% } %>
+    </table>
+
+    <table class="facts">
+      <tr>
+        <td></td>
+        <th class="horizontal">Total</th>
+        <th class="horizontal">Ready</th>
+        <th class="horizontal">Unacked</th>
+        <th class="horizontal">High priority</th>
+        <th class="horizontal">Normal priority</th>
+        <th class="horizontal">Returned</th>
+        <th class="horizontal">Dead-lettered
+        <span class="help" id="queue-dead-lettered"></span>
+        </th>
+      </tr>
+      <tr>
+        <th>
+          Messages
+          <span class="help" id="queue-messages"></span>
+        </th>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_unacknowledged) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_high) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_normal) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_ready_returned) %>
+        </td>
+        <td class="r">
+          <%= fmt_num_thousands(queue.messages_dlx) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Message body bytes
+          <span class="help" id="queue-message-body-bytes"></span>
+        </th>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_ready) %>
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_unacknowledged) %>
+        </td>
+        <td class="r">
+        </td>
+        <td class="r">
+        </td>
+        <td class="r">
+        </td>
+        <td class="r">
+          <%= fmt_bytes(queue.message_bytes_dlx) %>
+        </td>
+      </tr>
+      <tr>
+        <th>
+          Process memory
+          <span class="help" id="queue-process-memory"></span>
+        </th>
+        <td class="r"><%= fmt_bytes(queue.memory) %></td>
+      </tr>
+    </table>
