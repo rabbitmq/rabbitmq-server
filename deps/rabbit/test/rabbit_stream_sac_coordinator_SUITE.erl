@@ -532,7 +532,8 @@ import_state_v4_empty_test(_) ->
     OldMod = rabbit_stream_sac_coordinator_v4,
     OldState = OldMod:init_state(),
     Export = OldMod:state_to_map(OldState),
-    ?assertEqual(#?STATE{groups = #{}, pids_groups = #{}},
+    ?assertEqual(#?STATE{groups = #{}, pids_groups = #{},
+                         conf = #{disconnected_timeout => 60_000}},
                  ?MOD:import_state(4, Export)),
     ok.
 

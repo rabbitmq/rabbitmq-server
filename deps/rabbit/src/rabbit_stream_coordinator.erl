@@ -2296,8 +2296,10 @@ machine_version(1, 2, State = #?MODULE{streams = Streams0,
                    monitors = Monitors2,
                    listeners = undefined}, Effects};
 machine_version(2, 3, State) ->
-    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, updating state."),
-    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()},
+    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, "
+                    "updating state."),
+    SacState = rabbit_stream_sac_coordinator_v4:init_state(),
+    {State#?MODULE{single_active_consumer = SacState},
      []};
 machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
     rabbit_log:info("Stream coordinator machine version changes from 3 to 4, updating state."),
