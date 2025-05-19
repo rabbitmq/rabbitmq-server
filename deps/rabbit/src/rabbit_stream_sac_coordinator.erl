@@ -38,7 +38,7 @@
          group_consumers/4,
          connection_reconnected/1]).
 -export([apply/2,
-         init_state/1,
+         init_state/0,
          send_message/2,
          ensure_monitors/4,
          handle_connection_down/2,
@@ -49,7 +49,6 @@
          group_consumers/5,
          overview/1,
          import_state/2,
-         make_conf/0,
          check_conf_change/1]).
 -export([make_purge_nodes/1,
          make_update_conf/1]).
@@ -201,10 +200,9 @@ overview(#?MODULE{groups = Groups}) ->
                  Groups),
     #{num_groups => map_size(Groups), groups => GroupsOverview}.
 
--spec init_state(map()) -> state().
-init_state(Conf) ->
-    DisconTimeout = maps:get(?DISCONNECTED_TIMEOUT_CONF_KEY, Conf,
-                             ?DISCONNECTED_TIMEOUT_MS),
+-spec init_state() -> state().
+init_state() ->
+    DisconTimeout = ?DISCONNECTED_TIMEOUT_MS,
     #?MODULE{groups = #{}, pids_groups = #{},
              conf = #{?DISCONNECTED_TIMEOUT_CONF_KEY => DisconTimeout}}.
 
@@ -862,10 +860,6 @@ import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
     #?MODULE{groups = map_to_groups(Groups),
              pids_groups = map_to_pids_groups(PidsGroups),
              conf = #{disconnected_timeout => ?DISCONNECTED_TIMEOUT_MS}}.
-
--spec make_conf() -> conf().
-make_conf() ->
-    #{?DISCONNECTED_TIMEOUT_CONF_KEY => lookup_disconnected_timeout()}.
 
 -spec check_conf_change(state()) -> {new, conf()} | unchanged.
 check_conf_change(#?MODULE{conf = Conf}) ->

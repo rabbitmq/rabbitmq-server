@@ -536,10 +536,9 @@ version() -> 5.
 which_module(_) ->
     ?MODULE.
 
-init(#{machine_version := MacVersion} = Conf) when MacVersion >= 5 ->
-    SacConf = maps:get(sac_conf, Conf, #{}),
+init(#{machine_version := MacVersion}) when MacVersion >= 5 ->
     #?MODULE{single_active_consumer =
-             rabbit_stream_sac_coordinator:init_state(SacConf)};
+             rabbit_stream_sac_coordinator:init_state()};
 init(_) ->
     #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator_v4:init_state()}.
 
@@ -1364,14 +1363,9 @@ make_ra_conf(Node, Nodes, MinMacVersion) ->
       initial_members => Members,
       log_init_args => #{uid => UId},
       tick_timeout => TickTimeout,
-      machine => {module, ?MODULE, #{sac_conf => make_sac_conf(MinMacVersion)}},
+      machine => {module, ?MODULE, #{}},
       initial_machine_version => MinMacVersion,
       ra_event_formatter => Formatter}.
-
-make_sac_conf(MinMacVersion) when MinMacVersion >= 5 ->
-    sac_make_conf();
-make_sac_conf(_) ->
-    #{}.
 
 filter_command(_Meta, {delete_replica, _, #{node := Node}}, #stream{id = StreamId,
                                                                     members = Members0}) ->
@@ -2449,9 +2443,6 @@ maps_to_list(M) ->
 
 ra_local_query(QueryFun) ->
     ra:local_query({?MODULE, node()}, QueryFun, infinity).
-
-sac_make_conf() ->
-    rabbit_stream_sac_coordinator:make_conf().
 
 sac_make_purge_nodes(Nodes) ->
     rabbit_stream_sac_coordinator:make_purge_nodes(Nodes).
