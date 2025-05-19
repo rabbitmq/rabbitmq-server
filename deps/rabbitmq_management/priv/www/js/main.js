@@ -1759,6 +1759,10 @@ function select_queue_type(queuetype) {
     update();
 }
 
+function is_internal(queue) {
+    return queue.internal;
+}
+
 function get_queue_type (queue) {    
     return queue.type;
 }

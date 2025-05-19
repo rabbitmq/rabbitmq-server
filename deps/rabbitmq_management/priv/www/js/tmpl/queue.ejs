@@ -395,6 +395,7 @@
 </div>
 <% } %>
 
+<% if (!is_internal(queue)) { %>
 <div class="section-hidden" id="delete">
   <h2>Delete</h2>
   <div class="hider">
@@ -406,6 +407,7 @@
     </form>
   </div>
 </div>
+<% } %>
 
 <% if (!is_stream(queue)) { %>
 <div class="section-hidden">
