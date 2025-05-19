@@ -83,50 +83,78 @@ end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
 
 simple_sac_consumer_should_get_disconnected_on_partition(Config) ->
-    T = ?TRSPT,
     S = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
-    {ok, S0, C0} = stream_test_utils:connect(Config, 0),
-    {ok, S1, C1} = stream_test_utils:connect(Config, 1),
-    {ok, S2, C2} = stream_test_utils:connect(Config, 2),
+    {ok, So0, C0_00} = stream_test_utils:connect(Config, 0),
+    {ok, So1, C1_00} = stream_test_utils:connect(Config, 1),
+    {ok, So2, C2_00} = stream_test_utils:connect(Config, 2),
 
     create_stream(Config, S),
-    wait_for_members(S0, C0, S, 3),
+    wait_for_members(So0, C0_00, S, 3),
 
-    C0_01 = register_sac(S0, C0, S),
-    C0_02 = receive_consumer_update(S0, C0_01),
+    C0_01 = register_sac(So0, C0_00, S, 0),
+    C0_02 = receive_consumer_update(So0, C0_01),
 
-    C1_01 = register_sac(S1, C1, S),
-    C2_01 = register_sac(S2, C2, S),
+    C1_01 = register_sac(So1, C1_00, S, 1),
+    C2_01 = register_sac(So2, C2_00, S, 2),
+    SubIdToState0 = #{0 => {So0, C0_02},
+                      1 => {So1, C1_01},
+                      2 => {So2, C2_01}},
 
     Members = stream_members(Config, S),
     L = leader(Members),
     [F1, F2] = followers(Members),
 
-    Consumers = query_consumers(Config, S),
-    assertSize(3, Consumers),
-    assertConsumersConnected(Consumers),
+    Consumers1 = query_consumers(Config, S),
+    assertSize(3, Consumers1),
+    assertConsumersConnected(Consumers1),
 
-    rabbit_ct_broker_helpers:block_traffic_between(F1, L),
-    rabbit_ct_broker_helpers:block_traffic_between(F1, F2),
+    Isolated = F1,
+    {value, DisconnectedConsumer} =
+        lists:search(fun(#consumer{pid = ConnPid}) ->
+                             rpc(Config, erlang, node, [ConnPid]) =:= Isolated
+                     end, Consumers1),
+    #consumer{subscription_id = DiscSubId} = DisconnectedConsumer,
+
+    rabbit_ct_broker_helpers:block_traffic_between(Isolated, L),
+    rabbit_ct_broker_helpers:block_traffic_between(Isolated, F2),
 
     wait_for_disconnected_consumer(Config, S),
     wait_for_forgotten_consumer(Config, S),
 
-    rabbit_ct_broker_helpers:allow_traffic_between(F1, L),
-    rabbit_ct_broker_helpers:allow_traffic_between(F1, F2),
+    rabbit_ct_broker_helpers:allow_traffic_between(Isolated, L),
+    rabbit_ct_broker_helpers:allow_traffic_between(Isolated, F2),
 
     wait_for_all_consumers_connected(Config, S),
-    assertConsumersConnected(query_consumers(Config, S)),
+
+    Consumers2 = query_consumers(Config, S),
+    %% the disconnected, then forgotten consumer is cancelled,
+    %% because the stream member on its node has been restarted
+    assertSize(2, Consumers2),
+    assertConsumersConnected(Consumers2),
+    ?assertMatch([DisconnectedConsumer],
+                 Consumers1 -- Consumers2),
+
+    %% assert the cancelled consumer received a metadata update frame
+    SubIdToState1 =
+        maps:fold(fun(K, {S0, C0}, Acc) when K == DiscSubId ->
+                          C1 = receive_metadata_update(S0, C0),
+                          Acc#{K => {S0, C1}};
+                     (K, {S0, C0}, Acc) ->
+                          Acc#{K => {S0, C0}}
+                  end, #{}, SubIdToState0),
 
     delete_stream(Config, S),
 
-    {_, _} = receive_commands(T, S0, C0),
-    {_, _} = receive_commands(T, S1, C1),
-    {_, _} = receive_commands(T, S2, C2),
+    %% online consumers should receive a metadata update frame (stream deleted)
+    %% we unqueue the this frame before closing the connection
+    %% directly closing the connection of the cancelled consumer
+    maps:foreach(fun(K, {S0, C0}) when K /= DiscSubId ->
+                         {_, C1} = receive_commands(S0, C0),
+                         {ok, _} = stream_test_utils:close(S0, C1);
+                    (_, {S0, C0}) ->
+                         {ok, _} = stream_test_utils:close(S0, C0)
+                 end, SubIdToState1),
 
-    {ok, _} = stream_test_utils:close(S0, C0),
-    {ok, _} = stream_test_utils:close(S1, C1),
-    {ok, _} = stream_test_utils:close(S2, C2),
     ok.
 
 leader(Members) ->
@@ -161,8 +189,8 @@ delete_stream(Config, St) ->
     {ok, C1} = stream_test_utils:delete_stream(S, C0, St),
     {ok, _} = stream_test_utils:close(S, C1).
 
-register_sac(S, C0, St) ->
-    SacSubscribeFrame = request({subscribe, 0, St,
+register_sac(S, C0, St, SubId) ->
+    SacSubscribeFrame = request({subscribe, SubId, St,
                                  first, 1,
                                  #{<<"single-active-consumer">> => <<"true">>,
                                    <<"name">> => name()}}),
@@ -174,8 +202,14 @@ register_sac(S, C0, St) ->
     C1.
 
 receive_consumer_update(S, C0) ->
-    {Cmd, C1} = receive_commands(?TRSPT, S, C0),
+    {Cmd, C1} = receive_commands(S, C0),
     ?assertMatch({request, _CorrId, {consumer_update, _SubId, _Status}},
+                 Cmd),
+    C1.
+
+receive_metadata_update(S, C0) ->
+    {Cmd, C1} = receive_commands(S, C0),
+    ?assertMatch({metadata_update, _, ?RESPONSE_CODE_STREAM_NOT_AVAILABLE},
                  Cmd),
     C1.
 
@@ -203,6 +237,9 @@ request(Cmd) ->
 
 request(CorrId, Cmd) ->
     rabbit_stream_core:frame({request, CorrId, Cmd}).
+
+receive_commands(S, C) ->
+    receive_commands(?TRSPT, S, C).
 
 receive_commands(Transport, S, C) ->
    stream_test_utils:receive_stream_commands(Transport, S, C).
