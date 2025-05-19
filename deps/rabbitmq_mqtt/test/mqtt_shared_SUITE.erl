@@ -205,6 +205,12 @@ init_per_testcase(T, Config)
        T =:= management_plugin_enable ->
     inets:start(),
     init_per_testcase0(T, Config);
+init_per_testcase(T, Config)
+  when T =:= clean_session_disconnect_client;
+       T =:= clean_session_node_restart;
+       T =:= clean_session_node_kill ->
+    ok = rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
+    init_per_testcase0(T, Config);
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
@@ -215,6 +221,12 @@ end_per_testcase(T, Config)
   when T =:= management_plugin_connection;
        T =:= management_plugin_enable ->
     ok = inets:stop(),
+    end_per_testcase0(T, Config);
+end_per_testcase(T, Config)
+  when T =:= clean_session_disconnect_client;
+       T =:= clean_session_node_restart;
+       T =:= clean_session_node_kill ->
+    ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
     end_per_testcase0(T, Config);
 end_per_testcase(Testcase, Config) ->
     end_per_testcase0(Testcase, Config).

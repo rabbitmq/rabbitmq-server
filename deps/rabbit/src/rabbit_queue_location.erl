@@ -45,7 +45,7 @@ queue_leader_locators() ->
 -spec select_leader_and_followers(amqqueue:amqqueue(), pos_integer()) ->
     {Leader :: node(), Followers :: [node()]}.
 select_leader_and_followers(Q, Size)
-  when (?amqqueue_is_quorum(Q) orelse ?amqqueue_is_stream(Q) orelse ?amqqueue_is_classic(Q)) andalso is_integer(Size) ->
+  when (?is_amqqueue_v2(Q)) andalso is_integer(Size) ->
     LeaderLocator = leader_locator(Q),
     QueueType = amqqueue:get_type(Q),
     do_select_leader_and_followers(Size, QueueType, LeaderLocator).
@@ -109,6 +109,7 @@ leader_locator0(_) ->
     %% default
     <<"client-local">>.
 
+%% TODO: allow dispatching by queue type
 -spec select_members(pos_integer(), rabbit_queue_type:queue_type(), [node(),...], [node(),...],
                       non_neg_integer(), non_neg_integer(), function()) ->
     {[node(),...], function()}.

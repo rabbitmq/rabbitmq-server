@@ -463,20 +463,8 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
 -spec queue_topology(amqqueue:amqqueue()) ->
     {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
-    Leader = case amqqueue:get_pid(Q) of
-                 {_RaName, Node} ->
-                     Node;
-                 none ->
-                     none;
-                 Pid ->
-                     node(Pid)
-             end,
-    Replicas = case amqqueue:get_type_state(Q) of
-                   #{nodes := Nodes} ->
-                       Nodes;
-                   _ ->
-                       [Leader]
-               end,
+    Leader = amqqueue:get_leader_node(Q),
+    Replicas = amqqueue:get_nodes(Q),
     {Leader, Replicas}.
 
 decode_exchange({map, KVList}) ->

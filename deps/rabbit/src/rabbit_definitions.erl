@@ -1045,16 +1045,11 @@ list_queues() ->
 
 queue_definition(Q) ->
     #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
-    Type = case amqqueue:get_type(Q) of
-               rabbit_classic_queue -> classic;
-               rabbit_quorum_queue -> quorum;
-               rabbit_stream_queue -> stream;
-               T -> T
-           end,
+    TypeModule =  amqqueue:get_type(Q),
     #{
         <<"vhost">> => VHost,
         <<"name">> => Name,
-        <<"type">> => Type,
+        <<"type">> => rabbit_registry:lookup_type_name(queue, TypeModule),
         <<"durable">> => amqqueue:is_durable(Q),
         <<"auto_delete">> => amqqueue:is_auto_delete(Q),
         <<"arguments">> => rabbit_misc:amqp_table(amqqueue:get_arguments(Q))

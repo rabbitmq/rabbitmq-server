@@ -4270,7 +4270,7 @@ leader_health_check(Config) ->
     [Q1Data, Q2Data, Q3Data, Q4Data, Q5Data, Q6Data] = QQ_Data =
         [begin
             rabbit_ct_broker_helpers:rpc(Config, 0, ra_leaderboard, clear, [Q_ClusterName]),
-            _QData = amqqueue:to_printable(Q_Res, rabbit_quorum_queue)
+            rabbit_ct_broker_helpers:rpc(Config, 0, amqqueue, to_printable, [Q_Res, rabbit_quorum_queue])
          end
             || {Q_ClusterName, Q_Res} <- QQ_Clusters],
 

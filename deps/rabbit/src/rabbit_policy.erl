@@ -493,10 +493,13 @@ matches_type(_,        _)               -> false.
 
 matches_queue_type(queue, _, <<"all">>)    -> true;
 matches_queue_type(queue, _, <<"queues">>) -> true;
-matches_queue_type(queue, rabbit_classic_queue, <<"classic_queues">>) -> true;
-matches_queue_type(queue, rabbit_quorum_queue,  <<"quorum_queues">>)  -> true;
-matches_queue_type(queue, rabbit_stream_queue,  <<"streams">>)        -> true;
-matches_queue_type(queue, _, _) -> false.
+matches_queue_type(queue, TypeModule, Term) ->
+    %% we assume here TypeModule comes from queue struct,
+    %% therefore it is used and loaded - no need to check
+    %% with registry.
+    %% we also assume here and elsewhere that queue type
+    %% module developer implemented all needed callbacks
+    TypeModule:policy_apply_to_name() == Term.
 
 priority_comparator(A, B) -> pget(priority, A) >= pget(priority, B).
 
@@ -578,9 +581,19 @@ is_proplist(L) -> length(L) =:= length([I || I = {_, _} <- L]).
 apply_to_validation(_Name, <<"all">>)       -> ok;
 apply_to_validation(_Name, <<"exchanges">>) -> ok;
 apply_to_validation(_Name, <<"queues">>)    -> ok;
-apply_to_validation(_Name, <<"classic_queues">>)    -> ok;
-apply_to_validation(_Name, <<"quorum_queues">>)    -> ok;
-apply_to_validation(_Name, <<"streams">>)    -> ok;
 apply_to_validation(_Name, Term) ->
-    {error, "apply-to '~ts' unrecognised; should be one of: 'queues', 'classic_queues', "
-     " 'quorum_queues', 'streams', 'exchanges', or 'all'", [Term]}.
+    %% as a last restort go to queue types registry
+    %% and try to find something here
+    case maybe_apply_to_queue_type(Term) of
+        true -> ok;
+        false ->
+            %% TODO: get recognized queue terms from queue types from queue type.
+            {error, "apply-to '~ts' unrecognised; should be one of: 'queues', 'classic_queues', "
+             " 'quorum_queues', 'streams', 'exchanges', or 'all'", [Term]}
+    end.
+
+maybe_apply_to_queue_type(Term) ->
+    lists:any(fun({_TypeName, TypeModule}) ->
+                      TypeModule:policy_apply_to_name() == Term
+              end,
+              rabbit_registry:lookup_all(queue)).
