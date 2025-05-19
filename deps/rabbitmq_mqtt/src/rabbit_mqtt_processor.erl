@@ -1219,7 +1219,8 @@ vhost_in_username(UserBin) ->
             %% split at the last colon, disallowing colons in username
             case re:split(UserBin, ":(?!.*?:)") of
                 [_, _]      -> true;
-                [UserBin]   -> false
+                [UserBin]   -> false;
+                []          -> false
             end
     end.
 
@@ -1231,7 +1232,8 @@ get_vhost_username(UserBin) ->
             %% split at the last colon, disallowing colons in username
             case re:split(UserBin, ":(?!.*?:)") of
                 [Vhost, UserName] -> {Vhost,  UserName};
-                [UserBin]         -> Default
+                [UserBin]         -> Default;
+                []                -> Default
             end
     end.
 
