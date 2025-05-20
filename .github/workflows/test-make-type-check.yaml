@@ -34,7 +34,8 @@ jobs:
           - rabbitmq_aws
           - rabbitmq_consistent_hash_exchange
           - rabbitmq_event_exchange
-          - rabbitmq_federation
+          - rabbitmq_exchange_federation
+          - rabbitmq_federation_common
           - rabbitmq_federation_management
           - rabbitmq_federation_prometheus
           - rabbitmq_jms_topic_exchange
@@ -50,6 +51,7 @@ jobs:
           - rabbitmq_peer_discovery_k8s
           - rabbitmq_prelaunch
           - rabbitmq_prometheus
+          - rabbitmq_queue_federation
           - rabbitmq_recent_history_exchange
           - rabbitmq_sharding
           - rabbitmq_shovel
