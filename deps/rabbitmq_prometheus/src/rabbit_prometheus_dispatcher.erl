@@ -29,6 +29,7 @@ build_dispatcher() ->
         prometheus_vm_msacc_collector,
         prometheus_rabbitmq_core_metrics_collector,
         prometheus_rabbitmq_global_metrics_collector,
+        prometheus_rabbitmq_raft_metrics_collector,
         prometheus_rabbitmq_message_size_metrics_collector
         ]),
     prometheus_registry:register_collectors('detailed', [
