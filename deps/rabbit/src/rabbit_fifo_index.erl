@@ -7,7 +7,8 @@
          delete/2,
          size/1,
          smallest/1,
-         map/2
+         map/2,
+         to_list/1
         ]).
 
 -compile({no_auto_import, [size/1]}).
@@ -87,6 +88,10 @@ smallest(#?MODULE{smallest = Smallest}) ->
 map(F, #?MODULE{data = Data} = State) ->
     State#?MODULE{data = maps:map(F, Data)}.
 
+% Note: the ordering of the list is undefined. Sort the list for ordering.
+-spec to_list(state()) -> [integer()].
+to_list(#?MODULE{data = Data}) ->
+    maps:keys(Data).
 
 %% internal
 
