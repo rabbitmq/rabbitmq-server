@@ -266,23 +266,24 @@ body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
 %% following stucture:
 %% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
 -spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
-new(DeliveryTag, Body, Settled) when is_binary(Body) ->
-    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
-                                            settled = Settled,
-                                            message_format = {uint, ?MESSAGE_FORMAT}},
-                body = [#'v1_0.data'{content = Body}]};
+new(DeliveryTag, Bin, Settled) when is_binary(Bin) ->
+    Body = [#'v1_0.data'{content = Bin}],
+    new(DeliveryTag, Body, Settled);
 new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
-    #amqp10_msg{transfer = #'v1_0.transfer'{delivery_tag = {binary, DeliveryTag},
-                                            settled = Settled,
-                                            message_format = {uint, ?MESSAGE_FORMAT}},
-                body = Body}.
+    #amqp10_msg{
+       transfer = #'v1_0.transfer'{
+                     delivery_tag = {binary, DeliveryTag},
+                     settled = Settled,
+                     message_format = {uint, ?MESSAGE_FORMAT}},
+       %% This lib is safe by default.
+       header = #'v1_0.header'{durable = true},
+       body = Body}.
 
 %% @doc Create a new settled amqp10 message using the specified delivery tag
 %% and body.
 -spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
-
 
 % First 3 octets are the format
 % the last 1 octet is the version
