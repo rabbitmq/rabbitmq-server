@@ -80,15 +80,15 @@ init_global_counters() ->
     lists:foreach(fun init_global_counters/1, [?MQTT_PROTO_V3,
                                                ?MQTT_PROTO_V4,
                                                ?MQTT_PROTO_V5]),
-    rabbit_global_counters:init([{queue_type, ?QUEUE_TYPE_QOS_0}, {dead_letter_strategy, disabled}],
+    rabbit_global_counters:init(#{queue_type => ?QUEUE_TYPE_QOS_0, dead_letter_strategy => disabled},
                                 [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]).
 
 init_global_counters(ProtoVer) ->
-    Proto = {protocol, ProtoVer},
-    rabbit_global_counters:init([Proto]),
-    rabbit_global_counters:init([Proto, {queue_type, rabbit_classic_queue}]),
-    rabbit_global_counters:init([Proto, {queue_type, rabbit_quorum_queue}]),
-    rabbit_global_counters:init([Proto, {queue_type, ?QUEUE_TYPE_QOS_0}]),
+    Proto = #{protocol => ProtoVer},
+    rabbit_global_counters:init(Proto),
+    rabbit_global_counters:init(Proto#{queue_type => rabbit_classic_queue}),
+    rabbit_global_counters:init(Proto#{queue_type => rabbit_quorum_queue}),
+    rabbit_global_counters:init(Proto#{queue_type => ?QUEUE_TYPE_QOS_0}),
     rabbit_msg_size_metrics:init(ProtoVer).
 
 persist_static_configuration() ->
