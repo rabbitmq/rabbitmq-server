@@ -132,14 +132,14 @@
 boot_step() ->
     [begin
          %% Protocol counters
-         Protocol = {protocol, Proto},
-         init([Protocol]),
+         Protocol = #{protocol => Proto},
+         init(Protocol),
          rabbit_msg_size_metrics:init(Proto),
 
          %% Protocol & Queue Type counters
-         init([Protocol, {queue_type, rabbit_classic_queue}]),
-         init([Protocol, {queue_type, rabbit_quorum_queue}]),
-         init([Protocol, {queue_type, rabbit_stream_queue}])
+         init(Protocol#{queue_type => rabbit_classic_queue}),
+         init(Protocol#{queue_type => rabbit_quorum_queue}),
+         init(Protocol#{queue_type => rabbit_stream_queue})
      end || Proto <- [amqp091, amqp10]],
 
     %% Dead Letter counters
@@ -147,11 +147,11 @@ boot_step() ->
     %% Streams never dead letter.
     %%
     %% Source classic queue dead letters.
-    init([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, disabled}],
+    init(#{queue_type => rabbit_classic_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
-    init([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, at_most_once}],
+    init(#{queue_type => rabbit_classic_queue, dead_letter_strategy => at_most_once},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
@@ -159,19 +159,19 @@ boot_step() ->
     %% Source quorum queue dead letters.
     %% Only quorum queues can dead letter due to delivery-limit exceeded.
     %% Only quorum queues support dead letter strategy at-least-once.
-    init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, disabled}],
+    init(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER
          ]),
-    init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_most_once}],
+    init(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => at_most_once},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_DELIVERY_LIMIT_COUNTER
          ]),
-    init([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_least_once}],
+    init(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => at_least_once},
          [?MESSAGES_DEAD_LETTERED_CONFIRMED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER,
@@ -181,15 +181,15 @@ boot_step() ->
 init(Labels) ->
     init(Labels, []).
 
-init(Labels = [{protocol, Protocol}, {queue_type, QueueType}], Extra) ->
+init(Labels = #{protocol := Protocol, queue_type := QueueType}, Extra) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_QUEUE_TYPE_COUNTERS ++ Extra, Labels),
     persistent_term:put({?MODULE, Protocol, QueueType}, Counters);
-init(Labels = [{protocol, Protocol}], Extra) ->
+init(Labels = #{protocol := Protocol}, Extra) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, ?PROTOCOL_COUNTERS ++ Extra, Labels),
     persistent_term:put({?MODULE, Protocol}, Counters);
-init(Labels = [{queue_type, QueueType}, {dead_letter_strategy, DLS}], DeadLetterCounters) ->
+init(Labels = #{queue_type := QueueType, dead_letter_strategy := DLS}, DeadLetterCounters) ->
     _ = seshat:new_group(?MODULE),
     Counters = seshat:new(?MODULE, Labels, DeadLetterCounters, Labels),
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
