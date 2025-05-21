@@ -1598,12 +1598,10 @@ transfer_leadership(Q, Destination) ->
     end.
 
 queue_length(Q) ->
-    Name = amqqueue:get_name(Q),
-    case ets:lookup(ra_metrics, Name) of
-        [] -> 0;
-        [{_, _, SnapIdx, _, _, LastIdx, _}] ->
-            LastIdx - SnapIdx
-    end.
+    ServerId = amqqueue:get_pid(Q),
+    #{snapshot_index := SnapIdx,
+      last_written_index := LastIdx} = key_metrics_rpc(ServerId),
+    LastIdx - SnapIdx.
 
 get_replicas(Q) ->
     get_nodes(Q).

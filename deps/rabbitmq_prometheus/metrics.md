@@ -249,7 +249,7 @@ These metrics are specific to the stream protocol.
 
 | Metric                                     | Description                             |
 | ---                                        | ---                                     |
-| rabbitmq_raft_entry_commit_latency_seconds | Time taken for an entry to be committed |
+| rabbitmq_raft_commit_latency_seconds       | Time taken for an entry to be committed |
 | rabbitmq_raft_log_commit_index             | Raft log commit index                   |
 | rabbitmq_raft_log_last_applied_index       | Raft log last applied index             |
 | rabbitmq_raft_log_last_written_index       | Raft log last written index             |
