@@ -579,116 +579,122 @@ lookup_exchange_status(Config) ->
   clean_up_federation_related_bits(Config).
 
 child_id_format(Config) ->
-    [UpstreamNode,
-     OldNodeA,
-     NewNodeB,
-     OldNodeC,
-     NewNodeD] = rabbit_ct_broker_helpers:get_node_configs(
-                    Config, nodename),
+  case rabbit_ct_helpers:is_mixed_versions() of
+    false ->
+          [UpstreamNode,
+           OldNodeA,
+           NewNodeB,
+           OldNodeC,
+           NewNodeD] = rabbit_ct_broker_helpers:get_node_configs(
+                         Config, nodename),
+          
+          %% Create a cluster with the nodes running the old version of RabbitMQ in
+          %% mixed-version testing.
+          %%
+          %% Note: we build this on the assumption that `rabbit_ct_broker_helpers'
+          %% starts nodes this way:
+          %%   Node 1: the primary copy of RabbitMQ the test is started from
+          %%   Node 2: the secondary umbrella (if any)
+          %%   Node 3: the primary copy
+          %%   Node 4: the secondary umbrella
+          %%   ...
+          %%
+          %% Therefore, `UpstreamNode' will use the primary copy, `OldNodeA' the
+          %% secondary umbrella, `NewNodeB' the primary copy, and so on.
+          Config1 = rabbit_ct_broker_helpers:cluster_nodes(
+                      Config, [OldNodeA, OldNodeC]),
+          
+          %% Prepare the whole federated exchange on that old cluster.
+          UpstreamName = <<"fed_on_upgrade">>,
+          rabbit_ct_broker_helpers:set_parameter(
+            Config1, OldNodeA, <<"federation-upstream">>, UpstreamName,
+            [
+             {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config1, UpstreamNode)}
+            ]),
 
-    %% Create a cluster with the nodes running the old version of RabbitMQ in
-    %% mixed-version testing.
-    %%
-    %% Note: we build this on the assumption that `rabbit_ct_broker_helpers'
-    %% starts nodes this way:
-    %%   Node 1: the primary copy of RabbitMQ the test is started from
-    %%   Node 2: the secondary umbrella (if any)
-    %%   Node 3: the primary copy
-    %%   Node 4: the secondary umbrella
-    %%   ...
-    %%
-    %% Therefore, `UpstreamNode' will use the primary copy, `OldNodeA' the
-    %% secondary umbrella, `NewNodeB' the primary copy, and so on.
-    Config1 = rabbit_ct_broker_helpers:cluster_nodes(
-                Config, [OldNodeA, OldNodeC]),
+          rabbit_ct_broker_helpers:set_policy(
+            Config1, OldNodeA,
+            <<"fed_on_upgrade_policy">>, <<"^fed_">>, <<"all">>,
+            [
+             {<<"federation-upstream-pattern">>, UpstreamName}
+            ]),
 
-    %% Prepare the whole federated exchange on that old cluster.
-    UpstreamName = <<"fed_on_upgrade">>,
-    rabbit_ct_broker_helpers:set_parameter(
-      Config1, OldNodeA, <<"federation-upstream">>, UpstreamName,
-      [
-       {<<"uri">>, rabbit_ct_broker_helpers:node_uri(Config1, UpstreamNode)}
-      ]),
+          XName = <<"fed_ex_on_upgrade_cluster">>,
+          X = exchange_declare_method(XName, <<"direct">>),
+          {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(
+                           Config1, OldNodeA),
+          ?assertEqual({'exchange.declare_ok'}, declare_exchange(Ch1, X)),
+          rabbit_ct_client_helpers:close_channel(Ch1),
+          rabbit_ct_client_helpers:close_connection(Conn1),
 
-    rabbit_ct_broker_helpers:set_policy(
-      Config1, OldNodeA,
-      <<"fed_on_upgrade_policy">>, <<"^fed_">>, <<"all">>,
-      [
-       {<<"federation-upstream-pattern">>, UpstreamName}
-      ]),
+          %% Verify the format of the child ID. In the main branch, the format was
+          %% temporarily a size-2 tuple with a list as the first element. This was
+          %% not kept later and the original ID format is used in old and new nodes.
+          [{Id, _, _, _}] = rabbit_ct_broker_helpers:rpc(
+                              Config1, OldNodeA,
+                              mirrored_supervisor, which_children,
+                              [rabbit_federation_exchange_link_sup_sup]),
+          case Id of
+              %% This is the format we expect everywhere.
+              #exchange{name = #resource{name = XName}} ->
+                  %% Verify that the supervisors exist on all nodes.
+                  lists:foreach(
+                    fun(Node) ->
+                            ?assertMatch(
+                               [{#exchange{name = #resource{name = XName}},
+                                 _, _, _}],
+                               rabbit_ct_broker_helpers:rpc(
+                                 Config1, Node,
+                                 mirrored_supervisor, which_children,
+                                 [rabbit_federation_exchange_link_sup_sup]))
+                    end, [OldNodeA, OldNodeC]),
 
-    XName = <<"fed_ex_on_upgrade_cluster">>,
-    X = exchange_declare_method(XName, <<"direct">>),
-    {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(
-                     Config1, OldNodeA),
-    ?assertEqual({'exchange.declare_ok'}, declare_exchange(Ch1, X)),
-    rabbit_ct_client_helpers:close_channel(Ch1),
-    rabbit_ct_client_helpers:close_connection(Conn1),
+                  %% Simulate a rolling upgrade by:
+                  %% 1. adding new nodes to the old cluster
+                  %% 2. stopping the old nodes
+                  %%
+                  %% After that, the supervisors run on the new code.
+                  Config2 = rabbit_ct_broker_helpers:cluster_nodes(
+                              Config1, OldNodeA, [NewNodeB, NewNodeD]),
+                  ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeA),
+                  ok = rabbit_ct_broker_helpers:reset_node(Config1, OldNodeA),
+                  ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeC),
+                  ok = rabbit_ct_broker_helpers:reset_node(Config2, OldNodeC),
 
-    %% Verify the format of the child ID. In the main branch, the format was
-    %% temporarily a size-2 tuple with a list as the first element. This was
-    %% not kept later and the original ID format is used in old and new nodes.
-    [{Id, _, _, _}] = rabbit_ct_broker_helpers:rpc(
-                        Config1, OldNodeA,
-                        mirrored_supervisor, which_children,
-                        [rabbit_federation_exchange_link_sup_sup]),
-    case Id of
-        %% This is the format we expect everywhere.
-        #exchange{name = #resource{name = XName}} ->
-            %% Verify that the supervisors exist on all nodes.
-            lists:foreach(
-              fun(Node) ->
-                      ?assertMatch(
-                         [{#exchange{name = #resource{name = XName}},
-                           _, _, _}],
-                         rabbit_ct_broker_helpers:rpc(
-                           Config1, Node,
-                           mirrored_supervisor, which_children,
-                           [rabbit_federation_exchange_link_sup_sup]))
-              end, [OldNodeA, OldNodeC]),
+                  %% Verify that the supervisors still use the same IDs.
+                  lists:foreach(
+                    fun(Node) ->
+                            ?assertMatch(
+                               [{#exchange{name = #resource{name = XName}},
+                                 _, _, _}],
+                               rabbit_ct_broker_helpers:rpc(
+                                 Config2, Node,
+                                 mirrored_supervisor, which_children,
+                                 [rabbit_federation_exchange_link_sup_sup]))
+                    end, [NewNodeB, NewNodeD]),
 
-            %% Simulate a rolling upgrade by:
-            %% 1. adding new nodes to the old cluster
-            %% 2. stopping the old nodes
-            %%
-            %% After that, the supervisors run on the new code.
-            Config2 = rabbit_ct_broker_helpers:cluster_nodes(
-                        Config1, OldNodeA, [NewNodeB, NewNodeD]),
-            ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeA),
-            ok = rabbit_ct_broker_helpers:reset_node(Config1, OldNodeA),
-            ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeC),
-            ok = rabbit_ct_broker_helpers:reset_node(Config2, OldNodeC),
+                  %% Delete the exchange: it should work because the ID format is the
+                  %% one expected.
+                  %%
+                  %% During the transient period where the ID format was changed,
+                  %% this would crash with a badmatch because the running
+                  %% supervisor's ID would not match the content of the database.
+                  {Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(
+                                   Config2, NewNodeB),
+                  ?assertEqual({'exchange.delete_ok'}, delete_exchange(Ch2, XName)),
+                  rabbit_ct_client_helpers:close_channel(Ch2),
+                  rabbit_ct_client_helpers:close_connection(Conn2);
 
-            %% Verify that the supervisors still use the same IDs.
-            lists:foreach(
-              fun(Node) ->
-                      ?assertMatch(
-                         [{#exchange{name = #resource{name = XName}},
-                           _, _, _}],
-                         rabbit_ct_broker_helpers:rpc(
-                           Config2, Node,
-                           mirrored_supervisor, which_children,
-                           [rabbit_federation_exchange_link_sup_sup]))
-              end, [NewNodeB, NewNodeD]),
-
-            %% Delete the exchange: it should work because the ID format is the
-            %% one expected.
-            %%
-            %% During the transient period where the ID format was changed,
-            %% this would crash with a badmatch because the running
-            %% supervisor's ID would not match the content of the database.
-            {Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(
-                             Config2, NewNodeB),
-            ?assertEqual({'exchange.delete_ok'}, delete_exchange(Ch2, XName)),
-            rabbit_ct_client_helpers:close_channel(Ch2),
-            rabbit_ct_client_helpers:close_connection(Conn2);
-
-        %% This is the transient format we are not interested in as it only
-        %% lived in a development branch.
-        {List, #exchange{name = #resource{name = XName}}}
-          when is_list(List) ->
-            {skip, "Testcase skipped with the transiently changed ID format"}
-    end.
+              %% This is the transient format we are not interested in as it only
+              %% lived in a development branch.
+              {List, #exchange{name = #resource{name = XName}}}
+                when is_list(List) ->
+                  {skip, "Testcase skipped with the transiently changed ID format"}
+          end;
+      true ->
+          %% skip the test in mixed version mode
+          {skip, "Should not run in mixed version environments"}
+  end.
 
 %%
 %% Test helpers
