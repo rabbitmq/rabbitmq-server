@@ -2,7 +2,7 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
 const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../../amqp')
-const { buildDriver, goToHome, captureScreensFor, teardown, delay } = require('../../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, delay, doWhile } = require('../../utils')
 
 const LoginPage = require('../../pageobjects/LoginPage')
 const OverviewPage = require('../../pageobjects/OverviewPage')
@@ -98,7 +98,8 @@ describe('Given an amqp10 connection opened, listed and clicked on it', function
     assert.equal(2, receivedAmqpMessageCount)
 
     await delay(5*1000) // wait until page refreshes
-    let sessions = await connectionPage.getSessions()
+    let sessions = await doWhile(function() { return connectionPage.getSessions() },
+      function(obj) { return obj != undefined })
     let incomingLink = connectionPage.getIncomingLinkInfo(sessions.incoming_links, 0)
     assert.equal(2, incomingLink.deliveryCount)
     
