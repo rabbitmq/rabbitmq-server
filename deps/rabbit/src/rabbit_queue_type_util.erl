@@ -12,7 +12,6 @@
          check_auto_delete/1,
          check_exclusive/1,
          check_non_durable/1,
-         run_checks/2,
          erpc_call/5]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -61,16 +60,6 @@ check_non_durable(Q) when not ?amqqueue_is_durable(Q) ->
     Name = amqqueue:get_name(Q),
     {protocol_error, precondition_failed, "invalid property 'non-durable' for ~ts",
      [rabbit_misc:rs(Name)]}.
-
-run_checks([], _) ->
-    ok;
-run_checks([C | Checks], Q) ->
-    case C(Q) of
-        ok ->
-            run_checks(Checks, Q);
-        Err ->
-            Err
-    end.
 
 -spec erpc_call(node(), module(), atom(), list(), non_neg_integer() | infinity) ->
     term() | {error, term()}.

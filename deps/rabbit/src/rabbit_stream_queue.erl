@@ -6,6 +6,8 @@
 %%
 
 -module(rabbit_stream_queue).
+-feature(maybe_expr, enable).
+
 -include("mc.hrl").
 
 -behaviour(rabbit_queue_type).
@@ -137,19 +139,14 @@ is_compatible(_, _, _) ->
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing', amqqueue:amqqueue()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
-declare(Q0, _Node) when ?amqqueue_is_stream(Q0) ->
-    case rabbit_queue_type_util:run_checks(
-           [fun rabbit_queue_type_util:check_auto_delete/1,
-            fun rabbit_queue_type_util:check_exclusive/1,
-            fun rabbit_queue_type_util:check_non_durable/1,
-            fun check_max_segment_size_bytes/1,
-            fun check_filter_size/1
-           ],
-           Q0) of
-        ok ->
-            create_stream(Q0);
-        Err ->
-            Err
+declare(Q, _Node) when ?amqqueue_is_stream(Q) ->
+    maybe
+        ok ?= rabbit_queue_type_util:check_auto_delete(Q),
+        ok ?= rabbit_queue_type_util:check_exclusive(Q),
+        ok ?= rabbit_queue_type_util:check_non_durable(Q),
+        ok ?= check_max_segment_size_bytes(Q),
+        ok ?= check_filter_size(Q),
+        create_stream(Q)
     end.
 
 check_max_segment_size_bytes(Q) ->
