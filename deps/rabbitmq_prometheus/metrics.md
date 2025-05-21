@@ -254,7 +254,7 @@ These metrics are specific to the stream protocol.
 | rabbitmq_raft_log_last_applied_index       | Raft log last applied index             |
 | rabbitmq_raft_log_last_written_index       | Raft log last written index             |
 | rabbitmq_raft_log_snapshot_index           | Raft log snapshot index                 |
-| rabbitmq_raft_term_total                   | Current Raft term number                |
+| rabbitmq_raft_term                         | Current Raft term number                |
 
 ### Federation
 
