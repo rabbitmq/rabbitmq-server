@@ -168,6 +168,12 @@ suites/authnz-mgt/oauth-with-uaa.sh test happy-login.js
 been implemented yet.
 
 
+If your test requires two RabbitMQ servers, typically required when testing WSR or shovels or federation, 
+you can run the second server, a.k.a. `downstream`, as follows:
+```
+suites/<yoursuite>.sh start-other-rabbitmq
+```
+
 ## Test case configuration
 
 RabbitMQ and other components such as UAA, or Keycloak, require configuration files which varies
