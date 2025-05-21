@@ -162,7 +162,7 @@ smoke(Config) ->
     ok = publish_and_confirm(Ch, <<"non-existent_queue">>, <<"msg4">>),
     ConsumerTag3 = <<"ctag3">>,
     ok = subscribe(Ch, QName, ConsumerTag3),
-    ProtocolCounters = maps:get([{protocol, amqp091}], get_global_counters(Config)),
+    ProtocolCounters = maps:get(#{protocol => amqp091}, get_global_counters(Config)),
     ?assertEqual(#{
                    messages_confirmed_total => 4,
                    messages_received_confirm_total => 4,
@@ -177,7 +177,7 @@ smoke(Config) ->
                   "rabbit_" ++
                   binary_to_list(?config(queue_type, Config)) ++
                   "_queue"),
-    ProtocolQueueTypeCounters = maps:get([{protocol, amqp091}, {queue_type, QueueType}],
+    ProtocolQueueTypeCounters = maps:get(#{protocol => amqp091, queue_type => QueueType},
                                          get_global_counters(Config)),
     ?assertEqual(#{
                    messages_acknowledged_total => 3,
@@ -196,7 +196,7 @@ smoke(Config) ->
     ?assertMatch(
        #{consumers := 0,
          publishers := 0},
-       maps:get([{protocol, amqp091}], get_global_counters(Config))),
+       maps:get(#{protocol => amqp091}, get_global_counters(Config))),
 
     ok.
 

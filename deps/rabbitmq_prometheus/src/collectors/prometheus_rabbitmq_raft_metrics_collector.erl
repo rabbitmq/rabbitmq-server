@@ -35,7 +35,7 @@ collect_mf(_Registry, Callback) ->
                 create_mf(?METRIC_NAME(Name),
                           Help,
                           Type,
-                          maps:to_list(Values)))
+                          Values))
       end,
       seshat:format(ra, [term,
 			 snapshot_index,
