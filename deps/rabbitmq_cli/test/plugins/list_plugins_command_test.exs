@@ -13,7 +13,7 @@ defmodule ListPluginsCommandTest do
 
   def reset_enabled_plugins_to_preconfigured_defaults(context) do
     set_enabled_plugins(
-      [:rabbitmq_stomp, :rabbitmq_federation],
+      [:rabbitmq_stomp, :rabbitmq_federation_common],
       :online,
       get_rabbit_hostname(),
       context[:opts]
@@ -124,7 +124,7 @@ defmodule ListPluginsCommandTest do
     end)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: false},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: false},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: false}
     ]
 
@@ -146,7 +146,7 @@ defmodule ListPluginsCommandTest do
     end)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: false}
     ]
 
@@ -163,7 +163,7 @@ defmodule ListPluginsCommandTest do
 
     expected_plugins = [
       %{
-        name: :rabbitmq_federation,
+        name: :rabbitmq_federation_common,
         enabled: :enabled,
         running: true,
         dependencies: [:amqp_client]
@@ -186,7 +186,7 @@ defmodule ListPluginsCommandTest do
   test "run: reports plugin names in minimal mode", context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
 
-    expected_plugins = [%{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]
+    expected_plugins = [%{name: :rabbitmq_federation_common}, %{name: :rabbitmq_stomp}]
 
     %{status: :running, plugins: actual_plugins} =
       @command.run([".*"], Map.merge(context[:opts], %{minimal: true}))
@@ -196,11 +196,11 @@ defmodule ListPluginsCommandTest do
 
   test "run: by default lists all plugins", context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
-    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation_common], :online, context[:opts][:node], context[:opts])
 
     on_exit(fn ->
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
@@ -208,7 +208,7 @@ defmodule ListPluginsCommandTest do
     end)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :not_enabled, running: false}
     ]
 
@@ -221,18 +221,18 @@ defmodule ListPluginsCommandTest do
 
   test "run: with --enabled flag, lists only explicitly enabled plugins", context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
-    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation_common], :online, context[:opts][:node], context[:opts])
 
     on_exit(fn ->
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
       )
     end)
 
-    expected_plugins = [%{name: :rabbitmq_federation, enabled: :enabled, running: true}]
+    expected_plugins = [%{name: :rabbitmq_federation_common, enabled: :enabled, running: true}]
 
     %{
       status: :running,
@@ -245,18 +245,18 @@ defmodule ListPluginsCommandTest do
   test "run: with --implicitly_enabled flag lists explicitly and implicitly enabled plugins",
        context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
-    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation_common], :online, context[:opts][:node], context[:opts])
 
     on_exit(fn ->
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
       )
     end)
 
-    expected_plugins = [%{name: :rabbitmq_federation, enabled: :enabled, running: true}]
+    expected_plugins = [%{name: :rabbitmq_federation_common, enabled: :enabled, running: true}]
 
     %{
       status: :running,
@@ -268,11 +268,11 @@ defmodule ListPluginsCommandTest do
 
   test "run: filters plugins by name with pattern provided", context do
     reset_enabled_plugins_to_preconfigured_defaults(context)
-    set_enabled_plugins([:rabbitmq_federation], :online, context[:opts][:node], context[:opts])
+    set_enabled_plugins([:rabbitmq_federation_common], :online, context[:opts][:node], context[:opts])
 
     on_exit(fn ->
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
@@ -282,7 +282,7 @@ defmodule ListPluginsCommandTest do
     %{status: :running, plugins: actual_plugins} =
       @command.run(["fede"], Map.merge(context[:opts], %{minimal: true}))
 
-    assert_plugin_states(actual_plugins, [%{name: :rabbitmq_federation}])
+    assert_plugin_states(actual_plugins, [%{name: :rabbitmq_federation_common}])
 
     %{status: :running, plugins: actual_plugins2} =
       @command.run(["stomp$"], Map.merge(context[:opts], %{minimal: true}))
@@ -295,7 +295,7 @@ defmodule ListPluginsCommandTest do
     opts = get_opts_with_non_existing_plugins_directory(context)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation},
+      %{name: :rabbitmq_federation_common},
       %{name: :rabbitmq_stomp}
     ]
 
@@ -310,7 +310,7 @@ defmodule ListPluginsCommandTest do
     reset_enabled_plugins_to_preconfigured_defaults(context)
     opts = get_opts_with_existing_plugins_directory(context)
 
-    expected_plugins = [%{name: :rabbitmq_federation}, %{name: :rabbitmq_stomp}]
+    expected_plugins = [%{name: :rabbitmq_federation_common}, %{name: :rabbitmq_stomp}]
 
     %{status: :running, plugins: actual_plugins} =
       @command.run([".*"], Map.merge(opts, %{minimal: true}))
@@ -329,7 +329,7 @@ defmodule ListPluginsCommandTest do
     expected_plugins = [
       %{name: :mock_rabbitmq_plugins_01},
       %{name: :mock_rabbitmq_plugins_02},
-      %{name: :rabbitmq_federation},
+      %{name: :rabbitmq_federation_common},
       %{name: :rabbitmq_stomp}
     ]
 
@@ -365,7 +365,7 @@ defmodule ListPluginsCommandTest do
         running: false,
         version: ~c"0.2.0"
       },
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}
     ]
 
@@ -385,7 +385,7 @@ defmodule ListPluginsCommandTest do
     switch_plugins_directories(context[:opts][:plugins_dir], opts[:plugins_dir])
 
     set_enabled_plugins(
-      [:mock_rabbitmq_plugins_02, :rabbitmq_federation, :rabbitmq_stomp],
+      [:mock_rabbitmq_plugins_02, :rabbitmq_federation_common, :rabbitmq_stomp],
       :online,
       get_rabbit_hostname(),
       opts
@@ -405,7 +405,7 @@ defmodule ListPluginsCommandTest do
         version: ~c"0.1.0",
         running_version: ~c"0.1.0"
       },
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}
     ]
 
@@ -435,7 +435,7 @@ defmodule ListPluginsCommandTest do
         version: ~c"0.2.0",
         running_version: ~c"0.1.0"
       },
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :enabled, running: true}
     ]
 
@@ -459,7 +459,7 @@ defmodule ListPluginsCommandTest do
     reset_enabled_plugins_to_preconfigured_defaults(context)
 
     set_enabled_plugins(
-      [:rabbitmq_federation, missing_plugin],
+      [:rabbitmq_federation_common, missing_plugin],
       :online,
       context[:opts][:node],
       context[:opts]
@@ -474,7 +474,7 @@ defmodule ListPluginsCommandTest do
       context = Map.replace(context, :opts, opts)
 
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
@@ -482,7 +482,7 @@ defmodule ListPluginsCommandTest do
     end)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :not_enabled, running: false}
     ]
 
@@ -520,7 +520,7 @@ defmodule ListPluginsCommandTest do
     reset_enabled_plugins_to_preconfigured_defaults(context)
 
     set_enabled_plugins(
-      [:rabbitmq_federation, missing_plugin],
+      [:rabbitmq_federation_common, missing_plugin],
       :online,
       context[:opts][:node],
       context[:opts]
@@ -535,7 +535,7 @@ defmodule ListPluginsCommandTest do
       context = Map.replace(context, :opts, opts)
 
       set_enabled_plugins(
-        [:rabbitmq_stomp, :rabbitmq_federation],
+        [:rabbitmq_stomp, :rabbitmq_federation_common],
         :online,
         context[:opts][:node],
         context[:opts]
@@ -543,7 +543,7 @@ defmodule ListPluginsCommandTest do
     end)
 
     expected_plugins = [
-      %{name: :rabbitmq_federation, enabled: :enabled, running: true},
+      %{name: :rabbitmq_federation_common, enabled: :enabled, running: true},
       %{name: :rabbitmq_stomp, enabled: :not_enabled, running: false}
     ]
 

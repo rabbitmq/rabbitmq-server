@@ -814,13 +814,13 @@ defmodule TestHelper do
 
     plugins = currently_active_plugins(%{opts: %{node: node}})
 
-    case Enum.member?(plugins, :rabbitmq_federation) do
+    case Enum.member?(plugins, :rabbitmq_federation_common) do
       true ->
         :ok
 
       false ->
         set_enabled_plugins(
-          plugins ++ [:rabbitmq_federation],
+          plugins ++ [:rabbitmq_federation_common],
           :online,
           get_rabbit_hostname(),
           opts
