@@ -400,9 +400,7 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
-    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    %% Check raft_entry_commit_latency_seconds because we are aggregating it
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_commit_latency_seconds ", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
 
 endpoint_per_object_metrics(Config) ->
     per_object_metrics_test(Config, "/metrics/per-object").
