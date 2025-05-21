@@ -3,7 +3,6 @@ const { By, Key, until, Builder } = require('selenium-webdriver')
 const BasePage = require('./BasePage')
 
 
-const OVERVIEW_SECTION = By.css('div#main div.section#connection-overview-section')
 const SESSIONS_SECTION = By.css('div#main div.section#connection-sessions-section')
 const SESSIONS_TABLE = By.css('div.section#connection-sessions-section table.list#sessions')
 const INCOMING_LINKS_TABLE = By.css('div.section#connection-sessions-section table.list#incoming-links')
