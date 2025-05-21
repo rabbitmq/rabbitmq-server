@@ -2161,7 +2161,7 @@ dead_letter_metric(Metric, Config) ->
 
 dead_letter_metric(Metric, Config, Strategy) ->
     Counters = rpc(Config, rabbit_global_counters, overview, []),
-    Map = maps:get([{queue_type, rabbit_classic_queue}, {dead_letter_strategy, Strategy}], Counters),
+    Map = maps:get(#{queue_type => rabbit_classic_queue, dead_letter_strategy => Strategy}, Counters),
     maps:get(Metric, Map).
 
 assert_nothing_received() ->

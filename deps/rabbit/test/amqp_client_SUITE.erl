@@ -6911,11 +6911,11 @@ formatted_state(Pid) ->
     proplists:get_value("State", L2).
 
 get_global_counters(Config) ->
-    get_global_counters0(Config, [{protocol, amqp10}]).
+    get_global_counters0(Config, #{protocol => amqp10}).
 
 get_global_counters(Config, QType) ->
-    get_global_counters0(Config, [{protocol, amqp10},
-                                  {queue_type, QType}]).
+    get_global_counters0(Config, #{protocol => amqp10,
+                                   queue_type => QType}).
 
 get_global_counters0(Config, Key) ->
     Overview = rpc(Config, rabbit_global_counters, overview, []),
