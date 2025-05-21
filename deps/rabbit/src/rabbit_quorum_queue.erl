@@ -544,7 +544,7 @@ filter_quorum_critical(Queues, ReplicaStates, Self) ->
 capabilities() ->
     #{unsupported_policies => [%% Classic policies
                                <<"max-priority">>, <<"queue-mode">>,
-                               <<"single-active-consumer">>, <<"ha-mode">>, <<"ha-params">>,
+                               <<"ha-mode">>, <<"ha-params">>,
                                <<"ha-sync-mode">>, <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
                                %% Stream policies
