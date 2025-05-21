@@ -991,5 +991,5 @@ counted(Metric, Config) ->
     metric(Metric, OldCounters).
 
 metric(Metric, Counters) ->
-    Metrics = maps:get([{queue_type, rabbit_quorum_queue}, {dead_letter_strategy, at_least_once}], Counters),
+    Metrics = maps:get(#{queue_type => rabbit_quorum_queue, dead_letter_strategy => at_least_once}, Counters),
     maps:get(Metric, Metrics).

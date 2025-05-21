@@ -255,11 +255,11 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     QType = rabbit_mqtt_qos0_queue,
 
     #{
-      [{protocol, ProtoVer}, {queue_type, QType}] :=
+      #{protocol => ProtoVer, queue_type => QType} :=
       #{messages_delivered_total := 0,
         messages_delivered_consume_auto_ack_total := 0},
 
-      [{queue_type, QType}, {dead_letter_strategy, disabled}] :=
+      #{queue_type => QType, dead_letter_strategy => disabled} :=
       #{messages_dead_lettered_maxlen_total := NumDeadLettered}
      } = rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, []),
 
@@ -314,11 +314,11 @@ rabbit_mqtt_qos0_queue_overflow(Config) ->
     ExpectedNumDeadLettered = NumDeadLettered + NumDropped,
     ?assertMatch(
        #{
-         [{protocol, ProtoVer}, {queue_type, QType}] :=
+         #{protocol => ProtoVer, queue_type => QType} :=
          #{messages_delivered_total := NumReceived,
            messages_delivered_consume_auto_ack_total := NumReceived},
 
-         [{queue_type, QType}, {dead_letter_strategy, disabled}] :=
+         #{queue_type => QType, dead_letter_strategy => disabled} :=
          #{messages_dead_lettered_maxlen_total := ExpectedNumDeadLettered}
         },
        rabbit_ct_broker_helpers:rpc(Config, rabbit_global_counters, overview, [])),
