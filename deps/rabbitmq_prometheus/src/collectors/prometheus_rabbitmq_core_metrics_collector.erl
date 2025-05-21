@@ -106,15 +106,6 @@
         {2, ?MICROSECOND, io_seek_time_seconds_total, counter, "Total I/O seek time", io_seek_time}
     ]},
 
-    {ra_metrics, [
-        {2, undefined, raft_term_total, counter, "Current Raft term number"},
-        {3, undefined, raft_log_snapshot_index, gauge, "Raft log snapshot index"},
-        {4, undefined, raft_log_last_applied_index, gauge, "Raft log last applied index"},
-        {5, undefined, raft_log_commit_index, gauge, "Raft log commit index"},
-        {6, undefined, raft_log_last_written_index, gauge, "Raft log last written index"},
-        {7, ?MILLISECOND, raft_entry_commit_latency_seconds, gauge, "Time taken for a log entry to be committed"}
-    ]},
-
     {auth_attempt_metrics, [
         {2, undefined, auth_attempts_total, counter, "Total number of authentication attempts"},
         {3, undefined, auth_attempts_succeeded_total, counter, "Total number of successful authentication attempts"},
@@ -701,7 +692,6 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
                            Table == exchange_metrics;
                            Table == queue_exchange_metrics;
                            Table == channel_queue_exchange_metrics;
-                           Table == ra_metrics;
                            Table == channel_process_metrics ->
     Result = ets:foldl(fun
                   %% For queue_coarse_metrics
@@ -723,33 +713,10 @@ get_data(Table, false, VHostsFilter) when Table == channel_exchange_metrics;
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
                   ({_, V1, V2, V3, V4}, {T, A1, A2, A3, A4}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4};
-                  ({_, V1, V2, V3, V4, V5, V6}, {T, A1, A2, A3, A4, A5, A6}) ->
-                       %% ra_metrics: raft_entry_commit_latency_seconds needs to be an average
-                       {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, accumulate_count_and_sum(V6, A6)};
                   ({_, V1, V2, V3, V4, V5, V6, V7, _}, {T, A1, A2, A3, A4, A5, A6, A7}) ->
                        {T, V1 + A1, V2 + A2, V3 + A3, V4 + A4, V5 + A5, V6 + A6, V7 + A7}
                end, empty(Table), Table),
-    case Table of
-        %% raft_entry_commit_latency_seconds needs to be an average
-        ra_metrics ->
-            {Count, Sum} = element(7, Result),
-            [setelement(7, Result, division(Sum, Count))];
-        _ ->
-            [Result]
-    end;
-get_data(ra_metrics = Table, true, _) ->
-    ets:foldl(
-      fun ({#resource{kind = queue}, _, _, _, _, _, _} = Row, Acc) ->
-              %% Metrics for QQ records use the queue resource as the table
-              %% key. The queue name and vhost will be rendered as tags.
-              [Row | Acc];
-          ({ClusterName, _, _, _, _, _, _} = Row, Acc) when is_atom(ClusterName) ->
-              %% Other Ra clusters like Khepri and the stream coordinator use
-              %% the cluster name as the metrics key. Transform this into a
-              %% value that can be rendered as a "raft_cluster" tag.
-              Row1 = setelement(1, Row, #{<<"raft_cluster">> => atom_to_binary(ClusterName, utf8)}),
-              [Row1 | Acc]
-      end, [], Table);
+    [Result];
 get_data(exchange_metrics = Table, true, VHostsFilter) when is_map(VHostsFilter)->
     ets:foldl(fun
         ({#resource{kind = exchange, virtual_host = VHost}, _, _, _, _, _} = Row, Acc) when
@@ -912,22 +879,12 @@ sum_queue_metrics(Props, {T, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11,
      sum(proplists:get_value(segments, Props), A17)
     }.
 
-division(0, 0) ->
-    0;
-division(A, B) ->
-    A / B.
-
-accumulate_count_and_sum(Value, {Count, Sum}) ->
-    {Count + 1, Sum + Value}.
-
 empty(T) when T == channel_queue_exchange_metrics; T == queue_exchange_metrics; T == channel_process_metrics; T == queue_consumer_count ->
     {T, 0};
 empty(T) when T == connection_coarse_metrics; T == auth_attempt_metrics; T == auth_attempt_detailed_metrics ->
     {T, 0, 0, 0};
 empty(T) when T == channel_exchange_metrics; T == exchange_metrics; T == queue_coarse_metrics; T == connection_metrics ->
     {T, 0, 0, 0, 0};
-empty(T) when T == ra_metrics ->
-    {T, 0, 0, 0, 0, 0, {0, 0}};
 empty(T) when T == channel_queue_metrics; T == queue_delivery_metrics; T == channel_metrics ->
     {T, 0, 0, 0, 0, 0, 0, 0};
 empty(queue_metrics = T) ->

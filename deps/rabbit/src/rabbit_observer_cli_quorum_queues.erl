@@ -123,11 +123,11 @@ sheet_header() ->
 sheet_body(PrevState) ->
     {_, RaStates} = rabbit_quorum_queue:all_replica_states(),
     Body = [begin
-                #resource{name = Name, virtual_host = Vhost} = R = amqqueue:get_name(Q),
+                #resource{name = Name, virtual_host = Vhost} = amqqueue:get_name(Q),
                 case rabbit_amqqueue:pid_of(Q) of
                     none ->
                         empty_row(Name);
-                    {QName, _QNode} = _QQ ->
+                    {QName, _QNode} = ServerId ->
                         case whereis(QName) of
                             undefined ->
                                 empty_row(Name);
@@ -139,7 +139,12 @@ sheet_body(PrevState) ->
                                     _ ->
                                         QQCounters = maps:get({QName, node()}, ra_counters:overview()),
                                         {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
-                                        [{_, CT, SnapIdx, LA, CI, LW, CL}] = ets:lookup(ra_metrics, R),
+                                        #{snapshot_index := SnapIdx,
+                                            last_written_index := LW,
+                                            term := CT,
+                                            commit_latency := CL,
+                                            commit_index := CI,
+                                            last_applied := LA} = ra:key_metrics(ServerId),
                                         [
                                          Pid,
                                          QName,
