@@ -1335,7 +1335,7 @@ capabilities() ->
                                <<"dead-letter-routing-key">>, <<"max-length">>,
                                <<"max-in-memory-length">>, <<"max-in-memory-bytes">>,
                                <<"max-priority">>, <<"overflow">>, <<"queue-mode">>,
-                               <<"single-active-consumer">>, <<"delivery-limit">>,
+                               <<"delivery-limit">>,
                                <<"ha-mode">>, <<"ha-params">>, <<"ha-sync-mode">>,
                                <<"ha-promote-on-shutdown">>, <<"ha-promote-on-failure">>,
                                <<"queue-master-locator">>,
