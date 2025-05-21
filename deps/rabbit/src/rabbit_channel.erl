@@ -136,9 +136,6 @@
              next_tag,
              %% messages pending consumer acknowledgement
              unacked_message_q,
-             %% queue processes are monitored to update
-             %% queue names
-             queue_monitors,
              %% a map of consumer tags to
              %% consumer details: #amqqueue record, acknowledgement mode,
              %% consumer exclusivity, etc
