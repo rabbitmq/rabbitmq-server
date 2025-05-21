@@ -248,15 +248,11 @@ handle_event(QName, {From, Evt}, QState) ->
     {new | existing, amqqueue:amqqueue()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
-    case rabbit_queue_type_util:run_checks(
-           [fun rabbit_queue_type_util:check_auto_delete/1,
-            fun rabbit_queue_type_util:check_exclusive/1,
-            fun rabbit_queue_type_util:check_non_durable/1],
-           Q) of
-        ok ->
-            start_cluster(Q);
-        Err ->
-            Err
+    maybe
+        ok ?= rabbit_queue_type_util:check_auto_delete(Q),
+        ok ?= rabbit_queue_type_util:check_exclusive(Q),
+        ok ?= rabbit_queue_type_util:check_non_durable(Q),
+        start_cluster(Q)
     end.
 
 start_cluster(Q) ->
