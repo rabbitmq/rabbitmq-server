@@ -650,9 +650,13 @@ requeue(AckTags, #vqstate { delta      = Delta,
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
         lists:foldl(fun(SeqId, {Acc0, State0}) ->
-                            MsgStatus = lookup_pending_ack(SeqId, State0),
-                            {Msg, State1} = read_msg(MsgStatus, State0),
-                            {MsgFun(Msg, SeqId, Acc0), State1}
+                                case lookup_pending_ack(SeqId, State0) of
+                                    none ->
+                                        {Acc0, State0};
+                                    MsgStatus = #msg_status{} ->
+                                        {Msg, State1} = read_msg(MsgStatus, State0),
+                                        {MsgFun(Msg, SeqId, Acc0), State1}
+                                end
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
@@ -1923,7 +1927,7 @@ record_pending_ack(#msg_status { seq_id = SeqId } = MsgStatus,
 lookup_pending_ack(SeqId, #vqstate { ram_pending_ack  = RPA,
                                      disk_pending_ack = DPA}) ->
     case maps:get(SeqId, RPA, none) of
-        none -> maps:get(SeqId, DPA);
+        none -> maps:get(SeqId, DPA, none);
         V    -> V
     end.
 
