@@ -1343,7 +1343,7 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
     end || Q <- QQs, VHost <- VHosts].
 
 force_checkpoint_on_queue(Config) ->
-    [Server0, _Server1, _Server2] =
+    [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     QQ = ?config(queue_name, Config),
@@ -1364,6 +1364,18 @@ force_checkpoint_on_queue(Config) ->
           #{log := #{latest_checkpoint_index := LCI}} = State,
           LCI =:= undefined
       end),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+          {ok, State, _} = rpc:call(Server1, ra, member_overview, [{RaName, Server1}]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          LCI =:= undefined
+      end),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+          {ok, State, _} = rpc:call(Server2, ra, member_overview, [{RaName, Server2}]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          LCI =:= undefined
+      end),
 
     {ok, State0, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
     ct:pal("Ra server state before forcing a checkpoint: ~tp~n", [State0]),
@@ -1377,6 +1389,20 @@ force_checkpoint_on_queue(Config) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
+          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          (LCI =/= undefined) andalso (LCI >= N)
+      end),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+          {ok, State, _} = rpc:call(Server1, ra, member_overview, [{RaName, Server1}]),
+          ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
+          #{log := #{latest_checkpoint_index := LCI}} = State,
+          (LCI =/= undefined) andalso (LCI >= N)
+      end),
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+          {ok, State, _} = rpc:call(Server2, ra, member_overview, [{RaName, Server2}]),
           ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
           #{log := #{latest_checkpoint_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
