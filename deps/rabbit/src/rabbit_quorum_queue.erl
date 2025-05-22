@@ -2118,7 +2118,6 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
     ok.
 
 force_checkpoint_on_queue(QName) ->
-    Node = node(),
     QNameFmt = rabbit_misc:rs(QName),
     case rabbit_db_queue:get_durable(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
@@ -2126,7 +2125,10 @@ force_checkpoint_on_queue(QName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
-            rpc:call(Node, ra, cast_aux_command, [{RaName, Node}, force_checkpoint], ?FORCE_CHECKPOINT_RPC_TIMEOUT);
+            Nodes = amqqueue:get_nodes(Q),
+            _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
+                 || Node <- Nodes],
+            ok;
         {ok, _Q} ->
             {error, not_quorum_queue};
         {error, _} = E ->
