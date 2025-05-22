@@ -322,8 +322,11 @@ collect_mf(_Registry, Callback) ->
     collect(PerObjectMetrics, ?METRIC_NAME_PREFIX, false, ?METRICS_RAW, Callback),
     totals(Callback),
     case PerObjectMetrics of
-        true -> emit_identity_info(<<"per-object">>, Callback);
-        false -> emit_identity_info(<<"aggregated">>, Callback)
+        true ->
+            emit_identity_info(<<"per-object">>, Callback),
+            emit_queue_info(?METRIC_NAME_PREFIX, false, Callback);
+        false ->
+            emit_identity_info(<<"aggregated">>, Callback)
     end,
     ok.
 
