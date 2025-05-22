@@ -64,6 +64,25 @@ module.exports = {
     let chromeCapabilities = Capabilities.chrome();
     const options = new chrome.Options()
     chromeCapabilities.setAcceptInsecureCerts(true);  
+    let seleniumArgs = [
+      "--window-size=1920,1080",
+      "--enable-automation",
+      "guest",
+      "disable-infobars",
+      "--disable-notifications",
+      "--lang=en",
+      "--disable-search-engine-choice-screen",
+      "disable-popup-blocking",
+      "--credentials_enable_service=false",
+      "profile.password_manager_enabled=false",
+      "profile.reduce-security-for-testing",
+      "profile.managed_default_content_settings.popups=1",
+      "profile.managed_default_content_settings.notifications.popups=1",
+      "profile.password_manager_leak_detection=false"
+    ]
+    if (!runLocal) {
+      seleniumArgs.push("--headless=new")
+    }
     chromeCapabilities.set('goog:chromeOptions', {
       excludeSwitches: [ // disable info bar
         'enable-automation',
@@ -71,21 +90,7 @@ module.exports = {
       prefs: {
         'profile.password_manager_enabled' : false      
       },
-      args: [
-          "--enable-automation",
-          "guest",
-          "disable-infobars",
-          "--disable-notifications",
-          "--lang=en",
-          "--disable-search-engine-choice-screen",
-          "disable-popup-blocking",
-          "--credentials_enable_service=false",
-          "profile.password_manager_enabled=false",
-          "profile.reduce-security-for-testing",
-          "profile.managed_default_content_settings.popups=1",
-          "profile.managed_default_content_settings.notifications.popups=1",
-          "profile.password_manager_leak_detection=false"
-      ]
+      args: seleniumArgs
     });
     let driver = builder
       .forBrowser('chrome')
