@@ -20,6 +20,8 @@
 
 -export([eval/2]).
 
+%%TODO test coverage for entire file
+
 -spec eval(rabbit_amqp_filter:filter_expressions(),
            #{atom() | binary() => atom() | binary() | number()}) ->
     boolean().

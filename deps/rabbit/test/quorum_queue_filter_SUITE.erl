@@ -47,6 +47,7 @@ groups() ->
        property_ttl,
        property_purge,
        property_filter_field_names_policy,
+       property_dead_letter_at_most_once,
        %% JMS message selectors
        jms_application_properties,
        %% miscellaneous
@@ -773,6 +774,66 @@ property_filter_field_names_policy(Config) ->
                  rabbitmq_amqp_client:delete_queue(LinkPair, QName)),
     ok = close(Init),
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, PolicyName).
+
+%% Test that dead lettering at most once to a quorum queue with filtering enabled works.
+property_dead_letter_at_most_once(Config) ->
+    {_, Session, LinkPair} = Init = init(Config),
+    QName1 = <<"q1">>,
+    QName2 = <<"q2">>,
+    Addr1 = rabbitmq_amqp_address:queue(QName1),
+    Addr2 = rabbitmq_amqp_address:queue(QName2),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QName1,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"classic">>},
+                                 <<"x-dead-letter-exchange">> => {utf8, <<>>},
+                                 <<"x-dead-letter-routing-key">> => {utf8, QName2},
+                                 <<"x-message-ttl">> => {ulong, 0}}}),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(
+                LinkPair, QName2,
+                #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
+                                 <<"x-filter-enabled">> => true,
+                                 <<"x-filter-field-names">> => {list, [{symbol, <<"group-id">>}]}
+                                }}),
+
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Addr1),
+    wait_for_credit(Sender),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:set_application_properties(
+                       #{<<"weight">> => 3},
+                       amqp10_msg:new(<<"t1">>, <<"red light">>)))),
+    ok = amqp10_client:send_msg(
+           Sender, amqp10_msg:set_properties(
+                     #{group_id => <<"red">>},
+                     amqp10_msg:set_application_properties(
+                       #{<<"weight">> => 99},
+                       amqp10_msg:new(<<"t2">>, <<"red heavy">>)))),
+    ok = wait_for_accepts(2),
+    ok = detach_link_sync(Sender),
+
+    Filter = #{?DESCRIPTOR_NAME_PROPERTIES_FILTER =>
+               {map, [{{symbol, <<"group-id">>}, {utf8, <<"&s:ed">>}}]},
+               ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER =>
+               {map, [{{utf8, <<"weight">>}, {ubyte, 99}}]}
+              },
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver red heavy">>, Addr2,
+                       unsettled, none, Filter),
+
+    ok = amqp10_client:flow_link_credit(Receiver, 2, never, false),
+    receive {amqp10_msg, Receiver, Msg} ->
+                ?assertEqual(<<"red heavy">>, amqp10_msg:body_bin(Msg)),
+                ok = amqp10_client:accept_msg(Receiver, Msg)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    ok = detach_link_sync(Receiver),
+    ?assertMatch({ok, #{message_count := 0}},
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName1)),
+    ?assertMatch({ok, #{message_count := 1}}, % red light message
+                 rabbitmq_amqp_client:delete_queue(LinkPair, QName2)),
+    ok = close(Init).
 
 %% Consumers filter messages by application-properties.
 jms_application_properties(Config) ->

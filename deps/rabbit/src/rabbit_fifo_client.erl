@@ -27,7 +27,7 @@
          credit_v1/4,
          credit/5,
          handle_ra_event/4,
-         untracked_enqueue/2,
+         untracked_enqueue/3,
          purge/1,
          update_machine_state/2,
          pending_size/1,
@@ -778,13 +778,12 @@ handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
 %% @param Msg the message to enqueue.
 %%
 %% @returns `ok'
--spec untracked_enqueue([ra:server_id()], term()) ->
+-spec untracked_enqueue(ra:server_id(), term(), filter()) ->
     ok.
-untracked_enqueue([ServerId | _], Msg) ->
-    Meta = #{}, %TODO include fields to filter on
-    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg, Meta),
-    ok = ra:pipeline_command(ServerId, Cmd),
-    ok.
+untracked_enqueue(ServerId, Msg, Filter) ->
+    MsgMeta = msg_meta(Msg, Filter),
+    Cmd = rabbit_fifo:make_enqueue(undefined, undefined, Msg, MsgMeta),
+    ok = ra:pipeline_command(ServerId, Cmd).
 
 %% Internal
 

@@ -227,12 +227,7 @@ init(Q) when ?is_amqqueue(Q) ->
     %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    Filter = case filter_enabled(Q) of
-                 true ->
-                     filter_field_names(Q);
-                 false ->
-                     none
-             end,
+    Filter = get_filter(Q),
     {ok, rabbit_fifo_client:init(Servers, SoftLimit, Filter)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
@@ -500,6 +495,14 @@ filter_field_names(Q) ->
                       end, FieldNames);
         _ ->
             []
+    end.
+
+get_filter(Q) ->
+    case filter_enabled(Q) of
+        true ->
+            filter_field_names(Q);
+        false ->
+            none
     end.
 
 update_consumer_handler(QName, {ConsumerTag, ChPid}, Exclusive, AckRequired,
@@ -1227,7 +1230,8 @@ deliver(QSs, Msg0, Options) ->
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
               QRef = amqqueue:get_pid(Q),
-              ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
+              Filter = get_filter(Q),
+              ok = rabbit_fifo_client:untracked_enqueue(QRef, Msg, Filter),
               {Qs, Actions};
          ({Q, S0}, {Qs, Actions}) ->
               QName = amqqueue:get_name(Q),

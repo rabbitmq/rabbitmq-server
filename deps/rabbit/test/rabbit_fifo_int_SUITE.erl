@@ -769,7 +769,7 @@ untracked_enqueue(Config) ->
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
 
-    ok = rabbit_fifo_client:untracked_enqueue([ServerId], msg1),
+    ok = rabbit_fifo_client:untracked_enqueue(ServerId, msg1, none),
     timer:sleep(100),
     F0 = rabbit_fifo_client:init([ServerId]),
     {ok, _, {_, _, _, _, msg1}, _F5} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F0),

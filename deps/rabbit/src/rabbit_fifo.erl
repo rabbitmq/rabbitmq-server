@@ -251,10 +251,14 @@ update_config(Conf, State) ->
     {state(), ra_machine:reply()}.
 apply(Meta, #enqueue{pid = From, seq = Seq,
                      msg = RawMsg}, State00) ->
-    apply_enqueue(Meta, From, Seq, RawMsg, message_size(RawMsg), [], State00);
+    apply_enqueue(Meta, From, Seq, RawMsg, message_size(RawMsg), #{}, State00);
 apply(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
       #?ENQ_V2{seq = Seq, msg = RawMsg, size = Size}, State00) ->
-    apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, [], State00);
+    apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, #{}, State00);
+apply(Meta, #?ENQ_V3{seq = undefined = Seq,
+                     msg = RawMsg, size = Size, meta = MsgMeta}, State) ->
+    EnqPid = undefined,
+    apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, MsgMeta, State);
 apply(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
       #?ENQ_V3{seq = Seq, msg = RawMsg, size = Size, meta = MsgMeta}, State00) ->
     apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, MsgMeta, State00);
@@ -1399,6 +1403,9 @@ usage(Name) when is_atom(Name) ->
 is_v4() ->
     %% Quorum queue v4 is introduced in RabbitMQ 4.0.0
     rabbit_feature_flags:is_enabled('rabbitmq_4.0.0').
+
+is_v5() ->
+    rabbit_feature_flags:is_enabled('rabbitmq_4.2.0').
 
 %%% Internal
 
@@ -2902,20 +2909,23 @@ is_below(Val, Num) when is_integer(Val) andalso is_integer(Num) ->
                    raw_msg(), msg_metadata()) ->
     protocol().
 make_enqueue(Pid, Seq, Msg, Meta) ->
-    case is_v4() of
-        true when is_pid(Pid) andalso
-                  is_integer(Seq) ->
-            %% more compact format
-            %% TODO v3 should probably be hidden behind a new feature flag
-            % #?ENQ_V2{seq = Seq,
-            %          msg = Msg,
-            %          size = ?SIZE(Msg)};
+    case is_v5() of
+        true ->
             #?ENQ_V3{seq = Seq,
                      msg = Msg,
                      size = ?SIZE(Msg),
                      meta = Meta};
-        _ ->
-            #enqueue{pid = Pid, seq = Seq, msg = Msg}
+        false ->
+            case is_v4() of
+                true when is_pid(Pid) andalso
+                          is_integer(Seq) ->
+                    %% more compact format
+                    #?ENQ_V2{seq = Seq,
+                             msg = Msg,
+                             size = ?SIZE(Msg)};
+                _ ->
+                    #enqueue{pid = Pid, seq = Seq, msg = Msg}
+            end
     end.
 
 -spec make_register_enqueuer(pid()) -> protocol().
