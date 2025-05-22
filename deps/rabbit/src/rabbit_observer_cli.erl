@@ -10,7 +10,23 @@
 -export([init/0]).
 
 init() ->
+<<<<<<< HEAD
     application:set_env(observer_cli, plugins, [
         rabbit_observer_cli_classic_queues:plugin_info(),
         rabbit_observer_cli_quorum_queues:plugin_info()
     ]).
+=======
+    %% prepare observer_cli.plugins for add_plugin/1
+    application:set_env(observer_cli, plugins, application:get_env(observer_cli, plugins, [])).
+
+%% must be executed after observer_cli boot_step
+add_plugin(PluginInfo) ->
+    case application:get_env(observer_cli, plugins, undefined) of
+        undefined -> %% shouldn't be there, die
+            exit({rabbit_observer_cli_step_not_there, "Can't add observer_cli plugin, required boot_step wasn't executed"});
+        Plugins when is_list(Plugins) ->
+            application:set_env(observer_cli, plugins, Plugins ++ [PluginInfo]);
+        _ ->
+            exit({rabbit_observer_cli_plugins_error, "Can't add observer_cli plugin, existing entry is not a list"})
+    end.
+>>>>>>> 2d029649a (Add CQ and QQ Observer CLI plugins from boot steps)

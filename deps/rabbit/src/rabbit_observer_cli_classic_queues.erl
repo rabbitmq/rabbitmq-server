@@ -7,10 +7,19 @@
 
 -module(rabbit_observer_cli_classic_queues).
 
--export([plugin_info/0]).
+-export([add_plugin/0, plugin_info/0]).
 -export([attributes/1, sheet_header/0, sheet_body/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-rabbit_boot_step({?MODULE,
+                   [{description, "Classic queues observer_cli plugin"},
+                    {mfa,         {?MODULE, add_plugin, []}},
+                    {requires,    [rabbit_observer_cli]},
+                    {enables,     routing_ready}]}).
+
+add_plugin() ->
+    rabbit_observer_cli:add_plugin(plugin_info()).
 
 plugin_info() ->
     #{
