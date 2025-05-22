@@ -13,25 +13,30 @@
 
 build_dispatcher() ->
     {ok, _} = application:ensure_all_started(prometheus),
-    prometheus_registry:register_collectors([
+    CoreCollectors = [
         prometheus_rabbitmq_core_metrics_collector,
         prometheus_rabbitmq_global_metrics_collector,
         prometheus_rabbitmq_message_size_metrics_collector,
         prometheus_rabbitmq_alarm_metrics_collector,
         prometheus_rabbitmq_dynamic_collector,
-        prometheus_process_collector]),
-    prometheus_registry:register_collectors('per-object', [
+        prometheus_process_collector],
+    PerObjectCollectors = CoreCollectors ++ [
         prometheus_vm_system_info_collector,
         prometheus_vm_dist_collector,
         prometheus_vm_memory_collector,
         prometheus_mnesia_collector,
         prometheus_vm_statistics_collector,
         prometheus_vm_msacc_collector,
-        prometheus_rabbitmq_core_metrics_collector,
-        prometheus_rabbitmq_global_metrics_collector,
-        prometheus_rabbitmq_raft_metrics_collector,
-        prometheus_rabbitmq_message_size_metrics_collector
-        ]),
+        prometheus_rabbitmq_raft_metrics_collector
+    ],
+    prometheus_registry:register_collectors(
+        case application:get_env(rabbitmq_prometheus, return_per_object_metrics, fasle) of
+            false -> CoreCollectors;
+            true  -> PerObjectCollectors
+        end
+    ),
+    prometheus_registry:register_collectors('per-object',
+        CoreCollectors ++ PerObjectCollectors),
     prometheus_registry:register_collectors('detailed', [
         prometheus_rabbitmq_core_metrics_collector
         ]),
