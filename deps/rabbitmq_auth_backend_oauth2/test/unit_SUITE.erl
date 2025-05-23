@@ -635,7 +635,7 @@ normalize_token_scope_with_additional_scopes_complex_claims(_) ->
         <<"rabbitmq3">> =>
             [<<"rabbitmq-resource.write:*/*">>,
              <<"rabbitmq-resource-write">>]},
-        [<<"read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        [<<"read:*/*">>]
     },
     {
         "claims are map with list content - empty result",
@@ -648,7 +648,7 @@ normalize_token_scope_with_additional_scopes_complex_claims(_) ->
         "claims are map with binary content",
         #{  <<"rabbitmq">> => <<"rabbitmq-resource.read:*/* rabbitmq-resource-read">>,
             <<"rabbitmq3">> => <<"rabbitmq-resource.write:*/* rabbitmq-resource-write">>},
-        [<<"rabbitmq.rabbitmq-resource.read:*/*">>, <<"rabbitmq.rabbitmq-resource-read">>]
+        [<<"read:*/*">>]
     },
     {
         "claims are map with binary content - empty result",
