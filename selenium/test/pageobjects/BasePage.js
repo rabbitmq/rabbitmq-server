@@ -14,7 +14,7 @@ const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
 const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
 const FORM_POPUP_WARNING = By.css('div.form-popup-warn')
-const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span#close')
+const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span')
 
 const FORM_POPUP_OPTIONS = By.css('div.form-popup-options')
 const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
