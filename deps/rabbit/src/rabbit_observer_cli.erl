@@ -10,10 +10,8 @@
 -export([init/0, add_plugin/1]).
 
 init() ->
-    application:set_env(observer_cli, plugins, [
-        rabbit_observer_cli_classic_queues:plugin_info(),
-        rabbit_observer_cli_quorum_queues:plugin_info()
-    ]).
+    %% prepare observer_cli.plugins for add_plugin/1
+    application:set_env(observer_cli, plugins, application:get_env(observer_cli, plugins, [])).
 
 %% must be executed after observer_cli boot_step
 add_plugin(PluginInfo) ->
