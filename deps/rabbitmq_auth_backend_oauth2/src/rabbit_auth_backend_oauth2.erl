@@ -88,7 +88,6 @@ check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            DecodedToken = DecodedTokenFun(),
             Scopes = get_expanded_scopes(Token, #resource{virtual_host = VHost}),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
