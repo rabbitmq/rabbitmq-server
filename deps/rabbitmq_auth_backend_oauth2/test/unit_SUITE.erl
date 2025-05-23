@@ -49,7 +49,8 @@ all() ->
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field,
         test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field,
         test_username_from,
-        {group, with_rabbitmq_node}
+        {group, with_rabbitmq_node},
+        {group, with_resource_server_id}
       
     ].
 groups() ->
@@ -62,11 +63,11 @@ groups() ->
       },
       {with_resource_server_id, [], [
           test_successful_access_with_a_token,
-          test_validate_payload_resource_server_id_mismatch,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field,
           test_successful_authorization_without_scopes,
           test_successful_authentication_without_scopes,
+          test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expansion,
           test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_source_field,
           test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field,
           normalize_token_scope_with_additional_scopes_complex_claims,
@@ -777,6 +778,35 @@ test_successful_access_with_a_token_that_has_tag_scopes(_) ->
     {ok, #auth_user{username = Username, tags = [management, policymaker]}} =
         user_login_authentication(Username, [{password, Token}]).
 
+test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expansion(_) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
+    set_env(key_config, UaaEnv),
+    Alias = <<"client-alias-1">>,
+    set_env(scope_aliases, #{
+        Alias => [
+            <<"rabbitmq.configure:{vhost}/q-{sub}/{client_id}/*">>
+        ]            
+    }),
+
+    VHost = <<"vhost">>,
+    Username = <<"bob">>,
+    Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
+        ?UTIL_MOD:token_with_claim(
+            ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), <<"client_id">>, <<"rmq">>), 
+                Username), Jwk),
+
+    {ok, #auth_user{username = Username} = AuthUser} =
+        user_login_authentication(Username, [{password, Token}]),
+        
+    assert_topic_access_refused(AuthUser, VHost, <<"q-bob">>, read,
+        #{routing_key => <<"rmq/#">>}),
+    assert_topic_access_granted(AuthUser, VHost, <<"q-bob">>, configure,
+        #{routing_key => <<"rmq/#">>}),
+    
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
+
 test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     UaaEnv = [{signing_keys, #{<<"token-key">> => {map, Jwk}}}],
@@ -813,8 +843,7 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field(
     assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
 
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
-    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
-    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
 
 
 test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_and_custom_scope_prefix(_) ->
@@ -855,8 +884,7 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_scope_field_
 
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
-    application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix),
-    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+    application:unset_env(rabbitmq_auth_backend_oauth2, scope_prefix).
 
 test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -901,8 +929,7 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_scope_fi
     assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
 
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
-    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
-    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
 
 test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_scope_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -976,8 +1003,7 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_in_extra_scope_
     assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
 
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
-    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
-    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
 
 test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_scope_source_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
@@ -1021,8 +1047,7 @@ test_successful_access_with_a_token_that_uses_multiple_scope_aliases_in_extra_sc
     assert_resource_access_denied(AuthUser, VHost, <<"three">>, write),
 
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
-    application:unset_env(rabbitmq_auth_backend_oauth2, key_config),
-    application:unset_env(rabbitmq_auth_backend_oauth2, resource_server_id).
+    application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
 
 test_unsuccessful_access_with_a_token_that_uses_missing_scope_alias_in_extra_scope_source_field(_) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
