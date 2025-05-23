@@ -108,9 +108,6 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
             Scopes = get_expanded_scopes(Token, Resource),        
-            ct:log("check_topic_access Scoes: ~p ......", [Scopes]),    
-            ct:log("check_topic_access Resource: ~p Permisson: ~p Context:~p", 
-                [Resource,Permission, Context]),   
             rabbit_oauth2_scope:topic_access(Resource, Permission, Context, Scopes)
         end).
 

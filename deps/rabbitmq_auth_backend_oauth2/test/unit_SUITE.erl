@@ -785,7 +785,7 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expans
     Alias = <<"client-alias-1">>,
     set_env(scope_aliases, #{
         Alias => [
-            <<"rabbitmq.configure:{vhost}/q-{sub}/{client_id}/*">>
+            <<"rabbitmq.configure:{vhost}/q-{sub}/{client_id}**">>
         ]            
     }),
 
