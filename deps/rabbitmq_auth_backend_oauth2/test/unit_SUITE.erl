@@ -785,25 +785,35 @@ test_successful_access_with_a_token_that_uses_single_scope_alias_with_var_expans
     Alias = <<"client-alias-1">>,
     set_env(scope_aliases, #{
         Alias => [
-            <<"rabbitmq.configure:{vhost}/q-{sub}/{client_id}**">>
-        ]            
+            <<"rabbitmq.configure:{vhost}/q-{sub}/rk-{client_id}**">>           
+        ]
     }),
 
     VHost = <<"vhost">>,
     Username = <<"bob">>,
+    ClientId = <<"rmq">>,
     Token    = ?UTIL_MOD:sign_token_hs(?UTIL_MOD:token_with_sub(
         ?UTIL_MOD:token_with_claim(
-            ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), <<"client_id">>, <<"rmq">>), 
+            ?UTIL_MOD:token_with_scope_alias_in_scope_field(Alias), <<"client_id">>, ClientId), 
                 Username), Jwk),
 
     {ok, #auth_user{username = Username} = AuthUser} =
         user_login_authentication(Username, [{password, Token}]),
-        
-    assert_topic_access_refused(AuthUser, VHost, <<"q-bob">>, read,
-        #{routing_key => <<"rmq/#">>}),
+
+    %% vhost access 
+    assert_vhost_access_granted(AuthUser, ClientId),
+
+    %% resource access 
+    assert_resource_access_denied(AuthUser, VHost, <<"none">>, read),
+    assert_resource_access_granted(AuthUser, VHost, <<"q-bob">>, configure),
+
+    %% topic access         
+    assert_topic_access_refused(AuthUser, VHost, <<"q-bob">>, configure,
+        #{routing_key => <<"rk-r2mq/#">>}),
     assert_topic_access_granted(AuthUser, VHost, <<"q-bob">>, configure,
-        #{routing_key => <<"rmq/#">>}),
+        #{routing_key => <<"rk-rmq/#">>}),
     
+
     application:unset_env(rabbitmq_auth_backend_oauth2, scope_aliases),
     application:unset_env(rabbitmq_auth_backend_oauth2, key_config).
 
