@@ -3,7 +3,7 @@
  rabbitmq_auth_backend_http,rabbitmq_auth_backend_ldap,
  rabbitmq_auth_backend_oauth2,rabbitmq_auth_mechanism_ssl,rabbitmq_aws,
  rabbitmq_consistent_hash_exchange,rabbitmq_event_exchange,
- rabbitmq_federation,rabbitmq_federation_management,
+ rabbitmq_federation_common,rabbitmq_queue_federation,rabbitmq_federation_management,
  rabbitmq_federation_prometheus,rabbitmq_jms_topic_exchange,
  rabbitmq_management,rabbitmq_management_agent,rabbitmq_mqtt,
  rabbitmq_peer_discovery_aws,rabbitmq_peer_discovery_common,

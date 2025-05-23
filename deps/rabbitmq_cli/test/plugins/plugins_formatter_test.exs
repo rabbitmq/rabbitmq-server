@@ -37,7 +37,7 @@ defmodule PluginsFormatterTest do
               running_version: ~c"0.1.0"
             },
             %{
-              name: :rabbitmq_federation,
+              name: :rabbitmq_federation_common,
               enabled: :enabled,
               running: true,
               version: ~c"3.7.0",
@@ -60,7 +60,7 @@ defmodule PluginsFormatterTest do
              "amqp_client",
              "mock_rabbitmq_plugins_01",
              "mock_rabbitmq_plugins_02",
-             "rabbitmq_federation",
+             "rabbitmq_federation_common",
              "rabbitmq_stomp"
            ]
   end
@@ -93,7 +93,7 @@ defmodule PluginsFormatterTest do
               running_version: ~c"0.1.0"
             },
             %{
-              name: :rabbitmq_federation,
+              name: :rabbitmq_federation_common,
               enabled: :enabled,
               running: true,
               version: ~c"3.7.0",
@@ -116,11 +116,11 @@ defmodule PluginsFormatterTest do
              " Configured: E = explicitly enabled; e = implicitly enabled",
              " | Status: * = running on rabbit@localhost",
              " |/",
-             "[e*] amqp_client              3.7.0",
-             "[  ] mock_rabbitmq_plugins_01 0.2.0",
-             "[E*] mock_rabbitmq_plugins_02 0.1.0 (pending upgrade to 0.2.0)",
-             "[E*] rabbitmq_federation      3.7.0",
-             "[E*] rabbitmq_stomp           3.7.0"
+             "[e*] amqp_client                3.7.0",
+             "[  ] mock_rabbitmq_plugins_01   0.2.0",
+             "[E*] mock_rabbitmq_plugins_02   0.1.0 (pending upgrade to 0.2.0)",
+             "[E*] rabbitmq_federation_common 3.7.0",
+             "[E*] rabbitmq_stomp             3.7.0"
            ]
   end
 end

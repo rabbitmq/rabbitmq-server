@@ -122,7 +122,7 @@ $(LINKED_ESCRIPTS): $(ESCRIPT_FILE)
 tests:: escript test-deps
 	$(verbose) $(MAKE) -C ../../ install-cli
 	$(verbose) $(MAKE) -C ../../ start-background-broker \
-		PLUGINS="rabbitmq_federation rabbitmq_stomp rabbitmq_stream_management amqp_client" \
+		PLUGINS="rabbitmq_federation_common rabbitmq_stomp rabbitmq_stream_management amqp_client" \
 		$(if $(filter khepri,$(RABBITMQ_METADATA_STORE)),,RABBITMQ_FEATURE_FLAGS="-khepri_db")
 	$(gen_verbose) $(MIX_TEST) \
 		$(if $(RABBITMQ_METADATA_STORE),--exclude $(filter-out $(RABBITMQ_METADATA_STORE),khepri mnesia),) \

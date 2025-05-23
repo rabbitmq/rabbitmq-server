@@ -99,7 +99,7 @@ defmodule PluginIsEnabledCommandTest do
 
     assert match?(
              {:ok, _},
-             assert(@command.run(["rabbitmq_stomp", "rabbitmq_federation"], opts))
+             assert(@command.run(["rabbitmq_stomp", "rabbitmq_federation_common"], opts))
            )
   end
 
