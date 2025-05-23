@@ -250,7 +250,7 @@ super_stream_sac_consumer_should_get_disconnected_on_network_partition(Config) -
                           Acc#{K => {S0, C0}}
                   end, #{}, SubIdToState0),
 
-    delete_super_stream(Config, Ss),
+    delete_super_stream(Config, Ss, L#node.stream_port),
 
     %% online consumers should receive a metadata update frame (stream deleted)
     %% we unqueue this frame before closing the connection
@@ -344,8 +344,8 @@ init_super_stream(Config, Ss) ->
     {ok, _} = stream_test_utils:close(S, C1),
     Partitions.
 
-delete_super_stream(Config, Ss) ->
-    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+delete_super_stream(Config, Ss, Port) ->
+    {ok, S, C0} = stream_test_utils:connect(Port),
     SsDeletionFrame = request({delete_super_stream, Ss}),
     ok = ?TRSPT:send(S, SsDeletionFrame),
     {Cmd1, C1} = receive_commands(S, C0),
