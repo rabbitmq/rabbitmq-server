@@ -18,6 +18,9 @@
 
 connect(Config, Node) ->
     StreamPort = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_stream),
+    connect(StreamPort).
+
+connect(StreamPort) ->
     {ok, Sock} = gen_tcp:connect("localhost", StreamPort, [{active, false}, {mode, binary}]),
 
     C0 = rabbit_stream_core:init(0),

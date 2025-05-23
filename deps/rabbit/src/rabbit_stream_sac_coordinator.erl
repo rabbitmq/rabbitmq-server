@@ -1168,8 +1168,7 @@ evaluate_active_consumer(#group{consumers = Consumers} = G) ->
             do_evaluate_active_consumer(G#group{consumers = eligible(Consumers)})
     end.
 
-do_evaluate_active_consumer(#group{partition_index = -1,
-                                consumers = Consumers})
+do_evaluate_active_consumer(#group{consumers = Consumers})
     when length(Consumers) == 0 ->
     undefined;
 do_evaluate_active_consumer(#group{partition_index = -1,
