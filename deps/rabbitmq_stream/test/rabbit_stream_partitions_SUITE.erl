@@ -37,7 +37,8 @@ all() ->
 groups() ->
     [{cluster, [],
       [simple_sac_consumer_should_get_disconnected_on_network_partition,
-       super_stream_sac_consumer_should_get_disconnected_on_network_partition]}
+       simple_sac_consumer_should_get_disconnected_on_coord_leader_network_partition,
+       super_stream_sac_consumer_should_get_disconnected_on_coord_leader_network_partition]}
     ].
 
 init_per_suite(Config) ->
@@ -80,7 +81,8 @@ init_per_testcase(TestCase, Config) ->
        fun(StepConfig) ->
                rabbit_ct_helpers:merge_app_env(StepConfig,
                                                {rabbit,
-                                                [{stream_sac_disconnected_timeout,
+                                                [{stream_cmd_timeout, 5000},
+                                                 {stream_sac_disconnected_timeout,
                                                   2000}]})
        end]
       ++ rabbit_ct_broker_helpers:setup_steps()).
@@ -97,8 +99,7 @@ simple_sac_consumer_should_get_disconnected_on_network_partition(Config) ->
     {ok, So1, C1_00} = stream_test_utils:connect(Config, 1),
     {ok, So2, C2_00} = stream_test_utils:connect(Config, 2),
 
-    create_stream(Config, S),
-    wait_for_members(So0, C0_00, S, 3),
+    init_stream(Config, 0, S),
 
     C0_01 = register_sac(So0, C0_00, S, 0),
     C0_02 = receive_consumer_update(So0, C0_01),
@@ -152,7 +153,7 @@ simple_sac_consumer_should_get_disconnected_on_network_partition(Config) ->
                           Acc#{K => {S0, C0}}
                   end, #{}, SubIdToState0),
 
-    delete_stream(Config, S),
+    delete_stream(stream_port(Config, 0), S),
 
     %% online consumers should receive a metadata update frame (stream deleted)
     %% we unqueue the this frame before closing the connection
@@ -166,7 +167,104 @@ simple_sac_consumer_should_get_disconnected_on_network_partition(Config) ->
 
     ok.
 
-super_stream_sac_consumer_should_get_disconnected_on_network_partition(Config) ->
+simple_sac_consumer_should_get_disconnected_on_coord_leader_network_partition(Config) ->
+    %% to initialize the stream coordinator on the first node
+    init_stream(Config, 0, <<"dummy">>),
+    delete_stream(stream_port(Config, 0), <<"dummy">>),
+
+    S = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+
+    init_stream(Config, 1, S),
+    [L, _F1, _F2] = topology(Config, S),
+
+    wait_for_coordinator_ready(Config),
+
+    {ok, So0, C0_00} = stream_test_utils:connect(Config, 0),
+    {ok, So1, C1_00} = stream_test_utils:connect(Config, 1),
+    {ok, So2, C2_00} = stream_test_utils:connect(Config, 2),
+
+    C0_01 = register_sac(So0, C0_00, S, 0),
+    C0_02 = receive_consumer_update(So0, C0_01),
+
+    C1_01 = register_sac(So1, C1_00, S, 1),
+    C2_01 = register_sac(So2, C2_00, S, 2),
+    SubIdToState0 = #{0 => {So0, C0_02},
+                      1 => {So1, C1_01},
+                      2 => {So2, C2_01}},
+
+    Consumers1 = query_consumers(Config, S),
+    assertSize(3, Consumers1),
+    assertConsumersConnected(Consumers1),
+
+    N1 = nodename(Config, 0),
+    N2 = nodename(Config, 1),
+    N3 = nodename(Config, 2),
+
+    %% N1 is the coordinator leader
+    Isolated = N1,
+    NotIsolated = N2,
+    {value, DisconnectedConsumer} =
+        lists:search(fun(#consumer{pid = ConnPid}) ->
+                             rpc(Config, erlang, node, [ConnPid]) =:= Isolated
+                     end, Consumers1),
+    #consumer{subscription_id = DiscSubId} = DisconnectedConsumer,
+
+    rabbit_ct_broker_helpers:block_traffic_between(Isolated, N2),
+    rabbit_ct_broker_helpers:block_traffic_between(Isolated, N3),
+
+    wait_for_disconnected_consumer(Config, NotIsolated, S),
+    wait_for_forgotten_consumer(Config, NotIsolated, S),
+
+    rabbit_ct_broker_helpers:allow_traffic_between(Isolated, N2),
+    rabbit_ct_broker_helpers:allow_traffic_between(Isolated, N3),
+
+    wait_for_coordinator_ready(Config),
+
+    wait_for_all_consumers_connected(Config, NotIsolated, S),
+
+    Consumers2 = query_consumers(Config, NotIsolated, S),
+
+    %% the disconnected, then forgotten consumer is cancelled,
+    %% because the stream member on its node has been restarted
+    assertSize(2, Consumers2),
+    assertConsumersConnected(Consumers2),
+    assertEmpty(lists:filter(fun(C) ->
+                                     same_consumer(DisconnectedConsumer, C)
+                             end, Consumers2)),
+
+    [#consumer{subscription_id = ActiveSubId}] =
+        lists:filter(fun(#consumer{status = St}) ->
+                             St =:= {connected, active}
+                     end, Consumers2),
+
+    SubIdToState1 =
+        maps:fold(fun(K, {S0, C0}, Acc) when K == DiscSubId ->
+                          %% cancelled consumer received a metadata update
+                          C1 = receive_metadata_update(S0, C0),
+                          Acc#{K => {S0, C1}};
+                     (K, {S0, C0}, Acc) when K == ActiveSubId ->
+                          %% promoted consumer should have received consumer update
+                          C1 = receive_consumer_update_and_respond(S0, C0),
+                          Acc#{K => {S0, C1}};
+                     (K, {S0, C0}, Acc) ->
+                          Acc#{K => {S0, C0}}
+                  end, #{}, SubIdToState0),
+
+    delete_stream(L#node.stream_port, S),
+
+    %% online consumers should receive a metadata update frame (stream deleted)
+    %% we unqueue this frame before closing the connection
+    %% directly closing the connection of the cancelled consumer
+    maps:foreach(fun(K, {S0, C0}) when K /= DiscSubId ->
+                         {_, C1} = receive_commands(S0, C0),
+                         {ok, _} = stream_test_utils:close(S0, C1);
+                    (_, {S0, C0}) ->
+                         {ok, _} = stream_test_utils:close(S0, C0)
+                 end, SubIdToState1),
+
+    ok.
+
+super_stream_sac_consumer_should_get_disconnected_on_coord_leader_network_partition(Config) ->
     Ss = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
     [_, Partition, _] = init_super_stream(Config, Ss),
     [L, F1, F2] = topology(Config, Partition),
@@ -250,7 +348,7 @@ super_stream_sac_consumer_should_get_disconnected_on_network_partition(Config) -
                           Acc#{K => {S0, C0}}
                   end, #{}, SubIdToState0),
 
-    delete_super_stream(Config, Ss, L#node.stream_port),
+    delete_super_stream(L#node.stream_port, Ss),
 
     %% online consumers should receive a metadata update frame (stream deleted)
     %% we unqueue this frame before closing the connection
@@ -261,7 +359,6 @@ super_stream_sac_consumer_should_get_disconnected_on_network_partition(Config) -
                     (_, {S0, C0}) ->
                          {ok, _} = stream_test_utils:close(S0, C0)
                  end, SubIdToState1),
-
     ok.
 
 same_consumer(#consumer{owner = P1, subscription_id = Id1},
@@ -274,11 +371,17 @@ same_consumer(_, _) ->
 cluster_nodes(Config) ->
     lists:map(fun(N) ->
                       #node{name = node_config(Config, N, nodename),
-                            stream_port = node_config(Config, N, tcp_port_stream)}
+                            stream_port = stream_port(Config, N)}
               end, lists:seq(0, node_count(Config) - 1)).
 
 node_count(Config) ->
    test_server:lookup_config(rmq_nodes_count, Config).
+
+nodename(Config, N) ->
+    node_config(Config, N, nodename).
+
+stream_port(Config, N) ->
+    node_config(Config, N, tcp_port_stream).
 
 node_config(Config, N, K) ->
     rabbit_ct_broker_helpers:get_node_config(Config, N, K).
@@ -318,13 +421,15 @@ stream_members(Config, Stream) ->
                         [StreamId, State]),
     Members.
 
-create_stream(Config, St) ->
-    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+init_stream(Config, Node, St) ->
+    {ok, S, C0} = stream_test_utils:connect(Config, Node),
     {ok, C1} = stream_test_utils:create_stream(S, C0, St),
+    NC = node_count(Config),
+    wait_for_members(S, C1, St, NC),
     {ok, _} = stream_test_utils:close(S, C1).
 
-delete_stream(Config, St) ->
-    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+delete_stream(Port, St) ->
+    {ok, S, C0} = stream_test_utils:connect(Port),
     {ok, C1} = stream_test_utils:delete_stream(S, C0, St),
     {ok, _} = stream_test_utils:close(S, C1).
 
@@ -344,7 +449,7 @@ init_super_stream(Config, Ss) ->
     {ok, _} = stream_test_utils:close(S, C1),
     Partitions.
 
-delete_super_stream(Config, Ss, Port) ->
+delete_super_stream(Port, Ss) ->
     {ok, S, C0} = stream_test_utils:connect(Port),
     SsDeletionFrame = request({delete_super_stream, Ss}),
     ok = ?TRSPT:send(S, SsDeletionFrame),
