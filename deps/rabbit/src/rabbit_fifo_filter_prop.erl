@@ -10,7 +10,6 @@
 %% https://groups.oasis-open.org/higherlogic/ws/public/document?document_id=66227
 %%
 %% § 4 Property Filter Expressions
-%% § 4.2.1 header filter
 %% § 4.2.4 properties filter
 %% § 4.2.5 applications-properties filter
 %%
@@ -19,8 +18,6 @@
 -module(rabbit_fifo_filter_prop).
 
 -export([eval/2]).
-
-%%TODO test coverage for entire file
 
 -spec eval(rabbit_amqp_filter:filter_expressions(),
            #{atom() | binary() => atom() | binary() | number()}) ->

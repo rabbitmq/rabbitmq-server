@@ -3252,7 +3252,7 @@ parse_filters(Filter = {{symbol, ?FILTER_NAME_JMS}, {described, Descriptor, {utf
     {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
 parse_filters(Filter = {{symbol, _Key}, Value},
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
-    case rabbit_amqp_filtex:validate(Value) of
+    case rabbit_amqp_filtex:parse(Value) of
         {ok, FilterExpression = {FilterType, _}} ->
             case proplists:is_defined(FilterType, ConsumerFilter) of
                 true ->

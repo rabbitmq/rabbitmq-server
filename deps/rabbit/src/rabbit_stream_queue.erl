@@ -1319,7 +1319,7 @@ entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName},
     Mc = mc_amqp:init_from_stream(Entry, #{?ANN_EXCHANGE => <<>>,
                                            ?ANN_ROUTING_KEYS => [QName],
                                            <<"x-stream-offset">> => Offset}),
-    case rabbit_amqp_filtex:filter(Filter, Mc) of
+    case rabbit_amqp_filtex:eval(Filter, Mc) of
         true ->
             {Name, LocalPid, Offset, false, Mc};
         false ->

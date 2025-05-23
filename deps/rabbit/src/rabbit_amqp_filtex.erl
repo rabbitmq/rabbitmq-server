@@ -10,8 +10,8 @@
 
 -include_lib("amqp10_common/include/amqp10_filtex.hrl").
 
--export([validate/1,
-         filter/2]).
+-export([parse/1,
+         eval/2]).
 
 %% "Impose a limit on the complexity of each filter expression."
 %% [filtex-v1.0-wd09 7.1]
@@ -26,32 +26,32 @@
 -type filter_expressions() :: [filter_expression()].
 -export_type([filter_expressions/0]).
 
--spec validate(tuple()) ->
+-spec parse(tuple()) ->
     {ok, filter_expression()} | error.
-validate({described, Descriptor, {map, KVList}})
+parse({described, Descriptor, {map, KVList}})
   when KVList =/= [] andalso
        length(KVList) =< ?MAX_FILTER_FIELDS ->
-    try validate0(Descriptor, KVList)
+    try parse0(Descriptor, KVList)
     catch throw:{?MODULE, _, _} ->
               error
     end;
-validate(_) ->
+parse(_) ->
     error.
 
--spec filter(filter_expressions(), mc:state()) ->
+-spec eval(filter_expressions(), mc:state()) ->
     boolean().
-filter(Filters, Mc) ->
+eval(Filters, Mc) ->
     %% "A message will pass through a filter-set if and only if
     %% it passes through each of the named filters." [3.5.8]
     lists:all(fun(Filter) ->
-                      filter0(Filter, Mc)
+                      filter(Filter, Mc)
               end, Filters).
 
 %%%%%%%%%%%%%%%%
 %%% Internal %%%
 %%%%%%%%%%%%%%%%
 
-filter0({properties, KVList}, Mc) ->
+filter({properties, KVList}, Mc) ->
     %% "The filter evaluates to true if all properties enclosed in the filter expression
     %% match the respective properties in the message."
     %% [filtex-v1.0-wd09 4.2.4]
@@ -60,7 +60,7 @@ filter0({properties, KVList}, Mc) ->
                       Val = unwrap(TaggedVal),
                       match_simple_type(RefVal, Val)
               end, KVList);
-filter0({application_properties, KVList}, Mc) ->
+filter({application_properties, KVList}, Mc) ->
     AppProps = mc:routing_headers(Mc, []),
     %% "The filter evaluates to true if all properties enclosed in the filter expression
     %% match the respective entries in the application-properties section in the message."
@@ -113,56 +113,56 @@ match_simple_type(RefVal, Val) ->
     %%   and the values are equal when treated as a floating-point"
     RefVal == Val.
 
-validate0(Descriptor, KVList) when
+parse0(Descriptor, KVList) when
       Descriptor =:= {symbol, ?DESCRIPTOR_NAME_PROPERTIES_FILTER} orelse
       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_PROPERTIES_FILTER} ->
-    validate_props(KVList, []);
-validate0(Descriptor, KVList) when
+    parse_props(KVList, []);
+parse0(Descriptor, KVList) when
       Descriptor =:= {symbol, ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER} orelse
       Descriptor =:= {ulong, ?DESCRIPTOR_CODE_APPLICATION_PROPERTIES_FILTER} ->
-    validate_app_props(KVList, []);
-validate0(_, _) ->
+    parse_app_props(KVList, []);
+parse0(_, _) ->
     error.
 
-validate_props([], Acc) ->
+parse_props([], Acc) ->
     {ok, {properties, lists:reverse(Acc)}};
-validate_props([{{symbol, <<"message-id">>}, TaggedVal} | Rest], Acc) ->
+parse_props([{{symbol, <<"message-id">>}, TaggedVal} | Rest], Acc) ->
     case parse_message_id(TaggedVal) of
         {ok, Val} ->
-            validate_props(Rest, [{message_id, Val} | Acc]);
+            parse_props(Rest, [{message_id, Val} | Acc]);
         error ->
             error
     end;
-validate_props([{{symbol, <<"user-id">>}, {binary, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{user_id, Val} | Acc]);
-validate_props([{{symbol, <<"to">>}, {utf8, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{to, parse_string_modifier_prefix(Val)} | Acc]);
-validate_props([{{symbol, <<"subject">>}, {utf8, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{subject, parse_string_modifier_prefix(Val)} | Acc]);
-validate_props([{{symbol, <<"reply-to">>}, {utf8, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{reply_to, parse_string_modifier_prefix(Val)} | Acc]);
-validate_props([{{symbol, <<"correlation-id">>}, TaggedVal} | Rest], Acc) ->
+parse_props([{{symbol, <<"user-id">>}, {binary, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{user_id, Val} | Acc]);
+parse_props([{{symbol, <<"to">>}, {utf8, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{to, parse_string_modifier_prefix(Val)} | Acc]);
+parse_props([{{symbol, <<"subject">>}, {utf8, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{subject, parse_string_modifier_prefix(Val)} | Acc]);
+parse_props([{{symbol, <<"reply-to">>}, {utf8, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{reply_to, parse_string_modifier_prefix(Val)} | Acc]);
+parse_props([{{symbol, <<"correlation-id">>}, TaggedVal} | Rest], Acc) ->
     case parse_message_id(TaggedVal) of
         {ok, Val} ->
-            validate_props(Rest, [{correlation_id, Val} | Acc]);
+            parse_props(Rest, [{correlation_id, Val} | Acc]);
         error ->
             error
     end;
-validate_props([{{symbol, <<"content-type">>}, {symbol, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{content_type, Val} | Acc]);
-validate_props([{{symbol, <<"content-encoding">>}, {symbol, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{content_encoding, Val} | Acc]);
-validate_props([{{symbol, <<"absolute-expiry-time">>}, {timestamp, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{absolute_expiry_time, Val} | Acc]);
-validate_props([{{symbol, <<"creation-time">>}, {timestamp, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{creation_time, Val} | Acc]);
-validate_props([{{symbol, <<"group-id">>}, {utf8, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{group_id, parse_string_modifier_prefix(Val)} | Acc]);
-validate_props([{{symbol, <<"group-sequence">>}, {uint, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{group_sequence, Val} | Acc]);
-validate_props([{{symbol, <<"reply-to-group-id">>}, {utf8, Val}} | Rest], Acc) ->
-    validate_props(Rest, [{reply_to_group_id, parse_string_modifier_prefix(Val)} | Acc]);
-validate_props(_, _) ->
+parse_props([{{symbol, <<"content-type">>}, {symbol, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{content_type, Val} | Acc]);
+parse_props([{{symbol, <<"content-encoding">>}, {symbol, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{content_encoding, Val} | Acc]);
+parse_props([{{symbol, <<"absolute-expiry-time">>}, {timestamp, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{absolute_expiry_time, Val} | Acc]);
+parse_props([{{symbol, <<"creation-time">>}, {timestamp, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{creation_time, Val} | Acc]);
+parse_props([{{symbol, <<"group-id">>}, {utf8, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{group_id, parse_string_modifier_prefix(Val)} | Acc]);
+parse_props([{{symbol, <<"group-sequence">>}, {uint, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{group_sequence, Val} | Acc]);
+parse_props([{{symbol, <<"reply-to-group-id">>}, {utf8, Val}} | Rest], Acc) ->
+    parse_props(Rest, [{reply_to_group_id, parse_string_modifier_prefix(Val)} | Acc]);
+parse_props(_, _) ->
     error.
 
 parse_message_id({ulong, Val}) ->
@@ -176,13 +176,13 @@ parse_message_id({utf8, Val}) ->
 parse_message_id(_) ->
     error.
 
-validate_app_props([], Acc) ->
+parse_app_props([], Acc) ->
     {ok, {application_properties, lists:reverse(Acc)}};
-validate_app_props([{{utf8, Key}, {utf8, String}} | Rest], Acc) ->
-    validate_app_props(Rest, [{Key, parse_string_modifier_prefix(String)} | Acc]);
-validate_app_props([{{utf8, Key}, TaggedVal} | Rest], Acc) ->
-    validate_app_props(Rest, [{Key, unwrap(TaggedVal)} | Acc]);
-validate_app_props(_, _) ->
+parse_app_props([{{utf8, Key}, {utf8, String}} | Rest], Acc) ->
+    parse_app_props(Rest, [{Key, parse_string_modifier_prefix(String)} | Acc]);
+parse_app_props([{{utf8, Key}, TaggedVal} | Rest], Acc) ->
+    parse_app_props(Rest, [{Key, unwrap(TaggedVal)} | Acc]);
+parse_app_props(_, _) ->
     error.
 
 %% [filtex-v1.0-wd09 4.1.1]
