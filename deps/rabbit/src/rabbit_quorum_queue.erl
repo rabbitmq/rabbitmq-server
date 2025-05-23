@@ -77,17 +77,8 @@
          force_vhost_queues_shrink_member_to_current_member/1,
          force_all_queues_shrink_member_to_current_member/0]).
 
-<<<<<<< HEAD
-=======
--export([policy_apply_to_name/0,
-         drain/1,
-         revive/0,
-         queue_vm_stats_sups/0,
-         queue_vm_ets/0]).
-
 -export([force_checkpoint/2, force_checkpoint_on_queue/1]).
 
->>>>>>> 0d3dfd969 (Add force checkpoint functions for quorum queues and command line tool)
 %% for backwards compatibility
 -export([file_handle_leader_reservation/1,
          file_handle_other_reservation/0,

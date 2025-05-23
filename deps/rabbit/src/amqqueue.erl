@@ -29,6 +29,7 @@
          % exclusive_owner
          get_exclusive_owner/1,
          get_leader/1,
+         get_nodes/1,
          % name (#resource)
          get_name/1,
          set_name/2,
@@ -390,6 +391,24 @@ get_exclusive_owner(#amqqueue{exclusive_owner = Owner}) ->
 -spec get_leader(amqqueue_v2()) -> node().
 
 get_leader(#amqqueue{type = rabbit_quorum_queue, pid = {_, Leader}}) -> Leader.
+
+-spec get_leader_node(amqqueue_v2()) -> node() | none.
+
+%% Introduced in rabbitmq/rabbitmq-server#13905 for 4.2.0,
+%% used in v4.1.x as of rabbitmq/rabbitmq-server#13548. MK.
+get_leader_node(#amqqueue{pid = {_, Leader}}) -> Leader;
+get_leader_node(#amqqueue{pid = none}) -> none;
+get_leader_node(#amqqueue{pid = Pid}) -> node(Pid).
+
+-spec get_nodes(amqqueue_v2()) -> [node(),...].
+
+get_nodes(Q) ->
+    case amqqueue:get_type_state(Q) of
+        #{nodes := Nodes} ->
+            Nodes;
+        _ ->
+            [get_leader_node(Q)]
+    end.
 
 % operator_policy
 
