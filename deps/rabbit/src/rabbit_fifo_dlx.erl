@@ -25,7 +25,8 @@
          dehydrate/1,
          stat/1,
          update_config/4,
-         smallest_raft_index/1
+         smallest_raft_index/1,
+         raft_indexes/1
         ]).
 
 -record(checkout, {consumer :: pid(),
@@ -363,6 +364,12 @@ dehydrate(State) ->
     option(non_neg_integer()).
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).
+
+-spec raft_indexes(state()) ->
+    {non_neg_integer(), [ra:index()]}.
+raft_indexes(#?MODULE{ra_indexes = Indexes}) ->
+    {rabbit_fifo_index:size(Indexes),
+     rabbit_fifo_index:to_list(Indexes)}.
 
 annotate_msg(H, Msg) ->
     rabbit_fifo:annotate_msg(H, Msg).

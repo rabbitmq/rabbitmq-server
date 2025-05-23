@@ -9,6 +9,7 @@
          take/3,
          take/4,
          is_fully_scanned/2,
+         ra_indexes/1,
          overview/1
         ]).
 
@@ -142,6 +143,22 @@ is_fully_scanned({HiIdx, NoIdx}, #?MODULE{hi_max = HiMax,
                                           no_max = NoMax}) ->
     HiIdx >= HiMax andalso
     NoIdx >= NoMax.
+
+-spec ra_indexes(state()) ->
+    {non_neg_integer(), [ra:index()]}.
+ra_indexes(#?MODULE{hi = Hi,
+                    no = No}) ->
+    SizeHi = gb_trees:size(Hi),
+    SizeNo = gb_trees:size(No),
+    KeysHi = gb_trees:keys(Hi),
+    KeysNo = gb_trees:keys(No),
+    Keys = case SizeHi < SizeNo of
+               true ->
+                   KeysHi ++ KeysNo;
+               false ->
+                   KeysNo ++ KeysHi
+           end,
+    {SizeHi + SizeNo, Keys}.
 
 -spec overview(state()) ->
     #{len := non_neg_integer(),

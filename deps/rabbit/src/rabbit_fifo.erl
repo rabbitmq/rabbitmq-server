@@ -43,6 +43,7 @@
          apply/3,
          state_enter/2,
          tick/2,
+         live_indexes/1,
          overview/1,
 
          get_checked_out/4,
@@ -886,6 +887,25 @@ tick(Ts, #?STATE{cfg = #cfg{resource = QName}} = State) ->
         false ->
             [{aux, {handle_tick, [QName, overview(State), all_nodes(State)]}}]
     end.
+
+-spec live_indexes(state()) -> [ra:index()].
+live_indexes(#?STATE{cfg = #cfg{filter_enabled = true},
+                     messages = Messages,
+                     ra_indexes = Indexes,
+                     dlx = DlxState}) ->
+    {Size0, Idxs0} = rabbit_fifo_filter_q:ra_indexes(Messages),
+    {Size1, Idxs1} = rabbit_fifo_dlx:raft_indexes(DlxState),
+    Size2 = rabbit_fifo_index:size(Indexes),
+    Idxs2 = rabbit_fifo_index:to_list(Indexes),
+    %% Avoid copying the longest list
+    case max(max(Size0, Size1), Size2) of
+        Size0 -> Idxs1 ++ (Idxs2 ++ Idxs0);
+        Size1 -> Idxs0 ++ (Idxs2 ++ Idxs1);
+        Size2 -> Idxs0 ++ (Idxs1 ++ Idxs2)
+    end;
+live_indexes(#?STATE{cfg = #cfg{filter_enabled = false}}) ->
+    %%TODO is this correct?
+    [].
 
 -spec overview(state()) -> map().
 overview(#?STATE{consumers = Cons,
@@ -3145,7 +3165,7 @@ smallest_raft_index(#?STATE{messages = Messages,
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
-    lists:min([SmallestDlxRaIdx, SmallestMsgsRaIdx, SmallestRaIdx]).
+    min(min(SmallestDlxRaIdx, SmallestMsgsRaIdx), SmallestRaIdx).
 
 make_requeue(ConsumerKey, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
