@@ -437,10 +437,16 @@ process_command(Cmd) ->
 process_command([], _Cmd) ->
     {error, coordinator_unavailable};
 process_command([Server | Servers], Cmd) ->
-    case ra:process_command(Server, Cmd, ?CMD_TIMEOUT) of
+    case ra:process_command(Server, Cmd, cmd_timeout()) of
         {timeout, _} ->
+            CmdLabel = case Cmd of
+                           {sac, SacCmd} ->
+                               element(1, SacCmd);
+                           _ ->
+                               element(1, Cmd)
+                       end,
             rabbit_log:warning("Coordinator timeout on server ~w when processing command ~W",
-                               [element(2, Server), element(1, Cmd), 10]),
+                               [element(2, Server), CmdLabel, 10]),
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
@@ -449,6 +455,9 @@ process_command([Server | Servers], Cmd) ->
         Reply ->
             Reply
     end.
+
+cmd_timeout() ->
+    application:get_env(rabbit, stream_cmd_timeout, ?CMD_TIMEOUT).
 
 ensure_coordinator_started() ->
     Local = {?MODULE, node()},
