@@ -801,7 +801,9 @@ bq_queue_index1(_Config) ->
     TwoSegs = SegmentSize + SegmentSize,
     MostOfASegment = trunc(SegmentSize*0.75),
     SeqIdsA = lists:seq(0, MostOfASegment-1),
+    NextSeqIdA = MostOfASegment,
     SeqIdsB = lists:seq(MostOfASegment, 2*MostOfASegment),
+    NextSeqIdB = 2 * MostOfASegment + 1,
     SeqIdsC = lists:seq(0, trunc(SegmentSize/2)),
     SeqIdsD = lists:seq(0, SegmentSize*4),
 
@@ -809,17 +811,17 @@ bq_queue_index1(_Config) ->
 
     with_empty_test_queue(
       fun (Qi0, QName) ->
-              {0, 0, Qi1} = IndexMod:bounds(Qi0),
+              {0, 0, Qi1} = IndexMod:bounds(Qi0, undefined),
               {Qi2, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, false, Qi1),
-              {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2),
+              {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2, NextSeqIdA),
               {ReadA, Qi4} = IndexMod:read(0, SegmentSize, Qi3),
               ok = VerifyReadWithPublishedFun(false, ReadA,
                                               lists:reverse(SeqIdsMsgIdsA)),
               %% should get length back as 0, as all the msgs were transient
               {0, 0, Qi6} = restart_test_queue(Qi4, QName),
-              {0, 0, Qi7} = IndexMod:bounds(Qi6),
+              {NextSeqIdA, NextSeqIdA, Qi7} = IndexMod:bounds(Qi6, NextSeqIdA),
               {Qi8, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi7),
-              {0, TwoSegs, Qi9} = IndexMod:bounds(Qi8),
+              {0, TwoSegs, Qi9} = IndexMod:bounds(Qi8, NextSeqIdB),
               {ReadB, Qi10} = IndexMod:read(0, SegmentSize, Qi9),
               ok = VerifyReadWithPublishedFun(true, ReadB,
                                               lists:reverse(SeqIdsMsgIdsB)),
@@ -827,7 +829,7 @@ bq_queue_index1(_Config) ->
               LenB = length(SeqIdsB),
               BytesB = LenB * 10,
               {LenB, BytesB, Qi12} = restart_test_queue(Qi10, QName),
-              {0, TwoSegs, Qi13} = IndexMod:bounds(Qi12),
+              {0, TwoSegs, Qi13} = IndexMod:bounds(Qi12, NextSeqIdB),
               Qi15 = case IndexMod of
                   rabbit_queue_index ->
                       Qi14 = IndexMod:deliver(SeqIdsB, Qi13),
@@ -841,7 +843,7 @@ bq_queue_index1(_Config) ->
               {_DeletedSegments, Qi16} = IndexMod:ack(SeqIdsB, Qi15),
               Qi17 = IndexMod:flush(Qi16),
               %% Everything will have gone now because #pubs == #acks
-              {0, 0, Qi18} = IndexMod:bounds(Qi17),
+              {NextSeqIdB, NextSeqIdB, Qi18} = IndexMod:bounds(Qi17, NextSeqIdB),
               %% should get length back as 0 because all persistent
               %% msgs have been acked
               {0, 0, Qi19} = restart_test_queue(Qi18, QName),
@@ -996,7 +998,7 @@ v2_delete_segment_file_completely_acked1(_Config) ->
               %% Publish a full segment file.
               {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
               SegmentSize = length(SeqIdsMsgIds),
-              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1),
+              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1, undefined),
               %% Confirm that the file exists on disk.
               Path = IndexMod:segment_file(0, Qi2),
               true = filelib:is_file(Path),
@@ -1024,7 +1026,7 @@ v2_delete_segment_file_partially_acked1(_Config) ->
               %% Publish a partial segment file.
               {Qi1, SeqIdsMsgIds} = queue_index_publish(SeqIds, true, Qi0),
               SeqIdsLen = length(SeqIdsMsgIds),
-              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1),
+              {0, SegmentSize, Qi2} = IndexMod:bounds(Qi1, undefined),
               %% Confirm that the file exists on disk.
               Path = IndexMod:segment_file(0, Qi2),
               true = filelib:is_file(Path),
@@ -1054,7 +1056,7 @@ v2_delete_segment_file_partially_acked_with_holes1(_Config) ->
               {Qi1, SeqIdsMsgIdsA} = queue_index_publish(SeqIdsA, true, Qi0),
               {Qi2, SeqIdsMsgIdsB} = queue_index_publish(SeqIdsB, true, Qi1),
               SeqIdsLen = length(SeqIdsMsgIdsA) + length(SeqIdsMsgIdsB),
-              {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2),
+              {0, SegmentSize, Qi3} = IndexMod:bounds(Qi2, undefined),
               %% Confirm that the file exists on disk.
               Path = IndexMod:segment_file(0, Qi3),
               true = filelib:is_file(Path),

@@ -22,9 +22,6 @@
          sync/1, needs_sync/1, flush/1,
          bounds/2, next_segment_boundary/1]).
 
-%% Only used by tests
--export([bounds/1]).
-
 %% Used to upgrade/downgrade from/to the v1 index.
 -export([init_for_conversion/3]).
 -export([init_args/1]).
@@ -482,7 +479,7 @@ recover_index_v1_common(State0 = #qi{ queue_name = Name, dir = DirBin },
     {LoSeqId, HiSeqId, _} = rabbit_queue_index:bounds(V1State),
     %% When resuming after a crash we need to double check the messages that are both
     %% in the v1 and v2 index (effectively the messages below the upper bound of the
-    %% v1 index that are about to be written to it).
+    %% v2 index that are about to be written to it).
     {_, V2HiSeqId, _} = bounds(State0, undefined),
     SkipFun = fun
         (SeqId, FunState0) when SeqId < V2HiSeqId ->
@@ -1190,13 +1187,6 @@ flush_pre_publish_cache(TargetRamCount, State) ->
 %% and highest possible bounds. In fact we HAVE to be inaccurate for
 %% the test suite to pass. This can probably be made more accurate
 %% in the future.
-
-%% `bounds/1` is only used by tests
--spec bounds(State) ->
-                       {non_neg_integer(), non_neg_integer(), State}
-                       when State::state().
-bounds(State) ->
-    bounds(State, undefined).
 
 -spec bounds(State, non_neg_integer() | undefined) ->
                        {non_neg_integer(), non_neg_integer(), State}
