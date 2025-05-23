@@ -7,6 +7,7 @@
 
 %% Test suite for
 %% AMQP Filter Expressions Version 1.0 Working Draft 09
+%% filtering from a stream.
 -module(amqp_filtex_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
