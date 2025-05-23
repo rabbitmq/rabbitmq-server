@@ -648,16 +648,21 @@ requeue(AckTags, #vqstate { delta      = Delta,
                                       len        = Len + MsgCount })))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
-    {AccN, StateN} =
-        lists:foldl(fun(SeqId, {Acc0, State0}) ->
+    {AccN, StateN, BadAckTags} =
+        lists:foldl(fun(SeqId, {Acc0, State0, BadAckTagsAcc}) ->
                                 case lookup_pending_ack(SeqId, State0) of
                                     none ->
-                                        {Acc0, State0};
+                                        {Acc0, State0, [SeqId | BadAckTagsAcc]};
                                     MsgStatus = #msg_status{} ->
                                         {Msg, State1} = read_msg(MsgStatus, State0),
-                                        {MsgFun(Msg, SeqId, Acc0), State1}
+                                        {MsgFun(Msg, SeqId, Acc0), State1, BadAckTagsAcc}
                                 end
-                    end, {Acc, State}, AckTags),
+                    end, {Acc, State, []}, AckTags),
+    if length(BadAckTags) > 0 ->
+        rabbit_log:warning("ack tags not found in ram_pending_ack and disk_pending_ack: ~tp", [BadAckTags]);
+    true ->
+        ok
+    end,
     {AccN, a(StateN)}.
 
 fold(Fun, Acc, State = #vqstate{index_state = IndexState}) ->
