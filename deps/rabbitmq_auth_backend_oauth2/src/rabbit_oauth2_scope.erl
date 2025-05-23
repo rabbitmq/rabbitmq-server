@@ -41,12 +41,13 @@ resource_access(#resource{virtual_host = VHost, name = Name},
         end,
         get_scope_permissions(Scopes)).
 
+-spec topic_access(rabbit_types:r(atom()), permission(), map(), [binary()]) -> boolean().
 topic_access(#resource{virtual_host = VHost, name = ExchangeName},
              Permission,
              #{routing_key := RoutingKey},
              Scopes) ->
     lists:any(
-        fun({VHostPattern, ExchangeNamePattern, RoutingKeyPattern, ScopeGrantedPermission}) ->
+        fun({VHostPattern, ExchangeNamePattern, RoutingKeyPattern, ScopeGrantedPermission}) ->            
             is_binary(RoutingKeyPattern) andalso
             wildcard:match(VHost, VHostPattern) andalso
             wildcard:match(ExchangeName, ExchangeNamePattern) andalso
@@ -61,10 +62,11 @@ topic_access(#resource{virtual_host = VHost, name = ExchangeName},
 get_scope_permissions(Scopes) when is_list(Scopes) ->
     lists:filtermap(
         fun(ScopeEl) ->
-            case parse_permission_pattern(ScopeEl) of
+            Ret = case parse_permission_pattern(ScopeEl) of
                 ignore -> false;
                 Perm   -> {true, Perm}
-            end
+            end,
+            Ret
         end,
         Scopes).
 
@@ -87,7 +89,7 @@ parse_permission_pattern(_Other) ->
 
 -spec parse_resource_pattern(binary(), permission()) ->
     {rabbit_types:vhost(), binary(), binary() | none, permission()} | 'ignore'.
-parse_resource_pattern(Pattern, Permission) ->
+parse_resource_pattern(Pattern, Permission) ->    
     case binary:split(Pattern, <<"/">>, [global]) of
         [VhostPattern, NamePattern] ->
             {VhostPattern, NamePattern, none, Permission};

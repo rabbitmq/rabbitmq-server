@@ -48,7 +48,7 @@ resolve_resource_server_from_audience(Audience) ->
     case find_audience(Audience, AllowedResourceServerIds) of
         {error, aud_matched_many_resource_servers_only_one_allowed} = Error ->
             Error;
-        {error, no_matching_aud_found} ->
+        {error, no_matching_aud_found} ->            
             translate_error_if_any(
                 find_unique_resource_server_without_verify_aud(),
                 true);
