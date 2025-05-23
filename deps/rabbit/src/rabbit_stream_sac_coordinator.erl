@@ -772,7 +772,7 @@ handle_group_forget_connection(Pid, #?MODULE{groups = Groups0} = S0,
         #group{consumers = Consumers0} = G0 ->
             {Consumers1, Updated} =
                 lists:foldr(
-                  fun(#consumer{pid = P, status = {_, St}} = C, {L, _})
+                  fun(#consumer{pid = P, status = {?DISCONNECTED, St}} = C, {L, _})
                         when P == Pid ->
                           {[C#consumer{status = {?FORGOTTTEN, St}} | L], true};
                      (C, {L, UpdatedFlag}) ->

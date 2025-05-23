@@ -775,6 +775,49 @@ forget_connection_super_stream_disconnected_becomes_forgotten_test(_) ->
     assertSendMessageActivateEffect(Pid2, 2, stream(), name(), true, Eff),
     ok.
 
+forget_connection_simple_connected_does_not_become_forgotten_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = cgroup([consumer(Pid0, 0, {connected, active}),
+                    consumer(Pid1, 1, {connected, waiting}),
+                    consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid1, State0),
+
+    assertHasGroup(GId, cgroup([consumer(Pid0, 0, {connected, active}),
+                                consumer(Pid1, 1, {connected, waiting}),
+                                consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+forget_connection_super_stream_connected_does_not_become_forgotten_test(_) ->
+    Pid0 = new_process(),
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    GId = group_id(),
+    Group = cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                       consumer(Pid1, 1, {connected, active}),
+                       consumer(Pid2, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+
+    {#?STATE{groups = Groups1}, Eff} = ?MOD:forget_connection(Pid1, State0),
+
+    assertHasGroup(GId, cgroup(1, [consumer(Pid0, 0, {connected, waiting}),
+                                   consumer(Pid1, 1, {connected, active}),
+                                   consumer(Pid2, 2, {connected, waiting})]),
+                   Groups1),
+    assertEmpty(Eff),
+    ok.
+
+
 register_consumer_simple_disconn_active_block_rebalancing_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
