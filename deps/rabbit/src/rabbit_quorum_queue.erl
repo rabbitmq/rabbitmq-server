@@ -77,6 +77,8 @@
          force_vhost_queues_shrink_member_to_current_member/1,
          force_all_queues_shrink_member_to_current_member/0]).
 
+-export([force_checkpoint/2, force_checkpoint_on_queue/1]).
+
 %% for backwards compatibility
 -export([file_handle_leader_reservation/1,
          file_handle_other_reservation/0,
@@ -141,6 +143,7 @@
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
+-define(FORCE_CHECKPOINT_RPC_TIMEOUT, 15_000).
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
@@ -2104,6 +2107,40 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
          end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
     rabbit_log:warning("Shrinking finished"),
     ok.
+
+force_checkpoint_on_queue(QName) ->
+    QNameFmt = rabbit_misc:rs(QName),
+    case rabbit_db_queue:get_durable(QName) of
+        {ok, Q} when ?amqqueue_is_classic(Q) ->
+            {error, classic_queue_not_supported};
+        {ok, Q} when ?amqqueue_is_quorum(Q) ->
+            {RaName, _} = amqqueue:get_pid(Q),
+            rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
+            Nodes = amqqueue:get_nodes(Q),
+            _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
+                 || Node <- Nodes],
+            ok;
+        {ok, _Q} ->
+            {error, not_quorum_queue};
+        {error, _} = E ->
+            E
+    end.
+
+force_checkpoint(VhostSpec, QueueSpec) ->
+    [begin
+         QName = amqqueue:get_name(Q),
+         case force_checkpoint_on_queue(QName) of
+             ok ->
+                 {QName, {ok}};
+             {error, Err} ->
+                 rabbit_log:warning("~ts: failed to force checkpoint, error: ~w",
+                                    [rabbit_misc:rs(QName), Err]),
+                 {QName, {error, Err}}
+         end
+     end
+     || Q <- rabbit_db_queue:get_all_durable_by_type(?MODULE),
+        is_match(amqqueue:get_vhost(Q), VhostSpec)
+        andalso is_match(get_resource_name(amqqueue:get_name(Q)), QueueSpec)].
 
 is_minority(All, Up) ->
     MinQuorum = length(All) div 2 + 1,
