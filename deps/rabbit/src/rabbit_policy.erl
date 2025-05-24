@@ -378,13 +378,11 @@ validate(_VHost, <<"operator_policy">>, Name, Term, _User) ->
 notify(VHost, <<"policy">>, Name, Term0, ActingUser) ->
     Term = rabbit_data_coercion:atomize_keys(Term0),
     update_matched_objects(VHost, Term, ActingUser),
-    rabbit_quorum_queue_periodic_membership_reconciliation:policy_set(),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
                                      {user_who_performed_action, ActingUser} | Term]);
 notify(VHost, <<"operator_policy">>, Name, Term0, ActingUser) ->
     Term = rabbit_data_coercion:atomize_keys(Term0),
     update_matched_objects(VHost, Term, ActingUser),
-    rabbit_quorum_queue_periodic_membership_reconciliation:policy_set(),
     rabbit_event:notify(policy_set, [{name, Name}, {vhost, VHost},
                                      {user_who_performed_action, ActingUser} | Term]).
 

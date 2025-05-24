@@ -857,7 +857,6 @@ handle_dead_rabbit(Node, State) ->
     %% statements on *one* node, rather than all of them.
     ok = rabbit_amqqueue:on_node_down(Node),
     ok = rabbit_alarm:on_node_down(Node),
-    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_down(Node),
     State1 = case rabbit_khepri:is_enabled() of
                  true  -> State;
                  false -> on_node_down_using_mnesia(Node, State)
@@ -898,8 +897,7 @@ handle_live_rabbit(Node) ->
         true  -> ok;
         false -> on_node_up_using_mnesia(Node)
     end,
-    ok = rabbit_vhosts:on_node_up(Node),
-    ok = rabbit_quorum_queue_periodic_membership_reconciliation:on_node_up(Node).
+    ok = rabbit_vhosts:on_node_up(Node).
 
 on_node_up_using_mnesia(Node) ->
     ok = rabbit_mnesia:on_node_up(Node).
