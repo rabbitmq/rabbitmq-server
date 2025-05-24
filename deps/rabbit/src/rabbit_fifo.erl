@@ -591,7 +591,7 @@ apply(#{system_time := Ts} = Meta,
                    Effs1};
              (_, _, S) ->
                   S
-          end, {State0, []}, Cons0),
+          end, {State0, []}, maps:iterator(Cons0, ordered)),
     WaitingConsumers = update_waiting_consumer_status(Node, State1,
                                                       suspected_down),
 
@@ -632,7 +632,7 @@ apply(#{system_time := Ts} = Meta,
                   {St, Eff1};
              (_, _, {St, Eff}) ->
                   {St, Eff}
-          end, {State0, []}, Cons0),
+          end, {State0, []}, maps:iterator(Cons0, ordered)),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{status = suspected_down};
                        (_, E) -> E
@@ -675,7 +675,7 @@ apply(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                                                 SAcc), EAcc1};
                      (_, _, Acc) ->
                           Acc
-                  end, {State0, Monitors}, Cons0),
+                  end, {State0, Monitors}, maps:iterator(Cons0, ordered)),
     Waiting = update_waiting_consumer_status(Node, State1, up),
     State2 = State1#?STATE{enqueuers = Enqs1,
                            waiting_consumers = Waiting},
@@ -769,9 +769,10 @@ handle_down(Meta, Pid, #?STATE{consumers = Cons0,
     {Effects1, State2} = handle_waiting_consumer_down(Pid, State1),
     % return checked out messages to main queue
     % Find the consumers for the down pid
-    DownConsumers = maps:keys(maps:filter(fun(_CKey, ?CONSUMER_PID(P)) ->
-                                                  P =:= Pid
-                                          end, Cons0)),
+    DownConsumers0 = maps:keys(maps:filter(fun(_CKey, ?CONSUMER_PID(P)) ->
+                                                   P =:= Pid
+                                           end, Cons0)),
+    DownConsumers = lists:sort(DownConsumers0),
     lists:foldl(fun(ConsumerKey, {S, E}) ->
                         cancel_consumer(Meta, ConsumerKey, S, E, down)
                 end, {State2, Effects1}, DownConsumers).
@@ -3082,11 +3083,12 @@ all_pids_for(Node, #?STATE{consumers = Cons0,
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, Cons, Enqs0),
-    lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc)
-                      when node(P) =:= Node ->
-                        [P | Acc];
-                   (_, Acc) -> Acc
-                end, Enqs, WaitingConsumers0).
+    Pids = lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc)
+                             when node(P) =:= Node ->
+                               [P | Acc];
+                          (_, Acc) -> Acc
+                       end, Enqs, WaitingConsumers0),
+    lists:usort(Pids).
 
 suspected_pids_for(Node, #?STATE{consumers = Cons0,
                                  enqueuers = Enqs0,
@@ -3104,13 +3106,14 @@ suspected_pids_for(Node, #?STATE{consumers = Cons0,
                              [P | Acc];
                         (_, _, Acc) -> Acc
                      end, Cons, Enqs0),
-    lists:foldl(fun({_Key,
-                     #consumer{cfg = #consumer_cfg{pid = P},
-                               status = suspected_down}}, Acc)
-                      when node(P) =:= Node ->
-                        [P | Acc];
-                   (_, Acc) -> Acc
-                end, Enqs, WaitingConsumers0).
+    Pids = lists:foldl(fun({_Key,
+                            #consumer{cfg = #consumer_cfg{pid = P},
+                                      status = suspected_down}}, Acc)
+                             when node(P) =:= Node ->
+                               [P | Acc];
+                          (_, Acc) -> Acc
+                       end, Enqs, WaitingConsumers0),
+    lists:usort(Pids).
 
 is_expired(Ts, #?STATE{cfg = #cfg{expires = Expires},
                        last_active = LastActive,
