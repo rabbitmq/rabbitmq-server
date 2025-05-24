@@ -12,17 +12,31 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -compile([nowarn_export_all, export_all]).
 
+%% The reconciler has two modes of triggering itself
+%% - timer based
+%% - event based
+%% The default config of this test has Interval very short - 5 second which is lower than
+%% wait_until timeout. Meaninig that even if all domain triggers (node_up/down, policy_set, etc)
+%% are disconnected tests would be still green.
+%% So to test triggers it is essential to set Interval high enough (the very default value of 60 minutes is perfect)
+%%
+%% TODO: test `policy_set` trigger
 
 all() ->
     [
-     {group, unclustered}
+     {group, unclustered},
+     {group, unclustered_triggers}
     ].
 
 groups() ->
     [
-     {unclustered, [],
+     {unclustered, [], %% low interval, even if triggers do not work all tests should pass
       [
        {quorum_queue_3, [], [auto_grow, auto_grow_drained_node, auto_shrink]}
+      ]},
+     {unclustered_triggers, [], %% large interval (larger than `wait_until`(30sec))
+      [                         %% could pass only if triggers work, see also `auto_grow_drained_node`
+       {quorum_queue_3, [], [auto_grow, auto_shrink]}
       ]}
     ].
 
@@ -30,8 +44,14 @@ groups() ->
 %% Testsuite setup/teardown.
 %% -------------------------------------------------------------------
 
-init_per_suite(Config0) ->
+init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
+    rabbit_ct_helpers:run_setup_steps(Config, []).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(Config).
+
+init_per_group(unclustered, Config0) ->
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config0, {rabbit, [{quorum_tick_interval, 1000},
                                    {quorum_membership_reconciliation_enabled, true},
@@ -39,12 +59,22 @@ init_per_suite(Config0) ->
                                    {quorum_membership_reconciliation_interval, 5000},
                                    {quorum_membership_reconciliation_trigger_interval, 2000},
                                    {quorum_membership_reconciliation_target_group_size, 3}]}),
-    rabbit_ct_helpers:run_setup_steps(Config1, []).
-
-end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config).
-init_per_group(unclustered, Config) ->
-    rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, false}]);
+    rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false}]);
+init_per_group(unclustered_triggers, Config0) ->
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config0, {rabbit, [{quorum_tick_interval, 1000},
+                                   {quorum_membership_reconciliation_enabled, true},
+                                   {quorum_membership_reconciliation_auto_remove, true},
+                                   {quorum_membership_reconciliation_interval, 50000},
+                                   {quorum_membership_reconciliation_trigger_interval, 2000},
+                                   {quorum_membership_reconciliation_target_group_size, 3}]}),
+    %% shrink timeout set here because otherwise when node stopped right after queue created
+    %% the test will be green without triggers because cluster change will likely fall within trigger_interval
+    %% which will be set as a new timer value by queue_created trigger.
+    %% See also `auto_shrink/1` comment
+    rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false},
+                                           {quorum_membership_reconciliation_interval, 50000},
+                                           {shrink_timeout, 2000}]);
 init_per_group(Group, Config) ->
     ClusterSize = 3,
     Config1 = rabbit_ct_helpers:set_config(Config,
@@ -56,6 +86,8 @@ init_per_group(Group, Config) ->
                                     rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_group(unclustered, Config) ->
+    Config;
+end_per_group(unclustered_triggers, Config) ->
     Config;
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
@@ -72,33 +104,16 @@ init_per_testcase(Testcase, Config) ->
                                            ]),
     rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
 
-merge_app_env(Config) ->
-    rabbit_ct_helpers:merge_app_env(
-      rabbit_ct_helpers:merge_app_env(Config,
-                                      {rabbit, [{core_metrics_gc_interval, 100}]}),
-      {ra, [{min_wal_roll_over_interval, 30000}]}).
-
 end_per_testcase(Testcase, Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    amqp_channel:call(Ch, #'queue.delete'{queue = rabbit_data_coercion:to_binary(Testcase)}),
     reset_nodes([Server2, Server0], Server1),
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
                 rabbit_ct_client_helpers:teardown_steps()),
     rabbit_ct_helpers:testcase_finished(Config1, Testcase).
-
-reset_nodes([], _Leader) ->
-    ok;
-reset_nodes([Node| Nodes], Leader) ->
-    ok = rabbit_control_helper:command(stop_app, Node),
-    case rabbit_control_helper:command(forget_cluster_node, Leader, [atom_to_list(Node)]) of
-        ok -> ok;
-        {error, _, <<"Error:\n{:not_a_cluster_node, ~c\"The node selected is not in the cluster.\"}">>} -> ok
-    end,
-    ok = rabbit_control_helper:command(reset, Node),
-    ok = rabbit_control_helper:command(start_app, Node),
-    reset_nodes(Nodes, Leader).
-
 
 %% -------------------------------------------------------------------
 %% Testcases.
@@ -134,6 +149,10 @@ auto_grow(Config) ->
                end).
 
 auto_grow_drained_node(Config) ->
+    %% NOTE: with large Interval (larger than wait_until) test will fail.
+    %% the reason is that entering/exiting drain state does not emit events
+    %% and even if they did via gen_event, they going to be only local to that node.
+    %% so reconciliator has no choice but to wait full Interval
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),
@@ -169,7 +188,6 @@ auto_grow_drained_node(Config) ->
                        3 =:= length(M)
                end).
 
-
 auto_shrink(Config) ->
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -186,6 +204,19 @@ auto_shrink(Config) ->
                                                 Server1}),
                        3 =:= length(M)
                end),
+
+    %% The logic of reconciliator is interesting - when it is triggered it actually postpones
+    %% any action untill trigger_interval.
+    %% So if this test wants to test that reconciliator reacts to node_down or similar
+    %% it has to wait at least trigger_interval before removing node. Otherwise
+    %% the shrink effect would come from the previous trigger (which in our case is queue declaration)
+    %%
+    %% The key here is that when `queue_created` trigger switches timer to trigger_interval the queue has 3 nodes
+    %% and at least locally stop_app works fast enough so that when trigger_interval elapsed, the number of Members
+    %% will be changed without any need for node_down.
+
+    timer:sleep(rabbit_ct_helpers:get_config(Config, shrink_timeout, 0)),
+
     ok = rabbit_control_helper:command(stop_app, Server2),
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_cluster, forget_member,
                                       [Server2, false]),
@@ -196,7 +227,27 @@ auto_shrink(Config) ->
                        2 =:= length(M)
                end).
 
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
 
+merge_app_env(Config) ->
+    rabbit_ct_helpers:merge_app_env(
+      rabbit_ct_helpers:merge_app_env(Config,
+                                      {rabbit, [{core_metrics_gc_interval, 100}]}),
+      {ra, [{min_wal_roll_over_interval, 30000}]}).
+
+reset_nodes([], _Leader) ->
+    ok;
+reset_nodes([Node| Nodes], Leader) ->
+    ok = rabbit_control_helper:command(stop_app, Node),
+    case rabbit_control_helper:command(forget_cluster_node, Leader, [atom_to_list(Node)]) of
+        ok -> ok;
+        {error, _, <<"Error:\n{:not_a_cluster_node, ~c\"The node selected is not in the cluster.\"}">>} -> ok
+    end,
+    ok = rabbit_control_helper:command(reset, Node),
+    ok = rabbit_control_helper:command(start_app, Node),
+    reset_nodes(Nodes, Leader).
 
 add_server_to_cluster(Server, Leader) ->
     ok = rabbit_control_helper:command(stop_app, Server),
