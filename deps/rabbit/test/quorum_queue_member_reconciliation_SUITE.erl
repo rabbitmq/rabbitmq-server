@@ -34,8 +34,10 @@ groups() ->
       [
        {quorum_queue_3, [], [auto_grow, auto_grow_drained_node, auto_shrink]}
       ]},
-     {unclustered_triggers, [], %% large interval (larger than `wait_until`(30sec))
-      [                         %% could pass only if triggers work, see also `auto_grow_drained_node`
+     %% uses an interval longer than `wait_until` (30s by default)
+     {unclustered_triggers, [],
+      [
+       %% see also `auto_grow_drained_node`
        {quorum_queue_3, [], [auto_grow, auto_shrink]}
       ]}
     ].
@@ -205,15 +207,14 @@ auto_shrink(Config) ->
                        3 =:= length(M)
                end),
 
-    %% The logic of reconciliator is interesting - when it is triggered it actually postpones
-    %% any action untill trigger_interval.
-    %% So if this test wants to test that reconciliator reacts to node_down or similar
-    %% it has to wait at least trigger_interval before removing node. Otherwise
-    %% the shrink effect would come from the previous trigger (which in our case is queue declaration)
+    %% QQ member reconciliation does not act immediately but rather after a scheduled delay.
+    %% So if this test wants to test that the reconciliator reacts to, say, node_down or a similar event,
+    %% it has to wait at least a trigger_interval ms to pass before removing node. Otherwise
+    %% the shrink effect would come from the previous trigger.
     %%
-    %% The key here is that when `queue_created` trigger switches timer to trigger_interval the queue has 3 nodes
-    %% and at least locally stop_app works fast enough so that when trigger_interval elapsed, the number of Members
-    %% will be changed without any need for node_down.
+    %% When a `queue_created` trigger set up a timer to fire after a trigger_interval, the queue has 3 members
+    %% and stop_app executes much quicker than the trigger_interval. Therefore the number of members
+    %% will be updated even without a node_down event.
 
     timer:sleep(rabbit_ct_helpers:get_config(Config, shrink_timeout, 0)),
 
