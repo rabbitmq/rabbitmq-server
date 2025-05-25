@@ -70,10 +70,10 @@ init_per_group(unclustered_triggers, Config0) ->
                                    {quorum_membership_reconciliation_interval, 50000},
                                    {quorum_membership_reconciliation_trigger_interval, 2000},
                                    {quorum_membership_reconciliation_target_group_size, 3}]}),
-    %% shrink timeout set here because otherwise when node stopped right after queue created
-    %% the test will be green without triggers because cluster change will likely fall within trigger_interval
-    %% which will be set as a new timer value by queue_created trigger.
-    %% See also `auto_shrink/1` comment
+    %% shrink timeout is set here because without it, when a node stopped right after a queue was created,
+    %% the test will pass without any triggers because cluster change will likely happen before the trigger_interval,
+    %% scheduled in response to queue_created event.
+    %% See also a comment in `auto_shrink/1`.
     rabbit_ct_helpers:set_config(Config1, [{rmq_nodes_clustered, false},
                                            {quorum_membership_reconciliation_interval, 50000},
                                            {shrink_timeout, 2000}]);
