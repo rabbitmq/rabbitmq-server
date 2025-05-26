@@ -34,7 +34,12 @@ module.exports = class BasePage {
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
   }
 
-
+  async goTo(path) {
+    return driver.get(d.baseUrl + path)  
+  }
+  async refresh() {
+    return this.driver.navigate().refresh()
+  }
   async isLoaded () {
     return this.waitForDisplayed(MENU_TABS)
   }
@@ -146,6 +151,39 @@ module.exports = class BasePage {
     let selectable = await this.waitForDisplayed(SELECT_VHOSTS)
     const select = await new Select(selectable)
     return select.selectByValue(vhost)
+  }
+  async getTableMini(tableLocator) {
+    const table = await this.waitForDisplayed(tableLocator)
+    return this.getTableMiniUsingTableElement(table)    
+  }
+  async getTableMiniUsingTableElement(table) {
+    let tbody = await table.findElement(By.css('tbody'))
+    let rows = await tbody.findElements(By.xpath("./child::*"))
+
+    let table_model = []
+    for (let row of rows) {
+      let columnName = await row.findElement(By.css('th')).getText()
+
+      let columnValue = await row.findElement(By.css('td'))
+      let columnContent = await columnValue.findElement(By.xpath("./child::*"))
+
+      let columnType = await columnContent.getTagName()
+      
+      switch (columnType) {
+        case "table": 
+          table_model.push({
+            "name": columnName, 
+            "value" : await this.getTableMiniUsingTableElement(columnValue)
+          })
+          break
+        default: 
+          table_model.push({
+            "name" : columnName,
+            "value" : await columnContent.getText()
+          })
+      }      
+    }
+    return table_model
   }
   async getTable(tableLocator, firstNColumns, rowClass) {
     const table = await this.waitForDisplayed(tableLocator)
