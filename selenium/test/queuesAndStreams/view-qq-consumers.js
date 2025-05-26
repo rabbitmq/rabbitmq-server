@@ -62,7 +62,7 @@ describe('Given a quorum queue configured with SAC', function () {
     let table = await queuePage.getFeatures()
     assert.equal(table[0].name, "arguments:")
     let expectedArguments = [
-      {"name":"x-queue-type:","value":"quorum"}      
+      {"name":"x-queue-type:", "value":"quorum"}      
     ]
     assert.equal(JSON.stringify(table[0].value), JSON.stringify(expectedArguments))
     assert.equal(table[1].name, "x-single-active-consumer:")
