@@ -31,6 +31,7 @@ LOCAL_DEPS += ranch ssl crypto public_key
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
+CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
