@@ -22,7 +22,8 @@
     "proxy": "^1.0.2",
     "rhea": "^3.0.3",
     "selenium-webdriver": "^4.26.0",
-    "xmlhttprequest": "^1.8.0"
+    "xmlhttprequest": "^1.8.0",
+    "amqplib": "0.8.0"
   },
   "devDependencies": {
     "chai": "^4.3.6",
