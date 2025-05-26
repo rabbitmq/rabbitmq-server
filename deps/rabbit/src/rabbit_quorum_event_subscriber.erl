@@ -9,7 +9,7 @@
 
 -behaviour(gen_event).
 
--export([init/1, handle_event/2, handle_call/2]).
+-export([init/1, handle_event/2, handle_call/2, handle_info/2]).
 -export([register/0, unregister/0]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -48,4 +48,7 @@ handle_event(#event{type = operator_policy_set}, State) ->
     rabbit_quorum_queue_periodic_membership_reconciliation:policy_set(),
     {ok, State};
 handle_event(_, State) ->
+    {ok, State}.
+
+handle_info(_, State) ->
     {ok, State}.
