@@ -177,7 +177,7 @@ websocket_info({start_heartbeats, _},
                State = #state{heartbeat_mode = no_heartbeat}) ->
     {ok, State};
 websocket_info({start_heartbeats, {0, 0}}, State) ->
-    {ok, State#state{timeout_sec = {0, 0}}};
+    {ok, State};
 websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
                State = #state{socket         = Sock,
                               heartbeat_sup  = SupPid,
@@ -187,8 +187,7 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
     ReceiveFun = fun() -> Self ! client_timeout end,
     Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
                                        SendFun, ReceiveTimeout, ReceiveFun),
-    {ok, State#state{heartbeat = Heartbeat,
-                     timeout_sec = {0, 0}}};
+    {ok, State#state{heartbeat = Heartbeat}};
 websocket_info(connection_created, State) ->
     Infos = infos(?INFO_ITEMS ++ ?OTHER_METRICS, State),
     ?LOG_DEBUG("Connection created infos ~p", [Infos]),
@@ -379,9 +378,8 @@ info_internal(garbage_collection, _State) ->
 info_internal(reductions, _State) ->
     {reductions, Reductions} = erlang:process_info(self(), reductions),
     Reductions;
-info_internal(timeout, #state{timeout_sec = {_, Receive}}) ->
-    Receive;
-info_internal(timeout, #state{timeout_sec = undefined}) ->
+info_internal(timeout, State) ->
+    %% TODO: real value
     0;
 info_internal(conn_name, #state{conn_name = Val}) ->
     rabbit_data_coercion:to_binary(Val);

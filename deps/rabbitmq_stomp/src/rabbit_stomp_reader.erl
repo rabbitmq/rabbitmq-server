@@ -73,7 +73,6 @@ init([SupHelperPid, Ref, Configuration]) ->
             rabbit_log_connection:info("accepting STOMP connection ~tp (~ts)",
                 [self(), ConnName]),
 
-            ParseState = rabbit_stomp_frame:initial_state(),
             ParserConfig = #stomp_parser_config{
                               max_headers        = Configuration#stomp_configuration.max_headers,
                               max_header_length  = Configuration#stomp_configuration.max_header_length,
@@ -403,19 +402,19 @@ processor_args(Configuration, Sock) ->
      ssl_login_name(RealSocket, Configuration), PeerAddr}.
 
 adapter_info(Sock) ->
-case rabbit_net:socket_ends(Socket, inbound) of
-        {ok, {PeerIp, PeerPort, Ip, Port}} ->
-#amqp_adapter_info{protocol        = {'STOMP', 0},
-                       name            = Name,
-                       host            = Host,
-                       port            = Port,
-                       peer_host       = PeerHost,
-                       peer_port       = PeerPort,
-                       additional_info = maybe_ssl_info(Sock)}
-            process_connect(ConnectPacket, Socket, ConnName, SendFun, SocketEnds);
-        {error, Reason} ->
-            {error, {socket_ends, Reason}}
-    end.
+%% case rabbit_net:socket_ends(Socket, inbound) of
+%%         {ok, {PeerIp, PeerPort, Ip, Port}} ->
+%% #amqp_adapter_info{protocol        = {'STOMP', 0},
+%%                        name            = Name,
+%%                        host            = Host,
+%%                        port            = Port,
+%%                        peer_host       = PeerHost,
+%%                        peer_port       = PeerPort,
+%%                        additional_info = maybe_ssl_info(Sock)}
+%%             process_connect(ConnectPacket, Socket, ConnName, SendFun, SocketEnds);
+%%         {error, Reason} ->
+%%             {error, {socket_ends, Reason}}
+%%     end.
 
     amqp_connection:socket_adapter_info(Sock, {'STOMP', 0}).
 
