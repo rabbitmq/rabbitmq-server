@@ -944,7 +944,7 @@ does_use_expected_metadata_store(Config, NodeConfig) ->
                             true  -> khepri;
                             false -> mnesia
                         end,
-    ct:pal(
+    ct:log(
       "Metadata store on ~s: expected=~s, used=~s",
       [Nodename, ExpectedMetadataStore, UsedMetadataStore]),
     {ExpectedMetadataStore, UsedMetadataStore}.
@@ -975,7 +975,7 @@ cluster_nodes(Config, Nodes) when is_list(Nodes) ->
         {value, SecNodeConfig} ->
             NodeConfigs1 = NodeConfigs -- [SecNodeConfig],
             Nodename = ?config(nodename, SecNodeConfig),
-            ct:pal(
+            ct:log(
               "Using secondary-umbrella-based node ~s as the cluster seed "
               "node",
               [Nodename]),
@@ -984,7 +984,7 @@ cluster_nodes(Config, Nodes) when is_list(Nodes) ->
             case NodeConfigs of
                 [NodeConfig, SeedNodeConfig | NodeConfigs1] ->
                     Nodename = ?config(nodename, SeedNodeConfig),
-                    ct:pal(
+                    ct:log(
                       "Using node ~s as the cluster seed node",
                       [Nodename]),
                     cluster_nodes1(
@@ -1184,7 +1184,7 @@ ra_last_applied(ServerId) ->
 
 do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->
     [MacVer1 | MacVerN] = MacVers = rpc_all(Config, RaMachineMod, version, []),
-    ct:pal("Ra machine versions of ~s: ~0p", [RaMachineMod, MacVers]),
+    ct:log("Ra machine versions of ~s: ~0p", [RaMachineMod, MacVers]),
     is_integer(MacVer1) andalso
     lists:all(fun(MacVer) -> MacVer =:= MacVer1 end, MacVerN).
 
@@ -1403,7 +1403,7 @@ capture_gen_server_termination(
       lists:reverse(Acc), Rest, Count, IgnoredCrashes).
 
 found_gen_server_termiation(Message, Lines, Count, IgnoredCrashes) ->
-    ct:pal("gen_server termination:~n~n~s", [Message]),
+    ct:log("gen_server termination:~n~n~s", [Message]),
     count_gen_server_terminations(Lines, Count + 1, IgnoredCrashes).
 
 %% -------------------------------------------------------------------
