@@ -120,7 +120,7 @@ defmodule EnablePluginsCommandTest do
 
     check_plugins_enabled([:rabbitmq_stomp], context)
 
-    assert [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp] ==
+    assert [:amqp_client, :rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp] ==
              currently_active_plugins(context)
   end
 
@@ -144,7 +144,7 @@ defmodule EnablePluginsCommandTest do
     check_plugins_enabled([:rabbitmq_stomp], context)
 
     assert_equal_sets(
-      [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+      [:amqp_client, :rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
       currently_active_plugins(context)
     )
   end
@@ -174,11 +174,11 @@ defmodule EnablePluginsCommandTest do
              )
 
     assert [
-             [:rabbitmq_federation, :rabbitmq_stomp],
+             [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
              %{
                mode: :offline,
-               enabled: [:rabbitmq_federation],
-               set: [:rabbitmq_federation, :rabbitmq_stomp]
+               enabled: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation],
+               set: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp]
              }
            ] ==
              Enum.to_list(test_stream1)
@@ -210,13 +210,13 @@ defmodule EnablePluginsCommandTest do
     {:stream, test_stream1} = @command.run(["rabbitmq_federation"], context[:opts])
 
     assert [
-             [:rabbitmq_federation, :rabbitmq_stomp],
+             [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
              %{
                mode: :online,
-               started: [:rabbitmq_federation],
+               started: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation],
                stopped: [],
-               enabled: [:rabbitmq_federation],
-               set: [:rabbitmq_federation, :rabbitmq_stomp]
+               enabled: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation],
+               set: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp]
              }
            ] ==
              Enum.to_list(test_stream1)
@@ -224,7 +224,7 @@ defmodule EnablePluginsCommandTest do
     check_plugins_enabled([:rabbitmq_stomp, :rabbitmq_federation], context)
 
     assert_equal_sets(
-      [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+      [:amqp_client, :rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
       currently_active_plugins(context)
     )
 
@@ -239,13 +239,13 @@ defmodule EnablePluginsCommandTest do
              @command.run(["rabbitmq_stomp", "rabbitmq_federation"], context[:opts])
 
     assert [
-             [:rabbitmq_federation, :rabbitmq_stomp],
+             [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
              %{
                mode: :online,
-               started: [:rabbitmq_federation, :rabbitmq_stomp],
+               started: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
                stopped: [],
-               enabled: [:rabbitmq_federation, :rabbitmq_stomp],
-               set: [:rabbitmq_federation, :rabbitmq_stomp]
+               enabled: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
+               set: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp]
              }
            ] ==
              Enum.to_list(test_stream)
@@ -253,7 +253,7 @@ defmodule EnablePluginsCommandTest do
     check_plugins_enabled([:rabbitmq_stomp, :rabbitmq_federation], context)
 
     assert_equal_sets(
-      [:amqp_client, :rabbitmq_federation, :rabbitmq_stomp],
+      [:amqp_client, :rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation, :rabbitmq_stomp],
       currently_active_plugins(context)
     )
 
@@ -266,14 +266,14 @@ defmodule EnablePluginsCommandTest do
     assert {:stream, test_stream} = @command.run(["amqp_client"], context[:opts])
 
     assert [
-             [:rabbitmq_federation],
-             %{mode: :online, started: [], stopped: [], enabled: [], set: [:rabbitmq_federation]}
+             [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation],
+             %{mode: :online, started: [], stopped: [], enabled: [], set: [:rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation]}
            ] ==
              Enum.to_list(test_stream)
 
     check_plugins_enabled([:rabbitmq_federation], context)
 
-    assert [:amqp_client, :rabbitmq_federation] ==
+    assert [:amqp_client, :rabbitmq_exchange_federation, :rabbitmq_federation, :rabbitmq_federation_common, :rabbitmq_queue_federation] ==
              currently_active_plugins(context)
 
     reset_enabled_plugins_to_preconfigured_defaults(context)
