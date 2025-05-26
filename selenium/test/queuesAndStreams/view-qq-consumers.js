@@ -95,7 +95,7 @@ describe('Given a quorum queue configured with SAC', function () {
       assert.equal("Consumers (1)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
       let consumerTable = await queuePage.getConsumersTable()
-      console.log("consumer table: " + JSON.stringify(consumerTable))
+      
       assert.equal("single active", consumerTable[0][6])
       assert.equal("●", consumerTable[0][5])
     })
@@ -113,7 +113,7 @@ describe('Given a quorum queue configured with SAC', function () {
       assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
       let consumerTable = await queuePage.getConsumersTable()
-      console.log("consumer table: " + JSON.stringify(consumerTable))
+      
       let activeConsumer = consumerTable[1][6].localeCompare("single active") == 0 ?
         1 : 0
       let nonActiveConsumer = activeConsumer == 1 ? 0 : 1
