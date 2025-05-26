@@ -40,20 +40,22 @@ function getConnectionOptions() {
 }
 module.exports = {  
   
-  open: () => {
+  open: (queueName = "my-queue") => {
     let promise = new Promise((resolve, reject) => {
       container.on('connection_open', function(context) {
         resolve()
       })
     })
+    console.log("Opening amqp connection using " + JSON.stringify(connectionOptions))
+    
     let connection = container.connect(connectionOptions)
     let receiver = connection.open_receiver({
-      source: 'my-queue',
+      source: queueName,
       target: 'receiver-target',
       name: 'receiver-link'
     })
     let sender = connection.open_sender({
-      target: 'my-queue',
+      target: queueName,
       source: 'sender-source',
       name: 'sender-link'
     })
@@ -63,6 +65,13 @@ module.exports = {
       'receiver' : receiver,
       'sender' : sender
     }
+  },
+  openReceiver: (handler, queueName = "my-queue") => {
+      return handler.connection.open_receiver({
+        source: queueName,
+        target: 'receiver-target',
+        name: 'receiver-link'
+      })
   },
   close: (connection) => {
     if (connection != null) {
