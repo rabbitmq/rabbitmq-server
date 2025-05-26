@@ -449,7 +449,7 @@ get_messages(Number, Ch, Q) ->
     end.
 
 check_policy_value(Server, QName, Value) ->
-    ct:pal("QUEUES ~p",
+    ct:log("QUEUES ~p",
            [rpc:call(Server, rabbit_amqqueue, list, [])]),
     {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [rabbit_misc:r(<<"/">>, queue, QName)]),
     case rpc:call(Server, rabbit_policy, effective_definition, [Q]) of
