@@ -2123,9 +2123,9 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
 
 -spec delete_file(non_neg_integer(), gc_state()) -> ok | defer.
 
-delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
-                                      file_handles_ets = FileHandlesEts,
-                                      dir              = Dir }) ->
+delete_file(File, #gc_state { file_summary_ets = FileSummaryEts,
+                              file_handles_ets = FileHandlesEts,
+                              dir              = Dir }) ->
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} ->
             rabbit_log:debug("Asked to delete file ~p but it has active readers. Deferring.",
@@ -2134,7 +2134,6 @@ delete_file(File, State = #gc_state { file_summary_ets = FileSummaryEts,
         _ ->
             [#file_summary{ valid_total_size = 0,
                             file_size = FileSize }] = ets:lookup(FileSummaryEts, File),
-            [] = scan_and_vacuum_message_file(File, State),
             ok = file:delete(form_filename(Dir, filenum_to_name(File))),
             true = ets:delete(FileSummaryEts, File),
             rabbit_log:debug("Deleted empty file number ~tp; reclaimed ~tp bytes", [File, FileSize]),
