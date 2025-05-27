@@ -107,7 +107,7 @@ describe('Virtual Hosts in Admin tab', function () {
     let vhost = "test_" + Math.floor(Math.random() * 1000)
     before(async function() {
       log("Creating vhost")
-      createVhost(getManagementUrl(), basicAuthorization('administraotor', 'guest'), 
+      createVhost(getManagementUrl(), basicAuthorization('administrator', 'guest'), 
         vhost, "selenium", "selenium-tag")
     //  await overview.clickOnOverviewTab()
       await overview.clickOnAdminTab()
