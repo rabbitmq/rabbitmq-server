@@ -30,7 +30,8 @@ describe('Exchange management', function () {
     if (!await overview.isLoaded()) {
       throw new Error('Failed to login')
     }
-    overview.clickOnExchangesTab()
+    await overview.selectRefreshOption("Do not refresh")
+    await overview.clickOnExchangesTab()
   })
 
   it('display summary of exchanges', async function () {
