@@ -138,7 +138,9 @@
          %% decremented for each delivery
          credit = 0 :: non_neg_integer(),
          %% AMQP 1.0 §2.6.7
-         delivery_count :: rabbit_queue_type:delivery_count()
+         delivery_count :: rabbit_queue_type:delivery_count(),
+         %% Is this consumer in service_queue ?
+         queued = false :: boolean()
         }).
 
 -type consumer() :: #consumer{}.
