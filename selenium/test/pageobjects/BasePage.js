@@ -187,6 +187,24 @@ module.exports = class BasePage {
   }
   async getTable(tableLocator, firstNColumns, rowClass) {
     const table = await this.waitForDisplayed(tableLocator)
+    const rows = await table.findElements(rowClass == undefined ? 
+    By.css('tbody tr') : By.css('tbody tr.' + rowClass))
+    let table_model = []
+    
+    for (let row of rows) {
+      let columns = await row.findElements(By.css('td'))
+      let table_row = []
+      for (let column of columns) {
+        if (firstNColumns == undefined || table_row.length < firstNColumns) {
+          table_row.push(await column.getText())
+        }
+      }
+      table_model.push(table_row)
+    }
+    return table_model
+  }
+  async getPlainTable(tableLocator, firstNColumns) {
+    const table = await this.waitForDisplayed(tableLocator)
     let tbody = await table.findElement(By.css('tbody'))
     let rows = await tbody.findElements(By.xpath("./child::*"))
     let table_model = []
