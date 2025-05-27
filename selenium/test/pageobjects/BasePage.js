@@ -187,9 +187,10 @@ module.exports = class BasePage {
   }
   async getTable(tableLocator, firstNColumns, rowClass) {
     const table = await this.waitForDisplayed(tableLocator)
-    const rows = await table.findElements(rowClass == undefined ? 
-        By.css('tbody tr') : By.css('tbody tr.' + rowClass))
+    let tbody = await table.findElement(By.css('tbody'))
+    let rows = await tbody.findElements(By.xpath("./child::*"))
     let table_model = []
+    
     for (let row of rows) {
       let columns = await row.findElements(By.css('td'))
       let table_row = []

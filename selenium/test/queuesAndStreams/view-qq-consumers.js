@@ -97,18 +97,18 @@ describe('Given a quorum queue configured with SAC', function () {
       assert.equal("1", await queuePage.getConsumerCount())
       assert.equal("Consumers (1)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
-      let consumerTable = await queuePage.getConsumersTable()
-      
+      let consumerTable = await doWhile(async function() {
+        return queuePage.getConsumersTable()
+      }, function(table) {
+        return table[0][6].localeCompare("single active") == 0
+      })
       assert.equal("single active", consumerTable[0][6])
-      //assert.equal("●", consumerTable[0][5])
+      
     })
 
     it('it should have two consumers, after adding a second subscriber', async function() {
-      
-      console.log("Connecting..")
       amqp091conn = await amqplib.connect('amqp://guest:guest@localhost?frameMax=0')
       const ch1 = await amqp091conn.createChannel()      
-      console.log("Connected")
       // Listener
       
       ch1.consume(queueName, (msg) => {}, {priority: 10})
@@ -118,23 +118,25 @@ describe('Given a quorum queue configured with SAC', function () {
         await queuePage.isLoaded()
         return queuePage.getConsumerCount()
       }, function(count) {
-        return count.localeCompare("2") 
+        return count.localeCompare("2") == 0
       }, 5000)
+      
       assert.equal("2", await queuePage.getConsumerCount())
       assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
-      let consumerTable = await queuePage.getConsumersTable()
-      console.log("consumer table: " + JSON.stringify(consumerTable))
+      let consumerTable = await doWhile(async function() {
+        return queuePage.getConsumersTable()
+      }, function(table) {
+        return table.length == 2
+      }, 5000)
 
       let activeConsumer = consumerTable[1][6].localeCompare("single active") == 0 ?
         1 : 0
       let nonActiveConsumer = activeConsumer == 1 ? 0 : 1
 
       assert.equal("waiting", consumerTable[nonActiveConsumer][6])
-      //assert.equal("○", consumerTable[nonActiveConsumer][5])
       assert.equal("single active", consumerTable[activeConsumer][6])
-      //assert.equal("●", consumerTable[activeConsumer][5])
-      await delay(5000)
+      await delay(5000) 
     })
 
     after(function() {
