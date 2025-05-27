@@ -1,0 +1,1 @@
+-module(rabbitmq_federation_noop).
