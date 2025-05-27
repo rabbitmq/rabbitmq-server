@@ -35,7 +35,7 @@ module.exports = class QueuePage extends BasePage {
     return this.click(CONSUMERS_SECTION)
   }
   async getConsumersTable() {
-    return this.getTable(CONSUMERS_TABLE)
+    return this.getPlainTable(CONSUMERS_TABLE)
   }
   async ensureDeleteQueueSectionIsVisible() {    
     await this.click(DELETE_SECTION)
