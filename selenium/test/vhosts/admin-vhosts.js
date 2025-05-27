@@ -107,7 +107,7 @@ describe('Virtual Hosts in Admin tab', function () {
     let vhost = "test_" + Math.floor(Math.random() * 1000)
     before(async function() {
       log("Creating vhost")
-      createVhost(getManagementUrl(), basicAuthorization('administrator', 'guest'), 
+      createVhost(getManagementUrl(), basicAuthorization('administrator-only', 'guest'), 
         vhost, "selenium", "selenium-tag")
     //  await overview.clickOnOverviewTab()
       await overview.clickOnAdminTab()
@@ -132,7 +132,7 @@ describe('Virtual Hosts in Admin tab', function () {
     })
     after(async function () {
       log("Deleting vhost")
-      deleteVhost(getManagementUrl(), basicAuthorization("administrator", "guest"), 
+      deleteVhost(getManagementUrl(), basicAuthorization("administrator-only", "guest"), 
           vhost)
     })
 
