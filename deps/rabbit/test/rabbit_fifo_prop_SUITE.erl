@@ -3,9 +3,6 @@
 -compile(nowarn_export_all).
 -compile(export_all).
 
--export([
-         ]).
-
 -include_lib("proper/include/proper.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -87,7 +84,8 @@ all_tests() ->
      dlx_07,
      dlx_08,
      dlx_09,
-     single_active_ordering_02
+     single_active_ordering_02,
+     different_nodes
     ].
 
 groups() ->
@@ -1095,6 +1093,39 @@ single_active_ordering_03(_Config) ->
             false
     end.
 
+%% Test that running the state machine commands on different Erlang nodes
+%% end up in exactly the same state.
+different_nodes(Config) ->
+    Config1 = rabbit_ct_helpers:run_setup_steps(
+                Config,
+                rabbit_ct_broker_helpers:setup_steps()),
+
+    Size = 400,
+    run_proper(
+      fun () ->
+              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
+                      frequency([{5, {undefined, undefined, undefined, false}},
+                                 {5, {oneof([range(1, 10), undefined]),
+                                      oneof([range(1, 1000), undefined]),
+                                      oneof([range(1, 3), undefined]),
+                                      oneof([true, false])
+                                     }}]),
+                      begin
+                          Conf = config(?FUNCTION_NAME,
+                                        Length,
+                                        Bytes,
+                                        SingleActive,
+                                        DeliveryLimit),
+                          ?FORALL(O, ?LET(Ops, log_gen_different_nodes(Size), expand(Ops, Conf)),
+                                  collect({log_size, length(O)},
+                                          different_nodes_prop(Config1, Conf, O)))
+                      end)
+      end, [], Size),
+
+    rabbit_ct_helpers:run_teardown_steps(
+      Config1,
+      rabbit_ct_broker_helpers:teardown_steps()).
+
 max_length(_Config) ->
     %% tests that max length is never transgressed
     Size = 1000,
@@ -1454,6 +1485,19 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
             false
     end.
 
+different_nodes_prop(Config, Conf0, Commands) ->
+    Conf = Conf0#{release_cursor_interval => 100},
+    Indexes = lists:seq(1, length(Commands)),
+    Entries = lists:zip(Indexes, Commands),
+    InitState = test_init(Conf),
+    Fun = fun(_) -> true end,
+    Vsn = 6,
+
+    {State0, _Effs0} = run_log(InitState, Entries, Fun, Vsn),
+    {State1, _Effs1} = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, run_log,
+                                                    [InitState, Entries, Fun, Vsn]),
+    State0 =:= State1.
+
 messages_total_prop(Conf0, Commands) ->
     Conf = Conf0#{release_cursor_interval => 100},
     Indexes = lists:seq(1, length(Commands)),
@@ -1794,6 +1838,29 @@ log_gen_without_checkout_cancel(Size) ->
                           {2, checkout_gen(oneof(CPids))},
                           {1, down_gen(oneof(EPids ++ CPids))},
                           {1, nodeup_gen(Nodes)},
+                          {1, purge}
+                         ]))))).
+
+log_gen_different_nodes(Size) ->
+    Nodes = [node(),
+             fakenode@fake,
+             fakenode@fake2
+            ],
+    ?LET(EPids, vector(4, pid_gen(Nodes)),
+         ?LET(CPids, vector(4, pid_gen(Nodes)),
+              resize(Size,
+                     list(
+                       frequency(
+                         [{10, enqueue_gen(oneof(EPids))},
+                          {20, {input_event,
+                                frequency([{10, settle},
+                                           {2, return},
+                                           {2, discard},
+                                           {2, requeue}])}},
+                          {8, checkout_gen(oneof(CPids))},
+                          {2, checkout_cancel_gen(oneof(CPids))},
+                          {6, down_gen(oneof(EPids ++ CPids))},
+                          {6, nodeup_gen(Nodes)},
                           {1, purge}
                          ]))))).
 
