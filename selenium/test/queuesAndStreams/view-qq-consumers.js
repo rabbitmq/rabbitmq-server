@@ -3,8 +3,7 @@ require('chromedriver')
 const assert = require('assert')
 const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, goToQueue,delay } = require('../utils')
 const { createQueue, deleteQueue, getManagementUrl, basicAuthorization } = require('../mgt-api')
-const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp, 
-        openReceiver : openReceiver} = require('../amqp')
+const { getAmqpUrl : getAmqpUrl } = require('../amqp')
 const amqplib = require('amqplib');
 
 const LoginPage = require('../pageobjects/LoginPage')
@@ -13,12 +12,6 @@ const QueuesAndStreamsPage = require('../pageobjects/QueuesAndStreamsPage')
 const QueuePage = require('../pageobjects/QueuePage')
 const StreamPage = require('../pageobjects/StreamPage')
 
-var untilConnectionEstablished = new Promise((resolve, reject) => {
-  onAmqp('connection_open', function(context) {
-    console.log("Amqp connection opened")
-    resolve()
-  })
-})
 
 describe('Given a quorum queue configured with SAC', function () {
   let login
@@ -44,7 +37,6 @@ describe('Given a quorum queue configured with SAC', function () {
       throw new Error('Failed to login')
     }
     await overview.selectRefreshOption("Do not refresh")
-    await overview.clickOnQueuesTab()
     queueName = "test_" + Math.floor(Math.random() * 1000)
   
     createQueue(getManagementUrl(), basicAuthorization("management", "guest"), 
@@ -77,16 +69,21 @@ describe('Given a quorum queue configured with SAC', function () {
     assert.equal("Consumers (0)", await queuePage.getConsumersSectionTitle())
   })
 
-  describe("given there is a consumer attached to the queue", function () {
-    let amqp 
+  describe("given there is a consumer (without priority) attached to the queue", function () {
     let amqp091conn
+    let ch1
+    let ch1Consumer 
+    let ch2
+    let ch2Consumer 
 
     before(async function() {
-      amqp = openAmqp(queueName)
-      await untilConnectionEstablished          
+      let amqpUrl = getAmqpUrl() + "?frameMax=0"
+      amqp091conn = await amqplib.connect(amqpUrl)
+      ch1 = await amqp091conn.createChannel()      
+      ch1Consumer = ch1.consume(queueName, (msg) => {}, {consumerTag: "one"})      
     })
 
-    it('it should have one consumer', async function() {
+    it('it should have one consumer as active', async function() {
       await doWhile(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()
@@ -100,53 +97,146 @@ describe('Given a quorum queue configured with SAC', function () {
       let consumerTable = await doWhile(async function() {
         return queuePage.getConsumersTable()
       }, function(table) {
-        return table[0][6].localeCompare("single active") == 0
+        return table[0][6].localeCompare("single active") == 0 && 
+           table[0][1].localeCompare("one") == 0
       })
       assert.equal("single active", consumerTable[0][6])
+      assert.equal("one", consumerTable[0][1])
       
     })
 
-    it('it should have two consumers, after adding a second subscriber', async function() {
-      amqp091conn = await amqplib.connect('amqp://guest:guest@localhost?frameMax=0')
-      const ch1 = await amqp091conn.createChannel()      
-      // Listener
+    describe("given another consumer is added with priority", function () {
+      before(async function() {
+        ch2 = await amqp091conn.createChannel()            
+        ch2Consumer = ch2.consume(queueName, (msg) => {}, {consumerTag: "two", priority: 10})
+      })
+
+      it('the latter consumer should be active and the former waiting', async function() {
+              
+        await doWhile(async function() {
+          await queuePage.refresh()
+          await queuePage.isLoaded()
+          return queuePage.getConsumerCount()
+        }, function(count) {
+          return count.localeCompare("2") == 0
+        }, 5000)
+        
+        assert.equal("2", await queuePage.getConsumerCount())
+        assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
+        await queuePage.clickOnConsumerSection()
+        let consumerTable = await doWhile(async function() {
+          return queuePage.getConsumersTable()
+        }, function(table) {
+          return table.length == 2 && table[0][1] != "" && table[1][1] != ""
+        }, 5000)
+
+        let activeConsumer = consumerTable[1][6].localeCompare("single active") == 0 ?
+          1 : 0
+        let nonActiveConsumer = activeConsumer == 1 ? 0 : 1
+
+        assert.equal("waiting", consumerTable[nonActiveConsumer][6])
+        assert.equal("one", consumerTable[nonActiveConsumer][1])
+        assert.equal("single active", consumerTable[activeConsumer][6])
+        assert.equal("two", consumerTable[activeConsumer][1])
+        await delay(5000) 
+      })
+    })
+
+    after(async function() {      
+      try {
+        if (amqp091conn != null) {
+          amqp091conn.close()
+        }
+      } catch (error) {
+        error("Failed to close amqp091 connection due to " + error);      
+      }
+      // ensure there are no more consumers 
+      await doWhile(async function() {
+          await queuePage.refresh()
+          await queuePage.isLoaded()
+          return queuePage.getConsumerCount()
+        }, function(count) {
+          return count.localeCompare("0") == 0
+        }, 5000)
+        
       
-      ch1.consume(queueName, (msg) => {}, {priority: 10})
-      
+    })
+  })
+
+  describe("given there is a consumer (with priority) attached to the queue", function () {
+    let amqp091conn
+    let ch1
+    let ch1Consumer 
+    let ch2
+    let ch2Consumer 
+
+    before(async function() {
+      let amqpUrl = getAmqpUrl() + "?frameMax=0"
+      amqp091conn = await amqplib.connect(amqpUrl)
+      ch1 = await amqp091conn.createChannel()      
+      ch1Consumer = ch1.consume(queueName, (msg) => {}, {consumerTag: "one", priority: 10})      
+    })
+
+    it('it should have one consumer as active', async function() {
       await doWhile(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()
         return queuePage.getConsumerCount()
       }, function(count) {
-        return count.localeCompare("2") == 0
+        return count.localeCompare("0") == 1
       }, 5000)
-      
-      assert.equal("2", await queuePage.getConsumerCount())
-      assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
+      assert.equal("1", await queuePage.getConsumerCount())
+      assert.equal("Consumers (1)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
       let consumerTable = await doWhile(async function() {
         return queuePage.getConsumersTable()
       }, function(table) {
-        return table.length == 2
-      }, 5000)
-
-      let activeConsumer = consumerTable[1][6].localeCompare("single active") == 0 ?
-        1 : 0
-      let nonActiveConsumer = activeConsumer == 1 ? 0 : 1
-
-      assert.equal("waiting", consumerTable[nonActiveConsumer][6])
-      assert.equal("single active", consumerTable[activeConsumer][6])
-      await delay(5000) 
+        return table[0][6].localeCompare("single active") == 0 && 
+           table[0][1].localeCompare("one") == 0
+      })
+      assert.equal("single active", consumerTable[0][6])
+      assert.equal("one", consumerTable[0][1])
+      
     })
 
-    after(function() {
-      try {
-        if (amqp != null) {
-          closeAmqp(amqp.connection)
-        }
-      } catch (error) {
-        error("Failed to close amqp10 connection due to " + error);      
-      }  
+    describe("given another consumer is added without priority", function () {
+      before(async function() {
+        ch2 = await amqp091conn.createChannel()            
+        ch2Consumer = ch2.consume(queueName, (msg) => {}, {consumerTag: "two"})
+      })
+
+      it('the former consumer should still be active and the latter be waiting', async function() {
+              
+        await doWhile(async function() {
+          await queuePage.refresh()
+          await queuePage.isLoaded()
+          return queuePage.getConsumerCount()
+        }, function(count) {
+          return count.localeCompare("2") == 0
+        }, 5000)
+        
+        assert.equal("2", await queuePage.getConsumerCount())
+        assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
+        await queuePage.clickOnConsumerSection()
+        let consumerTable = await doWhile(async function() {
+          return queuePage.getConsumersTable()
+        }, function(table) {
+          return table.length == 2 && table[0][1] != "" && table[1][1] != ""
+        }, 5000)
+
+        let activeConsumer = consumerTable[1][6].localeCompare("single active") == 0 ?
+          1 : 0
+        let nonActiveConsumer = activeConsumer == 1 ? 0 : 1
+
+        assert.equal("waiting", consumerTable[nonActiveConsumer][6])
+        assert.equal("two", consumerTable[nonActiveConsumer][1])
+        assert.equal("single active", consumerTable[activeConsumer][6])
+        assert.equal("one", consumerTable[activeConsumer][1])
+        await delay(5000) 
+      })
+    })
+
+    after(function() {      
       try {
         if (amqp091conn != null) {
           amqp091conn.close()

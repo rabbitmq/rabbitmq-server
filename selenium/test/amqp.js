@@ -7,6 +7,7 @@ var connectionOptions = getConnectionOptions()
 
 function getAmqpConnectionOptions() {
   return {
+    'scheme': process.env.RABBITMQ_AMQP_SCHEME || 'amqp',
     'host': process.env.RABBITMQ_HOSTNAME || 'rabbitmq',
     'port': process.env.RABBITMQ_AMQP_PORT || 5672,
     'username' : process.env.RABBITMQ_AMQP_USERNAME || 'guest',
@@ -39,7 +40,12 @@ function getConnectionOptions() {
   }  
 }
 module.exports = {  
-  
+  getAmqpConnectionOptions: () => { return connectionOptions },
+  getAmqpUrl: () => {
+    return connectionOptions.scheme + '://' +
+        connectionOptions.username + ":" + connectionOptions.password + "@" +
+        connectionOptions.host + ":" + connectionOptions.port
+  },
   open: (queueName = "my-queue") => {
     let promise = new Promise((resolve, reject) => {
       container.on('connection_open', function(context) {
