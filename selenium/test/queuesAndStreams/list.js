@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -49,7 +49,7 @@ describe('Queues and Streams management', function () {
     let queueName = "test_" + Math.floor(Math.random() * 1000)
     await queuesAndStreams.fillInAddNewQueue({"name" : queueName, "type" : "classic"})
 
-    await doWhile(async function() { return queuesAndStreams.getQueuesTable() },
+    await doUntil(async function() { return queuesAndStreams.getQueuesTable() },
       function(table) { 
         return table.length > 0
       })
