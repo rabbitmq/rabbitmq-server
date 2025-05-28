@@ -157,11 +157,15 @@ filter_queues(Expected, Got) ->
                          lists:member(hd(G), Keys)
                  end, Got).
 
+<<<<<<< HEAD
 fifo_machines_use_same_version(Config) ->
     Nodenames = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     fifo_machines_use_same_version(Config, Nodenames).
 
 fifo_machines_use_same_version(Config, Nodenames)
+=======
+ra_machines_use_same_version(MachineModule, Config, Nodenames)
+>>>>>>> f293c11a0 (Remove unused function)
   when length(Nodenames) >= 1 ->
     [MachineAVersion | OtherMachinesVersions] =
     [(catch rabbit_ct_broker_helpers:rpc(
