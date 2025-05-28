@@ -117,6 +117,8 @@ fixture_token() ->
 
 token_with_sub(TokenFixture, Sub) ->
     maps:put(<<"sub">>, Sub, TokenFixture).
+token_with_claim(TokenFixture, Name, Value) ->
+    maps:put(Name, Value, TokenFixture).
 token_with_scopes(TokenFixture, Scopes) ->
     maps:put(<<"scope">>, Scopes, TokenFixture).
 
