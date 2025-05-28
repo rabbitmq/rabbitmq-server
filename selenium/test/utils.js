@@ -129,9 +129,9 @@ module.exports = {
   goToExchanges: (d) => {
     return d.driver.get(d.baseUrl + '#/exchanges')
   },
-
-  goTo: (d, address) => {
-    return d.get(address)
+    
+  goToQueue(d, vhost, queue) {
+    return d.driver.get(d.baseUrl + '#/queues/' + encodeURIComponent(vhost) + '/' + encodeURIComponent(queue))
   },
 
   delay: async (msec, ref) => {

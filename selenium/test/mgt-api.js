@@ -114,7 +114,7 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  createVhost: (url, name, description = "", tags = []) => {
+  createVhost: (url, authorization, name, description = "", tags = []) => {
     let vhost = {
       "description": description,
       "tags": tags
@@ -122,10 +122,9 @@ module.exports = {
     log("Create vhost " + JSON.stringify(vhost) 
       + " with name " + name + " on " + url)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/vhosts/" + encodeURIComponent(name)
     req.open('PUT', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     req.setRequestHeader('Content-Type', 'application/json')
     
     req.send(JSON.stringify(vhost))
@@ -158,13 +157,12 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  deleteVhost: (url, vhost) => {
+  deleteVhost: (url, authorization, vhost) => {
     log("Deleting vhost " + vhost)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/vhosts/" + encodeURIComponent(vhost)
     req.open('DELETE', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     
     req.send()
     if (req.status == 200 || req.status == 204) {
@@ -194,21 +192,18 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  createQueue: (url, name, vhost, queueType = "quorum") => {    
+  createQueue: (url, authorization, vhost, name, arguments = {}) => {    
     log("Create queue " + JSON.stringify(name) 
       + " in vhost " + vhost + " on " + url)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/queues/" + encodeURIComponent(vhost) + "/"
       + encodeURIComponent(name)
     req.open('PUT', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     req.setRequestHeader('Content-Type', 'application/json')
     let payload = {
       "durable": true,
-      "arguments":{
-        "x-queue-type" : queueType
-      }
+      "arguments": arguments
     }
     req.send(JSON.stringify(payload))
     if (req.status == 200 || req.status == 204 || req.status == 201) {
@@ -219,14 +214,13 @@ module.exports = {
       throw new Error(req.responseText)
     }
   },
-  deleteQueue: (url, name, vhost) => {
+  deleteQueue: (url, authorization, vhost, name) => {
     log("Deleting queue " + name + " on vhost " + vhost)
     const req = new XMLHttpRequest()
-    let base64Credentials = btoa('administrator-only' + ":" + 'guest')
     let finalUrl = url + "/api/queues/" + encodeURIComponent(vhost) + "/"
       + encodeURIComponent(name)
     req.open('DELETE', finalUrl, false)
-    req.setRequestHeader("Authorization", "Basic " + base64Credentials)
+    req.setRequestHeader("Authorization", authorization)
     
     req.send()
     if (req.status == 200 || req.status == 204) {

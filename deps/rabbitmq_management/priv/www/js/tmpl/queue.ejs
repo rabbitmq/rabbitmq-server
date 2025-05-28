@@ -11,10 +11,10 @@
 <% } %>
 
     <h3>Details</h3>
-    <table class="facts facts-l">
+    <table class="facts facts-l" id="details-queue-table">
       <tr>
         <th>Features</th>
-        <td><%= fmt_features(queue) %></td>
+        <td id="details-queue-features"><%= fmt_features(queue) %></td>
       </tr>
 <% if(!disable_stats) { %>
       <tr>
@@ -76,7 +76,7 @@
     </table>
 
 <% if(!disable_stats) { %>
-    <table class="facts facts-l">
+    <table class="facts facts-l" id="details-queue-stats-table">
       <tr>
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
@@ -84,12 +84,12 @@
       <% if(queue.consumers) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumers) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumers) %></td>
       </tr>
       <% } else if(queue.hasOwnProperty('consumer_details')) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumer_details.length) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
       <% } %>
       <% if (is_classic(queue)) { %>
@@ -277,7 +277,7 @@
 <% } %>
 
 <% if(!disable_stats) { %>
-<div class="section-hidden">
+<div class="section-hidden" id="queue-consumers-section">
   <h2 class="updatable">Consumers (<%=(queue.consumer_details.length)%>) </h2>
   <div class="hider updatable">
 <%= format('consumers', {'mode': 'queue', 'consumers': queue.consumer_details}) %>
