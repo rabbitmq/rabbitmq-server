@@ -128,15 +128,35 @@ consumer_cancelled(Connection, StreamResource, SubscriptionId, ActingUser, Notif
     rabbit_core_metrics:consumer_deleted(Connection,
                                          consumer_tag(SubscriptionId),
                                          StreamResource),
+
+    propagate_consumer_cancellation(StreamResource, SubscriptionId, ActingUser,
+                                    Notify),
+    ok.
+
+propagate_consumer_cancellation(StreamResource, SubscriptionId, ActingUser,
+                                Notify) ->
+    Props = consumer_cancellation_event(StreamResource,
+                                        SubscriptionId,
+                                        ActingUser),
+    Type = consumer_deleted,
     case Notify of
         true ->
-            rabbit_event:notify(consumer_deleted,
-                                [{consumer_tag, consumer_tag(SubscriptionId)},
-                                 {channel, self()}, {queue, StreamResource},
-                                 {user_who_performed_action, ActingUser}]);
-        _ -> ok
-    end,
-    ok.
+            rabbit_event:notify(Type, Props);
+        false ->
+            %% creating record without referencing it
+            Evt = {event, Type, Props, none, os:system_time(millisecond)},
+            try
+                gen_server:cast(rabbit_mgmt_metrics_gc:name(Type), {event, Evt})
+            catch
+                _:_ ->
+                    ok
+            end
+    end.
+
+consumer_cancellation_event(StreamResource, SubscriptionId, ActingUser) ->
+    [{consumer_tag, consumer_tag(SubscriptionId)},
+     {channel, self()}, {queue, StreamResource},
+     {user_who_performed_action, ActingUser}].
 
 publisher_created(Connection,
                   StreamResource,
