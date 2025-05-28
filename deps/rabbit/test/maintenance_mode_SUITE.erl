@@ -191,7 +191,7 @@ maintenance_mode_status(Config) ->
 
 listener_suspension_status(Config) ->
     Nodes = [A | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ct:pal("Picked node ~ts for maintenance tests...", [A]),
+    ct:log("Picked node ~ts for maintenance tests...", [A]),
 
     rabbit_ct_helpers:await_condition(
         fun () -> not rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
@@ -261,7 +261,7 @@ quorum_queue_leadership_transfer(Config) ->
         fun () -> rabbit_ct_broker_helpers:is_being_drained_local_read(Config, A) end, 10000),
 
     %% quorum queue leader election is asynchronous
-    AllTheSame = queue_utils:fifo_machines_use_same_version(
+    AllTheSame = queue_utils:ra_machines_use_same_version(rabbit_fifo,
                    Config, Nodenames),
     case AllTheSame of
         true ->
