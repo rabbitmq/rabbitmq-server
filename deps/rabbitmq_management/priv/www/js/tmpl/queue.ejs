@@ -76,7 +76,7 @@
     </table>
 
 <% if(!disable_stats) { %>
-    <table class="facts facts-l">
+    <table class="facts facts-l" id="details-queue-stats-table">
       <tr>
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
@@ -84,12 +84,12 @@
       <% if(queue.consumers) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumers) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumers) %></td>
       </tr>
       <% } else if(queue.hasOwnProperty('consumer_details')) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumer_details.length) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
       <% } %>
       <% if (is_classic(queue)) { %>
