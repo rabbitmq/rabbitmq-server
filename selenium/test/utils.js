@@ -144,7 +144,7 @@ module.exports = {
     return new CaptureScreenshot(d.driver, require('path').basename(test))
   },
 
-  doWhile: async (doCallback, booleanCallback, delayMs = 1000, message = "doWhile failed") => {
+  doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed") => {
     let done = false 
     let attempts = 10
     let ret
@@ -156,7 +156,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on doUntil callback...")
         
       }finally {
         if (!done) {
@@ -184,7 +184,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on retry callback...")
         
       }finally {
         if (!done) {
