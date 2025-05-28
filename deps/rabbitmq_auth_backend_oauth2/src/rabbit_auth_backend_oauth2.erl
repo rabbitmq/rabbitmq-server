@@ -97,7 +97,6 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
             Scopes = get_expanded_scopes(Token, Resource),
-            rabbit_log:debug("Checking against scopes: ~p", [Scopes]),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
