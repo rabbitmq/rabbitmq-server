@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, log } = require('../utils')
 
 const LoginPage = require('../pageobjects/LoginPage')
 const OverviewPage = require('../pageobjects/OverviewPage')
@@ -71,7 +71,7 @@ describe('Exchange management', function () {
   it('exchange selectable columns', async function () {  
     await overview.clickOnOverviewTab()
     await overview.clickOnExchangesTab()
-    await doWhile(async function() { return exchanges.getExchangesTable() },
+    await doUntil(async function() { return exchanges.getExchangesTable() },
       function(table) { 
         return table.length > 0
     })

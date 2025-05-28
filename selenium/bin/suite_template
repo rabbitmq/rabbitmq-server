@@ -30,8 +30,12 @@ find_selenium_dir() {
 SELENIUM_ROOT_FOLDER=$(find_selenium_dir $SCRIPT)
 TEST_DIR=$SELENIUM_ROOT_FOLDER/test
 BIN_DIR=$SELENIUM_ROOT_FOLDER/bin
-SCREENS=${SELENIUM_ROOT_FOLDER}/screens/${SUITE}
-CONF_DIR=${CONF_DIR_PREFIX:-/tmp}/selenium/${SUITE}
+if [[ -z "${CONF_DIR_PREFIX}" ]]; then
+  CONF_DIR_PREFIX=$(mktemp -d)
+fi
+CONF_DIR=${CONF_DIR_PREFIX}/selenium/${SUITE}
+SCREENS=${CONF_DIR}/screens
+
 LOGS=${CONF_DIR}/logs
 ENV_FILE=$CONF_DIR/.env
 OTHER_ENV_FILE=$CONF_DIR/.other.env
@@ -116,6 +120,8 @@ init_suite() {
 
   begin "Initializing suite $SUITE ..."
   print "> REQUIRED_COMPONENTS: ${REQUIRED_COMPONENTS[*]}"
+  print "> CONF_DIR_PREFIX: ${CONF_DIR_PREFIX} "
+  print "> CONF_DIR: ${CONF_DIR} "
   print "> TEST_CASES_DIR: ${TEST_CASES_DIR} "
   print "> TEST_CONFIG_DIR: ${TEST_CONFIG_DIR} "
   print "> DOCKER_NETWORK: ${DOCKER_NETWORK} "
@@ -128,8 +134,8 @@ init_suite() {
   print "> COMMAND: ${COMMAND}"
   end "Initialized suite"
 
-  mkdir -p ${LOGS}/${SUITE}
-  mkdir -p ${SCREENS}/${SUITE}
+  mkdir -p ${LOGS}
+  mkdir -p ${SCREENS}
 }
 
 build_mocha_image() {
@@ -356,8 +362,15 @@ _test() {
   mocha_test_tag=($(md5sum $SELENIUM_ROOT_FOLDER/package.json))
 
   generate_node_extra_ca_cert
-  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node_ca_certs.pem
-  print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
+  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node
+  
+  EXTRA_ENV_VARS="" 
+  EXTRA_MOUNTS="" 
+  if [[ -f ${MOUNT_NODE_EXTRA_CA_CERTS}/node_ca_certs.pem ]]; then 
+    print "> MOUNT_NODE_EXTRA_CA_CERTS: ${MOUNT_NODE_EXTRA_CA_CERTS}"
+    EXTRA_ENV_VARS="${EXTRA_ENV_VARS} --env NODE_EXTRA_CA_CERTS=/nodejs/node_ca_certs.pem "
+    EXTRA_MOUNTS="${EXTRA_MOUNTS} -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs "
+  fi 
 
   docker run \
     --rm \
@@ -373,12 +386,12 @@ _test() {
     --env PROFILES="${PROFILES}" \
     --env ENV_FILE="/code/.env" \
     --env RABBITMQ_CERTS=/etc/rabbitmq/certs \
-    --env NODE_EXTRA_CA_CERTS=/nodejs/ca.pem \
-    -v ${MOUNT_NODE_EXTRA_CA_CERTS}:/nodejs/ca.pem \
+    ${EXTRA_ENV_VARS} \
     -v ${TEST_DIR}:/code/test \
     -v ${TEST_CONFIG_DIR}/certs:/etc/rabbitmq/certs \
     -v ${SCREENS}:/screens \
     -v ${ENV_FILE}:/code/.env \
+    ${EXTRA_MOUNTS} \
     mocha-test:${mocha_test_tag} test /code/test${TEST_CASES_PATH}
 
   TEST_RESULT=$?
@@ -674,7 +687,7 @@ test_local() {
   export SELENIUM_POLLING=${SELENIUM_POLLING:-500}
     
   generate_node_extra_ca_cert
-  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node_ca_certs.pem
+  MOUNT_NODE_EXTRA_CA_CERTS=${CONF_DIR}/node/node_ca_certs.pem
 
   print "> SELENIUM_TIMEOUT: ${SELENIUM_TIMEOUT}"
   print "> SELENIUM_POLLING: ${SELENIUM_POLLING}"
@@ -738,16 +751,22 @@ save_components_logs() {
   end "Finished saving logs"
 }
 generate_node_extra_ca_cert() {  
-  echo "Generating ${CONF_DIR}/node_ca_certs.pem ..."
-  rm -f ${CONF_DIR}/node_ca_certs.pem  
+  begin "Generating ${CONF_DIR}/node/node_ca_certs.pem ..."
+  mkdir -p ${CONF_DIR}/node
+  rm -f ${CONF_DIR}/node/node_ca_certs.pem  
   env | while IFS= read -r line; do
     value=${line#*=}
     name=${line%%=*}
     
     if [[ $name == *NODE_EXTRA_CA_CERTS ]]
     then
-      echo "Adding ${TEST_DIR}/${value} to ${CONF_DIR}/node_ca_certs.pem ..."
-      cat ${TEST_DIR}/${value} >> ${CONF_DIR}/node_ca_certs.pem      
+      print "Adding ${TEST_DIR}/${value} to ${CONF_DIR}/node/node_ca_certs.pem ..."
+      cat ${TEST_DIR}/${value} >> ${CONF_DIR}/node/node_ca_certs.pem      
     fi 
-  done  
+  done
+  if [[ -f  ${CONF_DIR}/node/node_ca_certs.pem ]]; then 
+    end "Generated ${CONF_DIR}/node/node_ca_certs.pem"
+  else
+    end "Did not generate ${CONF_DIR}/node/node_ca_certs.pem"
+  fi 
 }

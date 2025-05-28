@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, log, delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, log, delay } = require('../utils')
 const { getManagementUrl, basicAuthorization, createVhost, deleteVhost } = require('../mgt-api')
 
 const LoginPage = require('../pageobjects/LoginPage')
@@ -56,7 +56,7 @@ describe('Virtual Hosts in Admin tab', function () {
     await adminTab.clickOnVhosts()
     await vhostsTab.isLoaded()
     await vhostsTab.searchForVhosts("/")
-    await doWhile(async function() { return vhostsTab.getVhostsTable() },
+    await doUntil(async function() { return vhostsTab.getVhostsTable() },
       function(table) { 
         return table.length>0
       })
@@ -116,7 +116,7 @@ describe('Virtual Hosts in Admin tab', function () {
     it('vhost is listed with tag', async function () {  
       log("Searching for vhost " + vhost)
       await vhostsTab.searchForVhosts(vhost)
-      await doWhile(async function() { return vhostsTab.getVhostsTable()},
+      await doUntil(async function() { return vhostsTab.getVhostsTable()},
       function(table) { 
         log("table: "+ JSON.stringify(table) + " table[0][0]:" + table[0][0])
         return table.length==1 && table[0][0].localeCompare(vhost) == 0
@@ -124,7 +124,7 @@ describe('Virtual Hosts in Admin tab', function () {
       log("Found vhost " + vhost)
       await vhostsTab.selectTableColumnsById(["checkbox-vhosts-tags"])
       
-      await doWhile(async function() { return vhostsTab.getVhostsTable() },
+      await doUntil(async function() { return vhostsTab.getVhostsTable() },
       function(table) { 
         return table.length==1 && table[0][3].localeCompare("selenium-tag") == 0
       })

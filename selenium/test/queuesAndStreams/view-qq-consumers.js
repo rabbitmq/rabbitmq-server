@@ -1,7 +1,7 @@
 const { By, Key, until, Builder } = require('selenium-webdriver')
 require('chromedriver')
 const assert = require('assert')
-const { buildDriver, goToHome, captureScreensFor, teardown, doWhile, goToQueue,delay } = require('../utils')
+const { buildDriver, goToHome, captureScreensFor, teardown, doUntil, goToQueue,delay } = require('../utils')
 const { createQueue, deleteQueue, getManagementUrl, basicAuthorization } = require('../mgt-api')
 const { getAmqpUrl : getAmqpUrl } = require('../amqp')
 const amqplib = require('amqplib');
@@ -84,7 +84,7 @@ describe('Given a quorum queue configured with SAC', function () {
     })
 
     it('it should have one consumer as active', async function() {
-      await doWhile(async function() {
+      await doUntil(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()
         return queuePage.getConsumerCount()
@@ -94,7 +94,7 @@ describe('Given a quorum queue configured with SAC', function () {
       assert.equal("1", await queuePage.getConsumerCount())
       assert.equal("Consumers (1)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
-      let consumerTable = await doWhile(async function() {
+      let consumerTable = await doUntil(async function() {
         return queuePage.getConsumersTable()
       }, function(table) {
         return table[0][6].localeCompare("single active") == 0 && 
@@ -113,7 +113,7 @@ describe('Given a quorum queue configured with SAC', function () {
 
       it('the latter consumer should be active and the former waiting', async function() {
               
-        await doWhile(async function() {
+        await doUntil(async function() {
           await queuePage.refresh()
           await queuePage.isLoaded()
           return queuePage.getConsumerCount()
@@ -124,7 +124,7 @@ describe('Given a quorum queue configured with SAC', function () {
         assert.equal("2", await queuePage.getConsumerCount())
         assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
         await queuePage.clickOnConsumerSection()
-        let consumerTable = await doWhile(async function() {
+        let consumerTable = await doUntil(async function() {
           return queuePage.getConsumersTable()
         }, function(table) {
           return table.length == 2 && table[0][1] != "" && table[1][1] != ""
@@ -151,7 +151,7 @@ describe('Given a quorum queue configured with SAC', function () {
         error("Failed to close amqp091 connection due to " + error);      
       }
       // ensure there are no more consumers 
-      await doWhile(async function() {
+      await doUntil(async function() {
           await queuePage.refresh()
           await queuePage.isLoaded()
           return queuePage.getConsumerCount()
@@ -178,7 +178,7 @@ describe('Given a quorum queue configured with SAC', function () {
     })
 
     it('it should have one consumer as active', async function() {
-      await doWhile(async function() {
+      await doUntil(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()
         return queuePage.getConsumerCount()
@@ -188,7 +188,7 @@ describe('Given a quorum queue configured with SAC', function () {
       assert.equal("1", await queuePage.getConsumerCount())
       assert.equal("Consumers (1)", await queuePage.getConsumersSectionTitle())
       await queuePage.clickOnConsumerSection()
-      let consumerTable = await doWhile(async function() {
+      let consumerTable = await doUntil(async function() {
         return queuePage.getConsumersTable()
       }, function(table) {
         return table[0][6].localeCompare("single active") == 0 && 
@@ -207,7 +207,7 @@ describe('Given a quorum queue configured with SAC', function () {
 
       it('the former consumer should still be active and the latter be waiting', async function() {
               
-        await doWhile(async function() {
+        await doUntil(async function() {
           await queuePage.refresh()
           await queuePage.isLoaded()
           return queuePage.getConsumerCount()
@@ -218,7 +218,7 @@ describe('Given a quorum queue configured with SAC', function () {
         assert.equal("2", await queuePage.getConsumerCount())
         assert.equal("Consumers (2)", await queuePage.getConsumersSectionTitle())
         await queuePage.clickOnConsumerSection()
-        let consumerTable = await doWhile(async function() {
+        let consumerTable = await doUntil(async function() {
           return queuePage.getConsumersTable()
         }, function(table) {
           return table.length == 2 && table[0][1] != "" && table[1][1] != ""
