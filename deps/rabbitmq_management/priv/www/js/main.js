@@ -1316,7 +1316,8 @@ function update_status(status) {
 
 function with_req(method, path, body, fun) {
     if(!has_auth_credentials()) {
-        // navigate to the login form
+        // Clear any lingering auth settings in local storage and navigate to the login form.
+        clear_auth();
         location.reload();
         return;
     }
