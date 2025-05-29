@@ -253,6 +253,7 @@ mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of
         issuer -> validator_https_uri(Key, Value);
         token_endpoint -> validator_https_uri(Key, Value);
+        tokeninfo_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);

@@ -25,6 +25,7 @@
     issuer :: option(uri_string:uri_string()),
     discovery_endpoint :: option(uri_string:uri_string()),
     token_endpoint :: option(uri_string:uri_string()),
+    tokeninfo_endpoint :: option(uri_string:uri_string()),
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
     jwks_uri :: option(uri_string:uri_string()),
