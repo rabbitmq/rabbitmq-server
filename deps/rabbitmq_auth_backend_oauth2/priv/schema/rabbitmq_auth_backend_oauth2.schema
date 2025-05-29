@@ -201,6 +201,11 @@
  end}.
 
 {mapping,
+ "auth_oauth2.tokeninfo_endpoint",
+ "rabbitmq_auth_backend_oauth2.tokeninfo_endpoint",
+ [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
+
+{mapping,
  "auth_oauth2.oauth_providers.$name.discovery_endpoint_params.$param",
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, string}]}.
@@ -287,6 +292,12 @@
 
 {mapping,
   "auth_oauth2.oauth_providers.$name.token_endpoint",
+  "rabbitmq_auth_backend_oauth2.oauth_providers",
+  [{datatype, string}, {validators, ["uri", "https_uri"]}]
+}.
+
+{mapping,
+  "auth_oauth2.oauth_providers.$name.tokeninfo_endpoint",
   "rabbitmq_auth_backend_oauth2.oauth_providers",
   [{datatype, string}, {validators, ["uri", "https_uri"]}]
 }.
