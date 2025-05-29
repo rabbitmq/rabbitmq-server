@@ -361,7 +361,7 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
                                     rabbit_log:warning(
                                         "~tp plugin version is not defined."
                                         " Requirement ~tp for plugin ~tp is ignored",
-                                        [Versions, PluginName]);
+                                        [Name, Versions, PluginName]);
                                 _  -> ok
                             end,
                             Acc;
