@@ -144,10 +144,15 @@ merge_oauth_provider(OAuthProvider, Proplist) ->
         EndSessionEndpoint -> [{end_session_endpoint, EndSessionEndpoint} |
             proplists:delete(end_session_endpoint, Proplist1)]
     end,
-    case OAuthProvider#oauth_provider.jwks_uri of
+    Proplist3 = case OAuthProvider#oauth_provider.tokeninfo_endpoint of
         undefined ->  Proplist2;
+        TokenInfoEndpoint -> [{tokeninfo_endpoint, TokenInfoEndpoint} |
+            proplists:delete(tokeninfo_endpoint, Proplist2)]
+    end,
+    case OAuthProvider#oauth_provider.jwks_uri of
+        undefined ->  Proplist3;
         JwksEndPoint -> [{jwks_uri, JwksEndPoint} |
-            proplists:delete(jwks_uri, Proplist2)]
+            proplists:delete(jwks_uri, Proplist3)]
     end.
 
 parse_openid_configuration_response({error, Reason}) ->
