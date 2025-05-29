@@ -17,6 +17,7 @@ while read SUITE
 do
   echo -e "=== Running suite (${TOTAL_SUITES}/${GREEN}${#SUCCESSFUL_SUITES[@]}/${RED}${#FAILED_SUITES[@]}${NC}) $SUITE ============================================"
   echo " "
+  
   ENV_MODES="docker" $SCRIPT/suites/$SUITE
   TEST_RESULT="$?"
   TEST_STATUS="${GREEN}Succeeded${NC}"

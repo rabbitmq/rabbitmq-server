@@ -59,19 +59,16 @@ jobs:
     - name: Run short UI suites on a standalone rabbitmq server
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
-        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
+        CONF_DIR_PREFIX="$(mktemp -d)" RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
           ${SELENIUM_DIR}/run-suites.sh short-suite-management-ui        
-
-    - name: Prepare logs for upload
-      if: ${{ failure() && steps.tests.outcome == 'failed' }}
-      run: |
-        mkdir -p /tmp/short-suite
-        mv /tmp/selenium/* /tmp/short-suite
+        echo "SELENIUM_ARTIFACTS=$CONF_DIR_PREFIX" >> "$GITHUB_OUTPUT"
         
     - name: Upload Test Artifacts
       if: ${{ failure() && steps.tests.outcome == 'failed' }}
       uses: actions/upload-artifact@v4
+      env: 
+          SELENIUM_ARTIFACTS: ${{ steps.run-suites.outputs.SELENIUM_ARTIFACTS }}
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          /tmp/short-suite
+          $SELENIUM_ARTIFACTS/*
