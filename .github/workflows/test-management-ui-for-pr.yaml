@@ -57,6 +57,7 @@ jobs:
         docker build -t mocha-test --target test .
 
     - name: Run short UI suites on a standalone rabbitmq server
+      id: tests
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         CONF_DIR_PREFIX="$(mktemp -d)" RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
@@ -67,7 +68,7 @@ jobs:
       if: ${{ failure() && steps.tests.outcome == 'failed' }}
       uses: actions/upload-artifact@v4
       env: 
-          SELENIUM_ARTIFACTS: ${{ steps.run-suites.outputs.SELENIUM_ARTIFACTS }}
+          SELENIUM_ARTIFACTS: ${{ steps.tests.outputs.SELENIUM_ARTIFACTS }}
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
