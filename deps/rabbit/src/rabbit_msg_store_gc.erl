@@ -12,7 +12,7 @@
 -export([start_link/1, compact/2, truncate/4, delete/2, stop/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+         terminate/2, code_change/3, prioritise_cast/3]).
 
 -record(state,
         { pending,
@@ -50,6 +50,10 @@ delete(Server, File) ->
 
 stop(Server) ->
     gen_server2:call(Server, stop, infinity).
+
+%% TODO replace with priority messages for OTP28+
+prioritise_cast({delete, _}, _Len, _State) -> 5;
+prioritise_cast(_, _Len, _State) -> 0.
 
 %%----------------------------------------------------------------------------
 
