@@ -87,11 +87,8 @@ user_login_authorization(Username, AuthProps) ->
 check_vhost_access(#auth_user{impl = DecodedTokenFun},
                    VHost, _AuthzData) ->
     with_decoded_token(DecodedTokenFun(),
-        fun(_Token) ->
-            DecodedToken = DecodedTokenFun(),
-            Scopes = get_scope(DecodedToken),
-            ScopeString = rabbit_oauth2_scope:concat_scopes(Scopes, ","),
-            rabbit_log:debug("Matching virtual host '~ts' against the following scopes: ~ts", [VHost, ScopeString]),
+        fun(Token) ->
+            Scopes = get_expanded_scopes(Token, #resource{virtual_host = VHost}),
             rabbit_oauth2_scope:vhost_access(VHost, Scopes)
         end).
 
@@ -99,7 +96,7 @@ check_resource_access(#auth_user{impl = DecodedTokenFun},
                       Resource, Permission, _AuthzContext) ->
     with_decoded_token(DecodedTokenFun(),
         fun(Token) ->
-            Scopes = get_scope(Token),
+            Scopes = get_expanded_scopes(Token, Resource),
             rabbit_oauth2_scope:resource_access(Resource, Permission, Scopes)
         end).
 
