@@ -562,7 +562,9 @@ failed_to_recv_proxy_header(Ref, Error) ->
     end,
     rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
-    _ = catch ranch:handshake(Ref),
+    _ = try ranch:handshake(Ref) catch
+            _:_ -> ok
+        end,
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
@@ -577,34 +579,31 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
                 {error, protocol_error, Error} ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
-                    Sock = try_ranch_handshake(Ref),
+                    {ok, Sock} = ranch_handshake(Ref),
                     ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
-            Sock = try_ranch_handshake(Ref),
+            {ok, Sock} = ranch_handshake(Ref),
             ok = tune_buffer_size(Sock, BufferStrategy),
             {ok, Sock}
     end.
 
-try_ranch_handshake(Ref) ->
-    try ranch:handshake(Ref) of
-        {ok, Sock} ->
-            Sock
-    catch
+ranch_handshake(Ref) ->
+    try ranch:handshake(Ref) catch
         %% Don't log on Reason = closed to prevent flooding the log
         %% specially since a TCP health check, such as the default
         %% (with cluster-operator) readinessProbe periodically opens
         %% and closes a connection, as mentioned in
         %% https://github.com/rabbitmq/rabbitmq-server/pull/12304
-        exit:{shutdown, {closed, _} = Reason} ->
-            exit({shutdown, Reason});
-        exit:{shutdown, {Reason, {PeerIp, PeerPort} = PeerInfo}} ->
+        exit:{shutdown, {closed, _}} = Error:Stacktrace ->
+            erlang:raise(exit, Error, Stacktrace);
+        exit:{shutdown, {Reason, {PeerIp, PeerPort}}} = Error:Stacktrace ->
             PeerAddress = io_lib:format("~ts:~tp", [rabbit_misc:ntoab(PeerIp), PeerPort]),
             Protocol = ranch_ref_to_protocol(Ref),
             rabbit_log:error("~p error during handshake for protocol ~p and peer ~ts",
                              [Reason, Protocol, PeerAddress]),
-            exit({shutdown, {Reason, PeerInfo}})
+            erlang:raise(exit, Error, Stacktrace)
     end.
 
 tune_buffer_size(Sock, dynamic_buffer) ->
