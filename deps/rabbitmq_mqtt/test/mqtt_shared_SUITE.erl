@@ -696,7 +696,7 @@ global_counters(Config) ->
                    messages_delivered_get_manual_ack_total => 0,
                    messages_get_empty_total => 0,
                    messages_redelivered_total => 0},
-                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_classic_queue}])),
+                 get_global_counters(Config, ProtoVer, 0, #{queue_type => rabbit_classic_queue})),
     ?assertEqual(#{messages_delivered_total => 1,
                    messages_acknowledged_total => 0,
                    messages_delivered_consume_auto_ack_total => 1,
@@ -705,7 +705,7 @@ global_counters(Config) ->
                    messages_delivered_get_manual_ack_total => 0,
                    messages_get_empty_total => 0,
                    messages_redelivered_total => 0},
-                 get_global_counters(Config, ProtoVer, 0, [{queue_type, rabbit_mqtt_qos0_queue}])),
+                 get_global_counters(Config, ProtoVer, 0, #{queue_type => rabbit_mqtt_qos0_queue})),
 
     {ok, _, _} = emqtt:unsubscribe(C, Topic1),
     ?assertEqual(1, maps:get(consumers, get_global_counters(Config, ProtoVer))),

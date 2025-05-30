@@ -1627,7 +1627,7 @@ get_osiris_counters(Config) ->
                                  []).
 
 get_global_counters(Config) ->
-    maps:get([{protocol, stream}],
+    maps:get(#{protocol => stream},
              rabbit_ct_broker_helpers:rpc(Config,
                                           0,
                                           rabbit_global_counters,
