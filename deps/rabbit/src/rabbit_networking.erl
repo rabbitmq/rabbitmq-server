@@ -282,7 +282,16 @@ start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
 
-start_ssl_listener(Listener, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) ->
+start_ssl_listener(Listener, SslOpts0, NumAcceptors, ConcurrentConnsSupsCount) ->
+    SslOpts = case proplists:get_value(password, SslOpts0) of
+                undefined -> SslOpts0;
+                Password  ->
+                  %% A password can be a value or a function returning that value.
+                  %% See the key_pem_password/0 type in https://github.com/erlang/otp/pull/5843/files.
+                  NewOpts = proplists:delete(password, SslOpts0),
+                  Fun = fun() -> Password end,
+                  [{password, Fun} | NewOpts]
+              end,
     start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, 'amqp/ssl',
                    "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 
