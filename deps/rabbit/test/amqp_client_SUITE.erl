@@ -44,6 +44,7 @@
 
 all() ->
     [
+      {group, cluster_size_1_group_2},
       {group, cluster_size_1},
       {group, cluster_size_3},
       {group, metrics}
@@ -164,8 +165,6 @@ groups() ->
        incoming_window_closed_close_link,
        incoming_window_closed_rabbitmq_internal_flow_classic_queue,
        incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
-       tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
-       tcp_back_pressure_rabbitmq_internal_flow_quorum_queue,
        session_flow_control_default_max_frame_size,
        session_flow_control_small_max_frame_size,
        session_max_per_connection,
@@ -176,6 +175,11 @@ groups() ->
        x_cc_annotation_queue,
        x_cc_annotation_null,
        bad_x_cc_annotation_exchange
+      ]},
+
+      {cluster_size_1_group_2, [], [
+        tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
+        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue
       ]},
 
      {cluster_size_3, [shuffle],
