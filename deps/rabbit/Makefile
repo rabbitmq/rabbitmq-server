@@ -151,6 +151,7 @@ MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
+CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -220,8 +221,6 @@ ct-fast:
 
 ct-slow:
 	$(MAKE) ct CT_SUITES='$(SLOW_CT_SUITES)'
-
-CT_OPTS += -ct_hooks rabbit_ct_hook []
 
 # Parallel CT.
 #

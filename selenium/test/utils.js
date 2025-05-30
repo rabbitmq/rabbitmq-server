@@ -129,9 +129,9 @@ module.exports = {
   goToExchanges: (d) => {
     return d.driver.get(d.baseUrl + '#/exchanges')
   },
-
-  goTo: (d, address) => {
-    return d.get(address)
+    
+  goToQueue(d, vhost, queue) {
+    return d.driver.get(d.baseUrl + '#/queues/' + encodeURIComponent(vhost) + '/' + encodeURIComponent(queue))
   },
 
   delay: async (msec, ref) => {
@@ -144,7 +144,7 @@ module.exports = {
     return new CaptureScreenshot(d.driver, require('path').basename(test))
   },
 
-  doWhile: async (doCallback, booleanCallback, delayMs = 1000, message = "doWhile failed") => {
+  doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed") => {
     let done = false 
     let attempts = 10
     let ret
@@ -156,7 +156,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on doUntil callback...")
         
       }finally {
         if (!done) {
@@ -184,7 +184,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on retry callback...")
         
       }finally {
         if (!done) {

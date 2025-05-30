@@ -1,4 +1,5 @@
-   <table class="facts facts-l">
+   <table class="facts facts-l" id="details-queue-stats-table">
+      <tbody>
       <tr>
         <th>State</th>
         <td><%= fmt_object_state(queue) %></td>
@@ -6,18 +7,18 @@
       <% if(queue.consumers) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumers) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumers) %></td>
       </tr>
       <% } else if(queue.hasOwnProperty('consumer_details')) { %>
       <tr>
         <th>Consumers</th>
-        <td><%= fmt_string(queue.consumer_details.length) %></td>
+        <td id="consumers"><%= fmt_string(queue.consumer_details.length) %></td>
       </tr>
       <% } %>
       <% if(queue.hasOwnProperty('publishers')) { %>
       <tr>
         <th>Publishers</th>
-        <td><%= fmt_string(queue.publishers) %></td>
+        <td id="publishers"><%= fmt_string(queue.publishers) %></td>
       </tr>
       <% } %>
       <tr>
@@ -30,6 +31,7 @@
         <td><%= fmt_string(queue.delivery_limit) %></td>
       </tr>
       <% } %>
+    </tbody>
     </table>
 
     <table class="facts">

@@ -8,12 +8,12 @@
          wait_for_messages_total/3,
          wait_for_messages/2,
          wait_for_messages/3,
+         wait_for_messages/4,
          wait_for_min_messages/3,
          wait_for_max_messages/3,
          dirty_query/3,
          ra_name/1,
-         fifo_machines_use_same_version/1,
-         fifo_machines_use_same_version/2,
+         ra_machines_use_same_version/3,
          wait_for_local_stream_member/4,
          has_local_stream_member_rpc/1
         ]).
@@ -36,12 +36,15 @@ wait_for_messages_total(Servers, QName, Total) ->
                       fun rabbit_fifo:query_messages_total/1,
                       ?WFM_DEFAULT_NUMS).
 
+wait_for_messages(Servers, QName, Total, Fun) ->
+    wait_for_messages(Servers, QName, Total, Fun, ?WFM_DEFAULT_NUMS).
+
 wait_for_messages(Servers, QName, Number, Fun, 0) ->
     Msgs = dirty_query(Servers, QName, Fun),
     ?assertEqual([Number || _ <- lists:seq(1, length(Servers))], Msgs);
 wait_for_messages(Servers, QName, Number, Fun, N) ->
     Msgs = dirty_query(Servers, QName, Fun),
-    ct:pal("Got messages ~tp ~tp", [QName, Msgs]),
+    ct:log("Got messages ~tp ~tp", [QName, Msgs]),
     %% hack to allow the check to succeed in mixed versions clusters if at
     %% least one node matches the criteria rather than all nodes for
     F = case rabbit_ct_helpers:is_mixed_versions() of
@@ -157,16 +160,16 @@ filter_queues(Expected, Got) ->
                          lists:member(hd(G), Keys)
                  end, Got).
 
-fifo_machines_use_same_version(Config) ->
+ra_machines_use_same_version(Config) ->
     Nodenames = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    fifo_machines_use_same_version(Config, Nodenames).
+    ra_machines_use_same_version(rabbit_fifo, Config, Nodenames).
 
-fifo_machines_use_same_version(Config, Nodenames)
+ra_machines_use_same_version(MachineModule, Config, Nodenames)
   when length(Nodenames) >= 1 ->
     [MachineAVersion | OtherMachinesVersions] =
     [(catch rabbit_ct_broker_helpers:rpc(
               Config, Nodename,
-              rabbit_fifo, version, []))
+              MachineModule, version, []))
      || Nodename <- Nodenames],
     lists:all(fun(V) -> V =:= MachineAVersion end, OtherMachinesVersions).
 
