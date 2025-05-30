@@ -1762,7 +1762,14 @@ function is_internal(queue) {
 }
 
 function get_queue_type (queue) {    
-    return queue.type;
+    switch(queue.type) {
+        case "classic":
+        case "quorum":
+        case "stream":
+            return queue.type;
+        default:
+            return "default"
+    }
 }
 
 function is_quorum(queue) {
