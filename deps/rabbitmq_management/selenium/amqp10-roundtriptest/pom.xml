@@ -8,7 +8,7 @@
   <name>amqp10-roundtriptest</name>
   <url>https://www.rabbitmq.com</url>
   <properties>
-    <junit.jupiter.version>5.12.2</junit.jupiter.version>
+    <junit.jupiter.version>5.13.0</junit.jupiter.version>
     <qpid-jms-client.version>2.7.0</qpid-jms-client.version>
     <logback.version>1.2.13</logback.version>
     <spotless.version>2.44.5</spotless.version>
