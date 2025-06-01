@@ -100,3 +100,4 @@ duplicate_client_id(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 publish_to_all_queue_types_qos0(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 publish_to_all_queue_types_qos1(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
 maintenance(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
+notify_consumer_classic_queue_deleted(Config) -> mqtt_shared_SUITE:?FUNCTION_NAME(Config).
