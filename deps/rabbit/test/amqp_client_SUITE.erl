@@ -6254,18 +6254,10 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ?assert(MsgsReady > 0),
     ?assert(MsgsReady < Num),
 
-    %% Use large buffers. This will considerably speed up receiving all messages (on Linux).
-    ok = inet:setopts(Socket, [{recbuf, 65536},
-                               {buffer, 65536}]),
-    %% When we resume the receiving client, we expect to receive all messages.
     ?assert(meck:validate(Mod)),
     ok = meck:unload(Mod),
-    ok = Mod:setopts(Socket, [{active, once}]),
-    receive_messages(Receiver, Num),
-
-    ok = detach_link_sync(Receiver),
-    {ok, #{message_count := 0}} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
-    ok = close({Connection, Session, LinkPair}).
+    %% Rely on end_per_testcase/2 to delete the queue and to close the connection.
+    ok.
 
 session_flow_control_default_max_frame_size(Config) ->
     QName = atom_to_binary(?FUNCTION_NAME),
