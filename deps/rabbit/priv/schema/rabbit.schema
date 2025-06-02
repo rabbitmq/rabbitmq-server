@@ -233,7 +233,8 @@ end}.
 
 {translation, "rabbit.definitions.ssl_options.password",
 fun(Conf) ->
-    rabbit_cuttlefish:optionally_tagged_string("definitions.tls.password", Conf)
+    Pass = rabbit_cuttlefish:optionally_tagged_string("definitions.tls.password", Conf),
+    fun() -> Pass end
 end}.
 
 {mapping, "definitions.tls.secure_renegotiate", "rabbit.definitions.ssl_options.secure_renegotiate",
