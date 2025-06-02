@@ -1728,8 +1728,7 @@ single_active_consumer_priority_test(Config) ->
      %% add a consumer with a higher priority, assert it becomes active
      {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
      ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up}},
-                          waiting_consumers = [_]}),
-
+                          waiting_consumers = [{CK1, _}]}),
      %% enqueue a message
      {E1Idx , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
      ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{next_msg_id = 1,
@@ -1751,10 +1750,27 @@ single_active_consumer_priority_test(Config) ->
                when map_size(Ch) == 0)
 
     ],
-    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
-
+    {#rabbit_fifo{ cfg = #cfg{resource = Resource}}, StateMachineEvents} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+    ModCalls = [ S || S = {mod_call, rabbit_quorum_queue, update_consumer_handler, _} <- StateMachineEvents ],
+    
+    %% C1 should be added as single_active    
+    assert_update_consumer_handler_state_transition(C1, Resource, true, single_active, lists:nth(1, ModCalls)),
+    %% C1 should transition to waiting because ...
+    assert_update_consumer_handler_state_transition(C1, Resource, false, waiting, lists:nth(2, ModCalls)),
+    %% C2 should become single_active
+    assert_update_consumer_handler_state_transition(C2, Resource, true, single_active, lists:nth(3, ModCalls)),
+    %% C2 should transition as waiting because ...
+    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(4, ModCalls)),
+    %% C3 is added as single_active
+    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(5, ModCalls)),
+    
     ok.
 
+assert_update_consumer_handler_state_transition(ConsumerId, Resource, IsActive, UpdatedState, ModCall) ->
+    {mod_call,rabbit_quorum_queue,update_consumer_handler,
+        [Resource,
+        ConsumerId,
+        _,_,_,IsActive,UpdatedState,[]]} = ModCall.
 
 single_active_consumer_priority_cancel_active_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
