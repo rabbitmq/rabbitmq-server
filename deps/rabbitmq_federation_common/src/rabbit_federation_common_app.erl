@@ -16,7 +16,6 @@
 -export([init/1]).
 
 start(_Type, _StartArgs) ->
-    ?FEDERATION_ETS = ets:new(?FEDERATION_ETS, [set, public, named_table]),
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 stop(_State) ->
