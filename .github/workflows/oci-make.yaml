@@ -7,13 +7,13 @@ name: OCI (make)
 on:
   pull_request:
     paths:
-      - deps/**
+      # - deps/**
       - scripts/**
-      - Makefile
+      # - Makefile
       - plugins.mk
       - rabbitmq-components.mk
       - packaging/**
-      - .github/workflows/oci-make.yaml
+      # - .github/workflows/oci-make.yaml
   workflow_dispatch:
     inputs:
       otp_version:
