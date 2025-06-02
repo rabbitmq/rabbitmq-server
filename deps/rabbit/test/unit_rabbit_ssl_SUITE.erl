@@ -27,9 +27,10 @@ groups() ->
 
 wrap_tls_opts_with_binary_password(_Config) ->
     Path = "/tmp/path/to/private_key.pem",
+    Bin = <<"s3krE7">>,
     Opts0 = [
       {keyfile, Path},
-      {password, <<"s3krE7">>}
+      {password, Bin}
     ],
 
     Opts = rabbit_ssl:wrap_password_opt(Opts0),
@@ -38,11 +39,15 @@ wrap_tls_opts_with_binary_password(_Config) ->
     ?assertEqual(Path, maps:get(keyfile, M)),
     ?assert(is_function(maps:get(password, M))),
 
+    F = maps:get(password, M),
+    ?assertEqual(Bin, F()),
+
     passed.
 
 wrap_tls_opts_with_function_password(_Config) ->
   Path = "/tmp/path/to/private_key.pem",
-  Fun = fun() -> <<"s3krE7">> end,
+  Bin = <<"s3krE7">>,
+  Fun = fun() -> Bin end,
   Opts0 = [
     {keyfile, Path},
     {password, Fun}
@@ -54,5 +59,8 @@ wrap_tls_opts_with_function_password(_Config) ->
   ?assertEqual(Path, maps:get(keyfile, M)),
   ?assert(is_function(maps:get(password, M))),
   ?assertEqual(Fun, maps:get(password, M)),
+
+  F = maps:get(password, M),
+  ?assertEqual(Bin, F()),
 
   passed.
