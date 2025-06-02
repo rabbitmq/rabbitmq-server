@@ -24,7 +24,7 @@ on:
 jobs:
   test:
     name: ${{ inputs.plugin }} (${{ inputs.make_target }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
     - name: CHECKOUT REPOSITORY
@@ -37,6 +37,7 @@ jobs:
       uses: erlef/setup-beam@v1.17
       with:
         otp-version: ${{ inputs.erlang_version }}
+        # version-type: strict
         elixir-version: ${{ inputs.elixir_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
