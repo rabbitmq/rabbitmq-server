@@ -45,6 +45,7 @@ stop() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    ?FEDERATION_ETS = ets:new(?FEDERATION_ETS, [set, public, named_table]),
     Status = #{
         id       => status,
         start    => {rabbit_federation_status, start_link, []},
