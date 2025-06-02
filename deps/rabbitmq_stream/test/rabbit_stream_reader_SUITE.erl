@@ -184,6 +184,44 @@ evaluate_state_after_secret_update_test(_) ->
     ?assert(is_integer(Cancel2)),
     ok.
 
+clean_subscriptions_should_remove_only_affected_subscriptions_test(_) ->
+    Mod = rabbit_stream_reader,
+    meck:new(Mod, [passthrough]),
+    meck:new(rabbit_stream_metrics, [stub_all]),
+    meck:new(rabbit_stream_sac_coordinator, [stub_all]),
+
+    S = <<"s1">>,
+    Pid1 = new_process(),
+    Pid2 = new_process(),
+    StreamSubs = #{S => [0, 1]},
+    Consumers = #{0 => consumer(S, Pid1),
+                  1 => consumer(S, Pid2)},
+
+    C0 = #stream_connection{stream_subscriptions = StreamSubs,
+                            user = #user{}},
+    S0 = #stream_connection_state{consumers = Consumers},
+    {Cleaned1, C1, S1} = Mod:clean_subscriptions(Pid1, S, C0, S0),
+    ?assert(Cleaned1),
+    ?assertEqual(#{S => [1]},
+                 C1#stream_connection.stream_subscriptions),
+    ?assertEqual(#{1 => consumer(S, Pid2)},
+                 S1#stream_connection_state.consumers),
+
+    {Cleaned2, C2, S2} = Mod:clean_subscriptions(Pid2, S, C1, S1),
+    ?assert(Cleaned2),
+    ?assertEqual(#{}, C2#stream_connection.stream_subscriptions),
+    ?assertEqual(#{}, S2#stream_connection_state.consumers),
+
+    ok.
+
+consumer(S, Pid) ->
+    #consumer{configuration = #consumer_configuration{stream = S,
+                                                      member_pid = Pid}}.
+
 consumer(S) ->
     #consumer{configuration = #consumer_configuration{stream = S},
               log = osiris_log:init(#{})}.
+
+new_process() ->
+    spawn(node(), fun() -> ok end).
+

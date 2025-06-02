@@ -106,7 +106,8 @@
          close_sent/3]).
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
-         evaluate_state_after_secret_update/4]).
+         evaluate_state_after_secret_update/4,
+         clean_subscriptions/4]).
 -endif.
 
 callback_mode() ->
@@ -3280,89 +3281,19 @@ clean_state_after_super_stream_deletion(Partitions, Connection, State, Transport
 
 clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                              #stream_connection{
-                                                user = #user{username = Username},
-                                                virtual_host = VirtualHost,
-                                                stream_subscriptions = StreamSubscriptions,
-                                                publishers = Publishers,
-                                                publisher_to_ids = PublisherToIds,
-                                                stream_leaders = Leaders,
-                                                outstanding_requests = Requests0} = C0,
-                                             #stream_connection_state{consumers = Consumers} = S0) ->
+                                                stream_leaders = Leaders} = C0,
+                                             S0) ->
     {SubscriptionsCleaned, C1, S1} =
         case stream_has_subscriptions(Stream, C0) of
             true ->
-                #{Stream := SubscriptionIds} = StreamSubscriptions,
-                Requests1 = lists:foldl(
-                              fun(SubId, Rqsts0) ->
-                                      #{SubId := Consumer} = Consumers,
-                                      case {MemberPid, Consumer} of
-                                          {undefined, _C} ->
-                                              rabbit_stream_metrics:consumer_cancelled(self(),
-                                                                                       stream_r(Stream,
-                                                                                                C0),
-                                                                                       SubId,
-                                                                                       Username),
-                                              maybe_unregister_consumer(
-                                                VirtualHost, Consumer,
-                                                single_active_consumer(Consumer),
-                                                Rqsts0);
-                                          {MemberPid, #consumer{configuration =
-                                                                #consumer_configuration{member_pid = MemberPid}}} ->
-                                              rabbit_stream_metrics:consumer_cancelled(self(),
-                                                                                       stream_r(Stream,
-                                                                                                C0),
-                                                                                       SubId,
-                                                                                       Username),
-                                              maybe_unregister_consumer(
-                                                VirtualHost, Consumer,
-                                                single_active_consumer(Consumer),
-                                                Rqsts0);
-                                          _ ->
-                                              Rqsts0
-                                      end
-                              end, Requests0, SubscriptionIds),
-                {true,
-                 C0#stream_connection{stream_subscriptions =
-                                          maps:remove(Stream,
-                                                      StreamSubscriptions),
-                                      outstanding_requests = Requests1},
-                 S0#stream_connection_state{consumers =
-                                                maps:without(SubscriptionIds,
-                                                             Consumers)}};
+                clean_subscriptions(MemberPid, Stream, C0, S0);
             false ->
                 {false, C0, S0}
         end,
     {PublishersCleaned, C2, S2} =
         case stream_has_publishers(Stream, C1) of
             true ->
-                {PurgedPubs, PurgedPubToIds} =
-                    maps:fold(fun(PubId,
-                                  #publisher{stream = S, reference = Ref},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MemberPid =:= undefined ->
-                                      rabbit_stream_metrics:publisher_deleted(self(),
-                                                                                 stream_r(Stream,
-                                                                                          C1),
-                                                                                 PubId),
-                                         {maps:remove(PubId, Pubs),
-                                          maps:remove({Stream, Ref}, PubToIds)};
-                                 (PubId,
-                                  #publisher{stream = S, reference = Ref, leader = MPid},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MPid =:= MemberPid ->
-                                         rabbit_stream_metrics:publisher_deleted(self(),
-                                                                                 stream_r(Stream,
-                                                                                          C1),
-                                                                                 PubId),
-                                         {maps:remove(PubId, Pubs),
-                                          maps:remove({Stream, Ref}, PubToIds)};
-
-                                 (_PubId, _Publisher, {Pubs, PubToIds}) ->
-                                     {Pubs, PubToIds}
-                              end,
-                              {Publishers, PublisherToIds}, Publishers),
-                {true,
-                 C1#stream_connection{publishers = PurgedPubs,
-                                      publisher_to_ids = PurgedPubToIds},
-                 S1};
+                clean_publishers(MemberPid, Stream, C1, S1);
             false ->
                 {false, C1, S1}
         end,
@@ -3384,6 +3315,98 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
+clean_subscriptions(MemberPid, Stream,
+                    #stream_connection{user = #user{username = Username},
+                                       virtual_host = VirtualHost,
+                                       stream_subscriptions = StreamSubs,
+                                       outstanding_requests = Requests0} = C0,
+                    #stream_connection_state{consumers = Consumers} = S0) ->
+    #{Stream := SubIds} = StreamSubs,
+    {DelSubs1, Requests1} =
+    lists:foldl(
+      fun(SubId, {DelSubIds, Rqsts0}) ->
+              #{SubId := Consumer} = Consumers,
+              case {MemberPid, Consumer} of
+                  {undefined, _C} ->
+                      rabbit_stream_metrics:consumer_cancelled(self(),
+                                                               stream_r(Stream,
+                                                                        C0),
+                                                               SubId,
+                                                               Username),
+                      Rqsts1 = maybe_unregister_consumer(
+                                 VirtualHost, Consumer,
+                                 single_active_consumer(Consumer),
+                                 Rqsts0),
+                      {[SubId | DelSubIds], Rqsts1};
+                  {MemberPid,
+                   #consumer{configuration =
+                             #consumer_configuration{member_pid = MemberPid}}} ->
+                      rabbit_stream_metrics:consumer_cancelled(self(),
+                                                               stream_r(Stream,
+                                                                        C0),
+                                                               SubId,
+                                                               Username),
+                      Rqsts1 = maybe_unregister_consumer(
+                                 VirtualHost, Consumer,
+                                 single_active_consumer(Consumer),
+                                 Rqsts0),
+                      {[SubId | DelSubIds], Rqsts1};
+                  _ ->
+                      {DelSubIds, Rqsts0}
+              end
+      end, {[], Requests0}, SubIds),
+    case DelSubs1 of
+        [] ->
+            {false, C0, S0};
+        _ ->
+            StreamSubs1 = case SubIds -- DelSubs1 of
+                              [] ->
+                                  maps:remove(Stream, StreamSubs);
+                              RemSubIds ->
+                                  StreamSubs#{Stream => RemSubIds}
+                          end,
+            Consumers1 = maps:without(DelSubs1, Consumers),
+            {true,
+             C0#stream_connection{stream_subscriptions = StreamSubs1,
+                                  outstanding_requests = Requests1},
+             S0#stream_connection_state{consumers = Consumers1}}
+    end.
+
+clean_publishers(MemberPid, Stream,
+                 #stream_connection{
+                    publishers = Publishers,
+                    publisher_to_ids = PublisherToIds} = C0, S0) ->
+    {Updated, PurgedPubs, PurgedPubToIds} =
+    maps:fold(fun(PubId, #publisher{stream = S, reference = Ref},
+                  {_, Pubs, PubToIds})
+                    when S =:= Stream andalso MemberPid =:= undefined ->
+                      rabbit_stream_metrics:publisher_deleted(self(),
+                                                              stream_r(Stream,
+                                                                       C0),
+                                                              PubId),
+                      {true,
+                       maps:remove(PubId, Pubs),
+                       maps:remove({Stream, Ref}, PubToIds)};
+                 (PubId, #publisher{stream = S, reference = Ref, leader = MPid},
+                  {_, Pubs, PubToIds})
+                   when S =:= Stream andalso MPid =:= MemberPid ->
+                      rabbit_stream_metrics:publisher_deleted(self(),
+                                                              stream_r(Stream,
+                                                                       C0),
+                                                              PubId),
+                      {true,
+                       maps:remove(PubId, Pubs),
+                       maps:remove({Stream, Ref}, PubToIds)};
+
+                 (_PubId, _Publisher, {Updated, Pubs, PubToIds}) ->
+                      {Updated, Pubs, PubToIds}
+              end,
+              {false, Publishers, PublisherToIds}, Publishers),
+    {Updated,
+     C0#stream_connection{publishers = PurgedPubs,
+                          publisher_to_ids = PurgedPubToIds},
+     S0}.
+
 store_offset(Reference, _, _, C) when ?IS_INVALID_REF(Reference) ->
   rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
   C;
@@ -3401,8 +3424,7 @@ store_offset(Reference, Stream, Offset, Connection0) ->
 
 lookup_leader(Stream,
               #stream_connection{stream_leaders = StreamLeaders,
-                                 virtual_host = VirtualHost} =
-                  Connection) ->
+                                 virtual_host = VirtualHost} = Connection) ->
     case maps:get(Stream, StreamLeaders, undefined) of
         undefined ->
             case lookup_leader_from_manager(VirtualHost, Stream) of
@@ -3411,6 +3433,7 @@ lookup_leader(Stream,
                 {ok, LeaderPid} ->
                     Connection1 =
                         maybe_monitor_stream(LeaderPid, Stream, Connection),
+
                     {LeaderPid,
                      Connection1#stream_connection{stream_leaders =
                                                        StreamLeaders#{Stream =>
