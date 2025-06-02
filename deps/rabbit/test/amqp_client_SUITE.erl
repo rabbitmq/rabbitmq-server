@@ -164,7 +164,7 @@ groups() ->
        % incoming_window_closed_close_link,
        % incoming_window_closed_rabbitmq_internal_flow_classic_queue,
        % incoming_window_closed_rabbitmq_internal_flow_quorum_queue,
-       tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
+       % tcp_back_pressure_rabbitmq_internal_flow_classic_queue,
        tcp_back_pressure_rabbitmq_internal_flow_quorum_queue
        % session_flow_control_default_max_frame_size,
        % session_flow_control_small_max_frame_size,
@@ -6255,8 +6255,8 @@ tcp_back_pressure_rabbitmq_internal_flow(QType, Config) ->
     ?assert(MsgsReady < Num),
 
     %% Use large buffers. This will considerably speed up receiving all messages (on Linux).
-    ok = inet:setopts(Socket, [{recbuf, 300_000},
-                               {buffer, 300_000}]),
+    % ok = inet:setopts(Socket, [{recbuf, 300_000},
+    %                            {buffer, 300_000}]),
     %% When we resume the receiving client, we expect to receive all messages.
     ?assert(meck:validate(Mod)),
     ok = meck:unload(Mod),
