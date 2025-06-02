@@ -297,7 +297,8 @@ start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
 
-start_ssl_listener(Listener, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) ->
+start_ssl_listener(Listener, SslOpts0, NumAcceptors, ConcurrentConnsSupsCount) ->
+    SslOpts = rabbit_ssl:wrap_password_opt(SslOpts0),
     start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, 'amqp/ssl',
                    "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 

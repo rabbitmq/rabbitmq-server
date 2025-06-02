@@ -49,7 +49,8 @@ load(Proplist) ->
     URL = pget(url, Proplist),
     rabbit_log:info("Applying definitions from a remote URL"),
     rabbit_log:debug("HTTPS URL: ~ts", [URL]),
-    TLSOptions = tls_options_or_default(Proplist),
+    TLSOptions0 = tls_options_or_default(Proplist),
+    TLSOptions = rabbit_ssl:wrap_password_opt(TLSOptions0),
     HTTPOptions = http_options(TLSOptions),
     load_from_url(URL, HTTPOptions).
 
