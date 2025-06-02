@@ -67,19 +67,16 @@ jobs:
       id: tests
       run: |
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
-        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
+        CONF_DIR_PREFIX="$(mktemp -d)" RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
           ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
-
-    - name: Prepare logs for upload
-      if: ${{ failure() && steps.tests.outcome == 'failed' }}
-      run: |
-        mkdir -p /tmp/full-suite
-        mv -v /tmp/selenium/* /tmp/full-suite
+        echo "SELENIUM_ARTIFACTS=$CONF_DIR_PREFIX" >> "$GITHUB_OUTPUT"
         
     - name: Upload Test Artifacts
       if: ${{ failure() && steps.tests.outcome == 'failed' }}
       uses: actions/upload-artifact@v4.3.2
+      env: 
+          SELENIUM_ARTIFACTS: ${{ steps.run-suites.outputs.SELENIUM_ARTIFACTS }}
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
-          /tmp/full-suite
+          $SELENIUM_ARTIFACTS/*

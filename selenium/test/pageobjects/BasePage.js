@@ -14,7 +14,7 @@ const ADMIN_TAB = By.css('div#menu ul#tabs li#admin')
 const STREAM_CONNECTIONS_TAB = By.css('div#menu ul#tabs li#stream-connections')
 
 const FORM_POPUP_WARNING = By.css('div.form-popup-warn')
-const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span#close')
+const FORM_POPUP_WARNING_CLOSE_BUTTON = By.css('div.form-popup-warn span')
 
 const FORM_POPUP_OPTIONS = By.css('div.form-popup-options')
 const ADD_MINUS_BUTTON = By.css('div#main table.list thead tr th.plus-minus')
@@ -34,7 +34,12 @@ module.exports = class BasePage {
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
   }
 
-
+  async goTo(path) {
+    return driver.get(d.baseUrl + path)  
+  }
+  async refresh() {
+    return this.driver.navigate().refresh()
+  }
   async isLoaded () {
     return this.waitForDisplayed(MENU_TABS)
   }
@@ -147,11 +152,63 @@ module.exports = class BasePage {
     const select = await new Select(selectable)
     return select.selectByValue(vhost)
   }
+  async getTableMini(tableLocator) {
+    const table = await this.waitForDisplayed(tableLocator)
+    return this.getTableMiniUsingTableElement(table)    
+  }
+  async getTableMiniUsingTableElement(table) {
+    let tbody = await table.findElement(By.css('tbody'))
+    let rows = await tbody.findElements(By.xpath("./child::*"))
+
+    let table_model = []
+    for (let row of rows) {
+      let columnName = await row.findElement(By.css('th')).getText()
+
+      let columnValue = await row.findElement(By.css('td'))
+      let columnContent = await columnValue.findElement(By.xpath("./child::*"))
+
+      let columnType = await columnContent.getTagName()
+      
+      switch (columnType) {
+        case "table": 
+          table_model.push({
+            "name": columnName, 
+            "value" : await this.getTableMiniUsingTableElement(columnValue)
+          })
+          break
+        default: 
+          table_model.push({
+            "name" : columnName,
+            "value" : await columnContent.getText()
+          })
+      }      
+    }
+    return table_model
+  }
   async getTable(tableLocator, firstNColumns, rowClass) {
     const table = await this.waitForDisplayed(tableLocator)
     const rows = await table.findElements(rowClass == undefined ? 
-        By.css('tbody tr') : By.css('tbody tr.' + rowClass))
+    By.css('tbody tr') : By.css('tbody tr.' + rowClass))
     let table_model = []
+    
+    for (let row of rows) {
+      let columns = await row.findElements(By.css('td'))
+      let table_row = []
+      for (let column of columns) {
+        if (firstNColumns == undefined || table_row.length < firstNColumns) {
+          table_row.push(await column.getText())
+        }
+      }
+      table_model.push(table_row)
+    }
+    return table_model
+  }
+  async getPlainTable(tableLocator, firstNColumns) {
+    const table = await this.waitForDisplayed(tableLocator)
+    let tbody = await table.findElement(By.css('tbody'))
+    let rows = await tbody.findElements(By.xpath("./child::*"))
+    let table_model = []
+    
     for (let row of rows) {
       let columns = await row.findElements(By.css('td'))
       let table_row = []

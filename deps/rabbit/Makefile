@@ -151,6 +151,7 @@ MANPAGES     = $(wildcard $(DOCS_DIR)/*.[0-9])
 WEB_MANPAGES = $(patsubst %,%.html,$(MANPAGES))
 MD_MANPAGES  = $(patsubst %,%.md,$(MANPAGES))
 
+CT_HOOKS = rabbit_ct_hook
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
@@ -221,8 +222,6 @@ ct-fast:
 ct-slow:
 	$(MAKE) ct CT_SUITES='$(SLOW_CT_SUITES)'
 
-CT_OPTS += -ct_hooks rabbit_ct_hook []
-
 # Parallel CT.
 #
 # @todo We must ensure that the CT_OPTS also apply to ct-master
@@ -258,7 +257,7 @@ define ct_master.erl
 	halt(0)
 endef
 
-PARALLEL_CT_SET_1_A = unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
+PARALLEL_CT_SET_1_A = unit_rabbit_ssl unit_cluster_formation_locking_mocks unit_cluster_formation_sort_nodes unit_collections unit_config_value_encryption unit_connection_tracking
 PARALLEL_CT_SET_1_B = amqp_address amqp_auth amqp_credit_api_v2 amqp_filtex amqp_dotnet amqp_jms signal_handling single_active_consumer unit_access_control_authn_authz_context_propagation unit_access_control_credential_validation unit_amqp091_content_framing unit_amqp091_server_properties unit_app_management
 PARALLEL_CT_SET_1_C = amqp_proxy_protocol amqpl_consumer_ack amqpl_direct_reply_to backing_queue bindings rabbit_db_maintenance rabbit_db_msup rabbit_db_policy rabbit_db_queue rabbit_db_topic_exchange rabbit_direct_reply_to_prop cluster_limit cluster_minority term_to_binary_compat_prop topic_permission transactions unicode unit_access_control
 PARALLEL_CT_SET_1_D = amqqueue_backward_compatibility channel_interceptor channel_operation_timeout classic_queue classic_queue_prop config_schema peer_discovery_dns peer_discovery_tmp_hidden_node per_node_limit per_user_connection_channel_limit

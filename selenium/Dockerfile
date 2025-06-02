@@ -1,5 +1,4 @@
-# syntax=docker/dockerfile:1
-FROM atools/jdk-maven-node:mvn3-jdk11-node16 as base
+FROM node:18 as base
 
 WORKDIR /code
 

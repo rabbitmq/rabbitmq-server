@@ -1529,9 +1529,12 @@ activate_next_consumer(#?STATE{consumers = Cons0,
             State = State0#?STATE{consumers = Cons,
                                   service_queue = ServiceQueue1,
                                   waiting_consumers = Waiting},
+            Effects1 = consumer_update_active_effects(State, Active,
+                                                      false, waiting,
+                                                      Effects0),                                  
             Effects = consumer_update_active_effects(State, Consumer,
                                                      true, single_active,
-                                                     Effects0),
+                                                     Effects1),
             {State, Effects};
         {{ActiveCKey, ?CONSUMER_PRIORITY(ActivePriority) = Active},
          {_NextCKey, ?CONSUMER_PRIORITY(WaitingPriority)}}
@@ -1829,8 +1832,22 @@ complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       Effects0, State0) ->
     State1 = complete(Meta, ConsumerKey, MsgIds, Con0, State0),
     %% a completion could have removed the active/quiescing consumer
-    {State2, Effects1} = activate_next_consumer(State1, Effects0),
-    checkout(Meta, State0, State2, Effects1).
+    Effects1 = add_active_effect(Con0, State1, Effects0),
+    {State2, Effects2} = activate_next_consumer(State1, Effects1),
+    checkout(Meta, State0, State2, Effects2).
+
+add_active_effect(#consumer{status = quiescing} = Consumer,
+                  #?STATE{cfg = #cfg{consumer_strategy = single_active},
+                          consumers = Consumers} = State,
+                  Effects) ->
+    case active_consumer(Consumers) of
+        undefined ->
+            consumer_update_active_effects(State, Consumer, false, waiting, Effects);
+        _ ->
+            Effects
+    end;
+add_active_effect(_, _, Effects) ->
+    Effects.
 
 cancel_consumer_effects(ConsumerId,
                         #?STATE{cfg = #cfg{resource = QName}},

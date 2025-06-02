@@ -33,7 +33,7 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
-         ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1,
+         ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1, ranch_ref_to_protocol/1,
          listener_of_protocol/1, stop_ranch_listener_of_protocol/1,
          list_local_connections_of_protocol/1]).
 
@@ -233,6 +233,21 @@ ranch_ref(IPAddress, Port) ->
 ranch_ref_of_protocol(Protocol) ->
     ranch_ref(listener_of_protocol(Protocol)).
 
+-spec ranch_ref_to_protocol(ranch:ref()) -> atom() | undefined.
+ranch_ref_to_protocol({acceptor, IPAddress, Port}) ->
+    MatchSpec = #listener{
+                   node = node(),
+                   ip_address = IPAddress,
+                   port = Port,
+                   _ = '_'
+                  },
+    case ets:match_object(?ETS_TABLE, MatchSpec) of
+        []    -> undefined;
+        [Row] -> Row#listener.protocol
+    end;
+ranch_ref_to_protocol(_) ->
+    undefined.
+
 -spec listener_of_protocol(atom()) -> #listener{}.
 listener_of_protocol(Protocol) ->
     MatchSpec = #listener{
@@ -282,7 +297,8 @@ start_ssl_listener(Listener, SslOpts, NumAcceptors) ->
 -spec start_ssl_listener(
         listener_config(), rabbit_types:infos(), integer(), integer()) -> 'ok' | {'error', term()}.
 
-start_ssl_listener(Listener, SslOpts, NumAcceptors, ConcurrentConnsSupsCount) ->
+start_ssl_listener(Listener, SslOpts0, NumAcceptors, ConcurrentConnsSupsCount) ->
+    SslOpts = rabbit_ssl:wrap_password_opt(SslOpts0),
     start_listener(Listener, NumAcceptors, ConcurrentConnsSupsCount, 'amqp/ssl',
                    "TLS (SSL) listener", tcp_opts() ++ SslOpts).
 
@@ -547,7 +563,9 @@ failed_to_recv_proxy_header(Ref, Error) ->
     end,
     rabbit_log:debug(Msg, [Error]),
     % The following call will clean up resources then exit
-    _ = ranch:handshake(Ref),
+    _ = try ranch:handshake(Ref) catch
+            _:_ -> ok
+        end,
     exit({shutdown, failed_to_recv_proxy_header}).
 
 handshake(Ref, ProxyProtocolEnabled) ->
@@ -562,14 +580,31 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
                 {error, protocol_error, Error} ->
                     failed_to_recv_proxy_header(Ref, Error);
                 {ok, ProxyInfo} ->
-                    {ok, Sock} = ranch:handshake(Ref),
+                    {ok, Sock} = ranch_handshake(Ref),
                     ok = tune_buffer_size(Sock, BufferStrategy),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
-            {ok, Sock} = ranch:handshake(Ref),
+            {ok, Sock} = ranch_handshake(Ref),
             ok = tune_buffer_size(Sock, BufferStrategy),
             {ok, Sock}
+    end.
+
+ranch_handshake(Ref) ->
+    try ranch:handshake(Ref) catch
+        %% Don't log on Reason = closed to prevent flooding the log
+        %% specially since a TCP health check, such as the default
+        %% (with cluster-operator) readinessProbe periodically opens
+        %% and closes a connection, as mentioned in
+        %% https://github.com/rabbitmq/rabbitmq-server/pull/12304
+        exit:{shutdown, {closed, _}} = Error:Stacktrace ->
+            erlang:raise(exit, Error, Stacktrace);
+        exit:{shutdown, {Reason, {PeerIp, PeerPort}}} = Error:Stacktrace ->
+            PeerAddress = io_lib:format("~ts:~tp", [rabbit_misc:ntoab(PeerIp), PeerPort]),
+            Protocol = ranch_ref_to_protocol(Ref),
+            rabbit_log:error("~p error during handshake for protocol ~p and peer ~ts",
+                             [Reason, Protocol, PeerAddress]),
+            erlang:raise(exit, Error, Stacktrace)
     end.
 
 tune_buffer_size(Sock, dynamic_buffer) ->

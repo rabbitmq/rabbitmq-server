@@ -38,7 +38,7 @@ CT_OPTS += -kernel net_ticktime 5
 #   This hook will change the output of common_test to something more
 #   concise and colored.
 
-CT_HOOKS ?= cth_styledout
+CT_HOOKS += cth_styledout
 TEST_DEPS += cth_styledout
 
 ifdef CONCOURSE

@@ -61,7 +61,7 @@ web_amqp(Config) ->
 flush(Prefix) ->
     receive
         Msg ->
-            ct:pal("~p flushed: ~p~n", [Prefix, Msg]),
+            ct:log("~p flushed: ~p~n", [Prefix, Msg]),
             flush(Prefix)
     after 1 ->
               ok

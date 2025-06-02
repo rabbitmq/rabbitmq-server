@@ -64,6 +64,25 @@ module.exports = {
     let chromeCapabilities = Capabilities.chrome();
     const options = new chrome.Options()
     chromeCapabilities.setAcceptInsecureCerts(true);  
+    let seleniumArgs = [
+      "--window-size=1920,1080",
+      "--enable-automation",
+      "guest",
+      "disable-infobars",
+      "--disable-notifications",
+      "--lang=en",
+      "--disable-search-engine-choice-screen",
+      "disable-popup-blocking",
+      "--credentials_enable_service=false",
+      "profile.password_manager_enabled=false",
+      "profile.reduce-security-for-testing",
+      "profile.managed_default_content_settings.popups=1",
+      "profile.managed_default_content_settings.notifications.popups=1",
+      "profile.password_manager_leak_detection=false"
+    ]
+    if (!runLocal) {
+      seleniumArgs.push("--headless=new")
+    }
     chromeCapabilities.set('goog:chromeOptions', {
       excludeSwitches: [ // disable info bar
         'enable-automation',
@@ -71,21 +90,7 @@ module.exports = {
       prefs: {
         'profile.password_manager_enabled' : false      
       },
-      args: [
-          "--enable-automation",
-          "guest",
-          "disable-infobars",
-          "--disable-notifications",
-          "--lang=en",
-          "--disable-search-engine-choice-screen",
-          "disable-popup-blocking",
-          "--credentials_enable_service=false",
-          "profile.password_manager_enabled=false",
-          "profile.reduce-security-for-testing",
-          "profile.managed_default_content_settings.popups=1",
-          "profile.managed_default_content_settings.notifications.popups=1",
-          "profile.password_manager_leak_detection=false"
-      ]
+      args: seleniumArgs
     });
     let driver = builder
       .forBrowser('chrome')
@@ -124,9 +129,9 @@ module.exports = {
   goToExchanges: (d) => {
     return d.driver.get(d.baseUrl + '#/exchanges')
   },
-
-  goTo: (d, address) => {
-    return d.get(address)
+    
+  goToQueue(d, vhost, queue) {
+    return d.driver.get(d.baseUrl + '#/queues/' + encodeURIComponent(vhost) + '/' + encodeURIComponent(queue))
   },
 
   delay: async (msec, ref) => {
@@ -139,7 +144,7 @@ module.exports = {
     return new CaptureScreenshot(d.driver, require('path').basename(test))
   },
 
-  doWhile: async (doCallback, booleanCallback, delayMs = 1000, message = "doWhile failed") => {
+  doUntil: async (doCallback, booleanCallback, delayMs = 1000, message = "doUntil failed") => {
     let done = false 
     let attempts = 10
     let ret
@@ -151,7 +156,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on doUntil callback...")
         
       }finally {
         if (!done) {
@@ -179,7 +184,7 @@ module.exports = {
           + ") with arg " + JSON.stringify(ret) + " ... ")
         done =  booleanCallback(ret)
       }catch(error) {
-        module.exports.error("Caught " + error + " on doWhile callback...")
+        module.exports.error("Caught " + error + " on retry callback...")
         
       }finally {
         if (!done) {

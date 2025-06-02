@@ -82,10 +82,10 @@ long_names_work(_Config) ->
 ipv6_works(Config) ->
     PrivDir = ?config(priv_dir, Config),
     InetrcFilename = filename:join(PrivDir, "inetrc-ipv6.erl"),
-    ct:pal("Inetrc filename:~n~0p", [InetrcFilename]),
+    ct:log("Inetrc filename:~n~0p", [InetrcFilename]),
     Inetrc = [{inet6, true}],
     InetrcContent = [io_lib:format("~p.~n", [Param]) || Param <- Inetrc],
-    ct:pal("Inetrc file content:~n---8<---~n~s---8<---", [InetrcContent]),
+    ct:log("Inetrc file content:~n---8<---~n~s---8<---", [InetrcContent]),
     ok = file:write_file(InetrcFilename, InetrcContent),
     InetrcArg = rabbit_misc:format("~0p", [InetrcFilename]),
 
@@ -106,10 +106,10 @@ inetrc_file_as_atom_works(_Config) ->
     %% might not be defined).
     TmpDir = os:getenv("TEMP", os:getenv("TMP", os:getenv("TMPDIR", "/tmp"))),
     InetrcFilename = filename:join(TmpDir, "inetrc-ipv6.erl"),
-    ct:pal("Inetrc filename:~n~0p", [InetrcFilename]),
+    ct:log("Inetrc filename:~n~0p", [InetrcFilename]),
     Inetrc = [{inet6, true}],
     InetrcContent = [io_lib:format("~p.~n", [Param]) || Param <- Inetrc],
-    ct:pal("Inetrc file content:~n---8<---~n~s---8<---", [InetrcContent]),
+    ct:log("Inetrc file content:~n---8<---~n~s---8<---", [InetrcContent]),
     ok = file:write_file(InetrcFilename, InetrcContent),
     InetrcArg = rabbit_misc:format("~0p", [list_to_atom(InetrcFilename)]),
 
@@ -138,27 +138,27 @@ tls_dist_works(Config) ->
 
     PrivDir = ?config(priv_dir, Config),
     SslOptFilename = filename:join(PrivDir, "ssl-options.erl"),
-    ct:pal("SSL options filename:~n~0p", [SslOptFilename]),
+    ct:log("SSL options filename:~n~0p", [SslOptFilename]),
     SslOptContent = rabbit_misc:format("~p.~n", [SslOptions]),
-    ct:pal("SSL options file content:~n---8<---~n~s---8<---", [SslOptContent]),
+    ct:log("SSL options file content:~n---8<---~n~s---8<---", [SslOptContent]),
     ok = file:write_file(SslOptFilename, SslOptContent),
 
     %% We need to read the certificate's Subject ID to see what hostname is
     %% used in the certificate and use the same to start the test Erlang nodes.
     %% We also need to pay attention if the name is short or long.
     {ok, ServerCertBin} = file:read_file(ServerCert),
-    ct:pal("ServerCertBin = ~p", [ServerCertBin]),
+    ct:log("ServerCertBin = ~p", [ServerCertBin]),
     [DecodedCert] = public_key:pem_decode(ServerCertBin),
-    ct:pal("DecodedCert = ~p", [DecodedCert]),
+    ct:log("DecodedCert = ~p", [DecodedCert]),
     DecodedCert1 = element(2, DecodedCert),
     {_SerialNr, {rdnSequence, IssuerAttrs}} = public_key:pkix_subject_id(
                                                 DecodedCert1),
-    ct:pal("IssuerAttrs = ~p", [IssuerAttrs]),
+    ct:log("IssuerAttrs = ~p", [IssuerAttrs]),
     [ServerName] = [Value
                     || [#'AttributeTypeAndValue'{type = {2, 5, 4, 3},
                                                  value = {utf8String, Value}}]
                        <- IssuerAttrs],
-    ct:pal("ServerName = ~p", [ServerName]),
+    ct:log("ServerName = ~p", [ServerName]),
     UseLongnames = re:run(ServerName, "\\.", [{capture, none}]) =:= match,
 
     PeerOptions = #{host => binary_to_list(ServerName),
@@ -188,7 +188,7 @@ do_test_query_node_props(Peers) ->
             NodeAPid,
             rabbit_peer_discovery, query_node_props, [[NodeB]],
             infinity),
-    ct:pal("Discovered nodes properties:~n~p", [Ret]),
+    ct:log("Discovered nodes properties:~n~p", [Ret]),
     ?assertMatch([{NodeB, [NodeB], _, false}], Ret),
 
     %% Ensure no connection exists after the query.
@@ -236,23 +236,23 @@ start_test_nodes(Testcase, NodeNumber, NodeCount, PeerOptions, Peers)
                        _ ->
                            PeerOptions1
                    end,
-    ct:pal("Starting peer with options: ~p", [PeerOptions2]),
+    ct:log("Starting peer with options: ~p", [PeerOptions2]),
     case catch peer:start(PeerOptions2) of
         {ok, PeerPid, PeerName} ->
-            ct:pal("Configuring peer '~ts'", [PeerName]),
+            ct:log("Configuring peer '~ts'", [PeerName]),
             setup_test_node(PeerPid, PeerOptions2),
             Peers1 = Peers#{PeerName => PeerPid},
             start_test_nodes(
               Testcase, NodeNumber + 1, NodeCount, PeerOptions, Peers1);
         Error ->
-            ct:pal("Failed to started peer node:~n"
+            ct:log("Failed to started peer node:~n"
                    "Options: ~p~n"
                    "Error: ~p", [PeerOptions2, Error]),
             stop_test_nodes(Peers),
             erlang:throw(Error)
     end;
 start_test_nodes(_Testcase, _NodeNumber, _Count, _PeerOptions, Peers) ->
-    ct:pal("Peers: ~p", [Peers]),
+    ct:log("Peers: ~p", [Peers]),
     Peers.
 
 setup_test_node(PeerPid, PeerOptions) ->

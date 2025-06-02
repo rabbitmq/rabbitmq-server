@@ -43,7 +43,7 @@ command_with_output(Command, Node, Args, Opts) ->
     Mod = 'Elixir.RabbitMQCtl', %% To silence a Dialyzer warning.
     CommandResult = Mod:exec_command(
         Formatted, fun(Output,_,_) -> Output end),
-    ct:pal("Executed command ~tp against node ~tp~nResult: ~tp~n", [Formatted, Node, CommandResult]),
+    ct:log("Executed command ~tp against node ~tp~nResult: ~tp~n", [Formatted, Node, CommandResult]),
     CommandResult.
 
 format_command(Command, Node, Args, Opts) ->
