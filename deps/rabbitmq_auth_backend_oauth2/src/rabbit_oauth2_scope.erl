@@ -41,6 +41,7 @@ resource_access(#resource{virtual_host = VHost, name = Name},
         end,
         get_scope_permissions(Scopes)).
 
+-spec topic_access(rabbit_types:r(atom()), permission(), map(), [binary()]) -> boolean().
 topic_access(#resource{virtual_host = VHost, name = ExchangeName},
              Permission,
              #{routing_key := RoutingKey},

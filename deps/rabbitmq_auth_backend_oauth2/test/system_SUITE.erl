@@ -35,6 +35,7 @@ groups() ->
                        test_successful_connection_with_a_full_permission_token_and_all_defaults,
                        test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
                        test_successful_connection_with_simple_strings_for_aud_and_scope,
+                       test_successful_connection_with_variable_expansion_on_queue_access,
                        test_successful_token_refresh,
                        test_successful_connection_without_verify_aud,
                        mqtt
@@ -42,6 +43,7 @@ groups() ->
      {basic_unhappy_path, [], [
                        test_failed_connection_with_expired_token,
                        test_failed_connection_with_a_non_token,
+                       test_failed_connection_with_a_token_with_variable_expansion,
                        test_failed_connection_with_a_token_with_insufficient_vhost_permission,
                        test_failed_connection_with_a_token_with_insufficient_resource_permission,
                        more_than_one_resource_server_id_not_allowed_in_one_token,
@@ -134,7 +136,8 @@ end_per_group(_Group, Config) ->
 %%
 
 init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost orelse
-                                         Testcase =:= test_successful_token_refresh ->
+                                         Testcase =:= test_successful_token_refresh orelse 
+                                         Testcase =:= test_successful_connection_with_variable_expansion_on_queue_access ->
     rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
@@ -418,6 +421,19 @@ test_successful_connection_with_simple_strings_for_aud_and_scope(Config) ->
     {ok, Ch} = amqp_connection:open_channel(Conn),
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_variable_expansion_on_queue_access(Config) ->
+    {_Algo, Token} = generate_valid_token(
+        Config,
+        <<"rabbitmq.configure:*/{vhost}-{sub}-* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+        [<<"hare">>, <<"rabbitmq">>],
+        <<"Bob">>
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"Bob">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{} =
+        amqp_channel:call(Ch, #'queue.declare'{queue = <<"vhost1-Bob-1">>, exclusive = true}),
     close_connection_and_channel(Conn, Ch).
 
 test_successful_connection_without_verify_aud(Config) ->
@@ -894,6 +910,18 @@ test_failed_connection_with_a_token_with_insufficient_vhost_permission(Config) -
                                                    <<"rabbitmq.read:alt-vhost/*">>]),
     ?assertEqual({error, not_allowed},
                  open_unmanaged_connection(Config, 0, <<"off-limits-vhost">>, <<"username">>, Token)).
+
+test_failed_connection_with_a_token_with_variable_expansion(Config) ->
+    {_Algo, Token} = generate_valid_token(
+        Config,
+        <<"rabbitmq.configure:*/{vhost}-{sub}-* rabbitmq.write:*/* rabbitmq.read:*/*">>,
+        [<<"hare">>, <<"rabbitmq">>]
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost2">>, <<"username">>, Token),    
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+       amqp_channel:call(Ch, #'queue.declare'{queue = <<"vhost1-username-3">>, exclusive = true})),
+    close_connection(Conn).
 
 test_failed_connection_with_a_token_with_insufficient_resource_permission(Config) ->
     {_Algo, Token} = generate_valid_token(Config, [<<"rabbitmq.configure:vhost2/jwt*">>,
