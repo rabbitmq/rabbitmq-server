@@ -14,6 +14,8 @@ authnz-mgt/oauth-with-keycloak.sh
 authnz-mgt/oauth-with-keycloak-with-verify-none.sh
 authnz-mgt/oauth-with-uaa-down-but-with-basic-auth.sh
 authnz-mgt/oauth-with-uaa-down.sh
+mgt/amqp10-connections.sh
+mgt/mqtt-connections.sh
 mgt/vhosts.sh
 mgt/definitions.sh
 mgt/exchanges.sh
