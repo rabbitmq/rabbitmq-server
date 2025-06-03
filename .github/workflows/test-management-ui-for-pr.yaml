@@ -1,9 +1,6 @@
 name: Test Management UI with Selenium for PRs
 on:
   pull_request:
-    branches:
-    - main
-    - v4.*.x
     paths:
     - deps/**
     - selenium/**
