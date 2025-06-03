@@ -126,6 +126,8 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
     log_delete(QName, amqqueue:get_exclusive_owner(Q)),
     case rabbit_amqqueue:internal_delete(Q, ActingUser) of
         ok ->
+            Pid = amqqueue:get_pid(Q),
+            delegate:invoke_no_result([Pid], {gen_server, cast, [{queue_event, ?MODULE, {queue_down, QName}}]}),
             {ok, 0};
         {error, timeout} = Err ->
             Err
