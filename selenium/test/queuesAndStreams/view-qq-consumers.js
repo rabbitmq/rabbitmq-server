@@ -83,7 +83,7 @@ describe('Given a quorum queue configured with SAC', function () {
       ch1Consumer = ch1.consume(queueName, (msg) => {}, {consumerTag: "one"})      
     })
 
-    it('it should have one consumer as active', async function() {
+    it('it should have one consumer listed as active', async function() {
       await doUntil(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()
@@ -111,7 +111,7 @@ describe('Given a quorum queue configured with SAC', function () {
         ch2Consumer = ch2.consume(queueName, (msg) => {}, {consumerTag: "two", priority: 10})
       })
 
-      it('the latter consumer should be active and the former waiting', async function() {
+      it('the latter consumer should be listed as active and the former waiting', async function() {
               
         await doUntil(async function() {
           await queuePage.refresh()
@@ -177,7 +177,7 @@ describe('Given a quorum queue configured with SAC', function () {
       ch1Consumer = ch1.consume(queueName, (msg) => {}, {consumerTag: "one", priority: 10})      
     })
 
-    it('it should have one consumer as active', async function() {
+    it('it should have one consumer listed as active', async function() {
       await doUntil(async function() {
         await queuePage.refresh()
         await queuePage.isLoaded()

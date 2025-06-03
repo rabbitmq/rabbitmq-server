@@ -76,9 +76,12 @@ describe('Exchange management', function () {
         return table.length > 0
     })
 
+    log("Opening selectable columns popup...")    
     await exchanges.clickOnSelectTableColumns()
+    log("Getting all selectable dolumns ...")
     let table = await exchanges.getSelectableTableColumns()
     
+    log("Asserting selectable dolumns ...")
     let overviewGroup = { 
         "name" : "Overview:",
         "columns": [
