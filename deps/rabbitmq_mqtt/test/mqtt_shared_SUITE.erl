@@ -209,8 +209,6 @@ init_per_testcase(T, Config)
        T =:= management_plugin_enable ->
     inets:start(),
     init_per_testcase0(T, Config);
-<<<<<<< HEAD
-=======
 init_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
        T =:= clean_session_node_restart;
@@ -218,7 +216,6 @@ init_per_testcase(T, Config)
        T =:= notify_consumer_qos0_queue_deleted ->
     ok = rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
     init_per_testcase0(T, Config);
->>>>>>> bf468bdd5 (MQTT: disconnect consumer when queue is deleted)
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
@@ -230,8 +227,6 @@ end_per_testcase(T, Config)
        T =:= management_plugin_enable ->
     ok = inets:stop(),
     end_per_testcase0(T, Config);
-<<<<<<< HEAD
-=======
 end_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
        T =:= clean_session_node_restart;
@@ -239,7 +234,6 @@ end_per_testcase(T, Config)
        T =:= notify_consumer_qos0_queue_deleted ->
     ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
     end_per_testcase0(T, Config);
->>>>>>> bf468bdd5 (MQTT: disconnect consumer when queue is deleted)
 end_per_testcase(Testcase, Config) ->
     end_per_testcase0(Testcase, Config).
 
@@ -337,7 +331,7 @@ decode_basic_properties(Config) ->
     {ok, _, [1]} = emqtt:subscribe(C1, Topic, qos1),
     QuorumQueues = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_quorum_queue]),
     ?assertEqual(1, length(QuorumQueues)),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     amqp_channel:call(Ch, #'basic.publish'{exchange = <<"amq.topic">>,
                                            routing_key = Topic},
                       #amqp_msg{payload = Payload}),
@@ -345,12 +339,8 @@ decode_basic_properties(Config) ->
     ok = emqtt:disconnect(C1),
     C2 = connect(ClientId, Config, [{clean_start, true}]),
     ok = emqtt:disconnect(C2),
-<<<<<<< HEAD
-    ok = rpc(Config, application, unset_env, [App, Par]).
-=======
     unset_durable_queue_type(Config),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
->>>>>>> bf468bdd5 (MQTT: disconnect consumer when queue is deleted)
 
 quorum_queue_rejects(Config) ->
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
@@ -1992,11 +1982,7 @@ await_confirms_unordered(From, Left) ->
     end.
 
 await_consumer_count(ConsumerCount, ClientId, QoS, Config) ->
-<<<<<<< HEAD
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
-=======
     {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
->>>>>>> bf468bdd5 (MQTT: disconnect consumer when queue is deleted)
     QueueName = rabbit_mqtt_util:queue_name_bin(
                   rabbit_data_coercion:to_binary(ClientId), QoS),
     eventually(
