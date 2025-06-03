@@ -2003,7 +2003,7 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
 -spec handle_queue_event(
         {queue_event, rabbit_amqqueue:name() | ?QUEUE_TYPE_QOS_0, term()}, state()) ->
     {ok, state()} | {error, Reason :: any(), state()}.
-handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, {queue_down, QName}},
+handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, {eol, QName}},
                    State0) ->
     try handle_queue_down(QName, State0) of
         State ->
