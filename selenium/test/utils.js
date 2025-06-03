@@ -126,8 +126,16 @@ module.exports = {
     return d.driver.get(d.baseUrl + '#/login?access_token=' + token)
   },
 
+  goToConnections: (d) => {
+    return d.driver.get(d.baseUrl + '#/connections')
+  },
+
   goToExchanges: (d) => {
     return d.driver.get(d.baseUrl + '#/exchanges')
+  },
+    
+  goToQueues: (d) => {
+    return d.driver.get(d.baseUrl + '#/queues')
   },
     
   goToQueue(d, vhost, queue) {
