@@ -1976,7 +1976,7 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
                 State ->
                     {ok, State}
             catch throw:consuming_queue_down ->
-                      {error, consuming_queue_down}
+                    {error, consuming_queue_down}
             end;
         {eol, QStates1, QRef} ->
             {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QRef, U0),
@@ -1984,12 +1984,25 @@ handle_down({{'DOWN', QName}, _MRef, process, QPid, Reason},
             State = State0#state{queue_states = QStates,
                                  unacked_client_pubs = U},
             send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
-            {ok, State}
+            try handle_queue_down(QName, State) of
+                State ->
+                    {ok, State}
+            catch throw:consuming_queue_down ->
+                    {error, consuming_queue_down}
+            end
     end.
 
 -spec handle_queue_event(
         {queue_event, rabbit_amqqueue:name() | ?QUEUE_TYPE_QOS_0, term()}, state()) ->
     {ok, state()} | {error, Reason :: any(), state()}.
+handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, {queue_down, QName}},
+                   State0) ->
+    try handle_queue_down(QName, State0) of
+        State ->
+            {ok, State}
+    catch throw:consuming_queue_down ->
+            {error, consuming_queue_down, State0}
+    end;
 handle_queue_event({queue_event, ?QUEUE_TYPE_QOS_0, Msg},
                    State0 = #state{qos0_messages_dropped = N}) ->
     State = case drop_qos0_message(State0) of
@@ -2010,13 +2023,17 @@ handle_queue_event({queue_event, QName, Evt},
             State = handle_queue_actions(Actions, State1),
             {ok, State};
         {eol, Actions} ->
-            State1 = handle_queue_actions(Actions, State0),
-            {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
-            QStates = rabbit_queue_type:remove(QName, QStates0),
-            State = State1#state{queue_states = QStates,
-                                 unacked_client_pubs = U},
-            send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
-            {ok, State};
+            try
+                State1 = handle_queue_actions(Actions ++ [{queue_down, QName}], State0),
+                {ConfirmPktIds, U} = rabbit_mqtt_confirms:remove_queue(QName, U0),
+                QStates = rabbit_queue_type:remove(QName, QStates0),
+                State = State1#state{queue_states = QStates,
+                                     unacked_client_pubs = U},
+                send_puback(ConfirmPktIds, ?RC_SUCCESS, State),
+                {ok, State}
+            catch throw:consuming_queue_down ->
+                    {error, consuming_queue_down, State0}
+            end;
         {protocol_error, _Type, _Reason, _ReasonArgs} = Error ->
             {error, Error, State0}
     end.
