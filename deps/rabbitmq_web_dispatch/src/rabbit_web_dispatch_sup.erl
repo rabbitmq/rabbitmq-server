@@ -27,7 +27,8 @@ ensure_listener(Listener) ->
         undefined ->
             {error, {no_port_given, Listener}};
         _ ->
-            {Transport, TransportOpts, ProtoOpts} = preprocess_config(Listener),
+            {Transport, TransportOpts0, ProtoOpts} = preprocess_config(Listener),
+            TransportOpts = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
             rabbit_log:debug("Starting HTTP[S] listener with transport ~ts", [Transport]),
@@ -86,9 +87,10 @@ auto_ssl(Options) ->
     fix_ssl([{ssl_opts, SSLOpts} | Options]).
 
 fix_ssl(Options) ->
-    SSLOpts = proplists:get_value(ssl_opts, Options),
+    TLSOpts0 = proplists:get_value(ssl_opts, Options),
+    TLSOpts = rabbit_ssl_options:wrap_password_opt(TLSOpts0),
     {ranch_ssl,
-        transport_config(Options ++ rabbit_networking:fix_ssl_options(SSLOpts)),
+        transport_config(Options ++ rabbit_networking:fix_ssl_options(TLSOpts)),
         protocol_config(Options)}.
 
 transport_config(Options0) ->
