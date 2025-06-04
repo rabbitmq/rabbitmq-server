@@ -1,16 +1,17 @@
 ﻿(function (factory) {
-  if (typeof define === 'function' && define.amd) {
-    define(['jquery', 'sammy'], factory);
+  if (typeof define === "function" && define.amd) {
+    define(["jquery", "sammy"], factory);
   } else {
-    (window.Sammy = window.Sammy || {}).Title = factory(window.jQuery, window.Sammy);
+    (window.Sammy = window.Sammy || {}).Title = factory(
+      window.jQuery,
+      window.Sammy,
+    );
   }
-}(function ($, Sammy) {
-
+})(function ($, Sammy) {
   // Sammy.Title is a very simple plugin to easily set the document's title.
   // It supplies a helper for setting the title (`title()`) within routes,
   // and an app level method for setting the global title (`setTitle()`)
-  Sammy.Title = function() {
-
+  Sammy.Title = function () {
     // setTitle allows setting a global title or a function that modifies the
     // title for each route/page.
     //
@@ -38,11 +39,11 @@
     //      });
     //    });
     //
-    this.setTitle = function(title) {
+    this.setTitle = function (title) {
       if (!$.isFunction(title)) {
-        this.title_function = function(additional_title) {
-          return [title, additional_title].join(' ');
-        }
+        this.title_function = function (additional_title) {
+          return [title, additional_title].join(" ");
+        };
       } else {
         this.title_function = title;
       }
@@ -50,16 +51,14 @@
 
     // *Helper* title() sets the document title, passing it through the function
     // defined by setTitle() if set.
-    this.helper('title', function() {
-      var new_title = $.makeArray(arguments).join(' ');
+    this.helper("title", function () {
+      var new_title = $.makeArray(arguments).join(" ");
       if (this.app.title_function) {
         new_title = this.app.title_function(new_title);
       }
       document.title = new_title;
     });
-
   };
 
   return Sammy.Title;
-
-}));
+});
