@@ -71,6 +71,7 @@ cluster_size_1_tests() ->
      session_expiry_reconnect_non_zero,
      session_expiry_reconnect_zero,
      session_expiry_reconnect_infinity_to_zero,
+     zero_session_expiry_disconnect_autodeletes_qos0_queue,
      client_publish_qos2,
      client_rejects_publish,
      client_receive_maximum_min,
@@ -188,6 +189,12 @@ init_per_testcase(T, Config)
     ok = rpc(Config, application, set_env, [?APP, Par, infinity]),
     Config1 = rabbit_ct_helpers:set_config(Config, {Par, Default}),
     init_per_testcase0(T, Config1);
+
+init_per_testcase(T, Config)
+    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue ->
+  rpc(Config, rabbit_registry, register, [queue, <<"qos0">>, rabbit_mqtt_qos0_queue]),
+  init_per_testcase0(T, Config);
+
 init_per_testcase(T, Config) ->
     init_per_testcase0(T, Config).
 
@@ -202,6 +209,11 @@ end_per_testcase(T, Config)
     Default = ?config(Par, Config),
     ok = rpc(Config, application, set_env, [?APP, Par, Default]),
     end_per_testcase0(T, Config);
+end_per_testcase(T, Config)
+    when T =:= zero_session_expiry_disconnect_autodeletes_qos0_queue ->
+  ok = rpc(Config, rabbit_registry, unregister, [queue, <<"qos0">>]),
+  init_per_testcase0(T, Config);
+
 end_per_testcase(T, Config) ->
     end_per_testcase0(T, Config).
 
@@ -388,6 +400,22 @@ session_expiry_quorum_queue_disconnect_decrease(Config) ->
     ok = rpc(Config, application, set_env, [?APP, durable_queue_type, quorum]),
     ok = session_expiry_disconnect_decrease(rabbit_quorum_queue, Config),
     ok = rpc(Config, application, unset_env, [?APP, durable_queue_type]).
+
+zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) ->
+    ClientId = ?FUNCTION_NAME,
+    C = connect(ClientId, Config, [
+        {clean_start, false},
+        {properties, #{'Session-Expiry-Interval' => 0}}]),
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ?assertEqual(1, length(QsQos0)),
+
+    ok = emqtt:disconnect(C),
+    %% After terminating a clean session, we expect any session state to be cleaned up on the server.
+    %% Give the node some time to clean up the MQTT QoS 0 queue.
+    timer:sleep(200),
+    L = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(0, length(L)).
 
 session_expiry_disconnect_decrease(QueueType, Config) ->
     ClientId = ?FUNCTION_NAME,

@@ -211,6 +211,7 @@ init_per_testcase(T, Config)
     init_per_testcase0(T, Config);
 init_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
+       T =:= zero_session_expiry_interval_disconnect_client;
        T =:= clean_session_node_restart;
        T =:= clean_session_node_kill;
        T =:= notify_consumer_qos0_queue_deleted ->
@@ -229,6 +230,7 @@ end_per_testcase(T, Config)
     end_per_testcase0(T, Config);
 end_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
+       T =:= zero_session_expiry_interval_disconnect_client;
        T =:= clean_session_node_restart;
        T =:= clean_session_node_kill;
        T =:= notify_consumer_qos0_queue_deleted ->
