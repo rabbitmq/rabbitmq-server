@@ -1,0 +1,117 @@
+name: Nightly OCI (make)
+on:
+  schedule:
+    # at 2:20am Mon-Fri
+    # GitHub advises to schedule jobs NOT at the start of the hour
+    # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule
+    - cron: 20 2 * * 1-5
+env:
+  REGISTRY_IMAGE: pivotalrabbitmq/rabbitmq
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-package-generic-unix:
+    strategy:
+      matrix:
+        otp_version:
+          - '27'
+        branch:
+          - main
+          - v4.1.x
+          - v4.0.x
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Configure Erlang
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp_version }}
+          elixir-version: latest
+
+      - name: make package-generic-unix
+        id: make
+        run: |
+          make package-generic-unix PROJECT_VERSION=${{ matrix.branch }}+${{ github.sha }}
+
+      - name: Upload package-generic-unix
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
+          path: PACKAGES/rabbitmq-server-*.tar.xz
+
+  build-and-push:
+    strategy:
+      fail-fast: false
+      matrix:
+        otp_version:
+          - '27'
+        branch:
+          - main
+          - v4.1.x
+          - v4.0.x
+
+    needs: build-package-generic-unix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Download package-generic-unix
+        uses: actions/download-artifact@v4
+        with:
+          name: package-generic-unix-otp${{ matrix.otp_version }}-${{ matrix.branch }}
+          path: PACKAGES
+
+      - name: Rename package-generic-unix
+        run: |
+          cp \
+            PACKAGES/rabbitmq-server-generic-unix-*.tar.xz \
+            packaging/docker-image/package-generic-unix.tar.xz
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            suffix=-otp${{ matrix.otp_version }}
+          tags: |
+            type=sha,format=long
+            type=schedule,pattern=nightly.{{date 'YYYYMMDD'}},prefix=${{ matrix.branch }}+
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: packaging/docker-image
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.otp_version }}
+          cache-from: type=gha,scope=${{ matrix.otp_version }}
+          build-args: |
+            OTP_VERSION=${{ matrix.otp_version }}
+            RABBITMQ_VERSION=${{ matrix.branch }}+${{ github.sha }}
