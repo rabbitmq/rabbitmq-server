@@ -412,7 +412,8 @@ zero_session_expiry_disconnect_autodeletes_qos0_queue(Config) ->
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
-    timer:sleep(200), %% Give some time to clean up exclusive classic queue.
+    %% Give the node some time to clean up the MQTT QoS 0 queue.
+    timer:sleep(200),
     L = rpc(Config, rabbit_amqqueue, list, []),
     ?assertEqual(0, length(L)).
 
