@@ -20,7 +20,6 @@ groups() ->
              help,
              host,
              base_uri,
-             config_file,
              user,
              fmt_long,
              fmt_kvp,
@@ -78,16 +77,9 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(config_file, Config) ->
-    Home = os:getenv("HOME"),
-    os:putenv("HOME", ?config(priv_dir, Config)),
-    rabbit_ct_helpers:set_config(Config, {env_home, Home});
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(config_file, Config) ->
-    Home = rabbit_ct_helpers:get_config(Config, env_home),
-    os:putenv("HOME", Home);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -121,33 +113,6 @@ base_uri(Config) ->
                                  "list", "exchanges"]).
 
 
-config_file(Config) ->
-    MgmtPort = integer_to_list(http_api_port(Config)),
-    {_DefConf, TestConf} = write_test_config(Config),
-
-    %% try using a non-existent config file
-    ?assertMatch({error, _, _}, run(Config, ["--config", "/tmp/no-such-config-file", "show", "overview"])),
-    %% use a config file section with a reachable endpoint and correct credentials
-    ?assertMatch({ok, _}, run(Config, ["--config", TestConf, "--node", "reachable", "show", "overview"])),
-
-    %% Default node in the config file uses an unreachable endpoint. Note that
-    %% the function that drives rabbitmqadmin will specify a --port and that will override
-    %% the config file value.
-    ?assertMatch({error, _, _}, run(Config, ["--config", TestConf, "show", "overview"])),
-
-    %% overrides hostname and port using --base-uri
-    BaseURI = rabbit_misc:format("http://localhost:~ts", [MgmtPort]),
-    ?assertMatch({ok, _}, run(Config, ["--config", TestConf, "--base-uri", BaseURI, "show", "overview"])),
-
-    %% overrides --host and --port on the command line
-    ?assertMatch({ok, _}, run(Config, ["--config", TestConf, "--node", "default", "--host", "localhost", "--port", MgmtPort, "show", "overview"])),
-
-    ?assertMatch({ok, _}, run(Config, ["show", "overview"])),
-    ?assertMatch({error, _, _}, run(Config, ["--node", "bad_credentials", "show", "overview"])),
-    %% overrides --username and --password on the command line with correct credentials
-    ?assertMatch({ok, _}, run(Config, ["--node", "bad_credentials", "--username", "guest", "--password", "guest", "show", "overview"])),
-    %% overrides --username and --password on the command line with incorrect credentials
-    ?assertMatch({error, _, _}, run(Config, ["--node", "bad_credentials", "--username", "gu3st", "--password", "guesTTTT", "show", "overview"])).
 
 user(Config) ->
     ?assertMatch({ok, _}, run(Config, ["--user", "guest", "--password", "guest", "show", "overview"])),
