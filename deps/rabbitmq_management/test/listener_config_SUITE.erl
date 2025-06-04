@@ -73,7 +73,7 @@ tcp_config_only(_Config) ->
         ]},
         {port, 999}
     ],
-    ?assertEqual(lists:usort(Expected), get_single_listener_config()).
+    ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
 
 ssl_config_only(_Config) ->
     application:set_env(rabbitmq_management, ssl_config, [
@@ -92,7 +92,7 @@ ssl_config_only(_Config) ->
             {idle_timeout, 10000}
         ]}
     ],
-    ?assertEqual(lists:usort(Expected), get_single_listener_config()).
+    ?assertEqual(sort_nested(Expected), sort_nested(get_single_listener_config())).
 
 multiple_listeners(_Config) ->
     application:set_env(rabbitmq_management, tcp_config, [
@@ -126,9 +126,18 @@ multiple_listeners(_Config) ->
             ]}
         ]
     ],
-    ?assertEqual(lists:usort(Expected), rabbit_mgmt_app:get_listeners_config()).
+    ?assertEqual(sort_nested(Expected), sort_nested(rabbit_mgmt_app:get_listeners_config())).
 
 
 get_single_listener_config() ->
     [Config] = rabbit_mgmt_app:get_listeners_config(),
     lists:usort(Config).
+
+sort_nested(Proplist) when is_list(Proplist) ->
+    lists:usort(lists:map(fun({K, V}) when is_list(V) ->
+                                  {K, lists:usort(V)};
+                             (Any) ->
+                                  sort_nested(Any)
+                          end, Proplist));
+sort_nested(Value) ->
+    Value.

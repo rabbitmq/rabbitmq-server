@@ -39,18 +39,7 @@
 
 -spec wrap_password_opt(tls_opts()) -> tls_opts().
 wrap_password_opt(Opts0) ->
-    case proplists:get_value(password, Opts0) of
-        undefined ->
-            Opts0;
-        Fun when is_function(Fun) ->
-            Opts0;
-        Password ->
-            %% A password can be a value or a function returning that value.
-            %% See the key_pem_password/0 type in https://github.com/erlang/otp/pull/5843/files.
-            NewOpts = proplists:delete(password, Opts0),
-            Fun = fun() -> Password end,
-            [{password, Fun} | NewOpts]
-    end.
+    rabbit_ssl_options:wrap_password_opt(Opts0).
 
 -spec cipher_suites(cipher_suites_mode()) -> ssl:ciphers().
 cipher_suites(Mode) ->
