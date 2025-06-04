@@ -112,7 +112,7 @@ cluster_size_1_tests() ->
      ,keepalive_turned_off
      ,block
      ,amqp_to_mqtt_qos0
-     ,clean_session_disconnect_client     
+     ,clean_session_disconnect_client
      ,clean_session_node_restart
      ,clean_session_node_kill
      ,rabbit_status_connection_count
