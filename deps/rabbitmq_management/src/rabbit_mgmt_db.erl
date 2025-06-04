@@ -147,7 +147,7 @@ augment_exchanges(Xs, Ranges, _)    ->
 -spec augment_queues([proplists:proplist()], ranges(), core | basic | detailed | full) -> any().
 augment_queues(Qs, ?NO_RANGES = Ranges, core) ->
    submit_cached(queues,
-                 fun(Interval, Queues) ->
+                 fun(_Interval, Queues) ->
                          list_core_queue_data(Ranges, Queues)
                  end, Qs, max(60000, length(Qs) * 2));
 augment_queues(Qs, ?NO_RANGES = Ranges, basic) ->
