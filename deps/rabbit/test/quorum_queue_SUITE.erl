@@ -298,6 +298,24 @@ init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publ
       Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps());
+init_per_testcase(T, Config)
+  when T =:= leader_locator_balanced orelse
+       T =:= leader_locator_policy ->
+    Vsn0 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_fifo, version, []),
+    Vsn1 = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_fifo, version, []),
+    case Vsn0 =:= Vsn1 of
+        true ->
+            Config1 = rabbit_ct_helpers:testcase_started(Config, T),
+            Q = rabbit_data_coercion:to_binary(T),
+            Config2 = rabbit_ct_helpers:set_config(
+                        Config1, [{queue_name, Q},
+                                  {alt_queue_name, <<Q/binary, "_alt">>},
+                                  {alt_2_queue_name, <<Q/binary, "_alt_2">>}]),
+            rabbit_ct_helpers:run_steps(Config2,
+                                        rabbit_ct_client_helpers:setup_steps());
+        false ->
+            {skip, "machine versions must be the same for desired leader location to work"}
+    end;
 init_per_testcase(Testcase, Config) ->
     ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
