@@ -214,11 +214,10 @@ when_global_qos_is_not_permitted_from_conf(Config) ->
 list_server_channels(Config, Node) ->
     rabbit_ct_broker_helpers:rpc(Config, Node, rabbit_channel, list, []).
 
-is_prefetch_limited(ServerCh) ->
-    GenServer2State = sys:get_state(ServerCh),
-    ChState = element(4, GenServer2State),
-    ct:pal("Server channel (~p) state: ~p", [ServerCh, ChState]),
-    LimiterState = element(3, ChState),
+is_prefetch_limited(ChannelPid) ->
+    ChannelState = sys:get_state(ChannelPid),
+    ct:pal("Server channel (~p) state: ~p", [ChannelPid, ChannelState]),
+    LimiterState = element(3, ChannelState),
     element(3, LimiterState).
 
 %% -------------------------------------------------------------------
