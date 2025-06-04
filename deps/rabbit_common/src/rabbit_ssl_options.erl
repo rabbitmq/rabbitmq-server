@@ -7,14 +7,33 @@
 
 -module(rabbit_ssl_options).
 
--export([fix/1]).
--export([fix_client/1]).
-
+-export([
+    fix/1,
+    fix_client/1,
+    wrap_password_opt/1
+]).
 
 -define(BAD_SSL_PROTOCOL_VERSIONS, [
                                     %% POODLE
                                     sslv3
                                    ]).
+
+-type tls_opts() :: [ssl:tls_server_option()] | [ssl:tls_client_option()].
+
+-spec wrap_password_opt(tls_opts()) -> tls_opts().
+wrap_password_opt(Opts0) ->
+    case proplists:get_value(password, Opts0) of
+        undefined ->
+            Opts0;
+        Fun when is_function(Fun) ->
+            Opts0;
+        Password ->
+            %% A password can be a value or a function returning that value.
+            %% See the key_pem_password/0 type in https://github.com/erlang/otp/pull/5843/files.
+            NewOpts = proplists:delete(password, Opts0),
+            Fun = fun() -> Password end,
+            [{password, Fun} | NewOpts]
+    end.
 
 -spec fix(rabbit_types:infos()) -> rabbit_types:infos().
 
