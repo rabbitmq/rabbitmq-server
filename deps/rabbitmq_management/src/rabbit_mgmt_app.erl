@@ -128,16 +128,17 @@ get_legacy_listener() ->
 get_tls_listener() ->
     {ok, Listener0} = application:get_env(rabbitmq_management, ssl_config),
     {ok, Listener1} = ensure_port(tls, Listener0),
+    Listener2 = rabbit_ssl:wrap_password_opt(Listener1),
     Port = proplists:get_value(port, Listener1),
      case proplists:get_value(cowboy_opts, Listener0) of
         undefined ->
              [
                  {port, Port},
                  {ssl, true},
-                 {ssl_opts, Listener0}
+                 {ssl_opts, Listener2}
              ];
         CowboyOpts ->
-            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener0),
+            WithoutCowboyOpts = lists:keydelete(cowboy_opts, 1, Listener2),
             [
                 {port, Port},
                 {ssl, true},

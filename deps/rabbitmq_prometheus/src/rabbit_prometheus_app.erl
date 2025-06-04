@@ -34,7 +34,16 @@ init(_) ->
 -spec start_configured_listener() -> ok.
 start_configured_listener() ->
     TCPListenerConf = get_env(tcp_config, []),
-    TLSListenerConf = get_env(ssl_config, []),
+    TLSListenerConf0 = get_env(ssl_config, []),
+    TLSListenerConf =
+        case proplists:get_value(ssl_opts, TLSListenerConf0, undefined) of
+            undefined ->
+                TLSListenerConf0;
+            Opts0 ->
+                Opts = rabbit_ssl:wrap_password_opt(Opts0),
+                Tmp = proplists:delete(ssl_opts, TLSListenerConf0),
+                [{ssl_opts, Opts} | Tmp]
+        end,
 
     case {TCPListenerConf, TLSListenerConf} of
         %% nothing is configured
@@ -64,10 +73,11 @@ start_configured_tcp_listener(Conf) ->
 start_configured_tls_listener(Conf) ->
     case Conf of
         [] -> ok;
-        SSLCon ->
-            SSLListener0 = [{ssl, true} | SSLCon],
-            SSLListener1 = maybe_disable_sendfile(SSLListener0),
-            start_listener(SSLListener1)
+        TLSConf ->
+            TLSListener0 = [{ssl, true} | TLSConf],
+            TLSListener1 = maybe_disable_sendfile(TLSListener0),
+            TLSListener2 = rabbit_ssl:wrap_password_opt(TLSListener1),
+            start_listener(TLSListener2)
     end.
 
 maybe_disable_sendfile(Listener) ->

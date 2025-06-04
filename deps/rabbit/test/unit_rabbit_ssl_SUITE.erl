@@ -33,7 +33,7 @@ wrap_tls_opts_with_binary_password(_Config) ->
       {password, Bin}
     ],
 
-    Opts = rabbit_ssl:wrap_password_opt(Opts0),
+    Opts = rabbit_ssl_options:wrap_password_opt(Opts0),
     M = maps:from_list(Opts),
 
     ?assertEqual(Path, maps:get(keyfile, M)),
@@ -53,7 +53,7 @@ wrap_tls_opts_with_function_password(_Config) ->
     {password, Fun}
   ],
 
-  Opts = rabbit_ssl:wrap_password_opt(Opts0),
+  Opts = rabbit_ssl_options:wrap_password_opt(Opts0),
   M = maps:from_list(Opts),
 
   ?assertEqual(Path, maps:get(keyfile, M)),
