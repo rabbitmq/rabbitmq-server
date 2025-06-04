@@ -195,7 +195,7 @@ init(Labels = #{queue_type := QueueType, dead_letter_strategy := DLS}, DeadLette
     persistent_term:put({?MODULE, QueueType, DLS}, Counters).
 
 overview() ->
-    seshat:overview(?MODULE).
+    seshat:counters(?MODULE).
 
 prometheus_format() ->
     seshat:format(?MODULE).
