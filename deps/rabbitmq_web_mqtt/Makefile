@@ -35,6 +35,8 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
+CT_HOOKS = rabbit_ct_hook
+
 # We are using mqtt_shared_SUITE from rabbitmq_mqtt.
 CT_OPTS += -pa ../rabbitmq_mqtt/test/
 
