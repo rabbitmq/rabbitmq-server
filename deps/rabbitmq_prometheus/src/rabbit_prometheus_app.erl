@@ -36,8 +36,8 @@ start_configured_listener() ->
     TCPListenerConf = get_env(tcp_config, []),
     TLSListenerConf0 = get_env(ssl_config, []),
     TLSListenerConf =
-        case proplists:get_value(ssl_opts, TLSListenerConf0, undef) of
-            undef ->
+        case proplists:get_value(ssl_opts, TLSListenerConf0, undefined) of
+            undefined ->
                 TLSListenerConf0;
             Opts0 ->
                 Opts = rabbit_ssl:wrap_password_opt(Opts0),
