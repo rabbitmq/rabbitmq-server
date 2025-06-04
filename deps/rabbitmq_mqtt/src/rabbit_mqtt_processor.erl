@@ -1906,7 +1906,7 @@ log_delayed_will_failure(Topic, ClientId, Reason) ->
                [Topic, ClientId, Reason]).
 
 maybe_delete_mqtt_qos0_queue(
-  State = #state{cfg = #cfg{clean_start = true},
+  State = #state{cfg = #cfg{session_expiry_interval_secs = 0},
                  auth_state = #auth_state{user = #user{username = Username}}}) ->
     case get_queue(?QOS_0, State) of
         {ok, Q} ->

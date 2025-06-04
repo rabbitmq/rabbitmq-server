@@ -113,6 +113,7 @@ cluster_size_1_tests() ->
      ,block
      ,amqp_to_mqtt_qos0
      ,clean_session_disconnect_client
+     ,zero_session_expiry_interval_disconnect_client
      ,clean_session_node_restart
      ,clean_session_node_kill
      ,rabbit_status_connection_count
@@ -211,6 +212,7 @@ init_per_testcase(T, Config)
     init_per_testcase0(T, Config);
 init_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
+       T =:= zero_session_expiry_interval_disconnect_client;
        T =:= clean_session_node_restart;
        T =:= clean_session_node_kill;
        T =:= notify_consumer_qos0_queue_deleted ->
@@ -229,6 +231,7 @@ end_per_testcase(T, Config)
     end_per_testcase0(T, Config);
 end_per_testcase(T, Config)
   when T =:= clean_session_disconnect_client;
+       T =:= zero_session_expiry_interval_disconnect_client;
        T =:= clean_session_node_restart;
        T =:= clean_session_node_kill;
        T =:= notify_consumer_qos0_queue_deleted ->
@@ -1576,6 +1579,18 @@ clean_session_disconnect_client(Config) ->
     QsClassic = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_classic_queue]),
     ?assertEqual(1, length(QsQos0)),
     ?assertEqual(1, length(QsClassic)),
+
+    ok = emqtt:disconnect(C),
+    %% After terminating a clean session, we expect any session state to be cleaned up on the server.
+    timer:sleep(200), %% Give some time to clean up exclusive classic queue.
+    L = rpc(Config, rabbit_amqqueue, list, []),
+    ?assertEqual(0, length(L)).
+
+zero_session_expiry_interval_disconnect_client(Config) ->
+    C = connect(?FUNCTION_NAME, Config, [{properties, #{'Session-Expiry-Interval' => 0}}]),
+    {ok, _, _} = emqtt:subscribe(C, <<"topic0">>, qos0),
+    QsQos0 = rpc(Config, rabbit_amqqueue, list_by_type, [rabbit_mqtt_qos0_queue]),
+    ?assertEqual(1, length(QsQos0)),
 
     ok = emqtt:disconnect(C),
     %% After terminating a clean session, we expect any session state to be cleaned up on the server.
