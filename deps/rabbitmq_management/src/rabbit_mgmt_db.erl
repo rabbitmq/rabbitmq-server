@@ -144,7 +144,12 @@ augment_exchanges(Xs, Ranges, _)    ->
 
 %% we can only cache if no ranges are requested.
 %% The mgmt ui doesn't use ranges for queue listings
--spec augment_queues([proplists:proplist()], ranges(), basic | detailed | full) -> any().
+-spec augment_queues([proplists:proplist()], ranges(), core | basic | detailed | full) -> any().
+augment_queues(Qs, ?NO_RANGES = Ranges, core) ->
+   submit_cached(queues,
+                 fun(Interval, Queues) ->
+                         list_core_queue_data(Ranges, Queues)
+                 end, Qs, max(60000, length(Qs) * 2));
 augment_queues(Qs, ?NO_RANGES = Ranges, basic) ->
    submit_cached(queues,
                  fun(Interval, Queues) ->
@@ -356,6 +361,23 @@ consumers_stats(VHost) ->
     [proplists:proplist()].
 list_queue_stats(Ranges, Objs, Interval) ->
     list_queue_stats(Ranges, Objs, Interval, all_list_queue_data).
+
+-spec list_core_queue_data(ranges(), [proplists:proplist()]) ->
+    [proplists:proplist()].
+list_core_queue_data(Ranges, Objs) ->
+    Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_basic_queue_data, [Ids, Ranges]}),
+    adjust_hibernated_memory_use(
+      [begin
+       Id = id_lookup(queue_stats, Obj),
+       Pid = pget(pid, Obj),
+       QueueData = maps:get(Id, DataLookup),
+       Props = maps:get(queue_stats, QueueData),
+       ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
+          maps:get(consumer_stats, QueueData)),
+
+       {Pid, combine(Props, Obj) ++ ConsumerStats}
+       end || Obj <- Objs]).
 
 -spec list_basic_queue_stats(ranges(), [proplists:proplist()], integer()) ->
     [proplists:proplist()].

@@ -49,7 +49,8 @@ to_json(ReqData, Context) ->
                 rabbit_mgmt_util:reply(ensure_defaults(Payload), ReqData, Context);
             true ->
                 Q = case rabbit_mgmt_util:enable_queue_totals(ReqData) of
-                    false -> queue(ReqData);
+                    false -> rabbit_mgmt_db:list_core_queue_data([queue(ReqData)],
+                        [queue(ReqData)], core);
                     true  -> queue_with_totals(ReqData)
                 end,
                 rabbit_mgmt_util:reply(
