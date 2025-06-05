@@ -16,7 +16,7 @@
                                    counter_metric/2]).
 
 -define(METRIC_NAME_PREFIX, <<"rabbitmq_raft_">>).
--define(DETAILED_METRIC_NAME_PREFIX, <<"rabbitmq_raft_detailed_">>).
+-define(DETAILED_METRIC_NAME_PREFIX, <<"rabbitmq_detailed_raft_">>).
 
 %%====================================================================
 %% Collector API
@@ -35,7 +35,7 @@ collect_mf('detailed', Callback) ->
         undefined ->
             ok;
         MFNames ->
-            case lists:member(raft_metrics, MFNames) of
+            case lists:member(ra_metrics, MFNames) of
                 true ->
                     collect_detailed_metrics(?DETAILED_METRIC_NAME_PREFIX, Callback);
                 false ->

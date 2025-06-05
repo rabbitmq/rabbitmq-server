@@ -73,7 +73,7 @@ groups() ->
                                      exchange_bindings_metric,
                                      exchange_names_metric,
                                      stream_pub_sub_metrics,
-                                     raft_detailed_metrics_test
+                                     detailed_raft_metrics_test
         ]},
        {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -856,24 +856,24 @@ core_metrics_special_chars(Config) ->
                       maps:to_list(LabelValue3)),
     ok.
 
-raft_detailed_metrics_test(Config) ->
+detailed_raft_metrics_test(Config) ->
     ComponentMetrics = #{#{module => "ra_log_wal", ra_system => "coordination"} => ["1.0"],
                          #{module => "ra_log_wal", ra_system => "quorum_queues"} => ["1.0"]},
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
 
-    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=raft_metrics&vhost=foo", [], 200),
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
     %% no queues in vhost foo, so no QQ metrics
     ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_raft_detailed_wal_files, parse_response(Body1))),
+                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body1))),
     ?assertEqual(undefined,
-                 maps:get(rabbitmq_raft_detailed_term, parse_response(Body1), undefined)),
+                 maps:get(rabbitmq_detailed_raft_term, parse_response(Body1), undefined)),
 
-    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=raft_metrics&vhost=/", [], 200),
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=/", [], 200),
     %% there's a queue in vhost /
     ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_raft_detailed_wal_files, parse_response(Body2))),
+                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body2))),
     ?assertEqual(QQMetrics,
-                 map_get(rabbitmq_raft_detailed_term, parse_response(Body2))),
+                 map_get(rabbitmq_detailed_raft_term, parse_response(Body2))),
 
     ok.
 
