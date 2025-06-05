@@ -247,20 +247,26 @@ These metrics are specific to the stream protocol.
 
 ### Raft
 
-| Metric                                     | Description                             |
-| ---                                        | ---                                     |
-| rabbitmq_raft_commit_latency_seconds       | Time taken for an entry to be committed |
-| rabbitmq_raft_log_commit_index             | Raft log commit index                   |
-| rabbitmq_raft_log_last_applied_index       | Raft log last applied index             |
-| rabbitmq_raft_log_last_written_index       | Raft log last written index             |
-| rabbitmq_raft_log_snapshot_index           | Raft log snapshot index                 |
-| rabbitmq_raft_term                         | Current Raft term number                |
+| Metric                                   | Description                                                                         |
+| ---                                      | ---                                                                                 |
+| rabbitmq_raft_commit_latency_seconds     | Approximate time taken from an entry being written to the log until it is committed |
+| rabbitmq_raft_commit_index               | Current commit index                                                                |
+| rabbitmq_raft_last_applied               | Last applied index. Can go backwards if a ra server is restarted                    |
+| rabbitmq_raft_last_written_index         | Last fully written and fsynced index of the log                                     |
+| rabbitmq_raft_snapshot_index             | Current snapshot index                                                              |
+| rabbitmq_raft_term                       | Current term                                                                        |
+| rabbitmq_raft_num_segments               | Number of non-empty segments files                                                  |
+| rabbitmq_raft_wal_files                  | Number of write-ahead log files created                                             |
+| rabbitmq_raft_segments                   | Number of segments written                                                          |
+| rabbitmq_raft_mem_tables                 | Number of in-memory tables handled                                                  |
+| rabbitmq_raft_entries                    | Number of entries written                                                           |
+| rabbitmq_raft_bytes_written              | Number of bytes written                                                             |
 
 ### Federation
 
 | Metric                                     | Description                                    |
 | ---                                        | ---                                            |
-| rabbitmq_federation_links                 | Federations Links count grouped by Link status |
+| rabbitmq_federation_links                  | Federations Links count grouped by Link status |
 
 ## Telemetry
 
