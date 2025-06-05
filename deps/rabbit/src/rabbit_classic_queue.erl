@@ -49,7 +49,9 @@
          state_info/1,
          capabilities/0,
          notify_decorators/1,
-         is_stateful/0
+         is_stateful/0,
+         disk_footprint/0,
+         disk_limit/0
          ]).
 
 -export([delete_crashed/1,
@@ -619,6 +621,15 @@ notify_decorators(Q) when ?is_amqqueue(Q) ->
     delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
 
 is_stateful() -> true.
+
+-spec disk_footprint() -> {ok, Bytes :: non_neg_integer()} | {error, file:posix()}.
+disk_footprint() ->
+    %% TODO
+    {ok, 0}.
+
+-spec disk_limit() -> rabbit_queue_type_disk_monitor:disk_usage_limit_spec() | undefined.
+disk_limit() ->
+    application:get_env(rabbit, classic_queue_disk_limit, undefined).
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).

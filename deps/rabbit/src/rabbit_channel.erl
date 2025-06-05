@@ -163,6 +163,7 @@
              delivery_flow :: flow | noflow,
              interceptor_state,
              queue_states,
+             queue_types_published :: sets:set(QType :: atom()),
              tick_timer,
              publishing_mode = false :: boolean()
             }).
@@ -527,7 +528,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 reply_consumer          = none,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
-                queue_states            = rabbit_queue_type:init()
+                queue_states            = rabbit_queue_type:init(),
+                queue_types_published   = sets:new([{version, 2}])
                },
     State1 = State#ch{
                interceptor_state = rabbit_channel_interceptor:init(State)},
@@ -2057,9 +2059,10 @@ deliver_to_queues(XName,
             ok = process_routing_mandatory(Mandatory, RoutedToQueues, Message, XName, State0),
             MsgSeqNo = maps:get(correlation, Options, undefined),
             State1 = process_routing_confirm(MsgSeqNo, QueueNames, XName, State0),
+            State2 = notify_published_queue_types(Qs, State1),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
-            State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
+            State = handle_queue_actions(Actions, State2#ch{queue_states = QueueStates}),
             case rabbit_event:stats_level(State, #ch.stats_timer) of
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
@@ -2081,6 +2084,27 @@ deliver_to_queues(XName,
               "Stream coordinator unavailable for ~ts",
               [rabbit_misc:rs(Resource)])
     end.
+
+notify_published_queue_types(Qs,
+  #ch{cfg = #conf{reader_pid = ReaderPid},
+      queue_types_published = QTypes0} = State0) ->
+    QTypes = lists:foldl(
+               fun(Q0, Acc) ->
+                       Q = case Q0 of
+                               {Q1, _RouteInfo} -> Q1;
+                               _ -> Q0
+                           end,
+                       QType = amqqueue:get_type(Q),
+                       case sets:is_element(QType, Acc) of
+                           true ->
+                               Acc;
+                           false ->
+                               ReaderPid ! {channel_published_to_queue_type,
+                                            self(), QType},
+                               sets:add_element(QType, Acc)
+                       end
+               end, QTypes0, Qs),
+    State0#ch{queue_types_published = QTypes}.
 
 process_routing_mandatory(_Mandatory = true,
                           _RoutedToQs = [],
