@@ -366,7 +366,7 @@ list_queue_stats(Ranges, Objs, Interval) ->
     [proplists:proplist()].
 list_core_queue_data(Ranges, Objs) ->
     Ids = [id_lookup(queue_stats, Obj) || Obj <- Objs],
-    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_list_basic_queue_data, [Ids, Ranges]}),
+    DataLookup = get_data_from_nodes({rabbit_mgmt_data, all_detail_queue_data, [Ids, Ranges]}),
     adjust_hibernated_memory_use(
       [begin
        Id = id_lookup(queue_stats, Obj),
@@ -374,9 +374,10 @@ list_core_queue_data(Ranges, Objs) ->
        QueueData = maps:get(Id, DataLookup),
        Props = maps:get(queue_stats, QueueData),
        ConsumerStats = rabbit_mgmt_data_compat:fill_consumer_active_fields(
-          maps:get(consumer_stats, QueueData)),
+                         maps:get(consumer_stats, QueueData)),
+       Consumers = [{consumer_details, ConsumerStats}],
 
-       {Pid, combine(Props, Obj) ++ ConsumerStats}
+       {Pid, combine(Props, Obj) ++ Consumers}
        end || Obj <- Objs]).
 
 -spec list_basic_queue_stats(ranges(), [proplists:proplist()], integer()) ->
