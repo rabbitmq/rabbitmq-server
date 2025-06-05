@@ -24,7 +24,8 @@
          assert_message_expiry_interval/2,
          await_exit/1,
          await_exit/2,
-         non_clean_sess_opts/0
+         non_clean_sess_opts/0,
+         enable_plugin/2
         ]).
 
 all_connection_pids(Config) ->
@@ -171,3 +172,8 @@ start_client(ClientId, Config, Node, AdditionalOpts) ->
               ] ++ WsOpts ++ AdditionalOpts,
     {ok, C} = emqtt:start_link(Options),
     {C, Connect}.
+
+enable_plugin(Config, Plugin) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [rabbit_ct_broker_helpers:enable_plugin(Config, Node, Plugin)
+     || Node <- Nodes].

@@ -161,14 +161,18 @@ init_per_group(Group, Config0) ->
                 Config0,
                 [{mqtt_version, v5},
                  {rmq_nodes_count, Nodes},
-                 {rmq_nodename_suffix, Suffix}]),
+                 {rmq_nodename_suffix, Suffix},
+                 {start_rmq_with_plugins_disabled, true}
+                ]),
     Config = rabbit_ct_helpers:merge_app_env(
                Config1,
                {rabbit, [{quorum_tick_interval, 200}]}),
-    rabbit_ct_helpers:run_steps(
-      Config,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
@@ -918,6 +922,7 @@ subscription_options_persisted(Config) ->
                                        {<<"t2">>, [{nl, false}, {rap, true}, {qos, 1}]}]),
     unlink(C1),
     ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    util:enable_plugin(Config, rabbitmq_mqtt),
     C2 = connect(ClientId, Config, [{clean_start, false}]),
     ok = emqtt:publish(C2, <<"t1">>, <<"m1">>),
     ok = emqtt:publish(C2, <<"t2">>, <<"m2">>, [{retain, true}]),
@@ -1742,6 +1747,7 @@ will_delay_node_restart(Config) ->
     timer:sleep(SleepMs),
     assert_nothing_received(),
     ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    util:enable_plugin(Config, rabbitmq_mqtt),
     %% After node 0 restarts, we should receive the Will Message promptly on both nodes 0 and 1.
     receive {publish, #{client_pid := Sub1,
                         payload := Payload}} -> ok

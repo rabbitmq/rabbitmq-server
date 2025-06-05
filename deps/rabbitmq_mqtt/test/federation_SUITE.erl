@@ -22,11 +22,16 @@ init_per_suite(Config) ->
                 Config,
                 [{rmq_nodename_suffix, ?MODULE},
                  {rmq_nodes_count, 2},
-                 {rmq_nodes_clustered, false}]),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+                 {rmq_nodes_clustered, false},
+                 {start_rmq_with_plugins_disabled, true}
+                ]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    util:enable_plugin(Config2, rabbitmq_federation),
+    Config2.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(
