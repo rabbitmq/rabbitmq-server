@@ -1242,6 +1242,43 @@ fun(Conf) ->
 end}.
 
 %%
+%% Per-queue-type disk limits
+%% =====================
+%%
+
+%% {mapping, "quorum_queue_disk_limit.relative", "rabbit.quorum_queue_disk_limit", [
+%%     {datatype, float}]}.
+{mapping, "quorum_queue_disk_limit.absolute", "rabbit.quorum_queue_disk_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
+%% {translation, "rabbit.quorum_queue_disk_limit",
+%% fun(Conf) ->
+%%     Settings = cuttlefish_variable:filter_by_prefix("quorum_queue_disk_limit", Conf),
+%%     Absolute = proplists:get_value(["quorum_queue_disk_limit", "absolute"], Settings),
+%%     Relative = proplists:get_value(["quorum_queue_disk_limit", "relative"], Settings),
+%%     case {Absolute, Relative} of
+%%         {undefined, undefined} -> exit({unreachable, abcdefg});
+%%         {_, undefined} when is_integer(Absolute) -> {absolute, Absolute};
+%%         {_, undefined} when is_list(Absolute) -> Absolute;
+%%         {undefined, _} -> {relative, Relative};
+%%         _ ->
+%%             %% TODO: need to add `{absolute, Abs}` wrapper here
+%%             cuttlefish:warn("Both disk_free_limit.absolute and "
+%%                             "disk_free_limit.relative are configured. "
+%%                             "disk_free_limit.absolute has precedence"),
+%%             Absolute
+%%     end
+%% end}.
+
+%% Same as above, consider adding relative and the translation...
+{mapping, "stream_queue_disk_limit.absolute", "rabbit.stream_queue_disk_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
+%%
 %% Clustering
 %% =====================
 %%

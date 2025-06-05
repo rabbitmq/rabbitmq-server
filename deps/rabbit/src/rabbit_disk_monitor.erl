@@ -17,6 +17,9 @@
 %% this is the most reliable way of determining free disk space
 %% for the partition our internal database is on.
 %%
+%% ☝️ NOTE this is out of date and we should be able to switch back to OTP
+%% disk monitoring utils with OTP-26+.
+%%
 %% Update interval is dynamically calculated assuming disk
 %% space is being filled at FAST_RATE.
 

@@ -304,6 +304,12 @@
 
 -callback queue_vm_ets() -> {StatsKeys :: [atom()], ETSNames:: [[atom()]]}.
 
+-callback disk_footprint() -> {ok, Bytes :: non_neg_integer()} | {error, file:posix()}.
+-callback disk_limit() -> rabbit_queue_type_disk_monitor:disk_usage_limit_spec() | undefined.
+
+-optional_callbacks([disk_footprint/0,
+                     disk_limit/0]).
+
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
     fallback();

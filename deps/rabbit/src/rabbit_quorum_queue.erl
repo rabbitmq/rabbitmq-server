@@ -67,6 +67,8 @@
 -export([notify_decorators/1,
          notify_decorators/3,
          spawn_notify_decorators/3]).
+-export([disk_footprint/0,
+         disk_limit/0]).
 
 -export([is_enabled/0,
          is_compatible/3,
@@ -2065,6 +2067,19 @@ notify_decorators(QName, F, A) ->
     end.
 
 is_stateful() -> true.
+
+-spec disk_footprint() -> {ok, Bytes :: non_neg_integer()} | {error, file:posix()}.
+disk_footprint() ->
+    case ra_system:fetch(?RA_SYSTEM) of
+        #{data_dir := Dir} ->
+            rabbit_disk_usage:scan(Dir);
+        _ ->
+            {ok, 0}
+    end.
+
+-spec disk_limit() -> rabbit_queue_type_disk_monitor:disk_usage_limit_spec() | undefined.
+disk_limit() ->
+    application:get_env(rabbit, quorum_queue_disk_limit, undefined).
 
 force_shrink_member_to_current_member(VHost, Name) ->
     Node = node(),
