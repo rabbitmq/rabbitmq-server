@@ -85,7 +85,8 @@ all_tests() ->
      dlx_08,
      dlx_09,
      single_active_ordering_02,
-     different_nodes
+     two_nodes_same_otp_version,
+     two_nodes_different_otp_version
     ].
 
 groups() ->
@@ -1093,14 +1094,65 @@ single_active_ordering_03(_Config) ->
             false
     end.
 
-%% Test that running the state machine commands on different Erlang nodes
-%% end up in exactly the same state.
-different_nodes(Config) ->
-    Config1 = rabbit_ct_helpers:run_setup_steps(
-                Config,
-                rabbit_ct_broker_helpers:setup_steps()),
+%% Run the log on two Erlang nodes with the same OTP version.
+two_nodes_same_otp_version(Config0) ->
+    Config = rabbit_ct_helpers:run_setup_steps(Config0,
+                                               rabbit_ct_broker_helpers:setup_steps()),
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    case is_same_otp_version(Config) of
+        true ->
+            ok = rabbit_ct_broker_helpers:add_code_path_to_node(Node, ?MODULE),
+            two_nodes(Node);
+        false ->
+            ct:fail("expected CT node and RabbitMQ node to have the same OTP version")
+    end,
+    rabbit_ct_helpers:run_teardown_steps(Config,
+                                         rabbit_ct_broker_helpers:teardown_steps()).
 
-    Size = 400,
+%% Run the log on two Erlang nodes with different OTP versions.
+two_nodes_different_otp_version(_Config) ->
+    Node = 'rabbit_fifo_prop@localhost',
+    case net_adm:ping(Node) of
+        pong ->
+            case is_same_otp_version(Node) of
+                true ->
+                    ct:fail("expected CT node and 'rabbit_fifo_prop@localhost' "
+                            "to have different OTP versions");
+                false ->
+                    Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
+                                "lqueue", "priority_queue", "ra_"],
+                    [begin
+                         Mod = list_to_atom(ModStr),
+                         {Mod, Bin, _File} = code:get_object_code(Mod),
+                         {module, Mod} = erpc:call(Node, code, load_binary, [Mod, ModStr, Bin])
+                     end
+                     || {ModStr, _FileName, _Loaded} <- code:all_available(),
+                        lists:any(fun(Prefix) -> lists:prefix(Prefix, ModStr) end, Prefixes)],
+                    two_nodes(Node)
+            end;
+        pang ->
+            Reason = {node_down, Node},
+            case rabbit_ct_helpers:is_ci() of
+                true ->
+                    ct:fail(Reason);
+                false ->
+                    {skip, Reason}
+            end
+    end.
+
+is_same_otp_version(ConfigOrNode) ->
+    OurOTP = erlang:system_info(otp_release),
+    OtherOTP = case ConfigOrNode of
+                   Cfg when is_list(Cfg) ->
+                       rabbit_ct_broker_helpers:rpc(Cfg, erlang, system_info, [otp_release]);
+                   Node when is_atom(Node) ->
+                       erpc:call(Node, erlang, system_info, [otp_release])
+               end,
+    ct:pal("Our CT node runs OTP ~s, other node runs OTP ~s", [OurOTP, OtherOTP]),
+    OurOTP =:= OtherOTP.
+
+two_nodes(Node) ->
+    Size = 500,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
@@ -1118,13 +1170,9 @@ different_nodes(Config) ->
                                         DeliveryLimit),
                           ?FORALL(O, ?LET(Ops, log_gen_different_nodes(Size), expand(Ops, Conf)),
                                   collect({log_size, length(O)},
-                                          different_nodes_prop(Config1, Conf, O)))
+                                          different_nodes_prop(Node, Conf, O)))
                       end)
-      end, [], Size),
-
-    rabbit_ct_helpers:run_teardown_steps(
-      Config1,
-      rabbit_ct_broker_helpers:teardown_steps()).
+      end, [], Size).
 
 max_length(_Config) ->
     %% tests that max length is never transgressed
@@ -1485,18 +1533,18 @@ single_active_prop(Conf0, Commands, ValidateOrder) ->
             false
     end.
 
-different_nodes_prop(Config, Conf0, Commands) ->
+different_nodes_prop(Node, Conf0, Commands) ->
     Conf = Conf0#{release_cursor_interval => 100},
     Indexes = lists:seq(1, length(Commands)),
     Entries = lists:zip(Indexes, Commands),
     InitState = test_init(Conf),
     Fun = fun(_) -> true end,
-    Vsn = 6,
+    MachineVersion = 6,
 
-    {State0, _Effs0} = run_log(InitState, Entries, Fun, Vsn),
-    {State1, _Effs1} = rabbit_ct_broker_helpers:rpc(Config, ?MODULE, run_log,
-                                                    [InitState, Entries, Fun, Vsn]),
-    State0 =:= State1.
+    {State1, _Effs1} = run_log(InitState, Entries, Fun, MachineVersion),
+    {State2, _Effs2} = erpc:call(Node, ?MODULE, run_log,
+                                 [InitState, Entries, Fun, MachineVersion]),
+    State1 =:= State2.
 
 messages_total_prop(Conf0, Commands) ->
     Conf = Conf0#{release_cursor_interval => 100},

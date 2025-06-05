@@ -56,7 +56,9 @@
     await_condition_with_retries/2,
 
     eventually/1, eventually/3,
-    consistently/1, consistently/3
+    consistently/1, consistently/3,
+    
+    is_ci/0
   ]).
 
 -define(SSL_CERT_PASSWORD, "test").
@@ -1174,6 +1176,12 @@ consistently({Line, Assertion} = TestObj, PollInterval, PollCount)
     Assertion(),
     timer:sleep(PollInterval),
     consistently(TestObj, PollInterval, PollCount - 1).
+
+is_ci() ->
+    case os:getenv("CI") of
+        "true" -> true;
+        _ -> false
+    end.
 
 %% -------------------------------------------------------------------
 %% Cover-related functions.
