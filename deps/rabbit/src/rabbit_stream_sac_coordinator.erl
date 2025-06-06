@@ -27,6 +27,8 @@
 
 -opaque state() :: #?MODULE{}.
 
+-type sac_error() :: partition_index_conflict | not_found.
+
 -export_type([state/0,
               command/0]).
 
@@ -50,7 +52,8 @@
          import_state/2,
          check_conf_change/1,
          list_nodes/1,
-         state_enter/2
+         state_enter/2,
+         is_sac_error/1
         ]).
 -export([make_purge_nodes/1,
          make_update_conf/1]).
@@ -89,7 +92,7 @@
                         pid(),
                         binary(),
                         integer()) ->
-                           {ok, boolean()} | {error, term()}.
+                           {ok, boolean()} | {error, sac_error() | term()}.
 register_consumer(VirtualHost,
                   Stream,
                   PartitionIndex,
@@ -110,7 +113,7 @@ register_consumer(VirtualHost,
                           binary(),
                           pid(),
                           integer()) ->
-                             ok | {error, term()}.
+                             ok | {error, sac_error() | term()}.
 unregister_consumer(VirtualHost,
                     Stream,
                     ConsumerName,
@@ -122,13 +125,15 @@ unregister_consumer(VirtualHost,
                                                  connection_pid = ConnectionPid,
                                                  subscription_id = SubscriptionId}).
 
--spec activate_consumer(binary(), binary(), binary()) -> ok.
+-spec activate_consumer(binary(), binary(), binary()) ->
+    ok | {error, sac_error() | term()}.
 activate_consumer(VH, Stream, Name) ->
     process_command(#command_activate_consumer{vhost =VH,
                                                stream = Stream,
                                                consumer_name= Name}).
 
--spec connection_reconnected(connection_pid()) -> ok.
+-spec connection_reconnected(connection_pid()) ->
+    ok | {error, sac_error() | term()}.
 connection_reconnected(Pid) ->
     process_command(#command_connection_reconnected{pid = Pid}).
 
@@ -150,7 +155,7 @@ wrap_cmd(Cmd) ->
 %% (CLI command)
 -spec consumer_groups(binary(), [atom()]) ->
                          {ok,
-                          [term()] | {error, atom()}}.
+                          [term()]} | {error, sac_error() | term()}.
 consumer_groups(VirtualHost, InfoKeys) ->
     case ra_local_query(fun(State) ->
                                 SacState =
@@ -172,7 +177,7 @@ consumer_groups(VirtualHost, InfoKeys) ->
 %% (CLI command)
 -spec group_consumers(binary(), binary(), binary(), [atom()]) ->
                          {ok, [term()]} |
-                         {error, atom()}.
+                         {error, sac_error() | term()}.
 group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
     case ra_local_query(fun(State) ->
                                 SacState =
@@ -931,6 +936,10 @@ state_enter(leader, #?MODULE{groups = Groups} = State)
      end || P := Ts <- maps:iterator(DisConns, ordered)];
 state_enter(_, _) ->
     [].
+
+-spec is_sac_error(term()) -> boolean().
+is_sac_error(Reason) ->
+    lists:member(Reason, ?SAC_ERRORS).
 
 nodes_from_group(#group{consumers = Cs}) when is_list(Cs) ->
     lists:foldl(fun(#consumer{pid = Pid}, Acc) ->
