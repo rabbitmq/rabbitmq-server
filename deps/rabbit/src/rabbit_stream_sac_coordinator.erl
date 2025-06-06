@@ -78,6 +78,8 @@
 -define(DISCONNECTED_TIMEOUT_APP_KEY, stream_sac_disconnected_timeout).
 -define(DISCONNECTED_TIMEOUT_CONF_KEY, disconnected_timeout).
 -define(DISCONNECTED_TIMEOUT_MS, 60_000).
+-define(SAC_ERRORS, [partition_index_conflict, not_found]).
+-define(IS_STATE_REC(T), is_record(T, ?MODULE)).
 
 %% Single Active Consumer API
 -spec register_consumer(binary(),
@@ -538,7 +540,8 @@ maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
     end.
 
 -spec consumer_groups(binary(), [atom()], state()) -> {ok, [term()]}.
-consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
+consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups} = S)
+  when ?IS_STATE_REC(S) ->
     Res = maps:fold(fun ({VH, Stream, Reference},
                          #group{consumers = Consumers,
                                 partition_index = PartitionIndex},
@@ -568,7 +571,9 @@ consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups}) ->
                             Acc
                     end,
                     [], Groups),
-    {ok, lists:reverse(Res)}.
+    {ok, lists:reverse(Res)};
+consumer_groups(VirtualHost, InfoKeys, S) ->
+    rabbit_stream_sac_coordinator_v4:consumer_groups(VirtualHost, InfoKeys, S).
 
 -spec group_consumers(binary(),
                       binary(),
@@ -580,7 +585,8 @@ group_consumers(VirtualHost,
                 Stream,
                 Reference,
                 InfoKeys,
-                #?MODULE{groups = Groups}) ->
+                #?MODULE{groups = Groups} = S)
+  when ?IS_STATE_REC(S) ->
     GroupId = {VirtualHost, Stream, Reference},
     case Groups of
         #{GroupId := #group{consumers = Consumers}} ->
@@ -612,7 +618,10 @@ group_consumers(VirtualHost,
             {ok, Cs};
         _ ->
             {error, not_found}
-    end.
+    end;
+group_consumers(VirtualHost, Stream, Reference, InfoKeys, S) ->
+    rabbit_stream_sac_coordinator_v4:group_consumers(VirtualHost, Stream,
+                                                     Reference, InfoKeys, S).
 
 cli_consumer_status_label({?PDOWN, _}) ->
    inactive;
@@ -868,7 +877,7 @@ import_state(4, #{<<"groups">> := Groups, <<"pids_groups">> := PidsGroups}) ->
              conf = #{disconnected_timeout => ?DISCONNECTED_TIMEOUT_MS}}.
 
 -spec check_conf_change(state() | term()) -> {new, conf()} | unchanged.
-check_conf_change(State) when is_record(State, ?MODULE) ->
+check_conf_change(State) when ?IS_STATE_REC(State) ->
     #?MODULE{conf = Conf} = State,
     DisconTimeout = lookup_disconnected_timeout(),
     case Conf of
@@ -894,7 +903,7 @@ list_nodes(#?MODULE{groups = Groups}) ->
 -spec state_enter(ra_server:ra_state(), state() | term()) ->
     ra_machine:effects().
 state_enter(leader, #?MODULE{groups = Groups} = State)
-  when is_record(State, ?MODULE)->
+  when ?IS_STATE_REC(State) ->
     %% iterate over groups
     {Nodes, DisConns} =
     maps:fold(fun(_, #group{consumers = Cs}, Acc) ->
