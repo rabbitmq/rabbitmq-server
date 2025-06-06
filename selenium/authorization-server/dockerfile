@@ -1,0 +1,12 @@
+FROM maven:3.9.9-eclipse-temurin-24 as builder
+WORKDIR /home/app
+ADD . /home/app/authorization-server
+RUN ./mvnw -Dmaven.test.skip=true clean package
+
+FROM openjdk:24-jdk
+EXPOSE 8080
+ENTRYPOINT ["java","-jar","/authorization-server.jar"]
+ARG JAR_FILE=target/*.jar
+COPY --from=builder /home/app/authorization-server/target/*.jar authorization-server.jar
+
+
