@@ -1,7 +1,8 @@
-FROM maven:3.9.9-eclipse-temurin-24 as builder
-WORKDIR /home/app
-ADD . /home/app/authorization-server
-RUN ./mvnw -Dmaven.test.skip=true clean package
+FROM maven:3.9.9-eclipse-temurin-24-alpine as builder
+WORKDIR /home/app/authorization-server
+COPY ./ .
+RUN mvn -Dmaven.test.skip=true clean package
+# MAVEN_OPTS="--enable-native-access=ALL-UNNAMED" 
 
 FROM openjdk:24-jdk
 EXPOSE 8080
