@@ -152,6 +152,7 @@ wrap_cmd(Cmd) ->
     {sac, Cmd}.
 
 %% return the current groups for a given virtual host
+%% (CLI command)
 -spec consumer_groups(binary(), [atom()]) ->
                          {ok,
                           [term()]} | {error, sac_error() | term()}.
@@ -173,6 +174,7 @@ consumer_groups(VirtualHost, InfoKeys) ->
     end.
 
 %% get the consumers of a given group in a given virtual host
+%% (CLI command)
 -spec group_consumers(binary(), binary(), binary(), [atom()]) ->
                          {ok, [term()]} |
                          {error, sac_error() | term()}.
@@ -544,6 +546,7 @@ maybe_rebalance_group(#group{partition_index = _, consumers = Consumers} = G,
             end
     end.
 
+%% used by CLI
 -spec consumer_groups(binary(), [atom()], state()) -> {ok, [term()]}.
 consumer_groups(VirtualHost, InfoKeys, #?MODULE{groups = Groups} = S)
   when ?IS_STATE_REC(S) ->
@@ -586,38 +589,14 @@ consumer_groups(VirtualHost, InfoKeys, S) ->
                       [atom()],
                       state()) ->
                          {ok, [term()]} | {error, not_found}.
-group_consumers(VirtualHost,
-                Stream,
-                Reference,
-                InfoKeys,
+group_consumers(VH, St, Ref, InfoKeys,
                 #?MODULE{groups = Groups} = S)
   when ?IS_STATE_REC(S) ->
-    GroupId = {VirtualHost, Stream, Reference},
+    GroupId = {VH, St, Ref},
     case Groups of
         #{GroupId := #group{consumers = Consumers}} ->
-            Cs = lists:foldr(fun(#consumer{subscription_id = SubId,
-                                           owner = Owner,
-                                           status = Status},
-                                 Acc) ->
-                                Record =
-                                    lists:foldr(fun (subscription_id, RecAcc) ->
-                                                        [{subscription_id,
-                                                          SubId}
-                                                         | RecAcc];
-                                                    (connection_name, RecAcc) ->
-                                                        [{connection_name,
-                                                          Owner}
-                                                         | RecAcc];
-                                                    (state, RecAcc) ->
-                                                        [{state, cli_consumer_status_label(Status)}
-                                                         | RecAcc];
-                                                    (Unknown, RecAcc) ->
-                                                        [{Unknown,
-                                                          unknown_field}
-                                                         | RecAcc]
-                                                end,
-                                                [], InfoKeys),
-                                [Record | Acc]
+            Cs = lists:foldr(fun(C, Acc) ->
+                                     [csr_cli_record(C, InfoKeys) | Acc]
                              end,
                              [], Consumers),
             {ok, Cs};
@@ -628,12 +607,27 @@ group_consumers(VirtualHost, Stream, Reference, InfoKeys, S) ->
     rabbit_stream_sac_coordinator_v4:group_consumers(VirtualHost, Stream,
                                                      Reference, InfoKeys, S).
 
-cli_consumer_status_label({?PDOWN, _}) ->
-   inactive;
-cli_consumer_status_label({_, ?ACTIVE}) ->
-   active;
-cli_consumer_status_label(_) ->
-   inactive.
+csr_cli_record(#consumer{subscription_id = SubId, owner = Owner,
+                         status = Status}, InfoKeys) ->
+    lists:foldr(fun (subscription_id, Acc) ->
+                        [{subscription_id, SubId} | Acc];
+                    (connection_name, Acc) ->
+                        [{connection_name, Owner} | Acc];
+                    (state, Acc) ->
+                        [{state, cli_csr_status_label(Status)} | Acc];
+                    (Unknown, Acc) ->
+                        [{Unknown, unknown_field} | Acc]
+                end,
+                [], InfoKeys).
+
+
+cli_csr_status_label({Cnty, Acty}) ->
+   rabbit_data_coercion:to_list(Acty) ++ " (" ++ connectivity_label(Cnty) ++ ")".
+
+connectivity_label(?PDOWN) ->
+    "presumed down";
+connectivity_label(Cnty) ->
+    rabbit_data_coercion:to_list(Cnty).
 
 -spec ensure_monitors(command(),
                       state(),
