@@ -72,7 +72,8 @@ groups() ->
                                      vhost_status_metric,
                                      exchange_bindings_metric,
                                      exchange_names_metric,
-                                     stream_pub_sub_metrics
+                                     stream_pub_sub_metrics,
+                                     detailed_raft_metrics_test
         ]},
        {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -157,6 +158,12 @@ init_per_group(detailed_metrics, Config0) ->
      || {VHost, Ch, MsgNum} <- [{<<"/">>, DefaultCh, 3}, {<<"vhost-1">>, VHost1Ch, 7}, {<<"vhost-2">>, VHost2Ch, 11}],
         Q <- [ <<"queue-with-messages">>, <<"queue-with-consumer">> ]
     ],
+
+    amqp_channel:call(DefaultCh,
+                      #'queue.declare'{queue = <<"a_quorum_queue">>,
+                                       durable = true,
+                                       arguments = [{<<"x-queue-type">>, longstr, <<"quorum">>}]
+                                      }),
 
     DefaultConsumer = sleeping_consumer(),
     #'basic.consume_ok'{consumer_tag = DefaultCTag} =
@@ -392,7 +399,6 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "TYPE rabbitmq_auth_attempts_total", [{capture, none}, multiline])),
@@ -402,8 +408,13 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    %% Check raft_entry_commit_latency_seconds because we are aggregating it
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds ", [{capture, none}, multiline])).
+    ?assertEqual(nomatch, re:run(Body, "^rabbitmq_raft_commit_latency_seconds", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_segment_writer", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_wal", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entries{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_mem_tables{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_segments{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_wal_files{", [{capture, none}, multiline])).
 
 endpoint_per_object_metrics(Config) ->
     per_object_metrics_test(Config, "/metrics/per-object").
@@ -431,7 +442,7 @@ per_object_metrics_test(Config, Path) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_open_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_process_max_fds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_ops_total ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term_total{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_term{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_messages_ready{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_queue_consumers{", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "TYPE rabbitmq_auth_attempts_total", [{capture, none}, multiline])),
@@ -439,9 +450,10 @@ per_object_metrics_test(Config, Path) ->
     %% Check the first metric value in each ETS table that requires converting
     ?assertEqual(match, re:run(Body, "^rabbitmq_erlang_uptime_seconds ", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
-    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entry_commit_latency_seconds{", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_commit_latency_seconds{", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
-    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_num_segments{", [{capture, none}, multiline])).
 
 memory_breakdown_metrics_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, "/metrics/memory-breakdown", [], 200),
@@ -555,7 +567,8 @@ queue_consumer_count_all_vhosts_per_object_test(Config) ->
                    #{queue => "vhost-2-queue-with-consumer",vhost => "vhost-2"} => [1],
                    #{queue => "vhost-2-queue-with-messages",vhost => "vhost-2"} => [0],
                    #{queue => "default-queue-with-consumer",vhost => "/"} => [1],
-                   #{queue => "default-queue-with-messages",vhost => "/"} => [0]},
+                   #{queue => "default-queue-with-messages",vhost => "/"} => [0],
+                   #{queue => "a_quorum_queue",vhost => "/"} => [0]},
 
                  rabbitmq_detailed_queue_info =>
                  #{#{queue => "default-queue-with-consumer",
@@ -581,7 +594,10 @@ queue_consumer_count_all_vhosts_per_object_test(Config) ->
                    #{queue => "vhost-2-queue-with-messages",
                      vhost => "vhost-2",
                      queue_type => "rabbit_classic_queue",
-                     membership => "leader"} => [1]}
+                     membership => "leader"} => [1],
+                   #{membership => "leader",
+                     queue => "a_quorum_queue",vhost => "/",
+                     queue_type => "rabbit_quorum_queue"} => [1]}
                 },
 
     %% No vhost given, all should be returned
@@ -599,7 +615,8 @@ queue_coarse_metrics_per_object_test(Config) ->
     Expected2 =  #{#{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [11],
                    #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [11]},
     ExpectedD =  #{#{queue => "default-queue-with-consumer", vhost => "/"} => [3],
-                   #{queue => "default-queue-with-messages", vhost => "/"} => [3]},
+                   #{queue => "default-queue-with-messages", vhost => "/"} => [3],
+                   #{queue => "a_quorum_queue",vhost => "/"} => [0]},
 
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?vhost=vhost-1&family=queue_coarse_metrics", [], 200),
     ?assertEqual(Expected1,
@@ -707,7 +724,8 @@ queue_metrics_per_object_test(Config) ->
     Expected2 =  #{#{queue => "vhost-2-queue-with-consumer", vhost => "vhost-2"} => [11],
                    #{queue => "vhost-2-queue-with-messages", vhost => "vhost-2"} => [1]},
     ExpectedD =  #{#{queue => "default-queue-with-consumer", vhost => "/"} => [3],
-                   #{queue => "default-queue-with-messages", vhost => "/"} => [1]},
+                   #{queue => "default-queue-with-messages", vhost => "/"} => [1],
+                   #{queue => "a_quorum_queue",vhost => "/"} => [0]},
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?vhost=vhost-1&family=queue_metrics", [], 200),
     ?assertEqual(Expected1,
                  map_get(rabbitmq_detailed_queue_messages_ram, parse_response(Body1))),
@@ -836,6 +854,27 @@ core_metrics_special_chars(Config) ->
                      exchange := "exchange\\\"\\\\"}, [I]}]
                  when I == 0; I == 1,
                       maps:to_list(LabelValue3)),
+    ok.
+
+detailed_raft_metrics_test(Config) ->
+    ComponentMetrics = #{#{module => "ra_log_wal", ra_system => "coordination"} => ["1.0"],
+                         #{module => "ra_log_wal", ra_system => "quorum_queues"} => ["1.0"]},
+    QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
+
+    {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
+    %% no queues in vhost foo, so no QQ metrics
+    ?assertEqual(ComponentMetrics,
+                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body1))),
+    ?assertEqual(undefined,
+                 maps:get(rabbitmq_detailed_raft_term, parse_response(Body1), undefined)),
+
+    {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=/", [], 200),
+    %% there's a queue in vhost /
+    ?assertEqual(ComponentMetrics,
+                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body2))),
+    ?assertEqual(QQMetrics,
+                 map_get(rabbitmq_detailed_raft_term, parse_response(Body2))),
+
     ok.
 
 basic_auth(Config) ->
