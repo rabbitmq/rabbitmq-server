@@ -999,7 +999,7 @@ message_properties(Message, Confirm, #q{ttl = TTL}) ->
 
 calculate_msg_expiry(Msg, TTL) ->
     MsgTTL = mc:ttl(Msg),
-    case lists:min([TTL, MsgTTL]) of
+    case min(TTL, MsgTTL) of
         undefined -> undefined;
         T ->
             os:system_time(microsecond) + T * 1000
