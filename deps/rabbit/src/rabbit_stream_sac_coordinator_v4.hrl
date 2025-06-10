@@ -22,34 +22,22 @@
 -type subscription_id() :: byte().
 -type group_id() :: {vhost(), stream(), consumer_name()}.
 -type owner() :: binary().
--type consumer_activity() :: active | waiting | deactivating.
--type consumer_connectivity() :: connected | disconnected | presumed_down.
--type consumer_status() :: {consumer_connectivity(), consumer_activity()}.
--type conf() :: map().
--type timestamp() :: integer().
 
 -record(consumer,
         {pid :: pid(),
          subscription_id :: subscription_id(),
          owner :: owner(), %% just a label
-         status :: consumer_status(),
-         ts :: timestamp()}).
+         active :: boolean()}).
 -record(group,
         {consumers :: [#consumer{}], partition_index :: integer()}).
 -record(rabbit_stream_sac_coordinator,
-        {groups :: groups(),
-         pids_groups :: pids_groups(),
-         conf :: conf(),
+        {groups :: #{group_id() => #group{}},
+         pids_groups ::
+             #{connection_pid() =>
+                   #{group_id() => true}}, %% inner map acts as a set
          %% future extensibility
          reserved_1,
          reserved_2}).
-
--type consumer() :: #consumer{}.
--type group() :: #group{}.
--type groups() :: #{group_id() => group()}.
-%% inner map acts as a set
--type pids_groups() :: #{connection_pid() => #{group_id() => true}}.
-
 %% commands
 -record(command_register_consumer,
         {vhost :: vhost(),
@@ -68,9 +56,3 @@
 -record(command_activate_consumer,
         {vhost :: vhost(), stream :: stream(),
          consumer_name :: consumer_name()}).
--record(command_connection_reconnected,
-        {pid :: connection_pid()}).
--record(command_purge_nodes,
-        {nodes :: [node()]}).
--record(command_update_conf,
-        {conf :: conf()}).
