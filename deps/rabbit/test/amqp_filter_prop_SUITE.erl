@@ -5,12 +5,14 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 %%
 
-%% Test suite for
+%% Test suite for §4 Property Filter Expressions of
 %% AMQP Filter Expressions Version 1.0 Working Draft 09
--module(amqp_filtex_SUITE).
+%% filtering from a stream.
+-module(amqp_filter_prop_SUITE).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("amqp10_common/include/amqp10_filtex.hrl").
+-include_lib("amqp10_client/include/amqp10_client.hrl").
+-include_lib("amqp10_common/include/amqp10_filter.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -compile([nowarn_export_all,
@@ -53,9 +55,7 @@ init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
     rabbit_ct_helpers:merge_app_env(
-      Config, {rabbit, [{quorum_tick_interval, 1000},
-                        {stream_tick_interval, 1000}
-                       ]}).
+      Config, {rabbit, [{stream_tick_interval, 1000}]}).
 
 end_per_suite(Config) ->
     Config.
@@ -148,8 +148,10 @@ properties_section(Config) ->
                     {{symbol, <<"group-sequence">>}, {uint, 16#ff_ff_ff_ff}},
                     {{symbol, <<"reply-to-group-id">>}, {utf8, <<"other group ID">>}}
                    ],
-    Filter1 = #{<<"rabbitmq:stream-offset-spec">> => <<"first">>,
-                ?DESCRIPTOR_NAME_PROPERTIES_FILTER => {map, PropsFilter1}},
+    Filter1 = #{<<"from start">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
+                                            value = {symbol, <<"first">>}},
+                <<"props">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
+                                       value = {map, PropsFilter1}}},
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, Address,
                         settled, configuration, Filter1),
