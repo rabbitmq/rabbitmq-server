@@ -9,6 +9,7 @@
 -behaviour(gen_statem).
 
 -include("amqp10_client.hrl").
+-include("amqp10_client_internal.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
 
@@ -86,7 +87,7 @@
 -type attach_role() :: {sender, target_def()} | {receiver, source_def(), pid()}.
 
 % http://www.amqp.org/specification/1.0/filters
--type filter() :: #{binary() => binary() | map() | list(binary())}.
+-type filter() :: #{binary() => #filter{} | binary() | map() | list(binary())}.
 -type max_message_size() :: undefined | non_neg_integer().
 -type footer_opt() :: crc32 | adler32.
 
@@ -781,29 +782,39 @@ translate_filters(Filters)
   when map_size(Filters) =:= 0 ->
     undefined;
 translate_filters(Filters) ->
-    {map,
-     maps:fold(
-       fun
-           (<<"apache.org:legacy-amqp-headers-binding:map">> = K, V, Acc) when is_map(V) ->
-               %% special case conversion
-               Key = sym(K),
-               [{Key, {described, Key, translate_legacy_amqp_headers_binding(V)}} | Acc];
-          (K, V, Acc) when is_binary(K) ->
-               %% try treat any filter value generically
-               Key = sym(K),
-               Value = filter_value_type(V),
-               [{Key, {described, Key, Value}} | Acc]
-       end, [], Filters)}.
+    {map, lists:map(
+            fun({Name, #filter{descriptor = Desc,
+                               value = V}})
+                  when is_binary(Name) ->
+                    Descriptor = if is_binary(Desc) -> {symbol, Desc};
+                                    is_integer(Desc) -> {ulong, Desc}
+                                 end,
+                    {{symbol, Name}, {described, Descriptor, V}};
+               ({<<"apache.org:legacy-amqp-headers-binding:map">> = K, V})
+                 when is_map(V) ->
+                    %% special case conversion
+                    Key = sym(K),
+                    Val = translate_legacy_amqp_headers_binding(V),
+                    {Key, {described, Key, Val}};
+               ({K, V})
+                 when is_binary(K) ->
+                    Key = {symbol, K},
+                    Val = filter_value_type(V),
+                    {Key, {described, Key, Val}}
+            end, maps:to_list(Filters))}.
 
-filter_value_type(V) when is_binary(V) ->
+filter_value_type(V)
+  when is_binary(V) ->
     %% this is clearly not always correct
     {utf8, V};
 filter_value_type(V)
   when is_integer(V) andalso V >= 0 ->
     {uint, V};
-filter_value_type(VList) when is_list(VList) ->
+filter_value_type(VList)
+  when is_list(VList) ->
     {list, [filter_value_type(V) || V <- VList]};
-filter_value_type({T, _} = V) when is_atom(T) ->
+filter_value_type({T, _} = V)
+  when is_atom(T) ->
     %% looks like an already tagged type, just pass it through
     V.
 
@@ -1507,16 +1518,17 @@ translate_filters_selector_filter_test() ->
     } = translate_filters(#{<<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}).
 
 translate_filters_multiple_filters_test() ->
-    {map,
-        [
-            {{symbol, <<"apache.org:selector-filter:string">>},
-             {described, {symbol, <<"apache.org:selector-filter:string">>},
-              {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}}},
-            {{symbol, <<"apache.org:legacy-amqp-direct-binding:string">>},
-             {described, {symbol, <<"apache.org:legacy-amqp-direct-binding:string">>}, {utf8,<<"my topic">>}}}
-        ]
-    } = translate_filters(#{
-            <<"apache.org:legacy-amqp-direct-binding:string">> => <<"my topic">>,
-            <<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>
-        }).
+    {map, Actual} = translate_filters(
+                      #{
+                        <<"apache.org:legacy-amqp-direct-binding:string">> => <<"my topic">>,
+                        <<"apache.org:selector-filter:string">> => <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>
+                       }),
+    Expected = [{{symbol, <<"apache.org:selector-filter:string">>},
+                 {described, {symbol, <<"apache.org:selector-filter:string">>},
+                  {utf8, <<"amqp.annotation.x-opt-enqueuedtimeutc > 123456789">>}}},
+                {{symbol, <<"apache.org:legacy-amqp-direct-binding:string">>},
+                 {described, {symbol, <<"apache.org:legacy-amqp-direct-binding:string">>}, {utf8,<<"my topic">>}}}],
+    ActualSorted = lists:sort(Actual),
+    ExpectedSorted = lists:sort(Expected),
+    ExpectedSorted = ActualSorted.
 -endif.

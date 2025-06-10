@@ -16,7 +16,7 @@
          recv_amqp_header_step/1
         ]).
 
--include("src/amqp10_client.hrl").
+-include("src/amqp10_client_internal.hrl").
 
 start(Port) ->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
