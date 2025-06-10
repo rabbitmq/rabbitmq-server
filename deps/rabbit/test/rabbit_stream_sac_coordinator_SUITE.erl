@@ -949,6 +949,82 @@ active_consumer_super_stream_disconn_active_block_rebalancing_test(_) ->
     assertEmpty(Eff),
     ok.
 
+activate_consumer_simple_unblock_all_waiting_test(_) ->
+    P = self(),
+    GId = group_id(),
+    Group = grp([csr(P, 0, {connected, waiting}),
+                 csr(P, 1, {connected, waiting}),
+                 csr(P, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(P, 0, {connected, active}),
+                             csr(P, 1, {connected, waiting}),
+                             csr(P, 2, {connected, waiting})]),
+                   Groups1),
+    assertContainsActivateMessage(P, 0, Eff),
+    ok.
+
+activate_consumer_simple_unblock_ignore_disconnected_test(_) ->
+    P = self(),
+    GId = group_id(),
+    Group = grp([csr(P, 0, {disconnected, waiting}),
+                 csr(P, 1, {connected, waiting}),
+                 csr(P, 2, {connected, waiting}),
+                 csr(P, 3, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp([csr(P, 0, {disconnected, waiting}),
+                             csr(P, 1, {connected, active}),
+                             csr(P, 2, {connected, waiting}),
+                             csr(P, 3, {connected, waiting})]),
+                   Groups1),
+    assertContainsActivateMessage(P, 1, Eff),
+    ok.
+
+activate_consumer_super_stream_unblock_all_waiting_test(_) ->
+    P = self(),
+    GId = group_id(),
+    Group = grp(1, [csr(P, 0, {connected, waiting}),
+                    csr(P, 1, {connected, waiting}),
+                    csr(P, 2, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp(1, [csr(P, 0, {connected, waiting}),
+                                csr(P, 1, {connected, active}),
+                                csr(P, 2, {connected, waiting})]),
+                   Groups1),
+    assertContainsActivateMessage(P, 1, Eff),
+    ok.
+
+activate_consumer_super_stream_unblock_ignore_disconnected_test(_) ->
+    P = self(),
+    GId = group_id(),
+    Group = grp(1, [csr(P, 0, {disconnected, waiting}),
+                    csr(P, 1, {connected, waiting}),
+                    csr(P, 2, {connected, waiting}),
+                    csr(P, 3, {connected, waiting})]),
+
+    Groups0 = #{GId => Group},
+    State0 = state(Groups0),
+    Cmd = activate_consumer_command(stream(), name()),
+    {#?STATE{groups = Groups1}, ok, Eff} = ?MOD:apply(Cmd, State0),
+    assertHasGroup(GId, grp(1, [csr(P, 0, {disconnected, waiting}),
+                                csr(P, 1, {connected, waiting}),
+                                csr(P, 2, {connected, active}),
+                                csr(P, 3, {connected, waiting})]),
+                   Groups1),
+    assertContainsActivateMessage(P, 2, Eff),
+    ok.
+
 handle_connection_down_simple_disconn_active_block_rebalancing_test(_) ->
     Pid0 = new_process(),
     Pid1 = new_process(),
@@ -1728,6 +1804,10 @@ assertContainsCheckConnectionEffect(Pid, Effects) ->
 
 assertContainsSendMessageEffect(Pid, Stream, Active, Effects) ->
     assertContainsSendMessageEffect(Pid, 0, Stream, name(), Active, Effects).
+
+assertContainsActivateMessage(Pid, SubId, Effects) ->
+    assertContainsSendMessageEffect(Pid, SubId, stream(), name(),
+                                    true, Effects).
 
 assertContainsActivateMessage(Pid, Effects) ->
     assertContainsSendMessageEffect(Pid, sub_id(), stream(), name(),

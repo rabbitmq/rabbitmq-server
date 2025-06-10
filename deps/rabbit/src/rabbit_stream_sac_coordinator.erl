@@ -128,7 +128,7 @@ unregister_consumer(VirtualHost,
 -spec activate_consumer(binary(), binary(), binary()) ->
     ok | {error, sac_error() | term()}.
 activate_consumer(VH, Stream, Name) ->
-    process_command(#command_activate_consumer{vhost =VH,
+    process_command(#command_activate_consumer{vhost = VH,
                                                stream = Stream,
                                                consumer_name= Name}).
 
@@ -323,7 +323,13 @@ apply(#command_activate_consumer{vhost = VirtualHost,
         end,
     StreamGroups1 = update_groups(VirtualHost, Stream, ConsumerName,
                                   G, StreamGroups0),
-    {State0#?MODULE{groups = StreamGroups1}, ok, Eff};
+    R = case G of
+            undefined ->
+                {error, not_found};
+            _ ->
+                ok
+        end,
+    {State0#?MODULE{groups = StreamGroups1}, R, Eff};
 apply(#command_connection_reconnected{pid = Pid},
       #?MODULE{groups = Groups0} = State0) ->
     {State1, Eff} =
@@ -1157,9 +1163,8 @@ maybe_create_group(VirtualHost,
         #{{VirtualHost, Stream, ConsumerName} := _} ->
             {ok, StreamGroups};
         SGS ->
-            {ok, maps:put({VirtualHost, Stream, ConsumerName},
-                          #group{consumers = [], partition_index = PartitionIndex},
-                          SGS)}
+            {ok, SGS#{{VirtualHost, Stream, ConsumerName} =>
+                      #group{consumers = [], partition_index = PartitionIndex}}}
     end.
 
 lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups) ->
