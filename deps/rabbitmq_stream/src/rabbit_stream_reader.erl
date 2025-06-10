@@ -720,6 +720,9 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
+open(info, {sac, check_connection, _}, State) ->
+    rabbit_stream_sac_coordinator:connection_reconnected(self()),
+    {keep_state, State};
 open(info,
      {sac, #{subscription_id := SubId,
              active := Active} = Msg},
