@@ -378,7 +378,7 @@ list_consumer_groups_run(Config) ->
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),
 
     StreamPort = rabbit_stream_SUITE:get_stream_port(Config),
-    {S, C} = start_stream_connection(StreamPort),
+    {S, C0} = start_stream_connection(StreamPort),
     ?awaitMatch(1, connection_count(Config), ?WAIT),
 
     ConsumerReference = <<"foo">>,
@@ -387,11 +387,11 @@ list_consumer_groups_run(Config) ->
           <<"name">> => ConsumerReference},
 
     Stream1 = <<"list_consumer_groups_run_1">>,
-    create_stream(S, Stream1, C),
-    subscribe(S, 0, Stream1, SubProperties, C),
-    handle_consumer_update(S, C, 0),
-    subscribe(S, 1, Stream1, SubProperties, C),
-    subscribe(S, 2, Stream1, SubProperties, C),
+    C1 = create_stream(S, Stream1, C0),
+    C2 = subscribe(S, 0, Stream1, SubProperties, C1),
+    C3 = handle_consumer_update(S, C2, 0),
+    C4 = subscribe(S, 1, Stream1, SubProperties, C3),
+    C5 = subscribe(S, 2, Stream1, SubProperties, C4),
 
     ?awaitMatch(3, consumer_count(Config), ?WAIT),
 
@@ -399,11 +399,11 @@ list_consumer_groups_run(Config) ->
     assertConsumerGroup(Stream1, ConsumerReference, -1, 3, CG1),
 
     Stream2 = <<"list_consumer_groups_run_2">>,
-    create_stream(S, Stream2, C),
-    subscribe(S, 3, Stream2, SubProperties, C),
-    handle_consumer_update(S, C, 3),
-    subscribe(S, 4, Stream2, SubProperties, C),
-    subscribe(S, 5, Stream2, SubProperties, C),
+    C6 = create_stream(S, Stream2, C5),
+    C7 = subscribe(S, 3, Stream2, SubProperties, C6),
+    C8 = handle_consumer_update(S, C7, 3),
+    C9 = subscribe(S, 4, Stream2, SubProperties, C8),
+    C10 = subscribe(S, 5, Stream2, SubProperties, C9),
 
     ?awaitMatch(3 + 3, consumer_count(Config), ?WAIT),
 
@@ -411,10 +411,10 @@ list_consumer_groups_run(Config) ->
     assertConsumerGroup(Stream1, ConsumerReference, -1, 3, CG1),
     assertConsumerGroup(Stream2, ConsumerReference, -1, 3, CG2),
 
-    delete_stream(S, Stream1, C),
-    delete_stream(S, Stream2, C),
+    C11 = delete_stream(S, Stream1, C10),
+    C12 = delete_stream(S, Stream2, C11),
 
-    close(S, C),
+    close(S, C12),
     {ok, []} = ?COMMAND_LIST_CONSUMER_GROUPS:run([], Opts),
     ok.
 
@@ -490,9 +490,9 @@ list_group_consumers_run(Config) ->
 
     {ok, Consumers1} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup1),
-    ?assertEqual([[{subscription_id, 0}, {state, active}],
-                  [{subscription_id, 1}, {state, inactive}],
-                  [{subscription_id, 2}, {state, inactive}]],
+    ?assertEqual([[{subscription_id, 0}, {state, "active (connected)"}],
+                  [{subscription_id, 1}, {state, "waiting (connected)"}],
+                  [{subscription_id, 2}, {state, "waiting (connected)"}]],
                  Consumers1),
 
     Stream2 = <<"list_group_consumers_run_2">>,
@@ -510,9 +510,9 @@ list_group_consumers_run(Config) ->
 
     {ok, Consumers2} =
         ?COMMAND_LIST_GROUP_CONSUMERS:run(Args, OptsGroup2),
-    ?assertEqual([[{subscription_id, 3}, {state, active}],
-                  [{subscription_id, 4}, {state, inactive}],
-                  [{subscription_id, 5}, {state, inactive}]],
+    ?assertEqual([[{subscription_id, 3}, {state, "active (connected)"}],
+                  [{subscription_id, 4}, {state, "waiting (connected)"}],
+                  [{subscription_id, 5}, {state, "waiting (connected)"}]],
                  Consumers2),
 
     delete_stream(S, Stream1, C),

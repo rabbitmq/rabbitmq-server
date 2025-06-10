@@ -596,35 +596,23 @@ max_segment_size_bytes_validation(Config) ->
     ok.
 
 close_connection_on_consumer_update_timeout(Config) ->
-    Transport = gen_tcp,
-    Port = get_stream_port(Config),
-    {ok, S} =
-    Transport:connect("localhost", Port,
-                      [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(Transport, S, C0),
-    C2 = test_authenticate(Transport, S, C1),
     Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    C3 = test_create_stream(Transport, S, Stream, C2),
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
 
     SubId = 42,
-    C4 = test_subscribe(Transport, S, SubId, Stream,
-                        #{<<"single-active-consumer">> => <<"true">>,
-                          <<"name">> => <<"foo">>},
-                        ?RESPONSE_CODE_OK,
-                        C3),
-    {Cmd, _C5} = receive_commands(Transport, S, C4),
+    Props = #{<<"single-active-consumer">> => <<"true">>,
+              <<"name">> => <<"foo">>},
+    {ok, C2} = stream_test_utils:subscribe(S, C1, Stream, SubId, 10, Props),
+
+    {Cmd, _C3} = receive_commands(S, C2),
     ?assertMatch({request, _, {consumer_update, SubId, true}}, Cmd),
-    closed = wait_for_socket_close(Transport, S, 10),
-    {ok, Sb} =
-    Transport:connect("localhost", Port,
-                      [{active, false}, {mode, binary}]),
-    Cb0 = rabbit_stream_core:init(0),
-    Cb1 = test_peer_properties(Transport, Sb, Cb0),
-    Cb2 = test_authenticate(Transport, Sb, Cb1),
-    Cb3 = test_delete_stream(Transport, Sb, Stream, Cb2, false),
-    _Cb4 = test_close(Transport, Sb, Cb3),
-    closed = wait_for_socket_close(Transport, Sb, 10),
+    closed = wait_for_socket_close(S, 10),
+
+    {ok, Sb, Cb0} = stream_test_utils:connect(Config, 0),
+    {ok, Cb1} = stream_test_utils:delete_stream(Sb, Cb0, Stream),
+    stream_test_utils:close(Sb, Cb1),
+    closed = wait_for_socket_close(Sb, 10),
     ok.
 
 set_filter_size(Config) ->
@@ -1606,6 +1594,9 @@ test_close(Transport, S, C0) ->
         receive_commands(Transport, S, C0),
     C.
 
+wait_for_socket_close(S, Attempt) ->
+    wait_for_socket_close(gen_tcp, S, Attempt).
+
 wait_for_socket_close(_Transport, _S, 0) ->
     not_closed;
 wait_for_socket_close(Transport, S, Attempt) ->
@@ -1615,6 +1606,10 @@ wait_for_socket_close(Transport, S, Attempt) ->
         {error, closed} ->
             closed
     end.
+
+
+receive_commands(S, C) ->
+    receive_commands(gen_tcp, S, C).
 
 receive_commands(Transport, S, C) ->
    stream_test_utils:receive_stream_commands(Transport, S, C).

@@ -117,6 +117,7 @@
 ,   rabbit_local_random_exchange_SUITE
 ,   rabbit_msg_interceptor_SUITE
 ,   rabbit_stream_coordinator_SUITE
+,   rabbit_stream_sac_coordinator_v4_SUITE
 ,   rabbit_stream_sac_coordinator_SUITE
 ,   rabbitmq_4_0_deprecations_SUITE
 ,   rabbitmq_queues_cli_integration_SUITE
