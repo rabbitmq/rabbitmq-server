@@ -162,6 +162,9 @@ handle_info({'DOWN', _Ref, process, Pid, Reason},
     QName = amqqueue:get_name(Q),
     handle_down(Pid, Reason, Ch, DCh, {Upstream, UParams, QName}, State);
 
+handle_info({'EXIT', _From, Reason}, State) ->
+    {stop, Reason, State};
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 

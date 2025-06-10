@@ -184,6 +184,9 @@ handle_info(check_internal_exchange, State = #state{internal_exchange = IntXName
             {noreply, State#state{internal_exchange_timer = TRef}}
     end;
 
+handle_info({'EXIT', _From, Reason}, State) ->
+    {stop, Reason, State};
+
 handle_info(Msg, State) ->
     {stop, {unexpected_info, Msg}, State}.
 

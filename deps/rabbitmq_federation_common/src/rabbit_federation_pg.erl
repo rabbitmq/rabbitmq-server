@@ -17,7 +17,29 @@ stop_scope(Scope) ->
   case whereis(Scope) of
       Pid when is_pid(Pid) ->
           rabbit_log_federation:debug("Stopping pg scope ~ts", [Scope]),
+          Groups = pg:which_groups(Scope),
+          lists:foreach(
+            fun(Group) ->
+                    stop_group(Scope, Group)
+            end, Groups),
           exit(Pid, normal);
       _ ->
           ok
   end.
+
+stop_group(Scope, Group) ->
+    Members = pg:get_local_members(Scope, Group),
+    MRefs = [erlang:monitor(process, Member) || Member <- Members],
+    lists:foreach(
+      fun(Member) ->
+              exit(Member, normal)
+      end, Members),
+    lists:foreach(
+      fun(MRef) ->
+              receive
+                  {'DOWN', MRef, process, _Member, _Info} ->
+                      logger:alert("Member ~p stopped: ~0p", [_Member, _Info]),
+                      ok
+              end
+      end, MRefs),
+    ok.

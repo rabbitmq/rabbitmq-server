@@ -99,12 +99,12 @@ specs(LinkMod, XorQ) ->
 
 spec(LinkMod, U = #upstream{reconnect_delay = Delay}, #exchange{name = XName}) ->
     {U, {LinkMod, start_link, [{U, XName}]},
-     {permanent, Delay}, ?WORKER_WAIT, worker,
+     {transient, Delay}, ?WORKER_WAIT, worker,
      [LinkMod]};
 
 spec(LinkMod, Upstream = #upstream{reconnect_delay = Delay}, Q) when ?is_amqqueue(Q) ->
     {Upstream, {LinkMod, start_link, [{Upstream, Q}]},
-     {permanent, Delay}, ?WORKER_WAIT, worker,
+     {transient, Delay}, ?WORKER_WAIT, worker,
      [LinkMod]}.
 
 name(#exchange{name = XName}) -> XName;
