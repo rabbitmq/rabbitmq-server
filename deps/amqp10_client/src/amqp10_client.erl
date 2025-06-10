@@ -7,7 +7,7 @@
 
 -module(amqp10_client).
 
--include("amqp10_client.hrl").
+-include("amqp10_client_internal.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([open_connection/1,

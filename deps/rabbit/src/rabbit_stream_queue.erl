@@ -93,7 +93,7 @@
                  %% were part of an uncompressed sub batch, and are buffered in
                  %% reversed order until the consumer has more credits to consume them.
                  buffer_msgs_rev = [] :: [rabbit_amqqueue:qmsg()],
-                 filter :: rabbit_amqp_filtex:filter_expressions(),
+                 filter :: rabbit_amqp_filter:expression(),
                  reader_options :: map()}).
 
 -record(stream_client, {stream_id :: string(),
@@ -358,7 +358,7 @@ consume(Q, Spec, #stream_client{} = QState0)
                     %% begins sending
                     maybe_send_reply(ChPid, OkMsg),
                     _ = rabbit_stream_coordinator:register_local_member_listener(Q),
-                    Filter = maps:get(filter, Spec, []),
+                    Filter = maps:get(filter, Spec, undefined),
                     begin_stream(QState, ConsumerTag, OffsetSpec, Mode,
                                  AckRequired, Filter, filter_spec(Args));
                 {error, Reason} ->
@@ -1319,7 +1319,7 @@ entry_to_msg(Entry, Offset, #resource{kind = queue, name = QName},
     Mc = mc_amqp:init_from_stream(Entry, #{?ANN_EXCHANGE => <<>>,
                                            ?ANN_ROUTING_KEYS => [QName],
                                            <<"x-stream-offset">> => Offset}),
-    case rabbit_amqp_filtex:filter(Filter, Mc) of
+    case rabbit_amqp_filter:eval(Filter, Mc) of
         true ->
             {Name, LocalPid, Offset, false, Mc};
         false ->
