@@ -4,7 +4,7 @@ SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 TEST_CASES_PATH=/oauth/with-sp-initiated
 TEST_CONFIG_PATH=/oauth
-PROFILES="spring-authz-server spring-oauth-provider spring-mgt-oauth-provider tls"
+PROFILES="spring spring-oauth-provider spring-mgt-oauth-provider tls"
 
 source $SCRIPT/../../bin/suite_template $@
-runWith spring-authz-server
+runWith spring
