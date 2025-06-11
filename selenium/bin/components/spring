@@ -33,6 +33,7 @@ start_spring() {
   ${BIN_DIR}/gen-spring-yml ${SPRING_CONFIG_DIR} $ENV_FILE $MOUNT_SPRING_CONF_DIR/application.yml
   print "> EFFECTIVE SPRING_CONFIG_FILE: $MOUNT_SPRING_CONF_DIR/application.yml"
   cp ${SPRING_CONFIG_DIR}/*.pem $MOUNT_SPRING_CONF_DIR
+  cp ${SPRING_CONFIG_DIR}/*.jks $MOUNT_SPRING_CONF_DIR
 
   docker run \
 		--detach \
@@ -41,7 +42,6 @@ start_spring() {
 		--publish 8080:8080 \
     --publish 8443:8443 \
     -v ${MOUNT_SPRING_CONF_DIR}:/config \
-		-v ${MOUNT_SPRING_CONF_DIR}:/opt/spring/data/import/ \
 		${SPRING_DOCKER_IMAGE} 
 
   wait_for_oidc_endpoint spring $SPRING_URL $MOUNT_SPRING_CONF_DIR/ca_spring_certificate.pem
