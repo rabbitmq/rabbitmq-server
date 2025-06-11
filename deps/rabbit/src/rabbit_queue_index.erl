@@ -418,7 +418,7 @@ publish(MsgOrId, SeqId, _Location, MsgProps, IsPersistent, JournalSizeHint, Stat
                                false -> ?PUB_TRANS_JPREFIX
                            end):?JPREFIX_BITS,
                           SeqId:?SEQ_BITS, Bin/binary,
-                          (size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
+                          (byte_size(MsgBin)):?EMBEDDED_SIZE_BITS>>, MsgBin]),
     maybe_flush_journal(
       JournalSizeHint,
       add_to_journal(SeqId, {IsPersistent, Bin, MsgBin}, State1)).
@@ -434,7 +434,7 @@ maybe_needs_confirming(MsgProps, MsgOrId,
                 Msg ->
                     mc:get_annotation(id, Msg)
             end,
-    ?MSG_ID_BYTES = size(MsgId),
+    ?MSG_ID_BYTES = byte_size(MsgId),
     case {MsgProps#message_properties.needs_confirming, MsgOrId} of
       {true,  MsgId} -> UC1  = sets:add_element(MsgId, UC),
                         State#qistate{unconfirmed     = UC1};

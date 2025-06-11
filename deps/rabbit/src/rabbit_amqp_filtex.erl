@@ -88,7 +88,7 @@ match_simple_type({suffix, SuffixSize, Suffix}, Val) ->
     case is_binary(Val) of
         true ->
             case Val of
-                <<_:(size(Val) - SuffixSize)/binary, Suffix:SuffixSize/binary>> ->
+                <<_:(byte_size(Val) - SuffixSize)/binary, Suffix:SuffixSize/binary>> ->
                     true;
                 _ ->
                     false
@@ -187,9 +187,9 @@ validate_app_props(_, _) ->
 
 %% [filtex-v1.0-wd09 4.1.1]
 parse_string_modifier_prefix(<<"&s:", Suffix/binary>>) ->
-    {suffix, size(Suffix), Suffix};
+    {suffix, byte_size(Suffix), Suffix};
 parse_string_modifier_prefix(<<"&p:", Prefix/binary>>) ->
-    {prefix, size(Prefix), Prefix};
+    {prefix, byte_size(Prefix), Prefix};
 parse_string_modifier_prefix(<<"&&", _/binary>> = String) ->
     %% "Escape prefix for case-sensitive matching of a string starting with ‘&’"
     string:slice(String, 1);
