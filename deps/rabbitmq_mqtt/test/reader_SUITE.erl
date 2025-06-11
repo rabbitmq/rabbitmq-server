@@ -62,12 +62,18 @@ merge_app_env(Config) ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodename_suffix, ?MODULE}),
-    rabbit_ct_helpers:run_setup_steps(
-      Config1,
-      [fun merge_app_env/1] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config1 = rabbit_ct_helpers:set_config(
+                Config,
+                [{rmq_nodename_suffix, ?MODULE},
+                 {start_rmq_with_plugins_disabled, true}
+                ]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                [fun merge_app_env/1] ++
+                    rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
