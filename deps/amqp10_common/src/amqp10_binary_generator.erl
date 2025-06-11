@@ -120,10 +120,12 @@ generate1({char,V}) when V>=0 andalso V=<16#10ffff -> <<16#73,V:32>>;
 generate1({timestamp,V})                           -> <<16#83,V:64/signed>>;
 generate1({uuid,     V})                           -> <<16#98,V:16/binary>>;
 
-generate1({utf8, V}) when size(V) =< ?VAR_1_LIMIT   -> [16#a1, size(V), V];
-generate1({utf8, V})                                -> [<<16#b1, (size(V)):32>>, V];
-generate1({symbol, V}) when size(V) =< ?VAR_1_LIMIT -> [16#a3, size(V), V];
-generate1({symbol, V})                              -> [<<16#b3, (size(V)):32>>, V];
+generate1({utf8, V})
+  when byte_size(V) =< ?VAR_1_LIMIT                -> [16#a1, byte_size(V), V];
+generate1({utf8, V})                               -> [<<16#b1, (byte_size(V)):32>>, V];
+generate1({symbol, V})
+  when byte_size(V) =< ?VAR_1_LIMIT                -> [16#a3, byte_size(V), V];
+generate1({symbol, V})                             -> [<<16#b3, (byte_size(V)):32>>, V];
 generate1({binary, V}) ->
     Size = iolist_size(V),
     case Size =< ?VAR_1_LIMIT  of

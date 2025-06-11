@@ -113,7 +113,7 @@ mainloop(Deb, State = #v1{sock = Sock, buf = Buf, buf_len = BufLen}) ->
         {data, Data} ->
             State1 = maybe_resize_buffer(State, Data),
             recvloop(Deb, State1#v1{buf = [Data | Buf],
-                                    buf_len = BufLen + size(Data),
+                                    buf_len = BufLen + byte_size(Data),
                                     pending_recv = false});
         closed when State#v1.connection_state =:= closed ->
             ok;
@@ -403,7 +403,7 @@ handle_frame0(Mode, Channel, Body, State) ->
 
 %% "The frame body is defined as a performative followed by an opaque payload." [2.3.2]
 parse_frame_body(Body, _Channel) ->
-    BytesBody = size(Body),
+    BytesBody = byte_size(Body),
     {DescribedPerformative, BytesParsed} = amqp10_binary_parser:parse(Body),
     Performative = amqp10_framing:decode(DescribedPerformative),
     if BytesParsed < BytesBody ->
