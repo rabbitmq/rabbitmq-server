@@ -1180,7 +1180,7 @@ decode_as_msg(Transfer, Payload, undefined) ->
     Sections = amqp10_framing:decode_bin(Payload),
     {ok, amqp10_msg:from_amqp_records([Transfer | Sections])};
 decode_as_msg(Transfer, Payload, FooterOpt) ->
-    PosSections = decode_sections([], Payload, size(Payload), 0),
+    PosSections = decode_sections([], Payload, byte_size(Payload), 0),
     Sections = lists:map(fun({_Pos, S}) -> S end, PosSections),
     Msg = amqp10_msg:from_amqp_records([Transfer | Sections]),
     OkMsg = {ok, Msg},
