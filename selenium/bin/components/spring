@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-SPRING_DOCKER_IMAGE=pivotalrabbitmq/spring-authorization-server
+SPRING_DOCKER_IMAGE=pivotalrabbitmq/spring-authorization-server:0.0.1
 
 ensure_spring() {
   if docker ps | grep spring &> /dev/null; then
@@ -19,7 +19,7 @@ init_spring() {
   print "> SPRING_DOCKER_IMAGE: ${SPRING_DOCKER_IMAGE}"
 
   generate-ca-server-client-kpi spring $SPRING_CONFIG_DIR
-
+  generate-server-keystore-if-required spring $SPRING_CONFIG_DIR
 }
 start_spring() {
   begin "Starting spring ..."
@@ -30,7 +30,7 @@ start_spring() {
   MOUNT_SPRING_CONF_DIR=$CONF_DIR/spring
 
   mkdir -p $MOUNT_SPRING_CONF_DIR
-#  ${BIN_DIR}/gen-spring-yml ${SPRINGCONFIG_DIR} "test-realm" $ENV_FILE $MOUNT_KEYCLOAK_CONF_DIR/test-realm.json
+  ${BIN_DIR}/gen-spring-yml ${SPRING_CONFIG_DIR} $ENV_FILE $MOUNT_SPRING_CONF_DIR/application.yml
   print "> EFFECTIVE SPRING_CONFIG_FILE: $MOUNT_SPRING_CONF_DIR/application.yml"
   cp ${SPRING_CONFIG_DIR}/*.pem $MOUNT_SPRING_CONF_DIR
 
@@ -38,8 +38,9 @@ start_spring() {
 		--detach \
 		--name spring \
     --net ${DOCKER_NETWORK} \
-		--publish 8081:8080 \
-    --publish 8443:8443 \		
+		--publish 8080:8080 \
+    --publish 8443:8443 \
+    -v ${MOUNT_SPRING_CONF_DIR}:/config \
 		-v ${MOUNT_SPRING_CONF_DIR}:/opt/spring/data/import/ \
 		${SPRING_DOCKER_IMAGE} 
 

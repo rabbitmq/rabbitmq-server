@@ -1,0 +1,9 @@
+server:
+  ssl:
+    enabled: true
+    protocol: TLS
+    enabled-protocols: TLSv1.2
+    key-store-type: PKCS12
+    ssl.key-store: /config/server_spring.p12
+    ssl.key-store-password: guest
+  port: 8080
