@@ -4,6 +4,6 @@ server:
     protocol: TLS
     enabled-protocols: TLSv1.2
     key-store-type: PKCS12
-    ssl.key-store: /config/server_spring.p12
-    ssl.key-store-password: guest
+    key-store: /config/server_spring.jks
+    key-store-password: foobar
   port: 8080
