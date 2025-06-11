@@ -88,6 +88,7 @@ jobs:
           tags: |
             type=sha,format=long
             type=schedule,pattern=nightly.{{date 'YYYYMMDD'}},prefix=${{ matrix.branch }}+
+            type=raw,value=${{ matrix.branch }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
