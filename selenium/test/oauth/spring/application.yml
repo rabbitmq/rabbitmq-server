@@ -1,9 +1,18 @@
 server:
+  port: 8443
   ssl:
-    enabled: true
-    protocol: TLS
-    enabled-protocols: TLSv1.2
-    key-store-type: PKCS12
-    key-store: /config/server_spring.jks
-    key-store-password: foobar
-  port: 8080
+    bundle: spring-authorizationserver
+  
+spring:
+  ssl:
+    bundle:
+      jks:
+        spring-authorizationserver:
+          key:
+            alias: server-spring-tls
+            password: foobar
+          keystore:
+            location: /config/server_spring.jks
+            password: foobar
+            type: PKCS12
+          
