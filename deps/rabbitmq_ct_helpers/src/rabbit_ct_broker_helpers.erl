@@ -2375,9 +2375,55 @@ disable_plugin(Config, Node, Plugin) ->
     plugin_action(Config, Node, [disable, Plugin]).
 
 plugin_action(Config, Node, Args) ->
-    Rabbitmqplugins = ?config(rabbitmq_plugins_cmd, Config),
     NodeConfig = get_node_config(Config, Node),
     Nodename = ?config(nodename, NodeConfig),
+    %% We want to use the CLI from the given node if there is a secondary
+    %% umbrella being configured.
+    I = get_node_index(Config, Node),
+    CanUseSecondary = (I + 1) rem 2 =:= 0,
+    WithPlugins0 = rabbit_ct_helpers:get_config(Config,
+      broker_with_plugins),
+    WithPlugins = case is_list(WithPlugins0) of
+        true  -> lists:nth(I + 1, WithPlugins0);
+        false -> WithPlugins0
+    end,
+    UseSecondaryDist = case ?config(secondary_dist, Config) of
+                               false -> false;
+                               _     -> CanUseSecondary
+                           end,
+    UseSecondaryUmbrella = case ?config(secondary_umbrella, Config) of
+                               false ->
+                                   false;
+                               _ ->
+                                   CanUseSecondary
+                           end,
+    Rabbitmqplugins = case UseSecondaryUmbrella of
+                          true ->
+                              SrcDir = case WithPlugins of
+                                           false ->
+                                               ?config(
+                                                  secondary_rabbit_srcdir,
+                                                  Config);
+                                           _ ->
+                                               ?config(
+                                                  secondary_current_srcdir,
+                                                  Config)
+                                       end,
+                              SecScriptsDir = filename:join(
+                                                [SrcDir, "sbin"]),
+                              rabbit_misc:format(
+                                "~ts/rabbitmq-plugins", [SecScriptsDir]);
+                          false ->
+                              case UseSecondaryDist of
+                                  true ->
+                                      SecondaryDist = ?config(secondary_dist, Config),
+                                      rabbit_misc:format(
+                                        "~ts/sbin/rabbitmq-plugins", [SecondaryDist]);
+                                  false ->
+                                      ?config(rabbitmq_plugins_cmd, Config)
+                              end
+                      end,
+
     Env = [
       {"RABBITMQ_SCRIPTS_DIR", filename:dirname(Rabbitmqplugins)},
       {"RABBITMQ_PID_FILE", ?config(pid_file, NodeConfig)},
