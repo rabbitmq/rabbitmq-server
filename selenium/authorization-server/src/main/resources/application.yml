@@ -47,6 +47,7 @@ spring:
                 - openid 
                 - profile 
                 - rabbitmq.tag:administrator
+                - rabbitmq.tag:management
               client-name: rabbitmq_client_code
 
             
