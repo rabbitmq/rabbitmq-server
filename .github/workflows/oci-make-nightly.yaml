@@ -22,6 +22,9 @@ jobs:
           - main
           - v4.1.x
           - v4.0.x
+        include:
+          - branch: main
+            project_version: 4.2.0
 
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +32,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
+          fetch-tags: true
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Determine closes tag
+        id: tag
+        if: matrix.branch != 'main'
+        shell: bash
+        run: |
+          t=$(git describe --tags --abbrev=0 ${{ matrix.branch }})
+          printf "project_version=%s\n" "${t:1}" | tee -a "$GITHUB_OUTPUT"
 
       - name: Configure Erlang
         uses: erlef/setup-beam@v1
@@ -39,7 +53,7 @@ jobs:
       - name: make package-generic-unix
         id: make
         run: |
-          make package-generic-unix PROJECT_VERSION=${{ matrix.branch }}+${{ github.sha }}
+          make package-generic-unix PROJECT_VERSION=${{ matrix.project_version || steps.tag.outputs.project_version }}+${{ github.sha }}
 
       - name: Upload package-generic-unix
         uses: actions/upload-artifact@v4
@@ -87,7 +101,7 @@ jobs:
             suffix=-otp${{ matrix.otp_version }}
           tags: |
             type=sha,format=long
-            type=schedule,pattern=nightly.{{date 'YYYYMMDD'}},prefix=${{ matrix.branch }}+
+            type=schedule,pattern=nightly.{{date 'YYYYMMDD'}},prefix=${{ matrix.branch }}-
             type=raw,value=${{ matrix.branch }}
 
       - name: Set up QEMU
