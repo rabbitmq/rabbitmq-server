@@ -125,7 +125,9 @@ sub_groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config.
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{start_rmq_with_plugins_disabled, true}]).
 
 end_per_suite(Config) ->
     Config.
@@ -152,6 +154,7 @@ init_per_group(authz, Config0) ->
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config, rabbitmq_mqtt),
     rabbit_ct_broker_helpers:add_user(Config, User, Password),
     rabbit_ct_broker_helpers:add_vhost(Config, VHost),
     [Log|_] = rpc(Config, 0, rabbit, log_locations, []),
@@ -167,7 +170,7 @@ init_per_group(Group, Config) ->
     ]),
     MqttConfig = mqtt_config(Group),
     AuthConfig = auth_config(Group),
-    rabbit_ct_helpers:run_setup_steps(
+    Config2 = rabbit_ct_helpers:run_setup_steps(
       Config1,
       [fun(Conf) -> case MqttConfig of
                         undefined  -> Conf;
@@ -179,8 +182,10 @@ init_per_group(Group, Config) ->
                         _         -> merge_app_env(AuthConfig, Conf)
                     end
        end] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+          rabbit_ct_broker_helpers:setup_steps() ++
+          rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 end_per_group(G, Config)
   when G =:= v4;
