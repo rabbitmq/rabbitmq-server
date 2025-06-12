@@ -6,9 +6,9 @@
 
 -module(rabbitmq_amqp_address).
 
--export[exchange/1,
-        exchange/2,
-        queue/1].
+-export([exchange/1,
+         exchange/2,
+         queue/1]).
 
 -spec exchange(unicode:unicode_binary()) ->
     unicode:unicode_binary().
