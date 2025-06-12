@@ -4,6 +4,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.context.annotation.Bean;
@@ -20,6 +21,7 @@ import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
@@ -27,6 +29,8 @@ import org.springframework.security.oauth2.server.authorization.config.annotatio
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -37,6 +41,9 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+
+import static com.rabbitmq.authorization_server.ScopeAuthority.scope;
+import static com.rabbitmq.authorization_server.AudienceAuthority.aud;
 
 @Configuration
 @EnableWebSecurity
@@ -91,7 +98,11 @@ public class SecurityConfig {
 		UserDetails userDetails = User.withDefaultPasswordEncoder()
 				.username("rabbit_admin")
 				.password("rabbit_admin")
-				.roles("openid profile rabbitmq.tag:administrator")
+				.authorities(List.of(
+					scope("openid"),
+					scope("profile"),
+					scope("rabbitmq.tag:administrator"),
+					aud("rabbitmq")))
 				.build();
 
 		return new InMemoryUserDetailsManager(userDetails);
@@ -140,6 +151,20 @@ public class SecurityConfig {
 		}
 		return keyPair;
 	}
+
+	@Bean
+	public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+		return (context) -> {
+			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+				System.out.println("Principal: " + context.getPrincipal());
+				System.out.println("Authorized scopes: " + context.getAuthorizedScopes());
+				context.getClaims().claims((claims) -> {
+					claims.put("aud", "rabbitmq");					
+				});
+			}
+		};
+	}
+
 
 	@Bean 
 	public JwtDecoder jwtDecoder(JWKSource<SecurityContext> jwkSource) {
