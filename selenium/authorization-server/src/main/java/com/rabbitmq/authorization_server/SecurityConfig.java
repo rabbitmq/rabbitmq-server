@@ -89,14 +89,14 @@ public class SecurityConfig {
 	@Bean 
 	public UserDetailsService userDetailsService() {
 		UserDetails userDetails = User.withDefaultPasswordEncoder()
-				.username("admin")
-				.password("admin")
-				.roles("ADMIN")
+				.username("rabbit_admin")
+				.password("rabbit_admin")
+				.roles("openid profile rabbitmq.tag:administrator")
 				.build();
 
 		return new InMemoryUserDetailsManager(userDetails);
 	}
-
+/*
 	@Bean 
 	public RegisteredClientRepository registeredClientRepository() {
 		RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -114,7 +114,7 @@ public class SecurityConfig {
 
 		return new InMemoryRegisteredClientRepository(oidcClient);
 	}
-
+ */
 	@Bean 
 	public JWKSource<SecurityContext> jwkSource() {
 		KeyPair keyPair = generateRsaKey();
