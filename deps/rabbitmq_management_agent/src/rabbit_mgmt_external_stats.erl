@@ -264,20 +264,8 @@ i(context_switches, State) ->
     {Sw, 0} = erlang:statistics(context_switches),
     {State, Sw};
 i(ra_open_file_metrics, State) ->
-    {State, [{ra_log_wal, ra_metrics(ra_log_wal)},
-             {ra_log_segment_writer, ra_metrics(ra_log_segment_writer)}]}.
-
-ra_metrics(K) ->
-    try
-        case ets:lookup(ra_open_file_metrics, whereis(K)) of
-            [] -> 0;
-            [{_, C}] -> C
-        end
-    catch
-        error:badarg ->
-            %% On startup the mgmt might start before ra does
-            0
-    end.
+    {State, [{ra_log_wal, 0},
+             {ra_log_segment_writer, 0}]}.
 
 resource_alarm_set(Source) ->
     lists:member({{resource_limit, Source, node()},[]},
@@ -418,7 +406,7 @@ update_state(State0) ->
 get_fhc_stats() ->
     dict:to_list(dict:merge(fun(_, V1, V2) -> V1 + V2 end,
                             dict:from_list(zero_fhc_stats()),
-                            dict:from_list(get_ra_io_metrics()))).
+                            dict:from_list(get_zero_ra_io_metrics()))).
 
 zero_fhc_stats() ->
     [{{Op, Counter}, 0} || Op <- [io_read, io_write],
@@ -432,5 +420,17 @@ zero_fhc_stats() ->
                                   queue_index_write, queue_index_read],
                            Counter <- [count]].
 
-get_ra_io_metrics() ->
-    lists:sort(ets:tab2list(ra_io_metrics)).
+get_zero_ra_io_metrics() ->
+    %% not tracked anymore
+    [{{io_file_handle_open_attempt,count},0},
+     {{io_file_handle_open_attempt,time},0},
+     {{io_read,bytes},0},
+     {{io_read,count},0},
+     {{io_read,time},0},
+     {{io_seek,count},0},
+     {{io_seek,time},0},
+     {{io_sync,count},0},
+     {{io_sync,time},0},
+     {{io_write,bytes},0},
+     {{io_write,count},0},
+     {{io_write,time},0}].

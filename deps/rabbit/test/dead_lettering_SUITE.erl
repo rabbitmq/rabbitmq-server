@@ -1928,7 +1928,7 @@ counted(Metric, Config) ->
         metric(QueueType, Strategy, Metric, OldCounters).
 
 metric(QueueType, Strategy, Metric, Counters) ->
-    Metrics = maps:get([{queue_type, QueueType}, {dead_letter_strategy, Strategy}], Counters),
+    Metrics = maps:get(#{queue_type => QueueType, dead_letter_strategy => Strategy}, Counters),
     maps:get(Metric, Metrics).
 
 group_name(Config) ->

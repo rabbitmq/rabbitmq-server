@@ -1274,6 +1274,7 @@ make_ra_conf(Node, Nodes, MinMacVersion) ->
       uid => UId,
       friendly_name => atom_to_list(?MODULE),
       metrics_key => ?MODULE,
+      metrics_labels => #{ra_system => ?RA_SYSTEM, module=>?MODULE},
       initial_members => Members,
       log_init_args => #{uid => UId},
       tick_timeout => TickTimeout,
