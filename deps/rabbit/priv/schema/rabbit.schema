@@ -112,6 +112,14 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
+{mapping, "listeners.cli.$proto", "rabbit.cli_listeners",[
+    {datatype, [integer, ip]}
+]}.
+{translation, "rabbit.cli_listeners",
+fun(Conf) ->
+        cuttlefish_variable:filter_by_prefix("listeners.cli", Conf)
+end}.
+
 {mapping, "erlang.K", "vm_args.+K", [
   {default, "true"},
   {level, advanced}
