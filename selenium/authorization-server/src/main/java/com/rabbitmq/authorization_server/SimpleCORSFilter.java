@@ -23,28 +23,22 @@ import jakarta.servlet.http.HttpServletResponse;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class SimpleCORSFilter implements Filter {
 
-    private final Set<String> allowedOrigins;
-
     @Autowired
-    public SimpleCORSFilter(@Value("${spring.security.cors.allowed-origins:*}") Set<String> allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
+    public SimpleCORSFilter() {
     }
 
     @Override
     public void init(FilterConfig fc) throws ServletException {
-
+        System.out.println("Init SimpleCORSFilter");
     }
 
     @Override
     public void doFilter(ServletRequest req, ServletResponse resp,
                          FilterChain chain) throws IOException, ServletException {
+        System.out.println("doFilter SimpleCORSFilter");
         HttpServletResponse response = (HttpServletResponse) resp;
         HttpServletRequest request = (HttpServletRequest) req;
-        String origin = request.getHeader("referer");
-        if(origin != null ){
-            Optional<String> first = allowedOrigins.stream().filter(origin::startsWith).findFirst();
-            first.ifPresent(s -> response.setHeader("Access-Control-Allow-Origin", s));
-        }
+        response.setHeader("Access-Control-Allow-Origin", "*");
         response.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE");
         response.setHeader("Access-Control-Max-Age", "3600");
         response.setHeader("Access-Control-Allow-Headers", "x-requested-with, authorization, Content-Type, Authorization, credential, X-XSRF-TOKEN");
