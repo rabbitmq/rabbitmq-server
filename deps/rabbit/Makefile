@@ -158,12 +158,12 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-ESCRIPT_NAME := rabbit_cli
+ESCRIPT_NAME := rabbit_cli2
 ESCRIPT_FILE := scripts/rmq
 
 ebin/$(PROJECT).app:: $(ESCRIPT_FILE)
 
-$(ESCRIPT_FILE): ebin/rabbit_cli.beam
+$(ESCRIPT_FILE): ebin/rabbit_cli2.beam
 	$(gen_verbose) printf "%s\n" \
 		"#!$(ESCRIPT_SHEBANG)" \
 		"%% $(ESCRIPT_COMMENT)" \

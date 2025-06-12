@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>RabbitMQ CLI over HTTP</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        font-size: 16px;
+        width: 1000px;
+      }
+      p {
+        margin-top: 0px;
+      }
+      pre {
+        font-size: 14px;
+        border-radius: 5px;
+        background-color: #f6f8fa;
+        padding: 1rem;
+      }
+      #url {
+        color: #0a3069;
+      }
+    </style>
+    <script>
+      window.onload = function() {
+        document.getElementById("url").innerHTML = '"' + window.location.href + '"';
+      }
+    </script>
+  </head>
+  <body>
+    <h1>RabbitMQ CLI over HTTP</h1>
+    <div style="display: flex; flex-direction: row; align-items: flex-start; gap: 2rem;">
+      <div>
+        <svg width="100px" height="100px" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M0 2.5C0 1.67157 0.671573 1 1.5 1H13.5C14.3284 1 15 1.67157 15 2.5V12.5C15 13.3284 14.3284 14 13.5 14H1.5C0.671573 14 0 13.3284 0 12.5V2.5ZM5.79293 7.50001L3.14648 4.85356L3.85359 4.14645L7.20714 7.50001L3.85359 10.8536L3.14648 10.1465L5.79293 7.50001ZM12 11H8V10H12V11Z" fill="#000000"/>
+        </svg>
+      </div>
+      <div>
+        <p>This HTTP endpoint can be used by the RabbitMQ CLI &mdash; if this
+        URL is passed to it &mdash; instead of the default Erlang distribution
+        mechanism. To access this HTTP endpoint, the CLI will require
+        authentication using one of the configured RabbitMQ authentication
+        methods.</p>
+        <p>To manage this RabbitMQ node with the CLI over HTTP, run:</p>
+        <pre>rabbitmqctl \
+    --node <span id="url">&lt;URL&gt;</span> \
+    &lt;command&gt;</pre>
+      </div>
+    </div>
+  </body>
+</html>
