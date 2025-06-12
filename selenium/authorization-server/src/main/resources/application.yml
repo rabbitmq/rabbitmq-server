@@ -1,32 +1,52 @@
 server:
-  port: 8080
-
-logging:
-  level:
-    org.springframework.security: trace
-
+  port: 8443
+  ssl:
+    bundle: spring-authorizationserver
+  
 spring:
+  ssl:
+    bundle:
+      jks:
+        spring-authorizationserver:
+          key:
+            alias: server-spring-tls
+            password: foobar
+          keystore:
+            location: ../test/oauth/spring/server_spring.jks
+            password: foobar
+            type: PKCS12
   security:
-    user:
-      name: user
-      password: password
     oauth2:
       authorizationserver:
         client:
-          oidc-client:
+          mgt_api_client:
             registration:
-              client-id: "oidc-client"
-              client-secret: "{noop}secret"
+              provider: spring
+              client-id: mgt_api_client
+              authorization-grant-types: 
+                - client_credentials
               client-authentication-methods:
-                - "client_secret_basic"
-              authorization-grant-types:
-                - "authorization_code"
-                - "refresh_token"
-              redirect-uris:
-                - "http://127.0.0.1:15672/login/oauth2/code/oidc-client"
-              post-logout-redirect-uris:
-                - "http://127.0.0.1:15672/"
-              scopes:
-                - "openid"
-                - "profile"
-            require-authorization-consent: true
+                - client_secret_basic
+              require-proof-key: true
+              scopes: 
+                - openid
+                - profile
+                - rabbitmq.tag:management
+              client-name: mgt_api_client
+          rabbitmq_client_code:
+            registration:
+              provider: spring
+              client-id: rabbitmq_client_code
+              authorization-grant-types: 
+                - authorization_code
+              client-authentication-methods:
+                - none
+              redirect-uris: 
+                - "https://localhost:15671/js/oidc-oauth/login-callback.html"
+              scopes: 
+                - openid 
+                - profile 
+                - rabbitmq.tag:administrator
+              client-name: rabbitmq_client_code
+
+            
