@@ -11,27 +11,27 @@
 -include("rabbitmq_amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 
--export[
-        %% link pair operations
-        attach_management_link_pair_sync/2,
-        detach_management_link_pair_sync/1,
+-export([
+         %% link pair operations
+         attach_management_link_pair_sync/2,
+         detach_management_link_pair_sync/1,
 
-        %% queue operations
-        get_queue/2,
-        declare_queue/3,
-        bind_queue/5,
-        unbind_queue/5,
-        purge_queue/2,
-        delete_queue/2,
+         %% queue operations
+         get_queue/2,
+         declare_queue/3,
+         bind_queue/5,
+         unbind_queue/5,
+         purge_queue/2,
+         delete_queue/2,
 
-        %% exchange operations
-        declare_exchange/3,
-        bind_exchange/5,
-        unbind_exchange/5,
-        delete_exchange/2,
+         %% exchange operations
+         declare_exchange/3,
+         bind_exchange/5,
+         unbind_exchange/5,
+         delete_exchange/2,
 
-        set_token/2
-       ].
+         set_token/2
+        ]).
 
 -define(TIMEOUT, 30_000).
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
