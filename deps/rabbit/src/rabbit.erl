@@ -235,6 +235,13 @@
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({rabbit_cli_http_listener,
+                   [{description, "RabbitMQ CLI HTTP listener"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_cli_http_listener]}},
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
+
 -rabbit_boot_step({rabbit_observer_cli,
                    [{description, "Observer CLI configuration"},
                     {mfa,         {rabbit_observer_cli, init, []}},
@@ -951,7 +958,6 @@ start(normal, []) ->
         %% will be used. We start it now because we can't wait for boot steps
         %% to do this (feature flags are refreshed before boot steps run).
         ok = rabbit_sup:start_child(rabbit_ff_controller),
-        ok = rabbit_sup:start_child(rabbit_cli_ws),
 
         %% Compatibility with older RabbitMQ versions + required by
         %% rabbit_node_monitor:notify_node_up/0:
