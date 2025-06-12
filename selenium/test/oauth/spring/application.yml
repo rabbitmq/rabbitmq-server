@@ -15,4 +15,26 @@ spring:
             location: /config/server_spring.jks
             password: foobar
             type: PKCS12
-          
+  security:
+    oauth2:
+      client:
+        registration:
+          mgt_api_client:
+            provider: spring
+            client-id: mgt_api_client
+            authorization-grant-type: client_credentials
+            scopes: 
+              - openid
+              - profile
+              - rabbitmq.tag:management
+            client-name: mgt_api_client
+          rabbitmq_client_code:
+            provider: spring
+            client-id: rabbitmq_client_code
+            authorization-grant-type: authorization_code
+            redirect-uri: "https://localhost:15671/js/oidc-oauth/login-callback.html"
+            scopes: 
+              - openid 
+              - profile 
+              - rabbitmq.tag:administrator
+            client-name: rabbitmq_client_code
