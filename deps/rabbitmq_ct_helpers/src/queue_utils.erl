@@ -146,7 +146,8 @@ dirty_query(Servers, QName, Fun) ->
               case rpc:call(N, ra, local_query, [{QName, N}, Fun]) of
                   {ok, {_, Msgs}, _} ->
                       Msgs;
-                  _E ->
+                  E ->
+                      ct:log(error, "~s:~s rpc:call ra:local_query failed with ~p", [?MODULE, ?FUNCTION_NAME, E]),
                       undefined
               end
       end, Servers).
