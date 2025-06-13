@@ -1,4 +1,4 @@
--module(rabbit_cli2).
+-module(rabbit_cli_frontend).
 
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
@@ -8,8 +8,8 @@
          noop/1]).
 
 -record(?MODULE, {progname,
-                  args,
                   group_leader,
+                  args,
                   argparse_def,
                   arg_map,
                   cmd_path,
@@ -155,11 +155,13 @@ final_argparse_def(#?MODULE{argparse_def = PartialArgparseDef} = Context) ->
     end.
 
 get_full_argparse_def(#?MODULE{connection = Connection}) ->
+    %% TODO: Handle an undef failure when the remote node is too old.
     RemoteArgparseDef = rabbit_cli_transport2:rpc(
-                          Connection, rabbit_cli_commands, argparse_def, []),
+                          Connection,
+                          rabbit_cli_backend, final_argparse_def, []),
     {ok, RemoteArgparseDef};
 get_full_argparse_def(_) ->
-    LocalArgparseDef = rabbit_cli_commands:argparse_def(),
+    LocalArgparseDef = rabbit_cli_backend:final_argparse_def(),
     {ok, LocalArgparseDef}.
 
 merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
@@ -189,10 +191,28 @@ final_parse(
 %% -------------------------------------------------------------------
 
 run_command(#?MODULE{connection = Connection} = Context) ->
+    ContextMap = context_to_map(Context),
     rabbit_cli_transport2:rpc(
-      Connection, rabbit_cli_commands, run_command, [Context]);
+      Connection, rabbit_cli_backend, run_command, [ContextMap]);
 run_command(Context) ->
-    rabbit_cli_commands:run_command(Context).
+    %% FIXME: Do we need to spawn a process?
+    ContextMap = context_to_map(Context),
+    rabbit_cli_backend:run_command(ContextMap).
+
+context_to_map(Context) ->
+    Fields = [Field || Field <- record_info(fields, ?MODULE),
+                       %% We don’t need or want to communicate the connection
+                       %% state or the group leader to the backend.
+                       Field =/= connection orelse
+                       Field =/= group_leader],
+    record_to_map(Fields, Context, 2, #{}).
+
+record_to_map([Field | Rest], Record, Index, Map) ->
+    Value = element(Index, Record),
+    Map1 = Map#{Field => Value},
+    record_to_map(Rest, Record, Index + 1, Map1);
+record_to_map([], _Record, _Index, Map) ->
+    Map.
 
 noop(_Context) ->
     ok.
