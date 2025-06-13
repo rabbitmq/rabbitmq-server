@@ -1,5 +1,9 @@
 package com.rabbitmq.authorization_server;
 
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 
 public class ScopeAuthority implements GrantedAuthority {
@@ -17,6 +21,15 @@ public class ScopeAuthority implements GrantedAuthority {
     @Override
     public String getAuthority() {
         return authority;
+    }
+
+    public static List<String> getAllUnauthorized(AbstractAuthenticationToken principal,
+            Set<String> authorized) {
+        return principal.getAuthorities()
+					.stream()
+					.filter(a -> a instanceof ScopeAuthority)
+					.filter(a -> !authorized.contains(a.getAuthority()))
+					.map(a -> a.getAuthority()).toList();
     }
     
 }
