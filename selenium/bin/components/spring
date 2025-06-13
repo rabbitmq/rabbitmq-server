@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-SPRING_DOCKER_IMAGE=pivotalrabbitmq/spring-authorization-server:0.0.4
+SPRING_DOCKER_IMAGE=pivotalrabbitmq/spring-authorization-server:0.0.5
 
 ensure_spring() {
   if docker ps | grep spring &> /dev/null; then
