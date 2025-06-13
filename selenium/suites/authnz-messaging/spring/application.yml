@@ -1,0 +1,38 @@
+server:
+  port: 8443
+  ssl:
+    bundle: spring-authorizationserver
+  
+spring:
+  ssl:
+    bundle:
+      jks:
+        spring-authorizationserver:
+          key:
+            alias: server-spring-tls
+            password: foobar
+          keystore:
+            location: /config/server_spring.jks
+            password: foobar
+            type: PKCS12
+  security:
+    oauth2:      
+      authorizationserver:
+        client:
+          producer:
+            registration:
+              provider: spring
+              client-id: producer
+              client-secret: producer
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+              token-settings:
+                access-token-format: reference              
+              scopes: 
+                - rabbitmq.configure:*/*
+                - rabbitmq.read:*/*
+                - rabbitmq.write:*/*
+              client-name: producer
+          
