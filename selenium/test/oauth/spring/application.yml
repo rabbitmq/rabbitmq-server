@@ -44,7 +44,7 @@ spring:
               redirect-uris: 
                 - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/js/oidc-oauth/login-callback.html"
               post-logout-redirect-uris:
-                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}"
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/"
               scopes: 
                 - openid 
                 - profile 
