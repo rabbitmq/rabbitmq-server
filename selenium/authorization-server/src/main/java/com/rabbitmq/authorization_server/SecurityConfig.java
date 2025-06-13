@@ -36,9 +36,6 @@ import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
-import static com.rabbitmq.authorization_server.ScopeAuthority.scope;
-import static com.rabbitmq.authorization_server.AudienceAuthority.aud;
-
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -88,38 +85,10 @@ public class SecurityConfig {
 	}
 
 	@Bean 
-	public UserDetailsService userDetailsService() {
-		UserDetails userDetails = User.withDefaultPasswordEncoder()
-				.username("rabbit_admin")
-				.password("rabbit_admin")
-				.authorities(List.of(
-					scope("openid"),
-					scope("profile"),
-					scope("rabbitmq.tag:administrator"),
-					aud("rabbitmq")))
-				.build();
-
-		return new InMemoryUserDetailsManager(userDetails);
+	public UserDetailsService userDetailsService(UsersConfiguration users) {
+		return new InMemoryUserDetailsManager(users.getUserDetails());
 	}
-/*
-	@Bean 
-	public RegisteredClientRepository registeredClientRepository() {
-		RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-				.clientId("oidc-client")
-				.clientSecret("{noop}secret")
-				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-				.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-				.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-				.redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-				.postLogoutRedirectUri("http://127.0.0.1:8080/")
-				.scope(OidcScopes.OPENID)
-				.scope(OidcScopes.PROFILE)
-				.clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
-				.build();
 
-		return new InMemoryRegisteredClientRepository(oidcClient);
-	}
- */
 	@Bean 
 	public JWKSource<SecurityContext> jwkSource() {
 		KeyPair keyPair = generateRsaKey();
