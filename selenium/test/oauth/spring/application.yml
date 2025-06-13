@@ -42,7 +42,9 @@ spring:
               client-authentication-methods:
                 - none
               redirect-uris: 
-                - "https://localhost:15671/js/oidc-oauth/login-callback.html"
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/js/oidc-oauth/login-callback.html"
+              post-logout-redirect-uris:
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}"
               scopes: 
                 - openid 
                 - profile 

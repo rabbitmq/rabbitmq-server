@@ -43,6 +43,8 @@ spring:
                 - none
               redirect-uris: 
                 - "https://localhost:15671/js/oidc-oauth/login-callback.html"
+              post-logout-redirect-uris:
+                - "https://localhost:15671/"
               scopes: 
                 - openid 
                 - profile 
