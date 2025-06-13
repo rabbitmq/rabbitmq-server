@@ -14,7 +14,7 @@ on:
   
 env:
   REGISTRY_IMAGE: pivotalrabbitmq/spring-authorization-server
-  IMAGE_TAG: 0.0.4
+  IMAGE_TAG: 0.0.5
 jobs:
   docker:
     runs-on: ubuntu-latest
