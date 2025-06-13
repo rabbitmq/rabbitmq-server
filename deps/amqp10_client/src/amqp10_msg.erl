@@ -270,14 +270,23 @@ new(DeliveryTag, Bin, Settled) when is_binary(Bin) ->
     Body = [#'v1_0.data'{content = Bin}],
     new(DeliveryTag, Body, Settled);
 new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
-    #amqp10_msg{
-       transfer = #'v1_0.transfer'{
-                     delivery_tag = {binary, DeliveryTag},
-                     settled = Settled,
-                     message_format = {uint, ?MESSAGE_FORMAT}},
-       %% This lib is safe by default.
-       header = #'v1_0.header'{durable = true},
-       body = Body}.
+    case is_amqp10_body(Body) orelse (not is_list(Body)) of
+        true ->
+            #amqp10_msg{
+               transfer = #'v1_0.transfer'{
+                             delivery_tag = {binary, DeliveryTag},
+                             settled = Settled,
+                             message_format = {uint, ?MESSAGE_FORMAT}},
+               %% This lib is safe by default.
+               header = #'v1_0.header'{durable = true},
+               body = Body};
+        false ->
+            Transfer = #'v1_0.transfer'{
+                          delivery_tag = {binary, DeliveryTag},
+                          settled = Settled,
+                          message_format = {uint, ?MESSAGE_FORMAT}},
+            from_amqp_records([Transfer | Body])
+    end.
 
 %% @doc Create a new settled amqp10 message using the specified delivery tag
 %% and body.
@@ -462,3 +471,19 @@ uint(B) -> {uint, B}.
 
 has_value(undefined) -> false;
 has_value(_) -> true.
+
+is_amqp10_body(#'v1_0.amqp_value'{}) ->
+    true;
+is_amqp10_body(List) when is_list(List) ->
+    lists:all(fun(#'v1_0.data'{}) ->
+                      true;
+                 (_) ->
+                      false
+              end, List) orelse
+        lists:all(fun(#'v1_0.amqp_sequence'{}) ->
+                          true;
+                     (_) ->
+                          false
+                  end, List);
+is_amqp10_body(_) ->
+    false.
