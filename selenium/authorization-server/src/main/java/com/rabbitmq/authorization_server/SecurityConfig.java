@@ -11,24 +11,18 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
-import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
@@ -156,11 +150,11 @@ public class SecurityConfig {
 	public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
 		return (context) -> {
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-				System.out.println("Principal: " + context.getPrincipal());
-				System.out.println("Authorized scopes: " + context.getAuthorizedScopes());
-				context.getClaims().claims((claims) -> {
-					claims.put("aud", "rabbitmq");					
-				});
+				AbstractAuthenticationToken principal = context.getPrincipal();
+				context.getClaims()
+					.audience(AudienceAuthority.getAll(principal))
+					.claim("extra_scope", ScopeAuthority.getAllUnauthorized(principal, 
+						context.getAuthorizedScopes()));				
 			}
 		};
 	}
