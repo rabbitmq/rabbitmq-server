@@ -1,5 +1,8 @@
 package com.rabbitmq.authorization_server;
 
+import org.springframework.security.authentication.AbstractAuthenticationToken;
+import java.util.List;
+
 import org.springframework.security.core.GrantedAuthority;
 
 public class AudienceAuthority implements GrantedAuthority {
@@ -20,4 +23,10 @@ public class AudienceAuthority implements GrantedAuthority {
         return authority;
     }
     
+    public static List<String> getAll(AbstractAuthenticationToken principal) {
+        return principal.getAuthorities()
+					.stream().filter(a -> a instanceof AudienceAuthority)
+					.map(a -> a.getAuthority()).toList();
+    }
+				
 }
