@@ -17,6 +17,15 @@ spring:
             type: PKCS12
   security:
     oauth2:
+      users:
+        - username: rabbit_admin
+          password: rabbit_admin 
+          scopes: 
+            - openid 
+            - profile 
+            - rabbitmq.tag:administrator
+          audiencies: 
+            - rabbitmq
       authorizationserver:
         client:
           mgt_api_client:
@@ -27,7 +36,8 @@ spring:
                 - client_credentials
               client-authentication-methods:
                 - client_secret_basic
-              require-proof-key: true
+              token-settings:
+                access-token-format: reference              
               scopes: 
                 - openid
                 - profile
@@ -37,6 +47,7 @@ spring:
             registration:
               provider: spring
               client-id: rabbitmq_client_code
+              require-proof-key: true              
               authorization-grant-types: 
                 - authorization_code
               client-authentication-methods:
@@ -51,5 +62,3 @@ spring:
                 - rabbitmq.tag:administrator
                 - rabbitmq.tag:management
               client-name: rabbitmq_client_code
-
-            

@@ -37,6 +37,8 @@ spring:
               client-authentication-methods:
                 - client_secret_basic
               require-proof-key: true
+              token-settings:
+                access-token-format: reference
               scopes: 
                 - openid
                 - profile
@@ -48,6 +50,7 @@ spring:
               client-id: rabbitmq_client_code
               authorization-grant-types: 
                 - authorization_code
+              require-proof-key: true  
               client-authentication-methods:
                 - none
               redirect-uris: 
