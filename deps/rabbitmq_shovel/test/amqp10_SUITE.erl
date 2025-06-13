@@ -118,6 +118,7 @@ amqp10_destination(Config, AckMode) ->
 
     receive
         {amqp10_msg, Receiver, InMsg} ->
+            ct:pal("GOT ~p", [InMsg]),
             [<<42>>] = amqp10_msg:body(InMsg),
             #{content_type := ?UNSHOVELLED,
               content_encoding := ?UNSHOVELLED,
@@ -129,10 +130,12 @@ amqp10_destination(Config, AckMode) ->
               % creation_time := Timestamp
              } = amqp10_msg:properties(InMsg),
             #{<<"routing_key">> := ?TO_SHOVEL,
-              <<"type">> := ?UNSHOVELLED,
+              <<"exchange">> := ?EXCHANGE,
               <<"header1">> := 1,
               <<"header2">> := <<"h2">>
              } = amqp10_msg:application_properties(InMsg),
+            #{<<"x-basic-type">> := ?UNSHOVELLED
+             } = amqp10_msg:message_annotations(InMsg),
             #{durable := true} = amqp10_msg:headers(InMsg),
             ok
     after ?TIMEOUT ->

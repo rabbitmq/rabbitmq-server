@@ -2440,7 +2440,6 @@ incoming_link_transfer(
     validate_message_size(PayloadSize, MaxMessageSize),
     rabbit_msg_size_metrics:observe(?PROTOCOL, PayloadSize),
     messages_received(Settled),
-
     Mc0 = mc:init(mc_amqp, PayloadBin, #{}),
     case lookup_target(LinkExchange, LinkRKey, Mc0, Vhost, User, PermCache0) of
         {ok, X, RoutingKeys, Mc1, PermCache} ->
