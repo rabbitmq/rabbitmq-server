@@ -17,6 +17,15 @@ spring:
             type: PKCS12
   security:
     oauth2:
+      users:
+        - username: rabbit_admin
+          password: rabbit_admin 
+          scopes: 
+            - openid 
+            - profile 
+            - rabbitmq.tag:administrator
+          audiencies: 
+            - rabbitmq
       authorizationserver:
         client:
           mgt_api_client:

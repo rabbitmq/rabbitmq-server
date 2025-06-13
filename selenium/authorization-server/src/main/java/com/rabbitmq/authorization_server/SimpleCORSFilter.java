@@ -1,11 +1,7 @@
 package com.rabbitmq.authorization_server;
 
 import java.io.IOException;
-import java.util.Optional;
-import java.util.Set;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -29,13 +25,12 @@ public class SimpleCORSFilter implements Filter {
 
     @Override
     public void init(FilterConfig fc) throws ServletException {
-        System.out.println("Init SimpleCORSFilter");
+        
     }
 
     @Override
     public void doFilter(ServletRequest req, ServletResponse resp,
-                         FilterChain chain) throws IOException, ServletException {
-        System.out.println("doFilter SimpleCORSFilter");
+                         FilterChain chain) throws IOException, ServletException {        
         HttpServletResponse response = (HttpServletResponse) resp;
         HttpServletRequest request = (HttpServletRequest) req;
         response.setHeader("Access-Control-Allow-Origin", "*");
