@@ -8,6 +8,7 @@
 -module('Elixir.RabbitMQ.CLI.Ctl.Commands.DeleteShovelCommand').
 
 -include("rabbit_shovel.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -behaviour('Elixir.RabbitMQ.CLI.CommandBehaviour').
 
@@ -31,7 +32,7 @@
 %% Callbacks
 %%----------------------------------------------------------------------------
 usage() ->
-    <<"delete_shovel [--vhost <vhost>] <name>">>.
+    <<"delete_shovel [--vhost <vhost>] [--force] <name>">>.
 
 usage_additional() ->
     [
@@ -49,20 +50,24 @@ help_section() ->
 
 validate([], _Opts) ->
     {validation_failure, not_enough_args};
-validate([_, _ | _], _Opts) ->
+validate([_, _| _], _Opts) ->
     {validation_failure, too_many_args};
 validate([_], _Opts) ->
     ok.
 
 merge_defaults(A, Opts) ->
-    {A, maps:merge(#{vhost => <<"/">>}, Opts)}.
+    {A, maps:merge(#{vhost => <<"/">>,
+                     force => false}, Opts)}.
 
 banner([Name], #{vhost := VHost}) ->
     erlang:list_to_binary(io_lib:format("Deleting shovel ~ts in vhost ~ts",
                                         [Name, VHost])).
 
-run([Name], #{node := Node, vhost := VHost}) ->
-    ActingUser = 'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user(),
+run([Name], #{node := Node, vhost := VHost, force := Force}) ->
+    ActingUser = case Force of
+                     true -> ?INTERNAL_USER;
+                     false -> 'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()
+                 end,
 
     case rabbit_misc:rpc_call(Node, rabbit_shovel_status, cluster_status_with_nodes, []) of
         {badrpc, _} = Error ->
@@ -98,7 +103,7 @@ delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node) ->
     end.
 
 switches() ->
-    [].
+    [{force, boolean}].
 
 aliases() ->
     [].
