@@ -13,15 +13,18 @@
         ]).
 
 -define(WEIGHT, 2).
--define(NON_EMPTY, {_, [_|_]}).
--define(EMPTY, {[], []}).
 
-%% a weighted priority queue with only two priorities
+-define(BITS_RA_IDX, 56).
+-define(BITS_MSG_SIZE, 32).
+-define(NON_EMPTY, <<_:?BITS_RA_IDX, _:?BITS_MSG_SIZE, _/binary>>).
+-define(EMPTY, <<>>).
 
--record(?MODULE, {hi = ?EMPTY :: {list(msg()), list(msg())}, %% high
-                  no = ?EMPTY :: {list(msg()), list(msg())}, %% normal
-                  len = 0 :: non_neg_integer(),
-                  dequeue_counter = 0 :: non_neg_integer()}).
+-record(?MODULE, {
+           hi = ?EMPTY :: binary(), %% high
+           no = ?EMPTY :: binary(), %% normal
+           len = 0 :: non_neg_integer(),
+           dequeue_counter = 0 :: non_neg_integer()
+          }).
 
 -opaque state() :: #?MODULE{}.
 
@@ -104,11 +107,9 @@ get_lowest_index(#?MODULE{hi = Hi, no = No}) ->
       num_no := non_neg_integer(),
       lowest_index := ra:index()}.
 overview(#?MODULE{len = Len,
-                  hi = {Hi1, Hi2},
+                  hi = Hi,
                   no = _} = State) ->
-    %% TODO: this could be very slow with large backlogs,
-    %% consider keeping a separate counter for 'hi', 'no' messages
-    NumHi = length(Hi1) + length(Hi2),
+    NumHi = byte_size(Hi) div ((?BITS_RA_IDX + ?BITS_MSG_SIZE) div 8),
     #{len => Len,
       num_hi => NumHi,
       num_no => Len - NumHi,
@@ -134,19 +135,16 @@ next(#?MODULE{hi = ?NON_EMPTY = Hi}) ->
 next(#?MODULE{no = No}) ->
     {no, peek(No)}.
 
-%% invariant, if the queue is non empty so is the Out (right) list.
-in(X, ?EMPTY) ->
-    {[], [X]};
-in(X, {In, Out}) ->
-    {[X | In], Out}.
+%% TODO Support expiration.
+in(?MSG(RaIdx, MsgSize), Bin)
+  when is_integer(RaIdx) andalso
+       is_integer(MsgSize) ->
+    <<Bin/binary, RaIdx:?BITS_RA_IDX, MsgSize:?BITS_MSG_SIZE>>.
 
 peek(?EMPTY) ->
     empty;
-peek({_, [H | _]}) ->
-    H.
+peek(<<RaIdx:?BITS_RA_IDX, MsgSize:?BITS_MSG_SIZE, _/binary>>) ->
+    ?MSG(RaIdx, MsgSize).
 
-drop({In, [_]}) ->
-    %% the last Out one
-    {[], lists:reverse(In)};
-drop({In, [_ | Out]}) ->
-    {In, Out}.
+drop(<<_:?BITS_RA_IDX, _:?BITS_MSG_SIZE, Rest/binary>>) ->
+    Rest.
