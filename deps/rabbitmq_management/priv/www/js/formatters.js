@@ -1094,3 +1094,15 @@ function fmt_deprecation_phase(phase, deprecation_phases){
         }
     }
 }
+
+function fmt_resource(res) {
+    return `${res.kind} '${res.name}' in vhost '${res.virtual_host}'`;
+}
+
+function fmt_resource_link(res) {
+    if (res.kind == "queue") {
+        return `${res.kind} '${link_queue(res.virtual_host, res.name, {})}' in vhost '${link_vhost(res.virtual_host)}'`;
+    } else if (res.kind == "exchange") {
+        return `${res.kind} '${link_exchange(res.virtual_host, res.name, {})}' in vhost '${link_vhost(res.virtual_host)}'`;
+    }
+}

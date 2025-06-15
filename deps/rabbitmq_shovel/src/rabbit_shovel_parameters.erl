@@ -26,6 +26,8 @@
          src_decl_exchange/4, src_decl_queue/4, src_check_queue/4,
          fields_fun/5, props_fun/9]).
 
+-export([is_internal/1, internal_owner/1]).
+
 -import(rabbit_misc, [pget/2, pget/3, pset/3]).
 
 -rabbit_boot_step({?MODULE,
@@ -68,6 +70,17 @@ notify_clear(VHost, <<"shovel">>, Name, _Username) ->
     rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
 
 %%----------------------------------------------------------------------------
+
+is_internal(Def) ->
+    pget(<<"internal">>, Def, false).
+
+internal_owner(Def) ->
+    case pget(<<"internal_owner">>, Def, undefined) of
+        undefined -> undefined;
+        Owner -> rabbit_misc:r(pget(<<"virtual_host">>, Owner),
+                               binary_to_existing_atom(pget(<<"kind">>, Owner)),
+                               pget(<<"name">>, Owner))
+    end.
 
 validate_src(Def) ->
     case protocols(Def)  of
@@ -112,7 +125,9 @@ validate_amqp091_dest(Def) ->
      end].
 
 shovel_validation() ->
-    [{<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
+    [{<<"internal">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"internal_owner">>, fun validate_internal_owner/2, optional},
+     {<<"reconnect-delay">>, fun rabbit_parameter_validation:number/2,optional},
      {<<"ack-mode">>, rabbit_parameter_validation:enum(
                         ['no-ack', 'on-publish', 'on-confirm']), optional},
      {<<"src-protocol">>,
@@ -232,6 +247,14 @@ validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
+
+validate_internal_owner(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+
+    rabbit_parameter_validation:proplist(Name, [{<<"name">>, fun rabbit_parameter_validation:binary/2},
+                                                {<<"kind">>, rabbit_parameter_validation:enum(
+                                                              ['exchange', 'queue'])},
+                                                {<<"virtual_host">>, fun rabbit_parameter_validation:binary/2}], Term).
 
 validate_queue_args(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),

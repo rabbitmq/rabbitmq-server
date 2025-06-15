@@ -79,45 +79,60 @@ is_authorized(ReqData, Context) ->
 
 delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
     VHost = rabbit_mgmt_util:id(vhost, ReqData),
-    Reply = case rabbit_mgmt_util:id(name, ReqData) of
-                none ->
-                    false;
-                Name ->
-                    case get_shovel_node(VHost, Name, ReqData, Context) of
-                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
-                            case is_restart(ReqData) of
-                                true ->
-                                    false;
-                                %% this is a deletion attempt
-                                false ->
-                                    %% if we do not know the node, use the local one
-                                    try_delete(node(), VHost, Name, Username),
-                                    true
+    case rabbit_mgmt_util:id(name, ReqData) of
+        none ->
+            {false, ReqData, Context};
+        Name ->
+            case get_shovel_node(VHost, Name, ReqData, Context) of
+                undefined -> rabbit_log:error("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
+                             case is_restart(ReqData) of
+                                 true ->
+                                     {false, ReqData, Context};
+                                 %% this is a deletion attempt
+                                 false ->
+                                     %% if we do not know the node, use the local one
+                                      case try_delete(node(), VHost, Name, Username) of
+                                          true -> {true, ReqData, Context};
+                                          %% NOTE: that how it was before, try_delete return was ignored and true returned ¯\_(ツ)_/¯ 
+                                          false -> {true, ReqData, Context};
+                                          locked ->  Reply = cowboy_req:reply(405, #{<<"content-type">> => <<"text/plain">>},
+                                                                              "Protected", ReqData),
+                                                     {halt, Reply, Context};
+                                          %% NOTE: that how it was before, try_delete return was ignored and true returned ¯\_(ツ)_/¯ 
+                                          error -> {true, ReqData, Context}
+                                      end
+                             end;
+                Node ->
+                    %% We must distinguish between a delete and a restart
+                    case is_restart(ReqData) of
+                        true ->
+                            rabbit_log:info("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
+                            try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
+                                ok -> {true, ReqData, Context};
+                                {error, not_found} ->
+                                    rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                                    {false, ReqData, Context}
+                            catch _:Reason ->
+                                    rabbit_log:error("Failed to restart shovel '~s' on vhost '~s', reason: ~p",
+                                                     [Name, VHost, Reason]),
+                                    {false, ReqData, Context}
                             end;
-                        Node ->
-                            %% We must distinguish between a delete and a restart
-                            case is_restart(ReqData) of
-                                true ->
-                                    rabbit_log:info("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
-                                    try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
-                                        ok -> true;
-                                        {error, not_found} ->
-                                            rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
-                                            false
-                                    catch _:Reason ->
-                                            rabbit_log:error("Failed to restart shovel '~s' on vhost '~s', reason: ~p",
-                                                             [Name, VHost, Reason]),
-                                            false
-                                    end;
 
-                                _ ->
-                                    try_delete(Node, VHost, Name, Username),
-                                    true
-
+                        _ ->
+                            case try_delete(Node, VHost, Name, Username) of
+                                true -> {true, ReqData, Context};
+                                %% NOTE: that how it was before, try_delete return was ignored and true returned ¯\_(ツ)_/¯ 
+                                false -> {true, ReqData, Context};
+                                locked ->  Reply = cowboy_req:reply(405, #{<<"content-type">> => <<"text/plain">>},
+                                                                    "Protected", ReqData),
+                                           {halt, Reply, Context};
+                                %% NOTE: that how it was before, try_delete return was ignored and true returned ¯\_(ツ)_/¯ 
+                                error -> {true, ReqData, Context}
                             end
+
                     end
-            end,
-    {Reply, ReqData, Context}.
+            end
+    end.
 
 %%--------------------------------------------------------------------
 
@@ -168,7 +183,7 @@ find_matching_shovel(VHost, Name, Shovels) ->
             undefined
     end.
 
--spec try_delete(node(), vhost:name(), any(), rabbit_types:username()) -> boolean().
+-spec try_delete(node(), vhost:name(), any(), rabbit_types:username()) -> true | false | locked | error.
 try_delete(Node, VHost, Name, Username) ->
     rabbit_log:info("Asked to delete shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
     %% this will clear the runtime parameter, the ultimate way of deleting a dynamic Shovel eventually. MK.
@@ -177,8 +192,13 @@ try_delete(Node, VHost, Name, Username) ->
         {error, not_found} ->
             rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
             false
-    catch _:Reason ->
+    catch
+        _:{exception, {amqp_error, resource_locked, Reason, _}} ->
             rabbit_log:error("Failed to delete shovel '~s' on vhost '~s', reason: ~p",
                              [Name, VHost, Reason]),
-            false
+            locked;
+        _:Reason ->
+            rabbit_log:error("Failed to delete shovel '~s' on vhost '~s', reason: ~p",
+                             [Name, VHost, Reason]),
+            error
     end.
