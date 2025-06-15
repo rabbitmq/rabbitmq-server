@@ -206,6 +206,27 @@ function fmt_shovel_endpoint(prefix, shovel) {
     return txt;
 }
 
+function is_internal_shovel(shovel) {
+    if (!shovel.hasOwnProperty('internal')) {
+        return false;
+    } else {
+        return shovel['internal'];
+    }
+}
+
+function shovel_has_internal_owner(shovel) {
+    if (!shovel.hasOwnProperty('internal_owner')) {
+        return false;
+    } else {
+        return true;
+    }
+}
+
+function shovel_internal_owner(shovel) {
+    return shovel.internal_owner;
+}
+
+
 function fallback_value(shovel, key1, key2) {
     var v = shovel.value[key1];
     return (v !== undefined ? v : shovel.value[key2]);
