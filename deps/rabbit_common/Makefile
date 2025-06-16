@@ -45,10 +45,10 @@ DEP_PLUGINS = $(PROJECT)/mk/rabbitmq-build.mk \
 
 PLT_APPS += mnesia crypto ssl
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
-HEX_TARBALL_FILES += rabbitmq-components.mk \
+HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
 		     git-revisions.txt \
 		     mk/rabbitmq-build.mk \
 		     mk/rabbitmq-dist.mk \
