@@ -203,7 +203,7 @@ lookup_leader(VirtualHost, Stream) ->
                     {ok, LeaderPid};
                 false ->
                     case leader_from_members(Q) of
-                        {ok, Pid} ->
+                        {ok, Pid} when is_pid(Pid) ->
                             {ok, Pid};
                         _ ->
                             {error, not_available}
@@ -856,7 +856,7 @@ leader_from_members(Q) ->
             {error, not_found}
     end.
 
-process_alive(Pid) ->
+process_alive(Pid) when is_pid(Pid) ->
     CurrentNode = node(),
     case node(Pid) of
         nonode@nohost ->
@@ -870,7 +870,9 @@ process_alive(Pid) ->
                 _ ->
                     false
             end
-    end.
+    end;
+process_alive(_) ->
+    false.
 
 is_stream_queue(Q) ->
     case amqqueue:get_type(Q) of
