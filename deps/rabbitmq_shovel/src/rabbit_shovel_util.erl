@@ -52,12 +52,12 @@ delete_shovel(VHost, Name, ActingUser) ->
                     rabbit_log:info("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
                     ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser);
                 true ->
-                    report_connot_delete_protected_shovel(Name, VHost, ShovelParameters)
+                    report_that_protected_shovel_cannot_be_deleted(Name, VHost, ShovelParameters)
             end
     end.
 
--spec report_connot_delete_protected_shovel(binary(), binary(), map() | [tuple()]) -> no_return().
-report_connot_delete_protected_shovel(Name, VHost, ShovelParameters) ->
+-spec report_that_protected_shovel_cannot_be_deleted(binary(), binary(), map() | [tuple()]) -> no_return().
+report_that_protected_shovel_cannot_be_deleted(Name, VHost, ShovelParameters) ->
     case rabbit_shovel_parameters:internal_owner(ShovelParameters) of
         undefined ->
             rabbit_misc:protocol_error(
@@ -68,7 +68,7 @@ report_connot_delete_protected_shovel(Name, VHost, ShovelParameters) ->
             rabbit_misc:protocol_error(
               resource_locked,
               "Cannot delete protected shovel '~ts' in virtual host '~ts'. It was "
-              "declared as an protected and can be deleted only by deleting the owner entity: ~ts",
+              "declared as protected, delete it with --force or delete its owner entity instead: ~ts",
               [Name, VHost, rabbit_misc:rs(IOwner)])
     end.
 
