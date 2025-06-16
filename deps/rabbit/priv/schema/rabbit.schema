@@ -1242,6 +1242,26 @@ fun(Conf) ->
 end}.
 
 %%
+%% Per-queue-type disk limits
+%% =====================
+%%
+
+%% TODO: do relative limits make sense - what would they be relative to? The
+%% full disk size?
+%% {mapping, "quorum_queue_disk_limit.relative", "rabbit.quorum_queue_disk_limit", [
+%%     {datatype, float}]}.
+
+{mapping, "quorum_queue_disk_limit.absolute", "rabbit.quorum_queue_disk_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
+{mapping, "stream_queue_disk_limit.absolute", "rabbit.stream_queue_disk_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
+%%
 %% Clustering
 %% =====================
 %%

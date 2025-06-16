@@ -304,6 +304,16 @@
 
 -callback queue_vm_ets() -> {StatsKeys :: [atom()], ETSNames:: [[atom()]]}.
 
+%% The disk usage limit for the queue type, if any.
+-callback disk_limit() -> rabbit_queue_type_disk_monitor:disk_usage_limit_spec() | undefined.
+%% Calculate the disk space in bytes of the queue type.
+%% This callback is optional but must be implemented if `disk_limit/0' is
+%% defined.
+-callback disk_footprint() -> {ok, Bytes :: non_neg_integer()} | {error, file:posix()}.
+
+-optional_callbacks([disk_footprint/0,
+                     disk_limit/0]).
+
 -spec discover(binary() | atom()) -> queue_type().
 discover(<<"undefined">>) ->
     fallback();

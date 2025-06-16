@@ -46,7 +46,7 @@
 
 -export_type([alarm/0]).
 -type local_alarm() :: 'file_descriptor_limit'.
--type resource_alarm_source() :: 'disk' | 'memory'.
+-type resource_alarm_source() :: 'disk' | 'memory' | {queue_type_disk, atom()}.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
 -type alarm() :: local_alarm() | resource_alarm().
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
@@ -136,6 +136,11 @@ format_as_map({resource_limit, disk, Node}) ->
 format_as_map({resource_limit, memory, Node}) ->
     #{
         <<"resource">> => ?MEMORY_RESOURCE,
+        <<"node">> => Node
+    };
+format_as_map({resource_limit, {queue_type_disk, QType}, Node}) ->
+    #{
+        <<"resource">> => todo,
         <<"node">> => Node
     };
 format_as_map({resource_limit, Limit, Node}) ->
@@ -291,7 +296,7 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
     StillHasAlerts = lists:any(fun ({_Node, NodeAlerts}) -> lists:member(Source, NodeAlerts) end, dict:to_list(AN1)),
     case StillHasAlerts of
         true -> ok;
-        false -> rabbit_log:warning("~ts resource limit alarm cleared across the cluster", [Source])
+        false -> rabbit_log:warning("~tp resource limit alarm cleared across the cluster", [Source])
     end,
     Alert = {WasAlertAdded, StillHasAlerts, Node},
     case node() of
@@ -326,9 +331,11 @@ internal_register(Pid, {M, F, A} = AlertMFA,
     NewAlertees = dict:store(Pid, AlertMFA, Alertees),
     State#alarms{alertees = NewAlertees}.
 
+%% TODO: handle formatting of resources in these:
+
 handle_set_resource_alarm(Source, Node, State) ->
     rabbit_log:warning(
-      "~ts resource limit alarm set on node ~tp.~n~n"
+      "~tp resource limit alarm set on node ~tp.~n~n"
       "**********************************************************~n"
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
@@ -347,7 +354,7 @@ handle_set_alarm(Alarm, State) ->
     {ok, State}.
 
 handle_clear_resource_alarm(Source, Node, State) ->
-    rabbit_log:warning("~ts resource limit alarm cleared on node ~tp",
+    rabbit_log:warning("~tp resource limit alarm cleared on node ~tp",
                        [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)}.
 

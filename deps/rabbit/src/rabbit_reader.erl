@@ -109,16 +109,19 @@
   %% never | timestamp()
   last_blocked_at,
   %% a set of the reasons why we are
-  %% blocked: {resource, memory}, {resource, disk}.
+  %% blocked: {resource, memory}, {resource, disk}, flow, ...
   %% More reasons can be added in the future.
-  blocked_by,
+  blocked_by :: sets:set(flow | {resource, memory | disk | {queue_type_disk, atom()}}),
   %% true if received any publishes, false otherwise
   %% note that this will also be true when connection is
   %% already blocked
   should_block,
   %% true if we had we sent a connection.blocked,
   %% false otherwise
-  connection_blocked_message_sent
+  connection_blocked_message_sent,
+  %%
+  published_to_queue_types = #{} :: #{ChPid :: pid() =>
+                                      sets:set(QType :: atom())}
 }).
 
 -define(CREATION_EVENT_KEYS,
@@ -608,6 +611,14 @@ handle_other({channel_closing, ChPid}, State) ->
     ok = rabbit_channel:ready_for_close(ChPid),
     {_, State1} = channel_cleanup(ChPid, State),
     maybe_close(control_throttle(State1));
+handle_other({channel_published_to_queue_type, ChPid, QType},
+             #v1{throttle = Throttle0} = State0) ->
+    QTypes = maps:update_with(
+               ChPid, fun(Ts) -> sets:add_element(QType, Ts) end,
+               sets:from_list([QType], [{version, 2}]),
+               Throttle0#throttle.published_to_queue_types),
+    Throttle = Throttle0#throttle{published_to_queue_types = QTypes},
+    State0#v1{throttle = Throttle};
 handle_other({'EXIT', Parent, normal}, State = #v1{parent = Parent}) ->
     %% rabbitmq/rabbitmq-server#544
     %% The connection port process has exited due to the TCP socket being closed.
@@ -1004,14 +1015,22 @@ is_over_node_channel_limit() ->
             end
     end.
 
-channel_cleanup(ChPid, State = #v1{channel_count = ChannelCount}) ->
+channel_cleanup(ChPid, #v1{channel_count = ChannelCount,
+                           throttle = Throttle0} = State) ->
     case get({ch_pid, ChPid}) of
-        undefined       -> {undefined, State};
-        {Channel, MRef} -> credit_flow:peer_down(ChPid),
-                           erase({channel, Channel}),
-                           erase({ch_pid, ChPid}),
-                           erlang:demonitor(MRef, [flush]),
-                           {Channel, State#v1{channel_count = ChannelCount - 1}}
+        undefined ->
+            {undefined, State};
+        {Channel, MRef} ->
+            credit_flow:peer_down(ChPid),
+            erase({channel, Channel}),
+            erase({ch_pid, ChPid}),
+            erlang:demonitor(MRef, [flush]),
+            %% TODO: reevaluate throttle now that the connection may no longer
+            %% have a publisher to a queue type which is in disk alarm.
+            QTypes = maps:remove(ChPid, Throttle0#throttle.published_to_queue_types),
+            Throttle = Throttle0#throttle{published_to_queue_types = QTypes},
+            {Channel, State#v1{channel_count = ChannelCount - 1,
+                               throttle = Throttle}}
     end.
 
 all_channels() -> [ChPid || {{ch_pid, ChPid}, _ChannelMRef} <- get()].
@@ -1730,7 +1749,9 @@ blocked_by_message(#throttle{blocked_by = Reasons}) ->
 
 format_blocked_by({resource, memory}) -> "memory";
 format_blocked_by({resource, disk})   -> "disk";
-format_blocked_by({resource, disc})   -> "disk".
+format_blocked_by({resource, disc})   -> "disk";
+format_blocked_by({resource, {queue_type_disk, QType}}) ->
+    lists:flatten(io_lib:format("~ts disk", [QType])).
 
 update_last_blocked_at(Throttle) ->
     Throttle#throttle{last_blocked_at = erlang:monotonic_time()}.
@@ -1738,22 +1759,45 @@ update_last_blocked_at(Throttle) ->
 connection_blocked_message_sent(
     #throttle{connection_blocked_message_sent = BS}) -> BS.
 
-should_send_blocked(Throttle = #throttle{blocked_by = Reasons}) ->
+should_send_blocked(Throttle) ->
     should_block(Throttle)
     andalso
-    sets:size(sets:del_element(flow, Reasons)) =/= 0
+    do_throttle_reasons_apply(Throttle)
     andalso
     not connection_blocked_message_sent(Throttle).
 
-should_send_unblocked(Throttle = #throttle{blocked_by = Reasons}) ->
+should_send_unblocked(Throttle) ->
     connection_blocked_message_sent(Throttle)
     andalso
-    sets:size(sets:del_element(flow, Reasons)) == 0.
+    not do_throttle_reasons_apply(Throttle).
+
+do_throttle_reasons_apply(#throttle{blocked_by = Reasons} = Throttle) ->
+    lists:any(
+      fun ({resource, disk}) ->
+              true;
+          ({resource, memory}) ->
+              true;
+          ({resource, {queue_type_disk, QType}}) ->
+              has_published_to_queue_type(QType, Throttle);
+          (_) ->
+              %% NOTE: flow reason is ignored.
+              false
+      end, sets:to_list(Reasons)).
+
+has_published_to_queue_type(
+  QType, #throttle{published_to_queue_types = QTypes}) ->
+    rabbit_misc:maps_any(
+      fun(_ChPid, ChQTypes) -> sets:is_element(QType, ChQTypes) end, QTypes).
 
 %% Returns true if we have a reason to block
 %% this connection.
-has_reasons_to_block(#throttle{blocked_by = Reasons}) ->
-    sets:size(Reasons) > 0.
+has_reasons_to_block(#throttle{blocked_by = Reasons} = Throttle) ->
+    lists:any(
+      fun ({resource, {queue_type_disk, QType}}) ->
+              has_published_to_queue_type(QType, Throttle);
+          (_) ->
+              true
+      end, sets:to_list(Reasons)).
 
 is_blocked_by_flow(#throttle{blocked_by = Reasons}) ->
     sets:is_element(flow, Reasons).
