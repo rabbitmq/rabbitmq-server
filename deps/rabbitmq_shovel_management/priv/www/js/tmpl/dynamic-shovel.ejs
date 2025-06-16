@@ -44,14 +44,23 @@
   </div>
 </div>
 
-<div class="section-hidden">
+
+  <div class="section-hidden">
   <h2>Delete this shovel</h2>
   <div class="hider">
-    <form action="#/shovel-parameters" method="delete" class="confirm">
-      <input type="hidden" name="component" value="shovel"/>
-      <input type="hidden" name="vhost" value="<%= fmt_string(shovel.vhost) %>"/>
-      <input type="hidden" name="name" value="<%= fmt_string(shovel.name) %>"/>
-      <input type="submit" value="Delete this shovel"/>
-    </form>
+    <% if (!is_internal_shovel(shovel.value)) { %>
+      <form action="#/shovel-parameters" method="delete" class="confirm">
+        <input type="hidden" name="component" value="shovel"/>
+        <input type="hidden" name="vhost" value="<%= fmt_string(shovel.vhost) %>"/>
+        <input type="hidden" name="name" value="<%= fmt_string(shovel.name) %>"/>
+        <input type="submit" value="Delete this shovel"/>
+      </form>
+    <% } else { %>
+      <% if (shovel_has_internal_owner(shovel.value)) { %>
+        <span>This shovel is internal and owned by <%= fmt_resource_link(shovel_internal_owner(shovel.value)) %>. Could be deleted only via CLI command with --force.</span>
+      <% } else { %>
+        <span>This shovel is internal. Could be deleted only via CLI command with '--force'.</span>
+      <% } %>
+    <% } %>
   </div>
-</div>
+  </div>

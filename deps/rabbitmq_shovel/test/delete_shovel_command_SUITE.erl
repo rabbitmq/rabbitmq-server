@@ -24,7 +24,9 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                delete_not_found,
-                               delete
+                               delete,
+                               delete_internal,
+                               delete_internal_owner
                               ]},
      {cluster_size_2, [], [
                                clear_param_on_different_node
@@ -73,7 +75,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 delete_not_found(Config) ->
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Opts = #{node => A, vhost => <<"/">>},
+    Opts = #{node => A, vhost => <<"/">>, force => false},
     {error, _} = ?CMD:run([<<"myshovel">>], Opts).
 
 delete(Config) ->
@@ -82,10 +84,55 @@ delete(Config) ->
       <<"myshovel">>, [{<<"src-queue">>,  <<"src">>},
                        {<<"dest-queue">>, <<"dest">>}]),
     [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Opts = #{node => A, vhost => <<"/">>},
+    Opts = #{node => A, vhost => <<"/">>, force => false},
     ok = ?CMD:run([<<"myshovel">>], Opts),
     [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
                                       status, []).
+
+delete_internal(Config) ->
+    shovel_test_utils:set_param(
+      Config,
+      <<"myshovel">>, [{<<"src-queue">>,  <<"src">>},
+                       {<<"internal">>, true},
+                       {<<"dest-queue">>, <<"dest">>}]),
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    {badrpc,
+     {'EXIT',
+      {amqp_error, resource_locked,
+       "Cannot delete protected shovel 'myshovel' in virtual host '/'.",
+       none}}}  = ?CMD:run([<<"myshovel">>], Opts),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                       status, []),
+
+    ForceOpts = #{node => A, vhost => <<"/">>, force => true},
+    ok  = ?CMD:run([<<"myshovel">>], ForceOpts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                       status, []).
+
+delete_internal_owner(Config) ->
+    shovel_test_utils:set_param(
+      Config,
+      <<"myshovel">>, [{<<"src-queue">>,  <<"src">>},
+                       {<<"internal">>, true},
+                       {<<"internal_owner">>, [{<<"name">>, <<"src">>},
+                                               {<<"kind">>, <<"queue">>},
+                                               {<<"virtual_host">>, <<"/">>}]},
+                       {<<"dest-queue">>, <<"dest">>}]),
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    ?assertMatch(
+      {badrpc, {'EXIT', {amqp_error, resource_locked, _, none}}},
+      ?CMD:run([<<"myshovel">>], Opts)
+    ),
+    [_] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                       status, []),
+
+    ForceOpts = #{node => A, vhost => <<"/">>, force => true},
+    ok  = ?CMD:run([<<"myshovel">>], ForceOpts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                       status, []).
+
 clear_param_on_different_node(Config) ->
     shovel_test_utils:set_param(
       Config,

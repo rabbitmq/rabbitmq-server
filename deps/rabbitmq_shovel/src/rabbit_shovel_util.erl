@@ -14,6 +14,7 @@
          get_shovel_parameter/1]).
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("rabbit_common/include/rabbit.hrl").
 
 -define(ROUTING_HEADER, <<"x-shovelled">>).
 -define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
@@ -45,8 +46,41 @@ delete_shovel(VHost, Name, ActingUser) ->
             ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser),
             {error, not_found};
         _Obj ->
-            rabbit_log:info("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
-            ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser)
+            ShovelParameters = rabbit_runtime_parameters:value(VHost, <<"shovel">>, Name),
+            case needs_force_delete(ShovelParameters, ActingUser) of
+                false ->
+                    rabbit_log:info("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
+                    ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser);
+                true ->
+                    report_that_protected_shovel_cannot_be_deleted(Name, VHost, ShovelParameters)
+            end
+    end.
+
+-spec report_that_protected_shovel_cannot_be_deleted(binary(), binary(), map() | [tuple()]) -> no_return().
+report_that_protected_shovel_cannot_be_deleted(Name, VHost, ShovelParameters) ->
+    case rabbit_shovel_parameters:internal_owner(ShovelParameters) of
+        undefined ->
+            rabbit_misc:protocol_error(
+              resource_locked,
+              "Cannot delete protected shovel '~ts' in virtual host '~ts'.",
+              [Name, VHost]);
+        IOwner ->
+            rabbit_misc:protocol_error(
+              resource_locked,
+              "Cannot delete protected shovel '~ts' in virtual host '~ts'. It was "
+              "declared as protected, delete it with --force or delete its owner entity instead: ~ts",
+              [Name, VHost, rabbit_misc:rs(IOwner)])
+    end.
+
+needs_force_delete(Parameters,ActingUser) ->
+    case rabbit_shovel_parameters:is_internal(Parameters) of
+        false ->
+            false;
+        true ->
+            case ActingUser of
+                ?INTERNAL_USER -> false;
+                _ -> true
+            end
     end.
 
 restart_shovel(VHost, Name) ->
