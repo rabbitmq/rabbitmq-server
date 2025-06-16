@@ -29,6 +29,7 @@ body:
     attributes:
       label: RabbitMQ version used
       options:
+        - 4.1.1
         - 4.1.0
         - 4.0.9
         - 4.0.8
