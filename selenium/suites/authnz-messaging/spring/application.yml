@@ -28,11 +28,11 @@ spring:
                 - client_credentials
               client-authentication-methods:
                 - client_secret_basic
-              token-settings:
-                access-token-format: reference              
               scopes: 
                 - rabbitmq.configure:*/*
                 - rabbitmq.read:*/*
                 - rabbitmq.write:*/*
               client-name: producer
+            token:
+                access-token-format: reference
           

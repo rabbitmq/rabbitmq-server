@@ -118,6 +118,8 @@ public class SecurityConfig {
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
 				AbstractAuthenticationToken principal = context.getPrincipal();
 				System.out.println("registered client: " + context.getRegisteredClient());
+				System.out.println("token format : " + 
+					context.getRegisteredClient().getTokenSettings().getAccessTokenFormat().getValue());
 				System.out.println("authorities : " + principal.getAuthorities());
 				System.out.println("authorized scopes : " + context.getAuthorizedScopes());
 				
