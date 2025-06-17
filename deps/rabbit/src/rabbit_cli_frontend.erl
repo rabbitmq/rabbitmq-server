@@ -58,6 +58,14 @@ init_local_args(Context) ->
 
 connect_to_node(#?MODULE{arg_map = #{node := NodenameOrUri}} = Context) ->
     maybe
+        %% TODO: Send a list of supported features:
+        %% * support for some messages, like Erlang I/O protocol, file
+        %%   read/write support
+        %% * type of terminal (or no terminal)
+        %% * capabilities of the terminal
+        %% * is plain test or HTTP
+        %% * evolutions in the communication between the frontend and the
+        %%   backend
         {ok, Connection} ?= rabbit_cli_transport2:connect(NodenameOrUri),
         Context1 = Context#?MODULE{connection = Connection},
         init_final_args(Context1)
