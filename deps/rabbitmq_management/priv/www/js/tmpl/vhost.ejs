@@ -41,7 +41,7 @@
             <% if (vhost.cluster_state[node] == "stopped"){ %>
                 <form action="#/restart_vhost" method="post">
                     <input type="hidden" name="node" value="<%= node %>"/>
-                    <input type="hidden" name="vhost" value="<%= vhost.name %>"/>
+                    <input type="hidden" name="vhost" value="<%= fmt_string(vhost.name) %>"/>
                     <input type="submit" value="Restart"/>
                 </form>
             <% } %>
