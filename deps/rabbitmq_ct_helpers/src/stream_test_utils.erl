@@ -18,6 +18,9 @@
 
 connect(Config, Node) ->
     StreamPort = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_stream),
+    connect(StreamPort).
+
+connect(StreamPort) ->
     {ok, Sock} = gen_tcp:connect("localhost", StreamPort, [{active, false}, {mode, binary}]),
 
     C0 = rabbit_stream_core:init(0),
@@ -71,8 +74,14 @@ delete_publisher(Sock, C0, PublisherId) ->
     {{response, 1, {delete_publisher, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
 
+
 subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit) ->
-    SubscribeFrame = rabbit_stream_core:frame({request, 1, {subscribe, SubscriptionId, Stream, _OffsetSpec = first, InitialCredit, _Props = #{}}}),
+    subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, #{}).
+
+subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, Props) ->
+    Cmd = {subscribe, SubscriptionId, Stream, _OffsetSpec = first,
+           InitialCredit, Props},
+    SubscribeFrame = rabbit_stream_core:frame({request, 1, Cmd}),
     ok = gen_tcp:send(Sock, SubscribeFrame),
     {{response, 1, {subscribe, ?RESPONSE_CODE_OK}}, C1} = receive_stream_commands(Sock, C0),
     {ok, C1}.
