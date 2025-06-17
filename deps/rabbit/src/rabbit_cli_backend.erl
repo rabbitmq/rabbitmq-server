@@ -38,9 +38,8 @@ discover_commands() ->
       "Commands: query commands in loaded applications",
       #{domain => ?RMQLOG_DOMAIN_CMD}),
     T0 = erlang:monotonic_time(),
-    ScannedApps = rabbit_misc:rabbitmq_related_apps(),
-    AttrsPerApp = rabbit_misc:module_attributes_from_apps(
-                    rabbitmq_command, ScannedApps),
+    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(
+                    rabbitmq_command),
     T1 = erlang:monotonic_time(),
     ?LOG_DEBUG(
       "Commands: time to find supported commands: ~tp us",
