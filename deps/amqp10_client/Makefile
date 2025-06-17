@@ -41,10 +41,10 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk \
 DEP_PLUGINS += elvis_mk
 dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 
-include rabbitmq-components.mk
-include erlang.mk
+include ../../rabbitmq-components.mk
+include ../../erlang.mk
 
-HEX_TARBALL_FILES += rabbitmq-components.mk \
+HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
 		     git-revisions.txt
 
 # --------------------------------------------------------------------
