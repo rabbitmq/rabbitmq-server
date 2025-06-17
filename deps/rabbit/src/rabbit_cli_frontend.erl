@@ -7,7 +7,8 @@
          merge_argparse_def/2,
          noop/1]).
 
--record(?MODULE, {progname,
+-record(?MODULE, {scriptname,
+                  progname,
                   group_leader,
                   args,
                   argparse_def,
@@ -17,20 +18,22 @@
                   connection}).
 
 main(Args) ->
-    Progname = escript:script_name(),
-    Ret = run_cli(Progname, Args),
+    ScriptName = escript:script_name(),
+    Ret = run_cli(ScriptName, Args),
     io:format(standard_error, "CLI run_cli() -> ~p~n", [Ret]),
     erlang:halt().
 
-run_cli(Progname, Args) ->
+run_cli(ScriptName, Args) ->
+    ProgName = filename:basename(ScriptName, ".escript"),
     GroupLeader = erlang:group_leader(),
-    Context = #?MODULE{progname = Progname,
+    Context = #?MODULE{scriptname = ScriptName,
+                       progname = ProgName,
                        args = Args,
                        group_leader = GroupLeader},
     add_rabbitmq_code_path(Context).
 
-add_rabbitmq_code_path(#?MODULE{progname = Progname} = Context) ->
-    ScriptDir = filename:dirname(Progname),
+add_rabbitmq_code_path(#?MODULE{scriptname = ScriptName} = Context) ->
+    ScriptDir = filename:dirname(ScriptName),
     PluginsDir0 = filename:join([ScriptDir, "..", "plugins"]),
     PluginsDir1 = case filelib:is_dir(PluginsDir0) of
                       true ->
@@ -130,12 +133,12 @@ local_argparse_def() ->
       handler => {?MODULE, noop}}.
 
 initial_parse(
-  #?MODULE{progname = Progname, args = Args, argparse_def = ArgparseDef}) ->
-    Options = #{progname => Progname},
+  #?MODULE{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
+    Options = #{progname => ProgName},
     case partial_parse(Args, ArgparseDef, Options) of
         {ok, ArgMap, CmdPath, Command, _RemainingArgs} ->
             {ok, ArgMap, CmdPath, Command};
-        {error, _} = Error->
+        {error, _} = Error ->
             Error
     end.
 
@@ -190,8 +193,8 @@ merge_commands(Cmds1, Cmds2) ->
     maps:merge(Cmds1, Cmds2).
 
 final_parse(
-  #?MODULE{progname = Progname, args = Args, argparse_def = ArgparseDef}) ->
-    Options = #{progname => Progname},
+  #?MODULE{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
+    Options = #{progname => ProgName},
     argparse:parse(Args, ArgparseDef, Options).
 
 %% -------------------------------------------------------------------
