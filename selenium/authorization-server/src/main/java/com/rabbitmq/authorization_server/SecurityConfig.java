@@ -4,7 +4,6 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.context.annotation.Bean;
@@ -15,8 +14,6 @@ import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
@@ -120,6 +117,10 @@ public class SecurityConfig {
 		return (context) -> {
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
 				AbstractAuthenticationToken principal = context.getPrincipal();
+				System.out.println("registered client: " + context.getRegisteredClient());
+				System.out.println("authorities : " + principal.getAuthorities());
+				System.out.println("authorized scopes : " + context.getAuthorizedScopes());
+				
 				context.getClaims()
 					.audience(AudienceAuthority.getAll(principal))
 					.claim("extra_scope", ScopeAuthority.getAllUnauthorized(principal, 
