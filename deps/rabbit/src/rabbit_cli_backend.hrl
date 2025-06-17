@@ -1,4 +1,5 @@
--record(rabbit_cli, {progname,
+-record(rabbit_cli, {scriptname,
+                     progname,
                      args,
                      argparse_def,
                      arg_map,
