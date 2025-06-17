@@ -43,6 +43,9 @@ spring:
                 - openid
                 - profile
                 - rabbitmq.tag:management
+                - rabbitmq.configure:*/*
+                - rabbitmq.read:*/*
+                - rabbitmq.write:*/*
               client-name: producer
           rabbitmq_client_code:
             registration:
