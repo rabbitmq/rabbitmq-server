@@ -96,7 +96,8 @@ do_run_command(
     erlang:apply(Module, Function, [Context]).
 
 map_to_context(ContextMap) ->
-    #rabbit_cli{progname = maps:get(progname, ContextMap),
+    #rabbit_cli{scriptname = maps:get(scriptname, ContextMap),
+                progname = maps:get(progname, ContextMap),
                 args = maps:get(args, ContextMap),
                 argparse_def = maps:get(argparse_def, ContextMap),
                 arg_map = maps:get(arg_map, ContextMap),
