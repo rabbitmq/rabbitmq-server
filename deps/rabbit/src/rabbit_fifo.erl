@@ -2806,7 +2806,7 @@ smallest_raft_index(#?STATE{messages = Messages,
     SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
-    lists:min([SmallestDlxRaIdx, SmallestMsgsRaIdx, SmallestRaIdx]).
+    min(min(SmallestDlxRaIdx, SmallestMsgsRaIdx), SmallestRaIdx).
 
 make_requeue(ConsumerKey, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
