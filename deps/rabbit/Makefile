@@ -163,13 +163,17 @@ ESCRIPT_FILE := scripts/rabbitmq
 
 ebin/$(PROJECT).app:: $(ESCRIPT_FILE)
 
-$(ESCRIPT_FILE): ebin/rabbit_cli_frontend.beam
+$(ESCRIPT_FILE): $(ESCRIPT_FILE).escript
+	$(gen_verbose) rm -f "$@"
+	$(verbose) ln -s "$(notdir $(ESCRIPT_FILE)).escript" "$(ESCRIPT_FILE)"
+
+$(ESCRIPT_FILE).escript: ebin/rabbit_cli_frontend.beam
 	$(gen_verbose) printf "%s\n" \
 		"#!$(ESCRIPT_SHEBANG)" \
 		"%% $(ESCRIPT_COMMENT)" \
-		"%%! $(ESCRIPT_EMU_ARGS)" > $(ESCRIPT_FILE)
-	$(verbose) cat $< >> $(ESCRIPT_FILE)
-	$(verbose) chmod a+x $(ESCRIPT_FILE)
+		"%%! $(ESCRIPT_EMU_ARGS)" > "$@"
+	$(verbose) cat $< >> "$@"
+	$(verbose) chmod a+x "$@"
 
 clean:: clean-cli
 
