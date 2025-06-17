@@ -21,7 +21,7 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
   let mqttUrl = process.env.RABBITMQ_MQTT_URL || "mqtt://" + rabbit + ":1883"
   let username = process.env.RABBITMQ_AMQP_USERNAME
   let password = process.env.RABBITMQ_AMQP_PASSWORD
-  let client_id = process.env.RABBITMQ_AMQP_USERNAME || 'selenium-client'
+  let client_id = process.env.RABBITMQ_MQTT_CLIENT_ID || 'selenium-client'
   
   before(function () {    
     if (backends.includes("http") && (username.includes("http") || usemtls)) {
@@ -47,7 +47,7 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       log("Obtening OpenId configuration from " + oauthProviderUrl)
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
       log("Obtaining token from  " + openIdConfig.token_endpoint + " using " + oauthClientId + ":" + oauthClientSecret)
-      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint, "rabbitmq.configure:*/*")
       log("Obtained access token : " + password)
     }
     mqttOptions = {

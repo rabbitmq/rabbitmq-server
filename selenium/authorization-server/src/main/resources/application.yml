@@ -12,7 +12,7 @@ spring:
             alias: server-spring-tls
             password: foobar
           keystore:
-            location: ../test/oauth/spring/server_spring.jks
+            location: ../test/authnz-msg-protocols/spring/server_spring.jks
             password: foobar
             type: PKCS12
   security:
@@ -28,22 +28,25 @@ spring:
             - rabbitmq
       authorizationserver:
         client:
-          mgt_api_client:
+          producer:
             registration:
               provider: spring
-              client-id: mgt_api_client
+              client-id: producer
+              client-secret: "{noop}producer"
               authorization-grant-types: 
                 - client_credentials
               client-authentication-methods:
-                - client_secret_basic
-              require-proof-key: true
+                - client_secret_post
               token-settings:
-                access-token-format: reference
+                access-token-format: reference              
               scopes: 
                 - openid
                 - profile
                 - rabbitmq.tag:management
-              client-name: mgt_api_client
+                - rabbitmq.configure:*/*
+                - rabbitmq.read:*/*
+                - rabbitmq.write:*/*
+              client-name: producer
           rabbitmq_client_code:
             registration:
               provider: spring
