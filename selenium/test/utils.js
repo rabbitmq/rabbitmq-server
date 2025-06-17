@@ -241,7 +241,6 @@ module.exports = {
     let params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
-      '&token_format=jwt' +
       '&response_type=token'
     if (scopes != "") {
       params = params + "&scope=" + scopes
