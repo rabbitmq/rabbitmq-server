@@ -75,8 +75,8 @@ complete_nodename(Nodename) ->
             list_to_atom(Nodename)
     end.
 
-rpc(#?MODULE{type = erldist}, Module, Function, Args) ->
-    erlang:apply(Module, Function, Args);
+rpc(#?MODULE{type = erldist, peer = Node}, Module, Function, Args) ->
+    erpc:call(Node, Module, Function, Args);
 rpc(#?MODULE{type = http, peer = Pid}, Module, Function, Args) ->
     rabbit_cli_http_client:rpc(Pid, Module, Function, Args).
 
