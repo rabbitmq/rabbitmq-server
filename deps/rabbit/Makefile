@@ -159,7 +159,7 @@ include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
 ESCRIPT_NAME := rabbit_cli_frontend
-ESCRIPT_FILE := scripts/rmq
+ESCRIPT_FILE := scripts/rabbitmq
 
 ebin/$(PROJECT).app:: $(ESCRIPT_FILE)
 
