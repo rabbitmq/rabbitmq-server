@@ -165,13 +165,16 @@ final_argparse_def(#?MODULE{argparse_def = PartialArgparseDef} = Context) ->
         {ok, ArgparseDef1}
     end.
 
-get_full_argparse_def(#?MODULE{connection = Connection}) ->
+get_full_argparse_def(#?MODULE{connection = Connection})
+  when Connection =/= undefined ->
     %% TODO: Handle an undef failure when the remote node is too old.
     RemoteArgparseDef = rabbit_cli_transport2:rpc(
                           Connection,
                           rabbit_cli_backend, final_argparse_def, []),
     {ok, RemoteArgparseDef};
-get_full_argparse_def(_) ->
+get_full_argparse_def(#?MODULE{}) ->
+    %% FIXME: Load applications first, otherwise module attributes are
+    %% unavailable.
     LocalArgparseDef = rabbit_cli_backend:final_argparse_def(),
     {ok, LocalArgparseDef}.
 
