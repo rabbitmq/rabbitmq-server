@@ -81,6 +81,7 @@
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
 -define(IS_INVALID_REF(Ref), is_binary(Ref) andalso byte_size(Ref) > 255).
+-define(SAC_MOD, rabbit_stream_sac_coordinator).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
                               check_read_permitted/3]).
@@ -106,7 +107,8 @@
          close_sent/3]).
 -ifdef(TEST).
 -export([ensure_token_expiry_timer/2,
-         evaluate_state_after_secret_update/4]).
+         evaluate_state_after_secret_update/4,
+         clean_subscriptions/4]).
 -endif.
 
 callback_mode() ->
@@ -720,6 +722,9 @@ open(info, {OK, S, Data},
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State2}}
     end;
+open(info, {sac, check_connection, _}, State) ->
+    _ = sac_connection_reconnected(self()),
+    {keep_state, State};
 open(info,
      {sac, #{subscription_id := SubId,
              active := Active} = Msg},
@@ -790,17 +795,15 @@ open(info,
                 rabbit_log:debug("Subscription ~tp on ~tp has been deleted.",
                                  [SubId, Stream]),
                 rabbit_log:debug("Active ~tp, message ~tp", [Active, Msg]),
-                case {Active, Msg} of
-                    {false, #{stepping_down := true,
-                              stream := St,
-                              consumer_name := ConsumerName}} ->
-                        rabbit_log:debug("Former active consumer gone, activating consumer " ++
-                                         "on stream ~tp, group ~tp", [St, ConsumerName]),
-                        _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
-                                                                            St,
-                                                                            ConsumerName);
-                    _ ->
-                        ok
+                _ = case {Active, Msg} of
+                        {false, #{stepping_down := true,
+                                  stream := St,
+                                  consumer_name := ConsumerName}} ->
+                            rabbit_log:debug("Former active consumer gone, activating consumer " ++
+                                             "on stream ~tp, group ~tp", [St, ConsumerName]),
+                            sac_activate_consumer(VirtualHost, St, ConsumerName);
+                        _ ->
+                            ok
                 end,
                 {Connection0, ConnState0}
         end,
@@ -2550,9 +2553,8 @@ handle_frame_post_auth(Transport,
                                 rabbit_log:debug("Subscription ~tp on stream ~tp, group ~tp " ++
                                                  "has stepped down, activating consumer",
                                                  [SubscriptionId, Stream, ConsumerName]),
-                                _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
-                                                                                    Stream,
-                                                                                    ConsumerName),
+                                _ = sac_activate_consumer(VirtualHost, Stream,
+                                                          ConsumerName),
                                 ok;
                             _ ->
                                 ok
@@ -3011,21 +3013,9 @@ handle_subscription(Transport,#stream_connection{
 
 maybe_register_consumer(_, _, _, _, _, _, false = _Sac) ->
     {ok, true};
-maybe_register_consumer(VirtualHost,
-                        Stream,
-                        ConsumerName,
-                        ConnectionName,
-                        SubscriptionId,
-                        Properties,
-                        true) ->
-    PartitionIndex = partition_index(VirtualHost, Stream, Properties),
-    rabbit_stream_sac_coordinator:register_consumer(VirtualHost,
-                                                    Stream,
-                                                    PartitionIndex,
-                                                    ConsumerName,
-                                                    self(),
-                                                    ConnectionName,
-                                                    SubscriptionId).
+maybe_register_consumer(VH, St, Name, ConnName, SubId, Properties, true) ->
+    PartitionIndex = partition_index(VH, St, Properties),
+    sac_register_consumer(VH, St, PartitionIndex, Name, self(), ConnName, SubId).
 
 maybe_send_consumer_update(Transport,
                            Connection = #stream_connection{
@@ -3171,13 +3161,12 @@ maybe_unregister_consumer(VirtualHost,
     ConsumerName = consumer_name(Properties),
 
     Requests1 = maps:fold(
-                  fun(_, #request{content =
-                                  #{active := false,
-                                    subscription_id := SubId,
-                                    stepping_down := true}}, Acc) when SubId =:= SubscriptionId ->
-                          _ = rabbit_stream_sac_coordinator:activate_consumer(VirtualHost,
-                                                                              Stream,
-                                                                              ConsumerName),
+                  fun(_, #request{content = #{active := false,
+                                              subscription_id := SubId,
+                                              stepping_down := true}}, Acc)
+                        when SubId =:= SubscriptionId ->
+                          _ = sac_activate_consumer(VirtualHost, Stream,
+                                                    ConsumerName),
                           rabbit_log:debug("Outstanding SAC activation request for stream '~tp', " ++
                                            "group '~tp', sending activation.",
                                            [Stream, ConsumerName]),
@@ -3186,11 +3175,8 @@ maybe_unregister_consumer(VirtualHost,
                           Acc#{K => V}
                   end, maps:new(), Requests),
 
-    _ = rabbit_stream_sac_coordinator:unregister_consumer(VirtualHost,
-                                                          Stream,
-                                                          ConsumerName,
-                                                          self(),
-                                                          SubscriptionId),
+    _ = sac_unregister_consumer(VirtualHost, Stream, ConsumerName,
+                                self(), SubscriptionId),
     Requests1.
 
 partition_index(VirtualHost, Stream, Properties) ->
@@ -3277,89 +3263,19 @@ clean_state_after_super_stream_deletion(Partitions, Connection, State, Transport
 
 clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
                                              #stream_connection{
-                                                user = #user{username = Username},
-                                                virtual_host = VirtualHost,
-                                                stream_subscriptions = StreamSubscriptions,
-                                                publishers = Publishers,
-                                                publisher_to_ids = PublisherToIds,
-                                                stream_leaders = Leaders,
-                                                outstanding_requests = Requests0} = C0,
-                                             #stream_connection_state{consumers = Consumers} = S0) ->
+                                                stream_leaders = Leaders} = C0,
+                                             S0) ->
     {SubscriptionsCleaned, C1, S1} =
         case stream_has_subscriptions(Stream, C0) of
             true ->
-                #{Stream := SubscriptionIds} = StreamSubscriptions,
-                Requests1 = lists:foldl(
-                              fun(SubId, Rqsts0) ->
-                                      #{SubId := Consumer} = Consumers,
-                                      case {MemberPid, Consumer} of
-                                          {undefined, _C} ->
-                                              rabbit_stream_metrics:consumer_cancelled(self(),
-                                                                                       stream_r(Stream,
-                                                                                                C0),
-                                                                                       SubId,
-                                                                                       Username),
-                                              maybe_unregister_consumer(
-                                                VirtualHost, Consumer,
-                                                single_active_consumer(Consumer),
-                                                Rqsts0);
-                                          {MemberPid, #consumer{configuration =
-                                                                #consumer_configuration{member_pid = MemberPid}}} ->
-                                              rabbit_stream_metrics:consumer_cancelled(self(),
-                                                                                       stream_r(Stream,
-                                                                                                C0),
-                                                                                       SubId,
-                                                                                       Username),
-                                              maybe_unregister_consumer(
-                                                VirtualHost, Consumer,
-                                                single_active_consumer(Consumer),
-                                                Rqsts0);
-                                          _ ->
-                                              Rqsts0
-                                      end
-                              end, Requests0, SubscriptionIds),
-                {true,
-                 C0#stream_connection{stream_subscriptions =
-                                          maps:remove(Stream,
-                                                      StreamSubscriptions),
-                                      outstanding_requests = Requests1},
-                 S0#stream_connection_state{consumers =
-                                                maps:without(SubscriptionIds,
-                                                             Consumers)}};
+                clean_subscriptions(MemberPid, Stream, C0, S0);
             false ->
                 {false, C0, S0}
         end,
     {PublishersCleaned, C2, S2} =
         case stream_has_publishers(Stream, C1) of
             true ->
-                {PurgedPubs, PurgedPubToIds} =
-                    maps:fold(fun(PubId,
-                                  #publisher{stream = S, reference = Ref},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MemberPid =:= undefined ->
-                                      rabbit_stream_metrics:publisher_deleted(self(),
-                                                                                 stream_r(Stream,
-                                                                                          C1),
-                                                                                 PubId),
-                                         {maps:remove(PubId, Pubs),
-                                          maps:remove({Stream, Ref}, PubToIds)};
-                                 (PubId,
-                                  #publisher{stream = S, reference = Ref, leader = MPid},
-                                  {Pubs, PubToIds}) when S =:= Stream andalso MPid =:= MemberPid ->
-                                         rabbit_stream_metrics:publisher_deleted(self(),
-                                                                                 stream_r(Stream,
-                                                                                          C1),
-                                                                                 PubId),
-                                         {maps:remove(PubId, Pubs),
-                                          maps:remove({Stream, Ref}, PubToIds)};
-
-                                 (_PubId, _Publisher, {Pubs, PubToIds}) ->
-                                     {Pubs, PubToIds}
-                              end,
-                              {Publishers, PublisherToIds}, Publishers),
-                {true,
-                 C1#stream_connection{publishers = PurgedPubs,
-                                      publisher_to_ids = PurgedPubToIds},
-                 S1};
+                clean_publishers(MemberPid, Stream, C1, S1);
             false ->
                 {false, C1, S1}
         end,
@@ -3381,6 +3297,98 @@ clean_state_after_stream_deletion_or_failure(MemberPid, Stream,
             {not_cleaned, C2#stream_connection{stream_leaders = Leaders1}, S2}
     end.
 
+clean_subscriptions(MemberPid, Stream,
+                    #stream_connection{user = #user{username = Username},
+                                       virtual_host = VirtualHost,
+                                       stream_subscriptions = StreamSubs,
+                                       outstanding_requests = Requests0} = C0,
+                    #stream_connection_state{consumers = Consumers} = S0) ->
+    #{Stream := SubIds} = StreamSubs,
+    {DelSubs1, Requests1} =
+    lists:foldl(
+      fun(SubId, {DelSubIds, Rqsts0}) ->
+              #{SubId := Consumer} = Consumers,
+              case {MemberPid, Consumer} of
+                  {undefined, _C} ->
+                      rabbit_stream_metrics:consumer_cancelled(self(),
+                                                               stream_r(Stream,
+                                                                        C0),
+                                                               SubId,
+                                                               Username),
+                      Rqsts1 = maybe_unregister_consumer(
+                                 VirtualHost, Consumer,
+                                 single_active_consumer(Consumer),
+                                 Rqsts0),
+                      {[SubId | DelSubIds], Rqsts1};
+                  {MemberPid,
+                   #consumer{configuration =
+                             #consumer_configuration{member_pid = MemberPid}}} ->
+                      rabbit_stream_metrics:consumer_cancelled(self(),
+                                                               stream_r(Stream,
+                                                                        C0),
+                                                               SubId,
+                                                               Username),
+                      Rqsts1 = maybe_unregister_consumer(
+                                 VirtualHost, Consumer,
+                                 single_active_consumer(Consumer),
+                                 Rqsts0),
+                      {[SubId | DelSubIds], Rqsts1};
+                  _ ->
+                      {DelSubIds, Rqsts0}
+              end
+      end, {[], Requests0}, SubIds),
+    case DelSubs1 of
+        [] ->
+            {false, C0, S0};
+        _ ->
+            StreamSubs1 = case SubIds -- DelSubs1 of
+                              [] ->
+                                  maps:remove(Stream, StreamSubs);
+                              RemSubIds ->
+                                  StreamSubs#{Stream => RemSubIds}
+                          end,
+            Consumers1 = maps:without(DelSubs1, Consumers),
+            {true,
+             C0#stream_connection{stream_subscriptions = StreamSubs1,
+                                  outstanding_requests = Requests1},
+             S0#stream_connection_state{consumers = Consumers1}}
+    end.
+
+clean_publishers(MemberPid, Stream,
+                 #stream_connection{
+                    publishers = Publishers,
+                    publisher_to_ids = PublisherToIds} = C0, S0) ->
+    {Updated, PurgedPubs, PurgedPubToIds} =
+    maps:fold(fun(PubId, #publisher{stream = S, reference = Ref},
+                  {_, Pubs, PubToIds})
+                    when S =:= Stream andalso MemberPid =:= undefined ->
+                      rabbit_stream_metrics:publisher_deleted(self(),
+                                                              stream_r(Stream,
+                                                                       C0),
+                                                              PubId),
+                      {true,
+                       maps:remove(PubId, Pubs),
+                       maps:remove({Stream, Ref}, PubToIds)};
+                 (PubId, #publisher{stream = S, reference = Ref, leader = MPid},
+                  {_, Pubs, PubToIds})
+                   when S =:= Stream andalso MPid =:= MemberPid ->
+                      rabbit_stream_metrics:publisher_deleted(self(),
+                                                              stream_r(Stream,
+                                                                       C0),
+                                                              PubId),
+                      {true,
+                       maps:remove(PubId, Pubs),
+                       maps:remove({Stream, Ref}, PubToIds)};
+
+                 (_PubId, _Publisher, {Updated, Pubs, PubToIds}) ->
+                      {Updated, Pubs, PubToIds}
+              end,
+              {false, Publishers, PublisherToIds}, Publishers),
+    {Updated,
+     C0#stream_connection{publishers = PurgedPubs,
+                          publisher_to_ids = PurgedPubToIds},
+     S0}.
+
 store_offset(Reference, _, _, C) when ?IS_INVALID_REF(Reference) ->
   rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
   C;
@@ -3398,8 +3406,7 @@ store_offset(Reference, Stream, Offset, Connection0) ->
 
 lookup_leader(Stream,
               #stream_connection{stream_leaders = StreamLeaders,
-                                 virtual_host = VirtualHost} =
-                  Connection) ->
+                                 virtual_host = VirtualHost} = Connection) ->
     case maps:get(Stream, StreamLeaders, undefined) of
         undefined ->
             case lookup_leader_from_manager(VirtualHost, Stream) of
@@ -3408,6 +3415,7 @@ lookup_leader(Stream,
                 {ok, LeaderPid} ->
                     Connection1 =
                         maybe_monitor_stream(LeaderPid, Stream, Connection),
+
                     {LeaderPid,
                      Connection1#stream_connection{stream_leaders =
                                                        StreamLeaders#{Stream =>
@@ -4011,3 +4019,40 @@ stream_from_consumers(SubId, Consumers) ->
 %% for a bit so they can't DOS us with repeated failed logins etc.
 silent_close_delay() ->
     timer:sleep(?SILENT_CLOSE_DELAY).
+
+sac_connection_reconnected(Pid) ->
+    sac_call(fun() ->
+                     ?SAC_MOD:connection_reconnected(Pid)
+             end).
+
+sac_activate_consumer(VH, St, Name) ->
+    sac_call(fun() ->
+                     ?SAC_MOD:activate_consumer(VH, St, Name)
+             end).
+
+sac_register_consumer(VH, St, PartitionIndex, Name, Pid, ConnName, SubId) ->
+    sac_call(fun() ->
+                     ?SAC_MOD:register_consumer(VH, St, PartitionIndex,
+                                                Name, Pid, ConnName,
+                                                SubId)
+             end).
+
+sac_unregister_consumer(VH, St, Name, Pid, SubId) ->
+    sac_call(fun() ->
+                     ?SAC_MOD:unregister_consumer(VH, St, Name, Pid, SubId)
+             end).
+
+sac_call(Call) ->
+    case Call() of
+        {error, Reason} = Err ->
+            case ?SAC_MOD:is_sac_error(Reason) of
+                true ->
+                    Err;
+                _ ->
+                    rabbit_log:info("Stream SAC coordinator call failed with  ~tp",
+                                    [Reason]),
+                    throw({stop, {shutdown, stream_sac_coordinator_error}})
+            end;
+        R ->
+            R
+    end.

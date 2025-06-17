@@ -15,7 +15,7 @@
          apply/3,
          state_enter/2,
          init_aux/1,
-         handle_aux/6,
+         handle_aux/5,
          tick/2,
          version/0,
          which_module/1,
@@ -31,8 +31,7 @@
          transfer_leadership/1,
          forget_node/1,
          status/0,
-         member_overview/0
-        ]).
+         member_overview/0]).
 
 %% stream API
 -export([new_stream/2,
@@ -42,8 +41,7 @@
          add_replica/2,
          delete_replica/2,
          register_listener/1,
-         register_local_member_listener/1
-        ]).
+         register_local_member_listener/1]).
 
 -export([local_pid/1,
          writer_pid/1,
@@ -57,10 +55,8 @@
          query_stream_overview/2,
          ra_local_query/1]).
 
-
 -export([log_overview/1,
-         key_metrics_rpc/1
-         ]).
+         key_metrics_rpc/1]).
 
 %% for SAC coordinator
 -export([sac_state/1]).
@@ -68,11 +64,10 @@
 %% for testing and debugging
 -export([eval_listeners/3,
          replay/1,
-         state/0]).
+         state/0,
+         sac_state/0]).
 
--import(rabbit_queue_type_util, [
-                                 erpc_call/5
-                                ]).
+-import(rabbit_queue_type_util, [erpc_call/5]).
 
 -rabbit_boot_step({?MODULE,
                    [{description, "Restart stream coordinator"},
@@ -90,6 +85,10 @@
 -include("amqqueue.hrl").
 
 -define(REPLICA_FRESHNESS_LIMIT_MS, 10 * 1000). %% 10s
+-define(V2_OR_MORE(Vsn), Vsn >= 2).
+-define(V5_OR_MORE(Vsn), Vsn >= 5).
+-define(SAC_V4, rabbit_stream_sac_coordinator_v4).
+-define(SAC_CURRENT, rabbit_stream_sac_coordinator).
 
 -type state() :: #?MODULE{}.
 -type args() :: #{index := ra:index(),
@@ -119,7 +118,8 @@
                    {retention_updated, stream_id(), args()} |
                    {mnesia_updated, stream_id(), args()} |
                    {sac, rabbit_stream_sac_coordinator:command()} |
-                   ra_machine:effect().
+                   {machine_version, ra_machine:version(), ra_machine:version()} |
+                   ra_machine:builtin_command().
 
 -export_type([command/0]).
 
@@ -278,6 +278,16 @@ state() ->
             Any
     end.
 
+%% for debugging
+sac_state() ->
+    case state() of
+        S when is_record(S, ?MODULE) ->
+            sac_state(S);
+        R ->
+            R
+    end.
+
+
 writer_pid(StreamId) when is_list(StreamId) ->
     MFA = {?MODULE, query_writer_pid, [StreamId]},
     query_pid(StreamId, MFA).
@@ -426,10 +436,16 @@ process_command(Cmd) ->
 process_command([], _Cmd) ->
     {error, coordinator_unavailable};
 process_command([Server | Servers], Cmd) ->
-    case ra:process_command(Server, Cmd, ?CMD_TIMEOUT) of
+    case ra:process_command(Server, Cmd, cmd_timeout()) of
         {timeout, _} ->
+            CmdLabel = case Cmd of
+                           {sac, SacCmd} ->
+                               element(1, SacCmd);
+                           _ ->
+                               element(1, Cmd)
+                       end,
             rabbit_log:warning("Coordinator timeout on server ~w when processing command ~W",
-                               [element(2, Server), element(1, Cmd), 10]),
+                               [element(2, Server), CmdLabel, 10]),
             process_command(Servers, Cmd);
         {error, noproc} ->
             process_command(Servers, Cmd);
@@ -438,6 +454,9 @@ process_command([Server | Servers], Cmd) ->
         Reply ->
             Reply
     end.
+
+cmd_timeout() ->
+    application:get_env(rabbit, stream_cmd_timeout, ?CMD_TIMEOUT).
 
 ensure_coordinator_started() ->
     Local = {?MODULE, node()},
@@ -520,13 +539,16 @@ reachable_coord_members() ->
     Nodes = rabbit_nodes:list_reachable(),
     [{?MODULE, Node} || Node <- Nodes].
 
-version() -> 4.
+version() -> 5.
 
 which_module(_) ->
     ?MODULE.
 
-init(_Conf) ->
-    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()}.
+init(#{machine_version := Vsn}) when ?V5_OR_MORE(Vsn) ->
+    #?MODULE{single_active_consumer =
+             rabbit_stream_sac_coordinator:init_state()};
+init(_) ->
+    #?MODULE{single_active_consumer = rabbit_stream_sac_coordinator_v4:init_state()}.
 
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), term(), ra_machine:effects()}.
@@ -564,12 +586,13 @@ apply(#{index := _Idx, machine_version := MachineVersion} = Meta0,
     end;
 apply(Meta, {sac, SacCommand}, #?MODULE{single_active_consumer = SacState0,
                                         monitors = Monitors0} = State0) ->
-    {SacState1, Reply, Effects0} = rabbit_stream_sac_coordinator:apply(SacCommand, SacState0),
+    Mod = sac_module(Meta),
+    {SacState1, Reply, Effects0} = Mod:apply(SacCommand, SacState0),
     {SacState2, Monitors1, Effects1} =
-         rabbit_stream_sac_coordinator:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
+         Mod:ensure_monitors(SacCommand, SacState1, Monitors0, Effects0),
     return(Meta, State0#?MODULE{single_active_consumer = SacState2,
-                                 monitors = Monitors1}, Reply, Effects1);
-apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
+                                monitors = Monitors1}, Reply, Effects1);
+apply(#{machine_version := Vsn} = Meta, {down, Pid, Reason} = Cmd,
       #?MODULE{streams = Streams0,
                monitors = Monitors0,
                listeners = StateListeners0,
@@ -581,7 +604,7 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                        []
                end,
     case maps:take(Pid, Monitors0) of
-        {{StreamId, listener}, Monitors} when MachineVersion < 2 ->
+        {{StreamId, listener}, Monitors} when Vsn < 2 ->
             Listeners = case maps:take(StreamId, StateListeners0) of
                             error ->
                                 StateListeners0;
@@ -595,7 +618,7 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                         end,
             return(Meta, State#?MODULE{listeners = Listeners,
                                        monitors = Monitors}, ok, Effects0);
-        {{PidStreams, listener}, Monitors} when MachineVersion >= 2 ->
+        {{PidStreams, listener}, Monitors} when ?V2_OR_MORE(Vsn) ->
             Streams = maps:fold(
                 fun(StreamId, _, Acc) ->
                     case Acc of
@@ -629,9 +652,11 @@ apply(#{machine_version := MachineVersion} = Meta, {down, Pid, Reason} = Cmd,
                                                monitors = Monitors1}, ok, Effects0)
             end;
         {sac, Monitors1} ->
-            {SacState1, Effects} = rabbit_stream_sac_coordinator:handle_connection_down(Pid, SacState0),
+            {SacState1, SacEffects} = sac_handle_connection_down(SacState0, Pid,
+                                                                 Reason, Vsn),
             return(Meta, State#?MODULE{single_active_consumer = SacState1,
-                                       monitors = Monitors1}, ok, Effects);
+                                       monitors = Monitors1},
+                   ok, [Effects0 ++ SacEffects]);
         error ->
             return(Meta, State, ok, Effects0)
     end;
@@ -657,11 +682,11 @@ apply(#{machine_version := MachineVersion} = Meta,
             return(Meta, State0, stream_not_found, [])
     end;
 
-apply(#{machine_version := MachineVersion} = Meta,
+apply(#{machine_version := Vsn} = Meta,
       {register_listener, #{pid := Pid,
                             stream_id := StreamId} = Args},
       #?MODULE{streams = Streams,
-               monitors = Monitors0} = State0) when MachineVersion >= 2 ->
+               monitors = Monitors0} = State0) when ?V2_OR_MORE(Vsn) ->
     Node = maps:get(node, Args, node(Pid)),
     Type = maps:get(type, Args, leader),
 
@@ -685,9 +710,11 @@ apply(#{machine_version := MachineVersion} = Meta,
         _ ->
             return(Meta, State0, stream_not_found, [])
     end;
-apply(Meta, {nodeup, Node} = Cmd,
+apply(#{machine_version := Vsn} = Meta,
+      {nodeup, Node} = Cmd,
       #?MODULE{monitors = Monitors0,
-               streams = Streams0} = State)  ->
+               streams = Streams0,
+               single_active_consumer = Sac0} = State)  ->
     %% reissue monitors for all disconnected members
     {Effects0, Monitors} =
         maps:fold(
@@ -701,14 +728,24 @@ apply(Meta, {nodeup, Node} = Cmd,
                           {Acc, Mon}
                   end
           end, {[], Monitors0}, Streams0),
-    {Streams, Effects} =
+    {Streams, Effects1} =
         maps:fold(fun (Id, S0, {Ss, E0}) ->
                           S1 = update_stream(Meta, Cmd, S0),
                           {S, E} = evaluate_stream(Meta, S1, E0),
                           {Ss#{Id => S}, E}
                   end, {Streams0, Effects0}, Streams0),
+
+    {Sac1, Effects2} = case ?V5_OR_MORE(Vsn) of
+                           true ->
+                               SacMod = sac_module(Meta),
+                               SacMod:handle_node_reconnected(Node,
+                                                              Sac0, Effects1);
+                           false ->
+                               {Sac0, Effects1}
+                       end,
     return(Meta, State#?MODULE{monitors = Monitors,
-                               streams = Streams}, ok, Effects);
+                               streams = Streams,
+                               single_active_consumer = Sac1}, ok, Effects2);
 apply(Meta, {machine_version, From, To}, State0) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, "
                     ++ "applying incremental upgrade.", [From, To]),
@@ -719,6 +756,12 @@ apply(Meta, {machine_version, From, To}, State0) ->
                                             {S1, Eff0 ++ Eff1}
                                     end, {State0, []}, lists:seq(From, To - 1)),
     return(Meta, State1, ok, Effects);
+apply(Meta, {timeout, {sac, node_disconnected, #{connection_pid := Pid}}},
+      #?MODULE{single_active_consumer = SacState0} = State0) ->
+    Mod = sac_module(Meta),
+    {SacState1, Effects} = Mod:presume_connection_down(Pid, SacState0),
+    return(Meta, State0#?MODULE{single_active_consumer = SacState1}, ok,
+           Effects);
 apply(Meta, UnkCmd, State) ->
     rabbit_log:debug("~ts: unknown command ~W",
                      [?MODULE, UnkCmd, 10]),
@@ -737,15 +780,22 @@ state_enter(recover, _) ->
     put('$rabbit_vm_category', ?MODULE),
     [];
 state_enter(leader, #?MODULE{streams = Streams,
-                             monitors = Monitors}) ->
+                             monitors = Monitors,
+                             single_active_consumer = SacState}) ->
     Pids = maps:keys(Monitors),
     %% monitor all the known nodes
     Nodes = all_member_nodes(Streams),
     NodeMons = [{monitor, node, N} || N <- Nodes],
-    NodeMons ++ [{aux, fail_active_actions} |
-                 [{monitor, process, P} || P <- Pids]];
+    SacEffects = ?SAC_CURRENT:state_enter(leader, SacState),
+    SacEffects ++ NodeMons ++ [{aux, fail_active_actions} |
+                               [{monitor, process, P} || P <- Pids]];
 state_enter(_S, _) ->
     [].
+
+sac_module(#{machine_version := Vsn}) when ?V5_OR_MORE(Vsn) ->
+    ?SAC_CURRENT;
+sac_module(_) ->
+    ?SAC_V4.
 
 all_member_nodes(Streams) ->
     maps:keys(
@@ -754,8 +804,9 @@ all_member_nodes(Streams) ->
                 maps:merge(Acc, M)
         end, #{}, Streams)).
 
-tick(_Ts, _State) ->
-    [{aux, maybe_resize_coordinator_cluster}].
+tick(_Ts, #?MODULE{single_active_consumer = SacState}) ->
+    [{aux, maybe_resize_coordinator_cluster} |
+     maybe_update_sac_configuration(SacState)].
 
 members() ->
     %% TODO: this can be replaced with a ra_leaderboard
@@ -780,7 +831,7 @@ members() ->
             end
     end.
 
-maybe_resize_coordinator_cluster() ->
+maybe_resize_coordinator_cluster(LeaderPid, SacNodes, MachineVersion) ->
     spawn(fun() ->
                   RabbitIsRunning = rabbit:is_running(),
                   case members() of
@@ -806,18 +857,48 @@ maybe_resize_coordinator_cluster() ->
                           case MemberNodes -- RabbitNodes of
                               [] ->
                                   ok;
-                              [Old | _]  ->
+                              [Old | _]  when length(RabbitNodes) > 0 ->
                                   %% this ought to be rather rare as the stream
                                   %% coordinator member is now removed as part
                                   %% of the forget_cluster_node command
-                                  rabbit_log:info("~ts: Rabbit node(s) removed from the cluster, "
+                                  rabbit_log:info("~ts: Rabbit node(s) removed "
+                                                  "from the cluster, "
                                                   "deleting: ~w", [?MODULE, Old]),
-                                  remove_member(Leader, Members, Old)
-                          end;
+                                  _ = remove_member(Leader, Members, Old),
+                                  ok
+                          end,
+                          maybe_handle_stale_nodes(SacNodes, RabbitNodes,
+                                                   LeaderPid,
+                                                   MachineVersion);
                       _ ->
                           ok
                   end
           end).
+
+maybe_handle_stale_nodes(SacNodes, BrokerNodes,
+                         LeaderPid, Vsn) when ?V5_OR_MORE(Vsn) ->
+    case SacNodes -- BrokerNodes of
+        [] ->
+            ok;
+        Stale when length(BrokerNodes) > 0 ->
+            rabbit_log:debug("Stale nodes detected in stream SAC "
+                             "coordinator: ~w. Purging state.",
+                             [Stale]),
+            ra:pipeline_command(LeaderPid, sac_make_purge_nodes(Stale)),
+            ok;
+        _ ->
+            ok
+    end;
+maybe_handle_stale_nodes(_, _, _, _) ->
+    ok.
+
+maybe_update_sac_configuration(SacState) ->
+    case sac_check_conf_change(SacState) of
+        {new, UpdatedConf} ->
+            [{append, sac_make_update_conf(UpdatedConf), noreply}];
+        _ ->
+            []
+    end.
 
 add_member(Members, Node) ->
     MinMacVersion = erpc:call(Node, ?MODULE, version, []),
@@ -892,65 +973,64 @@ init_aux(_Name) ->
 
 %% TODO ensure the dead writer is restarted as a replica at some point in time, increasing timeout?
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
-           #aux{resizer = undefined} = Aux, LogState, _) ->
-    Pid = maybe_resize_coordinator_cluster(),
-    {no_reply, Aux#aux{resizer = Pid}, LogState, [{monitor, process, aux, Pid}]};
+           #aux{resizer = undefined} = Aux, RaAux) ->
+    Leader = ra_aux:leader_id(RaAux),
+    MachineVersion = ra_aux:effective_machine_version(RaAux),
+    SacNodes = sac_list_nodes(ra_aux:machine_state(RaAux), MachineVersion),
+    Pid = maybe_resize_coordinator_cluster(Leader, SacNodes, MachineVersion),
+    {no_reply, Aux#aux{resizer = Pid}, RaAux, [{monitor, process, aux, Pid}]};
 handle_aux(leader, _, maybe_resize_coordinator_cluster,
-           AuxState, LogState, _) ->
+           AuxState, RaAux) ->
     %% Coordinator resizing is still happening, let's ignore this tick event
-    {no_reply, AuxState, LogState};
+    {no_reply, AuxState, RaAux};
 handle_aux(leader, _, {down, Pid, _},
-           #aux{resizer = Pid} = Aux, LogState, _) ->
+           #aux{resizer = Pid} = Aux, RaAux) ->
     %% Coordinator resizing has finished
-    {no_reply, Aux#aux{resizer = undefined}, LogState};
+    {no_reply, Aux#aux{resizer = undefined}, RaAux};
 handle_aux(leader, _, {start_writer, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'start_writer'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_start_writer(StreamId, Args, Conf),
-    run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(starting, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {start_replica, StreamId,
                        #{epoch := Epoch, node := Node} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'start_replica'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_start_replica(StreamId, Args, Conf),
-    run_action(starting, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(starting, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {stop, StreamId, #{node := Node,
                                          epoch := Epoch} = Args, Conf},
-           Aux, LogState, _) ->
+           Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'stop'"
                      " for ~ts on node ~w in epoch ~b",
                      [?MODULE, StreamId, Node, Epoch]),
     ActionFun = phase_stop_member(StreamId, Args, Conf),
-    run_action(stopping, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(stopping, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_mnesia, StreamId, Args, Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'update_mnesia'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_mnesia(StreamId, Args, Conf),
-    run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(updating_mnesia, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {update_retention, StreamId, Args, _Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'update_retention'"
                      " for ~ts", [?MODULE, StreamId]),
     ActionFun = phase_update_retention(StreamId, Args),
-    run_action(update_retention, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(update_retention, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, {delete_member, StreamId, #{node := Node} = Args, Conf},
-           #aux{actions = _Monitors} = Aux, LogState,
-           #?MODULE{streams = _Streams}) ->
+           #aux{actions = _Monitors} = Aux, RaAux) ->
     rabbit_log:debug("~ts: running action: 'delete_member'"
                      " for ~ts ~ts", [?MODULE, StreamId, Node]),
     ActionFun = phase_delete_member(StreamId, Args, Conf),
-    run_action(delete_member, StreamId, Args, ActionFun, Aux, LogState);
+    run_action(delete_member, StreamId, Args, ActionFun, Aux, RaAux);
 handle_aux(leader, _, fail_active_actions,
-           #aux{actions = Actions} = Aux, LogState,
-           #?MODULE{streams = Streams}) ->
+           #aux{actions = Actions} = Aux, RaAux) ->
     %% this bit of code just creates an exclude map of currently running
     %% tasks to avoid failing them, this could only really happen during
     %% a leader flipflap
@@ -958,14 +1038,15 @@ handle_aux(leader, _, fail_active_actions,
                               || {P, {S, _, _}} <- maps_to_list(Actions),
                              is_process_alive(P)]),
     rabbit_log:debug("~ts: failing actions: ~w", [?MODULE, Exclude]),
+    #?MODULE{streams = Streams} = ra_aux:machine_state(RaAux),
     fail_active_actions(Streams, Exclude),
-    {no_reply, Aux, LogState, []};
+    {no_reply, Aux, RaAux, []};
 handle_aux(leader, _, {down, Pid, normal},
-           #aux{actions = Monitors} = Aux, LogState, _) ->
+           #aux{actions = Monitors} = Aux, RaAux) ->
     %% action process finished normally, just remove from actions map
-    {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)}, LogState, []};
+    {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)}, RaAux, []};
 handle_aux(leader, _, {down, Pid, Reason},
-           #aux{actions = Monitors0} = Aux, LogState, _) ->
+           #aux{actions = Monitors0} = Aux, RaAux) ->
     %% An action has failed - report back to the state machine
     case maps:get(Pid, Monitors0, undefined) of
         {StreamId, Action, #{node := Node, epoch := Epoch} = Args} ->
@@ -976,13 +1057,13 @@ handle_aux(leader, _, {down, Pid, Reason},
             Cmd = {action_failed, StreamId, Args#{action => Action}},
             send_self_command(Cmd),
             {no_reply, Aux#aux{actions = maps:remove(Pid, Monitors)},
-             LogState, []};
+             RaAux, []};
         undefined ->
             %% should this ever happen?
-            {no_reply, Aux, LogState, []}
+            {no_reply, Aux, RaAux, []}
     end;
-handle_aux(_, _, _, AuxState, LogState, _) ->
-    {no_reply, AuxState, LogState}.
+handle_aux(_, _, _, AuxState, RaAux) ->
+    {no_reply, AuxState, RaAux}.
 
 overview(#?MODULE{streams = Streams,
                   monitors = Monitors,
@@ -1018,7 +1099,7 @@ stream_overview0(#stream{epoch = Epoch,
 
 run_action(Action, StreamId, #{node := _Node,
                                epoch := _Epoch} = Args,
-           ActionFun, #aux{actions = Actions0} = Aux, Log) ->
+           ActionFun, #aux{actions = Actions0} = Aux, RaAux) ->
     Coordinator = self(),
     Pid = spawn_link(fun() ->
                              ActionFun(),
@@ -1026,7 +1107,7 @@ run_action(Action, StreamId, #{node := _Node,
                      end),
     Effects = [{monitor, process, aux, Pid}],
     Actions = Actions0#{Pid => {StreamId, Action, Args}},
-    {no_reply, Aux#aux{actions = Actions}, Log, Effects}.
+    {no_reply, Aux#aux{actions = Actions}, RaAux, Effects}.
 
 wrap_reply(From, Reply) ->
     [{reply, From, {wrap_reply, Reply}}].
@@ -1641,20 +1722,20 @@ update_stream0(_Meta, {update_config, _StreamId, Conf},
 update_stream0(_Meta, _Cmd, undefined) ->
     undefined.
 
-inform_listeners_eol(MachineVersion,
+inform_listeners_eol(Vsn,
                      #stream{target = deleted,
                              listeners = Listeners,
                              queue_ref = QRef})
-  when MachineVersion =< 1 ->
+  when Vsn =< 1 ->
     lists:map(fun(Pid) ->
                       {send_msg, Pid,
                        {queue_event, QRef, eol},
                        cast}
               end, maps:keys(Listeners));
-inform_listeners_eol(MachineVersion,
+inform_listeners_eol(Vsn,
                         #stream{target    = deleted,
                                 listeners = Listeners,
-                                queue_ref = QRef}) when MachineVersion >= 2 ->
+                                queue_ref = QRef}) when ?V2_OR_MORE(Vsn) ->
     LPidsMap = maps:fold(fun({P, _}, _V, Acc) ->
                             Acc#{P => ok}
                          end, #{}, Listeners),
@@ -1702,9 +1783,9 @@ eval_listeners(MachineVersion, #stream{listeners = Listeners0,
         _ ->
             {Stream, Effects0}
     end;
-eval_listeners(MachineVersion, #stream{listeners = Listeners0} = Stream0,
+eval_listeners(Vsn, #stream{listeners = Listeners0} = Stream0,
                _OldStream, Effects0)
-  when MachineVersion >= 2 ->
+  when ?V2_OR_MORE(Vsn) ->
     %% Iterating over stream listeners.
     %% Returning the new map of listeners and the effects (notification of changes)
     {Listeners1, Effects1} =
@@ -2199,8 +2280,10 @@ machine_version(1, 2, State = #?MODULE{streams = Streams0,
                    monitors = Monitors2,
                    listeners = undefined}, Effects};
 machine_version(2, 3, State) ->
-    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, updating state."),
-    {State#?MODULE{single_active_consumer = rabbit_stream_sac_coordinator:init_state()},
+    rabbit_log:info("Stream coordinator machine version changes from 2 to 3, "
+                    "updating state."),
+    SacState = rabbit_stream_sac_coordinator_v4:init_state(),
+    {State#?MODULE{single_active_consumer = SacState},
      []};
 machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
     rabbit_log:info("Stream coordinator machine version changes from 3 to 4, updating state."),
@@ -2214,6 +2297,11 @@ machine_version(3, 4, #?MODULE{streams = Streams0} = State) ->
                                              end, Members)}
                 end, Streams0),
     {State#?MODULE{streams = Streams}, []};
+machine_version(4 = From, 5, #?MODULE{single_active_consumer = Sac0} = State) ->
+    rabbit_log:info("Stream coordinator machine version changes from 4 to 5, updating state."),
+    SacExport = rabbit_stream_sac_coordinator_v4:state_to_map(Sac0),
+    Sac1 = rabbit_stream_sac_coordinator:import_state(From, SacExport),
+    {State#?MODULE{single_active_consumer = Sac1}, []};
 machine_version(From, To, State) ->
     rabbit_log:info("Stream coordinator machine version changes from ~tp to ~tp, no state changes required.",
                     [From, To]),
@@ -2350,3 +2438,22 @@ maps_to_list(M) ->
 
 ra_local_query(QueryFun) ->
     ra:local_query({?MODULE, node()}, QueryFun, infinity).
+
+sac_handle_connection_down(SacState, Pid, Reason, Vsn) when ?V5_OR_MORE(Vsn) ->
+    ?SAC_CURRENT:handle_connection_down(Pid, Reason, SacState);
+sac_handle_connection_down(SacState, Pid, _Reason, _Vsn) ->
+    ?SAC_V4:handle_connection_down(Pid, SacState).
+
+sac_make_purge_nodes(Nodes) ->
+    rabbit_stream_sac_coordinator:make_purge_nodes(Nodes).
+
+sac_make_update_conf(Conf) ->
+    rabbit_stream_sac_coordinator:make_update_conf(Conf).
+
+sac_check_conf_change(SacState) ->
+    rabbit_stream_sac_coordinator:check_conf_change(SacState).
+
+sac_list_nodes(State, Vsn) when ?V5_OR_MORE(Vsn) ->
+    rabbit_stream_sac_coordinator:list_nodes(sac_state(State));
+sac_list_nodes(_, _) ->
+    [].
