@@ -111,6 +111,10 @@ if [ -z "$ERL_MAX_PORTS" ]; then
     export ERL_MAX_PORTS=65536
 fi
 
+if [ -z "$RABBITMQ_MAX_OPEN_FILES" ]; then
+    export RABBITMQ_MAX_OPEN_FILES=65535
+fi
+
 [ -n "$ERL_EPMD_PORT" ] && export ERL_EPMD_PORT
 [ -n "$ERL_EPMD_ADDRESS" ] && export ERL_EPMD_ADDRESS
 

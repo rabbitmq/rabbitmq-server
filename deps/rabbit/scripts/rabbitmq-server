@@ -39,6 +39,10 @@ start_rabbitmq_server() {
 
     _rmq_env_set_erl_libs
 
+    if [ -n "$RABBITMQ_MAX_OPEN_FILES" ]; then
+        ulimit -n ${RABBITMQ_MAX_OPEN_FILES} || true
+    fi
+
     RABBITMQ_START_RABBIT=
     [ "x" = "x$RABBITMQ_ALLOW_INPUT" ] && RABBITMQ_START_RABBIT=" -noinput"
     if test -z "$RABBITMQ_NODE_ONLY"; then
