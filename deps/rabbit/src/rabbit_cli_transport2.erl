@@ -1,5 +1,7 @@
 -module(rabbit_cli_transport2).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([connect/0, connect/1,
          rpc/4,
          send/3]).
@@ -18,6 +20,11 @@ connect(NodenameOrUri) ->
 connect(erldist = Proto, Nodename) ->
     maybe
         Nodename1 = complete_nodename(Nodename),
+        ?LOG_DEBUG(
+           "CLI: connect to node ~s using Erlang distribution",
+           [Nodename1]),
+
+        %% FIXME: Handle short vs. long names.
         {ok, _} ?= net_kernel:start(undefined, #{name_domain => shortnames}),
 
         %% Can we reach the remote node?
@@ -32,7 +39,10 @@ connect(erldist = Proto, Nodename) ->
     end;
 connect(http = Proto, Uri) ->
     maybe
-        {ok, Client} = rabbit_cli_http_client:start_link(Uri),
+        ?LOG_DEBUG(
+           "CLI: connect to URI ~s using HTTP",
+           [Uri]),
+        {ok, Client} ?= rabbit_cli_http_client:start_link(Uri),
         Connection = #?MODULE{type = Proto,
                               peer = Client},
         {ok, Connection}
