@@ -157,14 +157,29 @@
 %% it must authenticate with the authorization server
 
 {mapping, 
+ "auth_oauth2.access_token_format", 
+ "rabbitmq_auth_backend_oauth2.access_token_format",
+ [{datatype, {enum, [jwt, opaque]}}]}.
+
+{mapping, 
  "auth_oauth2.oauth_client_id", 
  "rabbitmq_auth_backend_oauth2.oauth_client_id",
  [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.oauth_client_id",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.oauth_client_id", Conf))
+ end}.
 
 {mapping, 
  "auth_oauth2.oauth_client_secret", 
  "rabbitmq_auth_backend_oauth2.oauth_client_secret",
 [{datatype, string}]}.
+
+{translation,
+ "rabbitmq_auth_backend_oauth2.oauth_client_secret",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.oauth_client_secret", Conf))
+ end}.
 
 {mapping,
  "auth_oauth2.issuer",
@@ -444,6 +459,10 @@
  "rabbitmq_auth_backend_oauth2.resource_servers",
 [{datatype, string}]}.
 
+{mapping, 
+ "auth_oauth2.resource_servers.$name.access_token_format", 
+ "rabbitmq_auth_backend_oauth2.resource_servers",
+ [{datatype, {enum, [jwt, opaque]}}]}.
 
 {translation, "rabbitmq_auth_backend_oauth2.resource_servers",
  fun(Conf) ->

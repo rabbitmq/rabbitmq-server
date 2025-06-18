@@ -31,7 +31,7 @@
             {resource_server_type,<<"new_resource_server_type">>},
             {extra_scopes_source, <<"my_custom_scope_key">>},
             {preferred_username_claims, [<<"user_name">>, <<"username">>, <<"email">>]},
-            {verify_aud, true},
+            {verify_aud, true},            
             {issuer, "https://my-jwt-issuer"},
             {discovery_endpoint_path, "/.well-known/openid-configuration"},
             {discovery_endpoint_params, [
@@ -96,14 +96,14 @@
             {jwks_uri, "https://my-jwt-issuer/jwks.json"},
             {resource_servers,
               #{
+                <<"rabbitmq-customers">> => [
+                  {extra_scopes_source, <<"roles">>},
+                  {id, <<"rabbitmq-customers">>}                  
+                ],
                 <<"rabbitmq-operations">> => [
                   {scope_prefix, <<"api://">>},
                   {id, <<"rabbitmq-operations">>}
-                ],
-                <<"rabbitmq-customers">> => [
-                  {extra_scopes_source, <<"roles">>},
-                  {id, <<"rabbitmq-customers">>}
-                ]
+                ]                
               }
             },
             {key_config, [
@@ -324,6 +324,40 @@
         {rabbitmq_auth_backend_oauth2, [
             {resource_server_id,<<"new_resource_server_id">>},
             {extra_scopes_source, <<"roles realm.roles">> }            
+        ]}
+       ], []
+  },
+  {token_introspection, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.introspection_endpoint = https://introspect
+       auth_oauth2.access_token_format = jwt
+       auth_oauth2.oauth_client_id = rabbit
+       auth_oauth2.oauth_client_secret = rabbit_secret
+       auth_oauth2.oauth_providers.p.introspection_endpoint = https://introspect_p
+       auth_oauth2.resource_servers.b.access_token_format = opaque
+       auth_oauth2.resource_servers.b.oauth_client_id = rabbit_b
+       auth_oauth2.resource_servers.b.oauth_client_secret = rabbit_secret_b",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {introspection_endpoint, "https://introspect"},
+            {oauth_client_secret, <<"rabbit_secret">> },
+            {oauth_client_id, <<"rabbit">> },
+            {access_token_format, jwt},            
+            {resource_server_id,<<"new_resource_server_id">>},            
+            {oauth_providers, #{
+                <<"p">> => [
+                   {introspection_endpoint, "https://introspect_p"}
+                ]
+            }},
+            {resource_servers, #{
+                <<"b">> => [
+                   {oauth_client_secret, <<"rabbit_secret_b">>},
+                   {oauth_client_id, <<"rabbit_b">>},                   
+                   {access_token_format, opaque},
+                   {id, <<"b">>}
+                ]
+            }}
+                       
         ]}
        ], []
   }
