@@ -7,89 +7,65 @@
 
 -include("src/rabbit_cli_backend.hrl").
 
--export([final_argparse_def/0, run_command/1]).
+-export([run_command/1]).
 
-%% -------------------------------------------------------------------
-%% Commands discovery.
-%% -------------------------------------------------------------------
+%% TODO:
+%% * Implémenter "list exchanges" plus proprement
+%% * Implémenter "rabbitmqctl list_exchanges" pour la compatibilité
 
-final_argparse_def() ->
-    #{argparse_def := ArgparseDef} = get_discovered_commands(),
-    ArgparseDef.
+run_command(ContextMap) when is_map(ContextMap) ->
+    Context = map_to_context(ContextMap),
+    run_command(Context);
+run_command(#rabbit_cli{} = Context) ->
+    maybe
+        %% We can query the argparse definition from the remote node to know
+        %% the commands it supports and proceed with the execution.
+        ArgparseDef = final_argparse_def(Context),
+        Context1 = Context#rabbit_cli{argparse_def = ArgparseDef},
 
-get_discovered_commands() ->
-    Key = {?MODULE, discovered_commands},
-    try
-        persistent_term:get(Key)
-    catch
-        error:badarg ->
-            Commands = discover_commands(),
-            ArgparseDef = commands_to_cli_argparse_def(Commands),
-            Cache = #{commands => Commands,
-                      argparse_def => ArgparseDef},
-            persistent_term:put(Key, Cache),
-            Cache
+        {ok, ArgMap, CmdPath, Command} ?= final_parse(Context1),
+        Context2 = Context1#rabbit_cli{arg_map = ArgMap,
+                                       cmd_path = CmdPath,
+                                       command = Command},
+
+        do_run_command(Context2)
     end.
 
-discover_commands() ->
-    %% Extract the commands from module attributes like feature flags and boot
-    %% steps.
-    ?LOG_DEBUG(
-      "Commands: query commands in loaded applications",
-      #{domain => ?RMQLOG_DOMAIN_CMD}),
-    T0 = erlang:monotonic_time(),
-    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(
-                    rabbitmq_command),
-    T1 = erlang:monotonic_time(),
-    ?LOG_DEBUG(
-      "Commands: time to find supported commands: ~tp us",
-      [erlang:convert_time_unit(T1 - T0, native, microsecond)],
-      #{domain => ?RMQLOG_DOMAIN_CMD}),
-    AttrsPerApp.
-
-commands_to_cli_argparse_def(Commands) ->
-    lists:foldl(
-      fun({_App, _Mod, Entries}, Acc0) ->
-              lists:foldl(
-                fun
-                    ({#{cli := Path}, Def}, Acc1) ->
-                        Def1 = expand_argparse_def(Def),
-                        M1 = lists:foldr(
-                               fun
-                                   (Cmd, undefined) ->
-                                       #{commands => #{Cmd => Def1}};
-                                   (Cmd, M0) ->
-                                       #{commands => #{Cmd => M0}}
-                               end, undefined, Path),
-                        rabbit_cli:merge_argparse_def(Acc1, M1);
-                    (_, Acc1) ->
-                        Acc1
-                end, Acc0, Entries)
-      end, #{}, Commands).
-
-expand_argparse_def(Def) when is_map(Def) ->
-    Def;
-expand_argparse_def(Defs) when is_list(Defs) ->
-    lists:foldl(
-      fun
-          (argparse_def_record_stream, Acc) ->
-              Def = rabbit_cli_io:argparse_def(record_stream),
-              rabbit_cli:merge_argparse_def(Acc, Def);
-          (argparse_def_file_input, Acc) ->
-              Def = rabbit_cli_io:argparse_def(file_input),
-              rabbit_cli:merge_argparse_def(Acc, Def);
-          (Def, Acc) ->
-              Def1 = expand_argparse_def(Def),
-              rabbit_cli:merge_argparse_def(Acc, Def1)
-      end, #{}, Defs).
-
 %% -------------------------------------------------------------------
-%% Commands execution.
+%% Argparse definition handling.
 %% -------------------------------------------------------------------
 
-run_command(ContextMap) ->
-    Context = map_to_context(ContextMap),
-    do_run_command(Context).
+final_argparse_def(
+  #rabbit_cli{argparse_def = PartialArgparseDef}) ->
+    FullArgparseDef = rabbit_cli_commands:discovered_argparse_def(),
+    ArgparseDef1 = merge_argparse_def(PartialArgparseDef, FullArgparseDef),
+    ArgparseDef1.
+
+merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
+    Args1 = maps:get(arguments, ArgparseDef1, []),
+    Args2 = maps:get(arguments, ArgparseDef2, []),
+    Args = merge_arguments(Args1, Args2),
+    Cmds1 = maps:get(commands, ArgparseDef1, #{}),
+    Cmds2 = maps:get(commands, ArgparseDef2, #{}),
+    Cmds = merge_commands(Cmds1, Cmds2),
+    maps:merge(
+      ArgparseDef1,
+      ArgparseDef2#{arguments => Args, commands => Cmds}).
+
+merge_arguments(Args1, Args2) ->
+    Args1 ++ Args2.
+
+merge_commands(Cmds1, Cmds2) ->
+    maps:merge(Cmds1, Cmds2).
+
+final_parse(
+  #rabbit_cli{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
+    Options = #{progname => ProgName},
+    argparse:parse(Args, ArgparseDef, Options).
+
+%% -------------------------------------------------------------------
+%% Command execution.
+%% -------------------------------------------------------------------
 
 do_run_command(
   #rabbit_cli{command = #{handler := {Module, Function}}} = Context) ->
