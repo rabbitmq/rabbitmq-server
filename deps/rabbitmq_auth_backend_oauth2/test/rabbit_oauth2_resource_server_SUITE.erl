@@ -19,7 +19,9 @@
 -define(OAUTH_PROVIDER_B,<<"B">>).
 
 -import(oauth2_client, [get_oauth_provider/2]).
--import(rabbit_oauth2_resource_server, [resolve_resource_server_from_audience/1]).
+-import(rabbit_oauth2_resource_server, 
+    [resolve_resource_server_from_audience/1,
+     resolve_single_resource_server_with_opaque_access_token_format/0]).
 
 
 all() -> [
@@ -37,6 +39,10 @@ groups() -> [
         {with_verify_aud_false, [], [
             resolve_resource_server_for_none_audience_returns_rabbitmq,
             resolve_resource_server_for_unknown_audience_returns_rabbitmq
+        ]},
+        cannot_resolve_resource_server_for_opaque_access_token,
+        {with_opaque_access_token_format, [], [
+            resolve_resource_server_for_opaque_access_token
         ]},
         {verify_get_rabbitmq_server_configuration, [],
             verify_get_rabbitmq_server_configuration()}
@@ -205,6 +211,10 @@ init_per_group(with_two_resource_servers, Config) ->
     [{?RABBITMQ_RESOURCE_ONE, RabbitMQ1}, {?RABBITMQ_RESOURCE_TWO, RabbitMQ2}]
         ++ Config;
 
+init_per_group(with_opaque_access_token_format, Config) ->
+    set_env(access_token_format, opaque),
+    Config;
+
 init_per_group(_any, Config) ->
     Config.
 
@@ -256,6 +266,10 @@ end_per_group(with_scope_aliases, Config) ->
     unset_env(scope_aliases),
     Config;
 
+end_per_group(with_opaque_access_token_format, Config) ->
+    unset_env(access_token_format),
+    Config;
+
 end_per_group(_any, Config) ->
     Config.
 
@@ -303,6 +317,13 @@ resolve_resource_server_id_for_rabbitmq2(_) ->
 resolve_resource_server_id_for_both_resources_returns_error(_) ->
     assert_resource_server_id({error, aud_matched_many_resource_servers_only_one_allowed},
         [?RABBITMQ_RESOURCE_TWO, ?RABBITMQ_RESOURCE_ONE]).
+
+resolve_resource_server_for_opaque_access_token(_) ->
+    {ok, Actual} = resolve_single_resource_server_with_opaque_access_token_format(),
+    ?assertEqual(?RABBITMQ, Actual#resource_server.id).
+
+cannot_resolve_resource_server_for_opaque_access_token(_) ->
+    {error, no_resource_server_found} = resolve_single_resource_server_with_opaque_access_token_format().
 
 rabbitmq_verify_aud_is_true(_) ->
     assert_verify_aud(true, ?RABBITMQ).
