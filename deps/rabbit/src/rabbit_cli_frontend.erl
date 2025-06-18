@@ -23,6 +23,7 @@ main(Args) ->
 
     Ret = run_cli(ScriptName, Args),
     ?LOG_NOTICE("CLI: run_cli() return value: ~p", [Ret]),
+    %% FIXME: Ensures everything written to stdout/stderr was flushed.
     erlang:halt().
 
 %% -------------------------------------------------------------------
