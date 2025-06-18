@@ -3,7 +3,7 @@
 SCRIPT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 TEST_CASES_PATH=/authnz-msg-protocols
-PROFILES="amqp-internal-user auth_http auth_backends-internal-http "
+PROFILES="spring oauth-producer auth-oauth-spring auth_backends-opaque-oauth "
 
 source $SCRIPT/../../bin/suite_template
-runWith mock-auth-backend-http
+runWith spring
