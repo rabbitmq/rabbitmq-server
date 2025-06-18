@@ -205,6 +205,7 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         _ -> {error, mismatch_username_after_token_refresh}
     end.
 
+
 validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Now = os:system_time(seconds),
     case Exp =< Now of
