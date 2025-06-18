@@ -331,33 +331,40 @@
       "auth_oauth2.resource_server_id = new_resource_server_id
        auth_oauth2.introspection_endpoint = https://introspect
        auth_oauth2.access_token_format = jwt
-       auth_oauth2.oauth_client_id = rabbit
-       auth_oauth2.oauth_client_secret = rabbit_secret
-       auth_oauth2.oauth_providers.p.introspection_endpoint = https://introspect_p
-       auth_oauth2.resource_servers.b.access_token_format = opaque
-       auth_oauth2.resource_servers.b.oauth_client_id = rabbit_b
-       auth_oauth2.resource_servers.b.oauth_client_secret = rabbit_secret_b",
+       auth_oauth2.introspection_client_auth_method = basic
+       auth_oauth2.introspection_client_id = rabbit
+       auth_oauth2.introspection_client_secret = rabbit_secret",
        [
         {rabbitmq_auth_backend_oauth2, [
+            {access_token_format, jwt},
+            {introspection_client_auth_method, basic },
+            {introspection_client_id, <<"rabbit">> },
+            {introspection_client_secret, <<"rabbit_secret">> },
             {introspection_endpoint, "https://introspect"},
-            {oauth_client_secret, <<"rabbit_secret">> },
-            {oauth_client_id, <<"rabbit">> },
-            {access_token_format, jwt},            
-            {resource_server_id,<<"new_resource_server_id">>},            
+            {resource_server_id, <<"new_resource_server_id">>}
+          ]
+        }
+       ], []
+   },
+   {token_introspection_via_oauth_providers, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.access_token_format = jwt
+       auth_oauth2.oauth_providers.p.introspection_endpoint = https://introspect
+       auth_oauth2.oauth_providers.p.introspection_client_auth_method = basic
+       auth_oauth2.oauth_providers.p.introspection_client_id = rabbit
+       auth_oauth2.oauth_providers.p.introspection_client_secret = rabbit_secret",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {access_token_format, jwt},
+            {resource_server_id, <<"new_resource_server_id">>},
             {oauth_providers, #{
-                <<"p">> => [
-                   {introspection_endpoint, "https://introspect_p"}
-                ]
-            }},
-            {resource_servers, #{
-                <<"b">> => [
-                   {oauth_client_secret, <<"rabbit_secret_b">>},
-                   {oauth_client_id, <<"rabbit_b">>},                   
-                   {access_token_format, opaque},
-                   {id, <<"b">>}
-                ]
-            }}
-                       
+              <<"p">> => [
+                {introspection_client_auth_method, basic},
+                {introspection_client_id, <<"rabbit">>},
+                {introspection_client_secret, <<"rabbit_secret">>},
+                {introspection_endpoint, <<"https://introspect">>}
+              ]
+            }}                       
         ]}
        ], []
   }
