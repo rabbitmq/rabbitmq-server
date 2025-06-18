@@ -24,7 +24,8 @@ new_resource_server(ResourceServerId) ->
         additional_scopes_key = undefined,
         preferred_username_claims = ?DEFAULT_PREFERRED_USERNAME_CLAIMS,
         scope_aliases = undefined,
-        oauth_provider_id = root
+        oauth_provider_id = root,
+        access_token_format = jwt
     }.
 
 -spec resolve_resource_server_from_audience(binary() | list() | none) ->
@@ -85,6 +86,8 @@ get_root_resource_server() ->
         end,
     ScopePrefix =
         get_env(scope_prefix, DefaultScopePrefix),
+    AccessTokenFormat =
+        get_env(access_token_format, jwt),
     OAuthProviderId =
         case get_env(default_oauth_provider) of
             undefined -> root;
@@ -99,6 +102,7 @@ get_root_resource_server() ->
         additional_scopes_key = AdditionalScopesKey,
         preferred_username_claims = PreferredUsernameClaims,
         scope_aliases = ScopeAliases,
+        access_token_format = AccessTokenFormat,
         oauth_provider_id = OAuthProviderId
     }.
 
@@ -143,6 +147,9 @@ get_resource_server(ResourceServerId, RootResourseServer) when
                 undefined -> erlang:iolist_to_binary([ResourceServerId, <<".">>]);
                 Prefix -> Prefix
             end),
+    AccessTokenFormat =
+        proplists:get_value(access_token_format, ResourceServerProps,
+            RootResourseServer#resource_server.access_token_format),
     OAuthProviderId =
         proplists:get_value(oauth_provider_id, ResourceServerProps,
             RootResourseServer#resource_server.oauth_provider_id),
@@ -155,7 +162,8 @@ get_resource_server(ResourceServerId, RootResourseServer) when
         additional_scopes_key = AdditionalScopesKey,
         preferred_username_claims = PreferredUsernameClaims,
         scope_aliases = ScopeAliases,
-        oauth_provider_id = OAuthProviderId
+        oauth_provider_id = OAuthProviderId,
+        access_token_format = AccessTokenFormat
     }.
 
 -spec find_audience(binary() | list(), list()) ->

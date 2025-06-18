@@ -244,16 +244,22 @@ extract_oauth_providers_properties(Settings) ->
 extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
+    MapValueFun = fun(V) -> 
+        case V of 
+            jwt -> V;
+            opaque -> V;
+            _ -> list_to_binary(V)
+        end end,
 
-    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+    ResourceServers = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), MapValueFun(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
-    maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+    maps:groups_from_list(KeyFun, ValueFun, ResourceServers).
 
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of
         issuer -> validator_https_uri(Key, Value);
         token_endpoint -> validator_https_uri(Key, Value);
-        tokeninfo_endpoint -> validator_https_uri(Key, Value);
+        introspection_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);
