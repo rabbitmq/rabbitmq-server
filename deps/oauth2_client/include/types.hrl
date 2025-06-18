@@ -16,7 +16,8 @@
     token_endpoint :: option(uri_string:uri_string()),
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
-    jwks_uri :: option(uri_string:uri_string())
+    jwks_uri :: option(uri_string:uri_string()),
+    introspection_endpoint :: option(uri_string:uri_string()),
 }).
 -type openid_configuration() :: #openid_configuration{}.
 
@@ -29,6 +30,7 @@
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
     jwks_uri :: option(uri_string:uri_string()),
+    introspection_endpoint :: option(uri_string:uri_string()),
     ssl_options :: option(list())
 }).
 

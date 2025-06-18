@@ -109,6 +109,15 @@ merge_oauth_provider(_) ->
                   {token_endpoint, OAuthProvider4#oauth_provider.token_endpoint}],
                   Proplist5),
 
+    OAuthProvider5 = OAuthProvider4#oauth_provider{introspection_endpoint = "https://introspection"},
+    Proplist6 = oauth2_client:merge_oauth_provider(OAuthProvider5, Proplist5),
+    ?assertEqual([{jwks_uri, OAuthProvider5#oauth_provider.jwks_uri},
+                  {end_session_endpoint, OAuthProvider5#oauth_provider.end_session_endpoint},
+                  {authorization_endpoint, OAuthProvider5#oauth_provider.authorization_endpoint},
+                  {token_endpoint, OAuthProvider5#oauth_provider.token_endpoint},
+                  {introspection_endpoint, OAuthProvider5#oauth_provider.introspection_endpoint}],
+                  Proplist6),              
+
     % ensure id, issuer, ssl_options and discovery_endpoint are not affected
     ?assertEqual(OAuthProvider#oauth_provider.id,
         OAuthProvider4#oauth_provider.id),

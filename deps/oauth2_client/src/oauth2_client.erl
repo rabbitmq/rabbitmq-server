@@ -121,10 +121,15 @@ merge_openid_configuration(OpenId, OAuthProvider0) ->
         EndSessionEndpoint ->
             OAuthProvider2#oauth_provider{end_session_endpoint = EndSessionEndpoint}
     end,
-    case OpenId#openid_configuration.jwks_uri of
+    OAuthProvider4 = case OpenId#openid_configuration.introspection_endpoint of
         undefined -> OAuthProvider3;
+        IntrospectionEndpoint ->
+            OAuthProvider3#oauth_provider{introspection_endpoint = IntrospectionEndpoint}
+    end,
+    case OpenId#openid_configuration.jwks_uri of
+        undefined -> OAuthProvider4;
         JwksUri ->
-            OAuthProvider3#oauth_provider{jwks_uri = JwksUri}
+            OAuthProvider4#oauth_provider{jwks_uri = JwksUri}
     end.
 
 -spec merge_oauth_provider(oauth_provider(), proplists:proplist()) ->
@@ -145,10 +150,10 @@ merge_oauth_provider(OAuthProvider, Proplist) ->
         EndSessionEndpoint -> [{end_session_endpoint, EndSessionEndpoint} |
             proplists:delete(end_session_endpoint, Proplist1)]
     end,
-    Proplist3 = case OAuthProvider#oauth_provider.tokeninfo_endpoint of
+    Proplist3 = case OAuthProvider#oauth_provider.introspection_endpoint of
         undefined ->  Proplist2;
-        TokenInfoEndpoint -> [{tokeninfo_endpoint, TokenInfoEndpoint} |
-            proplists:delete(tokeninfo_endpoint, Proplist2)]
+        IntrospectionEndpoint -> [{introspection_endpoint, IntrospectionEndpoint} |
+            proplists:delete(introspection_endpoint, Proplist2)]
     end,
     case OAuthProvider#oauth_provider.jwks_uri of
         undefined ->  Proplist3;
@@ -181,6 +186,8 @@ map_to_openid_configuration(Map) ->
         authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
         end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT,
+            Map, undefined),
+        introspection_endpoint = maps:get(?RESPONSE_INTROSPECTION_ENDPOINT,
             Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     }.
@@ -220,6 +227,10 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
     case OAuthProvider#oauth_provider.end_session_endpoint of
         undefined -> do_nothing;
         EndSessionEndpoint -> set_env(end_session_endpoint, EndSessionEndpoint)
+    end,
+    case OAuthProvider#oauth_provider.introspection_endpoint of
+        undefined -> do_nothing;
+        IntrospectionEndpoint -> set_env(introspection_endpoint, IntrospectionEndpoint)
     end,
     case OAuthProvider#oauth_provider.jwks_uri of
         undefined -> do_nothing;
@@ -401,6 +412,7 @@ lookup_root_oauth_provider() ->
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
+        introspection_endpoint = get_env(introspection_endpoint),
         ssl_options = extract_ssl_options_as_list(Map)
     }.
 
@@ -590,6 +602,8 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(authorization_endpoint, PropList, undefined),
         end_session_endpoint =
             proplists:get_value(end_session_endpoint, PropList, undefined),
+        introspection_endpoint = 
+            proplists:get_value(introspection_endpoint, PropList, undefined),
         jwks_uri =
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options =
@@ -640,13 +654,14 @@ format_oauth_provider(OAuthProvider) ->
     lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
         " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "jwks_uri: ~p, ssl_options: ~p }", [
+        "introspection_endpoint: ~p, jwks_uri: ~p, ssl_options: ~p }", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.discovery_endpoint,
         OAuthProvider#oauth_provider.token_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
+        OAuthProvider#oauth_provider.introspection_endpoint,
         OAuthProvider#oauth_provider.jwks_uri,
         format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
 
