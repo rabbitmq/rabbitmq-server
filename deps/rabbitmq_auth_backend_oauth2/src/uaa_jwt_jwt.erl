@@ -6,7 +6,7 @@
 %%
 -module(uaa_jwt_jwt).
 
--export([decode_and_verify/3, get_key_id/1, get_aud/1]).
+-export([decode_and_verify/3, get_key_id/1, get_aud/1, is_jwt_token/1]).
 
 -include_lib("jose/include/jose_jwt.hrl").
 -include_lib("jose/include/jose_jws.hrl").
@@ -41,4 +41,10 @@ get_aud(Token) ->
         end
     catch Type:Err:Stacktrace ->
         {error, {invalid_token, Type, Err, Stacktrace}}
+    end.
+
+is_jwt_token(Token) ->
+    case binary:split(Token, <<".">>, [global]) of 
+        [_, _, _] -> true;
+        _ -> false
     end.
