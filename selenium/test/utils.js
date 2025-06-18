@@ -241,6 +241,7 @@ module.exports = {
     const params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
+      '&token_format=jwt' +
       '&response_type=token'
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
