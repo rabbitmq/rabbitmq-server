@@ -43,5 +43,6 @@
 -define(RESPONSE_TOKEN_ENDPOINT, <<"token_endpoint">>).
 -define(RESPONSE_AUTHORIZATION_ENDPOINT, <<"authorization_endpoint">>).
 -define(RESPONSE_END_SESSION_ENDPOINT, <<"end_session_endpoint">>).
+-define(RESPONSE_INTROSPECTION_ENDPOINT, <<"introspection_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).
