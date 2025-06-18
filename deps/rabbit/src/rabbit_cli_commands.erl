@@ -8,9 +8,15 @@
 -export([discover_commands/0,
          discovered_commands/0,
          discovered_argparse_def/0]).
--export([cmd_list_exchanges/1,
+-export([cmd_hello/1,
+         cmd_list_exchanges/1,
          cmd_import_definitions/1,
          cmd_top/1]).
+
+-rabbitmq_command(
+   {#{cli => ["hello"]},
+    #{help => "Say hello!",
+      handler => {?MODULE, cmd_hello}}}).
 
 -rabbitmq_command(
    {#{cli => ["declare", "exchange"],
@@ -134,6 +140,11 @@ expand_argparse_def(Defs) when is_list(Defs) ->
 %% -------------------------------------------------------------------
 %% XXX
 %% -------------------------------------------------------------------
+
+cmd_hello(_) ->
+    Name = io:get_line("Name: "),
+    io:format("Hello ~s!~n", [string:trim(Name)]),
+    ok.
 
 cmd_list_exchanges(#{progname := Progname, arg_map := ArgMap}) ->
     logger:alert("CLI: running list exchanges"),
