@@ -5,7 +5,9 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/resource.hrl").
 
--export([argparse_def/0, run_command/1, do_run_command/1]).
+-export([discover_commands/0,
+         discovered_commands/0,
+         discovered_argparse_def/0]).
 -export([cmd_list_exchanges/1,
          cmd_import_definitions/1,
          cmd_top/1]).
@@ -44,17 +46,21 @@
     [#{help => "Top-like interactive view",
        handler => {?MODULE, cmd_top}}]}).
 
-argparse_def() ->
-    #{argparse_def := ArgparseDef} = get_discovered_commands(),
-    ArgparseDef.
+%% -------------------------------------------------------------------
+%% Commands discovery.
+%% -------------------------------------------------------------------
 
-get_discovered_commands() ->
+discover_commands() ->
+    _ = discovered_commands_and_argparse_def(),
+    ok.
+
+discovered_commands_and_argparse_def() ->
     Key = {?MODULE, discovered_commands},
     try
         persistent_term:get(Key)
     catch
         error:badarg ->
-            Commands = discover_commands(),
+            Commands = do_discover_commands(),
             ArgparseDef = commands_to_cli_argparse_def(Commands),
             Cache = #{commands => Commands,
                       argparse_def => ArgparseDef},
@@ -62,16 +68,26 @@ get_discovered_commands() ->
             Cache
     end.
 
-discover_commands() ->
+discovered_commands() ->
+    #{commands := Commands} = discovered_commands_and_argparse_def(),
+    Commands.
+
+discovered_argparse_def() ->
+    #{argparse_def := ArgparseDef} = discovered_commands_and_argparse_def(),
+    ArgparseDef.
+
+do_discover_commands() ->
     %% Extract the commands from module attributes like feature flags and boot
     %% steps.
+    %% TODO: Discover commands as a boot step.
+    %% TODO: Write shell completion scripts for various shells as part of that.
+    %% TODO: Generate manpages? When/how? With eDoc?
     ?LOG_DEBUG(
       "Commands: query commands in loaded applications",
       #{domain => ?RMQLOG_DOMAIN_CMD}),
     T0 = erlang:monotonic_time(),
-    ScannedApps = rabbit_misc:rabbitmq_related_apps(),
-    AttrsPerApp = rabbit_misc:module_attributes_from_apps(
-                    rabbitmq_command, ScannedApps),
+    AttrsPerApp = rabbit_misc:rabbitmq_related_module_attributes(
+                    rabbitmq_command),
     T1 = erlang:monotonic_time(),
     ?LOG_DEBUG(
       "Commands: time to find supported commands: ~tp us",
@@ -115,32 +131,9 @@ expand_argparse_def(Defs) when is_list(Defs) ->
               rabbit_cli:merge_argparse_def(Acc, Def1)
       end, #{}, Defs).
 
-run_command(Context) ->
-    %% TODO: Put both processes under the rabbit supervision tree.
-    Parent = self(),
-    RunnerPid = spawn_link(
-                  fun() ->
-                          Ret = do_run_command(Context),
-                          case Ret of
-                              ok ->
-                                  ok;
-                              {ok, _} ->
-                                  ok;
-                              Other ->
-                                  erlang:unlink(Parent),
-                                  erlang:error(Other)
-                          end
-                  end),
-    RunnerMRef = erlang:monitor(process, RunnerPid),
-    receive
-        {'DOWN', RunnerMRef, _, _, normal} ->
-            ok;
-        {'DOWN', RunnerMRef, _, _, Reason} ->
-            Reason
-    end.
-
-do_run_command(#{command := #{handler := {Mod, Fun}}} = Context) ->
-    erlang:apply(Mod, Fun, [Context]).
+%% -------------------------------------------------------------------
+%% XXX
+%% -------------------------------------------------------------------
 
 cmd_list_exchanges(#{progname := Progname, arg_map := ArgMap}) ->
     logger:alert("CLI: running list exchanges"),
