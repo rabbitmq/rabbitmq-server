@@ -41,6 +41,8 @@ all() ->
 
 groups() ->
     [{happy_path, [], [
+        test_is_jwt_token,
+        test_is_not_jwt_token,
         test_successful_connection_with_a_full_permission_token_and_all_defaults,
         test_successful_connection_with_a_full_permission_token_and_explicitly_configured_vhost,
         test_successful_connection_with_simple_strings_for_aud_and_scope,
@@ -684,6 +686,13 @@ test_unsuccessful_connection_for_rabbitmq_audience_signed_by_root_oauth_provider
 test_successful_connection_with_a_full_permission_token_and_all_defaults(Config) ->
     {_Algo, Token} = get_config(Config, fixture_jwt),
     verify_queue_declare_with_token(Config, Token).
+
+test_is_jwt_token(Config) ->
+    {_Algo, Token} = get_config(Config, fixture_jwt),
+    ?assertEqual(true, uaa_jwt_jwt:is_jwt_token(Token)).
+
+test_is_not_jwt_token(_) ->
+    ?assertEqual(false, uaa_jwt_jwt:is_jwt_token(<<"some opaque token">>)).
 
 verify_queue_declare_with_token(Config, Token) ->
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
