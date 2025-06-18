@@ -1,0 +1,3 @@
+[ client_alt_names ]
+email.1 = rabbit_client@localhost
+URI.1 = rabbit_client_id_uri
