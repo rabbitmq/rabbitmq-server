@@ -51,7 +51,7 @@ refresh_access_token(OAuthProvider, Request) ->
     parse_access_token_response(Response).
 
 -spec introspect_token(binary()) -> 
-    {ok, successful_access_token_response()} |
+    {ok, map()} |
     {error, unsuccessful_access_token_response() | any()}.
 introspect_token(Token) ->
     case build_introspection_request() of 
@@ -109,14 +109,16 @@ build_introspection_request() ->
     Providers = case Result of 
         {ok, _} -> Result;
         {error, _} -> 
-            maps:filter(fun(K,V) -> 
-                case {V#oauth_provider.introspection_client_id, 
-                    V#oauth_provider.introspection_client_secret} of
-                    {undefined, _} -> false;
-                    {_Id, _Secret} -> 
-                        case get_oauth_provider(K, [introspection_endpoint]) of 
-                            {ok, _} -> true;
-                            _ -> false
+            maps:filter(fun(K,_V) -> 
+                case get_oauth_provider(K, [introspection_endpoint]) of 
+                    {error, _} -> false;
+                    {ok, P} -> 
+                        case {P#oauth_provider.introspection_client_id, 
+                            P#oauth_provider.introspection_client_secret,
+                            P#oauth_provider.introspection_endpoint} of
+                            {undefined, _, _} -> false;                    
+                            {_Id, _Secret, undefined} -> false;
+                            {_Id, _Secret, _Endpoint} -> true
                         end
                 end
             end, get_env(oauth_providers, #{}))

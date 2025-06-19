@@ -32,8 +32,13 @@ match_request(Req, #{method := Method} = ExpectedRequest) ->
     case maps:is_key(parameters, ExpectedRequest) of
         true -> match_request_parameters_in_body(Req, ExpectedRequest);
         false -> ok
+    end,
+    case maps:is_key(headers, ExpectedRequest) of 
+        true -> maps:foreach(fun(K,V) -> 
+            ?assertEqual(V, cowbow_req:header(K, Req)) end, 
+                maps:get(headers, ExpectedRequest));
+        false -> ok
     end.
-
 produce_expected_response(ExpectedResponse) ->
     case proplists:is_defined(content_type, ExpectedResponse) of
         true ->
