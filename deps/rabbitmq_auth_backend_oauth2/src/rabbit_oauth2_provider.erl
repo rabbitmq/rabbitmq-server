@@ -29,7 +29,6 @@ get_internal_oauth_provider(OAuthProviderId) ->
         algorithms = get_algorithms(OAuthProviderId)
     }.
 
-
 %%
 %% Signing Key storage:
 %%
