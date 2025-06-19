@@ -813,14 +813,14 @@ open(info,
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     _ = demonitor_all_streams(Connection),
-    rabbit_log_connection:warning("Socket ~w closed [~w]",
+    rabbit_log_connection:warning("Stream reader socket ~w closed [~w]",
                                   [Socket, self()]),
     stop;
 open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
     _ = demonitor_all_streams(Connection),
-    rabbit_log_connection:error("Socket error ~tp [~w] [~w]",
+    rabbit_log_connection:error("Stream reader socket error ~tp [~w] [~w]",
                                 [Reason, Socket, self()]),
     stop;
 open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
