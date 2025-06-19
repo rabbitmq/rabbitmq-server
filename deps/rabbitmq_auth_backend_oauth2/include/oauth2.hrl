@@ -49,8 +49,6 @@
   preferred_username_claims :: list(),
   scope_aliases :: map() | undefined,
   oauth_provider_id :: oauth_provider_id(),
-  oauth_client_id :: binary() | undefined,
-  oauth_client_secret :: binary() | undefined,
   access_token_format :: jwt | opaque | undefined
  }).
 
