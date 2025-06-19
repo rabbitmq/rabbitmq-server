@@ -352,7 +352,7 @@
 
 %% basic_authorization -> Authorization: Basic base64(client_id, client_secret)
 %% post_request_param -> &client_id=<client_id>&client_secret=<client_secret>
-{mapping, 
+{mapping,
  "auth_oauth2.oauth_providers.$name.introspection_client_auth_method", 
  "rabbitmq_auth_backend_oauth2.oauth_providers",
  [{datatype, {enum, [basic, request_param]}}]}.

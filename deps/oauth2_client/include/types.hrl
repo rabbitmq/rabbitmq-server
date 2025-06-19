@@ -78,3 +78,13 @@
 }).
 
 -type refresh_token_request() :: #refresh_token_request{}.
+
+-record(introspect_token_request, {
+  endpoint :: option(uri_string:uri_string()),
+  client_id :: binary() | undefined,
+  client_secret :: binary() | undefined,
+  client_auth_method :: basic | request_param | undefined,
+  ssl_options :: option(list())
+}).
+
+-type introspect_token_request() :: #introspect_token_request{}.

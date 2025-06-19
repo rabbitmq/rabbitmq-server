@@ -152,24 +152,32 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
-    Token     = token_from_context(AuthProps),
-    case resolve_resource_server(Token) of
-        {error, _} = Err0 ->
-            {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
-        {ResourceServer, _} = Tuple ->
-            case check_token(Token, Tuple) of
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
-                {refused, Err} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                {ok, DecodedToken} ->
-                    case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
-                        {error, Err} ->
+    Token0     = token_from_context(AuthProps),
+    TokenResult = case uaa_jwt_jwt:is_jwt_token(Token0) of 
+        true -> {ok, Token0};
+        false -> oauth_client:introspect_token(Token0)
+    end,
+    case TokenResult of 
+        {ok, Token} ->
+            case resolve_resource_server(Token) of
+                {error, _} = Err0 ->
+                    {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
+                {ResourceServer, _} = Tuple ->
+                    case check_token(Token, Tuple) of
+                        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+                        {refused, Err} ->
                             {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                        Else ->
-                            Else
+                        {ok, DecodedToken} ->
+                            case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                                {error, Err} ->
+                                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                                Else ->
+                                    Else
+                            end
                     end
-            end
+            end;
+        _ -> TokenResult
     end.
 
 -spec with_decoded_token(Token, Fun) -> Result

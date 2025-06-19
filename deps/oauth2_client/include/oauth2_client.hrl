@@ -27,6 +27,7 @@
 -define(REQUEST_CLIENT_SECRET, "client_secret").
 -define(REQUEST_SCOPE, "scope").
 -define(REQUEST_REFRESH_TOKEN, "refresh_token").
+-define(REQUEST_TOKEN, "token").
 
 % define access token response constants
 -define(BEARER_TOKEN_TYPE, <<"Bearer">>).
