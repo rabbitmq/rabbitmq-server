@@ -155,7 +155,7 @@ authenticate(_, AuthProps0) ->
     Token0     = token_from_context(AuthProps),
     TokenResult = case uaa_jwt_jwt:is_jwt_token(Token0) of 
         true -> {ok, Token0};
-        false -> oauth_client:introspect_token(Token0)
+        false -> oauth2_client:introspect_token(Token0)
     end,
     case TokenResult of 
         {ok, Token} ->
@@ -177,7 +177,7 @@ authenticate(_, AuthProps0) ->
                             end
                     end
             end;
-        _ -> TokenResult
+        {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
     end.
 
 -spec with_decoded_token(Token, Fun) -> Result

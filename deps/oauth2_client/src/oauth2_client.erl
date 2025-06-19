@@ -67,11 +67,7 @@ introspect_token(Token) ->
             Options = [],
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
             parse_access_token_response(Response);
-        {error, Message} -> 
-            #unsuccessful_access_token_response{
-              error = 500,
-              error_description = binary_to_list(Message)
-            }
+        {error, _} = Error -> Error            
     end.    
 
 build_introspect_request_parameters(Token, #introspect_token_request{
@@ -123,7 +119,7 @@ build_introspection_request() ->
                             _ -> false
                         end
                 end
-            end, get_env(oauth_providers))
+            end, get_env(oauth_providers, #{}))
         end,
     case maps:size(Providers) of 
         0 -> {error, not_found_introspection_endpoint};
