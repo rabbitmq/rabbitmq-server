@@ -3,17 +3,12 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
+-include("src/rabbit_cli_backend.hrl").
+
 -export([main/1,
          noop/1]).
 
 -record(?MODULE, {scriptname,
-                  progname,
-                  group_leader,
-                  args,
-                  argparse_def,
-                  arg_map,
-                  cmd_path,
-                  command,
                   connection}).
 
 main(Args) ->
@@ -24,6 +19,7 @@ main(Args) ->
     Ret = run_cli(ScriptName, Args),
     ?LOG_NOTICE("CLI: run_cli() return value: ~p", [Ret]),
     %% FIXME: Ensures everything written to stdout/stderr was flushed.
+    timer:sleep(50),
     erlang:halt().
 
 %% -------------------------------------------------------------------
@@ -59,48 +55,49 @@ configure_logging() ->
 
 run_cli(ScriptName, Args) ->
     ProgName = filename:basename(ScriptName, ".escript"),
-    GroupLeader = erlang:group_leader(),
-    Context = #?MODULE{scriptname = ScriptName,
-                       progname = ProgName,
-                       args = Args,
-                       group_leader = GroupLeader},
+    Priv = #?MODULE{scriptname = ScriptName},
+    Context = #rabbit_cli{progname = ProgName,
+                          args = Args,
+                          frontend_priv = Priv},
     init_local_args(Context).
 
 init_local_args(Context) ->
     maybe
         LocalArgparseDef = initial_argparse_def(),
-        Context1 = Context#?MODULE{argparse_def = LocalArgparseDef},
+        Context1 = Context#rabbit_cli{argparse_def = LocalArgparseDef},
 
         {ok,
          PartialArgMap,
          PartialCmdPath,
          PartialCommand} ?= initial_parse(Context1),
-        Context2 = Context1#?MODULE{arg_map = PartialArgMap,
-                                    cmd_path = PartialCmdPath,
-                                    command = PartialCommand},
+        Context2 = Context1#rabbit_cli{arg_map = PartialArgMap,
+                                       cmd_path = PartialCmdPath,
+                                       command = PartialCommand},
         set_log_level(Context2)
     end.
 
-set_log_level(#?MODULE{arg_map = #{verbose := Verbosity}} = Context)
+set_log_level(#rabbit_cli{arg_map = #{verbose := Verbosity}} = Context)
   when Verbosity >= 3 ->
     logger:set_primary_config(level, debug),
     connect_to_node(Context);
-set_log_level(#?MODULE{} = Context) ->
+set_log_level(#rabbit_cli{} = Context) ->
     connect_to_node(Context).
 
-connect_to_node(#?MODULE{arg_map = ArgMap} = Context) ->
+connect_to_node(
+  #rabbit_cli{arg_map = ArgMap, frontend_priv = Priv} = Context) ->
     Ret = case ArgMap of
               #{node := NodenameOrUri} ->
                   rabbit_cli_transport2:connect(NodenameOrUri);
               _ ->
                   rabbit_cli_transport2:connect()
           end,
-    Context1 = case Ret of
-                   {ok, Connection} ->
-                       Context#?MODULE{connection = Connection};
-                   {error, _Reason} ->
-                       Context#?MODULE{connection = none}
-               end,
+    Priv1 = case Ret of
+                {ok, Connection} ->
+                    Priv#?MODULE{connection = Connection};
+                {error, _Reason} ->
+                    Priv#?MODULE{connection = none}
+            end,
+    Context1 = Context#rabbit_cli{frontend_priv = Priv1},
     run_command(Context1).
 
 %% -------------------------------------------------------------------
@@ -138,7 +135,7 @@ initial_argparse_def() ->
       handler => {?MODULE, noop}}.
 
 initial_parse(
-  #?MODULE{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
+  #rabbit_cli{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
     Options = #{progname => ProgName},
     case partial_parse(Args, ArgparseDef, Options) of
         {ok, ArgMap, CmdPath, Command, _RemainingArgs} ->
@@ -163,10 +160,18 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
             Error
     end.
 
+noop(_Context) ->
+    ok.
+
 %% -------------------------------------------------------------------
 %% Command execution.
 %% -------------------------------------------------------------------
 
+%% Run command:
+%% * start backend (remote if connection, local otherwise); backend starts
+%%   execution of command
+%% * loop to react to signals and messages from backend
+%%
 %% TODO: Send a list of supported features:
 %% * support for some messages, like Erlang I/O protocol, file read/write
 %%   support
@@ -175,26 +180,34 @@ partial_parse(Args, ArgparseDef, Options, RemainingArgs) ->
 %% * is plain test or HTTP
 %% * evolutions in the communication between the frontend and the backend
 
-run_command(#?MODULE{connection = Connection} = Context)
+run_command(
+  #rabbit_cli{frontend_priv = #?MODULE{connection = Connection}} = Context)
   when Connection =/= none ->
-    ContextMap = context_to_map(Context),
-    rabbit_cli_transport2:rpc(
-      Connection, rabbit_cli_backend, run_command, [ContextMap]);
-run_command(Context) ->
+    maybe
+        process_flag(trap_exit, true),
+        ContextMap = context_to_map(Context),
+        {ok, _Backend} ?= rabbit_cli_transport2:run_command(
+                           Connection, ContextMap),
+        main_loop(Context)
+    end;
+run_command(#rabbit_cli{} = Context) ->
     %% TODO: If we can't connect to a node, try to parse args locally and run
     %% the command on this CLI node.
     %% FIXME: Load applications first, otherwise module attributes are
     %% unavailable.
-    %% FIXME: Do we need to spawn a process?
-    ContextMap = context_to_map(Context),
-    rabbit_cli_backend:run_command(ContextMap).
+    %% FIXME: run_command() relies on rabbit_cli_backend_sup.
+    maybe
+        process_flag(trap_exit, true),
+        ContextMap = context_to_map(Context),
+        {ok, _Backend} ?= rabbit_cli_backend:run_command(ContextMap),
+        main_loop(Context)
+    end.
 
 context_to_map(Context) ->
-    Fields = [Field || Field <- record_info(fields, ?MODULE),
-                       %% We don’t need or want to communicate the connection
-                       %% state or the group leader to the backend.
-                       Field =/= connection orelse
-                       Field =/= group_leader],
+    Fields = [Field || Field <- record_info(fields, rabbit_cli),
+                       %% We don't need or want to communicate anything that
+                       %% is private to the frontend.
+                       Field =/= frontend_priv],
     record_to_map(Fields, Context, 2, #{}).
 
 record_to_map([Field | Rest], Record, Index, Map) ->
@@ -204,5 +217,16 @@ record_to_map([Field | Rest], Record, Index, Map) ->
 record_to_map([], _Record, _Index, Map) ->
     Map.
 
-noop(_Context) ->
+main_loop(#rabbit_cli{} = Context) ->
+    ?LOG_DEBUG("CLI: frontend main loop..."),
+    receive
+        {'EXIT', _LinkedPid, Reason} ->
+            terminate(Reason, Context);
+        Info ->
+            ?LOG_DEBUG("Unknown info: ~0p", [Info]),
+            main_loop(Context)
+    end.
+
+terminate(Reason, _Context) ->
+    ?LOG_DEBUG("CLI: frontend terminating: ~0p", [Reason]),
     ok.

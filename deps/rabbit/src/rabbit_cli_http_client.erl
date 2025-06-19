@@ -5,7 +5,9 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([start_link/1, t/0,
+         run_command/2,
          rpc/4,
+         link/2,
          send/3]).
 -export([init/1,
          callback_mode/0,
@@ -28,8 +30,14 @@ t() ->
 start_link(Uri) ->
     gen_statem:start_link(?MODULE, Uri, []).
 
+run_command(Client, ContextMap) ->
+    gen_statem:call(Client, {?FUNCTION_NAME, ContextMap}).
+
 rpc(Client, Module, Function, Args) ->
     gen_statem:call(Client, {?FUNCTION_NAME, Module, Function, Args}).
+
+link(Client, Pid) ->
+    gen_statem:call(Client, {?FUNCTION_NAME, Pid}).
 
 send(Client, Dest, Msg) ->
     gen_statem:cast(Client, {?FUNCTION_NAME, Dest, Msg}).
@@ -103,13 +111,15 @@ handle_event(
   stream_ready,
   #?MODULE{} = Data) ->
     Request = binary_to_term(RequestBin),
-    ?LOG_DEBUG("CLI: received request from server: ~p", [Request]),
+    ?LOG_DEBUG("CLI: received HTTP message from server: ~p", [Request]),
     case handle_request(Request, Data) of
         {reply, Reply, Data1} ->
             send_request(Reply, Data1),
             {keep_state, Data1};
         {noreply, Data1} ->
-            {keep_state, Data1}
+            {keep_state, Data1};
+        {stop, Reason} ->
+            {stop, Reason, Data}
     end;
 handle_event(
   info, {io_reply, ProxyRef, Reply},
@@ -138,7 +148,8 @@ handle_event(
     %% FIXME: Handle pending requests.
     {stop, normal, Data}.
 
-terminate(_Reason, _State, _Data) ->
+terminate(Reason, _State, _Data) ->
+    ?LOG_DEBUG("CLI: HTTP client terminating: ~0p", [Reason]),
     ok.
 
 code_change(_Vsn, State, Data, _Extra) ->
@@ -183,4 +194,6 @@ handle_request(
     GroupLeader ! ProxyIoRequest,
     IoRequests1 = IoRequests#{ProxyRef => {From, ReplyAs}},
     Data1 = Data#?MODULE{io_requests = IoRequests1},
-    {noreply, Data1}.
+    {noreply, Data1};
+handle_request({'EXIT', _Pid, Reason}, _Data) ->
+    {stop, Reason}.

@@ -236,6 +236,12 @@
                     {enables,     routing_ready}]}).
 
 %% CLI-related boot steps.
+-rabbit_boot_step({rabbit_cli_backend_sup,
+                   [{description, "RabbitMQ CLI command supervisor"},
+                    {mfa,         {rabbit_sup, start_supervisor_child,
+                                   [rabbit_cli_backend_sup]}},
+                    {requires,    [core_initialized, recovery]},
+                    {enables,     routing_ready}]}).
 -rabbit_boot_step({rabbit_cli_command_discovery,
                    [{description, "RabbitMQ CLI command discovery"},
                     {mfa,         {rabbit_cli_commands, discover_commands,

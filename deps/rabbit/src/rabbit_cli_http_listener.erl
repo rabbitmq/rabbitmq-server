@@ -107,7 +107,6 @@ config_change(_OldVsn, State, _Extra) ->
 %% -------------------------------------------------------------------
 
 init(#{method := <<"GET">>} = Req, State) ->
-    ?LOG_DEBUG("CLI: received HTTP request: ~p", [Req]),
     UpgradeHeader = cowboy_req:header(<<"upgrade">>, Req),
     case UpgradeHeader of
         <<"websocket">> ->
@@ -124,25 +123,33 @@ init(#{method := <<"GET">>} = Req, State) ->
             end
     end;
 init(Req, State) ->
-    ?LOG_DEBUG("CLI: received HTTP request: ~p", [Req]),
     Req1 = reply_with_help(Req, 405),
     {ok, Req1, State}.
 
 websocket_init(State) ->
-    {ok, Server} = rabbit_cli_http_server:start_link(self()),
-    State1 = State#{server => Server,
-                    reqids => gen_server:reqids_new()},
-    {ok, State1}.
+    process_flag(trap_exit, true),
+    erlang:group_leader(self(), self()),
+    {ok, State}.
 
-websocket_handle(
-  {binary, RequestBin},
-  #{server := Server, reqids := ReqIds} = State) ->
+websocket_handle({binary, RequestBin}, State) ->
     Request = binary_to_term(RequestBin),
-    ?LOG_DEBUG("CLI: received request from client: ~p", [Request]),
-    ReqIds1 = rabbit_cli_http_server:send_request(
-                Server, Request, undefined, ReqIds),
-    State1 = State#{reqids => ReqIds1},
-    {ok, State1};
+    ?LOG_DEBUG("CLI: received HTTP message from client: ~p", [Request]),
+    try
+        case handle_request(Request) of
+            {reply, Reply} ->
+                ReplyBin = term_to_binary(Reply),
+                Frame1 = {binary, ReplyBin},
+                {[Frame1], State};
+            noreply ->
+                {ok, State}
+        end
+    catch
+        Class:Reason:Stacktrace ->
+            Exception = {call_exception, Class, Reason, Stacktrace},
+            ExceptionBin = term_to_binary(Exception),
+            Frame2 = {binary, ExceptionBin},
+            {[Frame2], State}
+    end;
 websocket_handle(Frame, State) ->
     ?LOG_DEBUG("CLI: unhandled Websocket frame: ~p", [Frame]),
     {ok, State}.
@@ -151,38 +158,13 @@ websocket_info({io_request, _From, _ReplyAs, _Request} = IoRequest, State) ->
     IoRequestBin = term_to_binary(IoRequest),
     Frame = {binary, IoRequestBin},
     {[Frame], State};
-websocket_info(Info, #{server := Server, reqids := ReqIds} = State) ->
-    case gen_server:check_response(Info, ReqIds, true) of
-        {{reply, Response}, _Label, ReqIds1} ->
-            State1 = State#{reqids => ReqIds1},
-            case Response of
-                {reply, Reply} ->
-                    ReplyBin = term_to_binary(Reply),
-                    Frame = {binary, ReplyBin},
-                    {[Frame], State1};
-                noreply ->
-                    {ok, State1}
-            end;
-        {{error, {Reason, Server}}, _Label, ReqIds1} ->
-            State1 = State#{reqids => ReqIds1},
-            ?LOG_DEBUG("CLI: error from gen_server request: ~p", [Reason]),
-            {ok, State1};
-        NotResponse
-          when NotResponse =:= no_request orelse NotResponse =:= no_reply ->
-            ?LOG_DEBUG("CLI: unhandled info: ~p", [Info]),
-            {ok, State}
-    end.
+websocket_info({'EXIT', _Pid, _Reason} = Exit, State) ->
+    ExitBin = term_to_binary(Exit),
+    Frame = {binary, ExitBin},
+    {[Frame, close], State}.
 
-terminate(_Reason, _Req, #{server := Server}) ->
-    ?LOG_ALERT("CLI: terminate: ~p", [_Reason]),
-    rabbit_cli_http_server:stop(Server),
-    receive
-        {'EXIT', Server, _} ->
-            ok
-    end,
-    ok;
-terminate(_Reason, _Req, _State) ->
-    ?LOG_ALERT("CLI: terminate: ~p", [_Reason]),
+terminate(Reason, _Req, _State) ->
+    ?LOG_DEBUG("CLI: HTTP server terminating: ~0p", [Reason]),
     ok.
 
 reply_with_help(Req, Code) ->
@@ -197,3 +179,21 @@ reply_with_help(Req, Code) ->
     cowboy_req:reply(
       Code, #{<<"content-type">> => <<"text/html; charset=utf-8">>}, Body,
       Req).
+
+handle_request({call, From, Command}) ->
+    Ret = handle_command(Command),
+    Reply = {call_ret, From, Ret},
+    {reply, Reply};
+handle_request({cast, Command}) ->
+    _ = handle_command(Command),
+    noreply.
+
+handle_command({run_command, ContextMap}) ->
+    Caller = self(),
+    rabbit_cli_backend:run_command(ContextMap, Caller);
+handle_command({rpc, Module, Function, Args}) ->
+    erlang:apply(Module, Function, Args);
+handle_command({link, Pid}) ->
+    erlang:link(Pid);
+handle_command({send, Dest, Msg}) ->
+    erlang:send(Dest, Msg).
