@@ -11,7 +11,6 @@
 
 -export([
     resolve_resource_server_from_audience/1,
-    resolve_single_resource_server_with_opaque_access_token_format/0,
     new_resource_server/1
 ]).
 
@@ -58,38 +57,6 @@ resolve_resource_server_from_audience(Audience) ->
             {ok, get_resource_server(ResourceServerId)}
     end.
 
--spec resolve_single_resource_server_with_opaque_access_token_format() -> 
-     {ok, resource_server()} |
-     {error, too_many_matched_resource_servers_only_one_allowed} |
-     {error, no_resource_server_found}.
-resolve_single_resource_server_with_opaque_access_token_format() ->
-    case get_root_resource_server_id() of 
-        <<>> -> 
-            find_unique_resource_server_with_opaque_access_token_format();
-        _ -> 
-            Root = get_root_resource_server(),
-            case Root#resource_server.access_token_format of 
-                opaque -> {ok, Root};
-                _ -> find_unique_resource_server_with_opaque_access_token_format()
-            end
-    end.
-
-find_unique_resource_server_with_opaque_access_token_format() ->   
-    Map0 = maps:fold(fun(K,V,Acc)->
-        case V#resource_server.access_token_format of 
-            opaque -> 
-                case maps:is_key(V#resource_server.oauth_provider_id, Acc) of 
-                    false -> maps:put(V#resource_server.oauth_provider_id, K, Acc);
-                    true -> Acc
-                end;
-            _ -> Acc
-        end end, #{}, get_env(resource_servers, #{})),
-    case maps:size(Map0) of 
-        0 -> {error, no_resource_server_found};
-        1 -> {ok, lists:last(maps:values(Map0))};
-        _ ->  {error, too_many_matched_resource_servers_only_one_allowed}
-    end.
-    
 -spec get_root_resource_server_id() -> resource_server_id().
 get_root_resource_server_id() ->
     get_env(resource_server_id, <<>>).
