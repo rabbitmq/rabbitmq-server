@@ -7,6 +7,7 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
+        introspect_token/1,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
         build_openid_discovery_endpoint/3,
@@ -48,6 +49,96 @@ refresh_access_token(OAuthProvider, Request) ->
     Options = [],
     Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
     parse_access_token_response(Response).
+
+-spec introspect_token(binary()) -> 
+    {ok, successful_access_token_response()} |
+    {error, unsuccessful_access_token_response() | any()}.
+introspect_token(Token) ->
+    case build_introspection_request() of 
+        {ok, Request} -> 
+            URL = Request#introspect_token_request.endpoint,
+            Header = build_introspect_authorization_header_if_any(Request),
+            Type = ?CONTENT_URLENCODED,
+            Body = build_introspect_request_parameters(Token, Request),
+            HTTPOptions = case Request#introspect_token_request.ssl_options of
+                                undefined -> [];
+                                SSL ->  [{ssl, SSL}]
+                          end ++ get_default_timeout(),
+            Options = [],
+            Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
+            parse_access_token_response(Response);
+        {error, Message} -> 
+            #unsuccessful_access_token_response{
+              error = 500,
+              error_description = binary_to_list(Message)
+            }
+    end.    
+
+build_introspect_request_parameters(Token, #introspect_token_request{
+        client_auth_method = Method, 
+        client_id = ClientId, 
+        client_secret = ClientSecret}) ->
+    QueryList = case Method of 
+        request_param -> [
+            client_id_request_parameter(ClientId),
+            client_secret_request_parameter(ClientSecret)
+            ];
+        _ -> []
+    end,
+    uri_string:compose_query([{?REQUEST_TOKEN, Token} | QueryList]).
+
+
+build_introspect_authorization_header_if_any(#introspect_token_request{
+        client_auth_method = Method, 
+        client_id = ClientId, 
+        client_secret = ClientSecret}) ->
+    case Method of 
+        basic ->
+            Credentials = binary_to_list(<<ClientId/binary,":",ClientSecret/binary>>),
+            AuthStr = base64:encode_to_string(Credentials),
+            [{"Authorization", "Basic " ++ AuthStr}];
+        _ -> []
+    end.
+
+build_introspection_request() ->
+     Result = case get_oauth_provider([introspection_endpoint]) of
+        {ok, Provider} -> 
+            case {Provider#oauth_provider.introspection_client_id, 
+                    Provider#oauth_provider.introspection_client_secret} of
+                {undefined, _} -> {error, not_found_introspection_endpoint};
+                {_, _} -> {ok, build_introspection_request(Provider)}
+            end;
+        {error, _} = Error -> Error
+    end,
+    Providers = case Result of 
+        {ok, _} -> Result;
+        {error, _} -> 
+            maps:filter(fun(K,V) -> 
+                case {V#oauth_provider.introspection_client_id, 
+                    V#oauth_provider.introspection_client_secret} of
+                    {undefined, _} -> false;
+                    {_Id, _Secret} -> 
+                        case get_oauth_provider(K, [introspection_endpoint]) of 
+                            {ok, _} -> true;
+                            _ -> false
+                        end
+                end
+            end, get_env(oauth_providers))
+        end,
+    case maps:size(Providers) of 
+        0 -> {error, not_found_introspection_endpoint};
+        1 -> {ok, build_introspection_request(lists:last(maps:values(Providers))) };
+        _ -> {error, too_many_introspection_endpoints}
+    end.
+
+build_introspection_request(Provider) ->
+    #introspect_token_request{
+        endpoint = Provider#oauth_provider.introspection_endpoint,
+        client_id = Provider#oauth_provider.introspection_client_id,
+        client_secret = Provider#oauth_provider.introspection_client_secret,
+        client_auth_method = Provider#oauth_provider.introspection_client_auth_method,
+        ssl_options = Provider#oauth_provider.ssl_options
+    }.
 
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
@@ -413,6 +504,9 @@ lookup_root_oauth_provider() ->
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
         introspection_endpoint = get_env(introspection_endpoint),
+        introspection_client_auth_method = get_env(introspection_client_auth_method),
+        introspection_client_id = get_env(introspection_client_id),
+        introspection_client_secret = get_env(introspection_client_secret),
         ssl_options = extract_ssl_options_as_list(Map)
     }.
 
@@ -547,9 +641,11 @@ get_ssl_options_if_any(OAuthProvider) ->
     end.
 get_timeout_of_default(Timeout) ->
     case Timeout of
-        undefined -> [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
+        undefined -> get_default_timeout();
         Timeout -> [{timeout, Timeout}]
     end.
+get_default_timeout() ->
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}].
 
 is_json(?CONTENT_JSON) -> true;
 is_json(_) -> false.
@@ -602,8 +698,14 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(authorization_endpoint, PropList, undefined),
         end_session_endpoint =
             proplists:get_value(end_session_endpoint, PropList, undefined),
-        introspection_endpoint = 
+        introspection_endpoint =
             proplists:get_value(introspection_endpoint, PropList, undefined),
+        introspection_client_id =
+            proplists:get_value(introspection_client_id, PropList, undefined),
+        introspection_client_secret =
+            proplists:get_value(introspection_client_secret, PropList, undefined),
+        introspection_client_auth_method = 
+            proplists:get_value(introspection_client_auth_method, PropList, basic),
         jwks_uri =
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options =
