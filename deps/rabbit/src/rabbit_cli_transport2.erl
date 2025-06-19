@@ -3,7 +3,9 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([connect/0, connect/1,
+         run_command/2,
          rpc/4,
+         link/2,
          send/3]).
 
 -record(?MODULE, {type :: erldist | http,
@@ -85,12 +87,23 @@ complete_nodename(Nodename) ->
             list_to_atom(Nodename)
     end.
 
+run_command(#?MODULE{type = erldist, peer = Node}, ContextMap) ->
+    Caller = self(),
+    erpc:call(Node, rabbit_cli_backend, run_command, [ContextMap, Caller]);
+run_command(#?MODULE{type = http, peer = Client}, ContextMap) ->
+    rabbit_cli_http_client:run_command(Client, ContextMap).
+
 rpc(#?MODULE{type = erldist, peer = Node}, Module, Function, Args) ->
     erpc:call(Node, Module, Function, Args);
-rpc(#?MODULE{type = http, peer = Pid}, Module, Function, Args) ->
-    rabbit_cli_http_client:rpc(Pid, Module, Function, Args).
+rpc(#?MODULE{type = http, peer = Client}, Module, Function, Args) ->
+    rabbit_cli_http_client:rpc(Client, Module, Function, Args).
+
+link(#?MODULE{type = erldist}, Pid) ->
+    erlang:link(Pid);
+link(#?MODULE{type = http, peer = Client}, Pid) ->
+    rabbit_cli_http_client:link(Client, Pid).
 
 send(#?MODULE{type = erldist}, Dest, Msg) ->
     erlang:send(Dest, Msg);
-send(#?MODULE{type = http, peer = Pid}, Dest, Msg) ->
-    rabbit_cli_http_client:send(Pid, Dest, Msg).
+send(#?MODULE{type = http, peer = Client}, Dest, Msg) ->
+    rabbit_cli_http_client:send(Client, Dest, Msg).

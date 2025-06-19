@@ -1,5 +1,7 @@
 -module(rabbit_cli_backend).
 
+-behaviour(gen_statem).
+
 -include_lib("kernel/include/logger.hrl").
 
 -include_lib("rabbit_common/include/logging.hrl").
@@ -7,29 +9,76 @@
 
 -include("src/rabbit_cli_backend.hrl").
 
--export([run_command/1]).
+-export([run_command/2,
+         start_link/3]).
+-export([init/1,
+         callback_mode/0,
+         handle_event/4,
+         terminate/3,
+         code_change/4]).
 
 %% TODO:
 %% * Implémenter "list exchanges" plus proprement
 %% * Implémenter "rabbitmqctl list_exchanges" pour la compatibilité
 
-run_command(ContextMap) when is_map(ContextMap) ->
+run_command(ContextMap, Caller) when is_map(ContextMap) ->
     Context = map_to_context(ContextMap),
-    run_command(Context);
-run_command(#rabbit_cli{} = Context) ->
-    maybe
-        %% We can query the argparse definition from the remote node to know
-        %% the commands it supports and proceed with the execution.
-        ArgparseDef = final_argparse_def(Context),
-        Context1 = Context#rabbit_cli{argparse_def = ArgparseDef},
+    run_command(Context, Caller);
+run_command(#rabbit_cli{} = Context, Caller) when is_pid(Caller) ->
+    GroupLeader = erlang:group_leader(),
+    rabbit_cli_backend_sup:start_backend(Context, Caller, GroupLeader).
 
-        {ok, ArgMap, CmdPath, Command} ?= final_parse(Context1),
-        Context2 = Context1#rabbit_cli{arg_map = ArgMap,
-                                       cmd_path = CmdPath,
-                                       command = Command},
+map_to_context(ContextMap) ->
+    #rabbit_cli{progname = maps:get(progname, ContextMap),
+                args = maps:get(args, ContextMap),
+                argparse_def = maps:get(argparse_def, ContextMap),
+                arg_map = maps:get(arg_map, ContextMap),
+                cmd_path = maps:get(cmd_path, ContextMap),
+                command = maps:get(command, ContextMap),
 
-        do_run_command(Context2)
-    end.
+                frontend_priv = undefined}.
+
+start_link(Context, Caller, GroupLeader) ->
+    Args = #{context => Context,
+             caller => Caller,
+             group_leader => GroupLeader},
+    gen_statem:start_link(?MODULE, Args, []).
+
+init(#{context := Context, caller := Caller, group_leader := GroupLeader}) ->
+    process_flag(trap_exit, true),
+    erlang:link(Caller),
+    erlang:group_leader(GroupLeader, self()),
+    {ok, standing_by, Context, {next_event, internal, parse_command}}.
+
+callback_mode() ->
+    handle_event_function.
+
+handle_event(internal, parse_command, standing_by, Context) ->
+    %% We can query the argparse definition from the remote node to know
+    %% the commands it supports and proceed with the execution.
+    ArgparseDef = final_argparse_def(Context),
+    Context1 = Context#rabbit_cli{argparse_def = ArgparseDef},
+
+    case final_parse(Context1) of
+        {ok, ArgMap, CmdPath, Command} ->
+            Context2 = Context1#rabbit_cli{arg_map = ArgMap,
+                                           cmd_path = CmdPath,
+                                           command = Command},
+            {next_state, command_parsed, Context2,
+             {next_event, internal, run_command}};
+        {error, Reason} ->
+            {stop, {failed_to_parse_command, Reason}}
+    end;
+handle_event(internal, run_command, command_parsed, Context) ->
+    Ret = do_run_command(Context),
+    {stop, {shutdown, Ret}, Context}.
+
+terminate(Reason, _State, _Data) ->
+    ?LOG_DEBUG("CLI: backend terminating: ~0p", [Reason]),
+    ok.
+
+code_change(_Vsn, State, Data, _Extra) ->
+    {ok, State, Data}.
 
 %% -------------------------------------------------------------------
 %% Argparse definition handling.
@@ -70,12 +119,3 @@ final_parse(
 do_run_command(
   #rabbit_cli{command = #{handler := {Module, Function}}} = Context) ->
     erlang:apply(Module, Function, [Context]).
-
-map_to_context(ContextMap) ->
-    #rabbit_cli{scriptname = maps:get(scriptname, ContextMap),
-                progname = maps:get(progname, ContextMap),
-                args = maps:get(args, ContextMap),
-                argparse_def = maps:get(argparse_def, ContextMap),
-                arg_map = maps:get(arg_map, ContextMap),
-                cmd_path = maps:get(cmd_path, ContextMap),
-                command = maps:get(command, ContextMap)}.
