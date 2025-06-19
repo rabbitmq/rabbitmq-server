@@ -1,7 +1,8 @@
--record(rabbit_cli, {scriptname,
-                     progname,
+-record(rabbit_cli, {progname,
                      args,
                      argparse_def,
                      arg_map,
                      cmd_path,
-                     command}).
+                     command,
+
+                     frontend_priv}).
