@@ -232,11 +232,17 @@ merge_list_of_maps(ListOfMaps) ->
 extract_oauth_providers_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
+    MapValueFun = fun(V) -> 
+        case V of 
+            L when is_list(L) -> list_to_binary(L);
+            B when is_binary(B) -> B;
+            _ -> V
+        end end,
 
     OAuthProviders = [{Name, mapOauthProviderProperty(
         {
             list_to_atom(Key),
-            list_to_binary(V)})
+            MapValueFun(V)})
         } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
@@ -244,14 +250,8 @@ extract_oauth_providers_properties(Settings) ->
 extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
-    MapValueFun = fun(V) -> 
-        case V of 
-            jwt -> V;
-            opaque -> V;
-            _ -> list_to_binary(V)
-        end end,
 
-    ResourceServers = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), MapValueFun(V)}}
+    ResourceServers = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, ResourceServers).
 
