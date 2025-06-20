@@ -18,8 +18,8 @@ main(Args) ->
 
     Ret = run_cli(ScriptName, Args),
     ?LOG_NOTICE("CLI: run_cli() return value: ~p", [Ret]),
-    %% FIXME: Ensures everything written to stdout/stderr was flushed.
-    timer:sleep(50),
+
+    flush_log_messages(),
     erlang:halt().
 
 %% -------------------------------------------------------------------
@@ -37,6 +37,8 @@ add_rabbitmq_code_path(ScriptName) ->
     AppDirs = filelib:wildcard(Glob),
     lists:foreach(fun code:add_path/1, AppDirs).
 
+-define(LOG_HANDLER_NAME, rmq_cli).
+
 configure_logging() ->
     Config = #{level => debug,
                config => #{type => standard_error},
@@ -45,9 +47,12 @@ configure_logging() ->
                formatter => {rabbit_logger_text_fmt,
                              #{single_line => false,
                                use_colors => true}}},
-    ok = logger:add_handler(rmq_cli, rabbit_logger_std_h, Config),
+    ok = logger:add_handler(?LOG_HANDLER_NAME, rabbit_logger_std_h, Config),
     ok = logger:remove_handler(default),
     ok.
+
+flush_log_messages() ->
+    rabbit_logger_std_h:filesync(?LOG_HANDLER_NAME).
 
 %% -------------------------------------------------------------------
 %% Preparation for remote command execution.
@@ -199,7 +204,7 @@ run_command(#rabbit_cli{} = Context) ->
     maybe
         process_flag(trap_exit, true),
         ContextMap = context_to_map(Context),
-        {ok, _Backend} ?= rabbit_cli_backend:run_command(ContextMap),
+        {ok, _Backend} ?= rabbit_cli_backend:run_command(ContextMap, self()),
         main_loop(Context)
     end.
 
