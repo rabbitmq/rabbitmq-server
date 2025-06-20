@@ -44,6 +44,10 @@ start_link(Context, Caller, GroupLeader) ->
              group_leader => GroupLeader},
     gen_statem:start_link(?MODULE, Args, []).
 
+%% -------------------------------------------------------------------
+%% gen_statem callbacks.
+%% -------------------------------------------------------------------
+
 init(#{context := Context, caller := Caller, group_leader := GroupLeader}) ->
     process_flag(trap_exit, true),
     erlang:link(Caller),

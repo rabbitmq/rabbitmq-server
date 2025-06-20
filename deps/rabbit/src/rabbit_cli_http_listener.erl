@@ -167,6 +167,10 @@ terminate(Reason, _Req, _State) ->
     ?LOG_DEBUG("CLI: HTTP server terminating: ~0p", [Reason]),
     ok.
 
+%% -------------------------------------------------------------------
+%% Internal functions.
+%% -------------------------------------------------------------------
+
 reply_with_help(Req, Code) ->
     PrivDir = code:priv_dir(rabbit),
     HelpFilename = filename:join(PrivDir, "cli_http_help.html"),
@@ -190,10 +194,4 @@ handle_request({cast, Command}) ->
 
 handle_command({run_command, ContextMap}) ->
     Caller = self(),
-    rabbit_cli_backend:run_command(ContextMap, Caller);
-handle_command({rpc, Module, Function, Args}) ->
-    erlang:apply(Module, Function, Args);
-handle_command({link, Pid}) ->
-    erlang:link(Pid);
-handle_command({send, Dest, Msg}) ->
-    erlang:send(Dest, Msg).
+    rabbit_cli_backend:run_command(ContextMap, Caller).
