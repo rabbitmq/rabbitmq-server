@@ -40,10 +40,10 @@
 
 start(_Type, _Args) ->
     rabbit_stream_metrics:init(),
-    rabbit_global_counters:init([{protocol, stream}],
+    rabbit_global_counters:init(#{protocol => stream},
                                 ?PROTOCOL_COUNTERS),
-    rabbit_global_counters:init([{protocol, stream},
-                                 {queue_type, ?STREAM_QUEUE_TYPE}]),
+    rabbit_global_counters:init(#{protocol => stream,
+                                 queue_type => ?STREAM_QUEUE_TYPE}),
     rabbit_stream_sup:start_link().
 
 tls_host() ->
