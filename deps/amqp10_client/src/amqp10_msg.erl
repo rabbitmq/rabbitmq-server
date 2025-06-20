@@ -265,32 +265,29 @@ body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
 %% A disposition will be notified to the sender by a message of the
 %% following stucture:
 %% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
--spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary() | [amqp10_client_types:amqp10_msg_record()], boolean()) -> amqp10_msg().
 new(DeliveryTag, Bin, Settled) when is_binary(Bin) ->
     Body = [#'v1_0.data'{content = Bin}],
     new(DeliveryTag, Body, Settled);
 new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
+    Transfer = #'v1_0.transfer'{
+                  delivery_tag = {binary, DeliveryTag},
+                  settled = Settled,
+                  message_format = {uint, ?MESSAGE_FORMAT}},
     case is_amqp10_body(Body) orelse (not is_list(Body)) of
         true ->
             #amqp10_msg{
-               transfer = #'v1_0.transfer'{
-                             delivery_tag = {binary, DeliveryTag},
-                             settled = Settled,
-                             message_format = {uint, ?MESSAGE_FORMAT}},
+               transfer = Transfer,
                %% This lib is safe by default.
                header = #'v1_0.header'{durable = true},
                body = Body};
         false ->
-            Transfer = #'v1_0.transfer'{
-                          delivery_tag = {binary, DeliveryTag},
-                          settled = Settled,
-                          message_format = {uint, ?MESSAGE_FORMAT}},
             from_amqp_records([Transfer | Body])
     end.
 
 %% @doc Create a new settled amqp10 message using the specified delivery tag
 %% and body.
--spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary() | [amqp10_client_types:amqp10_msg_record()]) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
 
