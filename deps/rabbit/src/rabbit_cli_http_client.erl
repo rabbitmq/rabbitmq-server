@@ -4,11 +4,8 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--export([start_link/1, t/0,
-         run_command/2,
-         rpc/4,
-         link/2,
-         send/3]).
+-export([start_link/1,
+         run_command/2]).
 -export([init/1,
          callback_mode/0,
          handle_event/4,
@@ -22,25 +19,15 @@
                   io_requests = #{} :: map(),
                   group_leader :: pid()}).
 
-t() ->
-    {ok, P} = start_link("http://localhost:8080"),
-    Data = rpc(P, io, get_line, ["Prompt: "]),
-    rpc(P, io, format, ["Data: ~p~n", [Data]]).
-
 start_link(Uri) ->
     gen_statem:start_link(?MODULE, Uri, []).
 
 run_command(Client, ContextMap) ->
     gen_statem:call(Client, {?FUNCTION_NAME, ContextMap}).
 
-rpc(Client, Module, Function, Args) ->
-    gen_statem:call(Client, {?FUNCTION_NAME, Module, Function, Args}).
-
-link(Client, Pid) ->
-    gen_statem:call(Client, {?FUNCTION_NAME, Pid}).
-
-send(Client, Dest, Msg) ->
-    gen_statem:cast(Client, {?FUNCTION_NAME, Dest, Msg}).
+%% -------------------------------------------------------------------
+%% gen_statem callbacks.
+%% -------------------------------------------------------------------
 
 init(Uri) ->
     maybe
@@ -63,53 +50,36 @@ callback_mode() ->
 
 handle_event(
   info, {gun_up, ConnPid, _},
-  opening_connection,
-  #?MODULE{connection = ConnPid} = Data) ->
+  opening_connection, #?MODULE{connection = ConnPid} = Data) ->
     ?LOG_DEBUG("CLI: HTTP connection opened, upgrading to websocket"),
     StreamRef = gun:ws_upgrade(ConnPid, "/", []),
     Data1 = Data#?MODULE{stream = StreamRef},
     {next_state, opening_stream, Data1};
 handle_event(
   info, {gun_upgrade, _ConnPid, _StreamRef, _Frames, _},
-  opening_stream,
-  #?MODULE{} = Data) ->
+  opening_stream, #?MODULE{} = Data) ->
     ?LOG_DEBUG("CLI: websocket ready, sending pending requests"),
     Data1 = flush_delayed_requests(Data),
     {next_state, stream_ready, Data1};
-%% Call (e.g. RPC).
-handle_event(
-  {call, From}, Command,
-  stream_ready,
-  #?MODULE{} = Data) ->
+handle_event({call, From}, Command, stream_ready, #?MODULE{} = Data) ->
     Request = prepare_call(From, Command),
     send_request(Request, Data),
     {keep_state, Data};
-handle_event(
-  {call, From}, Command,
-  _State,
-  #?MODULE{} = Data) ->
+handle_event({call, From}, Command, _State, #?MODULE{} = Data) ->
     Request = prepare_call(From, Command),
     Data1 = delay_request(Request, Data),
     {keep_state, Data1};
-%% Cast (e.g. send).
-handle_event(
-  cast, Command,
-  stream_ready,
-  #?MODULE{} = Data) ->
+handle_event(cast, Command, stream_ready, #?MODULE{} = Data) ->
     Request = prepare_cast(Command),
     send_request(Request, Data),
     {keep_state, Data};
-handle_event(
-  cast, Command,
-  _State,
-  #?MODULE{} = Data) ->
+handle_event(cast, Command, _State, #?MODULE{} = Data) ->
     Request = prepare_cast(Command),
     Data1 = delay_request(Request, Data),
     {keep_state, Data1};
 handle_event(
   info, {gun_ws, _ConnPid, _StreamRef, {binary, RequestBin}},
-  stream_ready,
-  #?MODULE{} = Data) ->
+  stream_ready, #?MODULE{} = Data) ->
     Request = binary_to_term(RequestBin),
     ?LOG_DEBUG("CLI: received HTTP message from server: ~p", [Request]),
     case handle_request(Request, Data) of
@@ -123,8 +93,7 @@ handle_event(
     end;
 handle_event(
   info, {io_reply, ProxyRef, Reply},
-  _State,
-  #?MODULE{io_requests = IoRequests} = Data) ->
+  _State, #?MODULE{io_requests = IoRequests} = Data) ->
     {From, ReplyAs} = maps:get(ProxyRef, IoRequests),
     IoReply = {io_reply, ReplyAs, Reply},
     Command = {send, From, IoReply},
@@ -135,15 +104,13 @@ handle_event(
     {keep_state, Data1};
 handle_event(
   info, {gun_ws, _ConnPid, _StreamRef, {close, _, _}},
-  stream_ready,
-  #?MODULE{} = Data) ->
+  stream_ready, #?MODULE{} = Data) ->
     ?LOG_DEBUG("CLI: stream closed"),
     %% FIXME: Handle pending requests.
     {stop, normal, Data};
 handle_event(
   info, {gun_down, _ConnPid, _Proto, _Reason, _KilledStreams},
-  _State,
-  #?MODULE{} = Data) ->
+  _State, #?MODULE{} = Data) ->
     ?LOG_DEBUG("CLI: gun_down: ~p", [_Reason]),
     %% FIXME: Handle pending requests.
     {stop, normal, Data}.
@@ -154,6 +121,10 @@ terminate(Reason, _State, _Data) ->
 
 code_change(_Vsn, State, Data, _Extra) ->
     {ok, State, Data}.
+
+%% -------------------------------------------------------------------
+%% Internal functions.
+%% -------------------------------------------------------------------
 
 prepare_call(From, Command) ->
     {call, From, Command}.
