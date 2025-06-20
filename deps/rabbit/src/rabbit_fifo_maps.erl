@@ -8,7 +8,8 @@
 -module(rabbit_fifo_maps).
 
 -export([keys/2,
-         fold/4]).
+         fold/4,
+         iterator/2]).
 
 -spec keys(Map, ra_machine:version()) -> Keys when
     Map :: #{Key => _},
@@ -29,13 +30,18 @@ keys(Map, Vsn) ->
     AccIn :: Init | AccOut,
     Map :: #{Key => Value}.
 fold(Fun, Init, Map, Vsn)  ->
-    Iterable = case is_deterministic(Vsn) of
-                   true ->
-                       maps:iterator(Map, ordered);
-                   false ->
-                       Map
-               end,
-    maps:fold(Fun, Init, Iterable).
+    maps:fold(Fun, Init, iterator(Map, Vsn)).
+
+-spec iterator(Map, ra_machine:version()) -> Iterator when
+    Map :: #{Key => Value},
+    Iterator :: maps:iterator(Key, Value).
+iterator(Map, Vsn) ->
+    case is_deterministic(Vsn) of
+        true ->
+            maps:iterator(Map, ordered);
+        false ->
+            maps:iterator(Map)
+    end.
 
 is_deterministic(Vsn) when is_integer(Vsn) ->
     Vsn > 5.
