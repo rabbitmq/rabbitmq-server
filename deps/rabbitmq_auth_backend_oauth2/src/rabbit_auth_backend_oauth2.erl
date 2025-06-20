@@ -180,6 +180,7 @@ authenticate(_, AuthProps0) ->
         {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
     end.
 
+
 -spec with_decoded_token(Token, Fun) -> Result
     when Token :: decoded_jwt_token(),
          Fun :: auth_user_extraction_fun(),

@@ -166,16 +166,6 @@ verify_signing_key(Type, Value) ->
         Err -> Err
     end.
 
-% introspect_token(OpaqueToken) ->
-%     case rabbit_oauth2_resource_server:resolve_single_resource_server_with_opaque_access_token_format() of
-%         ResourceServer -> 
-%             case oauth2_client:get_oauth_provider(ResourceServer#resource_server.oauth_provider_id,
-%                     [introspection_endpoint]) of 
-%                 Provider -> 
-%             Provider#oauth_provider.
-%         {error,_} = Error -> Error
-%     end.
-
 -spec get_scope(map()) -> binary() | list().
 get_scope(#{?SCOPE_JWT_FIELD := Scope}) -> Scope;
 get_scope(#{}) -> [].
@@ -199,3 +189,7 @@ sub(DecodedToken) ->
 -spec sub(map(), any()) -> binary() | undefined.
 sub(DecodedToken, Default) ->
     maps:get(<<"sub">>, DecodedToken, Default).
+
+-spec validate_introspected_token(Token) ->
+    {ok, map()} | {error, term()}
+validate_introspected_token(Token) ->

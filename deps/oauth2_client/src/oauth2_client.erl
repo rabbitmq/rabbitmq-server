@@ -102,6 +102,7 @@ build_introspection_request() ->
             case {Provider#oauth_provider.introspection_client_id, 
                     Provider#oauth_provider.introspection_client_secret} of
                 {undefined, _} -> {error, not_found_introspection_endpoint};
+                {_, undefined} -> {error, not_found_introspection_endpoint};
                 {_, _} -> {ok, build_introspection_request(Provider)}
             end;
         {error, _} = Error -> Error

@@ -54,8 +54,26 @@ groups() ->
                     {with_introspection_request_param_client_credentials, [], [
                         can_introspect_token
                     ]}
+                ]}                
+            ]},
+            {https, [], [
+                {with_introspection_basic_client_credentials, [], [
+                    cannot_introspect_due_to_missing_configuration
+                ]},
+                {with_introspection_request_param_client_credentials, [], [
+                    cannot_introspect_due_to_missing_configuration
                 ]}
-                
+            ]},
+            {with_discovered_introspection_endpoint, [], [
+                cannot_introspect_due_to_missing_configuration,
+                {https, [], [
+                    {with_introspection_basic_client_credentials, [], [
+                        can_introspect_token
+                    ]},
+                    {with_introspection_request_param_client_credentials, [], [
+                        can_introspect_token
+                    ]}
+                ]}                
             ]}
         ]}        
     ]},
@@ -176,18 +194,26 @@ init_per_group(with_introspection_endpoint, Config) ->
         build_token_introspection_endpoint("https")),
     Config;
 
+init_per_group(with_discovered_introspection_endpoint, Config) ->
+    Payload1 = [ {?RESPONSE_INTROSPECTION_ENDPOINT, build_token_introspection_endpoint("https")} | 
+        build_http_get_openid_configuration_payload() ],
+    [{expected_openid_configuration_payload, Payload1} | Config];
+
 init_per_group(with_introspection_basic_client_credentials, Config) ->    
     application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
         "some-client-id"),
     application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
         "some-client-secret"),
     application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
-        basic),
+        basic),        
     [{can_introspect_token, [
             {introspection_endpoint, build_http_mock_behaviour(
                 build_introspection_token_request(?MOCK_OPAQUE_TOKEN, basic, <<"some-client-id">>, 
                     <<"some-client-secret">>),
-                build_http_200_introspection_token_response())}
+                build_http_200_introspection_token_response())},
+            {get_openid_configuration, get_openid_configuration_http_expectation(
+                with_introspection_basic_client_credentials, Config)}
+            
         ]} | Config];    
 
 init_per_group(with_introspection_request_param_client_credentials, Config) ->    
@@ -202,7 +228,7 @@ init_per_group(with_introspection_request_param_client_credentials, Config) ->
                 build_introspection_token_request(?MOCK_OPAQUE_TOKEN, request_param, <<"some-client-id">>, 
                     <<"some-client-secret">>),
                 build_http_200_introspection_token_response())}
-        ]} | Config];    
+        ]} | Config];
 
 
 init_per_group(_, Config) ->
@@ -214,20 +240,24 @@ get_http_oauth_server_expectations(TestCase, Config) ->
         undefined ->
             [   {token_endpoint, build_http_mock_behaviour(build_http_access_token_request(),
                     build_http_200_access_token_response())},
-                {get_openid_configuration, get_openid_configuration_http_expectation(TestCase)}
+                {get_openid_configuration, get_openid_configuration_http_expectation(TestCase, Config)}
             ];
         Expectations ->
             Expectations
     end.
-get_openid_configuration_http_expectation(TestCaseAtom) ->
+get_openid_configuration_http_expectation(TestCaseAtom, Config) ->
     TestCase = binary_to_list(atom_to_binary(TestCaseAtom)),
-    Payload = case string:find(TestCase, "returns_partial_payload") of
-        nomatch ->
-            build_http_get_openid_configuration_payload();
-         _ ->
-            List0 = proplists:delete(authorization_endpoint,
-                build_http_get_openid_configuration_payload()),
-            proplists:delete(end_session_endpoint, List0)
+    Payload = case ?config(expected_openid_configuration_payload, Config) of 
+        undefined ->
+            case string:find(TestCase, "returns_partial_payload") of
+                nomatch ->
+                    build_http_get_openid_configuration_payload();
+                _ ->
+                    List0 = proplists:delete(authorization_endpoint,
+                        build_http_get_openid_configuration_payload()),
+                    proplists:delete(end_session_endpoint, List0)
+            end;
+        P -> P
     end,
     Path = case string:find(TestCase, "path") of
         nomatch ->  "";
@@ -242,7 +272,6 @@ get_openid_configuration_http_expectation(TestCaseAtom) ->
 
 lookup_expectation(Endpoint, Config) ->
     proplists:get_value(Endpoint, ?config(oauth_server_expectations, Config)).
-
 
 
 configure_all_oauth_provider_settings(Config) ->
@@ -681,7 +710,15 @@ jwks_uri_takes_precedence_over_jwks_url(_Config) ->
 
 
 cannot_introspect_due_to_missing_configuration(_Config)->
-    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id, "some-client-id"),    
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_client_id),
+
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-client-secret"),
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_client_secret).
 
 can_introspect_token(_Config) ->
     {ok, _} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
