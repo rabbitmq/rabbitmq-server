@@ -40,7 +40,7 @@
 %% Boot steps.
 -export([update_cluster_tags/0, maybe_insert_default_data/0, boot_delegate/0, recover/0,
          pg_local_amqp_session/0,
-         pg_local_amqp_connection/0]).
+         pg_local_amqp_connection/0, check_initial_run/0]).
 
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
 
@@ -199,10 +199,16 @@
                     {requires,    [core_initialized]},
                     {enables,     routing_ready}]}).
 
+-rabbit_boot_step({initial_run_check,
+                   [{description, "check if this is the first time the node starts"},
+                    {mfa,         {?MODULE, check_initial_run, []}},
+                    {requires,    recovery},
+                    {enables,     empty_db_check}]}).
+
 -rabbit_boot_step({empty_db_check,
                    [{description, "empty DB check"},
                     {mfa,         {?MODULE, maybe_insert_default_data, []}},
-                    {requires,    recovery},
+                    {requires,    initial_run_check},
                     {enables,     routing_ready}]}).
 
 
@@ -234,6 +240,7 @@
                     {mfa,         {rabbit_observer_cli, init, []}},
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
+
 
 -rabbit_boot_step({pre_flight,
                    [{description, "ready to communicate with peers and clients"},
@@ -1150,6 +1157,44 @@ update_cluster_tags() ->
     ?LOG_DEBUG("Seeding cluster tags from application environment key...",
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>).
+
+
+-spec check_initial_run() -> 'ok' | no_return().
+
+check_initial_run() ->
+    case application:get_env(rabbit, verify_initial_run, false) of
+        false ->
+            %% Feature is disabled, skip the check
+            ?LOG_DEBUG("Initial run verification is disabled",
+                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            ok;
+        true ->
+            %% Feature is enabled, perform the check
+            DataDir = data_dir(),
+            MarkerFile = filename:join(DataDir, "node_initialized.marker"),
+            case filelib:is_file(MarkerFile) of
+                true ->
+                    %% Not the first run, check if tables need default data
+                    case rabbit_table:needs_default_data() of
+                        true ->
+                            ?LOG_ERROR("Node has already been initialized, but database appears empty. "
+                                       "This could indicate data loss or a split-brain scenario.",
+                                      #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                            throw({error, cluster_already_initialized_but_tables_empty});
+                        false ->
+                            ?LOG_INFO("Node has already been initialized, proceeding with normal startup",
+                                      #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                            ok
+                    end;
+                false ->
+                    %% First time starting, create the marker file
+                    ?LOG_INFO("First node startup detected, creating initialization marker",
+                             #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+                    ok = filelib:ensure_dir(MarkerFile),
+                    ok = file:write_file(MarkerFile, <<>>, [exclusive]), % Empty file.
+                    ok
+            end
+    end.
 
 -spec maybe_insert_default_data() -> 'ok'.
 

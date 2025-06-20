@@ -1646,6 +1646,16 @@ end}.
     {datatype, string}
 ]}.
 
+
+%% Whether to verify if this is the first time a node starts.
+%% When enabled, nodes will create a marker file on first startup
+%% and refuse to start if the marker exists but tables are empty.
+%%
+
+{mapping, "verify_initial_run", "rabbit.verify_initial_run", [
+    {datatype, {enum, [true, false]}}
+]}.
+
 % ==========================
 % Logging section
 % ==========================
