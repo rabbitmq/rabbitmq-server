@@ -27,6 +27,7 @@
 -define(REQUEST_CLIENT_SECRET, "client_secret").
 -define(REQUEST_SCOPE, "scope").
 -define(REQUEST_REFRESH_TOKEN, "refresh_token").
+-define(REQUEST_TOKEN, "token").
 
 % define access token response constants
 -define(BEARER_TOKEN_TYPE, <<"Bearer">>).
@@ -43,5 +44,6 @@
 -define(RESPONSE_TOKEN_ENDPOINT, <<"token_endpoint">>).
 -define(RESPONSE_AUTHORIZATION_ENDPOINT, <<"authorization_endpoint">>).
 -define(RESPONSE_END_SESSION_ENDPOINT, <<"end_session_endpoint">>).
+-define(RESPONSE_INTROSPECTION_ENDPOINT, <<"introspection_endpoint">>).
 -define(RESPONSE_JWKS_URI, <<"jwks_uri">>).
 -define(RESPONSE_TLS_OPTIONS, <<"ssl_options">>).

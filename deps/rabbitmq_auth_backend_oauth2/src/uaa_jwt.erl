@@ -188,3 +188,7 @@ sub(DecodedToken) ->
 -spec sub(map(), any()) -> binary() | undefined.
 sub(DecodedToken, Default) ->
     maps:get(<<"sub">>, DecodedToken, Default).
+
+-spec validate_introspected_token(Token) ->
+    {ok, map()} | {error, term()}
+validate_introspected_token(Token) ->
