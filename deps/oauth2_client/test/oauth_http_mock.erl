@@ -35,7 +35,7 @@ match_request(Req, #{method := Method} = ExpectedRequest) ->
     end,
     case maps:is_key(headers, ExpectedRequest) of 
         true -> maps:foreach(fun(K,V) -> 
-            ?assertEqual(V, cowbow_req:header(K, Req)) end, 
+            ?assertEqual(V, cowboy_req:header(K, Req)) end, 
                 maps:get(headers, ExpectedRequest));
         false -> ok
     end.

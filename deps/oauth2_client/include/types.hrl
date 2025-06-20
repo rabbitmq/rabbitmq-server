@@ -88,3 +88,10 @@
 }).
 
 -type introspect_token_request() :: #introspect_token_request{}.
+
+-record(unsuccessful_introspect_token_response, {
+    error :: integer(),
+    error_description :: binary() | string() | undefined
+}).
+
+-type unsuccessful_introspect_token_response() :: #unsuccessful_introspect_token_response{}.
