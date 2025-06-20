@@ -17,7 +17,7 @@
 -compile(export_all).
 
 -define(MOCK_OPAQUE_TOKEN, <<"some opaque token">>).
--define(MOCK_INTROSPECTION_ENDPOINT, <<"/introspection">>).
+-define(MOCK_INTROSPECTION_ENDPOINT, <<"/introspect">>).
 -define(MOCK_TOKEN_ENDPOINT, <<"/token">>).
 -define(AUTH_PORT, 8000).
 -define(ISSUER_PATH, "/somepath").
@@ -47,12 +47,15 @@ groups() ->
             cannot_introspect_due_to_missing_configuration,
             {with_introspection_endpoint, [], [
                 cannot_introspect_due_to_missing_configuration,
-                {with_introspection_basic_client_credentials, [], [
-                    can_introspect_token
-                ]},
-                {with_introspection_request_param_client_credentials, [], [
-                    can_introspect_token
+                {https, [], [
+                    {with_introspection_basic_client_credentials, [], [
+                        can_introspect_token
+                    ]},
+                    {with_introspection_request_param_client_credentials, [], [
+                        can_introspect_token
+                    ]}
                 ]}
+                
             ]}
         ]}        
     ]},
@@ -170,17 +173,17 @@ init_per_group(with_default_oauth_provider, Config) ->
 
 init_per_group(with_introspection_endpoint, Config) ->    
     application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint,
-        "https://introspection"),
+        build_token_introspection_endpoint("https")),
     Config;
 
 init_per_group(with_introspection_basic_client_credentials, Config) ->    
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
         "some-client-id"),
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
         "some-client-secret"),
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
         basic),
-    [{with_introspection_basic_client_credentials, [
+    [{can_introspect_token, [
             {introspection_endpoint, build_http_mock_behaviour(
                 build_introspection_token_request(?MOCK_OPAQUE_TOKEN, basic, <<"some-client-id">>, 
                     <<"some-client-secret">>),
@@ -188,13 +191,13 @@ init_per_group(with_introspection_basic_client_credentials, Config) ->
         ]} | Config];    
 
 init_per_group(with_introspection_request_param_client_credentials, Config) ->    
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
         "some-client-id"),
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
         "some-client-secret"),
-    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method,
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
         request_param),
-    [{with_introspection_request_param_client_credentials, [
+    [{can_introspect_token, [
             {introspection_endpoint, build_http_mock_behaviour(
                 build_introspection_token_request(?MOCK_OPAQUE_TOKEN, request_param, <<"some-client-id">>, 
                     <<"some-client-secret">>),
@@ -363,6 +366,18 @@ end_per_group(with_default_oauth_provider, Config) ->
 
 end_per_group(with_introspection_endpoint, Config) ->    
     application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint),
+    Config;
+
+end_per_group(with_introspection_basic_client_credentials, Config) ->    
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method),
+    Config;
+
+end_per_group(with_introspection_request_param_client_credentials, Config) ->    
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method),
     Config;
 
 end_per_group(_, Config) ->
@@ -666,10 +681,10 @@ jwks_uri_takes_precedence_over_jwks_url(_Config) ->
 
 
 cannot_introspect_due_to_missing_configuration(_Config)->
-    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(<<"some token">>).
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
 
 can_introspect_token(_Config) ->
-    {ok, _} = oauth2_client:introspect_token(<<"some token">>).
+    {ok, _} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
 
 %%% HELPERS
 
@@ -696,6 +711,12 @@ build_jwks_uri(Scheme, Path) ->
                          host => "localhost",
                          port => rabbit_data_coercion:to_integer(?AUTH_PORT),
                          path => Path}).
+
+build_token_introspection_endpoint(Scheme) ->
+    uri_string:recompose(#{scheme => Scheme,
+                        host => "localhost",
+                        port => rabbit_data_coercion:to_integer(?AUTH_PORT),
+                        path => "/introspect"}).
 
 build_access_token_request(Request) ->
     #access_token_request {
@@ -748,6 +769,7 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}}
             = Expected <- Expectations ]}
     ]),
+    ct:log("start_https_oauth_server with Expectations: ~p", [Expectations]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -758,6 +780,7 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
+    ct:log("start_https_oauth_server"),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -767,6 +790,7 @@ start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expecte
             #{env => #{dispatch => Dispatch}}).
 
 stop_https_auth_server() ->
+    ct:log("stop_https_auth_server"),
     cowboy:stop_listener(mock_http_auth_listener).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
@@ -879,14 +903,14 @@ denies_access_token_expectation() ->
 build_introspection_token_request(Token, basic, ClientId, ClientSecret) ->
     Map = build_http_request(
         <<"POST">>,
-        ?MOCK_TOKEN_ENDPOINT,
+        ?MOCK_INTROSPECTION_ENDPOINT,
         [
             {?REQUEST_TOKEN, Token}            
         ]),
     Credentials = binary_to_list(<<ClientId/binary,":",ClientSecret/binary>>),
     AuthStr = base64:encode_to_string(Credentials),    
     maps:put(headers, #{
-            <<"authorization">> =>  "Basic " ++ AuthStr
+            <<"authorization">> =>  list_to_binary("Basic " ++ AuthStr)
         }, Map);
 build_introspection_token_request(Token, request_param, ClientId, ClientSecret) ->
     build_http_request(
