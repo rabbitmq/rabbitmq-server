@@ -64,9 +64,9 @@ introspect_token(Token) ->
                                 undefined -> [];
                                 SSL ->  [{ssl, SSL}]
                           end ++ get_default_timeout(),
-            Options = [],
+            Options = [],            
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
-            parse_access_token_response(Response);
+            parse_introspect_token_response(Response);
         {error, _} = Error -> Error            
     end.    
 
@@ -90,7 +90,7 @@ build_introspect_authorization_header_if_any(#introspect_token_request{
         client_secret = ClientSecret}) ->
     case Method of 
         basic ->
-            Credentials = binary_to_list(<<ClientId/binary,":",ClientSecret/binary>>),
+            Credentials = erlang:iolist_to_binary([ClientId, <<":">>,ClientSecret ]),
             AuthStr = base64:encode_to_string(Credentials),
             [{"Authorization", "Basic " ++ AuthStr}];
         _ -> []
@@ -106,10 +106,10 @@ build_introspection_request() ->
             end;
         {error, _} = Error -> Error
     end,
-    Providers = case Result of 
+    case Result of 
         {ok, _} -> Result;
         {error, _} -> 
-            maps:filter(fun(K,_V) -> 
+            Providers = maps:filter(fun(K,_V) -> 
                 case get_oauth_provider(K, [introspection_endpoint]) of 
                     {error, _} -> false;
                     {ok, P} -> 
@@ -121,13 +121,13 @@ build_introspection_request() ->
                             {_Id, _Secret, _Endpoint} -> true
                         end
                 end
-            end, get_env(oauth_providers, #{}))
-        end,
-    case maps:size(Providers) of 
-        0 -> {error, not_found_introspection_endpoint};
-        1 -> {ok, build_introspection_request(lists:last(maps:values(Providers))) };
-        _ -> {error, too_many_introspection_endpoints}
-    end.
+            end, get_env(oauth_providers, #{})),
+            case maps:size(Providers) of 
+                0 -> {error, not_found_introspection_endpoint};
+                1 -> {ok, build_introspection_request(lists:last(maps:values(Providers))) };
+                _ -> {error, too_many_introspection_endpoints}
+            end
+    end.    
 
 build_introspection_request(Provider) ->
     #introspect_token_request{
@@ -607,13 +607,17 @@ build_refresh_token_request_body(Request) ->
 grant_type_request_parameter(Type) ->
     {?REQUEST_GRANT_TYPE, Type}.
 
-client_id_request_parameter(ClientId) ->
-    {?REQUEST_CLIENT_ID,
-        binary_to_list(ClientId)}.
+client_id_request_parameter(ClientId) when is_binary(ClientId) ->
+    {?REQUEST_CLIENT_ID, binary_to_list(ClientId)};
 
-client_secret_request_parameter(ClientSecret) ->
-    {?REQUEST_CLIENT_SECRET,
-        binary_to_list(ClientSecret)}.
+client_id_request_parameter(ClientId) ->
+    {?REQUEST_CLIENT_ID, ClientId}.
+
+client_secret_request_parameter(ClientSecret)when is_binary(ClientSecret) ->
+    {?REQUEST_CLIENT_SECRET, binary_to_list(ClientSecret)};
+
+client_secret_request_parameter(ClientSecret)  ->
+    {?REQUEST_CLIENT_SECRET, ClientSecret}.
 
 refresh_token_request_parameter(Request) ->
     {?REQUEST_REFRESH_TOKEN, Request#refresh_token_request.refresh_token}.
@@ -726,10 +730,38 @@ map_to_access_token_response(Code, Reason, Headers, Body) ->
                 _ ->   {error, Reason}
             end
     end.
+map_to_introspect_token_response(Code, Reason, Headers, Body) ->
+    case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
+        {error, {error, InternalError}} ->
+            {error, InternalError};
+        {error, _} = Error ->
+            Error;
+        Value ->
+            case Code of
+                200 -> {ok, Value};
+                201 -> {ok, Value};
+                204 -> {ok, []};
+                400 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
+                401 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
+                _ ->   {error, Reason}
+            end
+    end.
+map_to_unsuccessful_introspect_token_response(Map) ->
+    #unsuccessful_introspect_token_response{
+        error = maps:get(?RESPONSE_ERROR, Map),
+        error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
+    }.
 parse_access_token_response({error, Reason}) ->
     {error, Reason};
 parse_access_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_to_access_token_response(Code, Reason, Headers, Body).
+
+parse_introspect_token_response({error, Reason}) ->
+    ct:log("parse_introspect_token_response error ~p", [Reason]),
+    {error, Reason};
+parse_introspect_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
+    ct:log("parse_introspect_token_response ok "),
+    map_to_introspect_token_response(Code, Reason, Headers, Body).
 
 -spec format_ssl_options([ssl:tls_client_option()]) -> string().
 format_ssl_options(TlsOptions) ->
@@ -754,7 +786,7 @@ format_oauth_provider(OAuthProvider) ->
     lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
         " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "introspection_endpoint: ~p, jwks_uri: ~p, ssl_options: ~p }", [
+        "introspection{endpoint: ~p, client_id: ~p, has client_secret: ~p} jwks_uri: ~p, ssl_options: ~p }", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.discovery_endpoint,
@@ -762,6 +794,11 @@ format_oauth_provider(OAuthProvider) ->
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
         OAuthProvider#oauth_provider.introspection_endpoint,
+        OAuthProvider#oauth_provider.introspection_client_id,
+        case OAuthProvider#oauth_provider.introspection_client_secret of 
+            undefined -> false;
+            _ -> true 
+        end,
         OAuthProvider#oauth_provider.jwks_uri,
         format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
 
