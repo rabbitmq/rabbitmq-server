@@ -138,7 +138,7 @@ sheet_body(PrevState) ->
                                         empty_row(Name);
                                     _ ->
                                         QQCounters = maps:get({QName, node()}, ra_counters:overview()),
-                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
+                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(rabbit_misc:queue_resource(Vhost, Name)),
                                         [{_, CT, SnapIdx, LA, CI, LW, CL}] = ets:lookup(ra_metrics, R),
                                         [
                                          Pid,

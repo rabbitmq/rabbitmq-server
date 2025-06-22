@@ -38,7 +38,7 @@ delete_resource(ReqData, Context) ->
       rabbit_amqqueue:with(
         rabbit_misc:r(VHost, queue, QName),
         fun(_Q) ->
-          rabbit_quorum_queue:delete_member(VHost, QName, rabbit_data_coercion:to_atom(NewReplicaNode))
+          rabbit_queue_commands:delete_member(VHost, QName, rabbit_data_coercion:to_atom(NewReplicaNode))
         end)
     end),
   case Res of

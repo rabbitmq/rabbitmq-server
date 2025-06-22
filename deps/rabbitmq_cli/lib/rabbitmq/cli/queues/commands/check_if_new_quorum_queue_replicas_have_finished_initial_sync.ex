@@ -6,7 +6,7 @@
 
 defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinishedInitialSyncCommand do
   @moduledoc """
-  Exits with a non-zero code if there are quorum queues
+  Exits with a non-zero code if there are queues
   that run "non-voter" (not yet done with their initial sync, promotable to voters)
   replicas on the current node.
 
@@ -16,27 +16,53 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinished
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  defp default_opts, do: %{type: "quorum"}
+
   import RabbitMQ.CLI.Core.Platform, only: [line_separator: 0]
 
   def scopes(), do: [:diagnostics, :queues]
 
-  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
-  use RabbitMQ.CLI.Core.MergesNoDefaults
-  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
+#  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
+#  use RabbitMQ.CLI.Core.MergesNoDefaults
+#  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([], %{node: node_name, timeout: timeout}) do
+  def merge_defaults(args, opts) do
+    default = default_opts()
+
+    {args, Map.merge(default, opts)}
+  end
+
+  def run([], %{node: node_name, timeout: timeout, type: type}) do
     case :rabbit_misc.rpc_call(
            node_name,
-           :rabbit_quorum_queue,
-           :list_with_local_promotable_for_cli,
-           [],
+           :rabbit_queue_commands,
+           :list_with_local_promotable,
+           [type],
            timeout
          ) do
-      [] -> {:ok, []}
-      qs when is_list(qs) -> {:ok, qs}
+      {:ok, []} -> {:ok, []}
+      {:ok, qs} when is_list(qs) -> {:ok, Enum.map(qs, &:amqqueue.to_printable/1)}
       other -> other
     end
+  end
+
+  def switches(),
+    do: [
+    timeout: :integer,
+    type: :string
+  ]
+  
+  def validate(_, _) do
+    :ok
+  end
+
+  def output({:error, {:unknown_queue_type, type}}, args) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Unknown queue type #{args}"
+     }}
   end
 
   def output({:ok, []}, %{formatter: "json"}) do
@@ -79,7 +105,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinished
       "that run promotable replicas on the current node."
   end
 
-  def usage, do: "check_if_new_quorum_queue_replicas_have_finished_initial_sync"
+  def usage, do: "check_if_new_quorum_queue_replicas_have_finished_initial_sync [--type type]"
 
   def banner([], %{node: node_name}) do
     "Checking if node #{node_name} runs promotable replicas of any queues ..."

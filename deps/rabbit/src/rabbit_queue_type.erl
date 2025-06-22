@@ -19,6 +19,7 @@
          init/0,
          close/1,
          discover/1,
+         lookup/1,
          short_alias_of/1,
          default/0,
          default_alias/0,
@@ -64,6 +65,7 @@
          can_redeliver/2,
          rebalance_module/1,
          is_replicable/1,
+         list_replicable/0,
          stop/1,
          list_with_minimum_quorum/0,
          drain/1,
@@ -312,6 +314,14 @@ discover(undefined) ->
 discover(TypeDescriptor) ->
     {ok, TypeModule} = rabbit_registry:lookup_type_module(queue, TypeDescriptor),
     TypeModule.
+
+-spec lookup(binary() | atom()) -> {ok, queue_type()} | {error, not_found}.
+lookup(<<"undefined">>) ->
+    fallback();
+lookup(undefined) ->
+    fallback();
+lookup(TypeDescriptor) ->
+     rabbit_registry:lookup_type_module(queue, TypeDescriptor).
 
 -spec short_alias_of(TypeDescriptor) -> Ret when
       TypeDescriptor :: {utf8, binary()} | atom() | binary(),
@@ -906,11 +916,17 @@ rebalance_module(Q) ->
     Capabilities = TypeModule:capabilities(),
     maps:get(rebalance_module, Capabilities, undefined).
 
--spec is_replicable(amqqueue:amqqueue()) -> undefine | module().
-is_replicable(Q) ->
+-spec is_replicable(amqqueue:amqqueue() | queue_type()) -> false | module().
+is_replicable(Q) when ?is_amqqueue(Q) ->
     TypeModule = amqqueue:get_type(Q),
+    is_replicable(TypeModule);
+is_replicable(TypeModule) when is_atom(TypeModule) ->
     Capabilities = TypeModule:capabilities(),
     maps:get(is_replicable, Capabilities, false).
+
+list_replicable() ->
+    _ = [TypeModule ||
+            {_Type, TypeModule} <- rabbit_registry:lookup_all(queue), is_replicable(TypeModule)].
 
 -spec stop(rabbit_types:vhost()) -> ok.
 stop(VHost) ->

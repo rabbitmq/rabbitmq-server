@@ -73,15 +73,10 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
         [name, node] = _args,
         %{vhost: vhost, node: node_name, timeout: timeout, membership: membership}
       ) do
-    args = [vhost, name, to_atom(node)]
 
-    args =
-      case to_atom(membership) do
-        :promotable -> args ++ [timeout]
-        other -> args ++ [other, timeout]
-      end
+    args = [vhost, name, to_atom(node)] ++ [to_atom(membership), timeout]
 
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :add_member, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_commands, :add_member, args) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot add members to a classic queue"}
 
@@ -99,7 +94,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   def usage_additional do
     [
-      ["<queue>", "quorum queue name"],
+      ["<queue>", "queue name"],
       ["<node>", "node to add a new replica on"],
       ["--membership <promotable|voter>", "add a promotable non-voter (default) or full voter"]
     ]
@@ -113,7 +108,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.AddMemberCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Adds a quorum queue member (replica) on the given node."
+  def description, do: "Adds a queue member (replica) on the given node."
 
   def banner([name, node], _) do
     [

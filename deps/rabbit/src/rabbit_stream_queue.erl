@@ -68,6 +68,9 @@
          queue_vm_stats_sups/0,
          queue_vm_ets/0]).
 
+%% queues commands
+-export([shrink_all/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
@@ -1471,3 +1474,6 @@ queue_vm_stats_sups() ->
 queue_vm_ets() ->
     {[],
      []}.
+
+shrink_all(Node) ->
+    delete_all_replicas(Node).

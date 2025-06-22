@@ -5,10 +5,15 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
+-type resource_kind() :: queue | exchange | topic.
+-type resource_name() :: binary().
+
 -record(resource, {
-    virtual_host,
+    %% '_'s come from rabbit_table:resource_match
+    %% 'undefined' is expected by import definitions module
+    virtual_host :: rabbit_types:vhost() | undefined | '_',
     %% exchange, queue, topic
-    kind,
+    kind :: resource_kind() | '_',
     %% name as a binary
-    name
+    name :: resource_name() | '_'
 }).

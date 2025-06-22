@@ -17,8 +17,13 @@
 -export([register/3, unregister/2,
          binary_to_type/1, lookup_module/2, lookup_type_module/2, lookup_type_name/2, lookup_all/1]).
 
+-export_type([type_descriptor/0]).
+
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
+
+-type type_descriptor() :: atom() | %% either full typemodule or atomized typename
+                           binary(). %% typename or typemodule in binary
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 -spec register(atom(), binary(), atom()) -> 'ok'.
@@ -65,8 +70,7 @@ lookup_module(Class, T) when is_atom(T) ->
 -spec lookup_type_module(Class, TypeDescriptor) ->
           Ret when
       Class :: atom(),
-      TypeDescriptor :: atom() | %% can be TypeModule or Type
-                        binary(), %% or what is currently called "alias" - a TypeName
+      TypeDescriptor :: type_descriptor(),
       Ret :: {ok, TypeModule} | {error, not_found},
       TypeModule :: atom().
 lookup_type_module(Class, TypeDescriptor) ->
@@ -80,8 +84,7 @@ lookup_type_module(Class, TypeDescriptor) ->
 -spec lookup_type_name(Class, TypeDescriptor) ->
           Ret when
       Class :: atom(),
-      TypeDescriptor :: atom() | %% either full typemodule or atomized typename
-                        binary(), %% typename or typemodule in binary
+      TypeDescriptor :: type_descriptor(),
       Ret :: {ok, binary()} | {error, not_found}.
 lookup_type_name(Class, TypeDescriptor) ->
     case lookup_type(Class, TypeDescriptor) of
@@ -113,13 +116,24 @@ lookup_type(Class, TypeDescriptor)
     %% when we register a type we convert
     %% typename to atom so we can lookup
     %% only existing atoms.
-    lookup_type(Class, binary_to_existing_atom(TypeDescriptor)).
+    case binary_to_existing_atom_or_not_found(TypeDescriptor) of
+        {error, _} =  E -> E;
+        Atom -> lookup_type(Class, Atom)
+    end.
 
 
 lookup_all(Class) ->
     [{K, V} || [K, V] <- ets:match(?ETS_NAME, {{Class, '$1'}, '$2'})].
 
 %%---------------------------------------------------------------------------
+
+binary_to_existing_atom_or_not_found(TypeDescriptor) ->
+    try binary_to_existing_atom(TypeDescriptor)
+    catch
+        error:badarg ->
+            {error, not_found}
+    end.
+                
 
 internal_binary_to_type(TypeBin) when is_binary(TypeBin) ->
     binary_to_atom(TypeBin).
