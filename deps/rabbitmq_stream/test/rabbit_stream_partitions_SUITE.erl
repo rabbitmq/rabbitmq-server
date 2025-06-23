@@ -457,7 +457,8 @@ super_stream_sac_consumer_should_get_disconnected_on_coord_leader_network_partit
     %% we unqueue this frame before closing the connection
     %% directly closing the connection of the cancelled consumer
     maps:foreach(fun(K, {S0, C0}) when K /= DiscSubId ->
-                         {_, C1} = receive_commands(S0, C0),
+                         {Cmd1, C1} = receive_commands(S0, C0),
+                         ct:pal("Received command: ~p", [Cmd1]),
                          {ok, _} = stream_test_utils:close(S0, C1);
                     (_, {S0, C0}) ->
                          {ok, _} = stream_test_utils:close(S0, C0)
