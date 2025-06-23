@@ -207,7 +207,7 @@ group_consumers(VirtualHost, Stream, Reference, InfoKeys) ->
 -spec overview(state() | undefined) -> map() | undefined.
 overview(undefined) ->
     undefined;
-overview(#?MODULE{groups = Groups}) ->
+overview(#?MODULE{groups = Groups} = S) when ?IS_STATE_REC(S) ->
     GroupsOverview =
         maps:map(fun(_,
                      #group{consumers = Consumers, partition_index = Idx}) ->
@@ -215,7 +215,9 @@ overview(#?MODULE{groups = Groups}) ->
                       partition_index => Idx}
                  end,
                  Groups),
-    #{num_groups => map_size(Groups), groups => GroupsOverview}.
+    #{num_groups => map_size(Groups), groups => GroupsOverview};
+overview(S) ->
+    rabbit_stream_sac_coordinator_v4:overview(S).
 
 -spec init_state() -> state().
 init_state() ->
