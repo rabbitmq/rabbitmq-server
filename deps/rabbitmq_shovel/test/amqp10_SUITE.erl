@@ -122,7 +122,6 @@ amqp10_destination(Config, AckMode) ->
 
     receive
         {amqp10_msg, Receiver, InMsg} ->
-            ct:pal("GOT ~p", [InMsg]),
             [<<42>>] = amqp10_msg:body(InMsg),
             Ts = Timestamp * 1000,
             ?assertMatch(
