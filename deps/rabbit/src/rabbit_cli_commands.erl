@@ -10,6 +10,7 @@
 -export([discover_commands/0,
          discovered_commands/0,
          discovered_argparse_def/0,
+         merge_argparse_def/2,
          expect_legacy/1]).
 -export([cmd_noop/1,
          cmd_hello/1,
@@ -121,11 +122,15 @@ commands_to_cli_argparse_def(Commands) ->
                                    (Cmd, M0) ->
                                        #{commands => #{Cmd => M0}}
                                end, undefined, Path),
-                        rabbit_cli:merge_argparse_def(Acc1, M1);
+                        merge_argparse_def(Acc1, M1);
                     (_, Acc1) ->
                         Acc1
                 end, Acc0, Entries)
       end, #{}, Commands).
+
+%% -------------------------------------------------------------------
+%% Argparse helpers.
+%% -------------------------------------------------------------------
 
 expand_argparse_def(Def) when is_map(Def) ->
     Def;
@@ -134,17 +139,53 @@ expand_argparse_def(Defs) when is_list(Defs) ->
       fun
           (argparse_def_record_stream, Acc) ->
               Def = rabbit_cli_io:argparse_def(record_stream),
-              rabbit_cli:merge_argparse_def(Acc, Def);
+              merge_argparse_def(Acc, Def);
           (argparse_def_file_input, Acc) ->
               Def = rabbit_cli_io:argparse_def(file_input),
-              rabbit_cli:merge_argparse_def(Acc, Def);
+              merge_argparse_def(Acc, Def);
           (Mod, Acc) when is_atom(Mod) ->
               Def = Mod:argparse_def(),
-              rabbit_cli:merge_argparse_def(Acc, Def);
+              merge_argparse_def(Acc, Def);
           (Def, Acc) ->
               Def1 = expand_argparse_def(Def),
-              rabbit_cli:merge_argparse_def(Acc, Def1)
+              merge_argparse_def(Acc, Def1)
       end, #{}, Defs).
+
+merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
+    Args1 = maps:get(arguments, ArgparseDef1, []),
+    Args2 = maps:get(arguments, ArgparseDef2, []),
+    Args = merge_arguments(Args1, Args2),
+    Cmds1 = maps:get(commands, ArgparseDef1, #{}),
+    Cmds2 = maps:get(commands, ArgparseDef2, #{}),
+    Cmds = merge_commands(Cmds1, Cmds2),
+    maps:merge(
+      ArgparseDef1,
+      ArgparseDef2#{arguments => Args, commands => Cmds}).
+
+merge_arguments(Args1, []) ->
+    Args1;
+merge_arguments([], Args2) ->
+    Args2;
+merge_arguments(Args1, Args2) ->
+    merge_arguments(Args1, Args2, []).
+
+merge_arguments([#{name := Name} = Arg1 | Rest1], Args2, Acc) ->
+    Ret = lists:partition(
+            fun(#{name := N}) -> N =:= Name end,
+            Args2),
+    {Arg, Rest2} = case Ret of
+                      {[Arg2], NotMatching} ->
+                          {Arg2, NotMatching};
+                      {[], Args2} ->
+                          {Arg1, Args2}
+                  end,
+    Acc1 = [Arg | Acc],
+    merge_arguments(Rest1, Rest2, Acc1);
+merge_arguments([], Args2, Acc) ->
+    lists:reverse(Acc) ++ Args2.
+
+merge_commands(Cmds1, Cmds2) ->
+    maps:merge(Cmds1, Cmds2).
 
 %% -------------------------------------------------------------------
 %% Helpers.
