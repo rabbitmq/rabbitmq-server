@@ -562,10 +562,15 @@ import_state_v4_test(_) ->
     OldState5 = apply_ensure_monitors(OldMod, Cmd4, OldState4),
     Cmd5 = register_consumer_command(P, 1, App1, Pid2, 2),
     OldState6 = apply_ensure_monitors(OldMod, Cmd5, OldState5),
-    Cmd6 = activate_consumer_command(P, App1),
+    %% a duplicate consumer sneaks in
+    %% this should not happen in real life, but it tests the dedup
+    %% logic in the import function
+    Cmd6 = register_consumer_command(P, 1, App1, Pid0, 0),
     OldState7 = apply_ensure_monitors(OldMod, Cmd6, OldState6),
+    Cmd7 = activate_consumer_command(P, App1),
+    OldState8 = apply_ensure_monitors(OldMod, Cmd7, OldState7),
 
-    Export = OldMod:state_to_map(OldState7),
+    Export = OldMod:state_to_map(OldState8),
     #?STATE{groups = Groups, pids_groups = PidsGroups} = ?MOD:import_state(4, Export),
     assertHasGroup({<<"/">>, S, App0},
                    grp(-1, [csr(Pid0, 0, active),
