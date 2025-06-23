@@ -710,8 +710,7 @@ apply(#{machine_version := Vsn} = Meta,
         _ ->
             return(Meta, State0, stream_not_found, [])
     end;
-apply(#{machine_version := Vsn} = Meta,
-      {nodeup, Node} = Cmd,
+apply(Meta, {nodeup, Node} = Cmd,
       #?MODULE{monitors = Monitors0,
                streams = Streams0,
                single_active_consumer = Sac0} = State)  ->
@@ -735,14 +734,8 @@ apply(#{machine_version := Vsn} = Meta,
                           {Ss#{Id => S}, E}
                   end, {Streams0, Effects0}, Streams0),
 
-    {Sac1, Effects2} = case ?V5_OR_MORE(Vsn) of
-                           true ->
-                               SacMod = sac_module(Meta),
-                               SacMod:handle_node_reconnected(Node,
-                                                              Sac0, Effects1);
-                           false ->
-                               {Sac0, Effects1}
-                       end,
+
+    {Sac1, Effects2} = sac_handle_node_reconnected(Meta, Node, Sac0, Effects1),
     return(Meta, State#?MODULE{monitors = Monitors,
                                streams = Streams,
                                single_active_consumer = Sac1}, ok, Effects2);
@@ -2443,6 +2436,17 @@ sac_handle_connection_down(SacState, Pid, Reason, Vsn) when ?V5_OR_MORE(Vsn) ->
     ?SAC_CURRENT:handle_connection_down(Pid, Reason, SacState);
 sac_handle_connection_down(SacState, Pid, _Reason, _Vsn) ->
     ?SAC_V4:handle_connection_down(Pid, SacState).
+
+sac_handle_node_reconnected(#{machine_version := Vsn} = Meta, Node,
+                            Sac, Effects) ->
+    case ?V5_OR_MORE(Vsn) of
+        true ->
+            SacMod = sac_module(Meta),
+            SacMod:handle_node_reconnected(Node,
+                                           Sac, Effects);
+        false ->
+            {Sac, Effects}
+    end.
 
 sac_make_purge_nodes(Nodes) ->
     rabbit_stream_sac_coordinator:make_purge_nodes(Nodes).
