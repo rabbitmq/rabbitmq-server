@@ -17,7 +17,7 @@ main(Args) ->
     configure_logging(),
 
     Ret = run_cli(ScriptName, Args),
-    ?LOG_NOTICE("CLI: run_cli() return value: ~p", [Ret]),
+    ?LOG_DEBUG("CLI: run_cli() return value: ~p", [Ret]),
 
     flush_log_messages(),
     erlang:halt().
@@ -61,9 +61,9 @@ flush_log_messages() ->
 run_cli(ScriptName, Args) ->
     ProgName = filename:basename(ScriptName, ".escript"),
     Priv = #?MODULE{scriptname = ScriptName},
-    Context = #rabbit_cli{progname = ProgName,
+    Context = #rabbit_cli{progname = list_to_binary(ProgName),
                           args = Args,
-                          frontend_priv = Priv},
+                          priv = Priv},
     init_local_args(Context).
 
 init_local_args(Context) ->
@@ -89,7 +89,7 @@ set_log_level(#rabbit_cli{} = Context) ->
     connect_to_node(Context).
 
 connect_to_node(
-  #rabbit_cli{arg_map = ArgMap, frontend_priv = Priv} = Context) ->
+  #rabbit_cli{arg_map = ArgMap, priv = Priv} = Context) ->
     Ret = case ArgMap of
               #{node := NodenameOrUri} ->
                   rabbit_cli_transport2:connect(NodenameOrUri);
@@ -102,7 +102,7 @@ connect_to_node(
                 {error, _Reason} ->
                     Priv#?MODULE{connection = none}
             end,
-    Context1 = Context#rabbit_cli{frontend_priv = Priv1},
+    Context1 = Context#rabbit_cli{priv = Priv1},
     run_command(Context1).
 
 %% -------------------------------------------------------------------
@@ -186,7 +186,7 @@ noop(_Context) ->
 %% * evolutions in the communication between the frontend and the backend
 
 run_command(
-  #rabbit_cli{frontend_priv = #?MODULE{connection = Connection}} = Context)
+  #rabbit_cli{priv = #?MODULE{connection = Connection}} = Context)
   when Connection =/= none ->
     maybe
         process_flag(trap_exit, true),
@@ -211,8 +211,8 @@ run_command(#rabbit_cli{} = Context) ->
 context_to_map(Context) ->
     Fields = [Field || Field <- record_info(fields, rabbit_cli),
                        %% We don't need or want to communicate anything that
-                       %% is private to the frontend.
-                       Field =/= frontend_priv],
+                       %% is private to the backend.
+                       Field =/= priv],
     record_to_map(Fields, Context, 2, #{}).
 
 record_to_map([Field | Rest], Record, Index, Map) ->

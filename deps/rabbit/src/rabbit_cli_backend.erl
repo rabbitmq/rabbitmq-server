@@ -17,6 +17,8 @@
          terminate/3,
          code_change/4]).
 
+-record(?MODULE, {caller}).
+
 %% TODO:
 %% * Implémenter "list exchanges" plus proprement
 %% * Implémenter "rabbitmqctl list_exchanges" pour la compatibilité
@@ -34,9 +36,7 @@ map_to_context(ContextMap) ->
                 argparse_def = maps:get(argparse_def, ContextMap),
                 arg_map = maps:get(arg_map, ContextMap),
                 cmd_path = maps:get(cmd_path, ContextMap),
-                command = maps:get(command, ContextMap),
-
-                frontend_priv = undefined}.
+                command = maps:get(command, ContextMap)}.
 
 start_link(Context, Caller, GroupLeader) ->
     Args = #{context => Context,
@@ -52,7 +52,9 @@ init(#{context := Context, caller := Caller, group_leader := GroupLeader}) ->
     process_flag(trap_exit, true),
     erlang:link(Caller),
     erlang:group_leader(GroupLeader, self()),
-    {ok, standing_by, Context, {next_event, internal, parse_command}}.
+    Priv = #?MODULE{caller = Caller},
+    Context1 = Context#rabbit_cli{priv = Priv},
+    {ok, standing_by, Context1, {next_event, internal, parse_command}}.
 
 callback_mode() ->
     handle_event_function.

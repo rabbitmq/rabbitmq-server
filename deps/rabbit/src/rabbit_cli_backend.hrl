@@ -5,4 +5,4 @@
                      cmd_path,
                      command,
 
-                     frontend_priv}).
+                     priv}).
