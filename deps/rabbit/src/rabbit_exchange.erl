@@ -24,13 +24,6 @@
 %% CLI commands.
 -export([cmd_list_exchanges/1]).
 
--rabbitmq_command(
-   {#{cli => ["list", "exchanges"],
-      http => {get, ["exchanges"]}},
-    [rabbit_cli_datagrid,
-     #{help => "List exchanges",
-       handler => {?MODULE, cmd_list_exchanges}}]}).
-
 %%----------------------------------------------------------------------------
 
 -deprecated([{route, 2, "Use route/3 instead"}]).
@@ -49,6 +42,22 @@
 -define(INFO_KEYS, [name, type, durable, auto_delete, internal, arguments,
                     policy, user_who_performed_action]).
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
+
+-rabbitmq_command(
+   {#{cli => ["list", "exchanges"],
+      http => {get, ["exchanges"]}},
+    [rabbit_cli_datagrid,
+     #{help => "List exchanges",
+       arguments =>
+       [
+        #{name => fields,
+          %% FIXME: Exclude user_who_performed_action
+          type => {atom, ?INFO_KEYS},
+          nargs => list,
+          required => false,
+          help => "Fields to include"}
+       ],
+       handler => {?MODULE, cmd_list_exchanges}}]}).
 
 -spec recover(rabbit_types:vhost()) -> [name()].
 
@@ -579,23 +588,16 @@ type_to_route_fun(T) ->
 %% -------------------------------------------------------------------
 
 cmd_list_exchanges(#rabbit_cli{arg_map = ArgMap} = Context) ->
-    InfoKeys0 = rabbit_exchange:info_keys() -- [user_who_performed_action],
-    InfoKeys1 = [atom_to_binary(I) || I <- InfoKeys0],
+    InfoKeys = rabbit_exchange:info_keys() -- [user_who_performed_action],
     Fields0 = case ArgMap of
                   #{fields := Arg} ->
                       Arg;
                   _ ->
                       [name, type]
               end,
-    Fields1 = lists:filtermap(
+    Fields1 = lists:filter(
                   fun(Field) ->
-                          IsValid = lists:member(Field, InfoKeys1),
-                          case IsValid of
-                              true ->
-                                  {true, binary_to_atom(Field)};
-                              false ->
-                                  false
-                          end
+                          lists:member(Field, InfoKeys)
                   end, Fields0),
     Priv = #{fields => Fields1},
 
