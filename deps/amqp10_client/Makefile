@@ -51,7 +51,7 @@ HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
 # ActiveMQ for the testsuite.
 # --------------------------------------------------------------------
 
-ACTIVEMQ_VERSION := 5.18.3
+ACTIVEMQ_VERSION := 6.1.7
 ACTIVEMQ_URL := 'https://archive.apache.org/dist/activemq/$(ACTIVEMQ_VERSION)/apache-activemq-$(ACTIVEMQ_VERSION)-bin.tar.gz'
 
 ACTIVEMQ := $(abspath test/system_SUITE_data/apache-activemq-$(ACTIVEMQ_VERSION)/bin/activemq)
