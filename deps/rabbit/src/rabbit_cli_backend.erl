@@ -75,6 +75,11 @@ handle_event(internal, parse_command, standing_by, Context) ->
         {error, Reason} ->
             {stop, {failed_to_parse_command, Reason}}
     end;
+handle_event(
+  internal, run_command, command_parsed,
+  #rabbit_cli{arg_map = #{help := true}} = Context) ->
+    display_help(Context),
+    {stop, {shutdown, ok}, Context};
 handle_event(internal, run_command, command_parsed, Context) ->
     Ret = do_run_command(Context),
     {stop, {shutdown, Ret}, Context}.
@@ -125,3 +130,15 @@ final_parse(
 do_run_command(
   #rabbit_cli{command = #{handler := {Module, Function}}} = Context) ->
     erlang:apply(Module, Function, [Context]).
+
+display_help(#rabbit_cli{progname = Progname,
+                         argparse_def = ArgparseDef,
+                         arg_map = #{help := true},
+                         cmd_path = CmdPath}) ->
+    Options = #{progname => Progname,
+                %% Work around bug in argparse;
+                %% See https://github.com/erlang/otp/pull/9160
+                command => tl(CmdPath)},
+    Help = argparse:help(ArgparseDef, Options),
+    io:format("~s~n", [Help]),
+    ok.
