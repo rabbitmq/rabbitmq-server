@@ -52,6 +52,9 @@ init([Type, Name, Config0]) ->
                      Config0;
                 dynamic ->
                     ClusterName = rabbit_nodes:cluster_name(),
+                     %% TODO It could handle errors while parsing
+                     %% (i.e. missing predeclared queues) and stop nicely
+                     %% without long stacktraces
                     {ok, Conf} = rabbit_shovel_parameters:parse(Name,
                                                                 ClusterName,
                                                                 Config0),
@@ -103,10 +106,14 @@ handle_cast(init_shovel, State = #state{config = Config}) ->
                [human_readable_name(maps:get(name, Config2))]),
     State1 = State#state{config = Config2},
     ok = report_running(State1),
-    {noreply, State1}.
+    {noreply, State1};
+handle_cast(Msg, State) ->
+    handle_msg(Msg, State).
 
+handle_info(Msg, State) ->
+    handle_msg(Msg, State).
 
-handle_info(Msg, State = #state{config = Config, name = Name}) ->
+handle_msg(Msg, State = #state{config = Config, name = Name}) ->
     case rabbit_shovel_behaviour:handle_source(Msg, Config) of
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of

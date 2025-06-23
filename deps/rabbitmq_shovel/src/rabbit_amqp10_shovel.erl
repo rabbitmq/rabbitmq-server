@@ -122,7 +122,7 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
     {ok, Sess} = amqp10_client:begin_session(Conn),
     link(Conn),
     LinkName = begin
-                   LinkName0 = gen_unique_name(Name, Postfix),
+                   LinkName0 = rabbit_shovel_util:gen_unique_name(Name, Postfix),
                    rabbit_data_coercion:to_binary(LinkName0)
                end,
     % needs to be sync, i.e. awaits the 'attach' event as
@@ -373,14 +373,3 @@ add_timestamp_header(_, Msg) -> Msg.
 add_forward_headers(#{dest := #{cached_forward_headers := Anns}}, Msg) ->
     amqp10_msg:set_message_annotations(Anns, Msg);
 add_forward_headers(_, Msg) -> Msg.
-
-gen_unique_name(Pre0, Post0) ->
-    Pre = to_binary(Pre0),
-    Post = to_binary(Post0),
-    Id = bin_to_hex(crypto:strong_rand_bytes(8)),
-    <<Pre/binary, <<"_">>/binary, Id/binary, <<"_">>/binary, Post/binary>>.
-
-bin_to_hex(Bin) ->
-    <<<<if N >= 10 -> N -10 + $a;
-           true  -> N + $0 end>>
-      || <<N:4>> <= Bin>>.

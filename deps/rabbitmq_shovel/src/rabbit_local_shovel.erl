@@ -1,0 +1,637 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%%
+
+-module(rabbit_local_shovel).
+
+-behaviour(rabbit_shovel_behaviour).
+
+-include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("rabbit/include/mc.hrl").
+-include("rabbit_shovel.hrl").
+
+-export([
+         parse/2,
+         connect_source/1,
+         connect_dest/1,
+         init_source/1,
+         init_dest/1,
+         source_uri/1,
+         dest_uri/1,
+         source_protocol/1,
+         dest_protocol/1,
+         source_endpoint/1,
+         dest_endpoint/1,
+         close_dest/1,
+         close_source/1,
+         handle_source/2,
+         handle_dest/2,
+         ack/3,
+         nack/3,
+         forward/3,
+         status/1
+        ]).
+
+-export([
+         src_decl_exchange/4,
+         decl_queue/4,
+         dest_decl_queue/4,
+         check_queue/4,
+         dest_check_queue/4,
+         decl_fun/3,
+         check_fun/3
+        ]).
+
+-define(QUEUE, lqueue).
+
+-record(pending_ack, {
+                      delivery_tag,
+                      msg_id
+                     }).
+
+parse(_Name, {source, Source}) ->
+    Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
+                               proplists:get_value(prefetch_count, Source,
+                                                   ?DEFAULT_PREFETCH)),
+    Queue = parse_parameter(queue, fun parse_binary/1,
+                            proplists:get_value(queue, Source)),
+    CArgs = proplists:get_value(consumer_args, Source, []),
+    #{module => ?MODULE,
+      uris => proplists:get_value(uris, Source),
+      resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
+      queue => Queue,
+      delete_after => proplists:get_value(delete_after, Source, never),
+      prefetch_count => Prefetch,
+      consumer_args => CArgs};
+parse(_Name, {destination, Dest}) ->
+    Exchange = parse_parameter(dest_exchange, fun parse_binary/1,
+                               proplists:get_value(dest_exchange, Dest, none)),
+    RK = parse_parameter(dest_exchange_key, fun parse_binary/1,
+                         proplists:get_value(dest_routing_key, Dest, none)),
+    #{module => ?MODULE,
+      uris => proplists:get_value(uris, Dest),
+      resource_decl  => rabbit_shovel_util:decl_fun(?MODULE, {destination, Dest}),
+      exchange => Exchange,
+      routing_key => RK,
+      add_forward_headers => proplists:get_value(add_forward_headers, Dest, false),
+      add_timestamp_header => proplists:get_value(add_timestamp_header, Dest, false)}.
+
+connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
+                                           queue := QName0,
+                                           uris := [Uri | _]}}) ->
+    QState = rabbit_queue_type:init(),
+    {User, VHost} = get_user_vhost_from_amqp_param(Uri),
+    %% We handle the most recently declared queue to use anonymous functions
+    %% It's usually the channel that does it
+    MRDQ = apply(M, F, MFArgs ++ [VHost, User]),
+    QName = case QName0 of
+                <<>> -> MRDQ;
+                _ -> QName0
+            end,
+    State#{source => Src#{current => #{queue_states => QState,
+                                       next_tag => 1,
+                                       user => User,
+                                       vhost => VHost},
+                          queue => QName},
+           unacked_message_q => ?QUEUE:new()}.
+
+connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
+                                        uris := [Uri | _]
+                                       },
+                       ack_mode := AckMode}) ->
+    %% Shall we get the user from an URI or something else?
+    {User, VHost} = get_user_vhost_from_amqp_param(Uri),
+    apply(M, F, MFArgs ++ [VHost, User]),
+
+    QState = rabbit_queue_type:init(),
+    case AckMode of
+        on_confirm ->
+            State#{dest => Dest#{current => #{queue_states => QState,
+                                              delivery_id => 1,
+                                              vhost => VHost},
+                                 unacked => #{}}};
+        _ ->
+            State#{dest => Dest#{current => #{queue_states => QState,
+                                              vhost => VHost},
+                                 unacked => #{}}}
+    end.
+
+init_source(State = #{source := #{queue := QName0,
+                                  prefetch_count := Prefetch,
+                                  consumer_args := Args,
+                                  current := #{queue_states := QState0,
+                                               vhost := VHost} = Current} = Src,
+                      name := Name,
+                      ack_mode := AckMode}) ->
+    _Mode = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
+                true ->
+                    {credited, Prefetch};
+                false ->
+                    {credited, credit_api_v1}
+            end,
+    QName = rabbit_misc:r(VHost, queue, QName0),
+    CTag = consumer_tag(Name),
+    case rabbit_amqqueue:with(
+           QName,
+           fun(Q) ->
+                   SndSettled = case AckMode of
+                                    no_ack -> true;
+                                    on_publish -> false;
+                                    on_confirm -> false
+                               end,
+                   Spec = #{no_ack => SndSettled,
+                            channel_pid => self(),
+                            limiter_pid => none,
+                            limiter_active => false,
+                            mode => {simple_prefetch, Prefetch},
+                            consumer_tag => CTag,
+                            exclusive_consume => false,
+                            args => Args,
+                            ok_msg => undefined,
+                            acting_user => ?SHOVEL_USER},
+                   case remaining(Q, State) of
+                       0 ->
+                          {0, {error, autodelete}};
+                       Remaining ->
+                           {Remaining, rabbit_queue_type:consume(Q, Spec, QState0)}
+                   end
+           end) of
+        {Remaining, {ok, QState}} ->
+            State#{source => Src#{current => Current#{queue_states => QState,
+                                                      consumer_tag => CTag},
+                                  remaining => Remaining,
+                                  remaining_unacked => Remaining}};
+        {0, {error, autodelete}} ->
+            exit({shutdown, autodelete});
+        {_Remaining, {error, Reason}} ->
+            rabbit_log:error(
+              "Shovel '~ts' in vhost '~ts' failed to consume: ~ts",
+              [Name, VHost, Reason]),
+            exit({shutdown, failed_to_consume_from_source});
+        {unlimited, {error, not_implemented, Reason, ReasonArgs}} ->
+            rabbit_log:error(
+              "Shovel '~ts' in vhost '~ts' failed to consume: ~ts",
+              [Name, VHost, io_lib:format(Reason, ReasonArgs)]),
+            exit({shutdown, failed_to_consume_from_source});
+        {error, not_found} ->
+            exit({shutdown, missing_source_queue})
+    end.
+
+init_dest(#{name := Name,
+            shovel_type := Type,
+            dest := #{add_forward_headers := AFH} = Dst} = State) ->
+    case AFH of
+        true ->
+            Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
+                      <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
+                      <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
+            State#{dest => Dst#{cached_forward_headers => Props}};
+        false ->
+            State
+    end.
+
+source_uri(_State) ->
+    "".
+
+dest_uri(_State) ->
+    "".
+
+source_protocol(_State) ->
+    local.
+
+dest_protocol(_State) ->
+    local.
+
+source_endpoint(#{source := #{queue := Queue,
+                              exchange := SrcX,
+                              routing_key := SrcXKey}}) ->
+    [{src_exchange, SrcX},
+     {src_exchange_key, SrcXKey},
+     {src_queue, Queue}];
+source_endpoint(#{source := #{queue := Queue}}) ->
+    [{src_queue, Queue}];
+source_endpoint(_Config) ->
+    [].
+
+dest_endpoint(#{dest := #{exchange := SrcX,
+                          routing_key := SrcXKey}}) ->
+    [{dest_exchange, SrcX},
+     {dest_exchange_key, SrcXKey}];
+dest_endpoint(#{dest := #{queue := Queue}}) ->
+    [{dest_queue, Queue}];
+dest_endpoint(_Config) ->
+    [].
+      
+close_dest(_State) ->
+    ok.
+
+close_source(#{source := #{current := #{queue_states := QStates0,
+                                        consumer_tag := CTag,
+                                        user := User,
+                                        vhost := VHost},
+                           queue := QName0}}) ->
+    QName = rabbit_misc:r(VHost, queue, QName0),
+    case rabbit_amqqueue:with(
+           QName,
+           fun(Q) ->
+                   rabbit_queue_type:cancel(Q, #{consumer_tag => CTag,
+                                                 reason => remove,
+                                                 user => User#user.username}, QStates0)
+           end) of
+        {ok, _QStates} ->
+            ok;
+        {error, not_found} ->
+            ok;
+        {error, Reason} ->
+            rabbit_log:warning("Local shovel failed to remove consumer ~tp: ~tp",
+                               [CTag, Reason]),
+            ok
+    end;
+close_source(_) ->
+    %% No consumer tag, no consumer to cancel
+    ok.
+
+handle_source(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
+              State = #{ack_mode := on_confirm}) ->
+    confirm_to_inbound(fun(Tag, Multi, StateX) ->
+                               rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
+                       end, Seq, Multiple, State);
+
+handle_source({queue_event, _, {Type, _, _}}, _State) when Type =:= confirm;
+                                                           Type =:= reject_publish ->
+    not_handled;
+handle_source({queue_event, QRef, Evt}, #{source := Source = #{current := Current = #{queue_states := QueueStates0}}} = State0) ->
+    case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
+        {ok, QState1, Actions} ->
+            State = State0#{source => Source#{current => Current#{queue_states => QState1}}},
+            handle_queue_actions(Actions, State);
+        {eol, Actions} ->
+            _ = handle_queue_actions(Actions, State0),
+            {stop, {inbound_link_or_channel_closure, queue_deleted}};
+        {protocol_error, _Type, Reason, ReasonArgs} ->
+            {stop, list_to_binary(io_lib:format(Reason, ReasonArgs))}
+    end;
+handle_source({{'DOWN', #resource{name = Queue,
+                                  kind = queue,
+                                  virtual_host = VHost}}, _, _, _, _}  ,
+              #{source := #{queue := Queue, current := #{vhost := VHost}}}) ->
+    {stop, {inbound_link_or_channel_closure, source_queue_down}};
+handle_source(_Msg, _State) ->
+    not_handled.
+
+handle_dest({queue_event, _QRef, {confirm, MsgSeqNos, _QPid}},
+            #{ack_mode := on_confirm} = State) ->
+    confirm_to_inbound(fun(Tag, Multi, StateX) ->
+                               rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
+                       end, MsgSeqNos, false, State);
+handle_dest({queue_event, _QRef, {reject_publish, Seq, _QPid}},
+            #{ack_mode := on_confirm} = State) ->
+    confirm_to_inbound(fun(Tag, Multi, StateX) ->
+                               rabbit_shovel_behaviour:nack(Tag, Multi, StateX)
+                       end, Seq, false, State);
+handle_dest({{'DOWN', #resource{name = Queue,
+                                kind = queue,
+                                virtual_host = VHost}}, _, _, _, _}  ,
+            #{dest := #{queue := Queue, current := #{vhost := VHost}}}) ->
+    {stop, {outbound_link_or_channel_closure, dest_queue_down}};
+handle_dest(_Msg, State) ->
+    State.
+
+ack(DeliveryTag, Multiple, State) ->
+    settle(complete, DeliveryTag, Multiple, State).
+
+nack(DeliveryTag, Multiple, State) ->
+    settle(discard, DeliveryTag, Multiple, State).
+
+forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
+                               unacked := Unacked} = Dest,
+                     ack_mode := AckMode} = State0) ->
+    {Options, #{dest := #{current := Current1} = Dest1} = State} =
+        case AckMode of
+            on_confirm  ->
+                DeliveryId = maps:get(delivery_id, Current),
+                Opts = #{correlation => DeliveryId},
+                {Opts, State0#{dest => Dest#{current => Current#{delivery_id => DeliveryId + 1}}}};
+            _ ->
+                {#{}, State0}
+        end,
+    Msg = set_annotations(Msg0, Dest),
+    QNames = route(Msg, Dest),
+    Queues = rabbit_amqqueue:lookup_many(QNames),
+    case rabbit_queue_type:deliver(Queues, Msg, Options, QState) of
+        {ok, QState1, Actions} ->
+            %% TODO handle credit?
+            State1 = State#{dest => Dest1#{current => Current1#{queue_states => QState1}}},
+            #{dest := Dst1} = State2 = rabbit_shovel_behaviour:incr_forwarded(State1),
+            State4 = rabbit_shovel_behaviour:decr_remaining_unacked(
+                       case AckMode of
+                           no_ack ->
+                               rabbit_shovel_behaviour:decr_remaining(1, State2);
+                           on_confirm ->
+                               Correlation = maps:get(correlation, Options),
+                               State2#{dest => Dst1#{unacked => Unacked#{Correlation => Tag}}};
+                           on_publish ->
+                               State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
+                               rabbit_shovel_behaviour:decr_remaining(1, State3)
+                       end),
+            handle_queue_actions(Actions, State4);
+        {error, Reason} ->
+            exit({shutdown, Reason})
+    end.
+
+set_annotations(Msg, Dest) ->
+    add_routing(add_forward_headers(add_timestamp_header(Msg, Dest), Dest), Dest).
+
+add_timestamp_header(Msg, #{add_timestamp_header := true}) ->
+    mc:set_annotation(<<"x-opt-shovelled-timestamp">>, os:system_time(milli_seconds), Msg);
+add_timestamp_header(Msg, _) ->
+    Msg.
+
+add_forward_headers(Msg, #{cached_forward_headers := Props}) ->
+    maps:fold(fun(K, V, Acc) ->
+                      mc:set_annotation(K, V, Acc)
+              end, Msg, Props);
+add_forward_headers(Msg, _D) ->
+    Msg.
+
+add_routing(Msg0, Dest) ->
+    Msg = case maps:get(exchange, Dest, undefined) of
+              undefined -> Msg0;
+              Exchange -> mc:set_annotation(?ANN_EXCHANGE, Exchange, Msg0)
+          end,
+    case maps:get(routing_key, Dest, undefined) of
+        undefined -> Msg;
+        RK -> mc:set_annotation(?ANN_ROUTING_KEYS, [RK], Msg)
+    end.
+
+status(_) ->
+    running.
+
+%% Internal
+
+parse_parameter(_, _, none) ->
+    none;
+parse_parameter(Param, Fun, Value) ->
+    try
+        Fun(Value)
+    catch
+        _:{error, Err} ->
+            fail({invalid_parameter_value, Param, Err})
+    end.
+
+parse_non_negative_integer(N) when is_integer(N) andalso N >= 0 ->
+    N;
+parse_non_negative_integer(N) ->
+    fail({require_non_negative_integer, N}).
+
+parse_binary(Binary) when is_binary(Binary) ->
+    Binary;
+parse_binary(NotABinary) ->
+    fail({require_binary, NotABinary}).
+
+consumer_tag(Name) ->
+    CTag0 = rabbit_shovel_util:gen_unique_name(Name, "receiver"),
+    rabbit_data_coercion:to_binary(CTag0).
+
+-spec fail(term()) -> no_return().
+fail(Reason) -> throw({error, Reason}).
+
+handle_queue_actions(Actions, State) ->
+    lists:foldl(
+      fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
+              handle_deliver(AckRequired, Msgs, S0);
+         (_, _) ->
+              not_handled
+         %% ({queue_down, QRef}, S0) ->
+         %%      State;
+         %% ({block, QName}, S0) ->
+         %%      State;
+         %% ({unblock, QName}, S0) ->
+         %%      State
+      end, State, Actions).
+
+handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
+    lists:foldl(fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
+                        DeliveryTag = next_tag(S0),
+                        S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
+                        rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S)
+               end, State, Msgs).
+
+next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
+    DeliveryTag.
+
+increase_next_tag(#{source := Source = #{current := Current = #{next_tag := DeliveryTag}}} = State) ->
+    State#{source => Source#{current => Current#{next_tag => DeliveryTag + 1}}}.
+
+record_pending(false, _DeliveryTag, _MsgId, State) ->
+    State;
+record_pending(true, DeliveryTag, MsgId, #{unacked_message_q := UAMQ0} = State) ->
+    UAMQ = ?QUEUE:in(#pending_ack{delivery_tag = DeliveryTag,
+                                  msg_id = MsgId}, UAMQ0),
+    State#{unacked_message_q => UAMQ}.
+
+remaining(_Q, #{source := #{delete_after := never}}) ->
+    unlimited;
+remaining(Q, #{source := #{delete_after := 'queue-length'}}) ->
+    [{messages, Count}] = rabbit_amqqueue:info(Q, [messages]),
+    Count;
+remaining(_Q, #{source := #{delete_after := Count}}) ->
+    Count.
+
+decl_fun(Decl, VHost, User) ->
+    lists:foldr(
+      fun(Method, MRDQ) -> %% keep track of most recently declared queue
+              Reply = rabbit_channel:handle_method(
+                        expand_shortcuts(Method, MRDQ),
+                        none, #{}, none, VHost, User),
+              case {Method, Reply} of
+                  {#'queue.declare'{}, {ok, QName, _, _}} ->
+                      QName#resource.name;
+                  _ ->
+                      MRDQ
+              end
+      end, <<>>, Decl).
+
+expand_shortcuts(#'queue.bind'   {queue = Q, routing_key = K} = M, MRDQ) ->
+    M#'queue.bind'   {queue       = expand_queue_name_shortcut(Q, MRDQ),
+                      routing_key = expand_routing_key_shortcut(Q, K, MRDQ)};
+expand_shortcuts(#'queue.unbind' {queue = Q, routing_key = K} = M, MRDQ) ->
+    M#'queue.unbind' {queue       = expand_queue_name_shortcut(Q, MRDQ),
+                      routing_key = expand_routing_key_shortcut(Q, K, MRDQ)};
+expand_shortcuts(M, _State) ->
+    M.
+
+expand_queue_name_shortcut(<<>>, <<>>) ->
+    exit({shutdown, {not_found, "no previously declared queue"}});
+expand_queue_name_shortcut(<<>>, MRDQ) ->
+    MRDQ;
+expand_queue_name_shortcut(QueueNameBin, _) ->
+    QueueNameBin.
+
+expand_routing_key_shortcut(<<>>, <<>>, <<>>) ->
+    exit({shutdown, {not_found, "no previously declared queue"}});
+expand_routing_key_shortcut(<<>>, <<>>, MRDQ) ->
+    MRDQ;
+expand_routing_key_shortcut(_QueueNameBin, RoutingKey, _) ->
+    RoutingKey.
+
+%% TODO A missing queue stops the shovel but because the error reason
+%% the failed status is not stored. Would not be it more useful to
+%% report it??? This is a rabbit_shovel_worker issues, last terminate
+%% clause
+check_fun(QName, VHost, User) ->
+    Method = #'queue.declare'{queue = QName,
+                              passive = true},
+    decl_fun([Method], VHost, User).
+
+src_decl_exchange(SrcX, SrcXKey, VHost, User) ->
+    Methods = [#'queue.bind'{routing_key = SrcXKey,
+                             exchange    = SrcX},
+               #'queue.declare'{exclusive = true}],
+    decl_fun(Methods, VHost, User).
+
+dest_decl_queue(none, _, _, _) ->
+    ok;
+dest_decl_queue(QName, QArgs, VHost, User) ->
+    decl_queue(QName, QArgs, VHost, User).
+
+decl_queue(QName, QArgs, VHost, User) ->
+    Args = rabbit_misc:to_amqp_table(QArgs),
+    Method = #'queue.declare'{queue = QName,
+                              durable = true,
+                              arguments = Args},
+    decl_fun([Method], VHost, User).
+
+dest_check_queue(none, _, _, _) ->
+    ok;
+dest_check_queue(QName, QArgs, VHost, User) ->
+    check_queue(QName, QArgs, VHost, User).
+
+check_queue(QName, _QArgs, VHost, User) ->
+    Method = #'queue.declare'{queue = QName,
+                              passive = true},
+    decl_fun([Method], VHost, User).
+
+get_user_vhost_from_amqp_param(Uri) ->
+    {ok, AmqpParam} = amqp_uri:parse(Uri),
+    rabbit_log:warning("AMQP PARAM ~p", [AmqpParam]),
+    {Username, Password, VHost} =
+        case AmqpParam of
+            #amqp_params_direct{username = U,
+                                password = P,
+                                virtual_host = V} ->
+                {U, P, V};
+            #amqp_params_network{username = U,
+                                 password = P,
+                                 virtual_host = V} ->
+                {U, P, V}
+        end,
+    case rabbit_access_control:check_user_login(Username, [{password, Password}]) of
+        {ok, User} ->
+            try
+                rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
+                ok ->
+                    {User, VHost}
+            catch
+                exit:#amqp_error{name = not_allowed} ->
+                    exit({shutdown, {access_refused, Username}})
+            end;
+        {refused, Username, _Msg, _Module} ->
+            rabbit_log:error("Local shovel user ~ts was refused access"),
+            exit({shutdown, {access_refused, Username}})
+    end.
+
+settle(Op, DeliveryTag, Multiple, #{unacked_message_q := UAMQ0,
+                             source := #{queue := Queue,
+                                         current := Current = #{queue_states := QState0,
+                                                                consumer_tag := CTag,
+                                                                vhost := VHost}} = Src} = State) ->
+    {Acked, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
+    QRef = rabbit_misc:r(VHost, queue, Queue),
+    MsgIds = [Ack#pending_ack.msg_id || Ack <- Acked],
+    case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, QState0) of
+        {ok, QState1, Actions} ->
+            QState = handle_queue_actions(Actions, QState1),
+            State#{source => Src#{current => Current#{queue_states => QState}},
+                   unacked_message_q => UAMQ};
+        {'protocol_error', Type, Reason, Args} ->
+            rabbit_log:error("Shovel failed to settle ~p acknowledgments with ~tp: ~tp",
+                             [Op, Type, io_lib:format(Reason, Args)]),
+            exit({shutdown, {ack_failed, Reason}})
+    end.
+
+%% From rabbit_channel
+%% Records a client-sent acknowledgement. Handles both single delivery acks
+%% and multi-acks.
+%%
+%% Returns a tuple of acknowledged pending acks and remaining pending acks.
+%% Sorts each group in the youngest-first order (descending by delivery tag).
+%% The special case for 0 comes from the AMQP 0-9-1 spec: if the multiple field is set to 1 (true),
+%% and the delivery tag is 0, this indicates acknowledgement of all outstanding messages (by a client).
+collect_acks(UAMQ, 0, true) ->
+    {lists:reverse(?QUEUE:to_list(UAMQ)), ?QUEUE:new()};
+collect_acks(UAMQ, DeliveryTag, Multiple) ->
+    collect_acks([], [], UAMQ, DeliveryTag, Multiple).
+
+collect_acks(AcknowledgedAcc, RemainingAcc, UAMQ, DeliveryTag, Multiple) ->
+    case ?QUEUE:out(UAMQ) of
+        {{value, UnackedMsg = #pending_ack{delivery_tag = CurrentDT}},
+         UAMQTail} ->
+            if CurrentDT == DeliveryTag ->
+                   {[UnackedMsg | AcknowledgedAcc],
+                    case RemainingAcc of
+                        [] -> UAMQTail;
+                        _  -> ?QUEUE:join(
+                                 ?QUEUE:from_list(lists:reverse(RemainingAcc)),
+                                 UAMQTail)
+                    end};
+               Multiple ->
+                    collect_acks([UnackedMsg | AcknowledgedAcc], RemainingAcc,
+                                 UAMQTail, DeliveryTag, Multiple);
+               true ->
+                    collect_acks(AcknowledgedAcc, [UnackedMsg | RemainingAcc],
+                                 UAMQTail, DeliveryTag, Multiple)
+            end;
+        {empty, UAMQTail} ->
+           {AcknowledgedAcc, UAMQTail}
+    end.
+
+route(_Msg, #{queue := Queue,
+              current := #{vhost := VHost}}) when Queue =/= none ->
+    QName = rabbit_misc:r(VHost, queue, Queue),
+    [QName];
+route(Msg, #{current := #{vhost := VHost}}) ->
+    ExchangeName = rabbit_misc:r(VHost, exchange, mc:exchange(Msg)),
+    Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
+    rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}).
+
+remove_delivery_tags(Seq, false, Unacked, 0) ->
+    {maps:remove(Seq, Unacked), 1};
+remove_delivery_tags(Seq, true, Unacked, Count) ->
+    case maps:size(Unacked) of
+        0  -> {Unacked, Count};
+        _ ->
+            maps:fold(fun(K, _V, {Acc, Cnt}) when K =< Seq ->
+                              {maps:remove(K, Acc), Cnt + 1};
+                         (_K, _V, Acc) -> Acc
+                      end, {Unacked, 0}, Unacked)
+    end.
+
+
+confirm_to_inbound(ConfirmFun, SeqNos, Multiple, State)
+  when is_list(SeqNos) ->
+    lists:foldl(fun(Seq, State0) ->
+                        confirm_to_inbound(ConfirmFun, Seq, Multiple, State0)
+                end, State, SeqNos);
+confirm_to_inbound(ConfirmFun, Seq, Multiple,
+                   State0 = #{dest := #{unacked := Unacked} = Dst}) ->
+    #{Seq := InTag} = Unacked,
+    State = ConfirmFun(InTag, Multiple, State0),
+    {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
+    rabbit_shovel_behaviour:decr_remaining(Removed,
+                                           State#{dest =>
+                                                      Dst#{unacked => Unacked1}}).

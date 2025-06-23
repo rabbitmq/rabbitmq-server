@@ -7,8 +7,6 @@
 
 -module(rabbit_amqp091_shovel).
 
--define(APP, rabbitmq_shovel).
-
 -behaviour(rabbit_shovel_behaviour).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -58,7 +56,7 @@ parse(_Name, {source, Source}) ->
     CArgs = proplists:get_value(consumer_args, Source, []),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun({source, Source}),
+      resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => Prefetch,
@@ -74,7 +72,7 @@ parse(Name, {destination, Dest}) ->
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
-      resource_decl  => decl_fun({destination, Dest}),
+      resource_decl  => rabbit_shovel_util:decl_fun(?MODULE, {destination, Dest}),
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
@@ -543,47 +541,6 @@ add_timestamp_header_fun(false, PubProps) -> PubProps.
 props_fun_timestamp_header({M, F, Args}, SrcUri, DestUri, Props) ->
     rabbit_shovel_util:add_timestamp_header(
       apply(M, F, Args ++ [SrcUri, DestUri, Props])).
-
-parse_declaration({[], Acc}) ->
-    Acc;
-parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
-                 catch exit:Reason -> fail(Reason)
-                 end,
-    case proplists:get_keys(Props) -- FieldNames of
-        []            -> ok;
-        UnknownFields -> fail({unknown_fields, Method, UnknownFields})
-    end,
-    {Res, _Idx} = lists:foldl(
-                    fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
-                                       undefined -> R;
-                                       V         -> setelement(Idx, R, V)
-                                   end,
-                            {NewR, Idx + 1}
-                    end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
-                    FieldNames),
-    parse_declaration({Rest, [Res | Acc]});
-parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
-    fail({expected_method_field_list, Method, Props});
-parse_declaration({[Method | Rest], Acc}) ->
-    parse_declaration({[{Method, []} | Rest], Acc}).
-
-decl_fun({source, Endpoint}) ->
-    case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of
-        [] ->
-            case proplists:get_value(predeclared, application:get_env(?APP, topology, []), false) of
-                true -> case proplists:get_value(queue, Endpoint) of
-                            <<>> -> fail({invalid_parameter_value, declarations, {require_non_empty}});
-                            Queue -> {?MODULE, check_fun, [Queue]}
-                        end;
-                false -> {?MODULE, decl_fun, []}
-            end;
-        Decl -> {?MODULE, decl_fun, [Decl]}
-    end;
-decl_fun({destination, Endpoint}) ->
-    Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []), []}),
-    {?MODULE, decl_fun, [Decl]}.
 
 decl_fun(Decl, _Conn, Ch) ->
     [begin
