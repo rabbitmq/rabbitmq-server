@@ -5,13 +5,15 @@
 -include_lib("rabbit_common/include/logging.hrl").
 -include_lib("rabbit_common/include/resource.hrl").
 
+-include("src/rabbit_cli_backend.hrl").
+
 -export([discover_commands/0,
          discovered_commands/0,
-         discovered_argparse_def/0]).
+         discovered_argparse_def/0,
+         expect_legacy/1]).
 -export([cmd_noop/1,
          cmd_hello/1,
          cmd_crash/1,
-         cmd_list_exchanges/1,
          cmd_import_definitions/1,
          cmd_top/1]).
 
@@ -45,13 +47,6 @@
                       help => "Name of the exchange to declare"}
                    ],
       handler => {?MODULE, cmd_declare_exchange}}}).
-
--rabbitmq_command(
-   {#{cli => ["list", "exchanges"],
-      http => {get, ["exchanges"]}},
-    [argparse_def_record_stream,
-     #{help => "List exchanges",
-       handler => {?MODULE, cmd_list_exchanges}}]}).
 
 -rabbitmq_command(
    {#{cli => ["import", "definitions"]},
@@ -97,7 +92,6 @@ discovered_argparse_def() ->
 do_discover_commands() ->
     %% Extract the commands from module attributes like feature flags and boot
     %% steps.
-    %% TODO: Discover commands as a boot step.
     %% TODO: Write shell completion scripts for various shells as part of that.
     %% TODO: Generate manpages? When/how? With eDoc?
     ?LOG_DEBUG(
@@ -144,10 +138,32 @@ expand_argparse_def(Defs) when is_list(Defs) ->
           (argparse_def_file_input, Acc) ->
               Def = rabbit_cli_io:argparse_def(file_input),
               rabbit_cli:merge_argparse_def(Acc, Def);
+          (Mod, Acc) when is_atom(Mod) ->
+              Def = Mod:argparse_def(),
+              rabbit_cli:merge_argparse_def(Acc, Def);
           (Def, Acc) ->
               Def1 = expand_argparse_def(Def),
               rabbit_cli:merge_argparse_def(Acc, Def1)
       end, #{}, Defs).
+
+%% -------------------------------------------------------------------
+%% Helpers.
+%% -------------------------------------------------------------------
+
+expect_legacy(#rabbit_cli{progname = <<"rabbitmqctl">>}) ->
+    true;
+expect_legacy(#rabbit_cli{progname = <<"rabbitmq-diagnostics">>}) ->
+    true;
+expect_legacy(#rabbit_cli{progname = <<"rabbitmq-plugins">>}) ->
+    true;
+expect_legacy(#rabbit_cli{progname = <<"rabbitmq-queues">>}) ->
+    true;
+expect_legacy(#rabbit_cli{progname = <<"rabbitmq-streams">>}) ->
+    true;
+expect_legacy(#rabbit_cli{progname = <<"rabbitmq-upgrade">>}) ->
+    true;
+expect_legacy(_Context) ->
+    false.
 
 %% -------------------------------------------------------------------
 %% XXX
@@ -163,52 +179,6 @@ cmd_hello(_) ->
 
 cmd_crash(_) ->
     erlang:exit(oops).
-
-cmd_list_exchanges(#{progname := Progname, arg_map := ArgMap}) ->
-    logger:alert("CLI: running list exchanges"),
-    InfoKeys = rabbit_exchange:info_keys() -- [user_who_performed_action],
-    Fields = lists:map(
-               fun
-                   (name = Key) ->
-                       #{name => Key, type => string};
-                   (type = Key) ->
-                       #{name => Key, type => string};
-                   (durable = Key) ->
-                       #{name => Key, type => boolean};
-                   (auto_delete = Key) ->
-                       #{name => Key, type => boolean};
-                   (internal = Key) ->
-                       #{name => Key, type => boolean};
-                   (arguments = Key) ->
-                       #{name => Key, type => term};
-                   (policy = Key) ->
-                       #{name => Key, type => string};
-                   (Key) ->
-                       #{name => Key, type => term}
-               end, InfoKeys),
-    {ok, IO} = rabbit_cli_io:start_link(Progname),
-    Ret = case rabbit_cli_io:start_record_stream(IO, exchanges, Fields, ArgMap) of
-              {ok, Stream} ->
-                  Exchanges = rabbit_exchange:list(),
-                  lists:foreach(
-                    fun(Exchange) ->
-                            Record0 = rabbit_exchange:info(Exchange, InfoKeys),
-                            Record1 = lists:sublist(Record0, length(Fields)),
-                            Record2 = [case Value of
-                                           #resource{name = N} ->
-                                               N;
-                                           _ ->
-                                               Value
-                                       end || {_Key, Value} <- Record1],
-                            rabbit_cli_io:push_new_record(IO, Stream, Record2)
-                    end, Exchanges),
-                  rabbit_cli_io:end_record_stream(IO, Stream),
-                  ok;
-              {error, _} = Error ->
-                  Error
-          end,
-    rabbit_cli_io:stop(IO),
-    Ret.
 
 cmd_import_definitions(#{progname := Progname, arg_map := ArgMap}) ->
     {ok, IO} = rabbit_cli_io:start_link(Progname),

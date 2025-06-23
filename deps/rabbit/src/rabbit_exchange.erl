@@ -8,6 +8,8 @@
 -module(rabbit_exchange).
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include("src/rabbit_cli_backend.hrl").
+
 -export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
          lookup/1, lookup_many/1, lookup_or_die/1, list/0, list/1, lookup_scratch/2,
@@ -18,6 +20,16 @@
 -export([list_names/0]).
 -export([serialise_events/1]).
 -export([serial/1, peek_serial/1]).
+
+%% CLI commands.
+-export([cmd_list_exchanges/1]).
+
+-rabbitmq_command(
+   {#{cli => ["list", "exchanges"],
+      http => {get, ["exchanges"]}},
+    [rabbit_cli_datagrid,
+     #{help => "List exchanges",
+       handler => {?MODULE, cmd_list_exchanges}}]}).
 
 %%----------------------------------------------------------------------------
 
@@ -561,3 +573,100 @@ type_to_route_fun(T) ->
         FunArity ->
             FunArity
     end.
+
+%% -------------------------------------------------------------------
+%% CLI commands.
+%% -------------------------------------------------------------------
+
+cmd_list_exchanges(#rabbit_cli{arg_map = ArgMap} = Context) ->
+    InfoKeys0 = rabbit_exchange:info_keys() -- [user_who_performed_action],
+    InfoKeys1 = [atom_to_binary(I) || I <- InfoKeys0],
+    Fields0 = case ArgMap of
+                  #{fields := Arg} ->
+                      Arg;
+                  _ ->
+                      [name, type]
+              end,
+    Fields1 = lists:filtermap(
+                  fun(Field) ->
+                          IsValid = lists:member(Field, InfoKeys1),
+                          case IsValid of
+                              true ->
+                                  {true, binary_to_atom(Field)};
+                              false ->
+                                  false
+                          end
+                  end, Fields0),
+    Priv = #{fields => Fields1},
+
+    %% Start datagrid with callbacks.
+    rabbit_cli_datagrid:process(
+      fun exchanges_fields/1,
+      fun exchanges_setup_stream/1,
+      fun exchanges_next_record/1,
+      fun exchanges_teardown_stream/1,
+      Priv, Context).
+
+exchanges_fields(
+  #{fields := Fields} = Priv) ->
+    Fields1 = lists:map(
+                fun
+                    (name = Key) ->
+                        #{name => Key, type => string};
+                    (type = Key) ->
+                        #{name => Key, type => string};
+                    (durable = Key) ->
+                        #{name => Key, type => boolean};
+                    (auto_delete = Key) ->
+                        #{name => Key, type => boolean};
+                    (internal = Key) ->
+                        #{name => Key, type => boolean};
+                    (arguments = Key) ->
+                        #{name => Key, type => term};
+                    (policy = Key) ->
+                        #{name => Key, type => string};
+                    (Key) ->
+                        #{name => Key, type => term}
+                end, Fields),
+    {ok, Fields1, Priv}.
+
+exchanges_setup_stream(Priv) ->
+    Exchanges = rabbit_exchange:list(),
+    case Exchanges of
+        [First | _] ->
+            Next = First#exchange.name,
+            {ok, Priv#{exchanges => Exchanges, next => Next}};
+        [] ->
+            {ok, Priv#{exchanges => Exchanges}}
+    end.
+
+exchanges_teardown_stream(_Priv) ->
+    ok.
+
+exchanges_next_record(#{exchanges := Exchanges, next := Name} = Priv) ->
+    exchanges_next_record1(Exchanges, Name, Priv);
+exchanges_next_record(Priv) ->
+    {ok, none, Priv}.
+
+exchanges_next_record1(
+  [#exchange{name = Name1} = Exchange | Rest], Name2,
+  #{fields := Fields} = Priv)
+  when Name1 =:= Name2 ->
+    Record0 = info(Exchange, Fields),
+    Record1 = lists:sublist(Record0, length(Fields)),
+    Record2 = [case Value of
+                   #resource{name = N} ->
+                       N;
+                   _ ->
+                       Value
+               end || {_Key, Value} <- Record1],
+
+    Priv1 = case Rest of
+                [#exchange{name = Next} | _] ->
+                    Priv#{next => Next};
+                [] ->
+                    maps:remove(next, Priv)
+            end,
+    {ok, Record2, Priv1};
+exchanges_next_record1([_ | Rest], Name, Priv) ->
+    exchanges_next_record1(Rest, Name, Priv).
