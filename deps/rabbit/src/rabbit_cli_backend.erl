@@ -98,25 +98,9 @@ code_change(_Vsn, State, Data, _Extra) ->
 final_argparse_def(
   #rabbit_cli{argparse_def = PartialArgparseDef}) ->
     FullArgparseDef = rabbit_cli_commands:discovered_argparse_def(),
-    ArgparseDef1 = merge_argparse_def(PartialArgparseDef, FullArgparseDef),
+    ArgparseDef1 = rabbit_cli_commands:merge_argparse_def(
+                     PartialArgparseDef, FullArgparseDef),
     ArgparseDef1.
-
-merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
-    Args1 = maps:get(arguments, ArgparseDef1, []),
-    Args2 = maps:get(arguments, ArgparseDef2, []),
-    Args = merge_arguments(Args1, Args2),
-    Cmds1 = maps:get(commands, ArgparseDef1, #{}),
-    Cmds2 = maps:get(commands, ArgparseDef2, #{}),
-    Cmds = merge_commands(Cmds1, Cmds2),
-    maps:merge(
-      ArgparseDef1,
-      ArgparseDef2#{arguments => Args, commands => Cmds}).
-
-merge_arguments(Args1, Args2) ->
-    Args1 ++ Args2.
-
-merge_commands(Cmds1, Cmds2) ->
-    maps:merge(Cmds1, Cmds2).
 
 final_parse(
   #rabbit_cli{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
