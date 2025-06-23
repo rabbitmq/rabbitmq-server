@@ -12,7 +12,8 @@
          discovered_argparse_def/0,
          merge_argparse_def/2,
          expect_legacy/1]).
--export([cmd_noop/1,
+-export([cmd_generate_completion_script/1,
+         cmd_noop/1,
          cmd_hello/1,
          cmd_crash/1,
          cmd_import_definitions/1,
@@ -59,6 +60,17 @@
    {#{cli => ["top"]},
     [#{help => "Top-like interactive view",
        handler => {?MODULE, cmd_top}}]}).
+
+-rabbitmq_command(
+   {#{cli => ["generate", "completion"]},
+    #{help => "Generate a completion script for the given shell",
+      arguments => [
+                    #{name => shell,
+                      type => {binary, [<<"fish">>]},
+                      required => true,
+                      help => "Name of the shell to target"}
+                   ],
+      handler => {?MODULE, cmd_generate_completion_script}}}).
 
 %% -------------------------------------------------------------------
 %% Commands discovery.
@@ -186,6 +198,166 @@ merge_arguments([], Args2, Acc) ->
 
 merge_commands(Cmds1, Cmds2) ->
     maps:merge(Cmds1, Cmds2).
+
+%% -------------------------------------------------------------------
+%% Completion files.
+%% -------------------------------------------------------------------
+
+cmd_generate_completion_script(
+  #rabbit_cli{arg_map = #{shell := Shell}} = Context) ->
+    ?LOG_DEBUG("Generating completion script for shell `~ts`", [Shell]),
+    generate_completion_script(Context, Shell).
+
+generate_completion_script(
+  #rabbit_cli{progname = Progname, argparse_def = ArgparseDef} = Context,
+  <<"fish">>) ->
+    Chunk1 = io_lib:format(
+               """
+               # Clear any existing completion rules.
+               complete -c ~ts -e
+
+               # Disable filename completion.
+               complete -c ~ts -f
+
+               """, [Progname, Progname]),
+
+    Chunk2 = completion_for_fish(Context, ArgparseDef, []),
+
+    io:format("~ts~n~ts", [Chunk1, Chunk2]).
+
+completion_for_fish(Context, ArgparseDef, CmdPath) ->
+    Chunk1 = format_arguments_for_fish(Context, ArgparseDef, CmdPath),
+    Chunk2 = format_commands_for_fish(Context, ArgparseDef, CmdPath),
+    [Chunk1, Chunk2].
+
+format_arguments_for_fish(
+  #rabbit_cli{progname = Progname},
+  #{arguments := Arguments},
+  CmdPath) when Arguments =/= [] ->
+    Chunk = lists:map(
+              fun(Arg) ->
+                      Cond = case CmdPath of
+                                 [] ->
+                                     "";
+                                 _ ->
+                                     format_cmdpath_cond_for_fish(
+                                       CmdPath, [])
+                             end,
+                      Option = format_arg_for_fish(Arg),
+                      Desc = format_desc_for_fish(Arg),
+                      io_lib:format(
+                        "complete -c ~ts~ts~ts~ts~n",
+                        [Progname, Cond, Option, Desc])
+              end, Arguments),
+    [io_lib:nl(), Chunk];
+format_arguments_for_fish(_Context, _ArgparseDef, _CmdPath) ->
+    "".
+
+format_commands_for_fish(
+  #rabbit_cli{progname = Progname} = Context,
+  #{commands := Commands},
+  CmdPath) when Commands =/= #{} ->
+    CmdNames = lists:sort(maps:keys(Commands)),
+    Chunk1 = lists:map(
+               fun(CmdName) ->
+                       Command = maps:get(CmdName, Commands),
+                       Cond = format_cmdpath_cond_for_fish(CmdPath, CmdNames),
+                       Desc = format_desc_for_fish(Command),
+                       io_lib:format(
+                         "complete -c ~ts~ts -a ~ts~ts~n",
+                         [Progname, Cond, CmdName, Desc])
+               end, CmdNames),
+    Chunk2 = lists:map(
+               fun(CmdName) ->
+                       Command = maps:get(CmdName, Commands),
+                       completion_for_fish(
+                         Context, Command, CmdPath ++ [CmdName])
+               end, CmdNames),
+    [io_lib:nl(), Chunk1, Chunk2];
+format_commands_for_fish(_Context, _ArgparseDef, _CmdPath) ->
+    "".
+
+format_cmdpath_cond_for_fish([], _CmdNames) ->
+     " -n __fish_use_subcommand";
+format_cmdpath_cond_for_fish(CmdPath, CmdNames) ->
+    CondA = lists:map(
+              fun(CmdName) ->
+                      io_lib:format(
+                        "__fish_seen_subcommand_from ~ts",
+                        [CmdName])
+              end, CmdPath),
+    CondB = case CmdNames of
+                [] ->
+                    [];
+                _ ->
+                    CondB0 = lists:map(
+                               fun(CmdName) ->
+                                       io_lib:format("~ts", [CmdName])
+                               end, CmdNames),
+                    CondB1 = string:join(CondB0, " "),
+                    CondB2 = io_lib:format(
+                               "not __fish_seen_subcommand_from ~ts",
+                               [CondB1]),
+                    [CondB2]
+            end,
+    Cond1 = string:join(CondA ++ CondB, " && "),
+    Cond2 = lists:flatten(Cond1),
+    io_lib:format(" -n ~0p", [Cond2]).
+
+format_arg_for_fish(Arg) ->
+    Long = case Arg of
+               #{long := [$- | Name]} ->
+                   io_lib:format(" -l ~ts", [Name]);
+               #{long := Name} ->
+                   io_lib:format(" -o ~ts", [Name]);
+               _ ->
+                   ""
+           end,
+    Short = case Arg of
+                #{short := Char} ->
+                    io_lib:format(" -s ~tc", [Char]);
+                _ ->
+                    ""
+            end,
+    IsRequired = case Arg of
+                     #{required := R} ->
+                         R;
+                     #{long := _} ->
+                         false;
+                     #{short := _} ->
+                         false;
+                     _ ->
+                         true
+                 end,
+    Required = case IsRequired of
+                   true ->
+                       " -r";
+                   false ->
+                       ""
+               end,
+    Type = maps:get(type, Arg, string),
+    ArgArg = case Type of
+                 {ErlType, [H | _] = Choices}
+                   when ErlType =:= atom orelse
+                        ErlType =:= binary orelse
+                        (ErlType =:= string andalso is_list(H)) ->
+                     AA0 = lists:map(
+                             fun(Choice) ->
+                                     io_lib:format("~ts", [Choice])
+                             end, Choices),
+                     AA1 = string:join(AA0, " "),
+                     AA2 = lists:flatten(AA1),
+                     AA3 = io_lib:format(" -a ~p", [AA2]),
+                     AA3;
+                 _ ->
+                     ""
+             end,
+    [Long, Short, Required, ArgArg].
+
+format_desc_for_fish(#{help := Help}) ->
+    io_lib:format(" -d ~0p", [Help]);
+format_desc_for_fish(_) ->
+    "".
 
 %% -------------------------------------------------------------------
 %% Helpers.
