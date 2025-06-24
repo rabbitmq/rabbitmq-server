@@ -29,7 +29,11 @@
 %%  * rabbit_definitions_import_http
 %%  * rabbit_definitions_hashing
 -module(rabbit_definitions).
+
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+
+-include("src/rabbit_cli_backend.hrl").
 
 -export([boot/0]).
 %% automatic import on boot
@@ -55,6 +59,10 @@
   is_internal_parameter/1
 ]).
 -export([decode/1, decode/2, args/1, validate_definitions/1]).
+
+%% CLI commands.
+-export([cmd_import_definitions/1,
+         cmd_export_definitions/1]).
 
 %% for tests
 -export([
@@ -89,6 +97,18 @@
 }.
 
 -export_type([definition_object/0, definition_list/0, definition_category/0, definitions/0]).
+
+-rabbitmq_command(
+   {#{cli => ["import", "definitions"]},
+    [{rabbit_cli_io, argparse_def, [file_input]},
+     #{help => "Import definitions",
+       handler => {?MODULE, cmd_import_definitions}}]}).
+
+-rabbitmq_command(
+   {#{cli => ["export", "definitions"]},
+    [{rabbit_cli_io, argparse_def, [file_output]},
+     #{help => "Export definitions",
+       handler => {?MODULE, cmd_export_definitions}}]}).
 
 -define(IMPORT_WORK_POOL, definition_import_pool).
 
@@ -1159,3 +1179,64 @@ topic_permission_definition(P0) ->
 
 tags_as_binaries(Tags) ->
     [to_binary(T) || T <- Tags].
+
+%% -------------------------------------------------------------------
+%% CLI commands.
+%% -------------------------------------------------------------------
+
+cmd_import_definitions(#rabbit_cli{arg_map = ArgMap} = Context) ->
+    case ArgMap of
+        #{input := "-"} ->
+            import_from_stdin(Context);
+        #{input := Filename} ->
+            import_from_file(Context, Filename);
+        _ ->
+            import_from_stdin(Context)
+    end.
+
+import_from_file(Context, Filename) ->
+    case rabbit_cli_backend:read_file(Context, Filename) of
+        {ok, Data} ->
+            do_import(Context, Data);
+        {error, _} = Error ->
+            Error
+    end.
+
+import_from_stdin(Context) ->
+    case rabbit_cli_backend:read_stdin(Context) of
+        {ok, Data} ->
+            do_import(Context, Data);
+        {error, _} = Error ->
+            Error
+    end.
+
+do_import(_Context, Data) ->
+    try
+        Json = json:decode(Data),
+        import_parsed(Json)
+    catch
+        error:unexpected_end = Reason ->
+            {error, Reason};
+        error:{invalid_byte, _Byte} = Reason ->
+            {error, Reason};
+        error:{unexpected_sequence, _Bytes} = Reason ->
+            {error, Reason}
+    end.
+
+cmd_export_definitions(#rabbit_cli{arg_map = ArgMap} = Context) ->
+    Defs = all_definitions(),
+    Json = json:encode(Defs),
+    case ArgMap of
+        #{output := "-"} ->
+            export_to_stdin(Context, Json);
+        #{output := Filename} ->
+            export_to_file(Context, Json, Filename);
+        _ ->
+            export_to_stdin(Context, Json)
+    end.
+
+export_to_file(Context, Json, Filename) ->
+    rabbit_cli_backend:write_file(Context, Filename, Json).
+
+export_to_stdin(_Context, Json) ->
+    io:format("~ts~n", [Json]).

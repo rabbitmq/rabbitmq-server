@@ -5,7 +5,8 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([start_link/1,
-         run_command/2]).
+         run_command/2,
+         gen_reply/3]).
 -export([init/1,
          callback_mode/0,
          handle_event/4,
@@ -17,19 +18,24 @@
                   stream :: gun:stream_ref(),
                   delayed_requests = [] :: list(),
                   io_requests = #{} :: map(),
+                  caller :: pid(),
                   group_leader :: pid()}).
 
 start_link(Uri) ->
-    gen_statem:start_link(?MODULE, Uri, []).
+    Caller = self(),
+    gen_statem:start_link(?MODULE, #{uri => Uri, caller => Caller}, []).
 
 run_command(Client, ContextMap) ->
     gen_statem:call(Client, {?FUNCTION_NAME, ContextMap}).
+
+gen_reply(Client, From, Reply) ->
+    gen_statem:cast(Client, {?FUNCTION_NAME, From, Reply}).
 
 %% -------------------------------------------------------------------
 %% gen_statem callbacks.
 %% -------------------------------------------------------------------
 
-init(Uri) ->
+init(#{uri := Uri, caller := Caller}) ->
     maybe
         #{host := Host, port := Port} = UriMap = uri_string:parse(Uri),
         GroupLeader = erlang:group_leader(),
@@ -40,6 +46,7 @@ init(Uri) ->
         {ok, ConnPid} ?= gun:open(Host, Port),
 
         Data = #?MODULE{uri = UriMap,
+                        caller = Caller,
                         group_leader = GroupLeader,
                         connection = ConnPid},
         {ok, opening_connection, Data}
@@ -156,6 +163,11 @@ handle_request({call_ret, From, Reply}, Data) ->
     {noreply, Data};
 handle_request({call_exception, Class, Reason, Stacktrace}, _Data) ->
     erlang:raise(Class, Reason, Stacktrace);
+handle_request(
+  {frontend_request, _From, _Request} = FrontendRequest,
+  #?MODULE{caller = Caller} = Data) ->
+    Caller ! FrontendRequest,
+    {noreply, Data};
 handle_request(
   {io_request, From, ReplyAs, Request},
   #?MODULE{group_leader = GroupLeader,
