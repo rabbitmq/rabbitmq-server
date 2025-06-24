@@ -610,13 +610,13 @@ ranch_handshake(Ref) ->
 tune_buffer_size(Sock, dynamic_buffer) ->
     case rabbit_net:setopts(Sock, [{buffer, 128}]) of
         ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
+        {error, _} -> _ = rabbit_net:fast_close(Sock),
                       exit(normal)
     end;
 tune_buffer_size(Sock, static_buffer) ->
     case tune_buffer_size_static(Sock) of
         ok         -> ok;
-        {error, _} -> rabbit_net:fast_close(Sock),
+        {error, _} -> _ = rabbit_net:fast_close(Sock),
                       exit(normal)
     end.
 
