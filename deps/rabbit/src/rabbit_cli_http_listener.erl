@@ -18,7 +18,9 @@
          websocket_info/2,
          terminate/3]).
 
--record(?MODULE, {listeners = [] :: [pid()]}).
+-record(?MODULE, {listeners = [] :: [{proto(), inet:port_number(), pid()}]}).
+
+-type proto() :: erldist | http.
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, #{}, []).
@@ -34,9 +36,7 @@ init(_) ->
             ignore;
         {ok, Listeners} ->
             State = #?MODULE{listeners = Listeners},
-            {ok, State, hibernate};
-        {error, _} = Error ->
-            Error
+            {ok, State, hibernate}
     end.
 
 handle_call(Request, From, State) ->

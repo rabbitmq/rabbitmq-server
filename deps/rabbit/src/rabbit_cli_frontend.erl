@@ -11,6 +11,9 @@
 -record(?MODULE, {scriptname,
                   connection}).
 
+-spec main(Args) -> no_return() when
+      Args :: argparse:args().
+
 main(Args) ->
     ScriptName = escript:script_name(),
     add_rabbitmq_code_path(ScriptName),
@@ -52,7 +55,8 @@ configure_logging() ->
     ok.
 
 flush_log_messages() ->
-    rabbit_logger_std_h:filesync(?LOG_HANDLER_NAME).
+    _ = rabbit_logger_std_h:filesync(?LOG_HANDLER_NAME),
+    ok.
 
 %% -------------------------------------------------------------------
 %% Preparation for remote command execution.
@@ -62,7 +66,7 @@ run_cli(ScriptName, Args) ->
     ProgName0 = filename:basename(ScriptName, ".bat"),
     ProgName1 = filename:basename(ProgName0, ".escript"),
     Priv = #?MODULE{scriptname = ScriptName},
-    Context = #rabbit_cli{progname = list_to_binary(ProgName1),
+    Context = #rabbit_cli{progname = ProgName1,
                           args = Args,
                           priv = Priv},
     init_local_args(Context).
@@ -84,7 +88,7 @@ init_local_args(Context) ->
 
 set_log_level(#rabbit_cli{arg_map = #{verbose := Verbosity}} = Context)
   when Verbosity >= 3 ->
-    logger:set_primary_config(level, debug),
+    _ = logger:set_primary_config(level, debug),
     connect_to_node(Context);
 set_log_level(#rabbit_cli{} = Context) ->
     connect_to_node(Context).

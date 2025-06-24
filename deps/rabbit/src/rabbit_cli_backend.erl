@@ -44,17 +44,17 @@ map_to_context(ContextMap) ->
                 command = maps:get(command, ContextMap),
                 legacy = Legacy}.
 
-is_legacy_progname(<<"rabbitmqctl">>) ->
+is_legacy_progname("rabbitmqctl") ->
     true;
-is_legacy_progname(<<"rabbitmq-diagnostics">>) ->
+is_legacy_progname("rabbitmq-diagnostics") ->
     true;
-is_legacy_progname(<<"rabbitmq-plugins">>) ->
+is_legacy_progname("rabbitmq-plugins") ->
     true;
-is_legacy_progname(<<"rabbitmq-queues">>) ->
+is_legacy_progname("rabbitmq-queues") ->
     true;
-is_legacy_progname(<<"rabbitmq-streams">>) ->
+is_legacy_progname("rabbitmq-streams") ->
     true;
-is_legacy_progname(<<"rabbitmq-upgrade">>) ->
+is_legacy_progname("rabbitmq-upgrade") ->
     true;
 is_legacy_progname(_Progname) ->
     false.
