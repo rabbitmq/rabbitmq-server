@@ -4,9 +4,12 @@
 
 -include_lib("rabbit_common/include/resource.hrl").
 
+-include("src/rabbit_cli_backend.hrl").
+
+-export([argparse_def/1,
+         supports_colors/1]).
 -export([start_link/1,
          stop/1,
-         argparse_def/1,
          display_help/1,
          format/3,
          start_record_stream/4,
@@ -65,6 +68,22 @@ argparse_def(file_output) ->
          help => "Write output to file <FILE>"}
       ]
      }.
+
+supports_colors(#rabbit_cli{env = Env, terminal = #{info := TermInfo}}) ->
+    ?LOG_DEBUG("Env: ~p", [Env]),
+    case proplists:get_value("COLORTERM", Env) of
+        "truecolor" ->
+            {true, truecolor};
+        "24bit" ->
+            {true, truecolor};
+        _ ->
+            case eterminfo:tigetnum_m(TermInfo, colors) of
+                Colors when is_integer(Colors) andalso Colors >= 0 ->
+                    {true, Colors};
+                _ ->
+                    false
+            end
+    end.
 
 %% -------------------------------------------------------------------
 %% OLD CODE (to remove).

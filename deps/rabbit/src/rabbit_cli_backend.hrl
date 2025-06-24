@@ -6,8 +6,13 @@
                      command :: argparse:command() | undefined,
                      legacy :: boolean() | undefined,
 
+                     os :: {unix | win32, atom()},
+                     env :: [{os:env_var_name(), os:env_var_value()}],
                      terminal :: #{stdout := boolean(),
                                    stderr := boolean(),
-                                   stdin := boolean()},
+                                   stdin := boolean(),
+
+                                   name := eterminfo:term_name(),
+                                   info := eterminfo:terminfo()},
 
                      priv}).

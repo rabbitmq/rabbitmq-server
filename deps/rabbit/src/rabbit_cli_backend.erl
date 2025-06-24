@@ -43,6 +43,8 @@ map_to_context(ContextMap) ->
                 cmd_path = maps:get(cmd_path, ContextMap),
                 command = maps:get(command, ContextMap),
                 legacy = Legacy,
+                os = maps:get(os, ContextMap),
+                env = maps:get(env, ContextMap),
                 terminal = maps:get(terminal, ContextMap)}.
 
 is_legacy_progname("rabbitmqctl") ->
