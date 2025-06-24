@@ -44,8 +44,7 @@
 -define(DEFAULT_EXCHANGE_NAME, <<>>).
 
 -rabbitmq_command(
-   {#{cli => ["list", "exchanges"],
-      http => {get, ["exchanges"]}},
+   {#{cli => ["list", "exchanges"]},
     [rabbit_cli_datagrid,
      #{help => "List exchanges",
        arguments =>
@@ -58,6 +57,21 @@
           help => "Fields to include"}
        ],
        handler => {?MODULE, cmd_list_exchanges}}]}).
+-rabbitmq_command(
+   {#{cli => ["list_exchanges"]},
+    [rabbit_cli_datagrid,
+     #{help => "List exchanges",
+       arguments =>
+       [
+        #{name => fields,
+          %% FIXME: Exclude user_who_performed_action
+          type => {atom, ?INFO_KEYS},
+          nargs => list,
+          required => false,
+          help => "Fields to include"}
+       ],
+       handler => {?MODULE, cmd_list_exchanges},
+       legacy => true}]}).
 
 -spec recover(rabbit_types:vhost()) -> [name()].
 
@@ -587,8 +601,9 @@ type_to_route_fun(T) ->
 %% CLI commands.
 %% -------------------------------------------------------------------
 
-cmd_list_exchanges(#rabbit_cli{arg_map = ArgMap} = Context) ->
-    InfoKeys = rabbit_exchange:info_keys() -- [user_who_performed_action],
+cmd_list_exchanges(#rabbit_cli{arg_map = ArgMap, legacy = Legacy} = Context) ->
+    VHost = <<"/">>, %% TODO: Take from args and use it.
+    InfoKeys = rabbit_exchange:info_keys(),
     Fields0 = case ArgMap of
                   #{fields := Arg} ->
                       Arg;
@@ -600,6 +615,13 @@ cmd_list_exchanges(#rabbit_cli{arg_map = ArgMap} = Context) ->
                           lists:member(Field, InfoKeys)
                   end, Fields0),
     Priv = #{fields => Fields1},
+
+    case Legacy of
+        false ->
+            ok;
+        true ->
+            io:format("Listing exchanges for vhost ~ts ...~n", [VHost])
+    end,
 
     %% Start datagrid with callbacks.
     rabbit_cli_datagrid:process(

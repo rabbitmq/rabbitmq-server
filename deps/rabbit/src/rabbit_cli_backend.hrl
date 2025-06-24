@@ -4,5 +4,6 @@
                      arg_map,
                      cmd_path,
                      command,
+                     legacy,
 
                      priv}).

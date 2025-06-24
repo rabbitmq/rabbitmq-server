@@ -34,12 +34,30 @@ run_command(#rabbit_cli{} = Context, Caller) when is_pid(Caller) ->
     rabbit_cli_backend_sup:start_backend(Context, Caller, GroupLeader).
 
 map_to_context(ContextMap) ->
-    #rabbit_cli{progname = maps:get(progname, ContextMap),
+    Progname = maps:get(progname, ContextMap),
+    Legacy = is_legacy_progname(Progname),
+    #rabbit_cli{progname = Progname,
                 args = maps:get(args, ContextMap),
                 argparse_def = maps:get(argparse_def, ContextMap),
                 arg_map = maps:get(arg_map, ContextMap),
                 cmd_path = maps:get(cmd_path, ContextMap),
-                command = maps:get(command, ContextMap)}.
+                command = maps:get(command, ContextMap),
+                legacy = Legacy}.
+
+is_legacy_progname(<<"rabbitmqctl">>) ->
+    true;
+is_legacy_progname(<<"rabbitmq-diagnostics">>) ->
+    true;
+is_legacy_progname(<<"rabbitmq-plugins">>) ->
+    true;
+is_legacy_progname(<<"rabbitmq-queues">>) ->
+    true;
+is_legacy_progname(<<"rabbitmq-streams">>) ->
+    true;
+is_legacy_progname(<<"rabbitmq-upgrade">>) ->
+    true;
+is_legacy_progname(_Progname) ->
+    false.
 
 start_link(Context, Caller, GroupLeader) ->
     Args = #{context => Context,
@@ -133,11 +151,38 @@ code_change(_Vsn, State, Data, _Extra) ->
 %% -------------------------------------------------------------------
 
 final_argparse_def(
-  #rabbit_cli{argparse_def = PartialArgparseDef}) ->
+  #rabbit_cli{argparse_def = PartialArgparseDef} = Context) ->
     FullArgparseDef = rabbit_cli_commands:discovered_argparse_def(),
     ArgparseDef1 = rabbit_cli_commands:merge_argparse_def(
                      PartialArgparseDef, FullArgparseDef),
-    ArgparseDef1.
+    ArgparseDef2 = filter_legacy_commands(Context, ArgparseDef1),
+    ArgparseDef2.
+
+filter_legacy_commands(#rabbit_cli{legacy = Legacy} = Context, ArgparseDef) ->
+    case ArgparseDef of
+        #{commands := Commands} ->
+            Commands1 = (
+              maps:filtermap(
+                fun(_CmdName, Command) ->
+                        Keep = (Legacy =:= is_legacy_command(Command)),
+                        case Keep of
+                            true ->
+                                Command1 = filter_legacy_commands(
+                                             Context, Command),
+                                {true, Command1};
+                            false ->
+                                false
+                        end
+                end, Commands)),
+            ArgparseDef#{commands => Commands1};
+        _ ->
+            ArgparseDef
+    end.
+
+is_legacy_command(#{legacy := true}) ->
+    true;
+is_legacy_command(_Command) ->
+    false.
 
 final_parse(
   #rabbit_cli{progname = ProgName, args = Args, argparse_def = ArgparseDef}) ->
