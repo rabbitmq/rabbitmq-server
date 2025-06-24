@@ -40,7 +40,7 @@
 %% Boot steps.
 -export([update_cluster_tags/0, maybe_insert_default_data/0, boot_delegate/0, recover/0,
          pg_local_amqp_session/0,
-         pg_local_amqp_connection/0, check_initial_run/0]).
+         pg_local_amqp_connection/0, prevent_startup_if_node_was_reset/0]).
 
 -rabbit_boot_step({pre_boot, [{description, "rabbit boot start"}]}).
 
@@ -201,7 +201,7 @@
 
 -rabbit_boot_step({initial_run_check,
                    [{description, "check if this is the first time the node starts"},
-                    {mfa,         {?MODULE, check_initial_run, []}},
+                    {mfa,         {?MODULE, prevent_startup_if_node_was_reset, []}},
                     {requires,    recovery},
                     {enables,     empty_db_check}]}).
 
@@ -1159,13 +1159,13 @@ update_cluster_tags() ->
     rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>).
 
 
--spec check_initial_run() -> 'ok' | no_return().
+-spec prevent_startup_if_node_was_reset() -> 'ok' | no_return().
 
-check_initial_run() ->
-    case application:get_env(rabbit, verify_initial_run, false) of
+prevent_startup_if_node_was_reset() ->
+    case application:get_env(rabbit, prevent_startup_if_node_was_reset, false) of
         false ->
             %% Feature is disabled, skip the check
-            ?LOG_DEBUG("Initial run verification is disabled",
+            ?LOG_DEBUG("prevent_startup_if_node_was_reset is disabled",
                        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
             ok;
         true ->

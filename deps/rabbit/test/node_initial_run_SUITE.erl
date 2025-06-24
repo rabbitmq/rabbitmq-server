@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2024 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
-%% Test suite for the verify_initial_run feature.
+%% Test suite for the prevent_startup_if_node_was_reset feature.
 %% This feature helps detect potential data loss scenarios by maintaining
 %% a marker file to track if a node has been initialized before.
 
@@ -25,12 +25,12 @@ all() ->
 groups() ->
     [
         {single_node_mnesia, [], [
-            verify_initial_run_disabled,
-            verify_initial_run_enabled
+            prevent_startup_if_node_was_reset_disabled,
+            prevent_startup_if_node_was_reset_enabled
         ]},
         {single_node_khepri, [], [
-            verify_initial_run_disabled,
-            verify_initial_run_enabled
+            prevent_startup_if_node_was_reset_disabled,
+            prevent_startup_if_node_was_reset_enabled
         ]}
     ].
 
@@ -76,7 +76,7 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases
 %% -------------------------------------------------------------------
 
-verify_initial_run_disabled(Config) ->
+prevent_startup_if_node_was_reset_disabled(Config) ->
     % When feature is disabled (default), node should start normally
     DataDir = rabbit_ct_broker_helpers:get_node_config(Config, 0, data_dir),
     MarkerFile = filename:join(DataDir, "node_initialized.marker"),
@@ -91,7 +91,7 @@ verify_initial_run_disabled(Config) ->
     ?assertNot(filelib:is_file(MarkerFile)),
     ok.
 
-verify_initial_run_enabled(Config) ->
+prevent_startup_if_node_was_reset_enabled(Config) ->
     DataDir = rabbit_ct_broker_helpers:get_node_config(Config, 0, data_dir),
     MarkerFile = filename:join(DataDir, "node_initialized.marker"),
 
@@ -140,11 +140,11 @@ start_app(Config) ->
         Error -> Error
     end.
 
-maybe_enable_verify_initial_run(Config, verify_initial_run_enabled) ->
+maybe_enable_prevent_startup_if_node_was_reset(Config, prevent_startup_if_node_was_reset_enabled) ->
     rabbit_ct_helpers:merge_app_env(
-        Config, {rabbit, [{verify_initial_run, true}]}
+        Config, {rabbit, [{prevent_startup_if_node_was_reset, true}]}
     );
-maybe_enable_verify_initial_run(Config, _) ->
+maybe_enable_prevent_startup_if_node_was_reset(Config, _) ->
     Config.
 
 meta_store(single_node_mnesia) ->
@@ -165,4 +165,4 @@ schema_file(Config) ->
 
 set_env(Config, Bool) ->
     Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    ok = rpc:call(Node, application, set_env, [rabbit, verify_initial_run, Bool]).
+    ok = rpc:call(Node, application, set_env, [rabbit, prevent_startup_if_node_was_reset, Bool]).
