@@ -361,6 +361,8 @@ cmd_hello(_) ->
     io:format("Hello ~s!~n", [string:trim(Name)]),
     ok.
 
+-spec cmd_crash(#rabbit_cli{}) -> no_return().
+
 cmd_crash(_) ->
     erlang:exit(oops).
 
@@ -373,7 +375,7 @@ run_top(IO) ->
         quit ->
             ok
     after 1000 ->
-              rabbit_cli_io:format(IO, "Refresh~n", []),
+              _ = rabbit_cli_io:format(IO, "Refresh~n", []),
               run_top(IO)
     end.
 

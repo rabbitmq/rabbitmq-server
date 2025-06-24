@@ -15,7 +15,7 @@
 
 -record(?MODULE, {uri :: uri_string:uri_map(),
                   connection :: pid(),
-                  stream :: gun:stream_ref(),
+                  stream :: gun:stream_ref() | undefined,
                   delayed_requests = [] :: list(),
                   io_requests = #{} :: map(),
                   caller :: pid(),
@@ -90,9 +90,9 @@ handle_event(
     Request = binary_to_term(RequestBin),
     ?LOG_DEBUG("CLI: received HTTP message from server: ~p", [Request]),
     case handle_request(Request, Data) of
-        {reply, Reply, Data1} ->
-            send_request(Reply, Data1),
-            {keep_state, Data1};
+        % {reply, Reply, Data1} ->
+        %     send_request(Reply, Data1),
+        %     {keep_state, Data1};
         {noreply, Data1} ->
             {keep_state, Data1};
         {stop, Reason} ->
