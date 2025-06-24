@@ -21,7 +21,7 @@ TEST_DEPS = amqp amqp_client temp x509 rabbit
 dep_amqp = hex 3.3.0
 dep_csv = hex 3.2.1
 dep_json = hex 1.4.1
-dep_temp = hex 0.4.7
+dep_temp = hex 0.4.9
 dep_x509 = hex 0.9.0
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
