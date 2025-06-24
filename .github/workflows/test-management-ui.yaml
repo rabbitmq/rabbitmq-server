@@ -36,7 +36,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Configure OTP & Elixir
-      uses: erlef/setup-beam@v1.17
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}

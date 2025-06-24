@@ -34,7 +34,7 @@ jobs:
       run: git fetch --tags
 
     - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.17
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ inputs.erlang_version }}
         elixir-version: ${{ inputs.elixir_version }}
