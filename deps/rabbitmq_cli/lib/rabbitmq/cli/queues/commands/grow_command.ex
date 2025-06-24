@@ -33,20 +33,40 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, :too_many_args}
   end
 
-  def validate([_, s], _)
+  def validate(args = [n, s], opts) do
+    case Integer.parse(n) do
+      {cluster_size, _} when is_integer(cluster_size) ->
+        do_validate([cluster_size, s], opts)
+
+      :error ->
+        do_validate(args, opts)
+    end
+  end
+
+  def do_validate([_, s], _)
       when not (s == "all" or
                   s == "even") do
     {:validation_failure, "strategy '#{s}' is not recognised."}
   end
 
-  def validate(_, %{membership: m})
+  def do_validate([n, _], _)
+      when (is_integer(n) and n <= 0) do
+    {:validation_failure, "target quorum cluster size '#{n}' must be greater than 0."}
+  end
+
+  def do_validate([n, _], %{membership: m})
+      when (is_integer(n) and not (m == "voter" or m == "promotable")) do
+    {:validation_failure, "voter status '#{m}' must be 'voter' or 'promotable' to grow to target quorum cluster size '#{n}'."}
+  end
+
+  def do_validate(_, %{membership: m})
       when not (m == "promotable" or
                   m == "non_voter" or
                   m == "voter") do
     {:validation_failure, "voter status '#{m}' is not recognised."}
   end
 
-  def validate(_, _) do
+  def do_validate(_, _) do
     :ok
   end
 
@@ -54,20 +74,38 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     Validators.chain(
       [
         &Validators.rabbit_is_running/2,
-        &Validators.existing_cluster_member/2
+        fn args = [n, _], opts ->
+          case Integer.parse(n) do
+            {cluster_size, _} when is_integer(cluster_size) ->
+              :ok
+
+            :error ->
+              Validators.existing_cluster_member(args, opts)
+          end
+        end
       ],
       [args, opts]
     )
   end
 
-  def run([node, strategy], %{
+  def run([node_or_quorum_cluster_size, strategy], %{
         node: node_name,
         vhost_pattern: vhost_pat,
         queue_pattern: queue_pat,
         membership: membership,
         errors_only: errors_only
       }) do
-    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
+
+    node_or_quorum_cluster_size =
+      case Integer.parse(node_or_quorum_cluster_size) do
+        {cluster_size, _} when is_integer(cluster_size) ->
+          cluster_size
+
+        :error ->
+          to_atom(node_or_quorum_cluster_size)
+      end
+
+    args = [node_or_quorum_cluster_size, vhost_pat, queue_pat, to_atom(strategy)]
 
     args =
       case to_atom(membership) do
@@ -108,11 +146,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def usage,
     do:
-      "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
+      "grow <node | quorum_cluster_size> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
 
   def usage_additional do
     [
-      ["<node>", "node name to place replicas on"],
+      ["<node | quorum_cluster_size>", "node name to place replicas on or desired quorum cluster size"],
       [
         "<all | even>",
         "add a member for all matching queues or just those whose membership count is an even number"
@@ -136,8 +174,14 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     do:
       "Grows quorum queue clusters by adding a member (replica) on the specified node for all matching queues"
 
-  def banner([node, strategy], _) do
-    "Growing #{strategy} quorum queues on #{node}..."
+  def banner([node_or_quorum_cluster_size, strategy], %{queue_pattern: queue_pattern}) do
+      case Integer.parse(node_or_quorum_cluster_size) do
+        {cluster_size, _} when is_integer(cluster_size) ->
+          "Growing #{strategy} quorum queues matching '#{queue_pattern}' to a target cluster size of '#{cluster_size}'..."
+
+        :error ->
+          "Growing #{strategy} quorum queues matching '#{queue_pattern}' to #{node_or_quorum_cluster_size}..."
+      end
   end
 
   #
