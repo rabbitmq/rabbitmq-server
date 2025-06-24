@@ -6,4 +6,8 @@
                      command :: argparse:command() | undefined,
                      legacy :: boolean() | undefined,
 
+                     terminal :: #{stdout := boolean(),
+                                   stderr := boolean(),
+                                   stdin := boolean()},
+
                      priv}).

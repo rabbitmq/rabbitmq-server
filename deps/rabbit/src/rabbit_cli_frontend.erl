@@ -66,8 +66,13 @@ run_cli(ScriptName, Args) ->
     ProgName0 = filename:basename(ScriptName, ".bat"),
     ProgName1 = filename:basename(ProgName0, ".escript"),
     Priv = #?MODULE{scriptname = ScriptName},
+    IoOpts = io:getopts(),
+    Terminal = #{stdout => proplists:get_value(stdout, IoOpts),
+                 stderr => proplists:get_value(stderr, IoOpts),
+                 stdin => proplists:get_value(stdin, IoOpts)},
     Context = #rabbit_cli{progname = ProgName1,
                           args = Args,
+                          terminal = Terminal,
                           priv = Priv},
     init_local_args(Context).
 

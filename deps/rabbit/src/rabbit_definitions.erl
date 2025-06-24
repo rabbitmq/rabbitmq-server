@@ -1225,18 +1225,24 @@ do_import(_Context, Data) ->
 
 cmd_export_definitions(#rabbit_cli{arg_map = ArgMap} = Context) ->
     Defs = all_definitions(),
-    Json = json:encode(Defs),
     case ArgMap of
         #{output := "-"} ->
-            export_to_stdin(Context, Json);
+            export_to_stdin(Context, Defs);
         #{output := Filename} ->
-            export_to_file(Context, Json, Filename);
+            export_to_file(Context, Defs, Filename);
         _ ->
-            export_to_stdin(Context, Json)
+            export_to_stdin(Context, Defs)
     end.
 
-export_to_file(Context, Json, Filename) ->
+export_to_file(Context, Defs, Filename) ->
+    Json = json:encode(Defs),
     rabbit_cli_backend:write_file(Context, Filename, Json).
 
-export_to_stdin(_Context, Json) ->
+export_to_stdin(#rabbit_cli{terminal = Terminal}, Defs) ->
+    Json = case Terminal of
+               #{stdout := true} ->
+                   json:format(Defs);
+               _ ->
+                   json:encode(Defs)
+           end,
     io:format("~ts~n", [Json]).
