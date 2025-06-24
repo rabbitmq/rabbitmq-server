@@ -65,16 +65,36 @@ flush_log_messages() ->
 run_cli(ScriptName, Args) ->
     ProgName0 = filename:basename(ScriptName, ".bat"),
     ProgName1 = filename:basename(ProgName0, ".escript"),
+    Terminal = collect_terminal_info(),
     Priv = #?MODULE{scriptname = ScriptName},
-    IoOpts = io:getopts(),
-    Terminal = #{stdout => proplists:get_value(stdout, IoOpts),
-                 stderr => proplists:get_value(stderr, IoOpts),
-                 stdin => proplists:get_value(stdin, IoOpts)},
     Context = #rabbit_cli{progname = ProgName1,
                           args = Args,
+                          os = os:type(),
+                          env = os:env(),
                           terminal = Terminal,
                           priv = Priv},
     init_local_args(Context).
+
+collect_terminal_info() ->
+    IoOpts = io:getopts(),
+    Term = eterminfo:get_term_type_or_default(),
+    TermInfo = case eterminfo:read_by_infocmp(Term) of
+                   {ok, TI} ->
+                       TI;
+                   _ ->
+                       case eterminfo:read_by_file(Term) of
+                           {ok, TI} ->
+                               TI;
+                           _ ->
+                               undefined
+                       end
+               end,
+    #{stdout => proplists:get_value(stdout, IoOpts),
+      stderr => proplists:get_value(stderr, IoOpts),
+      stdin => proplists:get_value(stdin, IoOpts),
+
+      name => Term,
+      info => TermInfo}.
 
 init_local_args(Context) ->
     maybe
