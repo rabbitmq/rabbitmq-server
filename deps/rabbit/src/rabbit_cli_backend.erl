@@ -42,7 +42,8 @@ map_to_context(ContextMap) ->
                 arg_map = maps:get(arg_map, ContextMap),
                 cmd_path = maps:get(cmd_path, ContextMap),
                 command = maps:get(command, ContextMap),
-                legacy = Legacy}.
+                legacy = Legacy,
+                terminal = maps:get(terminal, ContextMap)}.
 
 is_legacy_progname("rabbitmqctl") ->
     true;
@@ -103,10 +104,23 @@ send_frontend_request(
 %% gen_statem callbacks.
 %% -------------------------------------------------------------------
 
-init(#{context := Context, caller := Caller, group_leader := GroupLeader}) ->
+init(
+  #{context := #rabbit_cli{progname = Progname,
+                           args = Args,
+                           terminal = Terminal} = Context,
+    caller := Caller,
+    group_leader := GroupLeader
+   }) ->
     process_flag(trap_exit, true),
     erlang:link(Caller),
     erlang:group_leader(GroupLeader, self()),
+    ?LOG_INFO("CLI: running: ~0p", [[Progname | Args]]),
+    ?LOG_DEBUG(
+       "CLI: tty: stdout=~s stderr=~s stdin=~s",
+       [maps:get(stdout, Terminal),
+        maps:get(stderr, Terminal),
+        maps:get(stdin, Terminal)]),
+
     Priv = #?MODULE{caller = Caller},
     Context1 = Context#rabbit_cli{priv = Priv},
     {ok, standing_by, Context1, {next_event, internal, parse_command}}.
