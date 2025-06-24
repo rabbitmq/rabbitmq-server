@@ -40,6 +40,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinished
 
   @tag test_timeout: 3000
   test "run: targeting an unreachable node throws a badrpc" do
-    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, vhost: "/", timeout: 200}))
+    assert match?({:badrpc, _}, @command.run([], %{node: :jake@thedog, vhost: "/", timeout: 200, type: "quorum"}))
   end
 end

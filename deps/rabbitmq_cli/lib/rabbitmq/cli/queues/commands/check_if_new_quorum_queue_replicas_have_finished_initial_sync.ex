@@ -24,7 +24,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinished
 
 #  use RabbitMQ.CLI.Core.AcceptsDefaultSwitchesAndTimeout
 #  use RabbitMQ.CLI.Core.MergesNoDefaults
-#  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
+  use RabbitMQ.CLI.Core.AcceptsNoPositionalArguments
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def merge_defaults(args, opts) do
@@ -52,16 +52,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNewQuorumQueueReplicasHaveFinished
     timeout: :integer,
     type: :string
   ]
-  
-  def validate(_, _) do
-    :ok
-  end
 
-  def output({:error, {:unknown_queue_type, type}}, args) do
+  def output({:error, {:unknown_queue_type, type}}, _args) do
     {:error,
      %{
        "result" => "error",
-       "message" => "Unknown queue type #{args}"
+       "message" => "Unknown queue type #{type}"
      }}
   end
 

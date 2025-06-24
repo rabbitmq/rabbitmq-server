@@ -26,7 +26,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
   end
 
   test "merge_defaults: defaults to reporting complete results" do
-    assert @command.merge_defaults([], %{}) == {[], %{errors_only: false}}
+    assert @command.merge_defaults([], %{}) == {[], %{errors_only: false, type: "quorum"}}
   end
 
   test "validate: when no arguments are provided, returns a failure" do
@@ -55,7 +55,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommandTest do
              {:badrpc, _},
              @command.run(
                ["quorum-queue-a"],
-               Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/", timeout: 200})
+               Map.merge(context[:opts], %{node: :jake@thedog, vhost: "/", timeout: 200, type: "quorum"})
              )
            )
   end

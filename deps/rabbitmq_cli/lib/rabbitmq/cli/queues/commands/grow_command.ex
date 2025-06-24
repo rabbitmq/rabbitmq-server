@@ -67,15 +67,9 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         membership: membership,
         errors_only: errors_only
       }) do
-    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
+    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy), to_atom(membership)]
 
-    args =
-      case to_atom(membership) do
-        :promotable -> args
-        other -> args ++ [other]
-      end
-
-    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_command, :grow, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_commands, :grow, args) do
       {:error, _} = error ->
         error
 
@@ -151,14 +145,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   defp format_size({:error, _size, :timeout}) do
     # the actual size is uncertain here
     "?"
-  end
-
-  def output({:error, :not_found}, %{vhost: vhost, formatter: "json"}) do
-    {:error,
-     %{
-       "result" => "error",
-       "message" => "Target queue was not found in virtual host '#{vhost}'"
-     }}
   end
 
   defp format_size({:error, size, _}) do

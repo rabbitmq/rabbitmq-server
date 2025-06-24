@@ -11,9 +11,9 @@
 -record(resource, {
     %% '_'s come from rabbit_table:resource_match
     %% 'undefined' is expected by import definitions module
-    virtual_host :: rabbit_types:vhost() | undefined | '_',
+    virtual_host, %% :: rabbit_types:vhost() | undefined | '_',
     %% exchange, queue, topic
-    kind :: resource_kind() | '_',
+    kind, %% :: resource_kind() | '_',
     %% name as a binary
-    name :: resource_name() | '_'
+    name %% :: resource_name() | '_'
 }).

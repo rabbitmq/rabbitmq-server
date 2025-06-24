@@ -3476,14 +3476,14 @@ reclaim_memory_with_wrong_queue_type(Config) ->
     %% legacy, special case for classic queues
     ?assertMatch({error, classic_queue_not_supported},
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                              reclaim_memory, [<<"/">>, CQ])),
+                                              reclaim_memory, [rabbit_misc:queue_resource(<<"/">>, CQ)])),
     SQ = ?config(alt_queue_name, Config),
     ?assertEqual({'queue.declare_ok', SQ, 0, 0},
                  declare(Ch, SQ, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     %% all other (future) queue types get the same error
     ?assertMatch({error, not_quorum_queue},
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                              reclaim_memory, [<<"/">>, SQ])),
+                                              reclaim_memory, [rabbit_misc:queue_resource(<<"/">>, SQ)])),
     ok.
 
 queue_length_limit_drop_head(Config) ->
@@ -3703,7 +3703,7 @@ status(Config) ->
                         T2 /= <<>> andalso
                         T3 /= <<>>,
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-                                              status, [<<"/">>, QQ])),
+                                              status, [rabbit_misc:queue_resource(<<"/">>, QQ)])),
     wait_for_messages(Config, [[QQ, <<"2">>, <<"2">>, <<"0">>]]),
     ok.
 

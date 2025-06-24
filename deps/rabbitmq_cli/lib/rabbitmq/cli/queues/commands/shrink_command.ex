@@ -32,7 +32,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
       {:badrpc, _} = error ->
         error
 
-      results when errs ->
+      {:ok, results} when errs ->
         for {{:resource, vhost, _kind, name}, {:error, _, _} = res} <- results,
             do: [
               {:vhost, vhost},
@@ -41,7 +41,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
               {:result, format_result(res)}
             ]
 
-      results ->
+      {:ok, results} ->
         for {{:resource, vhost, _kind, name}, res} <- results,
             do: [
               {:vhost, vhost},
@@ -85,11 +85,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   # Implementation
   #
 
-  def format_output({:error, {:unknown_queue_type, type}}, args) do
+  def format_output({:error, {:unknown_queue_type, type}}, _args) do
     {:error,
      %{
        "result" => "error",
-       "message" => "Unknown queue type #{args}"
+       "message" => "Unknown queue type #{type}"
      }}
   end
 
