@@ -23,7 +23,7 @@ new(WsUrl, PPid, AuthInfo, Protocols) ->
     new(WsUrl, PPid, AuthInfo, Protocols, <<>>).
 
 new(WsUrl, PPid, AuthInfo, Protocols, TcpPreface) ->
-    _ = crypto:start(),
+    _ = application:start(crypto),
     _ = application:ensure_all_started(ssl),
     {Transport, Url} = case WsUrl of
         "ws://" ++ Rest -> {gen_tcp, Rest};
