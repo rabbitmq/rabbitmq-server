@@ -59,9 +59,10 @@ flush_log_messages() ->
 %% -------------------------------------------------------------------
 
 run_cli(ScriptName, Args) ->
-    ProgName = filename:basename(ScriptName, ".escript"),
+    ProgName0 = filename:basename(ScriptName, ".bat"),
+    ProgName1 = filename:basename(ProgName0, ".escript"),
     Priv = #?MODULE{scriptname = ScriptName},
-    Context = #rabbit_cli{progname = list_to_binary(ProgName),
+    Context = #rabbit_cli{progname = list_to_binary(ProgName1),
                           args = Args,
                           priv = Priv},
     init_local_args(Context).

@@ -93,33 +93,39 @@ format_fields(#?MODULE{fields = Fields} = State) ->
     {ok, State}.
 
 format_record(Record, #?MODULE{fields = Fields} = State) ->
-    Values1 = format_values(Fields, Record),
+    Values1 = format_values(Fields, Record, State),
     Values2 = string:join(Values1, "\t"),
     io:format("~ts~n", [Values2]),
     {ok, State}.
 
-format_values(Fields, Values) ->
-    format_values(Fields, Values, []).
+format_values(Fields, Values, State) ->
+    format_values(Fields, Values, State, []).
 
-format_values([#{type := string} | Rest1], [Value | Rest2], Acc) ->
+format_values([#{type := string} | Rest1], [Value | Rest2], State, Acc) ->
     String = io_lib:format("~ts", [Value]),
     Acc1 = [String | Acc],
-    format_values(Rest1, Rest2, Acc1);
-format_values([#{type := binary} | Rest1], [Value | Rest2], Acc) ->
+    format_values(Rest1, Rest2, State, Acc1);
+format_values([#{type := binary} | Rest1], [Value | Rest2], State, Acc) ->
     String = io_lib:format("~-20.. ts", [Value]),
     Acc1 = [String | Acc],
-    format_values(Rest1, Rest2, Acc1);
-format_values([#{type := integer} | Rest1], [Value | Rest2], Acc) ->
+    format_values(Rest1, Rest2, State, Acc1);
+format_values([#{type := integer} | Rest1], [Value | Rest2], State, Acc) ->
     String = io_lib:format("~b", [Value]),
     Acc1 = [String | Acc],
-    format_values(Rest1, Rest2, Acc1);
-format_values([#{type := boolean} | Rest1], [Value | Rest2], Acc) ->
-    String = io_lib:format("~ts", [if Value -> "☑"; true -> "☐" end]),
+    format_values(Rest1, Rest2, State, Acc1);
+format_values([#{type := boolean} | Rest1], [Value | Rest2], State, Acc) ->
+    #?MODULE{context = #rabbit_cli{legacy = Legacy}} = State,
+    String = case Legacy of
+                 false ->
+                     io_lib:format("~ts", [if Value -> "☑"; true -> "☐" end]);
+                 true ->
+                     io_lib:format("~ts", [Value])
+             end,
     Acc1 = [String | Acc],
-    format_values(Rest1, Rest2, Acc1);
-format_values([#{type := term} | Rest1], [Value | Rest2], Acc) ->
+    format_values(Rest1, Rest2, State, Acc1);
+format_values([#{type := term} | Rest1], [Value | Rest2], State, Acc) ->
     String = io_lib:format("~0p", [Value]),
     Acc1 = [String | Acc],
-    format_values(Rest1, Rest2, Acc1);
-format_values([], [], Acc) ->
+    format_values(Rest1, Rest2, State, Acc1);
+format_values([], [], _State, Acc) ->
     lists:reverse(Acc).

@@ -10,8 +10,7 @@
 -export([discover_commands/0,
          discovered_commands/0,
          discovered_argparse_def/0,
-         merge_argparse_def/2,
-         expect_legacy/1]).
+         merge_argparse_def/2]).
 -export([cmd_generate_completion_script/1,
          cmd_noop/1,
          cmd_hello/1,
@@ -349,25 +348,6 @@ format_desc_for_fish(#{help := Help}) ->
     io_lib:format(" -d ~0p", [Help]);
 format_desc_for_fish(_) ->
     "".
-
-%% -------------------------------------------------------------------
-%% Helpers.
-%% -------------------------------------------------------------------
-
-expect_legacy(#rabbit_cli{progname = <<"rabbitmqctl">>}) ->
-    true;
-expect_legacy(#rabbit_cli{progname = <<"rabbitmq-diagnostics">>}) ->
-    true;
-expect_legacy(#rabbit_cli{progname = <<"rabbitmq-plugins">>}) ->
-    true;
-expect_legacy(#rabbit_cli{progname = <<"rabbitmq-queues">>}) ->
-    true;
-expect_legacy(#rabbit_cli{progname = <<"rabbitmq-streams">>}) ->
-    true;
-expect_legacy(#rabbit_cli{progname = <<"rabbitmq-upgrade">>}) ->
-    true;
-expect_legacy(_Context) ->
-    false.
 
 %% -------------------------------------------------------------------
 %% XXX
