@@ -26,34 +26,23 @@
                   kbd_reader = undefined,
                   kbd_subscribers = []}).
 
-start_link(Progname) ->
-    gen_server:start_link(rabbit_cli_io, #{progname => Progname}, []).
-
-stop(IO) ->
-    MRef = erlang:monitor(process, IO),
-    _ = gen_server:call(IO, stop),
-    receive
-        {'DOWN', MRef, _, _, _Reason} ->
-            ok
-    end.
-
-argparse_def(record_stream) ->
-    #{arguments =>
-      [
-       #{name => output,
-         long => "-output",
-         short => $o,
-         type => string,
-         nargs => 1,
-         help => "Write output to file <FILE>"},
-       #{name => format,
-         long => "-format",
-         short => $f,
-         type => {atom, [plain, json]},
-         default => plain,
-         help => "Format output acccording to <FORMAT>"}
-      ]
-     };
+% argparse_def(record_stream) ->
+%     #{arguments =>
+%       [
+%        #{name => output,
+%          long => "-output",
+%          short => $o,
+%          type => string,
+%          nargs => 1,
+%          help => "Write output to file <FILE>"},
+%        #{name => format,
+%          long => "-format",
+%          short => $f,
+%          type => {atom, [plain, json]},
+%          default => plain,
+%          help => "Format output acccording to <FORMAT>"}
+%       ]
+%      };
 argparse_def(file_input) ->
     #{arguments =>
       [
@@ -64,7 +53,33 @@ argparse_def(file_input) ->
          nargs => 1,
          help => "Read input from file <FILE>"}
       ]
+     };
+argparse_def(file_output) ->
+    #{arguments =>
+      [
+       #{name => output,
+         long => "-output",
+         short => $o,
+         type => string,
+         nargs => 1,
+         help => "Write output to file <FILE>"}
+      ]
      }.
+
+%% -------------------------------------------------------------------
+%% OLD CODE (to remove).
+%% -------------------------------------------------------------------
+
+start_link(Progname) ->
+    gen_server:start_link(rabbit_cli_io, #{progname => Progname}, []).
+
+stop(IO) ->
+    MRef = erlang:monitor(process, IO),
+    _ = gen_server:call(IO, stop),
+    receive
+        {'DOWN', MRef, _, _, _Reason} ->
+            ok
+    end.
 
 display_help(#{io := {transport, Transport}} = Context) ->
     Transport ! {io_cast, {?FUNCTION_NAME, Context}};

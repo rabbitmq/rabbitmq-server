@@ -222,9 +222,13 @@ record_to_map([Field | Rest], Record, Index, Map) ->
 record_to_map([], _Record, _Index, Map) ->
     Map.
 
-main_loop(#rabbit_cli{} = Context) ->
+main_loop(
+  #rabbit_cli{priv = #?MODULE{connection = Connection}} = Context) ->
     ?LOG_DEBUG("CLI: frontend main loop..."),
     receive
+        {frontend_request, From, Request} ->
+            Reply = handle_request(Request),
+            rabbit_cli_transport2:gen_reply(Connection, From, Reply);
         {'EXIT', _LinkedPid, Reason} ->
             terminate(Reason, Context);
         Info ->
@@ -235,3 +239,8 @@ main_loop(#rabbit_cli{} = Context) ->
 terminate(Reason, _Context) ->
     ?LOG_DEBUG("CLI: frontend terminating: ~0p", [Reason]),
     ok.
+
+handle_request({read_file, Filename}) ->
+    file:read_file(Filename);
+handle_request({write_file, Filename, Bytes}) ->
+    file:write_file(Filename, Bytes).

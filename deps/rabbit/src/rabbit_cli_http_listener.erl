@@ -154,6 +154,10 @@ websocket_handle(Frame, State) ->
     ?LOG_DEBUG("CLI: unhandled Websocket frame: ~p", [Frame]),
     {ok, State}.
 
+websocket_info({frontend_request, _From, _Request} = FrontendRequest, State) ->
+    FrontendRequestBin = term_to_binary(FrontendRequest),
+    Frame = {binary, FrontendRequestBin},
+    {[Frame], State};
 websocket_info({io_request, _From, _ReplyAs, _Request} = IoRequest, State) ->
     IoRequestBin = term_to_binary(IoRequest),
     Frame = {binary, IoRequestBin},
@@ -194,4 +198,8 @@ handle_request({cast, Command}) ->
 
 handle_command({run_command, ContextMap}) ->
     Caller = self(),
-    rabbit_cli_backend:run_command(ContextMap, Caller).
+    rabbit_cli_backend:run_command(ContextMap, Caller);
+handle_command({gen_reply, From, Reply}) ->
+    gen:reply(From, Reply);
+handle_command({send, Dest, Msg}) ->
+    erlang:send(Dest, Msg).

@@ -3,7 +3,8 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([connect/0, connect/1,
-         run_command/2]).
+         run_command/2,
+         gen_reply/3]).
 
 -record(?MODULE, {type :: erldist | http,
                   peer :: atom() | pid()}).
@@ -89,3 +90,8 @@ run_command(#?MODULE{type = erldist, peer = Node}, ContextMap) ->
     erpc:call(Node, rabbit_cli_backend, run_command, [ContextMap, Caller]);
 run_command(#?MODULE{type = http, peer = Client}, ContextMap) ->
     rabbit_cli_http_client:run_command(Client, ContextMap).
+
+gen_reply(#?MODULE{type = erldist}, From, Reply) ->
+    gen:reply(From, Reply);
+gen_reply(#?MODULE{type = http, peer = Client}, From, Reply) ->
+    rabbit_cli_http_client:gen_reply(Client, From, Reply).

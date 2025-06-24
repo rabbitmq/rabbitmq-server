@@ -16,7 +16,6 @@
          cmd_noop/1,
          cmd_hello/1,
          cmd_crash/1,
-         cmd_import_definitions/1,
          cmd_top/1]).
 
 -rabbitmq_command(
@@ -49,12 +48,6 @@
                       help => "Name of the exchange to declare"}
                    ],
       handler => {?MODULE, cmd_declare_exchange}}}).
-
--rabbitmq_command(
-   {#{cli => ["import", "definitions"]},
-    [argparse_def_file_input,
-     #{help => "Import definitions",
-       handler => {?MODULE, cmd_import_definitions}}]}).
 
 -rabbitmq_command(
    {#{cli => ["top"]},
@@ -149,21 +142,19 @@ expand_argparse_def(Def) when is_map(Def) ->
 expand_argparse_def(Defs) when is_list(Defs) ->
     lists:foldl(
       fun
-          (argparse_def_record_stream, Acc) ->
-              Def = rabbit_cli_io:argparse_def(record_stream),
-              merge_argparse_def(Acc, Def);
-          (argparse_def_file_input, Acc) ->
-              Def = rabbit_cli_io:argparse_def(file_input),
-              merge_argparse_def(Acc, Def);
           (Mod, Acc) when is_atom(Mod) ->
               Def = Mod:argparse_def(),
               merge_argparse_def(Acc, Def);
-          (Def, Acc) ->
+          ({Mod, Function, Args}, Acc) when is_atom(Mod) ->
+              Def = erlang:apply(Mod, Function, Args),
+              merge_argparse_def(Acc, Def);
+          (Def, Acc) when is_map(Def) ->
               Def1 = expand_argparse_def(Def),
               merge_argparse_def(Acc, Def1)
       end, #{}, Defs).
 
-merge_argparse_def(ArgparseDef1, ArgparseDef2) ->
+merge_argparse_def(ArgparseDef1, ArgparseDef2)
+  when is_map(ArgparseDef1) andalso is_map(ArgparseDef2) ->
     Args1 = maps:get(arguments, ArgparseDef1, []),
     Args2 = maps:get(arguments, ArgparseDef2, []),
     Args = merge_arguments(Args1, Args2),
@@ -392,19 +383,6 @@ cmd_hello(_) ->
 
 cmd_crash(_) ->
     erlang:exit(oops).
-
-cmd_import_definitions(#{progname := Progname, arg_map := ArgMap}) ->
-    {ok, IO} = rabbit_cli_io:start_link(Progname),
-    %% TODO: Use a wrapper above `file' to proxy through transport.
-    Ret = case rabbit_cli_io:read_file(IO, ArgMap) of
-              {ok, Data} ->
-                  rabbit_cli_io:format(IO, "Import definitions:~n  ~s~n", [Data]),
-                  ok;
-              {error, _} = Error ->
-                  Error
-          end,
-    rabbit_cli_io:stop(IO),
-    Ret.
 
 cmd_top(#{io := IO} = Context) ->
     Top = spawn_link(fun() -> run_top(IO) end),
