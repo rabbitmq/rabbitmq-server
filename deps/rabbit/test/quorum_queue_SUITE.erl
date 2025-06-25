@@ -197,6 +197,7 @@ all_tests() ->
      requeue_multiple_true,
      requeue_multiple_false,
      subscribe_from_each,
+     dont_leak_file_handles,
      leader_health_check
     ].
 
@@ -1627,6 +1628,54 @@ subscribe_from_each(Config) ->
 
      end || S <- Servers],
 
+    ok.
+
+dont_leak_file_handles(Config) ->
+
+    [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    [begin
+         publish_confirm(Ch, QQ)
+     end || _ <- Servers],
+    timer:sleep(100),
+    %% roll the wal to force consumer messages to be read from disk
+    [begin
+         ok = rpc:call(S, ra_log_wal, force_roll_over, [ra_log_wal])
+     end || S <- Servers],
+    timer:sleep(256),
+
+    C = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    [_, NCh1] = rpc:call(Server0, rabbit_channel, list, []),
+    qos(C, 1, false),
+    subscribe(C, QQ, false),
+    [begin
+         receive
+             {#'basic.deliver'{delivery_tag = DeliveryTag}, _} ->
+                 amqp_channel:call(C, #'basic.ack'{delivery_tag = DeliveryTag})
+         after 5000 ->
+                   flush(1),
+                   ct:fail("basic.deliver timeout")
+         end
+     end || _ <- Servers],
+    flush(1),
+    [{_, MonBy2}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
+    NumMonRefsBefore = length([M || M <- MonBy2, is_reference(M)]),
+    %% delete queue
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ})),
+    [{_, MonBy3}] = rpc:call(Server0, erlang, process_info, [NCh1, [monitored_by]]),
+    NumMonRefsAfter = length([M || M <- MonBy3, is_reference(M)]),
+    %% this isn't an ideal way to assert this but every file handle creates
+    %% a monitor that (currenlty?) is a reference so we assert that we have
+    %% fewer reference monitors after
+    ?assert(NumMonRefsAfter < NumMonRefsBefore),
+
+    rabbit_ct_client_helpers:close_channel(C),
     ok.
 
 gh_12635(Config) ->
@@ -4946,3 +4995,7 @@ ensure_qq_proc_dead(Config, Server, RaName) ->
             ensure_qq_proc_dead(Config, Server, RaName)
     end.
 
+lsof_rpc() ->
+    Cmd = rabbit_misc:format(
+            "lsof -p ~ts", [os:getpid()]),
+    os:cmd(Cmd).
