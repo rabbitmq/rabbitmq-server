@@ -43,6 +43,7 @@
 ,   disk_monitor_SUITE
 ,   dynamic_qq_SUITE
 ,   exchanges_SUITE
+,   prevent_startup_if_node_was_reset_SUITE
 ,   rabbit_stream_queue_SUITE
 ]}.
 
