@@ -109,11 +109,18 @@ find_by_type(Type, {rdnSequence, RDNs}) ->
 %% Formatting functions
 %%--------------------------------------------------------------------------
 
+
+-if (?OTP_RELEASE >= 28).
+-define(M, 'PKIXAlgs-2009').
+-else.
+-define(M, 'OTP-PUB-KEY').
+-endif.
+
 sanitize_other_name(Bin) when is_binary(Bin) ->
     %% We make a wild assumption about the types here
     %% but ASN.1 decoding functions in OTP only offer so much and SAN values
     %% are expected to be "string-like" by RabbitMQ
-    case 'OTP-PUB-KEY':decode('DirectoryString', Bin) of
+    case ?M:decode('DirectoryString', Bin) of
         {ok, {_, Val}} -> Val;
         Other          -> Other
     end.
