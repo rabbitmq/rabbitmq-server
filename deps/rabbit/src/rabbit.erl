@@ -200,7 +200,7 @@
                     {enables,     routing_ready}]}).
 
 -rabbit_boot_step({prevent_startup_if_node_was_reset,
-                   [{description, "prevents node boot if a previous startup marker exists but the database is not seeded (requires opt-in configuration in rabbitmq.conf)"},
+                   [{description, "prevents node boot if a prior boot marker file exists but the database is not seeded (requires opt-in configuration in rabbitmq.conf)"},
                     {mfa,         {?MODULE, prevent_startup_if_node_was_reset, []}},
                     {requires,    recovery},
                     {enables,     empty_db_check}]}).
