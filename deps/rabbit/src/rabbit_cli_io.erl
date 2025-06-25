@@ -7,6 +7,10 @@
 -include("src/rabbit_cli_backend.hrl").
 
 -export([argparse_def/1,
+         read_stdin/1,
+         read_file/2,
+         write_file/3,
+         set_interactive_mode/1,
          supports_colors/1]).
 -export([start_link/1,
          stop/1,
@@ -15,8 +19,7 @@
          start_record_stream/4,
          push_new_record/3,
          end_record_stream/2,
-         send_keyboard_input/3,
-         read_file/2]).
+         send_keyboard_input/3]).
 -export([init/1,
          handle_call/3,
          handle_cast/2,
@@ -68,6 +71,33 @@ argparse_def(file_output) ->
          help => "Write output to file <FILE>"}
       ]
      }.
+
+read_stdin(Context) ->
+    read_stdin(Context, []).
+
+read_stdin(Context, Data) ->
+    case io:get_chars("", 4096) of
+        Chunk when is_list(Chunk) ->
+            Data1 = [Data, Chunk],
+            read_stdin(Context, Data1);
+        eof ->
+            {ok, list_to_binary(Data)};
+        {error, _} = Error ->
+            Error
+    end.
+
+read_file(Context, Filename) ->
+    Request = {?FUNCTION_NAME, Filename},
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+write_file(Context, Filename, Bytes) ->
+    Request = {?FUNCTION_NAME, Filename, Bytes},
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+set_interactive_mode(Context) ->
+    ?LOG_DEBUG("CLI: request interactive mode"),
+    Request = ?FUNCTION_NAME,
+    rabbit_cli_backend:send_frontend_request(Context, Request).
 
 supports_colors(#rabbit_cli{env = Env, terminal = #{info := TermInfo}}) ->
     ?LOG_DEBUG("Env: ~p", [Env]),
@@ -137,13 +167,13 @@ send_keyboard_input(IO, ArgMap, Subscriber)
        is_map(ArgMap) ->
     gen_server:call(IO, {?FUNCTION_NAME, ArgMap, Subscriber}).
 
-read_file({transport, Transport}, ArgMap) ->
-    Transport ! {io_call, self(), {?FUNCTION_NAME, ArgMap}},
-    receive Ret -> Ret end;
-read_file(IO, ArgMap)
-  when is_pid(IO) andalso
-       is_map(ArgMap) ->
-    gen_server:call(IO, {?FUNCTION_NAME, ArgMap}).
+% read_file({transport, Transport}, ArgMap) ->
+%     Transport ! {io_call, self(), {?FUNCTION_NAME, ArgMap}},
+%     receive Ret -> Ret end;
+% read_file(IO, ArgMap)
+%   when is_pid(IO) andalso
+%        is_map(ArgMap) ->
+%     gen_server:call(IO, {?FUNCTION_NAME, ArgMap}).
 
 init(#{progname := Progname}) ->
     process_flag(trap_exit, true),
@@ -169,9 +199,9 @@ handle_call(
     Subscribers1 = [Subscriber | Subscribers],
     State1 = State#?MODULE{kbd_subscribers = Subscribers1},
     {reply, ok, State1, compute_timeout(State1)};
-handle_call({read_file, ArgMap}, From, State) ->
-    {ok, State1} = do_read_file(ArgMap, From, State),
-    {noreply, State1, compute_timeout(State1)};
+% handle_call({read_file, ArgMap}, From, State) ->
+%     {ok, State1} = do_read_file(ArgMap, From, State),
+%     {noreply, State1, compute_timeout(State1)};
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
@@ -357,22 +387,22 @@ isatty(IoDevice) ->
             false
     end.
 
-do_read_file(#{input := "-"}, From, State) ->
-    Ret = read_stdin(<<>>),
-    gen:reply(From, Ret),
-    {ok, State};
-do_read_file(#{input := Filename}, From, State) ->
-    Ret = file:read_file(Filename),
-    gen:reply(From, Ret),
-    {ok, State}.
-
-read_stdin(Buf) ->
-    case file:read(standard_io, 4096) of
-        {ok, Data} ->
-            Buf1 = [Buf, Data],
-            read_stdin(Buf1);
-        eof ->
-            {ok, Buf};
-        {error, _} = Error ->
-            Error
-    end.
+% do_read_file(#{input := "-"}, From, State) ->
+%     Ret = read_stdin(<<>>),
+%     gen:reply(From, Ret),
+%     {ok, State};
+% do_read_file(#{input := Filename}, From, State) ->
+%     Ret = file:read_file(Filename),
+%     gen:reply(From, Ret),
+%     {ok, State}.
+%
+% read_stdin(Buf) ->
+%     case file:read(standard_io, 4096) of
+%         {ok, Data} ->
+%             Buf1 = [Buf, Data],
+%             read_stdin(Buf1);
+%         eof ->
+%             {ok, Buf};
+%         {error, _} = Error ->
+%             Error
+%     end.

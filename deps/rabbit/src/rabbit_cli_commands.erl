@@ -356,10 +356,107 @@ format_desc_for_fish(_) ->
 cmd_noop(_) ->
     ok.
 
-cmd_hello(_) ->
+cmd_hello(Context) ->
+    io:format("Regural prompt test; type Enter to submit~n"),
     Name = io:get_line("Name: "),
     io:format("Hello ~s!~n", [string:trim(Name)]),
+
+    io:format(
+      "~nInteraction mode test; "
+      "type any arrow keys, click with your mouse, or any other key to quit~n"),
+    ok = rabbit_cli_io:set_interactive_mode(Context),
+    io:format("\e[?1003h\e[?1015h\e[?1006h"),
+    Ret = cmd_hello_loop(Context),
+    io:format("\e[?1000l"),
+    Ret.
+
+cmd_hello_loop(Context) ->
+    case io:get_chars("", 1024) of
+        Chars when is_list(Chars) ->
+            case handle_hello_chars(Chars, Context) of
+                ok ->
+                    cmd_hello_loop(Context);
+                stop ->
+                    ok
+            end;
+        eof ->
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+handle_hello_chars("\e[A" ++ Rest, Context) ->
+    io:format("Key: Up\r~n"),
+    handle_hello_chars(Rest, Context);
+handle_hello_chars("\e[B" ++ Rest, Context) ->
+    io:format("Key: Down\r~n"),
+    handle_hello_chars(Rest, Context);
+handle_hello_chars("\e[C" ++ Rest, Context) ->
+    io:format("Key: Right\r~n"),
+    handle_hello_chars(Rest, Context);
+handle_hello_chars("\e[D" ++ Rest, Context) ->
+    io:format("Key: Left\r~n"),
+    handle_hello_chars(Rest, Context);
+handle_hello_chars("\e[<" ++ Rest, Context) ->
+    %% Mouse interaction.
+    {Mouse, Rest1} = split_escape_sequence(Rest, ""),
+    Attrs = string:lexemes(Mouse, ";"),
+    case Attrs of
+        ["35", Col0, Line0] ->
+            {Line, _} = string:to_integer(Line0),
+            {Col, ""} = string:to_integer(Col0),
+            io:format("Mouse: Move, line ~b, column ~b\r~n", [Line, Col]);
+        ["0", Col0, LineAndButton] ->
+            {Line, Button} = string:to_integer(LineAndButton),
+            {Col, ""} = string:to_integer(Col0),
+            case Button of
+                "M" ->
+                    io:format("Mouse: Left button down, line ~b, column ~b\r~n", [Line, Col]);
+                "m" ->
+                    io:format("Mouse: Left button up, line ~b, column ~b\r~n", [Line, Col])
+            end;
+        ["1", Col0, LineAndButton] ->
+            {Line, Button} = string:to_integer(LineAndButton),
+            {Col, ""} = string:to_integer(Col0),
+            case Button of
+                "M" ->
+                    io:format("Mouse: Middle button down, line ~b, column ~b\r~n", [Line, Col]);
+                "m" ->
+                    io:format("Mouse: Middle button up, line ~b, column ~b\r~n", [Line, Col])
+            end;
+        ["2", Col0, LineAndButton] ->
+            {Line, Button} = string:to_integer(LineAndButton),
+            {Col, ""} = string:to_integer(Col0),
+            case Button of
+                "M" ->
+                    io:format("Mouse: Right button down, line ~b, column ~b\r~n", [Line, Col]);
+                "m" ->
+                    io:format("Mouse: Right button up, line ~b, column ~b\r~n", [Line, Col])
+            end;
+        ["64", Col0, Line0] ->
+            {Line, _} = string:to_integer(Line0),
+            {Col, ""} = string:to_integer(Col0),
+            io:format("Mouse: Wheel up, line ~b, column ~b\r~n", [Line, Col]);
+        ["65", Col0, Line0] ->
+            {Line, _} = string:to_integer(Line0),
+            {Col, ""} = string:to_integer(Col0),
+            io:format("Mouse: Wheel down, line ~b, column ~b\r~n", [Line, Col]);
+        _ ->
+            io:format("Mouse: unparsed mouse event: ~0p\r~n", [Attrs])
+    end,
+    handle_hello_chars(Rest1, Context);
+handle_hello_chars([Char | Rest], _Context) ->
+    io:format("Key: Other: ~p (rest: ~p)\r~n", [Char, Rest]),
+    stop;
+handle_hello_chars("", _Context) ->
     ok.
+
+split_escape_sequence([Char | Rest], Chars) when Char =:= $m orelse Char =:= $M ->
+    {lists:reverse([Char | Chars]), Rest};
+split_escape_sequence([$\e | _] = Rest, Chars) ->
+    {lists:reverse(Chars), Rest};
+split_escape_sequence([Char | Rest], Chars) ->
+    split_escape_sequence(Rest, [Char | Chars]).
 
 -spec cmd_crash(#rabbit_cli{}) -> no_return().
 

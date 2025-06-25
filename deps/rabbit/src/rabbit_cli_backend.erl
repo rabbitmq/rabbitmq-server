@@ -10,9 +10,7 @@
 -include("src/rabbit_cli_backend.hrl").
 
 -export([run_command/2,
-         read_stdin/1,
-         read_file/2,
-         write_file/3,
+         send_frontend_request/2,
          start_link/3]).
 -export([init/1,
          callback_mode/0,
@@ -67,28 +65,6 @@ start_link(Context, Caller, GroupLeader) ->
              caller => Caller,
              group_leader => GroupLeader},
     gen_statem:start_link(?MODULE, Args, []).
-
-read_stdin(Context) ->
-    read_stdin(Context, []).
-
-read_stdin(Context, Data) ->
-    case io:get_chars("", 4096) of
-        Chunk when is_list(Chunk) ->
-            Data1 = [Data, Chunk],
-            read_stdin(Context, Data1);
-        eof ->
-            {ok, list_to_binary(Data)};
-        {error, _} = Error ->
-            Error
-    end.
-
-read_file(Context, Filename) ->
-    Request = {read_file, Filename},
-    send_frontend_request(Context, Request).
-
-write_file(Context, Filename, Bytes) ->
-    Request = {write_file, Filename, Bytes},
-    send_frontend_request(Context, Request).
 
 send_frontend_request(
   #rabbit_cli{priv = #?MODULE{caller = Caller}}, Request) ->

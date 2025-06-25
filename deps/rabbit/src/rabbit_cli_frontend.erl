@@ -274,4 +274,8 @@ terminate(Reason, _Context) ->
 handle_request({read_file, Filename}) ->
     file:read_file(Filename);
 handle_request({write_file, Filename, Bytes}) ->
-    file:write_file(Filename, Bytes).
+    file:write_file(Filename, Bytes);
+handle_request(set_interactive_mode) ->
+    Ret = shell:start_interactive({noshell, raw}),
+    ?LOG_DEBUG("CLI: interactive mode: ~p", [Ret]),
+    Ret.
