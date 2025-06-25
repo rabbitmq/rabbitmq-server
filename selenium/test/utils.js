@@ -243,7 +243,6 @@ module.exports = {
       '&grant_type=client_credentials' +
       '&token_format=jwt' +
       '&response_type=token'
-
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     req.setRequestHeader('Accept', 'application/json')
