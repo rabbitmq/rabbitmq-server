@@ -637,7 +637,12 @@ handle_cast(ready_for_close,
     {stop, normal, State};
 
 handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
-    ok = rabbit_writer:flush(WriterPid),
+    try
+       ok = rabbit_writer:flush(WriterPid)
+    catch
+        Class:Reason ->
+            rabbit_log:info("Failed to flushing writer ~tp, Error:~tp", [WriterPid, {Class,Reason}])
+    end,
     {stop, normal, State};
 
 handle_cast({command, #'basic.consume_ok'{consumer_tag = CTag} = Msg},
