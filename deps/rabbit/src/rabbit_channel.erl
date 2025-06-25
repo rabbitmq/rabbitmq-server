@@ -641,7 +641,7 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
        ok = rabbit_writer:flush(WriterPid)
     catch
         Class:Reason ->
-            rabbit_log:info("Failed to flushing writer ~tp, Error:~tp", [WriterPid, {Class,Reason}])
+            rabbit_log:debug("Failed to flush pending writes on a terminating connection, reason: ~tp", [Reason])
     end,
     {stop, normal, State};
 
