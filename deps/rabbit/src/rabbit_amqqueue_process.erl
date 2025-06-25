@@ -294,8 +294,12 @@ terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(
     fun (BQS) ->
-        _ = update_state(stopped, Q0),
-        BQ:terminate(R, BQS)
+        case BQS of
+            undefined -> undefined;
+            _ ->
+                _ = update_state(stopped, Q0),
+                BQ:terminate(R, BQS)
+        end
     end, State);
 terminate({shutdown, missing_owner = Reason}, {{reply_to, From}, #q{q = Q} = State}) ->
     %% if the owner was missing then there will be no queue, so don't emit stats
@@ -304,7 +308,13 @@ terminate({shutdown, missing_owner = Reason}, {{reply_to, From}, #q{q = Q} = Sta
     State1;
 terminate({shutdown, _} = R, State = #q{backing_queue = BQ}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
-    terminate_shutdown(fun (BQS) -> BQ:terminate(R, BQS) end, State);
+    terminate_shutdown(
+        fun (BQS) ->
+            case BQS of
+                undefined -> undefined;
+                _ -> BQ:terminate(R, BQS)
+            end
+        end, State);
 terminate(normal, State = #q{status = {terminated_by, auto_delete}}) ->
     %% auto_delete case
     %% To increase performance we want to avoid a mnesia_sync:sync call
@@ -338,8 +348,11 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                      missing_owner -> normal;
                      Any -> Any
                  end,
-        Len = BQ:len(BQS),
-        BQS1 = BQ:delete_and_terminate(Reason, BQS),
+        {Len, BQS1} =
+            case BQS of
+                undefined -> {0, undefined};
+                _ -> {BQ:len(BQS), BQ:delete_and_terminate(Reason, BQS)}
+            end,
         if EmitStats -> rabbit_event:if_enabled(State, #q.stats_timer,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
@@ -374,14 +387,15 @@ terminate_shutdown(Fun, #q{status = Status} = State) ->
                      fun stop_rate_timer/1,
                      fun stop_expiry_timer/1,
                      fun stop_ttl_timer/1]),
-    case BQS of
-        undefined -> State1;
-        _         -> QName = qname(State),
-                     notify_decorators(shutdown, State),
-                     [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
-                         {Ch, CTag, _, _, _, _, _, _} <-
-                             rabbit_queue_consumers:all(Consumers)],
-                     State1#q{backing_queue_state = Fun(BQS)}
+    try
+        QName = qname(State),
+        notify_decorators(shutdown, State),
+        [emit_consumer_deleted(Ch, CTag, QName, ActingUser) ||
+            {Ch, CTag, _, _, _, _, _, _} <-
+                rabbit_queue_consumers:all(Consumers)],
+        State1#q{backing_queue_state = Fun(BQS)}
+    catch _:_ ->
+        State1
     end.
 
 code_change(_OldVsn, State, _Extra) ->
