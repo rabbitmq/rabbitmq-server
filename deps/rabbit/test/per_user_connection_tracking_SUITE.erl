@@ -100,60 +100,64 @@ end_per_testcase(Testcase, Config) ->
 %% Test cases.
 %% -------------------------------------------------------------------
 single_node_list_of_user(Config) ->
-    Username = proplists:get_value(rmq_username, Config),
-    Username2 = <<"guest2">>,
+    Username1 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-1"),
+    Username2 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-2"),
 
     Vhost = proplists:get_value(rmq_vhost, Config),
 
-    rabbit_ct_broker_helpers:add_user(Config, Username2),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, Username2, Vhost),
+    [ begin
+          rabbit_ct_broker_helpers:add_user(Config, U),
+          rabbit_ct_broker_helpers:set_full_permissions(Config, U, Vhost)
+      end || U <- [Username1, Username2]],
 
-    ?assertEqual(0, count_connections_in(Config, Username)),
+    ?assertEqual(0, count_connections_in(Config, Username1)),
     ?assertEqual(0, count_connections_in(Config, Username2)),
 
-    [Conn1] = open_connections(Config, [0]),
-    ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username}] = connections_in(Config, Username),
+    [Conn1] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
     close_connections([Conn1]),
-    ?awaitMatch(0, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
+    ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
 
     [Conn2] = open_connections(Config, [{0, Username2}]),
     ?awaitMatch(1, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
     [#tracked_connection{username = Username2}] = connections_in(Config, Username2),
 
-    [Conn3] = open_connections(Config, [0]),
-    ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username}] = connections_in(Config, Username),
+    [Conn3] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
 
-    [Conn4] = open_connections(Config, [0]),
+    [Conn4] = open_connections(Config, [{0, Username1}]),
     kill_connections([Conn4]),
-    ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username}] = connections_in(Config, Username),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
 
-    [Conn5] = open_connections(Config, [0]),
-    ?awaitMatch(2, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
-    [Username, Username] =
+    [Conn5] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(2, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    [Username1, Username1] =
         lists:map(fun (#tracked_connection{username = U}) -> U end,
-                  connections_in(Config, Username)),
+                  connections_in(Config, Username1)),
 
     close_connections([Conn2, Conn3, Conn5]),
     rabbit_ct_broker_helpers:delete_user(Config, Username2),
     ?awaitMatch(0, length(all_connections(Config)), ?AWAIT_TIMEOUT).
 
 single_node_user_deletion_forces_connection_closure(Config) ->
-    Username = proplists:get_value(rmq_username, Config),
-    Username2 = <<"guest2">>,
+    Username1 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-1"),
+    Username2 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-2"),
 
     Vhost = proplists:get_value(rmq_vhost, Config),
 
-    rabbit_ct_broker_helpers:add_user(Config, Username2),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, Username2, Vhost),
+    [ begin
+          rabbit_ct_broker_helpers:add_user(Config, U),
+          rabbit_ct_broker_helpers:set_full_permissions(Config, U, Vhost)
+      end || U <- [Username1, Username2]],
 
-    ?assertEqual(0, count_connections_in(Config, Username)),
+    ?assertEqual(0, count_connections_in(Config, Username1)),
     ?assertEqual(0, count_connections_in(Config, Username2)),
 
-    [Conn1] = open_connections(Config, [0]),
-    ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
+    [Conn1] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
 
     [_Conn2] = open_connections(Config, [{0, Username2}]),
     ?awaitMatch(1, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
@@ -162,22 +166,24 @@ single_node_user_deletion_forces_connection_closure(Config) ->
     ?awaitMatch(0, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?awaitMatch(0, count_connections_in(Config, Username), ?AWAIT_TIMEOUT).
+    ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT).
 
 cluster_user_deletion_forces_connection_closure(Config) ->
-    Username = proplists:get_value(rmq_username, Config),
-    Username2 = <<"guest2">>,
+    Username1 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-1"),
+    Username2 = list_to_binary(atom_to_list(?FUNCTION_NAME) ++ "-2"),
 
     Vhost = proplists:get_value(rmq_vhost, Config),
 
-    rabbit_ct_broker_helpers:add_user(Config, Username2),
-    rabbit_ct_broker_helpers:set_full_permissions(Config, Username2, Vhost),
+    [ begin
+          rabbit_ct_broker_helpers:add_user(Config, U),
+          rabbit_ct_broker_helpers:set_full_permissions(Config, U, Vhost)
+      end || U <- [Username1, Username2]],
 
-    ?assertEqual(0, count_connections_in(Config, Username)),
+    ?assertEqual(0, count_connections_in(Config, Username1)),
     ?assertEqual(0, count_connections_in(Config, Username2)),
 
-    [Conn1] = open_connections(Config, [{0, Username}]),
-    ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
+    [Conn1] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
 
     [_Conn2] = open_connections(Config, [{1, Username2}]),
     ?awaitMatch(1, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
@@ -186,7 +192,7 @@ cluster_user_deletion_forces_connection_closure(Config) ->
     ?awaitMatch(0, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
 
     close_connections([Conn1]),
-    ?awaitMatch(0, count_connections_in(Config, Username), ?AWAIT_TIMEOUT).
+    ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT).
 
 %% -------------------------------------------------------------------
 %% Helpers
