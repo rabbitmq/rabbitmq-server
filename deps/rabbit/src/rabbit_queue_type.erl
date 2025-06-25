@@ -414,7 +414,9 @@ remove(QRef, #?STATE{ctxs = Ctxs0} = State) ->
     case maps:take(QRef, Ctxs0) of
         error ->
             State;
-        {_, Ctxs} ->
+        {#ctx{module = Mod,
+              state = S}, Ctxs} ->
+            ok = Mod:close(S),
             State#?STATE{ctxs = Ctxs}
     end.
 
@@ -502,11 +504,10 @@ init() ->
 
 -spec close(state()) -> ok.
 close(#?STATE{ctxs = Contexts}) ->
-    maps:foreach(
-      fun (_, #ctx{module = Mod,
-                   state = S}) ->
-              ok = Mod:close(S)
-      end, Contexts).
+    maps:foreach(fun (_, #ctx{module = Mod,
+                              state = S}) ->
+                         ok = Mod:close(S)
+                 end, Contexts).
 
 -spec new(amqqueue:amqqueue(), state()) -> state().
 new(Q, State) when ?is_amqqueue(Q) ->
