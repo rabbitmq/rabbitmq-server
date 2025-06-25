@@ -17,7 +17,7 @@ jobs:
         plugin:
           # These are using plugin-specific test jobs.
           - rabbit
-          - rabbitmq_mqtt
+          # - rabbitmq_mqtt # disabled due to Elixir 1.18 JSON conficts
           - rabbitmq_peer_discovery_aws
           # These are from the test-plugin test job.
           - amqp10_client
@@ -57,14 +57,14 @@ jobs:
           - rabbitmq_shovel
           - rabbitmq_shovel_management
           - rabbitmq_shovel_prometheus
-          - rabbitmq_stomp
-          - rabbitmq_stream
+          # - rabbitmq_stomp # disabled due to Elixir 1.18 JSON conficts
+          # - rabbitmq_stream # disabled due to Elixir 1.18 JSON conficts
           - rabbitmq_stream_common
           - rabbitmq_stream_management
           - rabbitmq_tracing
           - rabbitmq_trust_store
           - rabbitmq_web_dispatch
-          - rabbitmq_web_mqtt
+          # - rabbitmq_web_mqtt # disabled due to Elixir 1.18 JSON conficts
           - rabbitmq_web_stomp
           # This one we do not want to run tests so no corresponding test job.
           - rabbitmq_ct_helpers
