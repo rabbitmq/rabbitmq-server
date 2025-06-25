@@ -91,6 +91,8 @@ defmodule RabbitMQ.CLI.Formatters.Json do
     "Ref(#{inspect(data)})"
   end
 
+  defp convert_erlang_strings([]),  do: []
+
   defp convert_erlang_strings(data) when is_list(data) do
     try do
       case :unicode.characters_to_binary(data, :utf8) do
