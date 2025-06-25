@@ -9,7 +9,7 @@
 %% This feature helps detect potential data loss scenarios by maintaining
 %% a marker file to track if a node has been initialized before.
 
--module(node_initial_run_SUITE).
+-module(prevent_startup_if_node_was_reset_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
