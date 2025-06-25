@@ -92,8 +92,7 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   end
 
   defp convert_erlang_strings(data) when is_list(data) do
-    # Only attempt Unicode conversion on proper lists of integers
-    if is_proper_list_of_integers?(data) do
+    try do
       case :unicode.characters_to_binary(data, :utf8) do
         binary when is_binary(binary) ->
           # Successfully converted - it was a valid Unicode string
@@ -102,9 +101,10 @@ defmodule RabbitMQ.CLI.Formatters.Json do
           # Conversion failed - not a Unicode string, process as regular list
           Enum.map(data, &convert_erlang_strings/1)
       end
-    else
-      # Not a proper list of integers, process as regular list
-      Enum.map(data, &convert_erlang_strings/1)
+    rescue
+      ArgumentError ->
+        # badarg exception - not valid character data, process as regular list
+        Enum.map(data, &convert_erlang_strings/1)
     end
   end
 
@@ -122,15 +122,4 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   end
 
   defp convert_erlang_strings(data), do: data
-
-  # Check if data is a proper list containing only integers
-  defp is_proper_list_of_integers?([]), do: false  # Empty lists are not strings
-  defp is_proper_list_of_integers?(data) when is_list(data) do
-    try do
-      Enum.all?(data, &is_integer/1)
-    rescue
-      _ -> false  # Not a proper list or contains non-integers
-    end
-  end
-  defp is_proper_list_of_integers?(_), do: false
 end
