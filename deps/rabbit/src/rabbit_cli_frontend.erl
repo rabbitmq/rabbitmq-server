@@ -256,11 +256,12 @@ main_loop(
   #rabbit_cli{priv = #?MODULE{connection = Connection}} = Context) ->
     ?LOG_DEBUG("CLI: frontend main loop..."),
     receive
-        {frontend_request, From, Request} ->
-            Reply = handle_request(Request),
-            rabbit_cli_transport2:gen_reply(Connection, From, Reply);
         {'EXIT', _LinkedPid, Reason} ->
             terminate(Reason, Context);
+        {frontend_request, From, Request} ->
+            Reply = handle_request(Request),
+            _ = rabbit_cli_transport2:gen_reply(Connection, From, Reply),
+            main_loop(Context);
         Info ->
             ?LOG_DEBUG("Unknown info: ~0p", [Info]),
             main_loop(Context)
