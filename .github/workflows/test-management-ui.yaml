@@ -75,7 +75,7 @@ jobs:
       if: ${{ failure() && steps.tests.outcome == 'failed' }}
       uses: actions/upload-artifact@v4.3.2
       env: 
-          SELENIUM_ARTIFACTS: ${{ steps.run-suites.outputs.SELENIUM_ARTIFACTS }}
+          SELENIUM_ARTIFACTS: ${{ steps.tests.outputs.SELENIUM_ARTIFACTS }}
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: |
