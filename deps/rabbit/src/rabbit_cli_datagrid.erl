@@ -62,7 +62,8 @@ process_fields(#?MODULE{fields_fun = FieldsFun, priv = Priv} = State) ->
     end.
 
 start_stream(
-  #?MODULE{setup_stream_fun = SetupStreamFun, priv = Priv} = State) ->
+  #?MODULE{setup_stream_fun = SetupStreamFun,
+           priv = Priv} = State) ->
     maybe
         {ok, Priv1} ?= SetupStreamFun(Priv),
         State1 = State#?MODULE{priv = Priv1},

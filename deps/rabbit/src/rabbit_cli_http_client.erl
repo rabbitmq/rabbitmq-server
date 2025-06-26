@@ -170,11 +170,11 @@ handle_request(
     {noreply, Data};
 handle_request(
   {io_request, From, ReplyAs, Request},
-  #?MODULE{group_leader = GroupLeader,
+  #?MODULE{caller = Caller,
            io_requests = IoRequests} = Data) ->
     ProxyRef = erlang:make_ref(),
     ProxyIoRequest = {io_request, self(), ProxyRef, Request},
-    GroupLeader ! ProxyIoRequest,
+    Caller ! ProxyIoRequest,
     IoRequests1 = IoRequests#{ProxyRef => {From, ReplyAs}},
     Data1 = Data#?MODULE{io_requests = IoRequests1},
     {noreply, Data1};
