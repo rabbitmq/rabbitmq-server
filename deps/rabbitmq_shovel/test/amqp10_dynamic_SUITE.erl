@@ -28,7 +28,8 @@ groups() ->
           autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
           simple_amqp10_src,
-          amqp091_to_amqp10_with_dead_lettering
+          amqp091_to_amqp10_with_dead_lettering,
+          amqp10_to_amqp091_application_properties
         ]},
       {with_map_config, [], [
           simple,
@@ -153,6 +154,7 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                             <<"message-ann-value">>}]
                                   end}]),
     Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
+    ct:pal("GOT ~p", [Msg]),
     AppProps = amqp10_msg:application_properties(Msg),
 
     ?assertMatch((#{user_id := <<"guest">>, creation_time := _}),
@@ -190,6 +192,42 @@ simple_amqp10_src(Config) ->
               % the fidelity loss is quite high when consuming using the amqp10
               % plugin. For example custom headers aren't current translated.
               % This isn't due to the shovel though.
+              ok
+      end).
+
+amqp10_to_amqp091_application_properties(Config) ->
+    MapConfig = ?config(map_config, Config),
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_session(Config,
+      fun (Sess) ->
+              shovel_test_utils:set_param(
+                Config,
+                <<"test">>, [{<<"src-protocol">>, <<"amqp10">>},
+                             {<<"src-address">>,  Src},
+                             {<<"dest-protocol">>, <<"amqp091">>},
+                             {<<"dest-queue">>, Dest},
+                             {<<"add-forward-headers">>, true},
+                             {<<"dest-add-timestamp-header">>, true},
+                             {<<"publish-properties">>,
+                                case MapConfig of
+                                    true -> #{<<"cluster_id">> => <<"x">>};
+                                    _    -> [{<<"cluster_id">>, <<"x">>}]
+                                end}
+                            ]),
+
+              MsgSent = amqp10_msg:set_application_properties(
+                      #{<<"key">> => <<"value">>},
+                      amqp10_msg:set_headers(
+                        #{durable => true},
+                        amqp10_msg:new(<<"tag1">>, <<"hello">>, false))),
+
+              Msg = publish_expect_msg(Sess, Src, Dest, MsgSent),
+              AppProps = amqp10_msg:application_properties(Msg),
+              ct:pal("MSG ~p", [Msg]),
+
+              ?assertMatch(#{<<"key">> := <<"value">>},
+                           AppProps),
               ok
       end).
 
@@ -257,8 +295,8 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>,     AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, <<"hello">>, ExpDest),
-            expect_count(Session, Src, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, ExpDest),
+            expect_count(Session, Src, ExpSrc)
     end.
 
 autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
@@ -277,8 +315,8 @@ autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, <<"hello">>, ExpDest),
-            expect_count(Session, Src, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, ExpDest),
+            expect_count(Session, Src, ExpSrc)
     end.
 
 autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
@@ -297,8 +335,8 @@ autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, <<"hello">>, ExpDest),
-            expect_count(Session, Src, <<"hello">>, ExpSrc)
+            expect_count(Session, Dest, ExpDest),
+            expect_count(Session, Src, ExpSrc)
     end.
 
 %%----------------------------------------------------------------------------
@@ -323,6 +361,15 @@ publish(Sender, Tag, Payload) when is_binary(Payload) ->
               exit(publish_disposition_not_received)
     end.
 
+publish(Sender, Msg) ->
+    ok = amqp10_client:send_msg(Sender, Msg),
+    Tag = amqp10_msg:delivery_tag(Msg),
+    receive
+        {amqp10_disposition, {accepted, Tag}} -> ok
+    after 3000 ->
+            exit(publish_disposition_not_received)
+    end.
+
 publish_expect(Session, Source, Dest, Tag, Payload) ->
     LinkName = <<"dynamic-sender-", Dest/binary>>,
     {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
@@ -330,7 +377,16 @@ publish_expect(Session, Source, Dest, Tag, Payload) ->
     ok = await_amqp10_event(link, Sender, attached),
     publish(Sender, Tag, Payload),
     amqp10_client:detach_link(Sender),
-    expect_one(Session, Dest, Payload).
+    expect_one(Session, Dest).
+
+publish_expect_msg(Session, Source, Dest, Msg) ->
+    LinkName = <<"dynamic-sender-", Dest/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
+                                                    unsettled, unsettled_state),
+    ok = await_amqp10_event(link, Sender, attached),
+    publish(Sender, Msg),
+    amqp10_client:detach_link(Sender),
+    expect_one(Session, Dest).
 
 await_amqp10_event(On, Ref, Evt) ->
     receive
@@ -339,17 +395,17 @@ await_amqp10_event(On, Ref, Evt) ->
           exit({amqp10_event_timeout, On, Ref, Evt})
     end.
 
-expect_one(Session, Dest, Payload) ->
+expect_one(Session, Dest) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
                                                         Dest, settled,
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, 1, never),
-    Msg = expect(Receiver, Payload),
+    Msg = expect(Receiver),
     amqp10_client:detach_link(Receiver),
     Msg.
 
-expect(Receiver, _Payload) ->
+expect(Receiver) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             InMsg
@@ -379,7 +435,7 @@ publish_count(Session, Address, Payload, Count) ->
      end || I <- lists:seq(1, Count)],
      amqp10_client:detach_link(Sender).
 
-expect_count(Session, Address, Payload, Count) ->
+expect_count(Session, Address, Count) ->
     {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
                                                         <<"dynamic-receiver",
                                                           Address/binary>>,
@@ -387,7 +443,7 @@ expect_count(Session, Address, Payload, Count) ->
                                                         unsettled_state),
     ok = amqp10_client:flow_link_credit(Receiver, Count, never),
     [begin
-         expect(Receiver, Payload)
+         expect(Receiver)
      end || _ <- lists:seq(1, Count)],
     expect_empty(Session, Address),
     amqp10_client:detach_link(Receiver).
