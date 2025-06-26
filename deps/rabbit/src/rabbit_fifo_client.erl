@@ -14,6 +14,7 @@
 -export([
          init/1,
          init/2,
+         close/1,
          checkout/4,
          cancel_checkout/3,
          enqueue/3,
@@ -754,6 +755,13 @@ handle_ra_event(QName, Leader, close_cached_segments,
      end, []};
 handle_ra_event(_QName, _Leader, {machine, eol}, State) ->
     {eol, [{unblock, cluster_name(State)}]}.
+
+-spec close(rabbit_fifo_client:state()) -> ok.
+close(#state{cached_segments = undefined}) ->
+    ok;
+close(#state{cached_segments = {_, _, Flru}}) ->
+    _ = ra_flru:evict_all(Flru),
+    ok.
 
 %% @doc Attempts to enqueue a message using cast semantics. This provides no
 %% guarantees or retries if the message fails to achieve consensus or if the

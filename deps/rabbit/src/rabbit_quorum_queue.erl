@@ -159,7 +159,6 @@
 -define(RPC_TIMEOUT, 1000).
 -define(START_CLUSTER_TIMEOUT, 5000).
 -define(START_CLUSTER_RPC_TIMEOUT, 60_000). %% needs to be longer than START_CLUSTER_TIMEOUT
--define(FORCE_CHECKPOINT_RPC_TIMEOUT, 15_000).
 -define(TICK_INTERVAL, 5000). %% the ra server tick time
 -define(DELETE_TIMEOUT, 5000).
 -define(MEMBER_CHANGE_TIMEOUT, 20_000).
@@ -230,8 +229,8 @@ init(Q) when ?is_amqqueue(Q) ->
     {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
-close(_State) ->
-    ok.
+close(State) ->
+    rabbit_fifo_client:close(State).
 
 -spec update(amqqueue:amqqueue(), rabbit_fifo_client:state()) ->
     rabbit_fifo_client:state().
