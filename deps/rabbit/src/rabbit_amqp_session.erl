@@ -213,6 +213,7 @@
           dynamic :: boolean(),
           send_settled :: boolean(),
           max_message_size :: unlimited | pos_integer(),
+          filter :: list(),
 
           %% When feature flag rabbitmq_4.0.0 becomes required,
           %% the following 2 fields should be deleted.
@@ -1487,6 +1488,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                              dynamic = default(Source#'v1_0.source'.dynamic, false),
                                              send_settled = SndSettled,
                                              max_message_size = MaxMessageSize,
+                                             filter = format_filter(EffectiveFilter),
                                              credit_api_version = CreditApiVsn,
                                              delivery_count = DeliveryCount,
                                              client_flow_ctl = ClientFlowCtl,
@@ -3984,7 +3986,7 @@ info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
 
 info_outgoing_management_links(Links) ->
     [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
-                        true, MaxMessageSize, DeliveryCount, Credit)
+                        true, MaxMessageSize, [], DeliveryCount, Credit)
      || Handle := #management_link{
                      name = Name,
                      max_message_size = MaxMessageSize,
@@ -4001,27 +4003,48 @@ info_outgoing_links(Links) ->
                                            {'', ''}
                                    end,
          info_outgoing_link(Handle, Name, SourceAddress, QueueName#resource.name,
-                            SendSettled, MaxMessageSize, DeliveryCount, Credit)
+                            SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
 
      end
      || Handle := #outgoing_link{
                      name = Name,
                      source_address = SourceAddress,
                      queue_name = QueueName,
-                     max_message_size = MaxMessageSize,
                      send_settled = SendSettled,
+                     max_message_size = MaxMessageSize,
+                     filter = Filter,
                      client_flow_ctl = ClientFlowCtl} <- Links].
 
 info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
-                   MaxMessageSize, DeliveryCount, Credit) ->
+                   MaxMessageSize, Filter, DeliveryCount, Credit) ->
     [{handle, Handle},
      {link_name, LinkName},
      {source_address, SourceAddress},
      {queue_name, QueueNameBin},
      {send_settled, SendSettled},
      {max_message_size, MaxMessageSize},
+     {filter, Filter},
      {delivery_count, DeliveryCount},
      {credit, Credit}].
+
+format_filter(undefined) ->
+    [];
+format_filter({map, KVList}) ->
+    [[{name, Name},
+      {descriptor, Descriptor},
+      {value, format_filter_value(Value)}]
+     || {{symbol, Name}, {described, {_Type, Descriptor}, Value}} <- KVList].
+
+format_filter_value({list, List}) ->
+    lists:map(fun format_filter_value/1, List);
+format_filter_value({map, KVList}) ->
+    [[{key, Key},
+      {value, format_filter_value(Val)}]
+     || {{_T, Key}, Val} <- KVList, is_binary(Key)];
+format_filter_value({_Type, Val}) ->
+    Val;
+format_filter_value(Val) ->
+    Val.
 
 unwrap_simple_type(V = {list, _}) ->
     V;

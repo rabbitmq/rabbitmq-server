@@ -8,6 +8,8 @@
 -module(rabbit_mgmt_http_SUITE).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp10_common/include/amqp10_filter.hrl").
+-include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
@@ -1127,16 +1129,34 @@ amqp_sessions(Config) ->
     {ok, Session1} = amqp10_client:begin_session_sync(C),
     {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
                        Session1, <<"my link pair">>),
-    QName = <<"my queue">>,
-    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{}),
+    QName = <<"my stream">>,
+    QProps = #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>}}},
+    {ok, #{}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
     {ok, Sender} = amqp10_client:attach_sender_link_sync(
-                     Session1,
-                     <<"my sender">>,
+                     Session1, <<"my sender">>,
                      rabbitmq_amqp_address:exchange(<<"amq.direct">>, <<"my key">>)),
+
+    Filter = #{<<"ts filter">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
+                                          value = {timestamp, 1751023462000}},
+               <<"bloom filter">> => #filter{descriptor = <<"rabbitmq:stream-filter">>,
+                                             value = {list, [{utf8, <<"complaint">>},
+                                                             {utf8, <<"user1">>}]}},
+               <<"match filter">> => #filter{descriptor = <<"rabbitmq:stream-match-unfiltered">>,
+                                             value = {boolean, true}},
+               <<"prop filter">> => #filter{descriptor = ?DESCRIPTOR_CODE_PROPERTIES_FILTER,
+                                            value = {map, [{{symbol, <<"subject">>},
+                                                            {utf8, <<"complaint">>}},
+                                                           {{symbol, <<"user-id">>},
+                                                            {binary, <<"user1">>}}
+                                                          ]}},
+               <<"app prop filter">> => #filter{descriptor = ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER,
+                                                value = {map, [{{utf8, <<"k1">>}, {int, -4}},
+                                                               {{utf8, <<"☀️"/utf8>>}, {utf8, <<"🙂"/utf8>>}}
+                                                              ]}}},
     {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session1,
-                       <<"my receiver">>,
-                       rabbitmq_amqp_address:queue(QName)),
+                       Session1, <<"my receiver">>,
+                       rabbitmq_amqp_address:queue(QName),
+                       settled, none, Filter),
     receive {amqp10_event, {link, Receiver, attached}} -> ok
     after 5000 -> ct:fail({missing_event, ?LINE})
     end,
@@ -1155,53 +1175,83 @@ amqp_sessions(Config) ->
          next_outgoing_id := NextOutgoingId,
          remote_incoming_window := RemoteIncomingWindow,
          remote_outgoing_window := RemoteOutgoingWindow,
-         outgoing_unsettled_deliveries := 0,
-         incoming_links := [#{handle := 0,
-                              link_name := <<"my link pair">>,
-                              target_address := <<"/management">>,
-                              delivery_count := DeliveryCount1,
-                              credit := Credit1,
-                              snd_settle_mode := <<"settled">>,
-                              max_message_size := IncomingMaxMsgSize,
-                              unconfirmed_messages := 0},
-                            #{handle := 2,
-                              link_name := <<"my sender">>,
-                              target_address := <<"/exchanges/amq.direct/my%20key">>,
-                              delivery_count := DeliveryCount2,
-                              credit := Credit2,
-                              snd_settle_mode := <<"mixed">>,
-                              max_message_size := IncomingMaxMsgSize,
-                              unconfirmed_messages := 0}],
-         outgoing_links := [#{handle := 1,
-                              link_name := <<"my link pair">>,
-                              source_address := <<"/management">>,
-                              queue_name := <<>>,
-                              delivery_count := DeliveryCount3,
-                              credit := 0,
-                              max_message_size := <<"unlimited">>,
-                              send_settled := true},
-                            #{handle := 3,
-                              link_name := <<"my receiver">>,
-                              source_address := <<"/queues/my%20queue">>,
-                              queue_name := <<"my queue">>,
-                              delivery_count := DeliveryCount4,
-                              credit := 5000,
-                              max_message_size := <<"unlimited">>,
-                              send_settled := true}]
+         outgoing_unsettled_deliveries := 0
         } when is_integer(HandleMax) andalso
                is_integer(NextIncomingId) andalso
                is_integer(IncomingWindow) andalso
                is_integer(NextOutgoingId) andalso
                is_integer(RemoteIncomingWindow) andalso
-               is_integer(RemoteOutgoingWindow) andalso
-               is_integer(Credit1) andalso
-               is_integer(Credit2) andalso
-               is_integer(IncomingMaxMsgSize) andalso
-               is_integer(DeliveryCount1) andalso
-               is_integer(DeliveryCount2) andalso
-               is_integer(DeliveryCount3) andalso
-               is_integer(DeliveryCount4),
+               is_integer(RemoteOutgoingWindow),
                Session),
+
+    {ok, IncomingLinks} = maps:find(incoming_links, Session),
+    {ok, OutgoingLinks} = maps:find(outgoing_links, Session),
+    ?assertEqual(2, length(IncomingLinks)),
+    ?assertEqual(2, length(OutgoingLinks)),
+
+    ?assertMatch([#{handle := 0,
+                    link_name := <<"my link pair">>,
+                    target_address := <<"/management">>,
+                    delivery_count := DeliveryCount1,
+                    credit := Credit1,
+                    snd_settle_mode := <<"settled">>,
+                    max_message_size := IncomingMaxMsgSize,
+                    unconfirmed_messages := 0},
+                  #{handle := 2,
+                    link_name := <<"my sender">>,
+                    target_address := <<"/exchanges/amq.direct/my%20key">>,
+                    delivery_count := DeliveryCount2,
+                    credit := Credit2,
+                    snd_settle_mode := <<"mixed">>,
+                    max_message_size := IncomingMaxMsgSize,
+                    unconfirmed_messages := 0}]
+                   when is_integer(Credit1) andalso
+                        is_integer(Credit2) andalso
+                        is_integer(IncomingMaxMsgSize) andalso
+                        is_integer(DeliveryCount1) andalso
+                        is_integer(DeliveryCount2),
+                        IncomingLinks),
+
+    [OutLink1, OutLink2] = OutgoingLinks,
+    ?assertMatch(#{handle := 1,
+                   link_name := <<"my link pair">>,
+                   source_address := <<"/management">>,
+                   queue_name := <<>>,
+                   delivery_count := DeliveryCount3,
+                   credit := 0,
+                   max_message_size := <<"unlimited">>,
+                   send_settled := true}
+                   when is_integer(DeliveryCount3),
+                        OutLink1),
+    #{handle := 3,
+      link_name := <<"my receiver">>,
+      source_address := <<"/queues/my%20stream">>,
+      queue_name := <<"my stream">>,
+      delivery_count := DeliveryCount4,
+      credit := 5000,
+      max_message_size := <<"unlimited">>,
+      send_settled := true,
+      filter := ActualFilter} = OutLink2,
+    ?assert(is_integer(DeliveryCount4)),
+    ExpectedFilter = [#{name => <<"ts filter">>,
+                        descriptor => <<"rabbitmq:stream-offset-spec">>,
+                        value => 1751023462000},
+                      #{name => <<"bloom filter">>,
+                        descriptor => <<"rabbitmq:stream-filter">>,
+                        value => [<<"complaint">>, <<"user1">>]},
+                      #{name => <<"match filter">>,
+                        descriptor => <<"rabbitmq:stream-match-unfiltered">>,
+                        value => true},
+                      #{name => <<"prop filter">>,
+                        descriptor => ?DESCRIPTOR_CODE_PROPERTIES_FILTER,
+                        value => [#{key => <<"subject">>, value => <<"complaint">>},
+                                  #{key => <<"user-id">>, value => <<"user1">>}]},
+                      #{name => <<"app prop filter">>,
+                        descriptor => ?DESCRIPTOR_NAME_APPLICATION_PROPERTIES_FILTER,
+                        value => [#{key => <<"k1">>, value => -4},
+                                  #{key => <<"☀️"/utf8>>, value => <<"🙂"/utf8>>}]}],
+    ?assertEqual(lists:sort(ExpectedFilter),
+                 lists:sort(ActualFilter)),
 
     {ok, _Session2} = amqp10_client:begin_session_sync(C),
     Sessions = http_get(Config, Path),
