@@ -11,6 +11,7 @@
          read_file/2,
          write_file/3,
          set_interactive_mode/1,
+         set_paging_mode/1,
          supports_colors/1]).
 -export([start_link/1,
          stop/1,
@@ -96,6 +97,11 @@ write_file(Context, Filename, Bytes) ->
 
 set_interactive_mode(Context) ->
     ?LOG_DEBUG("CLI: request interactive mode"),
+    Request = ?FUNCTION_NAME,
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+set_paging_mode(Context) ->
+    ?LOG_DEBUG("CLI: request paging mode"),
     Request = ?FUNCTION_NAME,
     rabbit_cli_backend:send_frontend_request(Context, Request).
 

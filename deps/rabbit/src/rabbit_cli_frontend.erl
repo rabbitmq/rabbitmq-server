@@ -9,7 +9,8 @@
          noop/1]).
 
 -record(?MODULE, {scriptname,
-                  connection}).
+                  connection,
+                  pager}).
 
 -spec main(Args) -> no_return() when
       Args :: argparse:args().
@@ -253,29 +254,86 @@ record_to_map([], _Record, _Index, Map) ->
     Map.
 
 main_loop(
-  #rabbit_cli{priv = #?MODULE{connection = Connection}} = Context) ->
-    ?LOG_DEBUG("CLI: frontend main loop..."),
+  #rabbit_cli{priv = #?MODULE{connection = Connection,
+                              pager = Pager} = Priv} = Context) ->
+    ?LOG_DEBUG("CLI: frontend main loop (pager: ~0p)...", [Pager]),
+    Timeout = case is_port(Pager) of
+                  false ->
+                      infinity;
+                  true ->
+                      100
+              end,
     receive
-        {'EXIT', _LinkedPid, Reason} ->
-            terminate(Reason, Context);
+        {'EXIT', Pager, Reason} ->
+            ?LOG_DEBUG("CLI: EXIT signal from pager: ~p", [Reason]),
+            Priv1 = Priv#?MODULE{pager = undefined},
+            Context1 = Context#rabbit_cli{priv = Priv1},
+            terminate(Reason, Context1);
+        {'EXIT', LinkedPid, Reason} ->
+            ?LOG_DEBUG(
+               "CLI: EXIT signal from linked process ~0p: ~p",
+               [LinkedPid, Reason]),
+            case Pager of
+                undefined ->
+                    terminate(Reason, Context);
+                _ ->
+                    ?LOG_DEBUG("CLI: waiting for pager to exit"),
+                    main_loop(Context)
+            end;
         {frontend_request, From, Request} ->
-            Reply = handle_request(Request),
+            {reply, Reply, Context1} = handle_request(Request, Context),
             _ = rabbit_cli_transport2:gen_reply(Connection, From, Reply),
+            main_loop(Context1);
+        {io_request, From, ReplyAs, Request}
+          when element(1, Request) =:= put_chars andalso is_port(Pager) ->
+            Chars0 = case Request of
+                         {put_chars, unicode, M, F, A} ->
+                             erlang:apply(M, F, A);
+                         {put_chars, unicode, C} ->
+                             C
+                     end,
+            Chars1 = re:replace(Chars0, "\n", "\r\n"),
+            Bin = unicode:characters_to_binary(Chars1),
+            erlang:port_command(Pager, Bin),
+            IoReply = {io_reply, ReplyAs, ok},
+            From ! IoReply,
+            main_loop(Context);
+        {io_request, _From, _ReplyAs, _Request} = IoRequest ->
+            GroupLeader = erlang:group_leader(),
+            GroupLeader ! IoRequest,
             main_loop(Context);
         Info ->
-            ?LOG_DEBUG("Unknown info: ~0p", [Info]),
+            ?LOG_ALERT("CLI: unknown info: ~0p", [Info]),
             main_loop(Context)
+    after Timeout ->
+              erlang:port_command(Pager, <<>>),
+              main_loop(Context)
     end.
 
 terminate(Reason, _Context) ->
     ?LOG_DEBUG("CLI: frontend terminating: ~0p", [Reason]),
     ok.
 
-handle_request({read_file, Filename}) ->
-    file:read_file(Filename);
-handle_request({write_file, Filename, Bytes}) ->
-    file:write_file(Filename, Bytes);
-handle_request(set_interactive_mode) ->
+handle_request({read_file, Filename}, Context) ->
+    {reply, file:read_file(Filename), Context};
+handle_request({write_file, Filename, Bytes}, Context) ->
+    {reply, file:write_file(Filename, Bytes), Context};
+handle_request(set_interactive_mode, Context) ->
     Ret = shell:start_interactive({noshell, raw}),
     ?LOG_DEBUG("CLI: interactive mode: ~p", [Ret]),
-    Ret.
+    {reply, Ret, Context};
+handle_request(
+  set_paging_mode, #rabbit_cli{env = Env, priv = Priv} = Context) ->
+    Cmd = case proplists:get_value("PAGER", Env) of
+              Value when is_list(Value) ->
+                  Value;
+              undefined ->
+                  "less"
+          end,
+    ?LOG_DEBUG("CLI: start pager \"~ts\"", [Cmd]),
+    Pager = erlang:open_port(
+              {spawn, Cmd},
+              [stream, exit_status, binary, use_stdio, out, hide, {env, Env}]),
+    Priv1 = Priv#?MODULE{pager = Pager},
+    Context1 = Context#rabbit_cli{priv = Priv1},
+    {reply, ok, Context1}.

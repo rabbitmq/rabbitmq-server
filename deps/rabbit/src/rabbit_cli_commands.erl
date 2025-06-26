@@ -14,6 +14,7 @@
 -export([cmd_generate_completion_script/1,
          cmd_noop/1,
          cmd_hello/1,
+         cmd_pager/1,
          cmd_crash/1,
          cmd_top/1]).
 
@@ -26,6 +27,11 @@
    {#{cli => ["hello"]},
     #{help => "Say hello!",
       handler => {?MODULE, cmd_hello}}}).
+
+-rabbitmq_command(
+   {#{cli => ["page"]},
+    #{help => "Test pager",
+      handler => {?MODULE, cmd_pager}}}).
 
 -rabbitmq_command(
    {#{cli => ["crash"]},
@@ -457,6 +463,15 @@ split_escape_sequence([$\e | _] = Rest, Chars) ->
     {lists:reverse(Chars), Rest};
 split_escape_sequence([Char | Rest], Chars) ->
     split_escape_sequence(Rest, [Char | Chars]).
+
+cmd_pager(Context) ->
+    ok = rabbit_cli_io:set_paging_mode(Context),
+    ok = io:format("Line 1~n"),
+    ok = io:format("Line 2~n"),
+    ok = io:format("(waiting)~n"),
+    timer:sleep(5000),
+    ok = io:format("Line 3 (last)~n"),
+    ok.
 
 -spec cmd_crash(#rabbit_cli{}) -> no_return().
 

@@ -20,10 +20,6 @@
 
 -record(?MODULE, {caller}).
 
-%% TODO:
-%% * Implémenter "list exchanges" plus proprement
-%% * Implémenter "rabbitmqctl list_exchanges" pour la compatibilité
-
 run_command(ContextMap, Caller) when is_map(ContextMap) ->
     Context = map_to_context(ContextMap),
     run_command(Context, Caller);
@@ -87,11 +83,11 @@ init(
                            args = Args,
                            terminal = Terminal} = Context,
     caller := Caller,
-    group_leader := GroupLeader
+    group_leader := _GroupLeader
    }) ->
     process_flag(trap_exit, true),
     erlang:link(Caller),
-    erlang:group_leader(GroupLeader, self()),
+    erlang:group_leader(Caller, self()),
     ?LOG_INFO("CLI: running: ~0p", [[Progname | Args]]),
     ?LOG_DEBUG(
        "CLI: tty: stdout=~s stderr=~s stdin=~s",
