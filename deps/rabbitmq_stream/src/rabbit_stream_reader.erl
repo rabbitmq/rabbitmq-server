@@ -3309,25 +3309,29 @@ clean_subscriptions(MemberPid, Stream,
       fun(SubId, {DelSubIds, Rqsts0}) ->
               #{SubId := Consumer} = Consumers,
               case {MemberPid, Consumer} of
-                  {undefined, _C} ->
+                  {undefined, #consumer{log = Log}} ->
                       rabbit_stream_metrics:consumer_cancelled(self(),
                                                                stream_r(Stream,
                                                                         C0),
                                                                SubId,
                                                                Username),
+
+                      close_log(Log),
                       Rqsts1 = maybe_unregister_consumer(
                                  VirtualHost, Consumer,
                                  single_active_consumer(Consumer),
                                  Rqsts0),
                       {[SubId | DelSubIds], Rqsts1};
                   {MemberPid,
-                   #consumer{configuration =
-                             #consumer_configuration{member_pid = MemberPid}}} ->
+                   #consumer{
+                      log = Log,
+                      configuration = #consumer_configuration{member_pid = MemberPid}}} ->
                       rabbit_stream_metrics:consumer_cancelled(self(),
                                                                stream_r(Stream,
                                                                         C0),
                                                                SubId,
                                                                Username),
+                      close_log(Log),
                       Rqsts1 = maybe_unregister_consumer(
                                  VirtualHost, Consumer,
                                  single_active_consumer(Consumer),
