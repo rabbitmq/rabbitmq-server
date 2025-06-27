@@ -200,9 +200,20 @@ do-dist:: $(DIST_EZS)
 	$(verbose) unwanted='$(filter-out $(DIST_EZS) $(EXTRA_DIST_EZS), \
 		$(wildcard $(DIST_DIR)/*))'; \
 	test -z "$$unwanted" || (echo " RM     $$unwanted" && rm -rf $$unwanted)
+	$(verbose) unzip -o -d "$(DIST_DIR)" "$(CLI_ESCRIPTS_DIR)/rabbitmqctl" || :
+	$(verbose) ! test -d "$(DIST_DIR)"/csv-* || rm -rf "$(DIST_DIR)"/csv
+	$(verbose) ! test -d "$(DIST_DIR)"/json-* || rm -rf "$(DIST_DIR)"/json
+	$(verbose) ! test -d "$(DIST_DIR)"/stdout_formatter-* || rm -rf "$(DIST_DIR)"/stdout_formatter
 
 CLI_SCRIPTS_LOCK = $(CLI_SCRIPTS_DIR).lock
 CLI_ESCRIPTS_LOCK = $(CLI_ESCRIPTS_DIR).lock
+
+LEGACY_CLI_COMMANDS := rabbitmqctl \
+		       rabbitmq-diagnostics \
+		       rabbitmq-plugins \
+		       rabbitmq-queues \
+		       rabbitmq-streams \
+		       rabbitmq-upgrade
 
 ifeq ($(MAKELEVEL),0)
 ifneq ($(filter-out rabbit_common amqp10_common rabbitmq_stream_common,$(PROJECT)),)
@@ -223,6 +234,12 @@ install-cli-scripts: | $(CLI_SCRIPTS_DIR)
 	test -d "$(DEPS_DIR)/rabbit/scripts"; \
 	$(call maybe_flock,$(CLI_SCRIPTS_LOCK), \
 		cp -a $(DEPS_DIR)/rabbit/scripts/* $(CLI_SCRIPTS_DIR)/)
+	$(verbose) \
+		$(foreach cmd, $(LEGACY_CLI_COMMANDS), \
+		  ln -sf rabbitmq.escript $(CLI_SCRIPTS_DIR)/$(cmd).escript;)
+	$(verbose) \
+		$(foreach cmd, $(LEGACY_CLI_COMMANDS), \
+		  ln -sf rabbitmq $(CLI_SCRIPTS_DIR)/$(cmd);)
 
 install-cli-escripts: | $(CLI_ESCRIPTS_DIR)
 	$(gen_verbose) $(call maybe_flock,$(CLI_ESCRIPTS_LOCK), \
