@@ -90,7 +90,11 @@ complete_nodename(Nodename) ->
 get_client_info(#?MODULE{type = Proto}) ->
     {ok, Hostname} = inet:gethostname(),
     #{hostname => Hostname,
-      proto => Proto}.
+      proto => Proto};
+get_client_info(none) ->
+    {ok, Hostname} = inet:gethostname(),
+    #{hostname => Hostname,
+      proto => none}.
 
 run_command(#?MODULE{type = erldist, peer = Node}, ContextMap) ->
     Caller = self(),
@@ -101,9 +105,13 @@ run_command(#?MODULE{type = http, peer = Client}, ContextMap) ->
 gen_reply(#?MODULE{type = erldist}, From, Reply) ->
     gen:reply(From, Reply);
 gen_reply(#?MODULE{type = http, peer = Client}, From, Reply) ->
-    rabbit_cli_http_client:gen_reply(Client, From, Reply).
+    rabbit_cli_http_client:gen_reply(Client, From, Reply);
+gen_reply(none, From, Reply) ->
+    gen:reply(From, Reply).
 
 send(#?MODULE{type = erldist}, Dest, Msg) ->
     erlang:send(Dest, Msg);
 send(#?MODULE{type = http, peer = Client}, Dest, Msg) ->
-    rabbit_cli_http_client:send(Client, Dest, Msg).
+    rabbit_cli_http_client:send(Client, Dest, Msg);
+send(none, Dest, Msg) ->
+    erlang:send(Dest, Msg).
