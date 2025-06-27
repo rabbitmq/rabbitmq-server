@@ -1217,38 +1217,43 @@ single_active_consumer_priority(Config) ->
     ok.
 
 force_shrink_member_to_current_member(Config) ->
-    [Server0, Server1, Server2] =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    case rabbit_ct_helpers:is_mixed_versions() of
+    true ->
+        {skip, "Should not run in mixed version environments"};
+    _ ->
+        [Server0, Server1, Server2] =
+            rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    QQ = ?config(queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+        Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+        QQ = ?config(queue_name, Config),
+        ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                     declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    RaName = ra_name(QQ),
-    rabbit_ct_client_helpers:publish(Ch, QQ, 3),
-    wait_for_messages_ready([Server0], RaName, 3),
+        RaName = ra_name(QQ),
+        rabbit_ct_client_helpers:publish(Ch, QQ, 3),
+        wait_for_messages_ready([Server0], RaName, 3),
 
-    {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-    #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-    ?assertEqual(3, length(Nodes0)),
+        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+        ?assertEqual(3, length(Nodes0)),
 
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-        force_shrink_member_to_current_member, [<<"/">>, QQ]),
+        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+            force_shrink_member_to_current_member, [<<"/">>, QQ]),
 
-    wait_for_messages_ready([Server0], RaName, 3),
+        wait_for_messages_ready([Server0], RaName, 3),
 
-    {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-    #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
-    ?assertEqual(1, length(Nodes1)),
+        {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+        #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
+        ?assertEqual(1, length(Nodes1)),
 
-    %% grow queues back to all nodes
-    [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+        %% grow queues back to all nodes
+        [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
 
-    wait_for_messages_ready([Server0], RaName, 3),
-    {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-    #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
-    ?assertEqual(3, length(Nodes2)).
+        wait_for_messages_ready([Server0], RaName, 3),
+        {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+        #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
+        ?assertEqual(3, length(Nodes2))
+    end.
 
 force_all_queues_shrink_member_to_current_member(Config) ->
     [Server0, Server1, Server2] =
