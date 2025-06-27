@@ -33,6 +33,11 @@ jobs:
     - name: FETCH TAGS
       run: git fetch --tags
 
+    - name: EXTRACT ACTIVEMQ VERSION
+      if: inputs.plugin == 'amqp10_client'
+      run: |
+        awk '/^ACTIVEMQ_VERSION/ {print $1 "=" $3}' deps/amqp10_client/Makefile >> $GITHUB_ENV
+
     - name: SETUP OTP & ELIXIR
       uses: erlef/setup-beam@v1
       with:
@@ -99,11 +104,26 @@ jobs:
         docker run -d --network host --name erlang_low_version erlang:${LOW_ERLANG_VERSION} \
           erl -sname rabbit_fifo_prop@localhost -setcookie $(cat ~/.erlang.cookie) -noinput
 
+    - name: RESTORE ACTIVEMQ FROM CACHE
+      if: inputs.plugin == 'amqp10_client'
+      uses: actions/cache/restore@v4
+      id: cache-activemq-restore
+      with:
+        path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
+        key: activemq-${{ env.ACTIVEMQ_VERSION }}
+
     - name: RUN TESTS
       if: inputs.plugin != 'rabbitmq_cli'
       run: |
         sudo netstat -ntp
         make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+
+    - name: CACHE ACTIVEMQ
+      uses: actions/cache/save@v4
+      if: inputs.plugin == 'amqp10_client' && steps.cache-activemq-restore.outputs.cache-hit != 'true'
+      with:
+        path: deps/amqp10_client/test/system_SUITE_data/apache-activemq-${{ env.ACTIVEMQ_VERSION }}-bin.tar.gz
+        key: activemq-${{ env.ACTIVEMQ_VERSION }}
 
     # rabbitmq_cli needs a correct broker version for two of its tests.
     # But setting PROJECT_VERSION makes other plugins fail.
