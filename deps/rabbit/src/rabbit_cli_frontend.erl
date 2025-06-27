@@ -74,16 +74,42 @@ flush_log_messages() ->
 run_cli(ScriptName, Args) ->
     ProgName0 = filename:basename(ScriptName, ".bat"),
     ProgName1 = filename:basename(ProgName0, ".escript"),
+    case is_legacy_progname(ProgName1) of
+        false ->
+            run_cli(ScriptName, ProgName1, Args);
+        true ->
+            run_legacy_cli(Args)
+    end.
+
+is_legacy_progname("rabbitmqctl") ->
+    true;
+is_legacy_progname("rabbitmq-diagnostics") ->
+    true;
+is_legacy_progname("rabbitmq-plugins") ->
+    true;
+is_legacy_progname("rabbitmq-queues") ->
+    true;
+is_legacy_progname("rabbitmq-streams") ->
+    true;
+is_legacy_progname("rabbitmq-upgrade") ->
+    true;
+is_legacy_progname(_Progname) ->
+    false.
+
+run_cli(ScriptName, ProgName, Args) ->
     Terminal = collect_terminal_info(),
     configure_signal_handler(),
     Priv = #?MODULE{scriptname = ScriptName},
-    Context = #rabbit_cli{progname = ProgName1,
+    Context = #rabbit_cli{progname = ProgName,
                           args = Args,
                           os = os:type(),
                           env = os:env(),
                           terminal = Terminal,
                           priv = Priv},
     init_local_args(Context).
+
+run_legacy_cli(Args) ->
+    'Elixir.RabbitMQCtl':main(Args).
 
 collect_terminal_info() ->
     IoOpts = io:getopts(),
