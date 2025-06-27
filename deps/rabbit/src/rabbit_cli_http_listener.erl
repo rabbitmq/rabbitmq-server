@@ -135,13 +135,13 @@ websocket_handle({binary, RequestBin}, State) ->
     Request = binary_to_term(RequestBin),
     ?LOG_DEBUG("CLI: received HTTP message from client: ~p", [Request]),
     try
-        case handle_request(Request) of
-            {reply, Reply} ->
+        case handle_request(Request, State) of
+            {reply, Reply, State1} ->
                 ReplyBin = term_to_binary(Reply),
                 Frame1 = {binary, ReplyBin},
-                {[Frame1], State};
-            noreply ->
-                {ok, State}
+                {[Frame1], State1};
+            {noreply, State1} ->
+                {ok, State1}
         end
     catch
         Class:Reason:Stacktrace ->
@@ -167,8 +167,14 @@ websocket_info({'EXIT', _Pid, _Reason} = Exit, State) ->
     Frame = {binary, ExitBin},
     {[Frame, close], State}.
 
-terminate(Reason, _Req, _State) ->
+terminate(Reason, _Req, State) ->
     ?LOG_DEBUG("CLI: HTTP server terminating: ~0p", [Reason]),
+    case State of
+        #{backend := Backend} ->
+            _ = catch erlang:exit(Backend, Reason);
+        _ ->
+            ok
+    end,
     ok.
 
 %% -------------------------------------------------------------------
@@ -188,18 +194,26 @@ reply_with_help(Req, Code) ->
       Code, #{<<"content-type">> => <<"text/html; charset=utf-8">>}, Body,
       Req).
 
-handle_request({call, From, Command}) ->
-    Ret = handle_command(Command),
+handle_request({call, From, Command}, State) ->
+    {Ret, State1} = handle_command(Command, State),
     Reply = {call_ret, From, Ret},
-    {reply, Reply};
-handle_request({cast, Command}) ->
-    _ = handle_command(Command),
-    noreply.
+    {reply, Reply, State1};
+handle_request({cast, Command}, State) ->
+    {_, State1} = handle_command(Command, State),
+    {noreply, State1}.
 
-handle_command({run_command, ContextMap}) ->
+handle_command({run_command, ContextMap}, State) ->
     Caller = self(),
-    rabbit_cli_backend:run_command(ContextMap, Caller);
-handle_command({gen_reply, From, Reply}) ->
-    gen:reply(From, Reply);
-handle_command({send, Dest, Msg}) ->
-    erlang:send(Dest, Msg).
+    case rabbit_cli_backend:run_command(ContextMap, Caller) of
+        {ok, Backend} = Ret ->
+            State1 = State#{backend => Backend},
+            {Ret, State1};
+        {error, _} = Error ->
+            {Error, State}
+    end;
+handle_command({gen_reply, From, Reply}, State) ->
+    Ret = gen:reply(From, Reply),
+    {Ret, State};
+handle_command({send, Dest, Msg}, State) ->
+    Ret = erlang:send(Dest, Msg),
+    {Ret, State}.
