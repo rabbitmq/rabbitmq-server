@@ -3,15 +3,15 @@
 -behaviour(supervisor).
 
 -export([start_link/0,
-         start_backend/3,
+         start_backend/2,
          which_backends/0]).
 -export([init/1]).
 
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, none).
 
-start_backend(Context, Caller, GroupLeader) ->
-    supervisor:start_child(?MODULE, [Context, Caller, GroupLeader]).
+start_backend(Context, Caller) ->
+    supervisor:start_child(?MODULE, [Context, Caller]).
 
 which_backends() ->
     Children = supervisor:which_children(?MODULE),
