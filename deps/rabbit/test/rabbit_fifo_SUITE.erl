@@ -42,12 +42,12 @@ groups() ->
     ].
 
 init_per_group(tests, Config) ->
-    [{machine_version, 5} | Config];
+    [{machine_version, rabbit_fifo:version()} | Config];
 init_per_group(machine_version_conversion, Config) ->
     Config.
 
 init_per_testcase(_Testcase, Config) ->
-    FF = ?config(machine_version, Config) == 5,
+    FF = ?config(machine_version, Config) == rabbit_fifo:version(),
     ok = meck:new(rabbit_feature_flags, [passthrough]),
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> FF end),
     Config.
@@ -1932,6 +1932,83 @@ single_active_consumer_higher_waiting_disconnected_test(Config) ->
 
     ok.
 
+single_active_consumer_higher_waiting_return_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {?LINE , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is quiescing
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
+                          waiting_consumers = [{CK2, _}]}),
+     %% C1 returns message
+     {?LINE, rabbit_fifo:make_return(CK1, [0])},
+     %% C2 should activated
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
+                                                         checked_out = Ch,
+                                                         credit = 0}},
+                          waiting_consumers = [_]} when map_size(Ch) == 1)
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
+
+single_active_consumer_higher_waiting_requeue_test(Config) ->
+    S0 = init(#{name => ?FUNCTION_NAME,
+                queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
+                single_active_consumer_on => true}),
+
+    Pid1 = test_util:fake_pid(node()),
+    C1Pid = test_util:fake_pid(n1@banana),
+    C2Pid = test_util:fake_pid(n2@banana),
+    % % adding some consumers
+    {CK1, C1} = {?LINE, {?LINE_B, C1Pid}},
+    EnqIdx = ?LINE,
+    RequeueIdx = ?LINE,
+    {CK2, C2} = {?LINE, {?LINE_B, C2Pid}},
+    Entries =
+    [
+     %% add a consumer
+     {CK1, make_checkout(C1, {auto, {simple_prefetch, 1}}, #{priority => 1})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = up}},
+                          waiting_consumers = []}),
+
+     %% enqueue a message
+     {EnqIdx , rabbit_fifo:make_enqueue(Pid1, 1, msg1)},
+
+     %% add a consumer with a higher priority, current is quiescing
+     {CK2, make_checkout(C2, {auto, {simple_prefetch, 1}}, #{priority => 2})},
+     ?ASSERT(#rabbit_fifo{consumers = #{CK1 := #consumer{status = quiescing}},
+                          waiting_consumers = [{CK2, _}]}),
+     %% C1 returns message
+     % {?LINE, rabbit_fifo:make_requeue(CK1, [0])},
+     {RequeueIdx , element(2, hd(rabbit_fifo:make_requeue(CK1, {notify, 1, self()},
+                                               [{0, EnqIdx, 0, msg1}], [])))},
+     %% C2 should activated
+     ?ASSERT(#rabbit_fifo{consumers = #{CK2 := #consumer{status = up,
+                                                         checked_out = Ch,
+                                                         credit = 0}},
+                          waiting_consumers = [_]} when map_size(Ch) == 1)
+    ],
+    {_S1, _} = run_log(Config, S0, Entries, fun single_active_invariant/1),
+
+    ok.
 single_active_consumer_quiescing_disconnected_test(Config) ->
     S0 = init(#{name => ?FUNCTION_NAME,
                 queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
@@ -2455,8 +2532,7 @@ machine_version_test(C) ->
                   consumers = #{Cid := #consumer{cfg = #consumer_cfg{priority = 0}}},
                   service_queue = S,
                   messages = Msgs}, ok,
-     [_|_]} = apply(meta(C, Idx),
-                    {machine_version, 0, 2}, S1),
+     [_|_]} = apply(meta(C, Idx), {machine_version, 0, 2}, S1),
     %% validate message conversion to lqueue
     ?assertEqual(1, lqueue:len(Msgs)),
     ?assert(priority_queue:is_queue(S)),

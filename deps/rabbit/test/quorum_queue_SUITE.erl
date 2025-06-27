@@ -95,6 +95,8 @@ groups() ->
                                             format,
                                             add_member_2,
                                             single_active_consumer_priority_take_over,
+                                            single_active_consumer_priority_take_over_return,
+                                            single_active_consumer_priority_take_over_requeue,
                                             single_active_consumer_priority,
                                             force_shrink_member_to_current_member,
                                             force_all_queues_shrink_member_to_current_member,
@@ -1137,6 +1139,72 @@ single_active_consumer_priority_take_over(Config) ->
     ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
                ?DEFAULT_AWAIT),
+    ok.
+
+single_active_consumer_priority_take_over_return(Config) ->
+    single_active_consumer_priority_take_over_base(20, Config).
+
+single_active_consumer_priority_take_over_requeue(Config) ->
+    single_active_consumer_priority_take_over_base(-1, Config).
+
+single_active_consumer_priority_take_over_base(DelLimit, Config) ->
+    check_quorum_queues_v4_compat(Config),
+
+    [Server0, Server1, _Server2] = Nodes =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    MinMacVers = lists:min([V || {ok, V} <-
+                                 erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    if MinMacVers < 7 ->
+           throw({skip, "single_active_consumer_priority_take_over_base needs a higher machine verison"});
+       true ->
+           ok
+    end,
+
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+    QName = ?config(queue_name, Config),
+    Q1 = <<QName/binary, "_1">>,
+    RaNameQ1 = binary_to_atom(<<"%2F", "_", Q1/binary>>, utf8),
+    QueryFun = fun rabbit_fifo:query_single_active_consumer/1,
+    Args = [{<<"x-queue-type">>, longstr, <<"quorum">>},
+            {<<"x-delivery-limit">>, long, DelLimit},
+            {<<"x-single-active-consumer">>, bool, true}],
+    ?assertEqual({'queue.declare_ok', Q1, 0, 0}, declare(Ch1, Q1, Args)),
+    ok = subscribe(Ch1, Q1, false, <<"ch1-ctag1">>, [{"x-priority", byte, 1}]),
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun])),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch2, #'confirm.select'{}),
+    publish_confirm(Ch2, Q1),
+    %% higher priority consumer attaches
+    ok = subscribe(Ch2, Q1, false, <<"ch2-ctag1">>, [{"x-priority", byte, 3}]),
+
+    %% Q1 should still have Ch1 as consumer as it has pending messages
+    ?assertMatch({ok, {_, {value, {<<"ch1-ctag1">>, _}}}, _},
+                 rpc:call(Server0, ra, local_query,
+                          [RaNameQ1, QueryFun])),
+
+    %% ack the message
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ch1-ctag1">>,
+                          delivery_tag = DeliveryTag}, _} ->
+            amqp_channel:cast(Ch1, #'basic.nack'{delivery_tag = DeliveryTag})
+    after ?TIMEOUT ->
+              flush(1),
+              exit(basic_deliver_timeout)
+    end,
+
+    ?awaitMatch({ok, {_, {value, {<<"ch2-ctag1">>, _}}}, _},
+                rpc:call(Server0, ra, local_query, [RaNameQ1, QueryFun]),
+               ?DEFAULT_AWAIT),
+    receive
+        {#'basic.deliver'{consumer_tag = <<"ch2-ctag1">>,
+                          delivery_tag = DeliveryTag2}, _} ->
+            amqp_channel:cast(Ch1, #'basic.ack'{delivery_tag = DeliveryTag2})
+    after ?TIMEOUT ->
+              flush(1),
+              exit(basic_deliver_timeout_2)
+    end,
     ok.
 
 single_active_consumer_priority(Config) ->
