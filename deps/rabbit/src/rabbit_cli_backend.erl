@@ -11,7 +11,8 @@
 
 -export([run_command/2,
          send_frontend_request/2,
-         start_link/3]).
+         start_link/3,
+         i/0]).
 -export([init/1,
          callback_mode/0,
          handle_event/4,
@@ -38,6 +39,7 @@ map_to_context(ContextMap) ->
                 command = maps:get(command, ContextMap),
                 legacy = Legacy,
                 os = maps:get(os, ContextMap),
+                client = maps:get(client, ContextMap),
                 env = maps:get(env, ContextMap),
                 terminal = maps:get(terminal, ContextMap)}.
 
@@ -74,6 +76,37 @@ send_frontend_request(
             exit(Reason)
     end.
 
+i() ->
+    Backends = rabbit_cli_backend_sup:which_backends(),
+    i(Backends).
+
+i([]) ->
+    io:format("No CLI commands running~n");
+i(Backends) ->
+    io:format("Running commands:~n"),
+    Now = erlang:system_time(),
+    lists:foreach(
+      fun(Backend) ->
+              #{cmdline := CmdLine,
+                client := #{hostname := Hostname, proto := Proto},
+                started_at := StartTime} = proc_lib:get_label(Backend),
+              Duration = erlang:convert_time_unit(
+                           Now - StartTime, native, seconds),
+              FormattedCmdLine = format_cmdline(CmdLine),
+              FormattedProto = case Proto of
+                                   erldist ->
+                                       "Erlang distribution";
+                                   http ->
+                                       "HTTP";
+                                   _ ->
+                                       Proto
+                               end,
+              io:format(
+                "  - ~ts~n    (running for ~b seconds, started from \"~ts\", "
+                "protocol: ~ts)~n",
+                [FormattedCmdLine, Duration, Hostname, FormattedProto])
+      end, Backends).
+
 %% -------------------------------------------------------------------
 %% gen_statem callbacks.
 %% -------------------------------------------------------------------
@@ -81,14 +114,28 @@ send_frontend_request(
 init(
   #{context := #rabbit_cli{progname = Progname,
                            args = Args,
+                           client = #{hostname := Hostname,
+                                      proto := Proto} = ClientInfo,
                            terminal = Terminal} = Context,
     caller := Caller,
     group_leader := _GroupLeader
    }) ->
-    process_flag(trap_exit, true),
+    %% Do not trap EXIT signal. This ensures the command is stopped. Because
+    %% it could be running a blocking call or receive and the EXIT signal
+    %% could seat in its inbox for a long time.
+
     erlang:link(Caller),
     erlang:group_leader(Caller, self()),
-    ?LOG_INFO("CLI: running: ~0p", [[Progname | Args]]),
+
+    CmdLine = [Progname | Args],
+    StartTime = erlang:system_time(),
+    Label = #{cmdline => CmdLine,
+              client => ClientInfo,
+              started_at => StartTime},
+    proc_lib:set_label(Label),
+    ?LOG_INFO(
+       "CLI: running: ~ts (started from \"~ts\", protocol: ~ts)",
+       [format_cmdline(CmdLine), Hostname, Proto]),
     ?LOG_DEBUG(
        "CLI: tty: stdout=~s stderr=~s stdin=~s",
        [maps:get(stdout, Terminal),
@@ -98,6 +145,18 @@ init(
     Priv = #?MODULE{caller = Caller},
     Context1 = Context#rabbit_cli{priv = Priv},
     {ok, standing_by, Context1, {next_event, internal, parse_command}}.
+
+format_cmdline(CmdLine) ->
+    FormattedArgs = [begin
+                         case string:chr(Arg, $') of
+                             0 ->
+                                 Arg;
+                             _ ->
+                                 Arg1 = re:replace(Arg, "'", "\\'", [global]),
+                                 "'" ++ Arg1 ++ "'"
+                         end
+                     end || Arg <- CmdLine],
+    string:join(FormattedArgs, " ").
 
 callback_mode() ->
     handle_event_function.

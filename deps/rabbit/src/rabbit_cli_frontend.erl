@@ -150,13 +150,17 @@ connect_to_node(
               _ ->
                   rabbit_cli_transport2:connect()
           end,
-    Priv1 = case Ret of
-                {ok, Connection} ->
-                    Priv#?MODULE{connection = Connection};
-                {error, _Reason} ->
-                    Priv#?MODULE{connection = none}
-            end,
-    Context1 = Context#rabbit_cli{priv = Priv1},
+    {ClientInfo, Priv1} = case Ret of
+                              {ok, Connection} ->
+                                  {rabbit_cli_transport2:get_client_info(
+                                     Connection),
+                                   Priv#?MODULE{connection = Connection}};
+                              {error, _Reason} ->
+                                  {undefined,
+                                   Priv#?MODULE{connection = none}}
+                          end,
+    Context1 = Context#rabbit_cli{client = ClientInfo,
+                                  priv = Priv1},
     run_command(Context1).
 
 %% -------------------------------------------------------------------
