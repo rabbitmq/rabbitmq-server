@@ -1195,7 +1195,7 @@ cmd_import_definitions(#rabbit_cli{arg_map = ArgMap} = Context) ->
     end.
 
 import_from_file(Context, Filename) ->
-    case rabbit_cli_backend:read_file(Context, Filename) of
+    case rabbit_cli_io:read_file(Context, Filename) of
         {ok, Data} ->
             do_import(Context, Data);
         {error, _} = Error ->
@@ -1203,7 +1203,7 @@ import_from_file(Context, Filename) ->
     end.
 
 import_from_stdin(Context) ->
-    case rabbit_cli_backend:read_stdin(Context) of
+    case rabbit_cli_io:read_stdin(Context) of
         {ok, Data} ->
             do_import(Context, Data);
         {error, _} = Error ->
@@ -1236,7 +1236,7 @@ cmd_export_definitions(#rabbit_cli{arg_map = ArgMap} = Context) ->
 
 export_to_file(Context, Defs, Filename) ->
     Json = json:encode(Defs),
-    rabbit_cli_backend:write_file(Context, Filename, Json).
+    rabbit_cli_io:write_file(Context, Filename, Json).
 
 export_to_stdin(#rabbit_cli{terminal = Terminal}, Defs) ->
     Json = case Terminal of
