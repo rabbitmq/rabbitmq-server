@@ -311,7 +311,35 @@ remove_node(Config) ->
     rabbit_control_helper:command(start_app, C),
 
     %% Minority partition: A
+<<<<<<< HEAD
     partition_3_node_cluster(Config),
+=======
+    partition_3_node_cluster(Config1),
+
+    Pong = ra:ping(AMember, 10000),
+    ct:pal("Member A state: ~0p", [Pong]),
+    case Pong of
+        {pong, leader} ->
+            ?awaitMatch(
+               {ok, #{cluster_change_permitted := true}, _},
+               rabbit_ct_broker_helpers:rpc(Config, A, ra, member_overview, [AMember]),
+               60000),
+            ?awaitMatch(
+               ok,
+               rabbit_control_helper:command(
+                 forget_cluster_node, A, [atom_to_list(B)], []),
+               60000);
+        Ret ->
+            ct:pal("A is not the expected leader: ~p", [Ret]),
+            {skip, "Node A was not a leader"}
+    end.
+
+remove_node_when_seed_node_is_follower(Config) ->
+    [A, B, C | _] = rabbit_ct_broker_helpers:get_node_configs(
+                      Config, nodename),
+
+    %% Three node cluster: A, B, C
+>>>>>>> 716635742 (cluster_minority_SUITE: Fix race in `remove_node_when_seed_node_is_leader`)
     Cluster = [A, B, C],
 
     ok = rabbit_control_helper:command(forget_cluster_node, A, [atom_to_list(B)], []),
