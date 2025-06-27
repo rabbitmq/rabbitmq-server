@@ -179,6 +179,11 @@ handle_event(
   #rabbit_cli{arg_map = #{help := true}} = Context) ->
     display_help(Context),
     {stop, {shutdown, ok}, Context};
+handle_event(
+  internal, run_command, command_parsed,
+  #rabbit_cli{arg_map = #{version := true}} = Context) ->
+    display_version(Context),
+    {stop, {shutdown, ok}, Context};
 handle_event(internal, run_command, command_parsed, Context) ->
     Ret = do_run_command(Context),
     {stop, {shutdown, Ret}, Context}.
@@ -252,3 +257,31 @@ display_help(#rabbit_cli{progname = Progname,
     Help = argparse:help(ArgparseDef, Options),
     io:format("~s~n", [Help]),
     ok.
+
+display_version(_Context) ->
+    case application:get_key(rabbit, vsn) of
+        {ok, _} ->
+            ProductInfo = rabbit:product_info(),
+            ProductName = maps:get(
+                            product_name, ProductInfo,
+                            maps:get(product_base_name, ProductInfo)),
+            ProductVersion = maps:get(
+                               product_version, ProductInfo,
+                               maps:get(product_base_version, ProductInfo)),
+            OtpRelease = maps:get(otp_release, ProductInfo),
+            State = rabbit_boot_state:get(),
+            io:format(
+              "~ts ~ts~n"
+              "Erlang/OTP ~ts~n"
+              "Status: ~ts~n",
+              [ProductName, ProductVersion, OtpRelease, State]);
+        _ ->
+            OtpRelease = erlang:system_info(otp_release),
+            ok = application:load(rabbit),
+            {ok, Vsn} = application:get_key(rabbit, vsn),
+            io:format(
+              "RabbitMQ ~ts~n"
+              "Erlang/OTP ~ts~n"
+              "Status: (not connected to a RabbitMQ node)~n",
+              [Vsn, OtpRelease])
+    end.
