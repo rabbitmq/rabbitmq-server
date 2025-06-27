@@ -539,7 +539,7 @@ invalid_module(T) ->
 type_to_module(T) ->
     case get({xtype_to_module, T}) of
         undefined ->
-            case rabbit_registry:lookup_module(exchange, T) of
+            case rabbit_registry:lookup_type_module(exchange, T) of
                 {ok, Module}       -> put({xtype_to_module, T}, Module),
                                       Module;
                 {error, not_found} -> invalid_module(T)
