@@ -6,7 +6,8 @@
 
 -export([start_link/1,
          run_command/2,
-         gen_reply/3]).
+         gen_reply/3,
+         send/3]).
 -export([init/1,
          callback_mode/0,
          handle_event/4,
@@ -30,6 +31,9 @@ run_command(Client, ContextMap) ->
 
 gen_reply(Client, From, Reply) ->
     gen_statem:cast(Client, {?FUNCTION_NAME, From, Reply}).
+
+send(Client, Dest, Msg) ->
+    gen_statem:cast(Client, {?FUNCTION_NAME, Dest, Msg}).
 
 %% -------------------------------------------------------------------
 %% gen_statem callbacks.

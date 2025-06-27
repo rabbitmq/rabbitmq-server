@@ -15,6 +15,7 @@
          cmd_noop/1,
          cmd_hello/1,
          cmd_pager/1,
+         cmd_signal/1,
          cmd_crash/1,
          cmd_top/1]).
 
@@ -32,6 +33,11 @@
    {#{cli => ["page"]},
     #{help => "Test pager",
       handler => {?MODULE, cmd_pager}}}).
+
+-rabbitmq_command(
+   {#{cli => ["signal"]},
+    #{help => "Test signal handling",
+      handler => {?MODULE, cmd_signal}}}).
 
 -rabbitmq_command(
    {#{cli => ["crash"]},
@@ -365,16 +371,21 @@ cmd_noop(_) ->
 cmd_hello(Context) ->
     io:format("Regural prompt test; type Enter to submit~n"),
     Name = io:get_line("Name: "),
-    io:format("Hello ~s!~n", [string:trim(Name)]),
+    case Name of
+        Name when is_list(Name) ->
+            io:format("Hello ~s!~n", [string:trim(Name)]),
 
-    io:format(
-      "~nInteraction mode test; "
-      "type any arrow keys, click with your mouse, or any other key to quit~n"),
-    ok = rabbit_cli_io:set_interactive_mode(Context),
-    io:format("\e[?1003h\e[?1015h\e[?1006h"),
-    Ret = cmd_hello_loop(Context),
-    io:format("\e[?1000l"),
-    Ret.
+            io:format(
+              "~nInteraction mode test; "
+              "type any arrow keys, click with your mouse, or any other key to quit~n"),
+            ok = rabbit_cli_io:set_interactive_mode(Context),
+            io:format("\e[?1003h\e[?1015h\e[?1006h"),
+            Ret = cmd_hello_loop(Context),
+            io:format("\e[?1000l"),
+            Ret;
+        {error, _} = Error ->
+            Error
+    end.
 
 cmd_hello_loop(Context) ->
     case io:get_chars("", 1024) of
@@ -472,6 +483,24 @@ cmd_pager(Context) ->
     timer:sleep(5000),
     ok = io:format("Line 3 (last)~n"),
     ok.
+
+cmd_signal(Context) ->
+    receive
+        {signal, sigwinch} ->
+            #{lines := Lines, cols := Cols} = rabbit_cli_io:get_window_size(
+                                                Context),
+            io:format("Window size: ~bx~b~n", [Cols, Lines]),
+            cmd_signal(Context);
+        {signal, siginfo} ->
+            ?LOG_DEBUG("CLI: siginfo"),
+            {current_stacktrace, Stacktrace} = erlang:process_info(
+                                                 self(), current_stacktrace),
+            rabbit_cli_io:display_siginfo(
+              Context,
+              "RabbitMQ CLI in:~n    ~p~n",
+              [Stacktrace]),
+            cmd_signal(Context)
+    end.
 
 -spec cmd_crash(#rabbit_cli{}) -> no_return().
 

@@ -12,6 +12,8 @@
          write_file/3,
          set_interactive_mode/1,
          set_paging_mode/1,
+         display_siginfo/2, display_siginfo/3,
+         get_window_size/1,
          supports_colors/1]).
 -export([start_link/1,
          stop/1,
@@ -102,6 +104,18 @@ set_interactive_mode(Context) ->
 
 set_paging_mode(Context) ->
     ?LOG_DEBUG("CLI: request paging mode"),
+    Request = ?FUNCTION_NAME,
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+display_siginfo(Context, String) ->
+    Request = {?FUNCTION_NAME, String},
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+display_siginfo(Context, Format, Args) ->
+    Request = {?FUNCTION_NAME, {Format, Args}},
+    rabbit_cli_backend:send_frontend_request(Context, Request).
+
+get_window_size(Context) ->
     Request = ?FUNCTION_NAME,
     rabbit_cli_backend:send_frontend_request(Context, Request).
 
