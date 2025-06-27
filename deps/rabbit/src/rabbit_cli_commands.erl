@@ -369,7 +369,7 @@ cmd_noop(_) ->
     ok.
 
 cmd_hello(Context) ->
-    io:format("Regural prompt test; type Enter to submit~n"),
+    io:format("Regular prompt test; type Enter to submit~n"),
     Name = io:get_line("Name: "),
     case Name of
         Name when is_list(Name) ->

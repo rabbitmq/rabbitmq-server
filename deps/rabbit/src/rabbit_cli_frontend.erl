@@ -176,15 +176,18 @@ connect_to_node(
               _ ->
                   rabbit_cli_transport:connect()
           end,
-    {ClientInfo, Priv1} = case Ret of
-                              {ok, Connection} ->
-                                  {rabbit_cli_transport:get_client_info(
-                                     Connection),
-                                   Priv#?MODULE{connection = Connection}};
-                              {error, _Reason} ->
-                                  {undefined,
-                                   Priv#?MODULE{connection = none}}
-                          end,
+    Priv1 = case Ret of
+                {ok, Connection} ->
+                    Priv#?MODULE{connection = Connection};
+                {error, Reason} ->
+                    ?LOG_DEBUG(
+                       "CLI: failed to establish a connection to a RabbitMQ "
+                       "node: ~0p",
+                       [Reason]),
+                    Priv#?MODULE{connection = none}
+            end,
+    ClientInfo = rabbit_cli_transport:get_client_info(
+                   Priv1#?MODULE.connection),
     Context1 = Context#rabbit_cli{client = ClientInfo,
                                   priv = Priv1},
     run_command(Context1).
@@ -282,17 +285,30 @@ run_command(
         main_loop(Context1)
     end;
 run_command(#rabbit_cli{} = Context) ->
-    %% TODO: If we can't connect to a node, try to parse args locally and run
-    %% the command on this CLI node.
     %% FIXME: Load applications first, otherwise module attributes are
     %% unavailable.
-    %% FIXME: run_command() relies on rabbit_cli_backend_sup.
     maybe
         process_flag(trap_exit, true),
+        prepare_offline_exec(Context),
         ContextMap = context_to_map(Context),
         {ok, _Backend} ?= rabbit_cli_backend:run_command(ContextMap, self()),
         main_loop(Context)
     end.
+
+prepare_offline_exec(_Context) ->
+    ?LOG_DEBUG("CLI: prepare for offline execution"),
+    Env = rabbit_env:get_context(),
+    rabbit_env:context_to_code_path(Env),
+    rabbit_env:context_to_app_env_vars(Env),
+    PluginsDir = rabbit_plugins:plugins_dir(),
+    Plugins = rabbit_plugins:plugin_names(
+                rabbit_plugins:list(PluginsDir, true)),
+    Apps = [rabbit_common, rabbit | Plugins],
+    lists:foreach(
+      fun(App) -> _ = application:load(App) end,
+      Apps),
+    ?LOG_DEBUG("CLI: ready for offline execution: ~p", [application:loaded_applications()]),
+    ok.
 
 context_to_map(Context) ->
     Fields = [Field || Field <- record_info(fields, rabbit_cli),
@@ -311,7 +327,7 @@ record_to_map([], _Record, _Index, Map) ->
 main_loop(
   #rabbit_cli{priv = #?MODULE{connection = Connection,
                               backend = Backend,
-                              pager = Pager} = Priv} = Context) ->
+                pager = Pager} = Priv} = Context) ->
     ?LOG_DEBUG("CLI: frontend main loop (pager: ~0p)...", [Pager]),
     Timeout = case is_port(Pager) of
                   false ->

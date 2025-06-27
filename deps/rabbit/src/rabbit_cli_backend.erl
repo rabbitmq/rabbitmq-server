@@ -25,7 +25,12 @@ run_command(ContextMap, Caller) when is_map(ContextMap) ->
     Context = map_to_context(ContextMap),
     run_command(Context, Caller);
 run_command(#rabbit_cli{} = Context, Caller) when is_pid(Caller) ->
-    rabbit_cli_backend_sup:start_backend(Context, Caller).
+    try
+        rabbit_cli_backend_sup:start_backend(Context, Caller)
+    catch
+        exit:{noproc, _} ->
+            start_link(Context, Caller)
+    end.
 
 map_to_context(ContextMap) ->
     Progname = maps:get(progname, ContextMap),
