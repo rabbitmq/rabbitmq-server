@@ -317,7 +317,8 @@ apply(Meta, #modify{consumer_key = ConsumerKey,
         _ ->
             {State, ok}
     end;
-apply(#{index := Idx} = Meta,
+apply(#{index := Idx,
+        machine_version := MacVer} = Meta,
       #requeue{consumer_key = ConsumerKey,
                msg_id = MsgId,
                index = OldIdx,
@@ -344,7 +345,13 @@ apply(#{index := Idx} = Meta,
                                                                Messages),
                                    enqueue_count = EnqCount + 1},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            checkout(Meta, State0, State2, []);
+            {State3, Effects} = case MacVer >= 7 of
+                                     true ->
+                                         activate_next_consumer({State2, []});
+                                     false ->
+                                         {State2, []}
+                                 end,
+            checkout(Meta, State0, State3, Effects);
         _ ->
             {State00, ok, []}
     end;
@@ -923,7 +930,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 6.
+version() -> 7.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
@@ -931,7 +938,8 @@ which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
 which_module(4) -> ?MODULE;
 which_module(5) -> ?MODULE;
-which_module(6) -> ?MODULE.
+which_module(6) -> ?MODULE;
+which_module(7) -> ?MODULE.
 
 -define(AUX, aux_v3).
 
@@ -1747,8 +1755,8 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             {duplicate, State0, Effects0}
     end.
 
-return(#{} = Meta, ConsumerKey, MsgIds, IncrDelCount, Anns,
-       Checked, Effects0, State0)
+return(#{machine_version := MacVer} = Meta, ConsumerKey,
+       MsgIds, IncrDelCount, Anns, Checked, Effects0, State0)
  when is_map(Anns) ->
     %% We requeue in the same order as messages got returned by the client.
     {State1, Effects1} =
@@ -1768,7 +1776,13 @@ return(#{} = Meta, ConsumerKey, MsgIds, IncrDelCount, Anns,
                  _ ->
                      State1
              end,
-    checkout(Meta, State0, State2, Effects1).
+    {State3, Effects2} = case MacVer >= 7 of
+                             true ->
+                                 activate_next_consumer({State2, Effects1});
+                             false ->
+                                 {State2, Effects1}
+                         end,
+    checkout(Meta, State0, State3, Effects2).
 
 % used to process messages that are finished
 complete(Meta, ConsumerKey, [MsgId],
@@ -2798,7 +2812,10 @@ convert(Meta, 4, To, State) ->
     convert(Meta, 5, To, State);
 convert(Meta, 5, To, State) ->
     %% no conversion needed, this version only includes a logic change
-    convert(Meta, 6, To, State).
+    convert(Meta, 6, To, State);
+convert(Meta, 6, To, State) ->
+    %% no conversion needed, this version only includes a logic change
+    convert(Meta, 7, To, State).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             ra_indexes = Indexes,
