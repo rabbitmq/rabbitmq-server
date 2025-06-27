@@ -14,7 +14,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
--include_lib("amqp10_common/include/amqp10_filtex.hrl").
+-include_lib("amqp10_common/include/amqp10_filter.hrl").
 
 all() ->
     [{group, tests}].

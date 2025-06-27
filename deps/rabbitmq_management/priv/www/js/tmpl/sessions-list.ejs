@@ -6,6 +6,46 @@ function getAddressClass(address) {
 function getCreditClass(credit) {
   return credit === 0 || credit === '0' ? 'yellow-background' : '';
 }
+
+function fmt_amqp_filter(filters) {
+    if (!filters || filters.length === 0) {
+        return '';
+    }
+
+    var entries = [];
+    for (var i = 0; i < filters.length; i++) {
+        var filter = filters[i];
+        var formatted_value = fmt_filter_value(filter.value);
+        var entry = '<abbr title="(descriptor: ' + fmt_escape_html(filter.descriptor) + ') ' +
+                    fmt_escape_html(formatted_value) + '">' +
+                    fmt_escape_html(filter.name) + '</abbr>';
+        entries.push(entry);
+    }
+    return entries.join(' ');
+}
+
+function fmt_filter_value(value) {
+    if (typeof value === 'string') {
+        return value;
+    } else if (Array.isArray(value)) {
+        if (value.length === 0) return '[]';
+
+        if (value[0] && value[0].key !== undefined) {
+            // array of key-value pairs
+            var props = value.map(function(kv) {
+                return kv.key + '=' + fmt_filter_value(kv.value);
+            }).join(', ');
+            return '{' + props + '}';
+        } else {
+            // regular array
+            return '[' + value.map(fmt_filter_value).join(', ') + ']';
+        }
+    } else if (typeof value === 'object' && value !== null) {
+        return JSON.stringify(value);
+    } else {
+        return String(value);
+    }
+}
 %>
 
 <% if (sessions.length > 0) { %>
@@ -91,6 +131,7 @@ function getCreditClass(credit) {
       <th>max-message-size (bytes)</th>
       <th>delivery-count</th>
       <th>link-credit</th>
+      <th>Filters<span class="help" id="amqp-filter"></span></th>
      </tr>
     </thead>
     <tbody>
@@ -107,6 +148,7 @@ function getCreditClass(credit) {
       <td class="c"><%= fmt_string(out_link.max_message_size) %></td>
       <td class="c"><%= fmt_string(out_link.delivery_count) %></td>
       <td class="c"><%= fmt_string(out_link.credit) %></td>
+      <td class="c"><%= fmt_amqp_filter(out_link.filter) %></td>
      </tr>
 <% } %>
     </tbody>

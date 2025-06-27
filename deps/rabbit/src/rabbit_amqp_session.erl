@@ -14,6 +14,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("amqp10_common/include/amqp10_filter.hrl").
 -include("rabbit_amqp.hrl").
 -include("mc.hrl").
 
@@ -212,6 +213,7 @@
           dynamic :: boolean(),
           send_settled :: boolean(),
           max_message_size :: unlimited | pos_integer(),
+          filter :: list(),
 
           %% When feature flag rabbitmq_4.0.0 becomes required,
           %% the following 2 fields should be deleted.
@@ -1486,6 +1488,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                              dynamic = default(Source#'v1_0.source'.dynamic, false),
                                              send_settled = SndSettled,
                                              max_message_size = MaxMessageSize,
+                                             filter = format_filter(EffectiveFilter),
                                              credit_api_version = CreditApiVsn,
                                              delivery_count = DeliveryCount,
                                              client_flow_ctl = ClientFlowCtl,
@@ -3187,10 +3190,10 @@ parse_attach_properties({map, KVList}) ->
     end.
 
 parse_filter(undefined) ->
-    {undefined, [], []};
+    {undefined, undefined, []};
 parse_filter({map, DesiredKVList}) ->
     {EffectiveKVList, ConsusumerFilter, ConsumerArgs} =
-    lists:foldr(fun parse_filters/2, {[], [], []}, DesiredKVList),
+    lists:foldr(fun parse_filters/2, {[], undefined, []}, DesiredKVList),
     {{map, EffectiveKVList}, ConsusumerFilter, ConsumerArgs}.
 
 parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-offset-spec">>}, Value}},
@@ -3200,7 +3203,9 @@ parse_filters(Filter = {{symbol, _Key}, {described, {symbol, <<"rabbitmq:stream-
             %% 0.9.1 uses second based timestamps
             Arg = {<<"x-stream-offset">>, timestamp, Ts div 1000},
             {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
-        {utf8, Spec} ->
+        {Type, Spec}
+          when Type =:= utf8 orelse
+               Type =:= symbol ->
             %% next, last, first and "10m" etc
             Arg = {<<"x-stream-offset">>, longstr, Spec},
             {[Filter | EffectiveFilters], ConsumerFilter, [Arg | ConsumerArgs]};
@@ -3242,19 +3247,44 @@ parse_filters({Symbol = {symbol, <<"rabbitmq:stream-", _/binary>>}, Value}, Acc)
         false ->
             Acc
     end;
+parse_filters(Filter = {{symbol, ?FILTER_NAME_SQL}, Value},
+              Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
+    case ConsumerFilter of
+        undefined ->
+            case rabbit_amqp_filter_jms:parse(Value) of
+                {ok, ParsedSql} ->
+                    {[Filter | EffectiveFilters], {jms, ParsedSql}, ConsumerArgs};
+                error ->
+                    Acc
+            end;
+        _ ->
+            %% SQL filter expression is mutually exclusive with AMQP property filter expression.
+            Acc
+    end;
 parse_filters(Filter = {{symbol, _Key}, Value},
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
-    case rabbit_amqp_filtex:validate(Value) of
-        {ok, FilterExpression = {FilterType, _}} ->
-            case proplists:is_defined(FilterType, ConsumerFilter) of
-                true ->
-                    %% For now, let's prohibit multiple top level filters of the same type
-                    %% (properties or application-properties). There should be no use case.
-                    %% In future, we can allow multiple times the same top level grouping
-                    %% filter expression type (all/any/not).
-                    Acc;
-                false ->
-                    {[Filter | EffectiveFilters], [FilterExpression | ConsumerFilter], ConsumerArgs}
+    case rabbit_amqp_filter_prop:parse(Value) of
+        {ok, ParsedExpression = {Section, _}} ->
+            case ConsumerFilter of
+                undefined ->
+                    {[Filter | EffectiveFilters],
+                     {property, [ParsedExpression]},
+                     ConsumerArgs};
+                {property, ParsedExpressions} ->
+                    case proplists:is_defined(Section, ParsedExpressions) of
+                        true ->
+                            %% Let's prohibit multiple top level filters of the
+                            %% same section (properties or application-properties).
+                            Acc;
+                        false ->
+                            {[Filter | EffectiveFilters],
+                             {property, [ParsedExpression | ParsedExpressions]},
+                             ConsumerArgs}
+                    end;
+                {jms, _} ->
+                    %% SQL filter expression is mutually exclusive with
+                    %% AMQP property filter expressions.
+                    Acc
             end;
         error ->
             Acc
@@ -3956,7 +3986,7 @@ info_incoming_link(Handle, LinkName, SndSettleMode, TargetAddress,
 
 info_outgoing_management_links(Links) ->
     [info_outgoing_link(Handle, Name, ?MANAGEMENT_NODE_ADDRESS, <<>>,
-                        true, MaxMessageSize, DeliveryCount, Credit)
+                        true, MaxMessageSize, [], DeliveryCount, Credit)
      || Handle := #management_link{
                      name = Name,
                      max_message_size = MaxMessageSize,
@@ -3973,27 +4003,48 @@ info_outgoing_links(Links) ->
                                            {'', ''}
                                    end,
          info_outgoing_link(Handle, Name, SourceAddress, QueueName#resource.name,
-                            SendSettled, MaxMessageSize, DeliveryCount, Credit)
+                            SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
 
      end
      || Handle := #outgoing_link{
                      name = Name,
                      source_address = SourceAddress,
                      queue_name = QueueName,
-                     max_message_size = MaxMessageSize,
                      send_settled = SendSettled,
+                     max_message_size = MaxMessageSize,
+                     filter = Filter,
                      client_flow_ctl = ClientFlowCtl} <- Links].
 
 info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
-                   MaxMessageSize, DeliveryCount, Credit) ->
+                   MaxMessageSize, Filter, DeliveryCount, Credit) ->
     [{handle, Handle},
      {link_name, LinkName},
      {source_address, SourceAddress},
      {queue_name, QueueNameBin},
      {send_settled, SendSettled},
      {max_message_size, MaxMessageSize},
+     {filter, Filter},
      {delivery_count, DeliveryCount},
      {credit, Credit}].
+
+format_filter(undefined) ->
+    [];
+format_filter({map, KVList}) ->
+    [[{name, Name},
+      {descriptor, Descriptor},
+      {value, format_filter_value(Value)}]
+     || {{symbol, Name}, {described, {_Type, Descriptor}, Value}} <- KVList].
+
+format_filter_value({list, List}) ->
+    lists:map(fun format_filter_value/1, List);
+format_filter_value({map, KVList}) ->
+    [[{key, Key},
+      {value, format_filter_value(Val)}]
+     || {{_T, Key}, Val} <- KVList, is_binary(Key)];
+format_filter_value({_Type, Val}) ->
+    Val;
+format_filter_value(Val) ->
+    Val.
 
 unwrap_simple_type(V = {list, _}) ->
     V;

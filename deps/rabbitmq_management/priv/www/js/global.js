@@ -617,7 +617,10 @@ var HELP = {
       '"true" if the sender sends all deliveries settled to the receiver. "false" if the sender sends all deliveries initially unsettled to the receiver.',
 
     'outgoing-unsettled-deliveries':
-      'Number of messages that have been sent to consumers but have not yet been settled/acknowledged.'
+      'Number of messages that have been sent to consumers but have not yet been settled/acknowledged.',
+
+    'amqp-filter':
+      'Filters are predicates that define which messages RabbitMQ sends to the receiver. Each filter in the <a target="_blank" href="https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set">Filter Set</a> has a name displayed in the boxes below. Hovering over a box will display the filter descriptor and the filter definition.'
 };
 
 ///////////////////////////////////////////////////////////////////////////

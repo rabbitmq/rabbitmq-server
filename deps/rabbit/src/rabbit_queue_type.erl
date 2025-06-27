@@ -133,7 +133,7 @@
                           consumer_tag := rabbit_types:ctag(),
                           exclusive_consume => boolean(),
                           args => rabbit_framing:amqp_table(),
-                          filter => rabbit_amqp_filtex:filter_expressions(),
+                          filter => rabbit_amqp_filter:expression(),
                           ok_msg := term(),
                           acting_user := rabbit_types:username()}.
 -type cancel_reason() :: cancel | remove.
