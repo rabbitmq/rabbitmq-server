@@ -19,8 +19,7 @@
                   stream :: gun:stream_ref() | undefined,
                   delayed_requests = [] :: list(),
                   io_requests = #{} :: map(),
-                  caller :: pid(),
-                  group_leader :: pid()}).
+                  caller :: pid()}).
 
 start_link(Uri) ->
     Caller = self(),
@@ -42,7 +41,6 @@ send(Client, Dest, Msg) ->
 init(#{uri := Uri, caller := Caller}) ->
     maybe
         #{host := Host, port := Port} = UriMap = uri_string:parse(Uri),
-        GroupLeader = erlang:group_leader(),
 
         {ok, _} ?= application:ensure_all_started(gun),
 
@@ -51,7 +49,6 @@ init(#{uri := Uri, caller := Caller}) ->
 
         Data = #?MODULE{uri = UriMap,
                         caller = Caller,
-                        group_leader = GroupLeader,
                         connection = ConnPid},
         {ok, opening_connection, Data}
     end.

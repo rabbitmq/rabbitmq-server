@@ -11,7 +11,7 @@
 
 -export([run_command/2,
          send_frontend_request/2,
-         start_link/3,
+         start_link/2,
          i/0]).
 -export([init/1,
          callback_mode/0,
@@ -25,8 +25,7 @@ run_command(ContextMap, Caller) when is_map(ContextMap) ->
     Context = map_to_context(ContextMap),
     run_command(Context, Caller);
 run_command(#rabbit_cli{} = Context, Caller) when is_pid(Caller) ->
-    GroupLeader = erlang:group_leader(),
-    rabbit_cli_backend_sup:start_backend(Context, Caller, GroupLeader).
+    rabbit_cli_backend_sup:start_backend(Context, Caller).
 
 map_to_context(ContextMap) ->
     Progname = maps:get(progname, ContextMap),
@@ -58,10 +57,9 @@ is_legacy_progname("rabbitmq-upgrade") ->
 is_legacy_progname(_Progname) ->
     false.
 
-start_link(Context, Caller, GroupLeader) ->
+start_link(Context, Caller) ->
     Args = #{context => Context,
-             caller => Caller,
-             group_leader => GroupLeader},
+             caller => Caller},
     gen_statem:start_link(?MODULE, Args, []).
 
 send_frontend_request(
@@ -117,8 +115,7 @@ init(
                            client = #{hostname := Hostname,
                                       proto := Proto} = ClientInfo,
                            terminal = Terminal} = Context,
-    caller := Caller,
-    group_leader := _GroupLeader
+    caller := Caller
    }) ->
     %% Do not trap EXIT signal. This ensures the command is stopped. Because
     %% it could be running a blocking call or receive and the EXIT signal
