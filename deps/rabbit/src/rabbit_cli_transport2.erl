@@ -3,6 +3,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -export([connect/0, connect/1,
+         get_client_info/1,
          run_command/2,
          gen_reply/3,
          send/3]).
@@ -85,6 +86,11 @@ complete_nodename(Nodename) ->
         match ->
             list_to_atom(Nodename)
     end.
+
+get_client_info(#?MODULE{type = Proto}) ->
+    {ok, Hostname} = inet:gethostname(),
+    #{hostname => Hostname,
+      proto => Proto}.
 
 run_command(#?MODULE{type = erldist, peer = Node}, ContextMap) ->
     Caller = self(),

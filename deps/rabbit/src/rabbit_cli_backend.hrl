@@ -7,6 +7,8 @@
                      legacy :: boolean() | undefined,
 
                      os :: {unix | win32, atom()},
+                     client :: #{hostname := string(),
+                                 proto := atom()} | undefined,
                      env :: [{os:env_var_name(), os:env_var_value()}],
                      terminal :: #{stdout := boolean(),
                                    stderr := boolean(),
