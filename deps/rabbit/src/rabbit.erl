@@ -248,10 +248,10 @@
                                    []}},
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
--rabbit_boot_step({rabbit_cli_http_listener,
+-rabbit_boot_step({rabbit_cli_http_server,
                    [{description, "RabbitMQ CLI HTTP listener"},
                     {mfa,         {rabbit_sup, start_restartable_child,
-                                   [rabbit_cli_http_listener]}},
+                                   [rabbit_cli_http_server]}},
                     {requires,    [core_initialized, recovery]},
                     {enables,     routing_ready}]}).
 

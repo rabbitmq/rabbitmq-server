@@ -146,13 +146,13 @@ connect_to_node(
   #rabbit_cli{arg_map = ArgMap, priv = Priv} = Context) ->
     Ret = case ArgMap of
               #{node := NodenameOrUri} ->
-                  rabbit_cli_transport2:connect(NodenameOrUri);
+                  rabbit_cli_transport:connect(NodenameOrUri);
               _ ->
-                  rabbit_cli_transport2:connect()
+                  rabbit_cli_transport:connect()
           end,
     {ClientInfo, Priv1} = case Ret of
                               {ok, Connection} ->
-                                  {rabbit_cli_transport2:get_client_info(
+                                  {rabbit_cli_transport:get_client_info(
                                      Connection),
                                    Priv#?MODULE{connection = Connection}};
                               {error, _Reason} ->
@@ -249,7 +249,7 @@ run_command(
     maybe
         process_flag(trap_exit, true),
         ContextMap = context_to_map(Context),
-        {ok, Backend} ?= rabbit_cli_transport2:run_command(
+        {ok, Backend} ?= rabbit_cli_transport:run_command(
                            Connection, ContextMap),
         Priv1 = Priv#?MODULE{backend = Backend},
         Context1 = Context#rabbit_cli{priv = Priv1},
@@ -312,7 +312,7 @@ main_loop(
             end;
         {frontend_request, From, Request} ->
             {reply, Reply, Context1} = handle_request(Request, Context),
-            _ = rabbit_cli_transport2:gen_reply(Connection, From, Reply),
+            _ = rabbit_cli_transport:gen_reply(Connection, From, Reply),
             main_loop(Context1);
         {io_request, From, ReplyAs, Request}
           when element(1, Request) =:= put_chars andalso is_port(Pager) ->
@@ -334,7 +334,7 @@ main_loop(
             main_loop(Context);
         {signal, Signal} = Event ->
             ?LOG_DEBUG("CLI: got Unix signal: ~ts", [Signal]),
-            _ = rabbit_cli_transport2:send(Connection, Backend, Event),
+            _ = rabbit_cli_transport:send(Connection, Backend, Event),
             main_loop(Context);
         Info ->
             ?LOG_ALERT("CLI: unknown info: ~0p", [Info]),
