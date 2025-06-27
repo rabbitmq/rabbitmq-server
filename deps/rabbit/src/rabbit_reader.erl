@@ -275,7 +275,7 @@ socket_op(Sock, Fun) ->
     case Fun(Sock) of
         {ok, Res}       -> Res;
         {error, Reason} -> socket_error(Reason),
-                           rabbit_net:fast_close(RealSocket),
+                           _ = rabbit_net:fast_close(RealSocket),
                            exit(normal)
     end.
 
@@ -287,10 +287,10 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
     RealSocket = rabbit_net:unwrap_socket(Sock),
     Name = case rabbit_net:connection_string(Sock, inbound) of
                {ok, Str}         -> list_to_binary(Str);
-               {error, enotconn} -> rabbit_net:fast_close(RealSocket),
+               {error, enotconn} -> _ = rabbit_net:fast_close(RealSocket),
                                     exit(normal);
                {error, Reason}   -> socket_error(Reason),
-                                    rabbit_net:fast_close(RealSocket),
+                                    _ = rabbit_net:fast_close(RealSocket),
                                     exit(normal)
            end,
     {ok, HandshakeTimeout} = application:get_env(rabbit, handshake_timeout),
@@ -364,7 +364,7 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
         %% We don't call gen_tcp:close/1 here since it waits for
         %% pending output to be sent, which results in unnecessary
         %% delays.
-        rabbit_net:fast_close(RealSocket),
+        _ = rabbit_net:fast_close(RealSocket),
         rabbit_networking:unregister_connection(self()),
         rabbit_core_metrics:connection_closed(self()),
         ClientProperties = case get(client_properties) of

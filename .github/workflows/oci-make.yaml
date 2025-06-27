@@ -20,7 +20,7 @@ on:
         # a tag of the erlang image, see https://hub.docker.com/_/erlang for available tags
         # also used in the setup-beam step (same tag should work for both)
         description: OTP version (eg. `26`, `26.2.5.6`)
-        default: 27
+        default: 28
       build_arm:
         description: Build for ARM64 as well?
         type: boolean
@@ -36,7 +36,7 @@ jobs:
     strategy:
       matrix:
         otp_version:
-        - ${{ github.event.inputs.otp_version || '27' }}
+        - ${{ github.event.inputs.otp_version || '28' }}
     runs-on: ubuntu-latest
     outputs:
       # When dependabot, or a user from a fork, creates PRs, secrets are not injected, and the OCI workflow can't push the image
@@ -76,7 +76,7 @@ jobs:
       fail-fast: false
       matrix:
         otp_version:
-        - ${{ github.event.inputs.otp_version || '27' }}
+        - ${{ github.event.inputs.otp_version || '28' }}
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
     if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'

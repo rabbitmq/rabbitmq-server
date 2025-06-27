@@ -73,6 +73,7 @@
 -compile(inline).
 -compile(inline_list_funcs).
 
+-compile({no_auto_import,[ceil/1]}).
 
 -type value() :: tuple().
 -type internal_value() :: tuple() | drop.

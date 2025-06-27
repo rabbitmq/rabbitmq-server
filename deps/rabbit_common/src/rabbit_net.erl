@@ -82,18 +82,9 @@
 -define(SSL_CLOSE_TIMEOUT, 5000).
 
 -define(IS_SSL(Sock), is_tuple(Sock)
-    andalso (tuple_size(Sock) =:= 3)
     andalso (element(1, Sock) =:= sslsocket)).
 
 is_ssl(Sock) -> ?IS_SSL(Sock).
-
-%% Seems hackish. Is hackish. But the structure is stable and
-%% kept this way for backward compatibility reasons. We need
-%% it for two reasons: there are no ssl:getstat(Sock) function,
-%% and no ssl:close(Timeout) function. Both of them are being
-%% worked on as we speak.
-ssl_get_socket(Sock) ->
-    element(2, element(2, Sock)).
 
 ssl_info(Sock) when ?IS_SSL(Sock) ->
     ssl:connection_information(Sock);
@@ -119,12 +110,12 @@ controlling_process(Sock, Pid) when is_port(Sock) ->
     gen_tcp:controlling_process(Sock, Pid).
 
 getstat(Sock, Stats) when ?IS_SSL(Sock) ->
-    inet:getstat(ssl_get_socket(Sock), Stats);
+    ssl:getstat(Sock, Stats);
 getstat(Sock, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats);
 %% Used by Proxy protocol support in plugins
 getstat({rabbit_proxy_socket, Sock, _}, Stats) when ?IS_SSL(Sock) ->
-    inet:getstat(ssl_get_socket(Sock), Stats);
+    ssl:getstat(Sock, Stats);
 getstat({rabbit_proxy_socket, Sock, _}, Stats) when is_port(Sock) ->
     inet:getstat(Sock, Stats).
 
@@ -177,27 +168,7 @@ close(Sock)      when ?IS_SSL(Sock) -> ssl:close(Sock);
 close(Sock)      when is_port(Sock) -> gen_tcp:close(Sock).
 
 fast_close(Sock) when ?IS_SSL(Sock) ->
-    %% We cannot simply port_close the underlying tcp socket since the
-    %% TLS protocol is quite insistent that a proper closing handshake
-    %% should take place (see RFC 5245 s7.2.1). So we call ssl:close
-    %% instead, but that can block for a very long time, e.g. when
-    %% there is lots of pending output and there is tcp backpressure,
-    %% or the ssl_connection process has entered the the
-    %% workaround_transport_delivery_problems function during
-    %% termination, which, inexplicably, does a gen_tcp:recv(Socket,
-    %% 0), which may never return if the client doesn't send a FIN or
-    %% that gets swallowed by the network. Since there is no timeout
-    %% variant of ssl:close, we construct our own.
-    {Pid, MRef} = spawn_monitor(fun () -> ssl:close(Sock) end),
-    erlang:send_after(?SSL_CLOSE_TIMEOUT, self(), {Pid, ssl_close_timeout}),
-    receive
-        {Pid, ssl_close_timeout} ->
-            erlang:demonitor(MRef, [flush]),
-            exit(Pid, kill);
-        {'DOWN', MRef, process, Pid, _Reason} ->
-            ok
-    end,
-    catch port_close(ssl_get_socket(Sock)),
+    _ = ssl:close(Sock, ?SSL_CLOSE_TIMEOUT),
     ok;
 fast_close(Sock) when is_port(Sock) ->
     catch port_close(Sock), ok.

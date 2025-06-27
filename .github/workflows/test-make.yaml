@@ -23,8 +23,9 @@ jobs:
         erlang_version:
         - '26'
         - '27'
+        - '28'
         elixir_version:
-        - '1.17'
+        - '1.18'
     # @todo Add macOS and Windows.
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -36,7 +37,7 @@ jobs:
       run: git fetch --tags
 
     - name: SETUP OTP & ELIXIR
-      uses: erlef/setup-beam@v1.17
+      uses: erlef/setup-beam@v1.19
       with:
         otp-version: ${{ matrix.erlang_version }}
         elixir-version: ${{ matrix.elixir_version }}
@@ -62,9 +63,9 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '27'
+        - '28'
         elixir_version:
-        - '1.17'
+        - '1.18'
         metadata_store:
           - mnesia
           - khepri
@@ -81,9 +82,9 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '27'
+        - '28'
         elixir_version:
-        - '1.17'
+        - '1.18'
         metadata_store:
           - mnesia
           - khepri
@@ -100,9 +101,9 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version: # Latest OTP
-        - '27'
+        - '28'
         elixir_version: # Latest Elixir
-        - '1.17'
+        - '1.18'
     uses: ./.github/workflows/test-make-type-check.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}

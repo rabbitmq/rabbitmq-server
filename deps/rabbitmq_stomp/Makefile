@@ -33,7 +33,7 @@ endef
 DEPS = ranch rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management
 
-PLT_APPS += rabbitmq_cli elixir
+PLT_APPS += rabbitmq_cli elixir ssl
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

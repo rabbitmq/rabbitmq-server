@@ -99,7 +99,7 @@ defmodule SetPermissionsCommandTest do
     assert @command.run(
              [context[:user], "^#{context[:user]}-.*", ".*", "*"],
              context[:opts]
-           ) == {:error, {:invalid_regexp, ~c"*", {~c"nothing to repeat", 0}}}
+           ) == {:error, {:invalid_regexp, ~c"*", {~c"quantifier does not follow a repeatable item", 0}}}
 
     # asserts that the failed command didn't change anything
     u = Enum.find(list_permissions(context[:vhost]), fn x -> x[:user] == context[:user] end)

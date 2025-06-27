@@ -1111,32 +1111,43 @@ two_nodes_same_otp_version(Config0) ->
 
 %% Run the log on two Erlang nodes with different OTP versions.
 two_nodes_different_otp_version(_Config) ->
-    Node = 'rabbit_fifo_prop@localhost',
-    case net_adm:ping(Node) of
-        pong ->
-            case is_same_otp_version(Node) of
-                true ->
-                    ct:fail("expected CT node and 'rabbit_fifo_prop@localhost' "
-                            "to have different OTP versions");
-                false ->
-                    Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
-                                "lqueue", "priority_queue", "ra_"],
-                    [begin
-                         Mod = list_to_atom(ModStr),
-                         {Mod, Bin, _File} = code:get_object_code(Mod),
-                         {module, Mod} = erpc:call(Node, code, load_binary, [Mod, ModStr, Bin])
-                     end
-                     || {ModStr, _FileName, _Loaded} <- code:all_available(),
-                        lists:any(fun(Prefix) -> lists:prefix(Prefix, ModStr) end, Prefixes)],
-                    two_nodes(Node)
-            end;
-        pang ->
-            Reason = {node_down, Node},
-            case rabbit_ct_helpers:is_ci() of
-                true ->
-                    ct:fail(Reason);
-                false ->
-                    {skip, Reason}
+    case erlang:system_info(otp_release) of
+        "28" ->
+            %% Compiling a BEAM file on OTP 28 and loading it on OTP 26 or 27
+            %% causes a "corrupt atom table" error.
+            %% https://github.com/erlang/otp/pull/8913#issue-2572291638
+            {skip, "loading BEAM file compiled on OTP 28 on a lower OTP version is unsupported"};
+        _ ->
+            Node = 'rabbit_fifo_prop@localhost',
+            case net_adm:ping(Node) of
+                pong ->
+                    case is_same_otp_version(Node) of
+                        true ->
+                            ct:fail("expected CT node and 'rabbit_fifo_prop@localhost' "
+                                    "to have different OTP versions");
+                        false ->
+                            Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
+                                        "lqueue", "priority_queue", "ra_"],
+                            [begin
+                                 Mod = list_to_atom(ModStr),
+                                 {Mod, Bin, _File} = code:get_object_code(Mod),
+                                 {module, Mod} = erpc:call(Node, code, load_binary,
+                                                           [Mod, ModStr, Bin])
+                             end
+                             || {ModStr, _FileName, _Loaded} <- code:all_available(),
+                                lists:any(fun(Prefix) ->
+                                                  lists:prefix(Prefix, ModStr)
+                                          end, Prefixes)],
+                            two_nodes(Node)
+                    end;
+                pang ->
+                    Reason = {node_down, Node},
+                    case rabbit_ct_helpers:is_ci() of
+                        true ->
+                            ct:fail(Reason);
+                        false ->
+                            {skip, Reason}
+                    end
             end
     end.
 

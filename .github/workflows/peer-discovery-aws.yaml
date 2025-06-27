@@ -13,7 +13,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 env:
-  OTP_VERSION: "27"
+  OTP_VERSION: "28"
 jobs:
   peer-discovery-aws-integration-test:
     name: Integration Test
@@ -48,10 +48,10 @@ jobs:
         polling-seconds: 60
     - name: CONFIGURE OTP & ELIXIR
       if: steps.authorized.outputs.authorized == 'true'
-      uses: erlef/setup-beam@v1.17
+      uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ env.OTP_VERSION }}
-        elixir-version: "1.17"
+        elixir-version: "1.18"
     - name: SETUP ecs-cli
       if: steps.authorized.outputs.authorized == 'true'
       env:

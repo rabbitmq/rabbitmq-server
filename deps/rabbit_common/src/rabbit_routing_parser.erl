@@ -23,7 +23,9 @@ parse_endpoint(Destination, AllowAnonymousQueue)
 parse_endpoint(Destination, AllowAnonymousQueue)
   when is_list(Destination) ->
     case re:split(Destination, "/", [unicode, {return, list}]) of
-        [Name] ->
+        [] -> %% in OTP28+, re:split("", "/") returns []
+            {ok, {queue, unescape("")}};
+        [Name] -> %% before OTP28, re:split("", "/") returns [[]]
             {ok, {queue, unescape(Name)}};
         ["", Type | Rest]
             when Type =:= "exchange" orelse Type =:= "queue" orelse
