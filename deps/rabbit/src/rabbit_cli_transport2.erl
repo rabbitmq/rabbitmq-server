@@ -4,7 +4,8 @@
 
 -export([connect/0, connect/1,
          run_command/2,
-         gen_reply/3]).
+         gen_reply/3,
+         send/3]).
 
 -record(?MODULE, {type :: erldist | http,
                   peer :: atom() | pid()}).
@@ -95,3 +96,8 @@ gen_reply(#?MODULE{type = erldist}, From, Reply) ->
     gen:reply(From, Reply);
 gen_reply(#?MODULE{type = http, peer = Client}, From, Reply) ->
     rabbit_cli_http_client:gen_reply(Client, From, Reply).
+
+send(#?MODULE{type = erldist}, Dest, Msg) ->
+    erlang:send(Dest, Msg);
+send(#?MODULE{type = http, peer = Client}, Dest, Msg) ->
+    rabbit_cli_http_client:send(Client, Dest, Msg).

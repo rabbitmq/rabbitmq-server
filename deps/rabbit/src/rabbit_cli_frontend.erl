@@ -1,5 +1,7 @@
 -module(rabbit_cli_frontend).
 
+-behaviour(gen_event).
+
 -include_lib("kernel/include/logger.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
@@ -7,9 +9,15 @@
 
 -export([main/1,
          noop/1]).
+-export([init/1,
+         handle_call/2,
+         handle_event/2,
+         terminate/2,
+         code_change/3]).
 
 -record(?MODULE, {scriptname,
                   connection,
+                  backend,
                   pager}).
 
 -spec main(Args) -> no_return() when
@@ -67,6 +75,7 @@ run_cli(ScriptName, Args) ->
     ProgName0 = filename:basename(ScriptName, ".bat"),
     ProgName1 = filename:basename(ProgName0, ".escript"),
     Terminal = collect_terminal_info(),
+    configure_signal_handler(),
     Priv = #?MODULE{scriptname = ScriptName},
     Context = #rabbit_cli{progname = ProgName1,
                           args = Args,
@@ -96,6 +105,20 @@ collect_terminal_info() ->
 
       name => Term,
       info => TermInfo}.
+
+configure_signal_handler() ->
+    gen_event:add_handler(erl_signal_server, ?MODULE, self()),
+    Signals = [sigwinch, siginfo],
+    lists:foreach(
+      fun(Signal) ->
+              try
+                  os:set_signal(Signal, handle)
+              catch
+                  _:badarg ->
+                      ?LOG_DEBUG("Signal ~s not supported", [Signal])
+              end
+      end, Signals),
+    ok.
 
 init_local_args(Context) ->
     maybe
@@ -217,14 +240,16 @@ noop(_Context) ->
 %% * evolutions in the communication between the frontend and the backend
 
 run_command(
-  #rabbit_cli{priv = #?MODULE{connection = Connection}} = Context)
+  #rabbit_cli{priv = #?MODULE{connection = Connection} = Priv} = Context)
   when Connection =/= none ->
     maybe
         process_flag(trap_exit, true),
         ContextMap = context_to_map(Context),
-        {ok, _Backend} ?= rabbit_cli_transport2:run_command(
+        {ok, Backend} ?= rabbit_cli_transport2:run_command(
                            Connection, ContextMap),
-        main_loop(Context)
+        Priv1 = Priv#?MODULE{backend = Backend},
+        Context1 = Context#rabbit_cli{priv = Priv1},
+        main_loop(Context1)
     end;
 run_command(#rabbit_cli{} = Context) ->
     %% TODO: If we can't connect to a node, try to parse args locally and run
@@ -255,6 +280,7 @@ record_to_map([], _Record, _Index, Map) ->
 
 main_loop(
   #rabbit_cli{priv = #?MODULE{connection = Connection,
+                              backend = Backend,
                               pager = Pager} = Priv} = Context) ->
     ?LOG_DEBUG("CLI: frontend main loop (pager: ~0p)...", [Pager]),
     Timeout = case is_port(Pager) of
@@ -268,14 +294,14 @@ main_loop(
             ?LOG_DEBUG("CLI: EXIT signal from pager: ~p", [Reason]),
             Priv1 = Priv#?MODULE{pager = undefined},
             Context1 = Context#rabbit_cli{priv = Priv1},
-            terminate(Reason, Context1);
+            terminate_cli(Reason, Context1);
         {'EXIT', LinkedPid, Reason} ->
             ?LOG_DEBUG(
                "CLI: EXIT signal from linked process ~0p: ~p",
                [LinkedPid, Reason]),
             case Pager of
                 undefined ->
-                    terminate(Reason, Context);
+                    terminate_cli(Reason, Context);
                 _ ->
                     ?LOG_DEBUG("CLI: waiting for pager to exit"),
                     main_loop(Context)
@@ -302,6 +328,10 @@ main_loop(
             GroupLeader = erlang:group_leader(),
             GroupLeader ! IoRequest,
             main_loop(Context);
+        {signal, Signal} = Event ->
+            ?LOG_DEBUG("CLI: got Unix signal: ~ts", [Signal]),
+            _ = rabbit_cli_transport2:send(Connection, Backend, Event),
+            main_loop(Context);
         Info ->
             ?LOG_ALERT("CLI: unknown info: ~0p", [Info]),
             main_loop(Context)
@@ -310,7 +340,7 @@ main_loop(
               main_loop(Context)
     end.
 
-terminate(Reason, _Context) ->
+terminate_cli(Reason, _Context) ->
     ?LOG_DEBUG("CLI: frontend terminating: ~0p", [Reason]),
     ok.
 
@@ -336,4 +366,61 @@ handle_request(
               [stream, exit_status, binary, use_stdio, out, hide, {env, Env}]),
     Priv1 = Priv#?MODULE{pager = Pager},
     Context1 = Context#rabbit_cli{priv = Priv1},
-    {reply, ok, Context1}.
+    {reply, ok, Context1};
+handle_request({display_siginfo, {Format, Args}}, Context) ->
+    io:format(standard_error, Format, Args),
+    {reply, ok, Context};
+handle_request({display_siginfo, String}, Context) ->
+    io:format(standard_error, "~ts", [String]),
+    {reply, ok, Context};
+handle_request(get_window_size, Context) ->
+    Size = get_window_size(Context),
+    {reply, Size, Context}.
+
+get_window_size(#rabbit_cli{env = Env}) ->
+    DefaultSize = #{lines => 25, cols => 80},
+    Cmd = "stty size",
+    Port = erlang:open_port(
+             {spawn, Cmd},
+             [stream, use_stdio, in, hide, {env, Env}]),
+    get_window_size_loop(Port, DefaultSize).
+
+get_window_size_loop(Port, Size) ->
+    receive
+        {Port, {data, Output}} ->
+            [LinesStr, ColsStr] = string:lexemes(string:trim(Output), " "),
+            Lines = list_to_integer(LinesStr),
+            Cols = list_to_integer(ColsStr),
+            Size1 = Size#{lines => Lines,
+                          cols => Cols},
+            get_window_size_loop(Port, Size1);
+        {'EXIT', Port, _Reason} ->
+            Size
+    end.
+
+%% -------------------------------------------------------------------
+%% gen_event callbacks (signal handler).
+%% -------------------------------------------------------------------
+
+init(Parent) ->
+    {ok, Parent}.
+
+handle_call(Request, Parent) ->
+    ?LOG_DEBUG("CLI: (signal) unknown request: ~0p", [Request]),
+    {ok, ok, Parent}.
+
+handle_event(Signal, Parent)
+  when Signal =:= sigwinch orelse Signal =:= siginfo ->
+    ?LOG_DEBUG("CLI: (signal) signal = ~0p", [Signal]),
+    Parent ! {signal, Signal},
+    {ok, Parent};
+handle_event(Event, Parent) ->
+    ?LOG_DEBUG("CLI: (signal) unknown event: ~0p", [Event]),
+    {ok, Parent}.
+
+terminate(Reason, _Parent) ->
+    ?LOG_DEBUG("CLI: (signal) terminate: ~0p", [Reason]),
+    ok.
+
+code_change(_OldVsn, Parent, _Extra) ->
+    {ok, Parent}.
