@@ -4,3 +4,6 @@
 
 [Bb]in/
 [Oo]bj/
+
+/scripts/rabbitmq
+/scripts/rabbitmq.escript
