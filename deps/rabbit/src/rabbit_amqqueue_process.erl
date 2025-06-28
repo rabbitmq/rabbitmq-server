@@ -202,6 +202,11 @@ init_it(Recover, From, State = #q{q = Q0}) ->
                    State#q{backing_queue = BQ, backing_queue_state = BQS}}}
     end.
 
+stop_for_init(none, {Operation, Reason, _Reply, State}) ->
+    {Operation, Reason, State};
+stop_for_init(_From, Result) ->
+    Result.
+
 init_it2(Recover, From, State = #q{q                   = Q,
                                    backing_queue       = undefined,
                                    backing_queue_state = undefined}) ->
@@ -226,16 +231,16 @@ init_it2(Recover, From, State = #q{q                   = Q,
                                             fun() -> emit_stats(State1) end),
                     noreply(State1);
                 false ->
-                    {stop, normal, {existing, Q1}, State}
+                    stop_for_init(From, {stop, normal, {existing, Q1}, State})
             end;
         {error, timeout} ->
             Reason = {protocol_error, internal_error,
                       "Could not declare ~ts on node '~ts' because the "
                       "metadata store operation timed out",
                       [rabbit_misc:rs(amqqueue:get_name(Q)), node()]},
-            {stop, normal, Reason, State};
+            stop_for_init(From, {stop, normal, Reason, State});
         Err ->
-            {stop, normal, Err, State}
+            stop_for_init(From, {stop, normal, Err, State})
     end.
 
 recovery_status(new)              -> {no_barrier, new};
