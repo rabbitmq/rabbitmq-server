@@ -397,7 +397,8 @@ remove_node_when_seed_node_is_leader(Config) ->
         {pong, leader} ->
             ?awaitMatch(
                {ok, #{cluster_change_permitted := true}, _},
-               rabbit_ct_broker_helpers:rpc(Config, A, ra, member_overview, [AMember]),
+               rabbit_ct_broker_helpers:rpc(
+                 Config1, A, ra, member_overview, [AMember]),
                60000),
             ?awaitMatch(
                ok,
