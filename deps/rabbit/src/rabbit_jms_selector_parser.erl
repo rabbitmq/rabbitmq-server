@@ -26,7 +26,9 @@ process_escape_char({string, Line, Value}) ->
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2024. All Rights Reserved.
+%% SPDX-License-Identifier: Apache-2.0
+%%
+%% Copyright Ericsson AB 1996-2025. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -210,7 +212,7 @@ yecctoken2string1(Other) ->
 
 
 
--file("rabbit_jms_selector_parser.erl", 213).
+-file("rabbit_jms_selector_parser.erl", 215).
 
 -dialyzer({nowarn_function, yeccpars2/7}).
 -compile({nowarn_unused_function,  yeccpars2/7}).
