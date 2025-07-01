@@ -35,7 +35,8 @@
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ListStreamTrackingCommand').
 -define(COMMAND_ACTIVATE_STREAM_CONSUMER,
         'Elixir.RabbitMQ.CLI.Ctl.Commands.ActivateStreamConsumerCommand').
-
+-define(COMMAND_RESET_OFFSET,
+        'Elixir.RabbitMQ.CLI.Ctl.Commands.ResetOffsetCommand').
 
 all() ->
     [{group, list_connections},
@@ -45,6 +46,7 @@ all() ->
      {group, list_group_consumers},
      {group, activate_consumer},
      {group, list_stream_tracking},
+     {group, reset_offset},
      {group, super_streams}].
 
 groups() ->
@@ -67,6 +69,9 @@ groups() ->
      {list_stream_tracking, [],
       [list_stream_tracking_validate, list_stream_tracking_merge_defaults,
        list_stream_tracking_run]},
+     {reset_offset, [],
+      [reset_offset_validate, reset_offset_merge_defaults,
+       reset_offset_run]},
      {super_streams, [],
       [add_super_stream_merge_defaults,
        add_super_stream_validate,
@@ -708,6 +713,65 @@ list_stream_tracking_run(Config) ->
     close(S, C),
     ok.
 
+reset_offset_validate(_) ->
+    Cmd = ?COMMAND_RESET_OFFSET,
+    ValidOpts = #{vhost => <<"/">>,
+                  stream => <<"s1">>,
+                  reference => <<"foo">>},
+    ?assertMatch({validation_failure, not_enough_args},
+                 Cmd:validate([], #{})),
+    ?assertMatch({validation_failure, not_enough_args},
+                 Cmd:validate([], #{vhost => <<"test">>})),
+    ?assertMatch({validation_failure, too_many_args},
+                 Cmd:validate([<<"foo">>], ValidOpts)),
+    ?assertMatch({validation_failure, reference_too_long},
+                 Cmd:validate([], ValidOpts#{reference => gen_bin(256)})),
+    ?assertMatch(ok, Cmd:validate([], ValidOpts)),
+    ?assertMatch(ok, Cmd:validate([], ValidOpts#{reference => gen_bin(255)})).
+
+reset_offset_merge_defaults(_Config) ->
+    Cmd = ?COMMAND_RESET_OFFSET,
+    Opts = #{vhost => <<"/">>,
+             stream => <<"s1">>,
+             reference => <<"foo">>},
+    ?assertEqual({[], Opts},
+                 Cmd:merge_defaults([], maps:without([vhost], Opts))),
+    Merged = maps:merge(Opts, #{vhost => "vhost"}),
+    ?assertEqual({[], Merged},
+                 Cmd:merge_defaults([], Merged)).
+
+reset_offset_run(Config) ->
+    Cmd = ?COMMAND_RESET_OFFSET,
+    Node = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Opts =#{node => Node,
+            timeout => 10000,
+            vhost => <<"/">>},
+    Args = [],
+
+    St = atom_to_binary(?FUNCTION_NAME, utf8),
+    Ref = <<"foo">>,
+    OptsGroup = maps:merge(#{stream => St, reference => Ref},
+                            Opts),
+
+    %% the stream does not exist yet
+    ?assertMatch({error, not_found},
+                 Cmd:run(Args, OptsGroup)),
+
+    Port = rabbit_stream_SUITE:get_stream_port(Config),
+    {S, C} = start_stream_connection(Port),
+    create_stream(S, St, C),
+
+    ?assertEqual({error, no_reference}, Cmd:run(Args, OptsGroup)),
+    store_offset(S, St, Ref, 42, C),
+
+    check_stored_offset(S, St, Ref, 42, C),
+    ?assertMatch(ok, Cmd:run(Args, OptsGroup)),
+    check_stored_offset(S, St, Ref, 0, C),
+
+    delete_stream(S, St, C),
+    close(S, C),
+    ok.
+
 add_super_stream_merge_defaults(_Config) ->
     ?assertMatch({[<<"super-stream">>],
                   #{partitions := 3, vhost := <<"/">>}},
@@ -1024,6 +1088,10 @@ store_offset(S, Stream, Reference, Value, C) ->
             {error, offset_not_stored}
     end.
 
+
+check_stored_offset(S, Stream, Reference, Expected, C) ->
+    check_stored_offset(S, Stream, Reference, Expected, C, 20).
+
 check_stored_offset(_, _, _, _, _, 0) ->
     error;
 check_stored_offset(S, Stream, Reference, Expected, C, Attempt) ->
@@ -1061,3 +1129,5 @@ check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt) ->
             check_publisher_sequence(S, Stream, Reference, Expected, C, Attempt - 1)
     end.
 
+gen_bin(L) ->
+    list_to_binary(lists:duplicate(L, "a")).

@@ -21,6 +21,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("rabbitmq_stream/src/rabbit_stream_utils.hrl").
 
 %% API
 -export([create/4,
@@ -33,7 +34,8 @@
          topology/2,
          route/3,
          partitions/2,
-         partition_index/3]).
+         partition_index/3,
+         reset_offset/3]).
 
 -spec create(binary(), binary(), #{binary() => binary()}, binary()) ->
     {ok, map()} |
@@ -394,6 +396,27 @@ partition_index(VirtualHost, SuperStream, Stream) ->
             rabbit_log:error("Error while looking up exchange ~tp, ~tp",
                              [ExchangeName, Error]),
             {error, stream_not_found}
+    end.
+
+-spec reset_offset(binary(), binary(), binary()) ->
+    ok |
+    {error, not_available | not_found | no_reference |
+     {validation_failed, term()}}.
+reset_offset(_, _, Ref) when ?IS_INVALID_REF(Ref) ->
+    {error, {validation_failed,
+             rabbit_misc:format("Reference is too long to store offset: ~p",
+                                 [byte_size(Ref)])}};
+reset_offset(VH, S, Ref) ->
+    case lookup_leader(VH, S) of
+        {ok, P} ->
+            case osiris:read_tracking(P, offset, Ref) of
+                undefined ->
+                    {error, no_reference};
+                {offset, _} ->
+                    osiris:write_tracking(P, Ref, {offset, 0})
+            end;
+        R ->
+            R
     end.
 
 stream_queue_arguments(Arguments) ->
