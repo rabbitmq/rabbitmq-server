@@ -181,12 +181,11 @@ init([]) ->
 
 
 terminate(_, State) ->
-  % Close all Gun connections
-  maps:fold(fun(_Host, ConnPid, _Acc) ->
-      gun:close(ConnPid)
-  end, ok, State#state.gun_connections),
-  ok.
-
+    %% Close all Gun connections
+    maps:fold(fun(_Host, ConnPid, _Acc) ->
+                      gun:close(ConnPid)
+              end, ok, State#state.gun_connections),
+    ok.
 
 code_change(_, _, State) ->
   {ok, State}.
@@ -223,12 +222,15 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
                             error = undefined}};
 
 handle_msg({set_credentials, NewState}, State) ->
-  {reply, ok, State#state{access_key = NewState#state.access_key,
-                          secret_access_key = NewState#state.secret_access_key,
-                          security_token = NewState#state.security_token,
-                          expiration = NewState#state.expiration,
-                          error = NewState#state.error,
-                          gun_connections = State#state.gun_connections}};
+    spawn(fun() -> maps:fold(fun(_Host, ConnPid, _Acc) ->
+                                     gun:close(ConnPid)
+                             end, ok, State#state.gun_connections) end),
+    {reply, ok, State#state{access_key = NewState#state.access_key,
+                            secret_access_key = NewState#state.secret_access_key,
+                            security_token = NewState#state.security_token,
+                            expiration = NewState#state.expiration,
+                            error = NewState#state.error,
+                            gun_connections = #{}}}; % Potentially new credentials, so clear the connection pool?
 
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
@@ -577,10 +579,10 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
 %% Gun HTTP client functions
 gun_request(State, Method, URI, Headers, Body, Options) ->
     {Host, Port, Path} = parse_uri(URI),
-    {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Options),
+    {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Path, Options),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
     try
-        StreamRef = gun:get(ConnPid, Path, Headers),
+        StreamRef = do_gun_request(ConnPid, Method, Path, Headers, Body),
         case gun:await(ConnPid, StreamRef, Timeout) of
             {response, fin, Status, RespHeaders} ->
                 Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
@@ -595,16 +597,32 @@ gun_request(State, Method, URI, Headers, Body, Options) ->
     catch
         _:Error ->
             % Connection failed, remove from pool and return error
-            NewConnections = maps:remove(Host, NewState#state.gun_connections),
+            HostKey = get_connection_key(Host, Port, Path, Options),
+            NewConnections = maps:remove(HostKey, NewState#state.gun_connections),
             gun:close(ConnPid),
             {{error, Error}, NewState#state{gun_connections = NewConnections}}
     end.
 
-get_or_create_gun_connection(State, Host, Port, Options) ->
-    HostKey = Host ++ ":" ++ integer_to_list(Port),
+do_gun_request(ConnPid, get, Path, Headers, _Body) ->
+    gun:get(ConnPid, Path, Headers);
+do_gun_request(ConnPid, post, Path, Headers, Body) ->
+    gun:post(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, put, Path, Headers, Body) ->
+    gun:put(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, head, Path, Headers, _Body) ->
+    gun:head(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, delete, Path, Headers, _Body) ->
+    gun:delete(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, patch, Path, Headers, Body) ->
+    gun:patch(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, options, Path, Headers, _Body) ->
+    gun:options(ConnPid, Path, Headers, #{}).
+
+get_or_create_gun_connection(State, Host, Port, Path, Options) ->
+    HostKey = get_connection_key(Host, Port, Path, Options),
     case maps:get(HostKey, State#state.gun_connections, undefined) of
         undefined ->
-            create_gun_connection(State, Host, Port, HostKey, Options);
+            create_gun_connection(State, Host, Port, Path, HostKey, Options);
         ConnPid ->
             case is_process_alive(ConnPid) andalso gun:info(ConnPid) =/= undefined of
                 true ->
@@ -612,11 +630,17 @@ get_or_create_gun_connection(State, Host, Port, Options) ->
                 false ->
                     % Connection is dead, create new one
                     gun:close(ConnPid),
-                    create_gun_connection(State, Host, Port, HostKey, Options)
+                    create_gun_connection(State, Host, Port, Path, HostKey, Options)
             end
     end.
 
-create_gun_connection(State, Host, Port, HostKey, Options) ->
+get_connection_key(Host, Port, Path, Options) ->
+    case proplists:get_value(connection_per_path, Options, false) of
+        true -> Host ++ ":" ++ integer_to_list(Port) ++ Path;  % Per-path
+        false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
+    end.
+
+create_gun_connection(State, Host, Port, Path, HostKey, Options) ->
     % Map HTTP version to Gun protocols, always include http as fallback
     HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
     Protocols = case HttpVersion of
