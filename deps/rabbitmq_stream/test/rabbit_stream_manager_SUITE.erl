@@ -20,7 +20,8 @@ groups() ->
       [manage_super_stream,
        lookup_leader,
        lookup_member,
-       partition_index]}].
+       partition_index,
+       reset_offset]}].
 
 %% -------------------------------------------------------------------
 %% Testsuite setup/teardown.
@@ -196,73 +197,67 @@ partition_index(Config) ->
     amqp_connection:close(C),
     ok.
 
+reset_offset(Config) ->
+    S = atom_to_binary(?FUNCTION_NAME, utf8),
+    Ref = <<"app">>,
+    ?assertMatch({ok, _}, create_stream(Config, S)),
+
+    {ok, Pid} = lookup_leader(Config, S),
+
+    ?assertEqual(undefined, query_offset(Config, Pid, Ref)),
+    ?assertEqual({error, no_reference}, reset_offset(Config, S, Ref)),
+    ok = store_offset(Config, Pid, Ref, 42),
+    ?assertEqual({offset, 42}, query_offset(Config, Pid, Ref)),
+    ?assertEqual(ok, reset_offset(Config, S, Ref)),
+    ?assertEqual({offset, 0}, query_offset(Config, Pid, Ref)),
+
+    ?assertEqual({error, not_found},
+                 reset_offset(Config, <<"does-not-exist">>, Ref)),
+
+    ?assertEqual({ok, deleted}, delete_stream(Config, S)).
+
+query_offset(Config, Pid, Ref) ->
+    rpc(Config, osiris, read_tracking, [Pid, Ref]).
+
+store_offset(Config, Pid, Ref, Offset) ->
+    rpc(Config, osiris, write_tracking, [Pid, Ref, {offset, Offset}]).
+
+reset_offset(Config, S, Ref) ->
+    rpc(Config, rabbit_stream_manager, reset_offset, [<<"/">>, S, Ref]).
+
 create_super_stream(Config, Name, Partitions, RKs) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 create_super_stream,
-                                 [<<"/">>,
-                                  Name,
-                                  Partitions,
-                                  #{},
-                                  RKs,
-                                  <<"guest">>]).
+    rpc(Config, rabbit_stream_manager, create_super_stream,
+        [<<"/">>, Name, Partitions, #{}, RKs, <<"guest">>]).
 
 delete_super_stream(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 delete_super_stream,
-                                 [<<"/">>, Name, <<"guest">>]).
+    rpc(Config, rabbit_stream_manager, delete_super_stream,
+        [<<"/">>, Name, <<"guest">>]).
 
 create_stream(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 create,
-                                 [<<"/">>, Name, [], <<"guest">>]).
+    rpc(Config, rabbit_stream_manager, create, [<<"/">>, Name, [], <<"guest">>]).
 
 delete_stream(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 delete,
-                                 [<<"/">>, Name, <<"guest">>]).
+    rpc(Config, rabbit_stream_manager, delete, [<<"/">>, Name, <<"guest">>]).
 
 lookup_leader(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 lookup_leader,
-                                 [<<"/">>, Name]).
+    rpc(Config, rabbit_stream_manager, lookup_leader, [<<"/">>, Name]).
 
 lookup_member(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 lookup_member,
-                                 [<<"/">>, Name]).
+    rpc(Config, rabbit_stream_manager, lookup_member, [<<"/">>, Name]).
 
 partitions(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 partitions,
-                                 [<<"/">>, Name]).
+    rpc(Config, rabbit_stream_manager, partitions, [<<"/">>, Name]).
 
 route(Config, RoutingKey, SuperStream) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 route,
-                                 [RoutingKey, <<"/">>, SuperStream]).
+    rpc(Config, rabbit_stream_manager, route,
+        [RoutingKey, <<"/">>, SuperStream]).
 
 partition_index(Config, SuperStream, Stream) ->
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 0,
-                                 rabbit_stream_manager,
-                                 partition_index,
-                                 [<<"/">>, SuperStream, Stream]).
+    rpc(Config, rabbit_stream_manager, partition_index,
+        [<<"/">>, SuperStream, Stream]).
+
+rpc(Config, M, F, A) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, M, F, A).
 
 start_amqp_connection(Config) ->
     Port =

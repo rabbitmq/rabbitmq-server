@@ -453,6 +453,14 @@ List only writer deduplication tracking information.
 Example:
 .Sp
 .Dl rabbitmq-streams list_stream_tracking stream-1 --offset
+.\" ------------------------------------------------------------------
+.It Cm reset_offset Fl -stream Ar stream Fl -reference Ar reference Oo Fl -vhost Ar vhost Oc
+.Pp
+Reset the stored offset for a consumer name on a stream.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams reset_offset --stream stream --reference app-1
 .El
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO

@@ -19,6 +19,7 @@
 
 -behaviour(gen_statem).
 
+-include("rabbit_stream_utils.hrl").
 -include("rabbit_stream_reader.hrl").
 -include("rabbit_stream_metrics.hrl").
 
@@ -80,7 +81,6 @@
          peer_cert_validity]).
 -define(UNKNOWN_FIELD, unknown_field).
 -define(SILENT_CLOSE_DELAY, 3_000).
--define(IS_INVALID_REF(Ref), is_binary(Ref) andalso byte_size(Ref) > 255).
 -define(SAC_MOD, rabbit_stream_sac_coordinator).
 
 -import(rabbit_stream_utils, [check_write_permitted/2,
