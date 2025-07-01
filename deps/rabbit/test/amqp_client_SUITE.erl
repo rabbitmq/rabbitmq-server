@@ -326,7 +326,8 @@ init_per_testcase(T, Config)
     end;
 init_per_testcase(T, Config)
   when T =:= leader_transfer_quorum_queue_credit_single orelse
-       T =:= leader_transfer_quorum_queue_credit_batches ->
+       T =:= leader_transfer_quorum_queue_credit_batches orelse
+       T =:= async_notify_unsettled_classic_queue ->
     %% These test cases flake with feature flag 'rabbitmq_4.0.0' disabled.
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
