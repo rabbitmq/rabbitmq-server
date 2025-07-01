@@ -5,7 +5,7 @@
 .\"
 .\" Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 .\"
-.Dd February 18, 2025
+.Dd July 1, 2025
 .Dt RABBITMQ-STREAMS 8
 .Os "RabbitMQ Server"
 .Sh NAME
@@ -131,6 +131,14 @@ Example:
 .El
 .Ss Stream plugin
 .Bl -tag -width Ds
+.\" ------------------------------------------------------------------
+.It Cm activate_stream_consumer Fl -stream Ar stream Fl -reference Ar reference Oo Fl -vhost Ar vhost Oc
+.Pp
+Trigger a rebalancing to activate a consumer in a single active consumer group.
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams activate_stream_consumer --stream stream --reference app-1
 .\" ------------------------------------------------------------------
 .It Cm list_stream_connections Op Ar connectioninfoitem ...
 .Pp
@@ -338,13 +346,13 @@ The initial cluster size of partition streams.
 Create a super stream.
 .\" ------------------------------------------------------------------
 .It Cm delete_super_stream Ar super-stream Oo Fl -vhost Ar vhost Oc
+.Pp
+Delete a super stream.
 .Bl -tag -width Ds
 .It Ar super-stream
 The name of the super stream to delete.
 .It Ar vhost
 The virtual host of the super stream.
-.Pp
-Delete a super stream.
 .El
 \" ------------------------------------------------------------------
 .It Cm list_stream_consumer_groups Oo Fl p Ar vhost Oc Op Ar groupinfoitem ...
@@ -382,6 +390,7 @@ for each group:
 .It Cm list_stream_group_consumers Fl -stream Ar stream Fl -reference Ar reference Oo Fl -vhost Ar vhost Oc Op Ar consumerinfoitem ...
 .Pp
 Lists consumers of a stream consumer group in a vhost.
+.Bl -tag -width Ds
 .It Ar stream
 The stream the consumers are attached to.
 .It Ar reference
@@ -420,6 +429,30 @@ For example, this command displays the connection name and state
 for each consumer attached to the stream-1 stream and belonging to the stream-1 group:
 .sp
 .Dl rabbitmq-streams list_stream_group_consumers --stream stream-1 --reference stream-1 connection_name state
+\" ------------------------------------------------------------------
+.It Cm list_stream_tracking Ar stream Oo Fl -all | Fl -offset | Fl -writer Oc Oo Fl -vhost Ar vhost Oc
+.Pp
+Lists tracking information for a stream.
+.Pp
+.Bl -tag -width Ds
+.It Ar stream
+The name of the stream.
+.El
+.Pp
+Tracking information can be filtered by their type using one
+of the following mutually exclusive options:
+.Bl -tag -width Ds
+.It Fl -all
+List offset tracking and writer deduplication information.
+.It Fl -offset
+List only offset tracking information.
+.It Fl -writer
+List only writer deduplication tracking information.
+.El
+.Pp
+Example:
+.Sp
+.Dl rabbitmq-streams list_stream_tracking stream-1 --offset
 .El
 .\" ------------------------------------------------------------------
 .Sh SEE ALSO
