@@ -10,15 +10,19 @@
 
 %% API exports
 -export([
-    get/2, get/3,
+    get/2, get/3, get/4,
+    put/4, put/5,
     post/4,
     refresh_credentials/0,
     request/5, request/6, request/7,
     set_credentials/2,
     has_credentials/0,
+    parse_uri/1,
     set_region/1,
     ensure_imdsv2_token_valid/0,
-    api_get_request/2
+    api_get_request/2,
+    close_connection/3,
+    status_text/1
 ]).
 
 %% gen-server exports
@@ -65,7 +69,10 @@ get(Service, Path) ->
 %%      format.
 %% @end
 get(Service, Path, Headers) ->
-    request(Service, get, Path, "", Headers).
+    request(Service, get, Path, "", Headers, []).
+
+get(Service, Path, Headers, Options) ->
+    request(Service, get, Path, "", Headers, Options).
 
 -spec post(
     Service :: string(),
@@ -80,11 +87,30 @@ get(Service, Path, Headers) ->
 post(Service, Path, Body, Headers) ->
     request(Service, post, Path, Body, Headers).
 
+-spec put(
+    Service :: string(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers()
+) -> result().
+%% @doc Perform a HTTP Post request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+put(Service, Path, Body, Headers) ->
+    put(Service, Path, Body, Headers, []).
+
+put(Service, Path, Body, Headers, Options) ->
+    request(Service, put, Path, Body, Headers, Options).
+
 -spec refresh_credentials() -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
     gen_server:call(rabbitmq_aws, refresh_credentials).
+
+close_connection(Service, Path, Options) ->
+    gen_server:cast(?MODULE, {close_connection, Service, Path, Options}).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
@@ -186,9 +212,18 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
+    {ok, _} = application:ensure_all_started(gun),
     {ok, #state{}}.
 
-terminate(_, _) ->
+terminate(_, State) ->
+    %% Close all Gun connections
+    maps:fold(
+        fun(_Host, ConnPid, _Acc) ->
+            gun:close(ConnPid)
+        end,
+        ok,
+        State#state.gun_connections
+    ),
     ok.
 
 code_change(_, _, State) ->
@@ -197,6 +232,8 @@ code_change(_, _, State) ->
 handle_call(Msg, _From, State) ->
     handle_msg(Msg, State).
 
+handle_cast({close_connection, Service, Path, Options}, State) ->
+    {noreply, close_connection(Service, Path, Options, State)};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -225,12 +262,23 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
         error = undefined
     }};
 handle_msg({set_credentials, NewState}, State) ->
+    spawn(fun() ->
+        maps:fold(
+            fun(_Host, ConnPid, _Acc) ->
+                gun:close(ConnPid)
+            end,
+            ok,
+            State#state.gun_connections
+        )
+    end),
     {reply, ok, State#state{
         access_key = NewState#state.access_key,
         secret_access_key = NewState#state.secret_access_key,
         security_token = NewState#state.security_token,
         expiration = NewState#state.expiration,
-        error = NewState#state.error
+        error = NewState#state.error,
+        % Potentially new credentials, so clear the connection pool?
+        gun_connections = #{}
     }};
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
@@ -282,6 +330,8 @@ endpoint_tld(_Other) ->
 %% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
     {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+format_response({ok, {{_Version, 206, _Message}, Headers, Body}}) ->
+    {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
     {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({error, Reason}) ->
@@ -293,9 +343,9 @@ format_response({error, Reason}) ->
 %% @end
 get_content_type(Headers) ->
     Value =
-        case proplists:get_value("content-type", Headers, undefined) of
+        case proplists:get_value(<<"content-type">>, Headers, undefined) of
             undefined ->
-                proplists:get_value("Content-Type", Headers, "text/xml");
+                proplists:get_value(<<"Content-Type">>, Headers, "text/xml");
             Other ->
                 Other
         end,
@@ -329,7 +379,7 @@ expired_credentials(Expiration) ->
 %%        - Credentials file
 %%        - EC2 Instance Metadata Service
 %% @end
-load_credentials(#state{region = Region}) ->
+load_credentials(#state{region = Region, gun_connections = GunConnections}) ->
     case rabbitmq_aws_config:credentials() of
         {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
             {ok, #state{
@@ -339,7 +389,8 @@ load_credentials(#state{region = Region}) ->
                 secret_access_key = SecretAccessKey,
                 expiration = Expiration,
                 security_token = SecurityToken,
-                imdsv2_token = undefined
+                imdsv2_token = undefined,
+                gun_connections = GunConnections
             }};
         {error, Reason} ->
             ?LOG_ERROR(
@@ -353,7 +404,8 @@ load_credentials(#state{region = Region}) ->
                 secret_access_key = undefined,
                 expiration = undefined,
                 security_token = undefined,
-                imdsv2_token = undefined
+                imdsv2_token = undefined,
+                gun_connections = GunConnections
             }}
     end.
 
@@ -368,6 +420,8 @@ local_time() ->
     list() | body().
 %% @doc Attempt to decode the response body by its MIME
 %% @end
+maybe_decode_body(_, <<>>) ->
+    <<>>;
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
     rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
@@ -380,6 +434,8 @@ maybe_decode_body(_ContentType, Body) ->
 -spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
 %% @doc parse a content type string returning a tuple of type/subtype
 %% @end
+parse_content_type(ContentType) when is_binary(ContentType) ->
+    parse_content_type(binary_to_list(ContentType));
 parse_content_type(ContentType) ->
     Parts = string:tokens(ContentType, ";"),
     [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
@@ -480,15 +536,13 @@ perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
 perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host) ->
     URI = endpoint(State, Host, Service, Path),
     SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
-    ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
-    perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
+    perform_request_with_creds(State, Method, URI, SignedHeaders, Body, Options).
 
 -spec perform_request_with_creds(
     State :: state(),
     Method :: method(),
     URI :: string(),
     Headers :: headers(),
-    ContentType :: string() | undefined,
     Body :: body(),
     Options :: http_options()
 ) ->
@@ -496,14 +550,12 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
-perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
-    Options1 = ensure_timeout(Options0),
-    Response = httpc:request(Method, {URI, Headers}, Options1, []),
-    {format_response(Response), State};
-perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
-    Options1 = ensure_timeout(Options0),
-    Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
-    {format_response(Response), State}.
+perform_request_with_creds(State, Method, URI, Headers, "", Options0) ->
+    {Response, NewState} = gun_request(State, Method, URI, Headers, <<>>, Options0),
+    {format_response(Response), NewState};
+perform_request_with_creds(State, Method, URI, Headers, Body, Options0) ->
+    {Response, NewState} = gun_request(State, Method, URI, Headers, Body, Options0),
+    {format_response(Response), NewState}.
 
 -spec perform_request_creds_error(State :: state()) ->
     {result_error(), NewState :: state()}.
@@ -648,3 +700,168 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
             timer:sleep(WaitTimeBetweenRetries),
             api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
     end.
+
+%% Gun HTTP client functions
+gun_request(State, Method, URI, Headers, Body, Options) ->
+    HeadersBin = lists:map(
+        fun({Key, Value}) ->
+            {list_to_binary(Key), list_to_binary(Value)}
+        end,
+        Headers
+    ),
+    {Host, Port, Path} = parse_uri(URI),
+    {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Path, Options),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
+    try
+        StreamRef = do_gun_request(ConnPid, Method, Path, HeadersBin, Body),
+        case gun:await(ConnPid, StreamRef, Timeout) of
+            {response, fin, Status, RespHeaders} ->
+                Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
+                {Response, NewState};
+            {response, nofin, Status, RespHeaders} ->
+                {ok, RespBody} = gun:await_body(ConnPid, StreamRef, Timeout),
+                Response =
+                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}},
+                {Response, NewState};
+            {error, Reason} ->
+                {{error, Reason}, NewState}
+        end
+    catch
+        _:Error ->
+            % Connection failed, remove from pool and return error
+            HostKey = get_connection_key(Host, Port, Path, Options),
+            NewConnections = maps:remove(HostKey, NewState#state.gun_connections),
+            gun:close(ConnPid),
+            {{error, Error}, NewState#state{gun_connections = NewConnections}}
+    end.
+
+do_gun_request(ConnPid, get, Path, Headers, _Body) ->
+    gun:get(ConnPid, Path, Headers);
+do_gun_request(ConnPid, post, Path, Headers, Body) ->
+    gun:post(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, put, Path, Headers, Body) ->
+    gun:put(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, head, Path, Headers, _Body) ->
+    gun:head(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, delete, Path, Headers, _Body) ->
+    gun:delete(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, patch, Path, Headers, Body) ->
+    gun:patch(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, options, Path, Headers, _Body) ->
+    gun:options(ConnPid, Path, Headers, #{}).
+
+get_or_create_gun_connection(State, Host, Port, Path, Options) ->
+    HostKey = get_connection_key(Host, Port, Path, Options),
+    case maps:get(HostKey, State#state.gun_connections, undefined) of
+        undefined ->
+            create_gun_connection(State, Host, Port, HostKey, Options);
+        ConnPid ->
+            case is_process_alive(ConnPid) andalso gun:info(ConnPid) =/= undefined of
+                true ->
+                    {ConnPid, State};
+                false ->
+                    % Connection is dead, create new one
+                    gun:close(ConnPid),
+                    create_gun_connection(State, Host, Port, HostKey, Options)
+            end
+    end.
+
+get_connection_key(Host, Port, Path, Options) ->
+    case proplists:get_value(connection_key_type, Options, host) of
+        host ->
+            Host ++ ":" ++ integer_to_list(Port);
+        path ->
+            Host ++ ":" ++ integer_to_list(Port) ++ Path;
+        {path_custom, Extra} ->
+            Host ++ ":" ++ integer_to_list(Port) ++ Path ++ ":" ++ Extra;
+        _ ->
+            Host ++ ":" ++ integer_to_list(Port)
+    end.
+
+create_gun_connection(State, Host, Port, HostKey, Options) ->
+    % Map HTTP version to Gun protocols, always include http as fallback
+    HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
+    Protocols =
+        case HttpVersion of
+            "HTTP/2" -> [http2, http];
+            "HTTP/2.0" -> [http2, http];
+            "HTTP/1.1" -> [http];
+            "HTTP/1.0" -> [http];
+            % Default: try HTTP/2, fallback to HTTP/1.1
+            _ -> [http2, http]
+        end,
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, 5000),
+    Opts = #{
+        transport =>
+            if
+                Port == 443 -> tls;
+                true -> tcp
+            end,
+        protocols => Protocols,
+        connect_timeout => ConnectTimeout
+    },
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, ConnectTimeout) of
+                {ok, _Protocol} ->
+                    NewConnections = maps:put(HostKey, ConnPid, State#state.gun_connections),
+                    NewState = State#state{gun_connections = NewConnections},
+                    {ConnPid, NewState};
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    error({gun_connection_failed, Reason})
+            end;
+        {error, Reason} ->
+            error({gun_open_failed, Reason})
+    end.
+
+close_connection(Service, Path, Options, State) ->
+    URI = endpoint(State, undefined, Service, Path),
+    {Host, Port, Path} = parse_uri(URI),
+    HostKey = get_connection_key(Host, Port, Path, Options),
+    case maps:get(HostKey, State#state.gun_connections, undefined) of
+        undefined ->
+            State;
+        ConnPid ->
+            gun:close(ConnPid),
+            NewConnections = maps:remove(HostKey, State#state.gun_connections),
+            State#state{gun_connections = NewConnections}
+    end.
+
+parse_uri(URI) ->
+    case string:split(URI, "://", leading) of
+        [Scheme, Rest] ->
+            case string:split(Rest, "/", leading) of
+                [HostPort] ->
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
+                    {Host, Port, "/"};
+                [HostPort, Path] ->
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
+                    {Host, Port, "/" ++ Path}
+            end
+    end.
+
+parse_host_port(HostPort, Scheme) ->
+    DefaultPort =
+        case Scheme of
+            "https" -> 443;
+            "http" -> 80;
+            % Fallback to HTTPS
+            _ -> 443
+        end,
+    case string:split(HostPort, ":", trailing) of
+        [Host] ->
+            {Host, DefaultPort};
+        [Host, PortStr] ->
+            {Host, list_to_integer(PortStr)}
+    end.
+
+status_text(200) -> "OK";
+status_text(206) -> "Partial Content";
+status_text(400) -> "Bad Request";
+status_text(401) -> "Unauthorized";
+status_text(403) -> "Forbidden";
+status_text(404) -> "Not Found";
+status_text(416) -> "Range Not Satisfiable";
+status_text(500) -> "Internal Server Error";
+status_text(Code) -> integer_to_list(Code).
