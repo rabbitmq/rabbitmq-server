@@ -17,11 +17,11 @@ on:
         type: boolean
       previous_version:
         required: false
-        default: 'tags/v4.0.9'
+        default: 'tags/v4.1.1'
         type: string
       previous_otp_version:
         required: false
-        default: '26'
+        default: '26.2.5.13'
         type: string
       make_target:
         required: true
@@ -51,11 +51,6 @@ jobs:
       with:
         otp-version: ${{ inputs.erlang_version }}
         elixir-version: ${{ inputs.elixir_version }}
-        hexpm-mirrors: |
-          https://builds.hex.pm
-          https://cdn.jsdelivr.net/hex
-        # This currently only applies to Elixir; and can be safely
-        # restricted to the build jobs to avoid duplication in output.
         disable_problem_matchers: true
 
     - name: MIXED CLUSTERS - RESTORE OLDER ERLANG FROM CACHE
@@ -63,13 +58,15 @@ jobs:
       if: inputs.mixed_clusters
       id: cache-older-erlang-restore
       with:
-        path: ~/.cache/erlang-${{ inputs.previous_otp_version }}
+        path: ~/.cache/erlang-${{steps.setup-beam.outputs.erlang-version}}
         key: erlang-${{ inputs.previous_otp_version }}-${{ runner.os }}
 
     - name: MIXED CLUSTERS - SETUP OLDER ERLANG VERSION
       uses: erlef/setup-beam@v1.19
       if: inputs.mixed_clusters && steps.cache-older-erlang-restore.outputs.cache-hit != 'true'
       with:
+        # we need a strict version to cache correctly
+        version-type: strict
         otp-version: ${{ inputs.previous_otp_version }}
         #elixir-version: ${{ inputs.elixir_version }}
 
