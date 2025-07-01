@@ -1,3 +1,4 @@
+# test
 name: Test mixed clusters (scheduled)
 on:
   push:
