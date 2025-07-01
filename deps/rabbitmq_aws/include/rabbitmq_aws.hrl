@@ -68,7 +68,9 @@
                 security_token :: security_token() | undefined,
                 region :: region() | undefined,
                 imdsv2_token:: imdsv2token() | undefined,
-                error :: atom() | string() | undefined}).
+                error :: atom() | string() | undefined,
+                gun_connections = #{} :: #{string() => pid()}  % host -> gun_pid mapping
+               }).
 -type state() :: #state{}.
 
 -type scheme() :: atom().

@@ -180,7 +180,11 @@ init([]) ->
   {ok, #state{}}.
 
 
-terminate(_, _) ->
+terminate(_, State) ->
+  % Close all Gun connections
+  maps:fold(fun(_Host, ConnPid, _Acc) ->
+      gun:close(ConnPid)
+  end, ok, State#state.gun_connections),
   ok.
 
 
@@ -223,7 +227,8 @@ handle_msg({set_credentials, NewState}, State) ->
                           secret_access_key = NewState#state.secret_access_key,
                           security_token = NewState#state.security_token,
                           expiration = NewState#state.expiration,
-                          error = NewState#state.error}};
+                          error = NewState#state.error,
+                          gun_connections = State#state.gun_connections}};
 
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
@@ -293,7 +298,7 @@ get_content_type(Headers) ->
       proplists:get_value("Content-Type", Headers, "text/xml");
     Other -> Other
   end,
-  parse_content_type(Value).
+    parse_content_type(Value).
 
 -spec has_credentials() -> boolean().
 has_credentials() ->
@@ -324,7 +329,7 @@ expired_credentials(Expiration) ->
 %%        - Credentials file
 %%        - EC2 Instance Metadata Service
 %% @end
-load_credentials(#state{region = Region}) ->
+load_credentials(#state{region = Region, gun_connections = GunConnections}) ->
   case rabbitmq_aws_config:credentials() of
     {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
       {ok, #state{region = Region,
@@ -333,7 +338,8 @@ load_credentials(#state{region = Region}) ->
                   secret_access_key = SecretAccessKey,
                   expiration = Expiration,
                   security_token = SecurityToken,
-                  imdsv2_token = undefined}};
+                  imdsv2_token = undefined,
+                  gun_connections = GunConnections}};
     {error, Reason} ->
       ?LOG_ERROR("Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n", [Reason]),
       {error, #state{region = Region,
@@ -342,7 +348,8 @@ load_credentials(#state{region = Region}) ->
                      secret_access_key = undefined,
                      expiration = undefined,
                      security_token = undefined,
-                     imdsv2_token = undefined}}
+                     imdsv2_token = undefined,
+                     gun_connections = GunConnections}}
   end.
 
 
@@ -383,7 +390,7 @@ parse_content_type(ContentType) ->
 %% @doc Make the API request and return the formatted response.
 %% @end
 perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_has_creds(has_credentials(State), State, Service, Method,
+    perform_request_has_creds(has_credentials(State), State, Service, Method,
                             Headers, Path, Body, Options, Host).
 
 
@@ -397,7 +404,7 @@ perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
 %%      otherwise return an error result.
 %% @end
 perform_request_has_creds(true, State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_creds_expired(expired_credentials(State#state.expiration), State,
+    perform_request_creds_expired(expired_credentials(State#state.expiration), State,
                                 Service, Method, Headers, Path, Body, Options, Host);
 perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
   perform_request_creds_error(State).
@@ -413,7 +420,7 @@ perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
 %%      credentials before performing the request.
 %% @end
 perform_request_creds_expired(false, State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
+    perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
 perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
   perform_request_creds_error(State#state{error = "Credentials expired!"}).
 
@@ -429,7 +436,7 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
   URI = endpoint(State, Host, Service, Path),
   SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
   ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
-  perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
+    perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
 
 
 -spec perform_request_with_creds(State :: state(), Method :: method(), URI :: string(),
@@ -440,13 +447,12 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 %%      expired, perform the request and return the response.
 %% @end
 perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
-  Options1 = ensure_timeout(Options0),
-  Response = httpc:request(Method, {URI, Headers}, Options1, []),
-  {format_response(Response), State};
+  {Response, NewState} = gun_request(State, Method, URI, Headers, <<>>, Options0),
+  {format_response(Response), NewState};
 perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
-  Options1 = ensure_timeout(Options0),
-  Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
-  {format_response(Response), State}.
+  GunHeaders = [{"content-type", ContentType} | Headers],
+  {Response, NewState} = gun_request(State, Method, URI, GunHeaders, Body, Options0),
+  {format_response(Response), NewState}.
 
 
 -spec perform_request_creds_error(State :: state()) ->
@@ -567,3 +573,106 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
                                   timer:sleep(WaitTimeBetweenRetries),
                                   api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
   end.
+
+%% Gun HTTP client functions
+gun_request(State, Method, URI, Headers, Body, Options) ->
+    {Host, Port, Path} = parse_uri(URI),
+    {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Options),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
+    try
+        StreamRef = gun:get(ConnPid, Path, Headers),
+        case gun:await(ConnPid, StreamRef, Timeout) of
+            {response, fin, Status, RespHeaders} ->
+                Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
+                {Response, NewState};
+            {response, nofin, Status, RespHeaders} ->
+                {ok, RespBody} = gun:await_body(ConnPid, StreamRef, Timeout),
+                Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, binary_to_list(RespBody)}},
+                {Response, NewState};
+            {error, Reason} ->
+                {{error, Reason}, NewState}
+        end
+    catch
+        _:Error ->
+            % Connection failed, remove from pool and return error
+            NewConnections = maps:remove(Host, NewState#state.gun_connections),
+            gun:close(ConnPid),
+            {{error, Error}, NewState#state{gun_connections = NewConnections}}
+    end.
+
+get_or_create_gun_connection(State, Host, Port, Options) ->
+    HostKey = Host ++ ":" ++ integer_to_list(Port),
+    case maps:get(HostKey, State#state.gun_connections, undefined) of
+        undefined ->
+            create_gun_connection(State, Host, Port, HostKey, Options);
+        ConnPid ->
+            case is_process_alive(ConnPid) andalso gun:info(ConnPid) =/= undefined of
+                true ->
+                    {ConnPid, State};
+                false ->
+                    % Connection is dead, create new one
+                    gun:close(ConnPid),
+                    create_gun_connection(State, Host, Port, HostKey, Options)
+            end
+    end.
+
+create_gun_connection(State, Host, Port, HostKey, Options) ->
+    % Map HTTP version to Gun protocols, always include http as fallback
+    HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
+    Protocols = case HttpVersion of
+        "HTTP/2" -> [http2, http];
+        "HTTP/2.0" -> [http2, http];
+        "HTTP/1.1" -> [http];
+        "HTTP/1.0" -> [http];
+        _ -> [http2, http]  % Default: try HTTP/2, fallback to HTTP/1.1
+    end,
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, 5000),
+    Opts = #{
+        transport => if Port == 443 -> tls; true -> tcp end,
+        protocols => Protocols,
+        connect_timeout => ConnectTimeout
+    },
+    application:ensure_all_started(gun),
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, ConnectTimeout) of
+                {ok, _Protocol} ->
+                    NewConnections = maps:put(HostKey, ConnPid, State#state.gun_connections),
+                    NewState = State#state{gun_connections = NewConnections},
+                    {ConnPid, NewState};
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    error({gun_connection_failed, Reason})
+            end;
+        {error, Reason} ->
+            error({gun_open_failed, Reason})
+    end.
+
+parse_uri(URI) ->
+    case string:split(URI, "://", leading) of
+        [_Scheme, Rest] ->
+            case string:split(Rest, "/", leading) of
+                [HostPort] ->
+                    {Host, Port} = parse_host_port(HostPort),
+                    {Host, Port, "/"};
+                [HostPort, Path] ->
+                    {Host, Port} = parse_host_port(HostPort),
+                    {Host, Port, "/" ++ Path}
+            end
+    end.
+
+parse_host_port(HostPort) ->
+    case string:split(HostPort, ":", trailing) of
+        [Host] ->
+            {Host, 443};  % Default HTTPS port
+        [Host, PortStr] ->
+            {Host, list_to_integer(PortStr)}
+    end.
+
+status_text(200) -> "OK";
+status_text(400) -> "Bad Request";
+status_text(401) -> "Unauthorized";
+status_text(403) -> "Forbidden";
+status_text(404) -> "Not Found";
+status_text(500) -> "Internal Server Error";
+status_text(Code) -> integer_to_list(Code).
