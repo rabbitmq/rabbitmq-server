@@ -1123,8 +1123,8 @@ two_nodes_different_otp_version(_Config) ->
                 pong ->
                     case is_same_otp_version(Node) of
                         true ->
-                            ct:fail("expected CT node and 'rabbit_fifo_prop@localhost' "
-                                    "to have different OTP versions");
+                            {skip, "expected CT node and 'rabbit_fifo_prop@localhost' "
+                                    "to have different OTP versions"};
                         false ->
                             Prefixes = ["rabbit_fifo", "rabbit_misc", "mc",
                                         "lqueue", "priority_queue", "ra_"],
