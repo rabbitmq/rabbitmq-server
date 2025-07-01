@@ -90,8 +90,14 @@ run(_,
 banner(_, _) ->
     <<"Resetting stored offset ...">>.
 
-output(ok, _Opts) ->
-    'Elixir.RabbitMQ.CLI.DefaultOutput':output({ok, <<"OK">>});
+output(ok, Opts) ->
+    Silent = maps:get(quiet, Opts, maps:get(silent, Opts, false)),
+    case Silent of
+      true ->
+        'Elixir.RabbitMQ.CLI.DefaultOutput':output(ok);
+      false ->
+        'Elixir.RabbitMQ.CLI.DefaultOutput':output({ok, <<"Done">>})
+    end;
 output({validation_failure, reference_too_long}, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output({error,
                                                 <<"The reference is too long">>});
