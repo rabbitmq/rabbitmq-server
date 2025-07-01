@@ -99,10 +99,10 @@ credentials_test_() ->
   {
     foreach,
     fun () ->
-      meck:new(httpc),
-      meck:new(rabbitmq_aws),
+      meck:new(gun, []),
+      meck:new(rabbitmq_aws, [passthrough]),
       reset_environment(),
-      [httpc, rabbitmq_aws]
+      [gun, rabbitmq_aws]
     end,
     fun meck:unload/1,
     [
@@ -176,9 +176,16 @@ credentials_test_() ->
        end},
       {"from instance metadata service", fun() ->
         CredsBody = "{\n  \"Code\" : \"Success\",\n  \"LastUpdated\" : \"2016-03-31T21:51:49Z\",\n  \"Type\" : \"AWS-HMAC\",\n  \"AccessKeyId\" : \"ASIAIMAFAKEACCESSKEY\",\n  \"SecretAccessKey\" : \"2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh\",\n  \"Token\" : \"FAKE//////////wEAK/TOKEN/VALUE=\",\n  \"Expiration\" : \"2016-04-01T04:13:28Z\"\n}",
-        meck:sequence(httpc, request, 4,
-                      [{ok, {{protocol, 200, message}, headers, "Bob"}},
-                       {ok, {{protocol, 200, message}, headers, CredsBody}}]),
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:sequence(gun, get, 3, [stream_ref1, stream_ref2]),
+        meck:sequence(gun, await, 3, 
+                      [{response, nofin, 200, headers},
+                       {response, nofin, 200, headers}]),
+        meck:sequence(gun, await_body, 3,
+                      [{ok, <<"Bob">>},
+                       {ok, list_to_binary(CredsBody)}]),
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
         Expectation = {ok, "ASIAIMAFAKEACCESSKEY", "2+t64tZZVaz0yp0x1G23ZRYn+FAKEyVALUEs/4qh",
                        {{2016,4,1},{4,13,28}}, "FAKE//////////wEAK/TOKEN/VALUE="},
@@ -187,30 +194,46 @@ credentials_test_() ->
       },
       {"with instance metadata service role error", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:expect(httpc, request, 4, {error, timeout}),
+        meck:expect(gun, open, fun(_,_,_) -> {error, timeout} end),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service role http error", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:expect(httpc, request, 4,
-                    {ok, {{protocol, 500, message}, headers, "Internal Server Error"}}),
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+        meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 500, headers} end),
+        meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"Internal Server Error">>} end),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service credentials error", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:sequence(httpc, request, 4,
-                      [{ok, {{protocol, 200, message}, headers, "Bob"}},
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:sequence(gun, get, 3, [stream_ref1, stream_ref2]),
+        meck:sequence(gun, await, 3, 
+                      [{response, nofin, 200, headers},
                        {error, timeout}]),
+        meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"Bob">>} end),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       },
       {"with instance metadata service credentials not found", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:sequence(httpc, request, 4,
-                      [{ok, {{protocol, 200, message}, headers, "Bob"}},
-                       {ok, {{protocol, 404, message}, headers, "File Not Found"}}]),
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:sequence(gun, get, 3, [stream_ref1, stream_ref2]),
+        meck:sequence(gun, await, 3, 
+                      [{response, nofin, 200, headers},
+                       {response, nofin, 404, headers}]),
+        meck:sequence(gun, await_body, 3,
+                      [{ok, <<"Bob">>},
+                       {ok, <<"File Not Found">>}]),
         ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
        end
       }
@@ -293,10 +316,10 @@ region_test_() ->
   {
     foreach,
     fun () ->
-      meck:new(httpc),
-      meck:new(rabbitmq_aws),
+      meck:new(gun, []),
+      meck:new(rabbitmq_aws, [passthrough]),
       reset_environment(),
-      [httpc, rabbitmq_aws]
+      [gun, rabbitmq_aws]
     end,
     fun meck:unload/1,
     [
@@ -319,8 +342,12 @@ region_test_() ->
        end},
       {"from instance metadata service", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:expect(httpc, request, 4,
-                    {ok, {{protocol, 200, message}, headers, "us-west-1a"}}),
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+        meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 200, headers} end),
+        meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"us-west-1a">>} end),
         ?assertEqual({ok, "us-west-1"}, rabbitmq_aws_config:region())
        end},
       {"full lookup failure", fun() ->
@@ -329,8 +356,12 @@ region_test_() ->
        end},
       {"http error failure", fun() ->
         meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-        meck:expect(httpc, request, 4,
-                    {ok, {{protocol, 500, message}, headers, "Internal Server Error"}}),
+        meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+        meck:expect(gun, close, fun(_) -> ok end),
+        meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+        meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+        meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 500, headers} end),
+        meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"Internal Server Error">>} end),
         ?assertEqual({ok, ?DEFAULT_REGION}, rabbitmq_aws_config:region())
        end}
     ]}.
@@ -340,31 +371,46 @@ instance_id_test_() ->
   {
     foreach,
     fun () ->
-      meck:new(httpc),
-      meck:new(rabbitmq_aws),
+      meck:new(gun, []),
+      meck:new(rabbitmq_aws, [passthrough]),
       reset_environment(),
-      [httpc, rabbitmq_aws]
+      [gun, rabbitmq_aws]
     end,
     fun meck:unload/1,
     [
       {"get instance id successfully",
         fun() ->
           meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-          meck:expect(httpc, request, 4, {ok, {{protocol, 200, message}, headers, "instance-id"}}),
+          meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+          meck:expect(gun, close, fun(_) -> ok end),
+          meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+          meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+          meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 200, headers} end),
+          meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"instance-id">>} end),
           ?assertEqual({ok, "instance-id"}, rabbitmq_aws_config:instance_id())
         end
       },
       {"getting instance id is rejected with invalid token error",
         fun() ->
           meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "invalid"),
-          meck:expect(httpc, request, 4, {error, {{protocol, 401, message}, headers, "Invalid token"}}),
+          meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+          meck:expect(gun, close, fun(_) -> ok end),
+          meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+          meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+          meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 401, headers} end),
+          meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"Invalid token">>} end),
           ?assertEqual({error, undefined}, rabbitmq_aws_config:instance_id())
         end
       },
       {"getting instance id is rejected with access denied error",
         fun() ->
           meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "expired token"),
-          meck:expect(httpc, request, 4, {error, {{protocol, 403, message}, headers, "access denied"}}),
+          meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+          meck:expect(gun, close, fun(_) -> ok end),
+          meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+          meck:expect(gun, get, fun(_,_,_) -> stream_ref end),
+          meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 403, headers} end),
+          meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"access denied">>} end),
           ?assertEqual({error, undefined}, rabbitmq_aws_config:instance_id())
         end
       }
@@ -375,26 +421,35 @@ load_imdsv2_token_test_() ->
   {
     foreach,
     fun () ->
-      meck:new(httpc),
-      [httpc]
+      meck:new(gun, []),
+      [gun]
     end,
     fun meck:unload/1,
     [
       {"fail to get imdsv2 token - timeout",
         fun() ->
-          meck:expect(httpc, request, 4, {error, timeout}),
+          meck:expect(gun, open, fun(_,_,_) -> {error, timeout} end),
           ?assertEqual(undefined, rabbitmq_aws_config:load_imdsv2_token())
         end},
       {"fail to get imdsv2 token - PUT request is not valid",
         fun() ->
-          meck:expect(httpc, request, 4, {error, {{protocol, 400, messge}, headers, "Missing or Invalid Parameters – The PUT request is not valid."}}),
+          meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+          meck:expect(gun, close, fun(_) -> ok end),
+          meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+          meck:expect(gun, put, fun(_,_,_,_) -> stream_ref end),
+          meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 400, headers} end),
+          meck:expect(gun, await_body, fun(_,_,_) -> {ok, <<"Missing or Invalid Parameters – The PUT request is not valid.">>} end),
           ?assertEqual(undefined, rabbitmq_aws_config:load_imdsv2_token())
         end},
       {"successfully get imdsv2 token from instance metadata service",
         fun() ->
           IMDSv2Token = "super_secret_token_value",
-          meck:sequence(httpc, request, 4,
-            [{ok, {{protocol, 200, message}, headers, IMDSv2Token}}]),
+          meck:expect(gun, open, fun(_,_,_) -> {ok, pid} end),
+          meck:expect(gun, close, fun(_) -> ok end),
+          meck:expect(gun, await_up, fun(_,_) -> {ok, protocol} end),
+          meck:expect(gun, put, fun(_,_,_,_) -> stream_ref end),
+          meck:expect(gun, await, fun(_,_,_) -> {response, nofin, 200, headers} end),
+          meck:expect(gun, await_body, fun(_,_,_) -> {ok, list_to_binary(IMDSv2Token)} end),
           ?assertEqual(IMDSv2Token, rabbitmq_aws_config:load_imdsv2_token())
         end}
     ]
@@ -405,7 +460,7 @@ maybe_imdsv2_token_headers_test_() ->
   {
     foreach,
     fun () ->
-      meck:new(rabbitmq_aws),
+      meck:new(rabbitmq_aws, [passthrough]),
       [rabbitmq_aws]
     end,
     fun meck:unload/1,
@@ -430,7 +485,7 @@ reset_environment() ->
   setup_test_file_with_env_var("AWS_CONFIG_FILE", "bad_config.ini"),
   setup_test_file_with_env_var("AWS_SHARED_CREDENTIALS_FILE",
                                "bad_credentials.ini"),
-  meck:expect(httpc, request, 4, {error, timeout}).
+  meck:expect(gun, open, fun(_,_,_) -> {error, timeout} end).
 
 setup_test_config_env_var() ->
   setup_test_file_with_env_var("AWS_CONFIG_FILE", "test_aws_config.ini").

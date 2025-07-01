@@ -615,8 +615,10 @@ maybe_get_role_from_instance_metadata() ->
 %%      Instance Metadata service, returning the Region if successful.
 %% end.
 parse_az_response({error, _}) -> {error, undefined};
-parse_az_response({ok, {{_, 200, _}, _, Body}})
-  -> {ok, region_from_availability_zone(Body)};
+parse_az_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) ->
+    {ok, region_from_availability_zone(binary_to_list(Body))};
+parse_az_response({ok, {{_, 200, _}, _, Body}}) ->
+    {ok, region_from_availability_zone(Body)};
 parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 
 
@@ -626,7 +628,8 @@ parse_az_response({ok, {{_, _, _}, _, _}}) -> {error, undefined}.
 %%      body value is the string to process.
 %% end.
 parse_body_response({error, _}) -> {error, undefined};
-parse_body_response({ok, {{_, 200, _}, _, Body}}) -> {ok, Body};
+parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) -> {ok, binary_to_list(Body)};
+parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_list(Body) -> {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
   ?LOG_ERROR(get_instruction_on_instance_metadata_error("Unauthorized instance metadata service request.")),
   {error, undefined};
@@ -655,9 +658,35 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
-  ?LOG_DEBUG("Querying instance metadata service: ~tp", [URL]),
-  httpc:request(get, {URL, instance_metadata_request_headers()},
-    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []).
+    ?LOG_DEBUG("Querying instance metadata service: ~tp", [URL]),
+    % Parse metadata service URL
+    {Host, Port, Path} = rabbitmq_aws:parse_uri(URL),
+    % Simple Gun connection for metadata service
+    Opts = #{transport => tcp, protocols => [http]}, % HTTP only, no TLS
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, 5000) of
+                {ok, _Protocol} ->
+                    Headers = instance_metadata_request_headers(),
+                    StreamRef = gun:get(ConnPid, Path, Headers),
+                    Result = case gun:await(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT) of
+                        {response, fin, Status, RespHeaders} ->
+                            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, <<>>}};
+                        {response, nofin, Status, RespHeaders} ->
+                            {ok, Body} = gun:await_body(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT),
+                            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, Body}};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end,
+                    gun:close(ConnPid),
+                    Result;
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 -spec get_instruction_on_instance_metadata_error(string()) -> string().
 %% @doc Return error message on failures related to EC2 Instance Metadata Service with a reference to AWS document.
@@ -717,23 +746,56 @@ region_from_availability_zone(Value) ->
 %% @doc Attempt to obtain EC2 IMDSv2 token.
 %% @end
 load_imdsv2_token() ->
-  TokenUrl = imdsv2_token_url(),
-  ?LOG_INFO("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
-  case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}]},
-    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of
-    {ok, {{_, 200, _}, _, Value}} ->
-      ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
-      Value;
-    {error, {{_, 400, _}, _, _}} ->
-      ?LOG_WARNING("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
-      undefined;
-    Other ->
-      ?LOG_WARNING(
-        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
-        "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
-      undefined
-  end.
-
+    TokenUrl = imdsv2_token_url(),
+    ?LOG_INFO("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
+                                                % Parse metadata service URL
+    {Host, Port, Path} = rabbitmq_aws:parse_uri(TokenUrl),
+                                                % Simple Gun connection for metadata service
+    Opts = #{transport => tcp, protocols => [http]}, % HTTP only, no TLS
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, 5000) of
+                {ok, _Protocol} ->
+                                                % PUT request with IMDSv2 token TTL header
+                    Headers = [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}],
+                    StreamRef = gun:put(ConnPid, Path, Headers, <<>>),
+                    Result = case gun:await(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT) of
+                                 {response, fin, 200, _RespHeaders} ->
+                                     ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
+                                     <<>>; % Empty body for fin response
+                                 {response, nofin, 200, _RespHeaders} ->
+                                     {ok, Body} = gun:await_body(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT),
+                                     ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
+                                     binary_to_list(Body);
+                                 {response, _, 400, _RespHeaders} ->
+                                     ?LOG_WARNING("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
+                                     undefined;
+                                 {error, Reason} ->
+                                     ?LOG_WARNING(
+                                        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
+                                                                                  "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
+                                     undefined;
+                                 Other ->
+                                     ?LOG_WARNING(
+                                        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
+                                                                                  "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
+                                     undefined
+                             end,
+                    gun:close(ConnPid),
+                    Result;
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    ?LOG_WARNING(
+                       get_instruction_on_instance_metadata_error("Failed to connect for EC2 IMDSv2 token: ~tp. "
+                                                                 "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
+                    undefined
+            end;
+        {error, Reason} ->
+            ?LOG_WARNING(
+               get_instruction_on_instance_metadata_error("Failed to open connection for EC2 IMDSv2 token: ~tp. "
+                                                         "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
+            undefined
+    end.
 
 -spec instance_metadata_request_headers() -> headers().
 %% @doc Return headers used for instance metadata service requests.
