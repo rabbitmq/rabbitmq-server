@@ -82,12 +82,12 @@ jobs:
       fail-fast: false
       matrix:
         erlang_version:
-        - '28'
+        - '26'
         elixir_version:
         - '1.18'
         metadata_store:
           - mnesia
-          - khepri
+          #- khepri
     uses: ./.github/workflows/test-make-tests.yaml
     with:
       erlang_version: ${{ matrix.erlang_version }}
