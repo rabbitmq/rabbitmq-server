@@ -164,7 +164,17 @@ init_per_suite(Config) ->
                 Config, {rabbit, [
                                   {quorum_tick_interval, 1000},
                                   {stream_tick_interval, 1000},
-                                  {forced_feature_flags_on_init, []},
+                                  {forced_feature_flags_on_init, [
+                                                                  delete_ra_cluster_mqtt_node,
+                                                                  mqtt_v5,
+                                                                  rabbit_mqtt_qos0_queue,
+                                                                  restart_streams,
+                                                                  stream_sac_coordinator_unblock_group,
+                                                                  stream_update_config_command,
+                                                                  stream_filtering,
+                                                                  message_containers,
+                                                                  quorum_queue_non_voters
+                                                                 ]},
                                   {start_rmq_with_plugins_disabled, true}
                                  ]}),
     rabbit_ct_helpers:run_setup_steps(Config1).
