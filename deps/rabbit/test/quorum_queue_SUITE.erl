@@ -1286,155 +1286,167 @@ single_active_consumer_priority(Config) ->
 
 force_shrink_member_to_current_member(Config) ->
     case rabbit_ct_helpers:is_mixed_versions() of
-    true ->
-        {skip, "Should not run in mixed version environments"};
-    _ ->
-        [Server0, Server1, Server2] =
+        true ->
+            {skip, "Should not run in mixed version environments"};
+        _ ->
+            [Server0, Server1, Server2] =
             rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-        Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-        QQ = ?config(queue_name, Config),
-        ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                     declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+            QQ = ?config(queue_name, Config),
+            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                         declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-        RaName = ra_name(QQ),
-        rabbit_ct_client_helpers:publish(Ch, QQ, 3),
-        wait_for_messages_ready([Server0], RaName, 3),
+            RaName = ra_name(QQ),
+            rabbit_ct_client_helpers:publish(Ch, QQ, 3),
+            wait_for_messages_ready([Server0], RaName, 3),
 
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(3, length(Nodes0)),
+            {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+            #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+            ?assertEqual(3, length(Nodes0)),
 
-        rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-            force_shrink_member_to_current_member, [<<"/">>, QQ]),
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                         force_shrink_member_to_current_member, [<<"/">>, QQ]),
 
-        wait_for_messages_ready([Server0], RaName, 3),
+            wait_for_messages_ready([Server0], RaName, 3),
 
-        {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-        #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
-        ?assertEqual(1, length(Nodes1)),
+            {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+            #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
+            ?assertEqual(1, length(Nodes1)),
 
-        %% grow queues back to all nodes
-        [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% grow queues back to all nodes
+            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
 
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-        #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
-        ?assertEqual(3, length(Nodes2))
+            wait_for_messages_ready([Server0], RaName, 3),
+            {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
+            #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
+            ?assertEqual(3, length(Nodes2))
     end.
 
 force_all_queues_shrink_member_to_current_member(Config) ->
-    [Server0, Server1, Server2] =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "Should not run in mixed version environments"};
+        _ ->
+            [Server0, Server1, Server2] =
+            rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    QQ = ?config(queue_name, Config),
-    AQ = ?config(alt_queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                 declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
+            QQ = ?config(queue_name, Config),
+            AQ = ?config(alt_queue_name, Config),
+            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                         declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                         declare(Ch, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    QQs = [QQ, AQ],
+            QQs = [QQ, AQ],
 
-    [begin
-        RaName = ra_name(Q),
-        rabbit_ct_client_helpers:publish(Ch, Q, 3),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(3, length(Nodes0))
-    end || Q <- QQs],
+            [begin
+                 RaName = ra_name(Q),
+                 rabbit_ct_client_helpers:publish(Ch, Q, 3),
+                 wait_for_messages_ready([Server0], RaName, 3),
+                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                 ?assertEqual(3, length(Nodes0))
+             end || Q <- QQs],
 
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-        force_all_queues_shrink_member_to_current_member, []),
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                                         force_all_queues_shrink_member_to_current_member, []),
 
-    [begin
-        RaName = ra_name(Q),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(1, length(Nodes0))
-    end || Q <- QQs],
+            [begin
+                 RaName = ra_name(Q),
+                 wait_for_messages_ready([Server0], RaName, 3),
+                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                 ?assertEqual(1, length(Nodes0))
+             end || Q <- QQs],
 
-    %% grow queues back to all nodes
-    [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% grow queues back to all nodes
+            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
 
-    [begin
-        RaName = ra_name(Q),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(3, length(Nodes0))
-    end || Q <- QQs].
+            [begin
+                 RaName = ra_name(Q),
+                 wait_for_messages_ready([Server0], RaName, 3),
+                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
+                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                 ?assertEqual(3, length(Nodes0))
+             end || Q <- QQs]
+    end.
 
 force_vhost_queues_shrink_member_to_current_member(Config) ->
-    [Server0, Server1, Server2] =
-        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "Should not run in mixed version environments"};
+        _ ->
+            [Server0, Server1, Server2] =
+                rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
-    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
-    QQ = ?config(queue_name, Config),
-    AQ = ?config(alt_queue_name, Config),
-    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                 declare(Ch0, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+            QQ = ?config(queue_name, Config),
+            AQ = ?config(alt_queue_name, Config),
+            ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                         declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                         declare(Ch0, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    QQs = [QQ, AQ],
+            QQs = [QQ, AQ],
 
-    VHost1 = <<"/">>,
-    VHost2 = <<"another-vhost">>,
-    VHosts = [VHost1, VHost2],
+            VHost1 = <<"/">>,
+            VHost2 = <<"another-vhost">>,
+            VHosts = [VHost1, VHost2],
 
-    User = ?config(rmq_username, Config),
-    ok = rabbit_ct_broker_helpers:add_vhost(Config, Server0, VHost2, User),
-    ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost2),
-    Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server0, VHost2),
-    {ok, Ch1} = amqp_connection:open_channel(Conn1),
-        ?assertEqual({'queue.declare_ok', QQ, 0, 0},
-                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
-    ?assertEqual({'queue.declare_ok', AQ, 0, 0},
-                 declare(Ch1, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            User = ?config(rmq_username, Config),
+            ok = rabbit_ct_broker_helpers:add_vhost(Config, Server0, VHost2, User),
+            ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost2),
+            Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server0, VHost2),
+            {ok, Ch1} = amqp_connection:open_channel(Conn1),
+                ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                         declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+            ?assertEqual({'queue.declare_ok', AQ, 0, 0},
+                         declare(Ch1, AQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    [rabbit_ct_client_helpers:publish(Ch, Q, 3) || Q <- QQs, Ch <- [Ch0, Ch1]],
+            [rabbit_ct_client_helpers:publish(Ch, Q, 3) || Q <- QQs, Ch <- [Ch0, Ch1]],
 
-    [begin
-        QQRes = rabbit_misc:r(VHost, queue, Q),
-        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(3, length(Nodes0))
-    end || Q <- QQs, VHost <- VHosts],
+            [begin
+                QQRes = rabbit_misc:r(VHost, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
+                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                ?assertEqual(3, length(Nodes0))
+            end || Q <- QQs, VHost <- VHosts],
 
-    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
-        force_vhost_queues_shrink_member_to_current_member, [VHost2]),
+            rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
+                force_vhost_queues_shrink_member_to_current_member, [VHost2]),
 
-    [begin
-        QQRes = rabbit_misc:r(VHost, queue, Q),
-        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        case VHost of
-            VHost1 -> ?assertEqual(3, length(Nodes0));
-            VHost2 -> ?assertEqual(1, length(Nodes0))
-        end
-    end || Q <- QQs, VHost <- VHosts],
+            [begin
+                QQRes = rabbit_misc:r(VHost, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
+                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                case VHost of
+                    VHost1 -> ?assertEqual(3, length(Nodes0));
+                    VHost2 -> ?assertEqual(1, length(Nodes0))
+                end
+            end || Q <- QQs, VHost <- VHosts],
 
-    %% grow queues back to all nodes in VHost2 only
-    [rpc:call(Server0, rabbit_quorum_queue, grow, [S, VHost2, <<".*">>, all]) || S <- [Server1, Server2]],
+            %% grow queues back to all nodes in VHost2 only
+            [rpc:call(Server0, rabbit_quorum_queue, grow, [S, VHost2, <<".*">>, all]) || S <- [Server1, Server2]],
 
-    [begin
-        QQRes = rabbit_misc:r(VHost, queue, Q),
-        {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
-        wait_for_messages_ready([Server0], RaName, 3),
-        {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-        #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-        ?assertEqual(3, length(Nodes0))
-    end || Q <- QQs, VHost <- VHosts].
+            [begin
+                QQRes = rabbit_misc:r(VHost, queue, Q),
+                {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
+                wait_for_messages_ready([Server0], RaName, 3),
+                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
+                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
+                ?assertEqual(3, length(Nodes0))
+            end || Q <- QQs, VHost <- VHosts]
+    end.
 
 force_checkpoint_on_queue(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1501,6 +1513,8 @@ force_checkpoint_on_queue(Config) ->
       end).
 
 force_checkpoint(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     [Server0, _Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1722,6 +1736,7 @@ subscribe_from_each(Config) ->
     ok.
 
 dont_leak_file_handles(Config) ->
+    check_quorum_queues_v4_compat(Config),
 
     [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1770,6 +1785,8 @@ dont_leak_file_handles(Config) ->
     ok.
 
 gh_12635(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -3268,6 +3285,8 @@ subscribe_redelivery_limit(Config) ->
     end.
 
 subscribe_redelivery_limit_disable(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -3664,6 +3683,8 @@ queue_length_limit_reject_publish(Config) ->
     ok.
 
 queue_length_limit_policy_cleared(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -4723,6 +4744,8 @@ select_nodes_with_least_replicas_node_down(Config) ->
      || Q <- Qs].
 
 requeue_multiple_true(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -4761,6 +4784,8 @@ requeue_multiple_true(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
 
 requeue_multiple_false(Config) ->
+    check_quorum_queues_v4_compat(Config),
+
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
