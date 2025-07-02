@@ -15,6 +15,7 @@
          request/5, request/6, request/7,
          set_credentials/2,
          has_credentials/0,
+         parse_uri/1,
          set_region/1,
          ensure_imdsv2_token_valid/0,
          api_get_request/2]).
@@ -177,8 +178,8 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
-  {ok, #state{}}.
-
+    {ok, _} = application:ensure_all_started(gun),
+    {ok, #state{}}.
 
 terminate(_, State) ->
     %% Close all Gun connections
@@ -656,7 +657,6 @@ create_gun_connection(State, Host, Port, Path, HostKey, Options) ->
         protocols => Protocols,
         connect_timeout => ConnectTimeout
     },
-    application:ensure_all_started(gun),
     case gun:open(Host, Port, Opts) of
         {ok, ConnPid} ->
             case gun:await_up(ConnPid, ConnectTimeout) of
