@@ -194,25 +194,6 @@ maybe_flush_buffer(State = #qs{ write_buffer_size = WriteBufferSize }) ->
         false -> State
     end.
 
-open_eventually(File, Modes) ->
-    open_eventually(File, Modes, 3).
-
-open_eventually(_, _, 0) ->
-    {error, eacces};
-open_eventually(File, Modes, N) ->
-    case file:open(File, Modes) of
-        OK = {ok, _} ->
-            OK;
-        %% When the current write file was recently deleted it
-        %% is possible on Windows to get an {error,eacces}.
-        %% Sometimes Windows sets the files to "DELETE PENDING"
-        %% state and delays deletion a bit. So we wait 10ms and
-        %% try again up to 3 times.
-        {error, eacces} ->
-            timer:sleep(10),
-            open_eventually(File, Modes, N - 1)
-    end.
-
 flush_buffer(State = #qs{ write_buffer_size = 0 }, _) ->
     State;
 flush_buffer(State0 = #qs{ write_buffer = WriteBuffer }, FsyncFun) ->
@@ -223,7 +204,9 @@ flush_buffer(State0 = #qs{ write_buffer = WriteBuffer }, FsyncFun) ->
     Writes = flush_buffer_build(WriteList, CheckCRC32, SegmentEntryCount),
     %% Then we do the writes for each segment.
     State = lists:foldl(fun({Segment, LocBytes}, FoldState) ->
-        {ok, Fd} = open_eventually(segment_file(Segment, FoldState), [read, write, raw, binary]),
+        {ok, Fd} = rabbit_file:open_eventually(
+            segment_file(Segment, FoldState),
+            [read, write, raw, binary]),
         case file:position(Fd, eof) of
             {ok, 0} ->
                 %% We write the file header if it does not exist.

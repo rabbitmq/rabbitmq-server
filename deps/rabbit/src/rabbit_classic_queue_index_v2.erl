@@ -591,7 +591,9 @@ publish(MsgId, SeqId, Location, Props, IsPersistent, ShouldConfirm, TargetRamCou
 new_segment_file(Segment, SegmentEntryCount, State = #qi{ segments = Segments }) ->
     #qi{ fds = OpenFds } = reduce_fd_usage(Segment, State),
     false = maps:is_key(Segment, OpenFds), %% assert
-    {ok, Fd} = file:open(segment_file(Segment, State), [read, write, raw, binary]),
+    {ok, Fd} = rabbit_file:open_eventually(
+        segment_file(Segment, State),
+        [read, write, raw, binary]),
     %% We then write the segment file header. It contains
     %% some useful info and some reserved bytes for future use.
     %% We currently do not make use of this information. It is
