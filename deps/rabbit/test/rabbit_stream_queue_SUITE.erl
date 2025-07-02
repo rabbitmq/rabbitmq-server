@@ -238,7 +238,14 @@ init_per_group1(Group, Config) ->
                        Config1
                end,
     Config1c = rabbit_ct_helpers:merge_app_env(
-                 Config1b, {rabbit, [{forced_feature_flags_on_init, []}]}),
+                 Config1b, {rabbit, [{forced_feature_flags_on_init, [
+                                                                     restart_streams,
+                                                                     stream_sac_coordinator_unblock_group,
+                                                                     stream_update_config_command,
+                                                                     stream_filtering,
+                                                                     message_containers,
+                                                                     quorum_queue_non_voters
+                                                                    ]}]}),
     Ret = rabbit_ct_helpers:run_steps(Config1c,
                                       [fun merge_app_env/1 ] ++
                                       rabbit_ct_broker_helpers:setup_steps()),
