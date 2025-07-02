@@ -79,6 +79,27 @@ Or, with Nu shell:
 with-env {'RABBITMQ_METADATA_STORE': 'khepri'} { gmake ct-quorum_queue }
 ```
 
+### Running Mixed Version Tests
+
+For some components, it's important to run tests in a mixed-version cluster, to make sure the upgrades
+are handled correctly. For example, you may want to make sure that the quorum_queue suite passes, when
+there's a mix of RabbitMQ 4.1 and 4.2 nodes in the cluster.
+
+Here's how you can do that:
+
+```shell
+# download the older version, eg:
+https://github.com/rabbitmq/rabbitmq-server/releases/download/v4.1.1/rabbitmq-server-generic-unix-4.1.1.tar.xz
+
+# unpack it
+tar xf rabbitmq-server-generic-unix-4.1.1.tar.xz
+
+# run the test with SECONDARY_DIST pointing at the extracted folder
+SECONDARY_DIST=rabbitmq_server-4.1.1 make -C deps/rabbit ct-quorum_queue
+```
+
+Odd-numbered nodes (eg. 1 and 3) will be started using the main repository, while even-numbered nodes (eg. node 2)
+will run the older version.
 
 ## Running Single Nodes from Source
 
