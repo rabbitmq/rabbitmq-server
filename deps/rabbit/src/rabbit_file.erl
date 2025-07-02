@@ -17,6 +17,7 @@
 -export([read_file_info/1]).
 -export([filename_as_a_directory/1]).
 -export([filename_to_binary/1, binary_to_filename/1]).
+-export([open_eventually/2]).
 
 -define(TMP_EXT, ".tmp").
 
@@ -337,4 +338,35 @@ binary_to_filename(Bin) when is_binary(Bin) ->
             Name;
         Other ->
             erlang:error(Other)
+    end.
+
+%% On Windows the file may be in "DELETE PENDING" state following
+%% its deletion (when the last message was acked). A subsequent
+%% open may fail with an {error,eacces}. In that case we wait 10ms
+%% and retry up to 3 times.
+
+-spec open_eventually(File, Modes) -> {ok, IoDevice} | {error, Reason} when
+      File :: Filename | iodata(),
+      Filename :: file:name_all(),
+      Modes :: [file:mode() | ram | directory],
+      IoDevice :: file:io_device(),
+      Reason :: file:posix() | badarg | system_limit.
+
+open_eventually(File, Modes) ->
+    open_eventually(File, Modes, 3).
+
+open_eventually(_, _, 0) ->
+    {error, eacces};
+open_eventually(File, Modes, N) ->
+    case file:open(File, Modes) of
+        OK = {ok, _} ->
+            OK;
+        %% When the current write file was recently deleted it
+        %% is possible on Windows to get an {error,eacces}.
+        %% Sometimes Windows sets the files to "DELETE PENDING"
+        %% state and delays deletion a bit. So we wait 10ms and
+        %% try again up to 3 times.
+        {error, eacces} ->
+            timer:sleep(10),
+            open_eventually(File, Modes, N - 1)
     end.
