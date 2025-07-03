@@ -52,6 +52,7 @@ Rules.
 -             : {token, {'-', TokenLine}}.
 \*            : {token, {'*', TokenLine}}.
 /             : {token, {'/', TokenLine}}.
+\%            : {token, {'%', TokenLine}}.
 
 % Parentheses and comma
 \(            : {token, {'(', TokenLine}}.

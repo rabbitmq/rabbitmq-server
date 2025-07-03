@@ -24,7 +24,7 @@ Nonterminals
 Terminals
     integer float boolean string identifier
     '=' '<>' '>' '<' '>=' '<='
-    '+' '-' '*' '/'
+    '+' '-' '*' '/' '%'
     'AND' 'OR' 'NOT'
     'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
     '(' ')' ','.
@@ -36,7 +36,7 @@ Left 100 'OR'.
 Left 200 'AND'.
 Nonassoc 300 '=' '<>' '>' '<' '>=' '<='.
 Left 400 '+' '-'.
-Left 500 '*' '/'.
+Left 500 '*' '/' '%'.
 Unary 600 'NOT'.
 
 %% "A selector is a conditional expression"
@@ -91,6 +91,7 @@ additive_expr -> multiplicative_expr : '$1'.
 
 multiplicative_expr -> multiplicative_expr '*' unary_expr : {'*', '$1', '$3'}.
 multiplicative_expr -> multiplicative_expr '/' unary_expr : {'/', '$1', '$3'}.
+multiplicative_expr -> multiplicative_expr '%' unary_expr : {'%', '$1', '$3'}.
 multiplicative_expr -> unary_expr : '$1'.
 
 %% Handle unary operators through grammar structure instead of precedence
