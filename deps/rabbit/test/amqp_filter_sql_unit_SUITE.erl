@@ -193,6 +193,18 @@ arithmetic_operators(_Config) ->
     true = match("quantity / 10 = 10", app_props()),
     true = match("quantity / 10 = 10.000", app_props()),
 
+    %% Modulo
+    true = match("weight % 2 = 1", app_props()),
+    true = match("quantity % weight = 0.00", app_props()),
+    true = match("score = quantity % quantity", app_props()),
+    true = match("quantity % percentage = 25", app_props()),
+    true = match("24 < quantity % percentage", app_props()),
+    true = match("7 % temperature = 2", app_props()), % mod negative number
+    false = match("quantity % score = 0", app_props()), % mod 0
+    true = match("101 % percentage % weight = 1", app_props()), % left associative
+    true = match("(quantity + 1) % percentage % weight = 1", app_props()),
+    true = match("101 % (percentage % 30) = 11", app_props()),
+
     %% Nested arithmetic
     true = match("(weight + 5) * 2 = 20", app_props()),
     true = match("price / (weight - 3) = 5.25", app_props()),
@@ -460,6 +472,8 @@ precedence_and_parentheses(_Config) ->
 
     %% Mixed precedence
     true = match("weight * 2 > 5 + 3", app_props()),
+    true = match("weight = -(-81) % percentage -1", app_props()),
+    true = match("weight -(-2.0) = -(-81) % (percentage -1)", app_props()),
     true = match("price < 20 OR country = 'US' AND weight > 3", app_props()),
     true = match("weight > 3 AND price < 20 OR country = 'US'", app_props()),
     false = match("weight > 3 AND (price > 20 OR country = 'US')", app_props()),
@@ -515,7 +529,7 @@ type_handling(_Config) ->
 
 complex_expressions(_Config) ->
     true = match(
-             "country = 'UK' AND price > 10.0 AND description LIKE '%test%'",
+             "country = 'UK' AND price > 10.0 AND description LIKE '%test%' AND 2 = 101 % 3",
              app_props()
             ),
     true = match(

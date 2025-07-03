@@ -2,7 +2,7 @@
 -module(rabbit_amqp_sql_parser).
 -file("rabbit_amqp_sql_parser.erl", 3).
 -export([parse/1, parse_and_scan/1, format_error/1]).
--file("rabbit_amqp_sql_parser.yrl", 116).
+-file("rabbit_amqp_sql_parser.yrl", 117).
 
 extract_value({_Token, _Line, Value}) -> Value.
 
@@ -358,20 +358,24 @@ yeccpars2(69=S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_33(S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccpars2(70=S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_33(S, Cat, Ss, Stack, T, Ts, Tzr);
-%% yeccpars2(71=S, Cat, Ss, Stack, T, Ts, Tzr) ->
-%%  yeccpars2_71(S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccpars2(71=S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_33(S, Cat, Ss, Stack, T, Ts, Tzr);
 %% yeccpars2(72=S, Cat, Ss, Stack, T, Ts, Tzr) ->
 %%  yeccpars2_72(S, Cat, Ss, Stack, T, Ts, Tzr);
 %% yeccpars2(73=S, Cat, Ss, Stack, T, Ts, Tzr) ->
 %%  yeccpars2_73(S, Cat, Ss, Stack, T, Ts, Tzr);
-yeccpars2(74=S, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccpars2_74(S, Cat, Ss, Stack, T, Ts, Tzr);
-yeccpars2(75=S, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccpars2_75(S, Cat, Ss, Stack, T, Ts, Tzr);
+%% yeccpars2(74=S, Cat, Ss, Stack, T, Ts, Tzr) ->
+%%  yeccpars2_74(S, Cat, Ss, Stack, T, Ts, Tzr);
+%% yeccpars2(75=S, Cat, Ss, Stack, T, Ts, Tzr) ->
+%%  yeccpars2_75(S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccpars2(76=S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_76(S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccpars2(77=S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_77(S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccpars2(78=S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_78(S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccpars2(79=S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_79(S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccpars2(Other, _, _, _, _, _, _) ->
  erlang:error({yecc_bug,"1.4",{missing_state_in_action_table, Other}}).
 
@@ -405,10 +409,12 @@ yeccpars2_3(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 
 -dialyzer({nowarn_function, yeccpars2_4/7}).
 -compile({nowarn_unused_function,  yeccpars2_4/7}).
-yeccpars2_4(S, '*', Ss, Stack, T, Ts, Tzr) ->
+yeccpars2_4(S, '%', Ss, Stack, T, Ts, Tzr) ->
  yeccpars1(S, 69, Ss, Stack, T, Ts, Tzr);
-yeccpars2_4(S, '/', Ss, Stack, T, Ts, Tzr) ->
+yeccpars2_4(S, '*', Ss, Stack, T, Ts, Tzr) ->
  yeccpars1(S, 70, Ss, Stack, T, Ts, Tzr);
+yeccpars2_4(S, '/', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 71, Ss, Stack, T, Ts, Tzr);
 yeccpars2_4(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  NewStack = yeccpars2_4_(Stack),
  yeccgoto_additive_expr(hd(Ss), Cat, Ss, NewStack, T, Ts, Tzr).
@@ -450,7 +456,7 @@ yeccpars2_9(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 -dialyzer({nowarn_function, yeccpars2_10/7}).
 -compile({nowarn_unused_function,  yeccpars2_10/7}).
 yeccpars2_10(S, 'IS', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 74, Ss, Stack, T, Ts, Tzr);
+ yeccpars1(S, 76, Ss, Stack, T, Ts, Tzr);
 yeccpars2_10(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  NewStack = yeccpars2_10_(Stack),
  yeccgoto_primary(hd(Ss), Cat, Ss, NewStack, T, Ts, Tzr).
@@ -841,10 +847,12 @@ yeccpars2_67(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 
 -dialyzer({nowarn_function, yeccpars2_68/7}).
 -compile({nowarn_unused_function,  yeccpars2_68/7}).
-yeccpars2_68(S, '*', Ss, Stack, T, Ts, Tzr) ->
+yeccpars2_68(S, '%', Ss, Stack, T, Ts, Tzr) ->
  yeccpars1(S, 69, Ss, Stack, T, Ts, Tzr);
-yeccpars2_68(S, '/', Ss, Stack, T, Ts, Tzr) ->
+yeccpars2_68(S, '*', Ss, Stack, T, Ts, Tzr) ->
  yeccpars1(S, 70, Ss, Stack, T, Ts, Tzr);
+yeccpars2_68(S, '/', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 71, Ss, Stack, T, Ts, Tzr);
 yeccpars2_68(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  [_,_|Nss] = Ss,
  NewStack = yeccpars2_68_(Stack),
@@ -854,12 +862,7 @@ yeccpars2_68(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 
 %% yeccpars2_70: see yeccpars2_33
 
--dialyzer({nowarn_function, yeccpars2_71/7}).
--compile({nowarn_unused_function,  yeccpars2_71/7}).
-yeccpars2_71(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- [_,_|Nss] = Ss,
- NewStack = yeccpars2_71_(Stack),
- yeccgoto_multiplicative_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
+%% yeccpars2_71: see yeccpars2_33
 
 -dialyzer({nowarn_function, yeccpars2_72/7}).
 -compile({nowarn_unused_function,  yeccpars2_72/7}).
@@ -870,43 +873,59 @@ yeccpars2_72(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 
 -dialyzer({nowarn_function, yeccpars2_73/7}).
 -compile({nowarn_unused_function,  yeccpars2_73/7}).
-yeccpars2_73(S, '*', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 69, Ss, Stack, T, Ts, Tzr);
-yeccpars2_73(S, '/', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 70, Ss, Stack, T, Ts, Tzr);
 yeccpars2_73(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  [_,_|Nss] = Ss,
  NewStack = yeccpars2_73_(Stack),
- yeccgoto_additive_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
+ yeccgoto_multiplicative_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccpars2_74/7}).
 -compile({nowarn_unused_function,  yeccpars2_74/7}).
-yeccpars2_74(S, 'NOT', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 75, Ss, Stack, T, Ts, Tzr);
-yeccpars2_74(S, 'NULL', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 76, Ss, Stack, T, Ts, Tzr);
-yeccpars2_74(_, _, _, _, T, _, _) ->
- yeccerror(T).
+yeccpars2_74(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ [_,_|Nss] = Ss,
+ NewStack = yeccpars2_74_(Stack),
+ yeccgoto_multiplicative_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccpars2_75/7}).
 -compile({nowarn_unused_function,  yeccpars2_75/7}).
-yeccpars2_75(S, 'NULL', Ss, Stack, T, Ts, Tzr) ->
- yeccpars1(S, 77, Ss, Stack, T, Ts, Tzr);
-yeccpars2_75(_, _, _, _, T, _, _) ->
- yeccerror(T).
+yeccpars2_75(S, '%', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 69, Ss, Stack, T, Ts, Tzr);
+yeccpars2_75(S, '*', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 70, Ss, Stack, T, Ts, Tzr);
+yeccpars2_75(S, '/', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 71, Ss, Stack, T, Ts, Tzr);
+yeccpars2_75(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ [_,_|Nss] = Ss,
+ NewStack = yeccpars2_75_(Stack),
+ yeccgoto_additive_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccpars2_76/7}).
 -compile({nowarn_unused_function,  yeccpars2_76/7}).
-yeccpars2_76(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- [_,_|Nss] = Ss,
- NewStack = yeccpars2_76_(Stack),
- yeccgoto_is_null_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
+yeccpars2_76(S, 'NOT', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 77, Ss, Stack, T, Ts, Tzr);
+yeccpars2_76(S, 'NULL', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 78, Ss, Stack, T, Ts, Tzr);
+yeccpars2_76(_, _, _, _, T, _, _) ->
+ yeccerror(T).
 
 -dialyzer({nowarn_function, yeccpars2_77/7}).
 -compile({nowarn_unused_function,  yeccpars2_77/7}).
-yeccpars2_77(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+yeccpars2_77(S, 'NULL', Ss, Stack, T, Ts, Tzr) ->
+ yeccpars1(S, 79, Ss, Stack, T, Ts, Tzr);
+yeccpars2_77(_, _, _, _, T, _, _) ->
+ yeccerror(T).
+
+-dialyzer({nowarn_function, yeccpars2_78/7}).
+-compile({nowarn_unused_function,  yeccpars2_78/7}).
+yeccpars2_78(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ [_,_|Nss] = Ss,
+ NewStack = yeccpars2_78_(Stack),
+ yeccgoto_is_null_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
+
+-dialyzer({nowarn_function, yeccpars2_79/7}).
+-compile({nowarn_unused_function,  yeccpars2_79/7}).
+yeccpars2_79(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  [_,_,_|Nss] = Ss,
- NewStack = yeccpars2_77_(Stack),
+ NewStack = yeccpars2_79_(Stack),
  yeccgoto_is_null_expr(hd(Nss), Cat, Nss, NewStack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccgoto_additive_expr/7}).
@@ -989,6 +1008,8 @@ yeccgoto_identifier_expr(40=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 yeccgoto_identifier_expr(69=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_29(_S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_identifier_expr(70=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_29(_S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccgoto_identifier_expr(71=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_29(_S, Cat, Ss, Stack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccgoto_in_expr/7}).
@@ -1065,6 +1086,8 @@ yeccgoto_literal(40=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 yeccgoto_literal(69=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_6(_S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_literal(70=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_6(_S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccgoto_literal(71=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_6(_S, Cat, Ss, Stack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccgoto_logical_expr/7}).
@@ -1093,7 +1116,7 @@ yeccgoto_multiplicative_expr(24, Cat, Ss, Stack, T, Ts, Tzr) ->
 yeccgoto_multiplicative_expr(25, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_4(4, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_multiplicative_expr(33, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccpars2_73(73, Cat, Ss, Stack, T, Ts, Tzr);
+ yeccpars2_75(75, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_multiplicative_expr(34, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_68(68, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_multiplicative_expr(35, Cat, Ss, Stack, T, Ts, Tzr) ->
@@ -1144,6 +1167,8 @@ yeccgoto_primary(40=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 yeccgoto_primary(69=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_3(_S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_primary(70=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_3(_S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccgoto_primary(71=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_3(_S, Cat, Ss, Stack, T, Ts, Tzr).
 
 -dialyzer({nowarn_function, yeccgoto_selector/7}).
@@ -1198,14 +1223,16 @@ yeccgoto_unary_expr(39=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 yeccgoto_unary_expr(40=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_1(_S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_unary_expr(69=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccpars2_72(_S, Cat, Ss, Stack, T, Ts, Tzr);
+ yeccpars2_74(_S, Cat, Ss, Stack, T, Ts, Tzr);
 yeccgoto_unary_expr(70=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccpars2_71(_S, Cat, Ss, Stack, T, Ts, Tzr).
+ yeccpars2_73(_S, Cat, Ss, Stack, T, Ts, Tzr);
+yeccgoto_unary_expr(71=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
+ yeccpars2_72(_S, Cat, Ss, Stack, T, Ts, Tzr).
 
 -compile({inline,yeccpars2_1_/1}).
 -dialyzer({nowarn_function, yeccpars2_1_/1}).
 -compile({nowarn_unused_function,  yeccpars2_1_/1}).
--file("rabbit_amqp_sql_parser.yrl", 90).
+-file("rabbit_amqp_sql_parser.yrl", 91).
 yeccpars2_1_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1215,7 +1242,7 @@ yeccpars2_1_(__Stack0) ->
 -compile({inline,yeccpars2_3_/1}).
 -dialyzer({nowarn_function, yeccpars2_3_/1}).
 -compile({nowarn_unused_function,  yeccpars2_3_/1}).
--file("rabbit_amqp_sql_parser.yrl", 95).
+-file("rabbit_amqp_sql_parser.yrl", 96).
 yeccpars2_3_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1245,7 +1272,7 @@ yeccpars2_5_(__Stack0) ->
 -compile({inline,yeccpars2_6_/1}).
 -dialyzer({nowarn_function, yeccpars2_6_/1}).
 -compile({nowarn_unused_function,  yeccpars2_6_/1}).
--file("rabbit_amqp_sql_parser.yrl", 99).
+-file("rabbit_amqp_sql_parser.yrl", 100).
 yeccpars2_6_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1285,7 +1312,7 @@ yeccpars2_9_(__Stack0) ->
 -compile({inline,yeccpars2_10_/1}).
 -dialyzer({nowarn_function, yeccpars2_10_/1}).
 -compile({nowarn_unused_function,  yeccpars2_10_/1}).
--file("rabbit_amqp_sql_parser.yrl", 100).
+-file("rabbit_amqp_sql_parser.yrl", 101).
 yeccpars2_10_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1325,7 +1352,7 @@ yeccpars2_13_(__Stack0) ->
 -compile({inline,yeccpars2_18_/1}).
 -dialyzer({nowarn_function, yeccpars2_18_/1}).
 -compile({nowarn_unused_function,  yeccpars2_18_/1}).
--file("rabbit_amqp_sql_parser.yrl", 110).
+-file("rabbit_amqp_sql_parser.yrl", 111).
 yeccpars2_18_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1335,7 +1362,7 @@ yeccpars2_18_(__Stack0) ->
 -compile({inline,yeccpars2_19_/1}).
 -dialyzer({nowarn_function, yeccpars2_19_/1}).
 -compile({nowarn_unused_function,  yeccpars2_19_/1}).
--file("rabbit_amqp_sql_parser.yrl", 108).
+-file("rabbit_amqp_sql_parser.yrl", 109).
 yeccpars2_19_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1345,7 +1372,7 @@ yeccpars2_19_(__Stack0) ->
 -compile({inline,yeccpars2_20_/1}).
 -dialyzer({nowarn_function, yeccpars2_20_/1}).
 -compile({nowarn_unused_function,  yeccpars2_20_/1}).
--file("rabbit_amqp_sql_parser.yrl", 103).
+-file("rabbit_amqp_sql_parser.yrl", 104).
 yeccpars2_20_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1356,7 +1383,7 @@ yeccpars2_20_(__Stack0) ->
 -compile({inline,yeccpars2_21_/1}).
 -dialyzer({nowarn_function, yeccpars2_21_/1}).
 -compile({nowarn_unused_function,  yeccpars2_21_/1}).
--file("rabbit_amqp_sql_parser.yrl", 107).
+-file("rabbit_amqp_sql_parser.yrl", 108).
 yeccpars2_21_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1366,7 +1393,7 @@ yeccpars2_21_(__Stack0) ->
 -compile({inline,yeccpars2_22_/1}).
 -dialyzer({nowarn_function, yeccpars2_22_/1}).
 -compile({nowarn_unused_function,  yeccpars2_22_/1}).
--file("rabbit_amqp_sql_parser.yrl", 109).
+-file("rabbit_amqp_sql_parser.yrl", 110).
 yeccpars2_22_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1406,7 +1433,7 @@ yeccpars2_27_(__Stack0) ->
 -compile({inline,yeccpars2_28_/1}).
 -dialyzer({nowarn_function, yeccpars2_28_/1}).
 -compile({nowarn_unused_function,  yeccpars2_28_/1}).
--file("rabbit_amqp_sql_parser.yrl", 94).
+-file("rabbit_amqp_sql_parser.yrl", 95).
 yeccpars2_28_(__Stack0) ->
  [___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1416,7 +1443,7 @@ yeccpars2_28_(__Stack0) ->
 -compile({inline,yeccpars2_29_/1}).
 -dialyzer({nowarn_function, yeccpars2_29_/1}).
 -compile({nowarn_unused_function,  yeccpars2_29_/1}).
--file("rabbit_amqp_sql_parser.yrl", 100).
+-file("rabbit_amqp_sql_parser.yrl", 101).
 yeccpars2_29_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1426,7 +1453,7 @@ yeccpars2_29_(__Stack0) ->
 -compile({inline,yeccpars2_30_/1}).
 -dialyzer({nowarn_function, yeccpars2_30_/1}).
 -compile({nowarn_unused_function,  yeccpars2_30_/1}).
--file("rabbit_amqp_sql_parser.yrl", 93).
+-file("rabbit_amqp_sql_parser.yrl", 94).
 yeccpars2_30_(__Stack0) ->
  [___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1436,7 +1463,7 @@ yeccpars2_30_(__Stack0) ->
 -compile({inline,yeccpars2_32_/1}).
 -dialyzer({nowarn_function, yeccpars2_32_/1}).
 -compile({nowarn_unused_function,  yeccpars2_32_/1}).
--file("rabbit_amqp_sql_parser.yrl", 98).
+-file("rabbit_amqp_sql_parser.yrl", 99).
 yeccpars2_32_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1607,55 +1634,65 @@ yeccpars2_68_(__Stack0) ->
                                                          {'-', ___1, ___3}
   end | __Stack].
 
--compile({inline,yeccpars2_71_/1}).
--dialyzer({nowarn_function, yeccpars2_71_/1}).
--compile({nowarn_unused_function,  yeccpars2_71_/1}).
+-compile({inline,yeccpars2_72_/1}).
+-dialyzer({nowarn_function, yeccpars2_72_/1}).
+-compile({nowarn_unused_function,  yeccpars2_72_/1}).
 -file("rabbit_amqp_sql_parser.yrl", 89).
-yeccpars2_71_(__Stack0) ->
+yeccpars2_72_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
                                                             {'/', ___1, ___3}
   end | __Stack].
 
--compile({inline,yeccpars2_72_/1}).
--dialyzer({nowarn_function, yeccpars2_72_/1}).
--compile({nowarn_unused_function,  yeccpars2_72_/1}).
+-compile({inline,yeccpars2_73_/1}).
+-dialyzer({nowarn_function, yeccpars2_73_/1}).
+-compile({nowarn_unused_function,  yeccpars2_73_/1}).
 -file("rabbit_amqp_sql_parser.yrl", 88).
-yeccpars2_72_(__Stack0) ->
+yeccpars2_73_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
                                                             {'*', ___1, ___3}
   end | __Stack].
 
--compile({inline,yeccpars2_73_/1}).
--dialyzer({nowarn_function, yeccpars2_73_/1}).
--compile({nowarn_unused_function,  yeccpars2_73_/1}).
+-compile({inline,yeccpars2_74_/1}).
+-dialyzer({nowarn_function, yeccpars2_74_/1}).
+-compile({nowarn_unused_function,  yeccpars2_74_/1}).
+-file("rabbit_amqp_sql_parser.yrl", 90).
+yeccpars2_74_(__Stack0) ->
+ [___3,___2,___1 | __Stack] = __Stack0,
+ [begin
+                                                            {'%', ___1, ___3}
+  end | __Stack].
+
+-compile({inline,yeccpars2_75_/1}).
+-dialyzer({nowarn_function, yeccpars2_75_/1}).
+-compile({nowarn_unused_function,  yeccpars2_75_/1}).
 -file("rabbit_amqp_sql_parser.yrl", 84).
-yeccpars2_73_(__Stack0) ->
+yeccpars2_75_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
                                                          {'+', ___1, ___3}
   end | __Stack].
 
--compile({inline,yeccpars2_76_/1}).
--dialyzer({nowarn_function, yeccpars2_76_/1}).
--compile({nowarn_unused_function,  yeccpars2_76_/1}).
+-compile({inline,yeccpars2_78_/1}).
+-dialyzer({nowarn_function, yeccpars2_78_/1}).
+-compile({nowarn_unused_function,  yeccpars2_78_/1}).
 -file("rabbit_amqp_sql_parser.yrl", 80).
-yeccpars2_76_(__Stack0) ->
+yeccpars2_78_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
                                               {'is_null', ___1}
   end | __Stack].
 
--compile({inline,yeccpars2_77_/1}).
--dialyzer({nowarn_function, yeccpars2_77_/1}).
--compile({nowarn_unused_function,  yeccpars2_77_/1}).
+-compile({inline,yeccpars2_79_/1}).
+-dialyzer({nowarn_function, yeccpars2_79_/1}).
+-compile({nowarn_unused_function,  yeccpars2_79_/1}).
 -file("rabbit_amqp_sql_parser.yrl", 81).
-yeccpars2_77_(__Stack0) ->
+yeccpars2_79_(__Stack0) ->
  [___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
                                                     {'not', {'is_null', ___1}}
   end | __Stack].
 
 
--file("rabbit_amqp_sql_parser.yrl", 135).
+-file("rabbit_amqp_sql_parser.yrl", 136).

@@ -140,7 +140,8 @@ eval0({Op, Expr1, Expr2}, Msg)
   when Op =:= '+' orelse
        Op =:= '-' orelse
        Op =:= '*' orelse
-       Op =:= '/' ->
+       Op =:= '/' orelse
+       Op =:= '%' ->
     arithmetic(Op, eval0(Expr1, Msg), eval0(Expr2, Msg));
 
 %% Unary operators
@@ -209,6 +210,8 @@ arithmetic('*', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left * Right;
 arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) andalso Right /= 0 ->
     Left / Right;
+arithmetic('%', Left, Right) when is_integer(Left) andalso is_integer(Right) andalso Right =/= 0 ->
+    Left rem Right;
 arithmetic(_, _, _) ->
     undefined.
 
