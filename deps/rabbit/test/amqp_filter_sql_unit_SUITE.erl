@@ -43,6 +43,7 @@ groups() ->
        header_section,
        properties_section,
        multiple_sections,
+       section_qualifier,
        parse_errors
       ]
      }].
@@ -693,13 +694,13 @@ header_section(_Config) ->
     Hdr = #'v1_0.header'{priority = {ubyte, 7}},
     Ps = #'v1_0.properties'{},
     APs = [],
-    true = match("header.priority > 5", Hdr, Ps, APs),
-    true = match("header.priority = 7", Hdr, Ps, APs),
-    false = match("header.priority < 7", Hdr, Ps, APs),
+    true = match("h.priority > 5", Hdr, Ps, APs),
+    true = match("h.priority = 7", Hdr, Ps, APs),
+    false = match("h.priority < 7", Hdr, Ps, APs),
 
     %% Since the default priority is 4, we expect the following expression to evaluate
     %% to true if matched against a message without an explicit priority level set.
-    true = match("header.priority = 4", []).
+    true = match("h.priority = 4", []).
 
 properties_section(_Config) ->
     Ps = #'v1_0.properties'{
@@ -718,69 +719,69 @@ properties_section(_Config) ->
             reply_to_group_id = {utf8, <<"other group ID">>}},
     APs = [],
 
-    true = match("properties.message-id = 'id-123'", Ps, APs),
-    false = match("'id-123' <> properties.message-id", Ps, APs),
-    true = match("properties.message-id LIKE 'id-%'", Ps, APs),
-    true = match("properties.message-id IN ('id-123', 'id-456')", Ps, APs),
+    true = match("p.message-id = 'id-123'", Ps, APs),
+    false = match("'id-123' <> p.message-id", Ps, APs),
+    true = match("p.message-id LIKE 'id-%'", Ps, APs),
+    true = match("p.message-id IN ('id-123', 'id-456')", Ps, APs),
 
-    true = match("properties.user-id = 'some user ID'", Ps, APs),
-    true = match("properties.user-id LIKE '%user%'", Ps, APs),
-    false = match("properties.user-id = 'other user ID'", Ps, APs),
+    true = match("p.user-id = 'some user ID'", Ps, APs),
+    true = match("p.user-id LIKE '%user%'", Ps, APs),
+    false = match("p.user-id = 'other user ID'", Ps, APs),
 
-    true = match("properties.to = 'to some queue'", Ps, APs),
-    true = match("properties.to LIKE 'to some%'", Ps, APs),
-    true = match("properties.to NOT LIKE '%topic'", Ps, APs),
+    true = match("p.to = 'to some queue'", Ps, APs),
+    true = match("p.to LIKE 'to some%'", Ps, APs),
+    true = match("p.to NOT LIKE '%topic'", Ps, APs),
 
-    true = match("properties.subject = 'some subject'", Ps, APs),
-    true = match("properties.subject LIKE '%subject'", Ps, APs),
-    true = match("properties.subject IN ('some subject', 'other subject')", Ps, APs),
+    true = match("p.subject = 'some subject'", Ps, APs),
+    true = match("p.subject LIKE '%subject'", Ps, APs),
+    true = match("p.subject IN ('some subject', 'other subject')", Ps, APs),
 
-    true = match("properties.reply-to = 'reply to some topic'", Ps, APs),
-    true = match("properties.reply-to LIKE 'reply%topic'", Ps, APs),
-    false = match("properties.reply-to LIKE 'reply%queue'", Ps, APs),
+    true = match("p.reply-to = 'reply to some topic'", Ps, APs),
+    true = match("p.reply-to LIKE 'reply%topic'", Ps, APs),
+    false = match("p.reply-to LIKE 'reply%queue'", Ps, APs),
 
-    true = match("properties.correlation-id = 789", Ps, APs),
-    true = match("500 < properties.correlation-id", Ps, APs),
-    true = match("properties.correlation-id BETWEEN 700 AND 800", Ps, APs),
-    false = match("properties.correlation-id < 700", Ps, APs),
+    true = match("p.correlation-id = 789", Ps, APs),
+    true = match("500 < p.correlation-id", Ps, APs),
+    true = match("p.correlation-id BETWEEN 700 AND 800", Ps, APs),
+    false = match("p.correlation-id < 700", Ps, APs),
 
-    true = match("properties.content-type = 'text/plain'", Ps, APs),
-    true = match("properties.content-type LIKE 'text/%'", Ps, APs),
-    true = match("properties.content-type IN ('text/plain', 'text/html')", Ps, APs),
+    true = match("p.content-type = 'text/plain'", Ps, APs),
+    true = match("p.content-type LIKE 'text/%'", Ps, APs),
+    true = match("p.content-type IN ('text/plain', 'text/html')", Ps, APs),
 
-    true = match("'deflate' = properties.content-encoding", Ps, APs),
-    false = match("properties.content-encoding = 'gzip'", Ps, APs),
-    true = match("properties.content-encoding NOT IN ('gzip', 'compress')", Ps, APs),
+    true = match("'deflate' = p.content-encoding", Ps, APs),
+    false = match("p.content-encoding = 'gzip'", Ps, APs),
+    true = match("p.content-encoding NOT IN ('gzip', 'compress')", Ps, APs),
 
-    true = match("properties.absolute-expiry-time = 1311999988888", Ps, APs),
-    true = match("properties.absolute-expiry-time > 1311999988000", Ps, APs),
-    true = match("properties.absolute-expiry-time BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
+    true = match("p.absolute-expiry-time = 1311999988888", Ps, APs),
+    true = match("p.absolute-expiry-time > 1311999988000", Ps, APs),
+    true = match("p.absolute-expiry-time BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
 
-    true = match("properties.creation-time = 1311704463521", Ps, APs),
-    true = match("properties.creation-time < 1311999988888", Ps, APs),
-    true = match("properties.creation-time NOT BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
+    true = match("p.creation-time = 1311704463521", Ps, APs),
+    true = match("p.creation-time < 1311999988888", Ps, APs),
+    true = match("p.creation-time NOT BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
 
-    true = match("properties.group-id = 'some group ID'", Ps, APs),
-    true = match("properties.group-id LIKE 'some%ID'", Ps, APs),
-    false = match("properties.group-id = 'other group ID'", Ps, APs),
+    true = match("p.group-id = 'some group ID'", Ps, APs),
+    true = match("p.group-id LIKE 'some%ID'", Ps, APs),
+    false = match("p.group-id = 'other group ID'", Ps, APs),
 
-    true = match("properties.group-sequence = 999", Ps, APs),
-    true = match("properties.group-sequence >= 999", Ps, APs),
-    true = match("properties.group-sequence BETWEEN 900 AND 1000", Ps, APs),
-    false = match("properties.group-sequence > 999", Ps, APs),
+    true = match("p.group-sequence = 999", Ps, APs),
+    true = match("p.group-sequence >= 999", Ps, APs),
+    true = match("p.group-sequence BETWEEN 900 AND 1000", Ps, APs),
+    false = match("p.group-sequence > 999", Ps, APs),
 
-    true = match("properties.reply-to-group-id = 'other group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id LIKE '%group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id <> 'some group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id IS NOT NULL", Ps, APs),
-    false = match("properties.reply-to-group-id IS NULL", Ps, APs),
+    true = match("p.reply-to-group-id = 'other group ID'", Ps, APs),
+    true = match("p.reply-to-group-id LIKE '%group ID'", Ps, APs),
+    true = match("p.reply-to-group-id <> 'some group ID'", Ps, APs),
+    true = match("p.reply-to-group-id IS NOT NULL", Ps, APs),
+    false = match("p.reply-to-group-id IS NULL", Ps, APs),
 
-    true = match("properties.message-id = 'id-123' and 'some subject' = properties.subject", Ps, APs),
-    true = match("properties.group-sequence < 500 or properties.correlation-id > 700", Ps, APs),
-    true = match("(properties.content-type LIKE 'text/%') AND properties.content-encoding = 'deflate'", Ps, APs),
+    true = match("p.message-id = 'id-123' and 'some subject' = p.subject", Ps, APs),
+    true = match("p.group-sequence < 500 or p.correlation-id > 700", Ps, APs),
+    true = match("(p.content-type LIKE 'text/%') AND p.content-encoding = 'deflate'", Ps, APs),
 
-    true = match("properties.subject IS NULL", #'v1_0.properties'{}, APs),
-    false = match("properties.subject IS NOT NULL", #'v1_0.properties'{}, APs).
+    true = match("p.subject IS NULL", #'v1_0.properties'{}, APs),
+    false = match("p.subject IS NOT NULL", #'v1_0.properties'{}, APs).
 
 multiple_sections(_Config) ->
     Hdr = #'v1_0.header'{durable = true,
@@ -803,6 +804,29 @@ multiple_sections(_Config) ->
 
     true = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence > 90", Hdr, Ps, APs),
     false = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence < 90", Hdr, Ps, APs).
+
+section_qualifier(_Config) ->
+    Hdr = #'v1_0.header'{priority = {ubyte, 7}},
+    Ps = #'v1_0.properties'{message_id = {utf8, <<"id-123">>}},
+    APs = [{{utf8, <<"key_1">>}, {byte, -1}}],
+
+    %% supported section qualifiers
+    true = match("header.priority = 7", Hdr, Ps, APs),
+    true = match("h.priority = 7", Hdr, Ps, APs),
+    true = match("properties.message-id = 'id-123'", Hdr, Ps, APs),
+    true = match("p.message-id = 'id-123'", Hdr, Ps, APs),
+    true = match("application-properties.key_1 = -1", Hdr, Ps, APs),
+    true = match("a.key_1 = -1", Hdr, Ps, APs),
+    true = match("key_1 = -1", Hdr, Ps, APs),
+
+    %% (currently) unsupported section qualifiers
+    ?assertEqual(error, parse("delivery-annotations.abc")),
+    ?assertEqual(error, parse("d.abc")),
+    ?assertEqual(error, parse("message-annotations.abc")),
+    ?assertEqual(error, parse("m.abc")),
+    ?assertEqual(error, parse("footer.abc")),
+    ?assertEqual(error, parse("f.abc")),
+    ok.
 
 parse_errors(_Config) ->
     %% Parsing a non-UTF-8 encoded message selector should fail.
