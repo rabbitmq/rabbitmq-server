@@ -3986,7 +3986,7 @@ receive_and_ack(Ch) ->
     end.
 
 message_ttl_policy(Config) ->
-    %% Using ttl is very difficul to guarantee 100% test rate success, unless
+    %% Using ttl is very difficult to guarantee 100% test rate success, unless
     %% using really high ttl values. Previously, this test used 1s and 3s ttl,
     %% but expected to see first the messages in the queue and then the messages
     %% gone. A slow CI run, would fail the first assertion as the messages would
@@ -4006,9 +4006,8 @@ message_ttl_policy(Config) ->
     VHost = <<"%2F">>,
     RaName = binary_to_atom(<<VHost/binary, "_", QQ/binary>>, utf8),
 
-    QueryFun = fun rabbit_fifo:overview/1,
-    ?awaitMatch({ok, {_, #{config := #{msg_ttl := 1000}}}, _},
-                rpc:call(Server, ra, local_query, [RaName, QueryFun]),
+    ?awaitMatch({ok, #{machine := #{config := #{msg_ttl := 1000}}}, _},
+                rpc:call(Server, ra, member_overview, [RaName]),
                 ?DEFAULT_AWAIT),
     Msg1 = <<"msg1">>,
     Msg2 = <<"msg11">>,
@@ -4020,8 +4019,8 @@ message_ttl_policy(Config) ->
     ok = rabbit_ct_broker_helpers:set_policy(Config, 0, <<"msg-ttl">>,
                                              QQ, <<"queues">>,
                                              [{<<"message-ttl">>, 1000}]),
-    {ok, {_, Overview2}, _} = rpc:call(Server, ra, local_query, [RaName, QueryFun]),
-    ?assertMatch(#{config := #{msg_ttl := 1000}}, Overview2),
+    {ok, Overview2, _} = rpc:call(Server, ra, member_overview, [RaName]),
+    ?assertMatch(#{machine := #{config := #{msg_ttl := 1000}}}, Overview2),
     publish(Ch, QQ, Msg1),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
