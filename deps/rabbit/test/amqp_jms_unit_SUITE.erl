@@ -884,7 +884,7 @@ match(Selector, Header, Props, AppProps)
     rabbit_amqp_filter_jms:eval(ParsedSelector, Mc).
 
 parse(Selector) ->
-    Descriptor = {ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER},
+    Descriptor = {ulong, ?DESCRIPTOR_CODE_SQL_FILTER},
     Filter = {described, Descriptor, {utf8, Selector}},
     rabbit_amqp_filter_jms:parse(Filter).
 
