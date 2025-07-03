@@ -27,7 +27,6 @@ Rules.
 [nN][oO][tT]   : {token, {'NOT', TokenLine}}.
 
 % Special operators (case insensitive)
-[bB][eE][tT][wW][eE][eE][nN] : {token, {'BETWEEN', TokenLine}}.
 [lL][iI][kK][eE]             : {token, {'LIKE', TokenLine}}.
 [iI][nN]                     : {token, {'IN', TokenLine}}.
 [iI][sS]                     : {token, {'IS', TokenLine}}.
