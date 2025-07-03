@@ -30,7 +30,6 @@ groups() ->
        string_comparison,
        like_operator,
        in_operator,
-       between_operator,
        null_handling,
        literals,
        scientific_notation,
@@ -348,43 +347,6 @@ in_operator(_Config) ->
     false = match("missing NOT IN ('UK', 'US')", app_props()),
     false = match("absent NOT IN ('UK', 'US')", app_props()).
 
-between_operator(_Config) ->
-    %% Basic BETWEEN operations
-    true = match("weight BETWEEN 3 AND 7", app_props()),
-    true = match("weight BETWEEN 5 AND 7", app_props()),
-    true = match("weight BETWEEN 3 AND 5", app_props()),
-    false = match("weight BETWEEN 6 AND 10", app_props()),
-    true = match("price BETWEEN 10 AND 11", app_props()),
-    true = match("price BETWEEN 10 AND 10.5", app_props()),
-    false = match("price BETWEEN -1 AND 10", app_props()),
-    false = match("score BETWEEN tiny_value AND quantity", app_props()),
-    true = match("score BETWEEN -tiny_value AND quantity", app_props()),
-
-    %% NOT BETWEEN
-    true = match("weight NOT BETWEEN 6 AND 10", app_props()),
-    false = match("weight NOT BETWEEN 3 AND 7", app_props()),
-    false = match("weight NOT BETWEEN 3 AND 5", app_props()),
-    true = match("score NOT BETWEEN tiny_value AND quantity", app_props()),
-    false = match("score NOT BETWEEN -tiny_value AND quantity", app_props()),
-
-    %% Combined with other operators
-    true = match("weight BETWEEN 4 AND 6 AND country = 'UK'", app_props()),
-    true = match("(price BETWEEN 20 AND 30) OR (weight BETWEEN 5 AND 6)", app_props()),
-
-    %% "a string cannot be used in an arithmetic expression"
-    false = match("weight BETWEEN 1 AND 'Z'", app_props()),
-    false = match("country BETWEEN 'A' AND 'Z'", app_props()),
-
-    %% "Comparison or arithmetic with an unknown value always yields an unknown value."
-    false = match("weight BETWEEN absent AND 10", app_props()),
-    false = match("weight BETWEEN 2 AND absent", app_props()),
-    false = match("weight BETWEEN absent AND absent", app_props()),
-    false = match("absent BETWEEN 2 AND 10", app_props()),
-    false = match("weight NOT BETWEEN absent AND 10", app_props()),
-    false = match("weight NOT BETWEEN 2 AND absent", app_props()),
-    false = match("weight NOT BETWEEN absent AND absent", app_props()),
-    false = match("absent NOT BETWEEN 2 AND 10", app_props()).
-
 null_handling(_Config) ->
     %% IS NULL / IS NOT NULL
     true = match("missing IS NULL", app_props()),
@@ -474,7 +436,6 @@ scientific_notation(_Config) ->
     %% Comparisons with scientific notation
     true = match("distance > 1E6", app_props()),
     true = match("tiny_value < 1E-3", app_props()),
-    true = match("distance BETWEEN 1E6 AND 2E6", app_props()),
 
     %% Mixed numeric formats
     true = match("distance / 1200 = 1000", app_props()),
@@ -551,7 +512,7 @@ type_handling(_Config) ->
 
 complex_expressions(_Config) ->
     true = match(
-             "country = 'UK' AND price > 10.0 AND (weight BETWEEN 4 AND 6) AND description LIKE '%test%'",
+             "country = 'UK' AND price > 10.0 AND description LIKE '%test%'",
              app_props()
             ),
     true = match(
@@ -574,7 +535,7 @@ complex_expressions(_Config) ->
     true = match(
              "((country = 'UK' OR country = 'US') AND (city IN ('London', 'New York', 'Paris'))) OR " ++
              "(price * (1 - discount) < 10.0 AND quantity > 50 AND description LIKE '%test%') OR " ++
-             "(active = TRUE AND premium = FALSE AND (weight BETWEEN 4 AND 10))",
+             "(active AND NOT premium)",
              app_props()
             ).
 
@@ -590,8 +551,6 @@ case_sensitivity(_Config) ->
     true = match("country = 'France' or weight < 6", AppProps),
     true = match("NoT country = 'France'", AppProps),
     true = match("not country = 'France'", AppProps),
-    true = match("weight BeTwEeN 3 AnD 7", AppProps),
-    true = match("weight between 3 AnD 7", AppProps),
     true = match("description LiKe '%test%'", AppProps),
     true = match("description like '%test%'", AppProps),
     true = match("country In ('US', 'UK', 'France')", AppProps),
@@ -623,7 +582,7 @@ case_sensitivity(_Config) ->
     false = match("WEIGHT = 5", AppPropsCaseSensitiveKeys),
 
     true = match(
-             "country = 'UK' aNd COUNTRY = 'France' and (weight Between 4 AnD 6) AND Weight = 10",
+             "country = 'UK' aNd COUNTRY = 'France' and weight < 6 AND Weight = 10",
              AppPropsCaseSensitiveKeys
             ).
 
@@ -742,7 +701,6 @@ properties_section(_Config) ->
 
     true = match("p.correlation-id = 789", Ps, APs),
     true = match("500 < p.correlation-id", Ps, APs),
-    true = match("p.correlation-id BETWEEN 700 AND 800", Ps, APs),
     false = match("p.correlation-id < 700", Ps, APs),
 
     true = match("p.content-type = 'text/plain'", Ps, APs),
@@ -755,11 +713,9 @@ properties_section(_Config) ->
 
     true = match("p.absolute-expiry-time = 1311999988888", Ps, APs),
     true = match("p.absolute-expiry-time > 1311999988000", Ps, APs),
-    true = match("p.absolute-expiry-time BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
 
     true = match("p.creation-time = 1311704463521", Ps, APs),
     true = match("p.creation-time < 1311999988888", Ps, APs),
-    true = match("p.creation-time NOT BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
 
     true = match("p.group-id = 'some group ID'", Ps, APs),
     true = match("p.group-id LIKE 'some%ID'", Ps, APs),
@@ -767,7 +723,6 @@ properties_section(_Config) ->
 
     true = match("p.group-sequence = 999", Ps, APs),
     true = match("p.group-sequence >= 999", Ps, APs),
-    true = match("p.group-sequence BETWEEN 900 AND 1000", Ps, APs),
     false = match("p.group-sequence > 999", Ps, APs),
 
     true = match("p.reply-to-group-id = 'other group ID'", Ps, APs),

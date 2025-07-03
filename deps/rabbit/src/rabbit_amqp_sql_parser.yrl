@@ -17,7 +17,6 @@ Nonterminals
     identifier_expr
     string_list
     string_item
-    between_expr
     in_expr
     like_expr
     is_null_expr.
@@ -27,7 +26,7 @@ Terminals
     '=' '<>' '>' '<' '>=' '<='
     '+' '-' '*' '/'
     'AND' 'OR' 'NOT'
-    'BETWEEN' 'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
+    'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
     '(' ')' ','.
 
 Rootsymbol selector.
@@ -59,15 +58,10 @@ comparison_expr -> additive_expr '>' additive_expr : {'>', '$1', '$3'}.
 comparison_expr -> additive_expr '<' additive_expr : {'<', '$1', '$3'}.
 comparison_expr -> additive_expr '>=' additive_expr : {'>=', '$1', '$3'}.
 comparison_expr -> additive_expr '<=' additive_expr : {'<=', '$1', '$3'}.
-comparison_expr -> between_expr : '$1'.
 comparison_expr -> like_expr : '$1'.
 comparison_expr -> in_expr : '$1'.
 comparison_expr -> is_null_expr : '$1'.
 comparison_expr -> additive_expr : '$1'.
-
-%% BETWEEN expression
-between_expr -> additive_expr 'BETWEEN' additive_expr 'AND' additive_expr : {'between', '$1', '$3', '$5'}.
-between_expr -> additive_expr 'NOT' 'BETWEEN' additive_expr 'AND' additive_expr : {'not', {'between', '$1', '$4', '$6'}}.
 
 %% LIKE expression
 like_expr -> additive_expr 'LIKE' string :

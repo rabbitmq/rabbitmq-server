@@ -158,12 +158,6 @@ eval0({unary_minus, Expr}, Msg) ->
     end;
 
 %% Special operators
-eval0({'between', Expr, From, To}, Msg) ->
-    Value = eval0(Expr, Msg),
-    FromVal = eval0(From, Msg),
-    ToVal = eval0(To, Msg),
-    between(Value, FromVal, ToVal);
-
 eval0({'in', Expr, ValueList}, Msg) ->
     Value = eval0(Expr, Msg),
     is_in(Value, ValueList);
@@ -217,21 +211,6 @@ arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) andal
     Left / Right;
 arithmetic(_, _, _) ->
     undefined.
-
-between(Value, From, To)
-  when Value =:= undefined orelse
-       From =:= undefined orelse
-       To =:= undefined ->
-    undefined;
-between(Value, From, To)
-  when is_number(Value) andalso
-       is_number(From) andalso
-       is_number(To) ->
-    From =< Value andalso Value =< To;
-between(_, _, _) ->
-    %% BETWEEN requires arithmetic expressions
-    %% "a string cannot be used in an arithmetic expression"
-    false.
 
 is_in(undefined, _) ->
     %% "If identifier of an IN or NOT IN operation is NULL,
