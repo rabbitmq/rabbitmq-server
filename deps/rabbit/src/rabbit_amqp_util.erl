@@ -20,26 +20,60 @@
 -type field_name() :: header_field_name() | properties_field_name().
 -export_type([field_name/0]).
 
+%% [Filter-Expressions-v1.0] § 6.4.4.4
+%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929312
 -spec section_field_name_to_atom(binary()) -> field_name() | binary().
-section_field_name_to_atom(<<"header.priority">>) -> priority;
-%% ttl, first-acquirer, and delivery-count are unsupported
-%% because setting a JMS message selector on these fields is invalid.
-section_field_name_to_atom(<<"header.", _/binary>> = Bin) -> throw({unsupported_field, Bin});
-section_field_name_to_atom(<<"properties.message-id">>) -> message_id;
-section_field_name_to_atom(<<"properties.user-id">>) -> user_id;
-section_field_name_to_atom(<<"properties.to">>) -> to;
-section_field_name_to_atom(<<"properties.subject">>) -> subject;
-section_field_name_to_atom(<<"properties.reply-to">>) -> reply_to;
-section_field_name_to_atom(<<"properties.correlation-id">>) -> correlation_id;
-section_field_name_to_atom(<<"properties.content-type">>) -> content_type;
-section_field_name_to_atom(<<"properties.content-encoding">>) -> content_encoding;
-section_field_name_to_atom(<<"properties.absolute-expiry-time">>) -> absolute_expiry_time;
-section_field_name_to_atom(<<"properties.creation-time">>) -> creation_time;
-section_field_name_to_atom(<<"properties.group-id">>) -> group_id;
-section_field_name_to_atom(<<"properties.group-sequence">>) -> group_sequence;
-section_field_name_to_atom(<<"properties.reply-to-group-id">>) -> reply_to_group_id;
-section_field_name_to_atom(<<"properties.", _/binary>> = Bin) -> throw({unsupported_field, Bin});
-section_field_name_to_atom(Other) -> Other.
+section_field_name_to_atom(<<"header.", FieldName/binary>>) ->
+    header_field_name_to_atom(FieldName);
+section_field_name_to_atom(<<"h.", FieldName/binary>>) ->
+    header_field_name_to_atom(FieldName);
+section_field_name_to_atom(<<"delivery-annotations.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(<<"d.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(<<"message-annotations.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(<<"m.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(<<"properties.", FieldName/binary>>) ->
+    properties_field_name_to_atom(FieldName);
+section_field_name_to_atom(<<"p.", FieldName/binary>>) ->
+    properties_field_name_to_atom(FieldName);
+section_field_name_to_atom(<<"application-properties.", FieldName/binary>>) ->
+    FieldName;
+section_field_name_to_atom(<<"a.", FieldName/binary>>) ->
+    FieldName;
+section_field_name_to_atom(<<"footer.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(<<"f.", FieldName/binary>>) ->
+    unsupported_field_name(FieldName);
+section_field_name_to_atom(ApplicationPropertiesFieldName) ->
+    %% "When the section is omitted, the assumed section is ‘application-properties’."
+    ApplicationPropertiesFieldName.
+
+header_field_name_to_atom(<<"priority">>) ->
+    priority;
+header_field_name_to_atom(Other) ->
+    unsupported_field_name(Other).
+
+properties_field_name_to_atom(<<"message-id">>) -> message_id;
+properties_field_name_to_atom(<<"user-id">>) -> user_id;
+properties_field_name_to_atom(<<"to">>) -> to;
+properties_field_name_to_atom(<<"subject">>) -> subject;
+properties_field_name_to_atom(<<"reply-to">>) -> reply_to;
+properties_field_name_to_atom(<<"correlation-id">>) -> correlation_id;
+properties_field_name_to_atom(<<"content-type">>) -> content_type;
+properties_field_name_to_atom(<<"content-encoding">>) -> content_encoding;
+properties_field_name_to_atom(<<"absolute-expiry-time">>) -> absolute_expiry_time;
+properties_field_name_to_atom(<<"creation-time">>) -> creation_time;
+properties_field_name_to_atom(<<"group-id">>) -> group_id;
+properties_field_name_to_atom(<<"group-sequence">>) -> group_sequence;
+properties_field_name_to_atom(<<"reply-to-group-id">>) -> reply_to_group_id;
+properties_field_name_to_atom(Other) -> unsupported_field_name(Other).
+
+-spec unsupported_field_name(binary()) -> no_return().
+unsupported_field_name(Name) ->
+    throw({unsupported_field_name, Name}).
 
 -spec capabilities([binary()]) ->
     undefined | {array, symbol, [{symbol, binary()}]}.

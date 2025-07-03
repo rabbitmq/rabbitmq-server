@@ -355,9 +355,9 @@ transform_ast(Ast0, SQL) ->
           end, Ast0) of
         Ast ->
             {ok, Ast}
-    catch {unsupported_field, Name} ->
+    catch {unsupported_field_name, Name} ->
               rabbit_log:warning(
-                "identifier ~ts in SQL expression ~tp is unsupported",
+                "field name ~ts in SQL expression ~tp is unsupported",
                 [Name, SQL]),
               error;
           {invalid_pattern, Reason} ->
