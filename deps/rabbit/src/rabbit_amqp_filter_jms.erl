@@ -291,9 +291,9 @@ get_field_value(Name, Msg) ->
             undefined
     end.
 
-check_descriptor({symbol, ?DESCRIPTOR_NAME_SELECTOR_FILTER}) ->
+check_descriptor({symbol, ?DESCRIPTOR_NAME_SQL_FILTER}) ->
     ok;
-check_descriptor({ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER}) ->
+check_descriptor({ulong, ?DESCRIPTOR_CODE_SQL_FILTER}) ->
     ok;
 check_descriptor(_) ->
     error.
