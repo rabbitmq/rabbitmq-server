@@ -1,8 +1,8 @@
--file("rabbit_jms_selector_parser.yrl", 0).
--module(rabbit_jms_selector_parser).
--file("rabbit_jms_selector_parser.erl", 3).
+-file("rabbit_amqp_sql_parser.yrl", 0).
+-module(rabbit_amqp_sql_parser).
+-file("rabbit_amqp_sql_parser.erl", 3).
 -export([parse/1, parse_and_scan/1, format_error/1]).
--file("rabbit_jms_selector_parser.yrl", 122).
+-file("rabbit_amqp_sql_parser.yrl", 122).
 
 extract_value({_Token, _Line, Value}) -> Value.
 
@@ -212,7 +212,7 @@ yecctoken2string1(Other) ->
 
 
 
--file("rabbit_jms_selector_parser.erl", 215).
+-file("rabbit_amqp_sql_parser.erl", 215).
 
 -dialyzer({nowarn_function, yeccpars2/7}).
 -compile({nowarn_unused_function,  yeccpars2/7}).
@@ -1346,7 +1346,7 @@ yeccgoto_unary_expr(79=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
 -compile({inline,yeccpars2_1_/1}).
 -dialyzer({nowarn_function, yeccpars2_1_/1}).
 -compile({nowarn_unused_function,  yeccpars2_1_/1}).
--file("rabbit_jms_selector_parser.yrl", 96).
+-file("rabbit_amqp_sql_parser.yrl", 96).
 yeccpars2_1_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1356,7 +1356,7 @@ yeccpars2_1_(__Stack0) ->
 -compile({inline,yeccpars2_3_/1}).
 -dialyzer({nowarn_function, yeccpars2_3_/1}).
 -compile({nowarn_unused_function,  yeccpars2_3_/1}).
--file("rabbit_jms_selector_parser.yrl", 101).
+-file("rabbit_amqp_sql_parser.yrl", 101).
 yeccpars2_3_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1366,7 +1366,7 @@ yeccpars2_3_(__Stack0) ->
 -compile({inline,yeccpars2_4_/1}).
 -dialyzer({nowarn_function, yeccpars2_4_/1}).
 -compile({nowarn_unused_function,  yeccpars2_4_/1}).
--file("rabbit_jms_selector_parser.yrl", 92).
+-file("rabbit_amqp_sql_parser.yrl", 92).
 yeccpars2_4_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1376,7 +1376,7 @@ yeccpars2_4_(__Stack0) ->
 -compile({inline,yeccpars2_5_/1}).
 -dialyzer({nowarn_function, yeccpars2_5_/1}).
 -compile({nowarn_unused_function,  yeccpars2_5_/1}).
--file("rabbit_jms_selector_parser.yrl", 43).
+-file("rabbit_amqp_sql_parser.yrl", 43).
 yeccpars2_5_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1386,7 +1386,7 @@ yeccpars2_5_(__Stack0) ->
 -compile({inline,yeccpars2_6_/1}).
 -dialyzer({nowarn_function, yeccpars2_6_/1}).
 -compile({nowarn_unused_function,  yeccpars2_6_/1}).
--file("rabbit_jms_selector_parser.yrl", 105).
+-file("rabbit_amqp_sql_parser.yrl", 105).
 yeccpars2_6_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1396,7 +1396,7 @@ yeccpars2_6_(__Stack0) ->
 -compile({inline,yeccpars2_7_/1}).
 -dialyzer({nowarn_function, yeccpars2_7_/1}).
 -compile({nowarn_unused_function,  yeccpars2_7_/1}).
--file("rabbit_jms_selector_parser.yrl", 59).
+-file("rabbit_amqp_sql_parser.yrl", 59).
 yeccpars2_7_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1406,7 +1406,7 @@ yeccpars2_7_(__Stack0) ->
 -compile({inline,yeccpars2_8_/1}).
 -dialyzer({nowarn_function, yeccpars2_8_/1}).
 -compile({nowarn_unused_function,  yeccpars2_8_/1}).
--file("rabbit_jms_selector_parser.yrl", 61).
+-file("rabbit_amqp_sql_parser.yrl", 61).
 yeccpars2_8_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1416,7 +1416,7 @@ yeccpars2_8_(__Stack0) ->
 -compile({inline,yeccpars2_9_/1}).
 -dialyzer({nowarn_function, yeccpars2_9_/1}).
 -compile({nowarn_unused_function,  yeccpars2_9_/1}).
--file("rabbit_jms_selector_parser.yrl", 60).
+-file("rabbit_amqp_sql_parser.yrl", 60).
 yeccpars2_9_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1426,7 +1426,7 @@ yeccpars2_9_(__Stack0) ->
 -compile({inline,yeccpars2_10_/1}).
 -dialyzer({nowarn_function, yeccpars2_10_/1}).
 -compile({nowarn_unused_function,  yeccpars2_10_/1}).
--file("rabbit_jms_selector_parser.yrl", 106).
+-file("rabbit_amqp_sql_parser.yrl", 106).
 yeccpars2_10_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1436,7 +1436,7 @@ yeccpars2_10_(__Stack0) ->
 -compile({inline,yeccpars2_11_/1}).
 -dialyzer({nowarn_function, yeccpars2_11_/1}).
 -compile({nowarn_unused_function,  yeccpars2_11_/1}).
--file("rabbit_jms_selector_parser.yrl", 40).
+-file("rabbit_amqp_sql_parser.yrl", 40).
 yeccpars2_11_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1446,7 +1446,7 @@ yeccpars2_11_(__Stack0) ->
 -compile({inline,yeccpars2_12_/1}).
 -dialyzer({nowarn_function, yeccpars2_12_/1}).
 -compile({nowarn_unused_function,  yeccpars2_12_/1}).
--file("rabbit_jms_selector_parser.yrl", 49).
+-file("rabbit_amqp_sql_parser.yrl", 49).
 yeccpars2_12_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1456,7 +1456,7 @@ yeccpars2_12_(__Stack0) ->
 -compile({inline,yeccpars2_13_/1}).
 -dialyzer({nowarn_function, yeccpars2_13_/1}).
 -compile({nowarn_unused_function,  yeccpars2_13_/1}).
--file("rabbit_jms_selector_parser.yrl", 58).
+-file("rabbit_amqp_sql_parser.yrl", 58).
 yeccpars2_13_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1466,7 +1466,7 @@ yeccpars2_13_(__Stack0) ->
 -compile({inline,yeccpars2_14_/1}).
 -dialyzer({nowarn_function, yeccpars2_14_/1}).
 -compile({nowarn_unused_function,  yeccpars2_14_/1}).
--file("rabbit_jms_selector_parser.yrl", 62).
+-file("rabbit_amqp_sql_parser.yrl", 62).
 yeccpars2_14_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1476,7 +1476,7 @@ yeccpars2_14_(__Stack0) ->
 -compile({inline,yeccpars2_19_/1}).
 -dialyzer({nowarn_function, yeccpars2_19_/1}).
 -compile({nowarn_unused_function,  yeccpars2_19_/1}).
--file("rabbit_jms_selector_parser.yrl", 116).
+-file("rabbit_amqp_sql_parser.yrl", 116).
 yeccpars2_19_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1486,7 +1486,7 @@ yeccpars2_19_(__Stack0) ->
 -compile({inline,yeccpars2_20_/1}).
 -dialyzer({nowarn_function, yeccpars2_20_/1}).
 -compile({nowarn_unused_function,  yeccpars2_20_/1}).
--file("rabbit_jms_selector_parser.yrl", 114).
+-file("rabbit_amqp_sql_parser.yrl", 114).
 yeccpars2_20_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1496,7 +1496,7 @@ yeccpars2_20_(__Stack0) ->
 -compile({inline,yeccpars2_21_/1}).
 -dialyzer({nowarn_function, yeccpars2_21_/1}).
 -compile({nowarn_unused_function,  yeccpars2_21_/1}).
--file("rabbit_jms_selector_parser.yrl", 109).
+-file("rabbit_amqp_sql_parser.yrl", 109).
 yeccpars2_21_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1507,7 +1507,7 @@ yeccpars2_21_(__Stack0) ->
 -compile({inline,yeccpars2_22_/1}).
 -dialyzer({nowarn_function, yeccpars2_22_/1}).
 -compile({nowarn_unused_function,  yeccpars2_22_/1}).
--file("rabbit_jms_selector_parser.yrl", 113).
+-file("rabbit_amqp_sql_parser.yrl", 113).
 yeccpars2_22_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1517,7 +1517,7 @@ yeccpars2_22_(__Stack0) ->
 -compile({inline,yeccpars2_23_/1}).
 -dialyzer({nowarn_function, yeccpars2_23_/1}).
 -compile({nowarn_unused_function,  yeccpars2_23_/1}).
--file("rabbit_jms_selector_parser.yrl", 115).
+-file("rabbit_amqp_sql_parser.yrl", 115).
 yeccpars2_23_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1527,7 +1527,7 @@ yeccpars2_23_(__Stack0) ->
 -compile({inline,yeccpars2_24_/1}).
 -dialyzer({nowarn_function, yeccpars2_24_/1}).
 -compile({nowarn_unused_function,  yeccpars2_24_/1}).
--file("rabbit_jms_selector_parser.yrl", 48).
+-file("rabbit_amqp_sql_parser.yrl", 48).
 yeccpars2_24_(__Stack0) ->
  [___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1537,7 +1537,7 @@ yeccpars2_24_(__Stack0) ->
 -compile({inline,yeccpars2_27_/1}).
 -dialyzer({nowarn_function, yeccpars2_27_/1}).
 -compile({nowarn_unused_function,  yeccpars2_27_/1}).
--file("rabbit_jms_selector_parser.yrl", 47).
+-file("rabbit_amqp_sql_parser.yrl", 47).
 yeccpars2_27_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1547,7 +1547,7 @@ yeccpars2_27_(__Stack0) ->
 -compile({inline,yeccpars2_28_/1}).
 -dialyzer({nowarn_function, yeccpars2_28_/1}).
 -compile({nowarn_unused_function,  yeccpars2_28_/1}).
--file("rabbit_jms_selector_parser.yrl", 46).
+-file("rabbit_amqp_sql_parser.yrl", 46).
 yeccpars2_28_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1557,7 +1557,7 @@ yeccpars2_28_(__Stack0) ->
 -compile({inline,yeccpars2_29_/1}).
 -dialyzer({nowarn_function, yeccpars2_29_/1}).
 -compile({nowarn_unused_function,  yeccpars2_29_/1}).
--file("rabbit_jms_selector_parser.yrl", 100).
+-file("rabbit_amqp_sql_parser.yrl", 100).
 yeccpars2_29_(__Stack0) ->
  [___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1567,7 +1567,7 @@ yeccpars2_29_(__Stack0) ->
 -compile({inline,yeccpars2_30_/1}).
 -dialyzer({nowarn_function, yeccpars2_30_/1}).
 -compile({nowarn_unused_function,  yeccpars2_30_/1}).
--file("rabbit_jms_selector_parser.yrl", 106).
+-file("rabbit_amqp_sql_parser.yrl", 106).
 yeccpars2_30_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1577,7 +1577,7 @@ yeccpars2_30_(__Stack0) ->
 -compile({inline,yeccpars2_31_/1}).
 -dialyzer({nowarn_function, yeccpars2_31_/1}).
 -compile({nowarn_unused_function,  yeccpars2_31_/1}).
--file("rabbit_jms_selector_parser.yrl", 99).
+-file("rabbit_amqp_sql_parser.yrl", 99).
 yeccpars2_31_(__Stack0) ->
  [___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1587,7 +1587,7 @@ yeccpars2_31_(__Stack0) ->
 -compile({inline,yeccpars2_33_/1}).
 -dialyzer({nowarn_function, yeccpars2_33_/1}).
 -compile({nowarn_unused_function,  yeccpars2_33_/1}).
--file("rabbit_jms_selector_parser.yrl", 104).
+-file("rabbit_amqp_sql_parser.yrl", 104).
 yeccpars2_33_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1597,7 +1597,7 @@ yeccpars2_33_(__Stack0) ->
 -compile({inline,yeccpars2_49_/1}).
 -dialyzer({nowarn_function, yeccpars2_49_/1}).
 -compile({nowarn_unused_function,  yeccpars2_49_/1}).
--file("rabbit_jms_selector_parser.yrl", 73).
+-file("rabbit_amqp_sql_parser.yrl", 73).
 yeccpars2_49_(__Stack0) ->
  [___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1608,7 +1608,7 @@ yeccpars2_49_(__Stack0) ->
 -compile({inline,yeccpars2_51_/1}).
 -dialyzer({nowarn_function, yeccpars2_51_/1}).
 -compile({nowarn_unused_function,  yeccpars2_51_/1}).
--file("rabbit_jms_selector_parser.yrl", 75).
+-file("rabbit_amqp_sql_parser.yrl", 75).
 yeccpars2_51_(__Stack0) ->
  [___6,___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1619,7 +1619,7 @@ yeccpars2_51_(__Stack0) ->
 -compile({inline,yeccpars2_54_/1}).
 -dialyzer({nowarn_function, yeccpars2_54_/1}).
 -compile({nowarn_unused_function,  yeccpars2_54_/1}).
--file("rabbit_jms_selector_parser.yrl", 81).
+-file("rabbit_amqp_sql_parser.yrl", 81).
 yeccpars2_54_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1629,7 +1629,7 @@ yeccpars2_54_(__Stack0) ->
 -compile({inline,yeccpars2_55_/1}).
 -dialyzer({nowarn_function, yeccpars2_55_/1}).
 -compile({nowarn_unused_function,  yeccpars2_55_/1}).
--file("rabbit_jms_selector_parser.yrl", 83).
+-file("rabbit_amqp_sql_parser.yrl", 83).
 yeccpars2_55_(__Stack0) ->
  [___1 | __Stack] = __Stack0,
  [begin
@@ -1639,7 +1639,7 @@ yeccpars2_55_(__Stack0) ->
 -compile({inline,yeccpars2_57_/1}).
 -dialyzer({nowarn_function, yeccpars2_57_/1}).
 -compile({nowarn_unused_function,  yeccpars2_57_/1}).
--file("rabbit_jms_selector_parser.yrl", 82).
+-file("rabbit_amqp_sql_parser.yrl", 82).
 yeccpars2_57_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1649,7 +1649,7 @@ yeccpars2_57_(__Stack0) ->
 -compile({inline,yeccpars2_58_/1}).
 -dialyzer({nowarn_function, yeccpars2_58_/1}).
 -compile({nowarn_unused_function,  yeccpars2_58_/1}).
--file("rabbit_jms_selector_parser.yrl", 80).
+-file("rabbit_amqp_sql_parser.yrl", 80).
 yeccpars2_58_(__Stack0) ->
  [___6,___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1659,7 +1659,7 @@ yeccpars2_58_(__Stack0) ->
 -compile({inline,yeccpars2_61_/1}).
 -dialyzer({nowarn_function, yeccpars2_61_/1}).
 -compile({nowarn_unused_function,  yeccpars2_61_/1}).
--file("rabbit_jms_selector_parser.yrl", 66).
+-file("rabbit_amqp_sql_parser.yrl", 66).
 yeccpars2_61_(__Stack0) ->
  [___6,___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1669,7 +1669,7 @@ yeccpars2_61_(__Stack0) ->
 -compile({inline,yeccpars2_62_/1}).
 -dialyzer({nowarn_function, yeccpars2_62_/1}).
 -compile({nowarn_unused_function,  yeccpars2_62_/1}).
--file("rabbit_jms_selector_parser.yrl", 69).
+-file("rabbit_amqp_sql_parser.yrl", 69).
 yeccpars2_62_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1680,7 +1680,7 @@ yeccpars2_62_(__Stack0) ->
 -compile({inline,yeccpars2_64_/1}).
 -dialyzer({nowarn_function, yeccpars2_64_/1}).
 -compile({nowarn_unused_function,  yeccpars2_64_/1}).
--file("rabbit_jms_selector_parser.yrl", 71).
+-file("rabbit_amqp_sql_parser.yrl", 71).
 yeccpars2_64_(__Stack0) ->
  [___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1691,7 +1691,7 @@ yeccpars2_64_(__Stack0) ->
 -compile({inline,yeccpars2_67_/1}).
 -dialyzer({nowarn_function, yeccpars2_67_/1}).
 -compile({nowarn_unused_function,  yeccpars2_67_/1}).
--file("rabbit_jms_selector_parser.yrl", 79).
+-file("rabbit_amqp_sql_parser.yrl", 79).
 yeccpars2_67_(__Stack0) ->
  [___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1701,7 +1701,7 @@ yeccpars2_67_(__Stack0) ->
 -compile({inline,yeccpars2_70_/1}).
 -dialyzer({nowarn_function, yeccpars2_70_/1}).
 -compile({nowarn_unused_function,  yeccpars2_70_/1}).
--file("rabbit_jms_selector_parser.yrl", 65).
+-file("rabbit_amqp_sql_parser.yrl", 65).
 yeccpars2_70_(__Stack0) ->
  [___5,___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1711,7 +1711,7 @@ yeccpars2_70_(__Stack0) ->
 -compile({inline,yeccpars2_71_/1}).
 -dialyzer({nowarn_function, yeccpars2_71_/1}).
 -compile({nowarn_unused_function,  yeccpars2_71_/1}).
--file("rabbit_jms_selector_parser.yrl", 56).
+-file("rabbit_amqp_sql_parser.yrl", 56).
 yeccpars2_71_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1721,7 +1721,7 @@ yeccpars2_71_(__Stack0) ->
 -compile({inline,yeccpars2_72_/1}).
 -dialyzer({nowarn_function, yeccpars2_72_/1}).
 -compile({nowarn_unused_function,  yeccpars2_72_/1}).
--file("rabbit_jms_selector_parser.yrl", 54).
+-file("rabbit_amqp_sql_parser.yrl", 54).
 yeccpars2_72_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1731,7 +1731,7 @@ yeccpars2_72_(__Stack0) ->
 -compile({inline,yeccpars2_73_/1}).
 -dialyzer({nowarn_function, yeccpars2_73_/1}).
 -compile({nowarn_unused_function,  yeccpars2_73_/1}).
--file("rabbit_jms_selector_parser.yrl", 52).
+-file("rabbit_amqp_sql_parser.yrl", 52).
 yeccpars2_73_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1741,7 +1741,7 @@ yeccpars2_73_(__Stack0) ->
 -compile({inline,yeccpars2_74_/1}).
 -dialyzer({nowarn_function, yeccpars2_74_/1}).
 -compile({nowarn_unused_function,  yeccpars2_74_/1}).
--file("rabbit_jms_selector_parser.yrl", 53).
+-file("rabbit_amqp_sql_parser.yrl", 53).
 yeccpars2_74_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1751,7 +1751,7 @@ yeccpars2_74_(__Stack0) ->
 -compile({inline,yeccpars2_75_/1}).
 -dialyzer({nowarn_function, yeccpars2_75_/1}).
 -compile({nowarn_unused_function,  yeccpars2_75_/1}).
--file("rabbit_jms_selector_parser.yrl", 57).
+-file("rabbit_amqp_sql_parser.yrl", 57).
 yeccpars2_75_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1761,7 +1761,7 @@ yeccpars2_75_(__Stack0) ->
 -compile({inline,yeccpars2_76_/1}).
 -dialyzer({nowarn_function, yeccpars2_76_/1}).
 -compile({nowarn_unused_function,  yeccpars2_76_/1}).
--file("rabbit_jms_selector_parser.yrl", 55).
+-file("rabbit_amqp_sql_parser.yrl", 55).
 yeccpars2_76_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1771,7 +1771,7 @@ yeccpars2_76_(__Stack0) ->
 -compile({inline,yeccpars2_77_/1}).
 -dialyzer({nowarn_function, yeccpars2_77_/1}).
 -compile({nowarn_unused_function,  yeccpars2_77_/1}).
--file("rabbit_jms_selector_parser.yrl", 91).
+-file("rabbit_amqp_sql_parser.yrl", 91).
 yeccpars2_77_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1781,7 +1781,7 @@ yeccpars2_77_(__Stack0) ->
 -compile({inline,yeccpars2_80_/1}).
 -dialyzer({nowarn_function, yeccpars2_80_/1}).
 -compile({nowarn_unused_function,  yeccpars2_80_/1}).
--file("rabbit_jms_selector_parser.yrl", 95).
+-file("rabbit_amqp_sql_parser.yrl", 95).
 yeccpars2_80_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1791,7 +1791,7 @@ yeccpars2_80_(__Stack0) ->
 -compile({inline,yeccpars2_81_/1}).
 -dialyzer({nowarn_function, yeccpars2_81_/1}).
 -compile({nowarn_unused_function,  yeccpars2_81_/1}).
--file("rabbit_jms_selector_parser.yrl", 94).
+-file("rabbit_amqp_sql_parser.yrl", 94).
 yeccpars2_81_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1801,7 +1801,7 @@ yeccpars2_81_(__Stack0) ->
 -compile({inline,yeccpars2_82_/1}).
 -dialyzer({nowarn_function, yeccpars2_82_/1}).
 -compile({nowarn_unused_function,  yeccpars2_82_/1}).
--file("rabbit_jms_selector_parser.yrl", 90).
+-file("rabbit_amqp_sql_parser.yrl", 90).
 yeccpars2_82_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1811,7 +1811,7 @@ yeccpars2_82_(__Stack0) ->
 -compile({inline,yeccpars2_85_/1}).
 -dialyzer({nowarn_function, yeccpars2_85_/1}).
 -compile({nowarn_unused_function,  yeccpars2_85_/1}).
--file("rabbit_jms_selector_parser.yrl", 86).
+-file("rabbit_amqp_sql_parser.yrl", 86).
 yeccpars2_85_(__Stack0) ->
  [___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1821,7 +1821,7 @@ yeccpars2_85_(__Stack0) ->
 -compile({inline,yeccpars2_86_/1}).
 -dialyzer({nowarn_function, yeccpars2_86_/1}).
 -compile({nowarn_unused_function,  yeccpars2_86_/1}).
--file("rabbit_jms_selector_parser.yrl", 87).
+-file("rabbit_amqp_sql_parser.yrl", 87).
 yeccpars2_86_(__Stack0) ->
  [___4,___3,___2,___1 | __Stack] = __Stack0,
  [begin
@@ -1829,4 +1829,4 @@ yeccpars2_86_(__Stack0) ->
   end | __Stack].
 
 
--file("rabbit_jms_selector_parser.yrl", 141).
+-file("rabbit_amqp_sql_parser.yrl", 141).

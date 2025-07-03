@@ -5,8 +5,8 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 %% Helper functions operating on the Abstract Syntax Tree (AST)
-%% as returned by rabbit_jms_selector_parser:parse/1
--module(rabbit_jms_ast).
+%% as returned by rabbit_amqp_sql_parser:parse/1
+-module(rabbit_amqp_sql_ast).
 
 -export([search/2,
          map/2]).
@@ -94,8 +94,8 @@ has_binary_identifier_test() ->
     ok.
 
 has_binary_identifier(Selector) ->
-    {ok, Tokens, _EndLocation} = rabbit_jms_selector_lexer:string(Selector),
-    {ok, Ast0} = rabbit_jms_selector_parser:parse(Tokens),
+    {ok, Tokens, _EndLocation} = rabbit_amqp_sql_lexer:string(Selector),
+    {ok, Ast0} = rabbit_amqp_sql_parser:parse(Tokens),
     Ast = map(fun({identifier, Ident}) when is_binary(Ident) ->
                       {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
                  (Node) ->
