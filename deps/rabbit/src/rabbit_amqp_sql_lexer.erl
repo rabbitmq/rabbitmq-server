@@ -39,13 +39,13 @@
 %% property of the creator of the scanner and is not covered by that
 %% Copyright.
 
--module(rabbit_jms_selector_lexer).
+-module(rabbit_amqp_sql_lexer).
 
 -export([string/1,string/2,token/2,token/3,tokens/2,tokens/3]).
 -export([format_error/1]).
 
 %% User code. This is placed here to allow extra attributes.
--file("rabbit_jms_selector_lexer.xrl", 70).
+-file("rabbit_amqp_sql_lexer.xrl", 70).
 
 %% "Approximate literals use the Java floating-point literal syntax."
 to_float([$. | _] = Chars) ->
@@ -436,7 +436,7 @@ tab_size() -> 8.
 %% return signal either an unrecognised character or end of current
 %% input.
 
--file("rabbit_jms_selector_lexer.erl", 404).
+-file("rabbit_amqp_sql_lexer.erl", 404).
 yystate() -> 66.
 
 yystate(69, [101|Ics], Line, Col, Tlen, _, _) ->
@@ -1693,157 +1693,157 @@ yyaction(30, TokenLen, YYtcs, _, _) ->
 yyaction(_, _, _, _, _) -> error.
 
 -compile({inline,yyaction_0/0}).
--file("rabbit_jms_selector_lexer.xrl", 20).
+-file("rabbit_amqp_sql_lexer.xrl", 20).
 yyaction_0() ->
      skip_token .
 
 -compile({inline,yyaction_1/1}).
--file("rabbit_jms_selector_lexer.xrl", 23).
+-file("rabbit_amqp_sql_lexer.xrl", 23).
 yyaction_1(TokenLine) ->
      { token, { 'AND', TokenLine } } .
 
 -compile({inline,yyaction_2/1}).
--file("rabbit_jms_selector_lexer.xrl", 24).
+-file("rabbit_amqp_sql_lexer.xrl", 24).
 yyaction_2(TokenLine) ->
      { token, { 'OR', TokenLine } } .
 
 -compile({inline,yyaction_3/1}).
--file("rabbit_jms_selector_lexer.xrl", 25).
+-file("rabbit_amqp_sql_lexer.xrl", 25).
 yyaction_3(TokenLine) ->
      { token, { 'NOT', TokenLine } } .
 
 -compile({inline,yyaction_4/1}).
--file("rabbit_jms_selector_lexer.xrl", 28).
+-file("rabbit_amqp_sql_lexer.xrl", 28).
 yyaction_4(TokenLine) ->
      { token, { 'BETWEEN', TokenLine } } .
 
 -compile({inline,yyaction_5/1}).
--file("rabbit_jms_selector_lexer.xrl", 29).
+-file("rabbit_amqp_sql_lexer.xrl", 29).
 yyaction_5(TokenLine) ->
      { token, { 'LIKE', TokenLine } } .
 
 -compile({inline,yyaction_6/1}).
--file("rabbit_jms_selector_lexer.xrl", 30).
+-file("rabbit_amqp_sql_lexer.xrl", 30).
 yyaction_6(TokenLine) ->
      { token, { 'IN', TokenLine } } .
 
 -compile({inline,yyaction_7/1}).
--file("rabbit_jms_selector_lexer.xrl", 31).
+-file("rabbit_amqp_sql_lexer.xrl", 31).
 yyaction_7(TokenLine) ->
      { token, { 'IS', TokenLine } } .
 
 -compile({inline,yyaction_8/1}).
--file("rabbit_jms_selector_lexer.xrl", 32).
+-file("rabbit_amqp_sql_lexer.xrl", 32).
 yyaction_8(TokenLine) ->
      { token, { 'NULL', TokenLine } } .
 
 -compile({inline,yyaction_9/1}).
--file("rabbit_jms_selector_lexer.xrl", 33).
+-file("rabbit_amqp_sql_lexer.xrl", 33).
 yyaction_9(TokenLine) ->
      { token, { 'ESCAPE', TokenLine } } .
 
 -compile({inline,yyaction_10/1}).
--file("rabbit_jms_selector_lexer.xrl", 36).
+-file("rabbit_amqp_sql_lexer.xrl", 36).
 yyaction_10(TokenLine) ->
      { token, { boolean, TokenLine, true } } .
 
 -compile({inline,yyaction_11/1}).
--file("rabbit_jms_selector_lexer.xrl", 37).
+-file("rabbit_amqp_sql_lexer.xrl", 37).
 yyaction_11(TokenLine) ->
      { token, { boolean, TokenLine, false } } .
 
 -compile({inline,yyaction_12/1}).
--file("rabbit_jms_selector_lexer.xrl", 40).
+-file("rabbit_amqp_sql_lexer.xrl", 40).
 yyaction_12(TokenLine) ->
      { token, { '=', TokenLine } } .
 
 -compile({inline,yyaction_13/1}).
--file("rabbit_jms_selector_lexer.xrl", 41).
+-file("rabbit_amqp_sql_lexer.xrl", 41).
 yyaction_13(TokenLine) ->
      { token, { '<>', TokenLine } } .
 
 -compile({inline,yyaction_14/1}).
--file("rabbit_jms_selector_lexer.xrl", 42).
+-file("rabbit_amqp_sql_lexer.xrl", 42).
 yyaction_14(TokenLine) ->
      { token, { '>=', TokenLine } } .
 
 -compile({inline,yyaction_15/1}).
--file("rabbit_jms_selector_lexer.xrl", 43).
+-file("rabbit_amqp_sql_lexer.xrl", 43).
 yyaction_15(TokenLine) ->
      { token, { '<=', TokenLine } } .
 
 -compile({inline,yyaction_16/1}).
--file("rabbit_jms_selector_lexer.xrl", 44).
+-file("rabbit_amqp_sql_lexer.xrl", 44).
 yyaction_16(TokenLine) ->
      { token, { '>', TokenLine } } .
 
 -compile({inline,yyaction_17/1}).
--file("rabbit_jms_selector_lexer.xrl", 45).
+-file("rabbit_amqp_sql_lexer.xrl", 45).
 yyaction_17(TokenLine) ->
      { token, { '<', TokenLine } } .
 
 -compile({inline,yyaction_18/1}).
--file("rabbit_jms_selector_lexer.xrl", 48).
+-file("rabbit_amqp_sql_lexer.xrl", 48).
 yyaction_18(TokenLine) ->
      { token, { '+', TokenLine } } .
 
 -compile({inline,yyaction_19/1}).
--file("rabbit_jms_selector_lexer.xrl", 49).
+-file("rabbit_amqp_sql_lexer.xrl", 49).
 yyaction_19(TokenLine) ->
      { token, { '-', TokenLine } } .
 
 -compile({inline,yyaction_20/1}).
--file("rabbit_jms_selector_lexer.xrl", 50).
+-file("rabbit_amqp_sql_lexer.xrl", 50).
 yyaction_20(TokenLine) ->
      { token, { '*', TokenLine } } .
 
 -compile({inline,yyaction_21/1}).
--file("rabbit_jms_selector_lexer.xrl", 51).
+-file("rabbit_amqp_sql_lexer.xrl", 51).
 yyaction_21(TokenLine) ->
      { token, { '/', TokenLine } } .
 
 -compile({inline,yyaction_22/1}).
--file("rabbit_jms_selector_lexer.xrl", 54).
+-file("rabbit_amqp_sql_lexer.xrl", 54).
 yyaction_22(TokenLine) ->
      { token, { '(', TokenLine } } .
 
 -compile({inline,yyaction_23/1}).
--file("rabbit_jms_selector_lexer.xrl", 55).
+-file("rabbit_amqp_sql_lexer.xrl", 55).
 yyaction_23(TokenLine) ->
      { token, { ')', TokenLine } } .
 
 -compile({inline,yyaction_24/1}).
--file("rabbit_jms_selector_lexer.xrl", 56).
+-file("rabbit_amqp_sql_lexer.xrl", 56).
 yyaction_24(TokenLine) ->
      { token, { ',', TokenLine } } .
 
 -compile({inline,yyaction_25/2}).
--file("rabbit_jms_selector_lexer.xrl", 59).
+-file("rabbit_amqp_sql_lexer.xrl", 59).
 yyaction_25(TokenChars, TokenLine) ->
      { token, { integer, TokenLine, list_to_integer (TokenChars) } } .
 
 -compile({inline,yyaction_26/2}).
--file("rabbit_jms_selector_lexer.xrl", 60).
+-file("rabbit_amqp_sql_lexer.xrl", 60).
 yyaction_26(TokenChars, TokenLine) ->
      { token, { float, TokenLine, list_to_float (to_float (TokenChars)) } } .
 
 -compile({inline,yyaction_27/2}).
--file("rabbit_jms_selector_lexer.xrl", 61).
+-file("rabbit_amqp_sql_lexer.xrl", 61).
 yyaction_27(TokenChars, TokenLine) ->
      { token, { float, TokenLine, parse_scientific_notation (TokenChars) } } .
 
 -compile({inline,yyaction_28/2}).
--file("rabbit_jms_selector_lexer.xrl", 62).
+-file("rabbit_amqp_sql_lexer.xrl", 62).
 yyaction_28(TokenChars, TokenLine) ->
      { token, { string, TokenLine, process_string (TokenChars) } } .
 
 -compile({inline,yyaction_29/2}).
--file("rabbit_jms_selector_lexer.xrl", 63).
+-file("rabbit_amqp_sql_lexer.xrl", 63).
 yyaction_29(TokenChars, TokenLine) ->
      { token, { identifier, TokenLine, unicode : characters_to_binary (TokenChars) } } .
 
 -compile({inline,yyaction_30/1}).
--file("rabbit_jms_selector_lexer.xrl", 66).
+-file("rabbit_amqp_sql_lexer.xrl", 66).
 yyaction_30(TokenChars) ->
      { error, { illegal_character, TokenChars } } .
 -file("leexinc.hrl", 377).

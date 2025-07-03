@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(amqp_jms_unit_SUITE).
+-module(amqp_filter_sql_unit_SUITE).
 
 -compile([export_all, nowarn_export_all]).
 
@@ -697,9 +697,8 @@ header_section(_Config) ->
     true = match("header.priority = 7", Hdr, Ps, APs),
     false = match("header.priority < 7", Hdr, Ps, APs),
 
-    %% Since the default priority is 4 in both AMQP and JMS, we expect the
-    %% following expression to evaluate to true if matched against a message
-    %% without an explicit priority level set.
+    %% Since the default priority is 4, we expect the following expression to evaluate
+    %% to true if matched against a message without an explicit priority level set.
     true = match("header.priority = 4", []).
 
 properties_section(_Config) ->
@@ -881,12 +880,12 @@ match(Selector, Header, Props, AppProps)
     Sections = [Header, Props, AP, Body],
     Payload = amqp_encode_bin(Sections),
     Mc = mc_amqp:init_from_stream(Payload, #{}),
-    rabbit_amqp_filter_jms:eval(ParsedSelector, Mc).
+    rabbit_amqp_filter_sql:eval(ParsedSelector, Mc).
 
 parse(Selector) ->
     Descriptor = {ulong, ?DESCRIPTOR_CODE_SQL_FILTER},
     Filter = {described, Descriptor, {utf8, Selector}},
-    rabbit_amqp_filter_jms:parse(Filter).
+    rabbit_amqp_filter_sql:parse(Filter).
 
 amqp_encode_bin(L) when is_list(L) ->
     iolist_to_binary([amqp10_framing:encode_bin(X) || X <- L]).

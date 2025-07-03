@@ -4,13 +4,13 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
--module(rabbit_amqp_filter_jms).
+-module(rabbit_amqp_filter_sql).
 -feature(maybe_expr, enable).
 
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
 
 -type parsed_expression() :: {ApplicationProperties :: boolean(),
-                              rabbit_jms_ast:ast()}.
+                              rabbit_amqp_sql_ast:ast()}.
 
 -export_type([parsed_expression/0]).
 
@@ -21,27 +21,26 @@
 -define(MAX_EXPRESSION_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
-%% defined in both AMQP and JMS
 -define(DEFAULT_MSG_PRIORITY, 4).
 
 -define(IS_CONTROL_CHAR(C), C < 32 orelse C =:= 127).
 
 -spec parse(tuple()) ->
     {ok, parsed_expression()} | error.
-parse({described, Descriptor, {utf8, JmsSelector}}) ->
+parse({described, Descriptor, {utf8, SQL}}) ->
     maybe
         ok ?= check_descriptor(Descriptor),
-        {ok, String} ?= jms_selector_to_list(JmsSelector),
+        {ok, String} ?= sql_to_list(SQL),
         ok ?= check_length(String),
-        {ok, Tokens} ?= tokenize(String, JmsSelector),
-        ok ?= check_token_count(Tokens, JmsSelector),
-        {ok, Ast0} ?= parse(Tokens, JmsSelector),
-        {ok, Ast} ?= transform_ast(Ast0, JmsSelector),
+        {ok, Tokens} ?= tokenize(String, SQL),
+        ok ?= check_token_count(Tokens, SQL),
+        {ok, Ast0} ?= parse(Tokens, SQL),
+        {ok, Ast} ?= transform_ast(Ast0, SQL),
         AppProps = has_binary_identifier(Ast),
         {ok, {AppProps, Ast}}
     end.
 
-%% Evaluates a parsed JMS message selector expression.
+%% Evaluates a parsed SQL expression.
 -spec eval(parsed_expression(), mc:state()) -> boolean().
 eval({ApplicationProperties, Ast}, Msg) ->
     State = case ApplicationProperties of
@@ -298,54 +297,54 @@ check_descriptor({ulong, ?DESCRIPTOR_CODE_SQL_FILTER}) ->
 check_descriptor(_) ->
     error.
 
-jms_selector_to_list(JmsSelector) ->
-    case unicode:characters_to_list(JmsSelector) of
+sql_to_list(SQL) ->
+    case unicode:characters_to_list(SQL) of
         String when is_list(String) ->
             {ok, String};
         Error ->
-            rabbit_log:warning("JMS message selector ~p is not UTF-8 encoded: ~p",
-                               [JmsSelector, Error]),
+            rabbit_log:warning("SQL expression ~p is not UTF-8 encoded: ~p",
+                               [SQL, Error]),
             error
     end.
 
 check_length(String)
   when length(String) > ?MAX_EXPRESSION_LENGTH ->
-    rabbit_log:warning("JMS message selector length ~b exceeds maximum length ~b",
+    rabbit_log:warning("SQL expression length ~b exceeds maximum length ~b",
                        [length(String), ?MAX_EXPRESSION_LENGTH]),
     error;
 check_length(_) ->
     ok.
 
-tokenize(String, JmsSelector) ->
-    case rabbit_jms_selector_lexer:string(String) of
+tokenize(String, SQL) ->
+    case rabbit_amqp_sql_lexer:string(String) of
         {ok, Tokens, _EndLocation} ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
-            rabbit_log:warning("failed to scan JMS message selector '~ts': ~tp",
-                               [JmsSelector, ErrDescriptor]),
+            rabbit_log:warning("failed to scan SQL expression '~ts': ~tp",
+                               [SQL, ErrDescriptor]),
             error
     end.
 
-check_token_count(Tokens, JmsSelector)
+check_token_count(Tokens, SQL)
   when length(Tokens) > ?MAX_TOKENS ->
-    rabbit_log:warning("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
-                       [JmsSelector, length(Tokens), ?MAX_TOKENS]),
+    rabbit_log:warning("SQL expression '~ts' with ~b tokens exceeds token limit ~b",
+                       [SQL, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
     ok.
 
-parse(Tokens, JmsSelector) ->
-    case rabbit_jms_selector_parser:parse(Tokens) of
+parse(Tokens, SQL) ->
+    case rabbit_amqp_sql_parser:parse(Tokens) of
         {error, Reason} ->
-            rabbit_log:warning("failed to parse JMS message selector '~ts': ~p",
-                               [JmsSelector, Reason]),
+            rabbit_log:warning("failed to parse SQL expression '~ts': ~p",
+                               [SQL, Reason]),
             error;
         Ok ->
             Ok
     end.
 
-transform_ast(Ast0, JmsSelector) ->
-    try rabbit_jms_ast:map(
+transform_ast(Ast0, SQL) ->
+    try rabbit_amqp_sql_ast:map(
           fun({identifier, Ident})
                 when is_binary(Ident) ->
                   {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
@@ -358,18 +357,18 @@ transform_ast(Ast0, JmsSelector) ->
             {ok, Ast}
     catch {unsupported_field, Name} ->
               rabbit_log:warning(
-                "identifier ~ts in JMS message selector ~tp is unsupported",
-                [Name, JmsSelector]),
+                "identifier ~ts in SQL expression ~tp is unsupported",
+                [Name, SQL]),
               error;
           {invalid_pattern, Reason} ->
               rabbit_log:warning(
-                "failed to parse LIKE pattern for JMS message selector ~tp: ~tp",
-                [JmsSelector, Reason]),
+                "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
+                [SQL, Reason]),
               error
     end.
 
 has_binary_identifier(Ast) ->
-    rabbit_jms_ast:search(fun({identifier, Val}) ->
+    rabbit_amqp_sql_ast:search(fun({identifier, Val}) ->
                                   is_binary(Val);
                              (_Node) ->
                                   false
@@ -390,7 +389,7 @@ transform_pattern(Pattern, Escape) ->
         {single_percent, Chars, PercentPos} ->
             single_percent(Chars, PercentPos);
         regex ->
-            Re = jms_pattern_to_regex(Pattern, Escape, []),
+            Re = pattern_to_regex(Pattern, Escape, []),
             case re:compile("^" ++ Re ++ "$", [unicode]) of
                 {ok, CompiledRe} ->
                     CompiledRe;
@@ -441,23 +440,23 @@ single_percent(Chars, Pos) ->
     {{prefix, byte_size(PrefixBin), PrefixBin},
      {suffix, byte_size(SuffixBin), SuffixBin}}.
 
-jms_pattern_to_regex([], _Escape, Acc) ->
+pattern_to_regex([], _Escape, Acc) ->
     lists:reverse(Acc);
-jms_pattern_to_regex([EscapeChar | Rest], EscapeChar, Acc) ->
+pattern_to_regex([EscapeChar | Rest], EscapeChar, Acc) ->
     case Rest of
         [] ->
             throw({invalid_pattern, invalid_escape_at_end});
         [NextChar | Rest1] ->
-            jms_pattern_to_regex(Rest1, EscapeChar, escape_regex_char(NextChar) ++ Acc)
+            pattern_to_regex(Rest1, EscapeChar, escape_regex_char(NextChar) ++ Acc)
     end;
-jms_pattern_to_regex([$% | Rest], Escape, Acc) ->
+pattern_to_regex([$% | Rest], Escape, Acc) ->
     %% % matches any sequence of characters (0 or more)
-    jms_pattern_to_regex(Rest, Escape, [$*, $. | Acc]);
-jms_pattern_to_regex([$_ | Rest], Escape, Acc) ->
+    pattern_to_regex(Rest, Escape, [$*, $. | Acc]);
+pattern_to_regex([$_ | Rest], Escape, Acc) ->
     %% _ matches exactly one character
-    jms_pattern_to_regex(Rest, Escape, [$. | Acc]);
-jms_pattern_to_regex([Char | Rest], Escape, Acc) ->
-    jms_pattern_to_regex(Rest, Escape, escape_regex_char(Char) ++ Acc).
+    pattern_to_regex(Rest, Escape, [$. | Acc]);
+pattern_to_regex([Char | Rest], Escape, Acc) ->
+    pattern_to_regex(Rest, Escape, escape_regex_char(Char) ++ Acc).
 
 %% Escape user provided characters that have special meaning in Erlang regex.
 escape_regex_char(Char0) ->
