@@ -3254,14 +3254,14 @@ parse_filters(Filter = {{symbol, ?FILTER_NAME_SQL}, Value},
               Acc = {EffectiveFilters, ConsumerFilter, ConsumerArgs}) ->
     case ConsumerFilter of
         undefined ->
-            case rabbit_amqp_filter_jms:parse(Value) of
+            case rabbit_amqp_filter_sql:parse(Value) of
                 {ok, ParsedSql} ->
-                    {[Filter | EffectiveFilters], {jms, ParsedSql}, ConsumerArgs};
+                    {[Filter | EffectiveFilters], {sql, ParsedSql}, ConsumerArgs};
                 error ->
                     Acc
             end;
         _ ->
-            %% SQL filter expression is mutually exclusive with AMQP property filter expression.
+            %% SQL and property filter expressions are mutually exclusive.
             Acc
     end;
 parse_filters(Filter = {{symbol, _Key}, Value},
@@ -3284,9 +3284,8 @@ parse_filters(Filter = {{symbol, _Key}, Value},
                              {property, [ParsedExpression | ParsedExpressions]},
                              ConsumerArgs}
                     end;
-                {jms, _} ->
-                    %% SQL filter expression is mutually exclusive with
-                    %% AMQP property filter expressions.
+                {sql, _} ->
+                    %% SQL and property filter expressions are mutually exclusive.
                     Acc
             end;
         error ->
