@@ -116,7 +116,9 @@ comparison_operators(_Config) ->
 
     %% Inequality
     true = match("country <> 'US'", app_props()),
+    true = match("country != 'US'", app_props()),
     false = match("country <> 'UK'", app_props()),
+    false = match("country != 'UK'", app_props()),
 
     %% Greater than
     true = match("weight > 3", app_props()),
@@ -369,6 +371,7 @@ null_handling(_Config) ->
     false = match("missing <= 0", app_props()),
     false = match("missing = 0", app_props()),
     false = match("missing <> 0", app_props()),
+    false = match("0 != missing", app_props()),
     false = match("missing = missing", app_props()),
     false = match("absent = absent", app_props()),
     false = match("missing AND true", app_props()),
@@ -679,7 +682,7 @@ properties_section(_Config) ->
     APs = [],
 
     true = match("p.message-id = 'id-123'", Ps, APs),
-    false = match("'id-123' <> p.message-id", Ps, APs),
+    false = match("'id-123' != p.message-id", Ps, APs),
     true = match("p.message-id LIKE 'id-%'", Ps, APs),
     true = match("p.message-id IN ('id-123', 'id-456')", Ps, APs),
 
@@ -727,7 +730,7 @@ properties_section(_Config) ->
 
     true = match("p.reply-to-group-id = 'other group ID'", Ps, APs),
     true = match("p.reply-to-group-id LIKE '%group ID'", Ps, APs),
-    true = match("p.reply-to-group-id <> 'some group ID'", Ps, APs),
+    true = match("p.reply-to-group-id != 'some group ID'", Ps, APs),
     true = match("p.reply-to-group-id IS NOT NULL", Ps, APs),
     false = match("p.reply-to-group-id IS NULL", Ps, APs),
 

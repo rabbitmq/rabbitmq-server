@@ -38,8 +38,10 @@ Rules.
 [fF][aA][lL][sS][eE]         : {token, {boolean, TokenLine, false}}.
 
 % Comparison operators
-=             : {token, {'=', TokenLine}}.
+% "The ‘<>’ operator is synonymous to the ‘!=’ operator."
 <>            : {token, {'<>', TokenLine}}.
+!=            : {token, {'<>', TokenLine}}.
+=             : {token, {'=', TokenLine}}.
 >=            : {token, {'>=', TokenLine}}.
 <=            : {token, {'<=', TokenLine}}.
 >             : {token, {'>', TokenLine}}.
