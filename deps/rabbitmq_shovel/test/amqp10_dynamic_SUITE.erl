@@ -154,18 +154,20 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                             <<"message-ann-value">>}]
                                   end}]),
     Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
-    ct:pal("GOT ~p", [Msg]),
     AppProps = amqp10_msg:application_properties(Msg),
-
-    ?assertMatch((#{user_id := <<"guest">>, creation_time := _}),
-                 (amqp10_msg:properties(Msg))),
-    ?assertMatch((#{<<"shovel-name">> := <<"test">>,
-                    <<"shovel-type">> := <<"dynamic">>, <<"shovelled-by">> := _,
-                    <<"app-prop-key">> := <<"app-prop-value">>}),
-                 (AppProps)),
+    Anns = amqp10_msg:message_annotations(Msg),
+    %% We no longer add/override properties, application properties or
+    %% message annotations. Just the forward headers and timestamp as
+    %% message annotations. The AMQP 1.0 message is inmutable
+    ?assertNot(maps:is_key(user_id, amqp10_msg:properties(Msg))),
+    ?assertNot(maps:is_key(<<"app-prop-key">>, AppProps)),
     ?assertEqual(undefined, maps:get(<<"delivery_mode">>, AppProps, undefined)),
-    ?assertMatch((#{<<"x-message-ann-key">> := <<"message-ann-value">>}),
-                 (amqp10_msg:message_annotations(Msg))).
+    ?assertNot(maps:is_key(<<"x-message-ann-key">>, Anns)),
+    ?assertMatch(#{<<"x-opt-shovel-name">> := <<"test">>,
+                   <<"x-opt-shovel-type">> := <<"dynamic">>,
+                   <<"x-opt-shovelled-by">> := _,
+                   <<"x-opt-shovelled-timestamp">> := _
+                  }, Anns).
 
 simple_amqp10_src(Config) ->
     MapConfig = ?config(map_config, Config),

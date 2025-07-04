@@ -181,9 +181,16 @@ amqp10_dest_validation(_Def, User) ->
      {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
      {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
+     %% The bare message should be inmutable in the AMQP network.
+     %% Before RabbitMQ 4.2, we allowed to set application properties, message
+     %% annotations and any property. This is wrong.
+     %% From 4.2, the only message modification allowed is the optional
+     %% addition of forward headers and shovelled timestamp inside message
+     %% annotations.
+     %% To avoid breaking existing deployments, the following configuration
+     %% keys are still accepted but will be ignored.
      {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
      {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
-     % TODO: restrict to allowed fields
      {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
     ].
 
