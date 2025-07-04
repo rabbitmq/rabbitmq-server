@@ -232,11 +232,17 @@ merge_list_of_maps(ListOfMaps) ->
 extract_oauth_providers_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
+    MapValueFun = fun(V) -> 
+        case V of 
+            L when is_list(L) -> list_to_binary(L);
+            B when is_binary(B) -> B;
+            _ -> V
+        end end,
 
     OAuthProviders = [{Name, mapOauthProviderProperty(
         {
             list_to_atom(Key),
-            list_to_binary(V)})
+            MapValueFun(V)})
         } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
@@ -245,14 +251,15 @@ extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+    ResourceServers = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
-    maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+    maps:groups_from_list(KeyFun, ValueFun, ResourceServers).
 
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of
         issuer -> validator_https_uri(Key, Value);
         token_endpoint -> validator_https_uri(Key, Value);
+        introspection_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);
