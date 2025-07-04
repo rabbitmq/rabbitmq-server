@@ -159,9 +159,9 @@ eval0({unary_minus, Expr}, Msg) ->
     end;
 
 %% Special operators
-eval0({'in', Expr, ValueList}, Msg) ->
+eval0({'in', Expr, ExprList}, Msg) ->
     Value = eval0(Expr, Msg),
-    is_in(Value, ValueList);
+    is_in(Value, ExprList, Msg);
 
 eval0({'is_null', Expr}, Msg) ->
     eval0(Expr, Msg) =:= undefined;
@@ -218,12 +218,13 @@ arithmetic('%', Left, Right) when is_integer(Left) andalso is_integer(Right) and
 arithmetic(_, _, _) ->
     undefined.
 
-is_in(undefined, _) ->
+is_in(undefined, _, _) ->
     %% "If identifier of an IN or NOT IN operation is NULL,
     %% the value of the operation is unknown."
     undefined;
-is_in(Value, List) ->
-    lists:member(Value, List).
+is_in(Value, ExprList, Msg) ->
+    IsEqual = fun(Expr) -> eval0(Expr, Msg) == Value end,
+    lists:any(IsEqual, ExprList).
 
 like(Subject, {exact, Pattern}) ->
     Subject =:= Pattern;

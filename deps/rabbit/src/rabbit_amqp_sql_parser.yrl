@@ -15,8 +15,7 @@ Nonterminals
     primary
     literal
     identifier_expr
-    string_list
-    string_item
+    expression_list
     in_expr
     like_expr
     is_null_expr.
@@ -74,11 +73,10 @@ like_expr -> additive_expr 'NOT' 'LIKE' string 'ESCAPE' string :
     {'not', {'like', '$1', process_like_pattern('$4'), process_escape_char('$6')}}.
 
 %% IN expression
-in_expr -> additive_expr 'IN' '(' string_list ')' : {'in', '$1', lists:uniq('$4')}.
-in_expr -> additive_expr 'NOT' 'IN' '(' string_list ')' : {'not', {'in', '$1', lists:uniq('$5')}}.
-string_list -> string_item : ['$1'].
-string_list -> string_item ',' string_list : ['$1'|'$3'].
-string_item -> string : extract_value('$1').
+in_expr -> additive_expr 'IN' '(' expression_list ')' : {'in', '$1', '$4'}.
+in_expr -> additive_expr 'NOT' 'IN' '(' expression_list ')' : {'not', {'in', '$1', '$5'}}.
+expression_list -> additive_expr : ['$1'].
+expression_list -> additive_expr ',' expression_list : ['$1'|'$3'].
 
 %% IS NULL expression
 is_null_expr -> identifier_expr 'IS' 'NULL' : {'is_null', '$1'}.
