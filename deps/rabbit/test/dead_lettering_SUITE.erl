@@ -184,6 +184,14 @@ init_per_testcase(T, Config)
     %% * stream is known to fail due to https://github.com/rabbitmq/rabbitmq-server/issues/11173
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2),
     init_per_testcase0(T, Config);
+init_per_testcase(T, Config)
+  when T =:= dead_letter_headers_should_not_be_appended_for_republish ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
+        ok ->
+            init_per_testcase0(T, Config);
+        _ ->
+            {skip, "The expectations of this test don't match 3.13 behaviour"}
+    end;
 init_per_testcase(Testcase, Config) ->
     init_per_testcase0(Testcase, Config).
 
