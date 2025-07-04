@@ -82,8 +82,17 @@ init_per_group(mnesia_parallel_tests = Group, Config0) ->
     Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, mnesia}]),
     init_per_group0(Group, Config);
 init_per_group(khepri_parallel_tests = Group, Config0) ->
-    Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
-    init_per_group0(Group, Config).
+    %% this is very hacky way of skipping the tests, but the khepri_db
+    %% flag exists in 3,13, but it's not compatible with 4.x. We can remove
+    %% this after 4.2
+    SecondaryDist = os:getenv("SECONDARY_DIST", ""),
+    case string:str(SecondaryDist, "3.13.") == 0 of
+        true ->
+            Config = rabbit_ct_helpers:set_config(Config0, [{metadata_store, khepri}]),
+            init_per_group0(Group, Config);
+        _ ->
+            {skip, "Khepri was not supported in 3.13"}
+    end.
 
 init_per_group0(Group, Config) ->
     case lists:member({group, Group}, all()) of

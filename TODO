@@ -1,0 +1,3 @@
+- skip AMQP-1.0 tests when using 3.13 - check if works now
+- dead-lettering https://github.com/rabbitmq/rabbitmq-server/actions/runs/16000107488/job/45132635443?pr=14171
+- QQs https://github.com/rabbitmq/rabbitmq-server/actions/runs/16000107488/job/45132635471?pr=14171

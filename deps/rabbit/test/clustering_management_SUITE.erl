@@ -146,12 +146,26 @@ init_per_group(unclustered_2_nodes, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, false}]),
     rabbit_ct_helpers:merge_app_env(
-      Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
+      Config1, {rabbit, [{forced_feature_flags_on_init, [
+                                                         restart_streams,
+                                                         stream_sac_coordinator_unblock_group,
+                                                         stream_update_config_command,
+                                                         stream_filtering,
+                                                         message_containers,
+                                                         quorum_queue_non_voters
+                                                        ]}]});
 init_per_group(unclustered_3_nodes, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config, [{rmq_nodes_clustered, false}]),
     rabbit_ct_helpers:merge_app_env(
-      Config1, {rabbit, [{forced_feature_flags_on_init, []}]});
+      Config1, {rabbit, [{forced_feature_flags_on_init, [
+                                                         restart_streams,
+                                                         stream_sac_coordinator_unblock_group,
+                                                         stream_update_config_command,
+                                                         stream_filtering,
+                                                         message_containers,
+                                                         quorum_queue_non_voters
+                                                        ]}]});
 init_per_group(clustered_2_nodes, Config) ->
     rabbit_ct_helpers:set_config(Config, [{rmq_nodes_clustered, true}]);
 init_per_group(clustered_3_nodes, Config) ->
