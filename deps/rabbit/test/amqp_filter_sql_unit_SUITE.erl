@@ -350,12 +350,25 @@ in_operator(_Config) ->
     true = match("country IN ('UK')", app_props()),
     true = match("country IN ('🇫🇷', '🇬🇧')", AppPropsUtf8),
     false = match("country IN ('US', 'France')", app_props()),
+    true = match("'London' IN (city, country)", app_props()),
+
+    true = match("price IN (h.priority - 0.5)",
+                 #'v1_0.header'{priority = {ubyte, 11}}, #'v1_0.properties'{}, app_props()),
+    false = match("price IN (h.priority + 0.5)",
+                  #'v1_0.header'{priority = {ubyte, 11}}, #'v1_0.properties'{}, app_props()),
+    true = match("10.0 IN (true, p.group-sequence)",
+                 #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
+    true = match("10.00 IN (false, p.group-sequence)",
+                 #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
 
     %% NOT IN
     true = match("country NOT IN ('US', 'France', 'Germany')", app_props()),
     true = match("country NOT IN ('🇬🇧')", app_props()),
     false = match("country NOT IN ('🇫🇷', '🇬🇧')", AppPropsUtf8),
     false = match("country NOT IN ('US', 'UK', 'France')", app_props()),
+    false = match("'London' NOT IN (city, country)", app_props()),
+    false = match("10.0 NOT IN (true, p.group-sequence)",
+                  #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
 
     %% Combined with other operators
     true = match("country IN ('UK', 'US') AND weight > 3", app_props()),

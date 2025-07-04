@@ -23,6 +23,9 @@ search(Pred, Node) ->
             case Node of
                 {Op, Arg} when is_atom(Op) ->
                     search(Pred, Arg);
+                {in, Arg, List} ->
+                    search(Pred, Arg) orelse
+                    lists:any(fun(N) -> search(Pred, N) end, List);
                 {Op, Arg1, Arg2} when is_atom(Op) ->
                     search(Pred, Arg1) orelse
                     search(Pred, Arg2);
@@ -49,6 +52,8 @@ map_1(Other, _Fun) ->
 
 map_2({Op, Arg1}, Fun) ->
     {Op, map_1(Arg1, Fun)};
+map_2({in, Arg1, List}, Fun) ->
+    {in, map_1(Arg1, Fun), lists:map(fun(N) -> map_1(N, Fun) end, List)};
 map_2({Op, Arg1, Arg2}, Fun) ->
     {Op, map_1(Arg1, Fun), map_1(Arg2, Fun)};
 map_2({Op, Arg1, Arg2, Arg3}, Fun) ->
@@ -79,8 +84,11 @@ has_binary_identifier_test() ->
     false = has_binary_identifier("properties.group-id LIKE 'group_%' ESCAPE '!'"),
     true = has_binary_identifier("user_tag LIKE 'group_%' ESCAPE '!'"),
 
-    false = has_binary_identifier("properties.group-id IN ('g1', 'g2', 'g3')"),
     true = has_binary_identifier("user_category IN ('g1', 'g2', 'g3')"),
+    true = has_binary_identifier("p.group-id IN ('g1', user_key, 'g3')"),
+    true = has_binary_identifier("p.group-id IN ('g1', 'g2', a.user_key)"),
+    false = has_binary_identifier("p.group-id IN (p.reply-to-group-id, 'g2', 'g3')"),
+    false = has_binary_identifier("properties.group-id IN ('g1', 'g2', 'g3')"),
 
     false = has_binary_identifier(
               "(properties.group-sequence + 1) * 2 <= 100 AND " ++
