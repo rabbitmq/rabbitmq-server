@@ -3571,12 +3571,9 @@ subscription_exists(StreamSubscriptions, SubscriptionId) ->
     lists:any(fun(Id) -> Id =:= SubscriptionId end, SubscriptionIds).
 
 send_file_callback(?VERSION_1,
-                   Transport,
                    _Log,
                    #consumer{configuration =
-                                 #consumer_configuration{socket = S,
-                                                         subscription_id =
-                                                             SubscriptionId,
+                                 #consumer_configuration{subscription_id = SubId,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
@@ -3587,19 +3584,16 @@ send_file_callback(?VERSION_1,
              ?REQUEST:1,
              ?COMMAND_DELIVER:15,
              ?VERSION_1:16,
-             SubscriptionId:8/unsigned>>,
-       Transport:send(S, FrameBeginning),
+             SubId:8/unsigned>>,
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
-       set_consumer_offset(Counters, FirstOffsetInChunk)
+       set_consumer_offset(Counters, FirstOffsetInChunk),
+       FrameBeginning
     end;
 send_file_callback(?VERSION_2,
-                   Transport,
                    Log,
                    #consumer{configuration =
-                                 #consumer_configuration{socket = S,
-                                                         subscription_id =
-                                                             SubscriptionId,
+                                 #consumer_configuration{subscription_id = SubId,
                                                          counters = Counters}},
                    Counter) ->
     fun(#{chunk_id := FirstOffsetInChunk, num_entries := NumEntries},
@@ -3611,12 +3605,12 @@ send_file_callback(?VERSION_2,
              ?REQUEST:1,
              ?COMMAND_DELIVER:15,
              ?VERSION_2:16,
-             SubscriptionId:8/unsigned,
+             SubId:8/unsigned,
              CommittedChunkId:64>>,
-       Transport:send(S, FrameBeginning),
        atomics:add(Counter, 1, Size),
        increase_messages_consumed(Counters, NumEntries),
-       set_consumer_offset(Counters, FirstOffsetInChunk)
+       set_consumer_offset(Counters, FirstOffsetInChunk),
+       FrameBeginning
     end.
 
 send_chunks(DeliverVersion,
@@ -3686,9 +3680,7 @@ send_chunks(DeliverVersion,
             Retry,
             Counter) ->
     case osiris_log:send_file(Socket, Log,
-                              send_file_callback(DeliverVersion,
-                                                 Transport,
-                                                 Log,
+                              send_file_callback(DeliverVersion, Log,
                                                  Consumer,
                                                  Counter))
     of
