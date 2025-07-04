@@ -155,9 +155,9 @@ init_source(State = #{source := #{current := #{link := Link},
 init_dest(#{name := Name,
             shovel_type := Type,
             dest := #{add_forward_headers := true} = Dst} = State) ->
-    Props = #{<<"shovelled-by">> => rabbit_nodes:cluster_name(),
-              <<"shovel-type">> => rabbit_data_coercion:to_binary(Type),
-              <<"shovel-name">> => rabbit_data_coercion:to_binary(Name)},
+    Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
+              <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
+              <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
     State#{dest => Dst#{cached_forward_headers => Props}};
 init_dest(State) ->
     State.
@@ -337,7 +337,7 @@ forward(Tag, Msg0,
     Msg1 = mc:protocol_state(mc:convert(mc_amqp, Msg0)),
     Records = lists:flatten([amqp10_framing:decode_bin(iolist_to_binary(S)) || S <- Msg1]),
     Msg2 = amqp10_msg:new(OutTag, Records, AckMode =/= on_confirm),
-    Msg = update_amqp10_message(Msg2, mc:exchange(Msg0), mc:routing_keys(Msg0), State),
+    Msg = add_timestamp_header(State, add_forward_headers(State, Msg2)),
     case send_msg(Link, Msg) of
         ok ->
             rabbit_shovel_behaviour:decr_remaining_unacked(
@@ -366,23 +366,13 @@ send_msg(Link, Msg) ->
             end
     end.
 
-update_amqp10_message(Msg0, Exchange, RK, #{dest := #{properties := Props,
-                                                      application_properties := AppProps0,
-                                                      message_annotations := MsgAnns}} = State) ->
-    Msg1 = amqp10_msg:set_properties(Props, Msg0),
-    Msg2 = amqp10_msg:set_message_annotations(MsgAnns, Msg1),
-    AppProps = AppProps0#{<<"exchange">> => Exchange,
-                          <<"routing_key">> => RK},
-    Msg = amqp10_msg:set_application_properties(AppProps, Msg2),
-    add_timestamp_header(State, add_forward_headers(State, Msg)).
-
 add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
-    P =#{creation_time => os:system_time(milli_seconds)},
-    amqp10_msg:set_properties(P, Msg);
+    Anns = #{<<"x-opt-shovelled-timestamp">> => os:system_time(milli_seconds)},
+    amqp10_msg:set_message_annotations(Anns, Msg);
 add_timestamp_header(_, Msg) -> Msg.
 
-add_forward_headers(#{dest := #{cached_forward_headers := Props}}, Msg) ->
-    amqp10_msg:set_application_properties(Props, Msg);
+add_forward_headers(#{dest := #{cached_forward_headers := Anns}}, Msg) ->
+    amqp10_msg:set_message_annotations(Anns, Msg);
 add_forward_headers(_, Msg) -> Msg.
 
 gen_unique_name(Pre0, Post0) ->
