@@ -180,20 +180,23 @@ eval0({'like', Expr, {pattern, Pattern}}, Msg) ->
 %% "Comparison or arithmetic with an unknown value always yields an unknown value."
 compare(_Op, Left, Right) when Left =:= undefined orelse Right =:= undefined ->
     undefined;
-%% "Only like type values can be compared.
-%% One exception is that it is valid to compare exact numeric values and approximate numeric values.
-%% String and Boolean comparison is restricted to = and <>."
+%% "Only like type values can be compared. One exception is that it is valid to
+%% compare exact numeric values and approximate numeric values"
 compare('=', Left, Right) ->
     Left == Right;
 compare('<>', Left, Right) ->
     Left /= Right;
-compare('>', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('>', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                               is_binary(Left) andalso is_binary(Right) ->
     Left > Right;
-compare('<', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('<', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                               is_binary(Left) andalso is_binary(Right) ->
     Left < Right;
-compare('>=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('>=', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                                is_binary(Left) andalso is_binary(Right) ->
     Left >= Right;
-compare('<=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('<=', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                                is_binary(Left) andalso is_binary(Right) ->
     Left =< Right;
 compare(_, _, _) ->
     %% "If the comparison of non-like type values is attempted,
