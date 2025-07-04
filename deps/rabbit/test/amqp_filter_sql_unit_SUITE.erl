@@ -123,15 +123,22 @@ comparison_operators(_Config) ->
     %% Greater than
     true = match("weight > 3", app_props()),
     false = match("weight > 5", app_props()),
+    true = match("country > 'DE'", app_props()),
+    false = match("country > 'US'", app_props()),
+    true = match("'Zurich' > city", app_props()),
 
     %% Less than
     true = match("weight < 10", app_props()),
     false = match("weight < 5", app_props()),
+    true = match("country < 'US'", app_props()),
+    false = match("country < 'DE'", app_props()),
 
     %% Greater than or equal
     true = match("weight >= 5", app_props()),
     true = match("weight >= 4", app_props()),
     false = match("weight >= 6", app_props()),
+    true = match("country >= 'UK'", app_props()),
+    true = match("country >= 'DE'", app_props()),
     %% "Only like type values can be compared. One exception is that it is
     %% valid to compare exact numeric values and approximate numeric value"
     true = match("weight >= 5.0", app_props()),
@@ -149,8 +156,11 @@ comparison_operators(_Config) ->
     false = match("weight <= 4", app_props()),
     true = match("price <= 10.6", app_props()),
     false = match("price <= 10", app_props()),
+    true = match("country <= 'US'", app_props()),
+    true = match("country <= 'UK'", app_props()),
+    false = match("country <= 'DE'", app_props()),
 
-    %% "String and Boolean comparison is restricted to = and <>."
+    %% "Boolean comparison is restricted to = and <>."
     %% "If the comparison of non-like type values is attempted, the value of the operation is false."
     true = match("active = true", app_props()),
     true = match("premium = false", app_props()),
@@ -160,19 +170,15 @@ comparison_operators(_Config) ->
     false = match("premium >= 0", app_props()),
     false = match("premium <= 0", app_props()),
 
-    false = match("country >= 'UK'", app_props()),
-    false = match("country > 'UA'", app_props()),
-    false = match("country >= 'UA'", app_props()),
-    false = match("country < 'UA'", app_props()),
-    false = match("country <= 'UA'", app_props()),
-    false = match("country < 'UL'", app_props()),
-    false = match("country < true", app_props()),
-
     false = match("weight = '5'", app_props()),
     false = match("weight >= '5'", app_props()),
     false = match("weight <= '5'", app_props()),
+    false = match("country <= true", app_props()),
+    false = match("country >= true", app_props()),
     false = match("country > 1", app_props()),
-    false = match("country < 1", app_props()).
+    false = match("country >= 1", app_props()),
+    false = match("country < 1", app_props()),
+    false = match("country <= 1", app_props()).
 
 arithmetic_operators(_Config) ->
     %% Addition
