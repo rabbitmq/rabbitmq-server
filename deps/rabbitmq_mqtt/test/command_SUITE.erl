@@ -42,11 +42,14 @@ init_per_suite(Config) ->
         {rmq_extra_tcp_ports, [tcp_port_mqtt_extra,
                                tcp_port_mqtt_tls_extra]},
         {rmq_nodes_clustered, true},
-        {rmq_nodes_count, 3}
+        {rmq_nodes_count, 3},
+        {start_rmq_with_plugins_disabled, true}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+      rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config2, rabbitmq_mqtt),
+    Config2.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
