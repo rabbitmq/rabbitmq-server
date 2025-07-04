@@ -338,7 +338,7 @@ invalid_filter(Config) ->
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>}}}),
 
     %% Trigger a lexer error.
-    Filter1 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter1 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"@#$%^&">>}}},
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, Address,
@@ -356,7 +356,7 @@ invalid_filter(Config) ->
     ok = detach_link_sync(Receiver1),
 
     %% Trigger a parser error. We use allowed tokens here, but the grammar is incorrect.
-    Filter2 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter2 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"FALSE FALSE">>}}},
     {ok, Receiver2} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 2">>, Address,
@@ -375,7 +375,7 @@ invalid_filter(Config) ->
     PropsFilter = [{{symbol, <<"subject">>}, {utf8, <<"some subject">>}}],
     Filter3 = #{<<"prop name">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
                                            value = {map, PropsFilter}},
-                ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+                ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"TRUE">>}}},
     {ok, Receiver3} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 3">>, Address,
@@ -393,7 +393,7 @@ invalid_filter(Config) ->
 
     %% Send invalid UTF-8 in the SQL expression.
     InvalidUTF8 = <<255>>,
-    Filter4 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter4 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, InvalidUTF8}}},
     {ok, Receiver4} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 4">>, Address,
@@ -432,7 +432,7 @@ filter(String)
   when is_binary(String) ->
     #{<<"from start">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
                                   value = {symbol, <<"first">>}},
-      ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_NAME_SELECTOR_FILTER,
+      ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_NAME_SQL_FILTER,
                                   value = {utf8, String}}}.
 
 assert_credit_exhausted(Receiver, Line) ->

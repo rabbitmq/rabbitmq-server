@@ -1,8 +1,8 @@
-%%% This is the definitions file for JMS message selectors:
-%%% https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#message-selector
+%%% This is the definitions file for SQL Filter Expressions:
+%%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929276
 %%%
-%%% To manually generate the scanner file rabbit_jms_selector_lexer.erl run:
-%%% leex:file("rabbit_jms_selector_lexer.xrl", [deterministic]).
+%%% To manually generate the scanner file rabbit_amqp_sql_lexer.erl run:
+%%% leex:file("rabbit_amqp_sql_lexer.xrl", [deterministic]).
 
 Definitions.
 WHITESPACE  = [\s\t\f\n\r]
@@ -27,7 +27,6 @@ Rules.
 [nN][oO][tT]   : {token, {'NOT', TokenLine}}.
 
 % Special operators (case insensitive)
-[bB][eE][tT][wW][eE][eE][nN] : {token, {'BETWEEN', TokenLine}}.
 [lL][iI][kK][eE]             : {token, {'LIKE', TokenLine}}.
 [iI][nN]                     : {token, {'IN', TokenLine}}.
 [iI][sS]                     : {token, {'IS', TokenLine}}.
@@ -39,8 +38,10 @@ Rules.
 [fF][aA][lL][sS][eE]         : {token, {boolean, TokenLine, false}}.
 
 % Comparison operators
-=             : {token, {'=', TokenLine}}.
+% "The ‘<>’ operator is synonymous to the ‘!=’ operator."
 <>            : {token, {'<>', TokenLine}}.
+!=            : {token, {'<>', TokenLine}}.
+=             : {token, {'=', TokenLine}}.
 >=            : {token, {'>=', TokenLine}}.
 <=            : {token, {'<=', TokenLine}}.
 >             : {token, {'>', TokenLine}}.
@@ -51,6 +52,7 @@ Rules.
 -             : {token, {'-', TokenLine}}.
 \*            : {token, {'*', TokenLine}}.
 /             : {token, {'/', TokenLine}}.
+\%            : {token, {'%', TokenLine}}.
 
 % Parentheses and comma
 \(            : {token, {'(', TokenLine}}.

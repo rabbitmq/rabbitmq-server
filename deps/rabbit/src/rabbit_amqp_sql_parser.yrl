@@ -1,8 +1,8 @@
-%%% This is the grammar file for JMS message selectors:
-%%% https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#message-selector
+%%% This is the grammar file for SQL Filter Expressions:
+%%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929276
 %%%
-%%% To manually generate the parser file rabbit_jms_selector_parser.erl run:
-%%% yecc:file("rabbit_jms_selector_parser.yrl", [deterministic]).
+%%% To manually generate the parser file rabbit_amqp_sql_parser.erl run:
+%%% yecc:file("rabbit_amqp_sql_parser.yrl", [deterministic]).
 
 Nonterminals
     selector
@@ -17,7 +17,6 @@ Nonterminals
     identifier_expr
     string_list
     string_item
-    between_expr
     in_expr
     like_expr
     is_null_expr.
@@ -25,9 +24,9 @@ Nonterminals
 Terminals
     integer float boolean string identifier
     '=' '<>' '>' '<' '>=' '<='
-    '+' '-' '*' '/'
+    '+' '-' '*' '/' '%'
     'AND' 'OR' 'NOT'
-    'BETWEEN' 'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
+    'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
     '(' ')' ','.
 
 Rootsymbol selector.
@@ -37,7 +36,7 @@ Left 100 'OR'.
 Left 200 'AND'.
 Nonassoc 300 '=' '<>' '>' '<' '>=' '<='.
 Left 400 '+' '-'.
-Left 500 '*' '/'.
+Left 500 '*' '/' '%'.
 Unary 600 'NOT'.
 
 %% "A selector is a conditional expression"
@@ -59,15 +58,10 @@ comparison_expr -> additive_expr '>' additive_expr : {'>', '$1', '$3'}.
 comparison_expr -> additive_expr '<' additive_expr : {'<', '$1', '$3'}.
 comparison_expr -> additive_expr '>=' additive_expr : {'>=', '$1', '$3'}.
 comparison_expr -> additive_expr '<=' additive_expr : {'<=', '$1', '$3'}.
-comparison_expr -> between_expr : '$1'.
 comparison_expr -> like_expr : '$1'.
 comparison_expr -> in_expr : '$1'.
 comparison_expr -> is_null_expr : '$1'.
 comparison_expr -> additive_expr : '$1'.
-
-%% BETWEEN expression
-between_expr -> additive_expr 'BETWEEN' additive_expr 'AND' additive_expr : {'between', '$1', '$3', '$5'}.
-between_expr -> additive_expr 'NOT' 'BETWEEN' additive_expr 'AND' additive_expr : {'not', {'between', '$1', '$4', '$6'}}.
 
 %% LIKE expression
 like_expr -> additive_expr 'LIKE' string :
@@ -97,6 +91,7 @@ additive_expr -> multiplicative_expr : '$1'.
 
 multiplicative_expr -> multiplicative_expr '*' unary_expr : {'*', '$1', '$3'}.
 multiplicative_expr -> multiplicative_expr '/' unary_expr : {'/', '$1', '$3'}.
+multiplicative_expr -> multiplicative_expr '%' unary_expr : {'%', '$1', '$3'}.
 multiplicative_expr -> unary_expr : '$1'.
 
 %% Handle unary operators through grammar structure instead of precedence

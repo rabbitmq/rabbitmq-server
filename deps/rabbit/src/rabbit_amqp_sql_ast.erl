@@ -5,8 +5,8 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
 %% Helper functions operating on the Abstract Syntax Tree (AST)
-%% as returned by rabbit_jms_selector_parser:parse/1
--module(rabbit_jms_ast).
+%% as returned by rabbit_amqp_sql_parser:parse/1
+-module(rabbit_amqp_sql_ast).
 
 -export([search/2,
          map/2]).
@@ -76,9 +76,6 @@ has_binary_identifier_test() ->
     true = has_binary_identifier("custom_metric * 10 < 100"),
     true = has_binary_identifier("properties.creation-time >= 12345 OR user_data = 'test'"),
 
-    false = has_binary_identifier("properties.group-sequence BETWEEN 1 AND 10"),
-    true = has_binary_identifier("user_score BETWEEN 1 AND 10"),
-
     false = has_binary_identifier("properties.group-id LIKE 'group_%' ESCAPE '!'"),
     true = has_binary_identifier("user_tag LIKE 'group_%' ESCAPE '!'"),
 
@@ -87,15 +84,15 @@ has_binary_identifier_test() ->
 
     false = has_binary_identifier(
               "(properties.group-sequence + 1) * 2 <= 100 AND " ++
-              "(properties.group-id LIKE 'prod_%' OR header.priority BETWEEN 5 AND 10)"),
+              "(properties.group-id LIKE 'prod_%' OR h.priority > 5)"),
     true = has_binary_identifier(
              "(properties.group-sequence + 1) * 2 <= 100 AND " ++
-             "(user_value LIKE 'prod_%' OR properties.absolute-expiry-time BETWEEN 5 AND 10)"),
+             "(user_value LIKE 'prod_%' OR p.absolute-expiry-time < 10)"),
     ok.
 
 has_binary_identifier(Selector) ->
-    {ok, Tokens, _EndLocation} = rabbit_jms_selector_lexer:string(Selector),
-    {ok, Ast0} = rabbit_jms_selector_parser:parse(Tokens),
+    {ok, Tokens, _EndLocation} = rabbit_amqp_sql_lexer:string(Selector),
+    {ok, Ast0} = rabbit_amqp_sql_parser:parse(Tokens),
     Ast = map(fun({identifier, Ident}) when is_binary(Ident) ->
                       {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
                  (Node) ->

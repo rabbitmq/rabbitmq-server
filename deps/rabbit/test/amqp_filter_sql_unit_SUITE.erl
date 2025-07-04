@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(amqp_jms_unit_SUITE).
+-module(amqp_filter_sql_unit_SUITE).
 
 -compile([export_all, nowarn_export_all]).
 
@@ -30,7 +30,6 @@ groups() ->
        string_comparison,
        like_operator,
        in_operator,
-       between_operator,
        null_handling,
        literals,
        scientific_notation,
@@ -43,6 +42,7 @@ groups() ->
        header_section,
        properties_section,
        multiple_sections,
+       section_qualifier,
        parse_errors
       ]
      }].
@@ -116,20 +116,28 @@ comparison_operators(_Config) ->
 
     %% Inequality
     true = match("country <> 'US'", app_props()),
+    true = match("country != 'US'", app_props()),
     false = match("country <> 'UK'", app_props()),
+    false = match("country != 'UK'", app_props()),
 
     %% Greater than
     true = match("weight > 3", app_props()),
     false = match("weight > 5", app_props()),
+    true = match("country > 'DE'", app_props()),
+    false = match("country > 'US'", app_props()),
 
     %% Less than
     true = match("weight < 10", app_props()),
     false = match("weight < 5", app_props()),
+    true = match("country < 'US'", app_props()),
+    false = match("country < 'DE'", app_props()),
 
     %% Greater than or equal
     true = match("weight >= 5", app_props()),
     true = match("weight >= 4", app_props()),
     false = match("weight >= 6", app_props()),
+    true = match("country >= 'UK'", app_props()),
+    true = match("country >= 'DE'", app_props()),
     %% "Only like type values can be compared. One exception is that it is
     %% valid to compare exact numeric values and approximate numeric value"
     true = match("weight >= 5.0", app_props()),
@@ -147,8 +155,11 @@ comparison_operators(_Config) ->
     false = match("weight <= 4", app_props()),
     true = match("price <= 10.6", app_props()),
     false = match("price <= 10", app_props()),
+    true = match("country <= 'US'", app_props()),
+    true = match("country <= 'UK'", app_props()),
+    false = match("country <= 'DE'", app_props()),
 
-    %% "String and Boolean comparison is restricted to = and <>."
+    %% "Boolean comparison is restricted to = and <>."
     %% "If the comparison of non-like type values is attempted, the value of the operation is false."
     true = match("active = true", app_props()),
     true = match("premium = false", app_props()),
@@ -158,19 +169,15 @@ comparison_operators(_Config) ->
     false = match("premium >= 0", app_props()),
     false = match("premium <= 0", app_props()),
 
-    false = match("country >= 'UK'", app_props()),
-    false = match("country > 'UA'", app_props()),
-    false = match("country >= 'UA'", app_props()),
-    false = match("country < 'UA'", app_props()),
-    false = match("country <= 'UA'", app_props()),
-    false = match("country < 'UL'", app_props()),
-    false = match("country < true", app_props()),
-
     false = match("weight = '5'", app_props()),
     false = match("weight >= '5'", app_props()),
     false = match("weight <= '5'", app_props()),
+    false = match("country <= true", app_props()),
+    false = match("country >= true", app_props()),
     false = match("country > 1", app_props()),
-    false = match("country < 1", app_props()).
+    false = match("country >= 1", app_props()),
+    false = match("country < 1", app_props()),
+    false = match("country <= 1", app_props()).
 
 arithmetic_operators(_Config) ->
     %% Addition
@@ -190,6 +197,18 @@ arithmetic_operators(_Config) ->
     true = match("price / 2 = 5.25", app_props()),
     true = match("quantity / 10 = 10", app_props()),
     true = match("quantity / 10 = 10.000", app_props()),
+
+    %% Modulo
+    true = match("weight % 2 = 1", app_props()),
+    true = match("quantity % weight = 0.00", app_props()),
+    true = match("score = quantity % quantity", app_props()),
+    true = match("quantity % percentage = 25", app_props()),
+    true = match("24 < quantity % percentage", app_props()),
+    true = match("7 % temperature = 2", app_props()), % mod negative number
+    false = match("quantity % score = 0", app_props()), % mod 0
+    true = match("101 % percentage % weight = 1", app_props()), % left associative
+    true = match("(quantity + 1) % percentage % weight = 1", app_props()),
+    true = match("101 % (percentage % 30) = 11", app_props()),
 
     %% Nested arithmetic
     true = match("(weight + 5) * 2 = 20", app_props()),
@@ -347,43 +366,6 @@ in_operator(_Config) ->
     false = match("missing NOT IN ('UK', 'US')", app_props()),
     false = match("absent NOT IN ('UK', 'US')", app_props()).
 
-between_operator(_Config) ->
-    %% Basic BETWEEN operations
-    true = match("weight BETWEEN 3 AND 7", app_props()),
-    true = match("weight BETWEEN 5 AND 7", app_props()),
-    true = match("weight BETWEEN 3 AND 5", app_props()),
-    false = match("weight BETWEEN 6 AND 10", app_props()),
-    true = match("price BETWEEN 10 AND 11", app_props()),
-    true = match("price BETWEEN 10 AND 10.5", app_props()),
-    false = match("price BETWEEN -1 AND 10", app_props()),
-    false = match("score BETWEEN tiny_value AND quantity", app_props()),
-    true = match("score BETWEEN -tiny_value AND quantity", app_props()),
-
-    %% NOT BETWEEN
-    true = match("weight NOT BETWEEN 6 AND 10", app_props()),
-    false = match("weight NOT BETWEEN 3 AND 7", app_props()),
-    false = match("weight NOT BETWEEN 3 AND 5", app_props()),
-    true = match("score NOT BETWEEN tiny_value AND quantity", app_props()),
-    false = match("score NOT BETWEEN -tiny_value AND quantity", app_props()),
-
-    %% Combined with other operators
-    true = match("weight BETWEEN 4 AND 6 AND country = 'UK'", app_props()),
-    true = match("(price BETWEEN 20 AND 30) OR (weight BETWEEN 5 AND 6)", app_props()),
-
-    %% "a string cannot be used in an arithmetic expression"
-    false = match("weight BETWEEN 1 AND 'Z'", app_props()),
-    false = match("country BETWEEN 'A' AND 'Z'", app_props()),
-
-    %% "Comparison or arithmetic with an unknown value always yields an unknown value."
-    false = match("weight BETWEEN absent AND 10", app_props()),
-    false = match("weight BETWEEN 2 AND absent", app_props()),
-    false = match("weight BETWEEN absent AND absent", app_props()),
-    false = match("absent BETWEEN 2 AND 10", app_props()),
-    false = match("weight NOT BETWEEN absent AND 10", app_props()),
-    false = match("weight NOT BETWEEN 2 AND absent", app_props()),
-    false = match("weight NOT BETWEEN absent AND absent", app_props()),
-    false = match("absent NOT BETWEEN 2 AND 10", app_props()).
-
 null_handling(_Config) ->
     %% IS NULL / IS NOT NULL
     true = match("missing IS NULL", app_props()),
@@ -406,6 +388,7 @@ null_handling(_Config) ->
     false = match("missing <= 0", app_props()),
     false = match("missing = 0", app_props()),
     false = match("missing <> 0", app_props()),
+    false = match("0 != missing", app_props()),
     false = match("missing = missing", app_props()),
     false = match("absent = absent", app_props()),
     false = match("missing AND true", app_props()),
@@ -473,7 +456,6 @@ scientific_notation(_Config) ->
     %% Comparisons with scientific notation
     true = match("distance > 1E6", app_props()),
     true = match("tiny_value < 1E-3", app_props()),
-    true = match("distance BETWEEN 1E6 AND 2E6", app_props()),
 
     %% Mixed numeric formats
     true = match("distance / 1200 = 1000", app_props()),
@@ -495,6 +477,8 @@ precedence_and_parentheses(_Config) ->
 
     %% Mixed precedence
     true = match("weight * 2 > 5 + 3", app_props()),
+    true = match("weight = -(-81) % percentage -1", app_props()),
+    true = match("weight -(-2.0) = -(-81) % (percentage -1)", app_props()),
     true = match("price < 20 OR country = 'US' AND weight > 3", app_props()),
     true = match("weight > 3 AND price < 20 OR country = 'US'", app_props()),
     false = match("weight > 3 AND (price > 20 OR country = 'US')", app_props()),
@@ -550,7 +534,7 @@ type_handling(_Config) ->
 
 complex_expressions(_Config) ->
     true = match(
-             "country = 'UK' AND price > 10.0 AND (weight BETWEEN 4 AND 6) AND description LIKE '%test%'",
+             "country = 'UK' AND price > 10.0 AND description LIKE '%test%' AND 2 = 101 % 3",
              app_props()
             ),
     true = match(
@@ -573,7 +557,7 @@ complex_expressions(_Config) ->
     true = match(
              "((country = 'UK' OR country = 'US') AND (city IN ('London', 'New York', 'Paris'))) OR " ++
              "(price * (1 - discount) < 10.0 AND quantity > 50 AND description LIKE '%test%') OR " ++
-             "(active = TRUE AND premium = FALSE AND (weight BETWEEN 4 AND 10))",
+             "(active AND NOT premium)",
              app_props()
             ).
 
@@ -589,8 +573,6 @@ case_sensitivity(_Config) ->
     true = match("country = 'France' or weight < 6", AppProps),
     true = match("NoT country = 'France'", AppProps),
     true = match("not country = 'France'", AppProps),
-    true = match("weight BeTwEeN 3 AnD 7", AppProps),
-    true = match("weight between 3 AnD 7", AppProps),
     true = match("description LiKe '%test%'", AppProps),
     true = match("description like '%test%'", AppProps),
     true = match("country In ('US', 'UK', 'France')", AppProps),
@@ -622,7 +604,7 @@ case_sensitivity(_Config) ->
     false = match("WEIGHT = 5", AppPropsCaseSensitiveKeys),
 
     true = match(
-             "country = 'UK' aNd COUNTRY = 'France' and (weight Between 4 AnD 6) AND Weight = 10",
+             "country = 'UK' aNd COUNTRY = 'France' and weight < 6 AND Weight = 10",
              AppPropsCaseSensitiveKeys
             ).
 
@@ -693,14 +675,13 @@ header_section(_Config) ->
     Hdr = #'v1_0.header'{priority = {ubyte, 7}},
     Ps = #'v1_0.properties'{},
     APs = [],
-    true = match("header.priority > 5", Hdr, Ps, APs),
-    true = match("header.priority = 7", Hdr, Ps, APs),
-    false = match("header.priority < 7", Hdr, Ps, APs),
+    true = match("h.priority > 5", Hdr, Ps, APs),
+    true = match("h.priority = 7", Hdr, Ps, APs),
+    false = match("h.priority < 7", Hdr, Ps, APs),
 
-    %% Since the default priority is 4 in both AMQP and JMS, we expect the
-    %% following expression to evaluate to true if matched against a message
-    %% without an explicit priority level set.
-    true = match("header.priority = 4", []).
+    %% Since the default priority is 4, we expect the following expression to evaluate
+    %% to true if matched against a message without an explicit priority level set.
+    true = match("h.priority = 4", []).
 
 properties_section(_Config) ->
     Ps = #'v1_0.properties'{
@@ -719,69 +700,65 @@ properties_section(_Config) ->
             reply_to_group_id = {utf8, <<"other group ID">>}},
     APs = [],
 
-    true = match("properties.message-id = 'id-123'", Ps, APs),
-    false = match("'id-123' <> properties.message-id", Ps, APs),
-    true = match("properties.message-id LIKE 'id-%'", Ps, APs),
-    true = match("properties.message-id IN ('id-123', 'id-456')", Ps, APs),
+    true = match("p.message-id = 'id-123'", Ps, APs),
+    false = match("'id-123' != p.message-id", Ps, APs),
+    true = match("p.message-id LIKE 'id-%'", Ps, APs),
+    true = match("p.message-id IN ('id-123', 'id-456')", Ps, APs),
 
-    true = match("properties.user-id = 'some user ID'", Ps, APs),
-    true = match("properties.user-id LIKE '%user%'", Ps, APs),
-    false = match("properties.user-id = 'other user ID'", Ps, APs),
+    true = match("p.user-id = 'some user ID'", Ps, APs),
+    true = match("p.user-id LIKE '%user%'", Ps, APs),
+    false = match("p.user-id = 'other user ID'", Ps, APs),
 
-    true = match("properties.to = 'to some queue'", Ps, APs),
-    true = match("properties.to LIKE 'to some%'", Ps, APs),
-    true = match("properties.to NOT LIKE '%topic'", Ps, APs),
+    true = match("p.to = 'to some queue'", Ps, APs),
+    true = match("p.to LIKE 'to some%'", Ps, APs),
+    true = match("p.to NOT LIKE '%topic'", Ps, APs),
 
-    true = match("properties.subject = 'some subject'", Ps, APs),
-    true = match("properties.subject LIKE '%subject'", Ps, APs),
-    true = match("properties.subject IN ('some subject', 'other subject')", Ps, APs),
+    true = match("p.subject = 'some subject'", Ps, APs),
+    true = match("p.subject LIKE '%subject'", Ps, APs),
+    true = match("p.subject IN ('some subject', 'other subject')", Ps, APs),
 
-    true = match("properties.reply-to = 'reply to some topic'", Ps, APs),
-    true = match("properties.reply-to LIKE 'reply%topic'", Ps, APs),
-    false = match("properties.reply-to LIKE 'reply%queue'", Ps, APs),
+    true = match("p.reply-to = 'reply to some topic'", Ps, APs),
+    true = match("p.reply-to LIKE 'reply%topic'", Ps, APs),
+    false = match("p.reply-to LIKE 'reply%queue'", Ps, APs),
 
-    true = match("properties.correlation-id = 789", Ps, APs),
-    true = match("500 < properties.correlation-id", Ps, APs),
-    true = match("properties.correlation-id BETWEEN 700 AND 800", Ps, APs),
-    false = match("properties.correlation-id < 700", Ps, APs),
+    true = match("p.correlation-id = 789", Ps, APs),
+    true = match("500 < p.correlation-id", Ps, APs),
+    false = match("p.correlation-id < 700", Ps, APs),
 
-    true = match("properties.content-type = 'text/plain'", Ps, APs),
-    true = match("properties.content-type LIKE 'text/%'", Ps, APs),
-    true = match("properties.content-type IN ('text/plain', 'text/html')", Ps, APs),
+    true = match("p.content-type = 'text/plain'", Ps, APs),
+    true = match("p.content-type LIKE 'text/%'", Ps, APs),
+    true = match("p.content-type IN ('text/plain', 'text/html')", Ps, APs),
 
-    true = match("'deflate' = properties.content-encoding", Ps, APs),
-    false = match("properties.content-encoding = 'gzip'", Ps, APs),
-    true = match("properties.content-encoding NOT IN ('gzip', 'compress')", Ps, APs),
+    true = match("'deflate' = p.content-encoding", Ps, APs),
+    false = match("p.content-encoding = 'gzip'", Ps, APs),
+    true = match("p.content-encoding NOT IN ('gzip', 'compress')", Ps, APs),
 
-    true = match("properties.absolute-expiry-time = 1311999988888", Ps, APs),
-    true = match("properties.absolute-expiry-time > 1311999988000", Ps, APs),
-    true = match("properties.absolute-expiry-time BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
+    true = match("p.absolute-expiry-time = 1311999988888", Ps, APs),
+    true = match("p.absolute-expiry-time > 1311999988000", Ps, APs),
 
-    true = match("properties.creation-time = 1311704463521", Ps, APs),
-    true = match("properties.creation-time < 1311999988888", Ps, APs),
-    true = match("properties.creation-time NOT BETWEEN 1311999988000 AND 1311999989000", Ps, APs),
+    true = match("p.creation-time = 1311704463521", Ps, APs),
+    true = match("p.creation-time < 1311999988888", Ps, APs),
 
-    true = match("properties.group-id = 'some group ID'", Ps, APs),
-    true = match("properties.group-id LIKE 'some%ID'", Ps, APs),
-    false = match("properties.group-id = 'other group ID'", Ps, APs),
+    true = match("p.group-id = 'some group ID'", Ps, APs),
+    true = match("p.group-id LIKE 'some%ID'", Ps, APs),
+    false = match("p.group-id = 'other group ID'", Ps, APs),
 
-    true = match("properties.group-sequence = 999", Ps, APs),
-    true = match("properties.group-sequence >= 999", Ps, APs),
-    true = match("properties.group-sequence BETWEEN 900 AND 1000", Ps, APs),
-    false = match("properties.group-sequence > 999", Ps, APs),
+    true = match("p.group-sequence = 999", Ps, APs),
+    true = match("p.group-sequence >= 999", Ps, APs),
+    false = match("p.group-sequence > 999", Ps, APs),
 
-    true = match("properties.reply-to-group-id = 'other group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id LIKE '%group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id <> 'some group ID'", Ps, APs),
-    true = match("properties.reply-to-group-id IS NOT NULL", Ps, APs),
-    false = match("properties.reply-to-group-id IS NULL", Ps, APs),
+    true = match("p.reply-to-group-id = 'other group ID'", Ps, APs),
+    true = match("p.reply-to-group-id LIKE '%group ID'", Ps, APs),
+    true = match("p.reply-to-group-id != 'some group ID'", Ps, APs),
+    true = match("p.reply-to-group-id IS NOT NULL", Ps, APs),
+    false = match("p.reply-to-group-id IS NULL", Ps, APs),
 
-    true = match("properties.message-id = 'id-123' and 'some subject' = properties.subject", Ps, APs),
-    true = match("properties.group-sequence < 500 or properties.correlation-id > 700", Ps, APs),
-    true = match("(properties.content-type LIKE 'text/%') AND properties.content-encoding = 'deflate'", Ps, APs),
+    true = match("p.message-id = 'id-123' and 'some subject' = p.subject", Ps, APs),
+    true = match("p.group-sequence < 500 or p.correlation-id > 700", Ps, APs),
+    true = match("(p.content-type LIKE 'text/%') AND p.content-encoding = 'deflate'", Ps, APs),
 
-    true = match("properties.subject IS NULL", #'v1_0.properties'{}, APs),
-    false = match("properties.subject IS NOT NULL", #'v1_0.properties'{}, APs).
+    true = match("p.subject IS NULL", #'v1_0.properties'{}, APs),
+    false = match("p.subject IS NOT NULL", #'v1_0.properties'{}, APs).
 
 multiple_sections(_Config) ->
     Hdr = #'v1_0.header'{durable = true,
@@ -804,6 +781,29 @@ multiple_sections(_Config) ->
 
     true = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence > 90", Hdr, Ps, APs),
     false = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence < 90", Hdr, Ps, APs).
+
+section_qualifier(_Config) ->
+    Hdr = #'v1_0.header'{priority = {ubyte, 7}},
+    Ps = #'v1_0.properties'{message_id = {utf8, <<"id-123">>}},
+    APs = [{{utf8, <<"key_1">>}, {byte, -1}}],
+
+    %% supported section qualifiers
+    true = match("header.priority = 7", Hdr, Ps, APs),
+    true = match("h.priority = 7", Hdr, Ps, APs),
+    true = match("properties.message-id = 'id-123'", Hdr, Ps, APs),
+    true = match("p.message-id = 'id-123'", Hdr, Ps, APs),
+    true = match("application-properties.key_1 = -1", Hdr, Ps, APs),
+    true = match("a.key_1 = -1", Hdr, Ps, APs),
+    true = match("key_1 = -1", Hdr, Ps, APs),
+
+    %% (currently) unsupported section qualifiers
+    ?assertEqual(error, parse("delivery-annotations.abc")),
+    ?assertEqual(error, parse("d.abc")),
+    ?assertEqual(error, parse("message-annotations.abc")),
+    ?assertEqual(error, parse("m.abc")),
+    ?assertEqual(error, parse("footer.abc")),
+    ?assertEqual(error, parse("f.abc")),
+    ok.
 
 parse_errors(_Config) ->
     %% Parsing a non-UTF-8 encoded message selector should fail.
@@ -881,12 +881,12 @@ match(Selector, Header, Props, AppProps)
     Sections = [Header, Props, AP, Body],
     Payload = amqp_encode_bin(Sections),
     Mc = mc_amqp:init_from_stream(Payload, #{}),
-    rabbit_amqp_filter_jms:eval(ParsedSelector, Mc).
+    rabbit_amqp_filter_sql:eval(ParsedSelector, Mc).
 
 parse(Selector) ->
-    Descriptor = {ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER},
+    Descriptor = {ulong, ?DESCRIPTOR_CODE_SQL_FILTER},
     Filter = {described, Descriptor, {utf8, Selector}},
-    rabbit_amqp_filter_jms:parse(Filter).
+    rabbit_amqp_filter_sql:parse(Filter).
 
 amqp_encode_bin(L) when is_list(L) ->
     iolist_to_binary([amqp10_framing:encode_bin(X) || X <- L]).
