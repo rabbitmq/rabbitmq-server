@@ -322,6 +322,10 @@ init_per_testcase(T, Config)
 init_per_testcase(Testcase, Config) ->
     ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
+    RabbitMQ3 = case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
+                    ok -> false;
+                    _ -> true
+                end,
     SameKhepriMacVers = (
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
@@ -359,6 +363,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
+        cancel_consumer_gh_3729 when IsMixed andalso RabbitMQ3 ->
+            {skip, "this test is not compatible with RabbitMQ 3.13.x"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1535,7 +1541,7 @@ force_checkpoint(Config) ->
     ForceCheckpointRes = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
         force_checkpoint, [<<".*">>, <<".*">>]),
     ExpectedRes = [{QQName, {ok}}],
-    
+
     % Result should only have quorum queue
     ?assertEqual(ExpectedRes, ForceCheckpointRes).
 
@@ -2494,8 +2500,6 @@ metrics_cleanup_on_leader_crash(Config) ->
     publish(Ch, QQ),
     publish(Ch, QQ),
 
-    wait_for_messages_ready([Server], RaName, 3),
-    wait_for_messages_pending_ack([Server], RaName, 0),
     {ok, _, {Name, Leader}} = ra:members({RaName, Server}),
     QRes = rabbit_misc:r(<<"/">>, queue, QQ),
     rabbit_ct_helpers:await_condition(
