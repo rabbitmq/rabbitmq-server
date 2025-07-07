@@ -27,7 +27,8 @@ groups() ->
        logical_operators,
        comparison_operators,
        arithmetic_operators,
-       string_comparison,
+       single_quoted_strings,
+       double_quoted_strings,
        binary_constants,
        like_operator,
        in_operator,
@@ -241,18 +242,97 @@ arithmetic_operators(_Config) ->
     false = match("absent + 4 = 5", app_props()),
     false = match("2 * absent = 0", app_props()).
 
-string_comparison(_Config) ->
+single_quoted_strings(_Config) ->
     %% "Two strings are equal if and only if they contain the same sequence of characters."
     false = match("country = '🇬🇧'", app_props()),
     true = match("country = '🇬🇧'", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧"/utf8>>}}]),
 
-    %% "A string literal is enclosed in single quotes, with an included
-    %% single quote represented by doubled single quote"
+    %%  "A quotation mark inside the string is represented by two consecutive quotation marks."
     true = match("'UK''s' = 'UK''s'", app_props()),
     true = match("country = 'UK''s'", [{{utf8, <<"country">>}, {utf8, <<"UK's">>}}]),
     true = match("country = '🇬🇧''s'", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧's"/utf8>>}}]),
     true = match("country = ''", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
     true = match("country = ''''", [{{utf8, <<"country">>}, {utf8, <<$'>>}}]).
+
+double_quoted_strings(_Config) ->
+    %% Basic double-quoted string equality
+    true = match("\"UK\" = \"UK\"", []),
+    true = match("country = \"UK\"", app_props()),
+    false = match("country = \"US\"", app_props()),
+
+    %% Mix of single and double quotes
+    true = match("'UK' = \"UK\"", []),
+    true = match("\"UK\" = 'UK'", []),
+    true = match("country = 'UK' AND country = \"UK\"", app_props()),
+
+    %% Empty strings
+    true = match("\"\" = ''", []),
+    true = match("\"\" = country", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
+    true = match("'' = country", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
+
+    %% Escaped quotes inside strings
+    true = match("country = \"UK\"\"s\"", [{{utf8, <<"country">>}, {utf8, <<"UK\"s">>}}]),
+    true = match("country = \"\"\"\"", [{{utf8, <<"country">>}, {utf8, <<$">>}}]),
+    true = match("country = \"\"\"\"\"\"", [{{utf8, <<"country">>}, {utf8, <<$", $">>}}]),
+    true = match(" \"\"\"\"\"\" = '\"\"' ", []),
+    true = match("\"UK\"\"s\" = \"UK\"\"s\"", []),
+    true = match("\"They said \"\"Hello\"\"\" = key", [{{utf8, <<"key">>}, {utf8, <<"They said \"Hello\"">>}}]),
+
+    %% Single quotes inside double-quoted strings (no escaping needed)
+    true = match("country = \"UK's\"", [{{utf8, <<"country">>}, {utf8, <<"UK's">>}}]),
+    true = match("key = \"It's working\"", [{{utf8, <<"key">>}, {utf8, <<"It's working">>}}]),
+
+    %% Double quotes inside single-quoted strings (no escaping needed)
+    true = match("country = 'UK\"s'", [{{utf8, <<"country">>}, {utf8, <<"UK\"s">>}}]),
+    true = match("key = 'They said \"Hello\"'", [{{utf8, <<"key">>}, {utf8, <<"They said \"Hello\"">>}}]),
+
+    %% LIKE operator with double-quoted strings
+    true = match("description LIKE \"%test%\"", app_props()),
+    true = match("description LIKE \"This is a %\"", app_props()),
+    true = match("country LIKE \"U_\"", app_props()),
+    true = match("country LIKE \"UK\"", app_props()),
+    false = match("country LIKE \"US\"", app_props()),
+
+    %% ESCAPE with double-quoted strings
+    true = match("product_id LIKE \"ABC\\_%\" ESCAPE \"\\\"", app_props()),
+    true = match("key LIKE \"z_%\" ESCAPE \"z\"", [{{utf8, <<"key">>}, {utf8, <<"_foo">>}}]),
+
+    %% IN operator with double-quoted strings
+    true = match("country IN (\"US\", \"UK\", \"France\")", app_props()),
+    true = match("country IN ('US', \"UK\", 'France')", app_props()),
+    true = match("\"London\" IN (city, country)", app_props()),
+    false = match("country IN (\"US\", \"France\")", app_props()),
+
+    %% NOT LIKE with double-quoted strings
+    true = match("country NOT LIKE \"US\"", app_props()),
+    false = match("country NOT LIKE \"U_\"", app_props()),
+
+    %% Complex expressions with double-quoted strings
+    true = match("country = \"UK\" AND description LIKE \"%test%\" AND city = 'London'", app_props()),
+    true = match("(country IN (\"UK\", \"US\") OR city = \"London\") AND weight > 3", app_props()),
+
+    %% Unicode in double-quoted strings
+    true = match("country = \"🇬🇧\"", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧"/utf8>>}}]),
+    true = match("\"🇬🇧\" = '🇬🇧'", []),
+    false = match("\"🇬🇧\" != '🇬🇧'", []),
+    true = match("country = \"🇬🇧\"\"s\"", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧\"s"/utf8>>}}]),
+
+    %% Whitespace inside double-quoted strings
+    true = match("description = \"This is a test message\"", app_props()),
+    true = match("key = \"  spaces  \"", [{{utf8, <<"key">>}, {utf8, <<"  spaces  ">>}}]),
+
+    %% Properties section with double-quoted strings
+    Props = #'v1_0.properties'{
+               message_id = {utf8, <<"id-123">>},
+               subject = {utf8, <<"test">>}
+              },
+    true = match("p.message-id = \"id-123\"", Props, []),
+    true = match("p.subject = \"test\"", Props, []),
+    true = match("p.message-id = 'id-123' AND p.subject = \"test\"", Props, []),
+
+    true = match("country < \"US\"", app_props()),
+    true = match("\"US\" >= country", app_props()),
+    ok.
 
 binary_constants(_Config) ->
     true = match("0x48656C6C6F = 0x48656C6C6F", app_props()),  % "Hello" = "Hello"

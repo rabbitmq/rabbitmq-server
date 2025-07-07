@@ -17,7 +17,7 @@ EXPONENT    = {DIGIT}+E[\+\-]?{DIGIT}+
 % these two characters return false for Character.isJavaIdentifierPart()
 % to allow identifiers such as properties.group-id
 IDENTIFIER  = [a-zA-Z_$][a-zA-Z0-9_$.\-]*
-STRING      = '([^']|'')*'
+STRING      = '([^']|'')*'|"([^"]|"")*"
 BINARY      = 0x({HEXDIGIT}{HEXDIGIT})+
 
 Rules.
@@ -97,12 +97,11 @@ parse_scientific_notation(Chars) ->
 
 process_string(Chars) ->
     %% remove surrounding quotes
-    Chars1 = lists:sublist(Chars, 2, length(Chars) - 2),
-    Bin = unicode:characters_to_binary(Chars1),
-    process_escaped_quotes(Bin).
-
-process_escaped_quotes(Binary) ->
-    binary:replace(Binary, <<"''">>, <<"'">>, [global]).
+    [Quote | Chars1] = Chars,
+    Chars2 = lists:droplast(Chars1),
+    Bin = unicode:characters_to_binary(Chars2),
+    %% process escaped quotes
+    binary:replace(Bin, <<Quote, Quote>>, <<Quote>>, [global]).
 
 parse_binary([$0, $x | HexChars]) ->
     parse_hex_pairs(HexChars, <<>>).
