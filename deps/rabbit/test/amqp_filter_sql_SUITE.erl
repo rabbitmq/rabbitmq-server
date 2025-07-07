@@ -239,7 +239,7 @@ filter_few_messages_from_many(Config) ->
 
     %% Our filter should cause us to receive only the first and
     %% last message out of the 1002 messages in the stream.
-    Filter = filter(<<"properties.group-id is not null">>),
+    Filter = filter(<<"properties.group-id IS NOT NULL">>),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"receiver">>, Address,
                        unsettled, configuration, Filter),

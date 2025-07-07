@@ -77,7 +77,7 @@ has_binary_identifier_test() ->
     false = has_binary_identifier("properties.group-sequence * 10 < 100"),
     false = has_binary_identifier("properties.creation-time >= 12345 OR properties.subject = 'test'"),
     true = has_binary_identifier("user_key = 'g1' AND header.priority > 5"),
-    true = has_binary_identifier("header.priority > 5 and user_key = 'g1'"),
+    true = has_binary_identifier("header.priority > 5 AND user_key = 'g1'"),
     true = has_binary_identifier("custom_metric * 10 < 100"),
     true = has_binary_identifier("properties.creation-time >= 12345 OR user_data = 'test'"),
 
