@@ -21,7 +21,7 @@ Nonterminals
     is_null_expr.
 
 Terminals
-    integer float boolean string identifier
+    integer float boolean string binary identifier
     '=' '<>' '>' '<' '>=' '<='
     '+' '-' '*' '/' '%'
     'AND' 'OR' 'NOT'
@@ -110,6 +110,7 @@ identifier_expr -> identifier :
 literal -> integer : {integer, extract_value('$1')}.
 literal -> float : {float, extract_value('$1')}.
 literal -> string : {string, extract_value('$1')}.
+literal -> binary : {binary, extract_value('$1')}.
 literal -> boolean : {boolean, extract_value('$1')}.
 
 Erlang code.

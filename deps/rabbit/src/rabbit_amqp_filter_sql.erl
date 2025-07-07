@@ -58,8 +58,9 @@ eval({ApplicationProperties, Ast}, Msg) ->
 eval0({Type, Value}, _Msg)
   when Type =:= integer orelse
        Type =:= float orelse
+       Type =:= boolean orelse
        Type =:= string orelse
-       Type =:= boolean ->
+       Type =:= binary ->
     Value;
 
 %% Identifier lookup

@@ -7,6 +7,7 @@
 Definitions.
 WHITESPACE  = [\s\t\f\n\r]
 DIGIT       = [0-9]
+HEXDIGIT    = [0-9A-F]
 INT         = {DIGIT}+
 % Approximate numeric literal with a decimal
 FLOAT       = ({DIGIT}+\.{DIGIT}*|\.{DIGIT}+)(E[\+\-]?{INT})?
@@ -17,6 +18,7 @@ EXPONENT    = {DIGIT}+E[\+\-]?{DIGIT}+
 % to allow identifiers such as properties.group-id
 IDENTIFIER  = [a-zA-Z_$][a-zA-Z0-9_$.\-]*
 STRING      = '([^']|'')*'
+BINARY      = 0x({HEXDIGIT}{HEXDIGIT})+
 
 Rules.
 {WHITESPACE}+  : skip_token.
@@ -65,6 +67,7 @@ FALSE    : {token, {boolean, TokenLine, false}}.
 {EXPONENT}      : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
 {STRING}        : {token, {string, TokenLine, process_string(TokenChars)}}.
 {IDENTIFIER}    : {token, {identifier, TokenLine, unicode:characters_to_binary(TokenChars)}}.
+{BINARY}        : {token, {binary, TokenLine, parse_binary(TokenChars)}}.
 
 % Catch any other characters as errors
 .    : {error, {illegal_character, TokenChars}}.
@@ -100,3 +103,12 @@ process_string(Chars) ->
 
 process_escaped_quotes(Binary) ->
     binary:replace(Binary, <<"''">>, <<"'">>, [global]).
+
+parse_binary([$0, $x | HexChars]) ->
+    parse_hex_pairs(HexChars, <<>>).
+
+parse_hex_pairs([], Acc) ->
+    Acc;
+parse_hex_pairs([H1, H2 | Rest], Acc) ->
+    Byte = list_to_integer([H1, H2], 16),
+    parse_hex_pairs(Rest, <<Acc/binary, Byte>>).

@@ -28,6 +28,7 @@ groups() ->
        comparison_operators,
        arithmetic_operators,
        string_comparison,
+       binary_constants,
        like_operator,
        in_operator,
        null_handling,
@@ -252,6 +253,84 @@ string_comparison(_Config) ->
     true = match("country = '🇬🇧''s'", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧's"/utf8>>}}]),
     true = match("country = ''", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
     true = match("country = ''''", [{{utf8, <<"country">>}, {utf8, <<$'>>}}]).
+
+binary_constants(_Config) ->
+    true = match("0x48656C6C6F = 0x48656C6C6F", app_props()),  % "Hello" = "Hello"
+    false = match("0x48656C6C6F = 0x48656C6C6F21", app_props()), % "Hello" != "Hello!"
+
+    AppProps = [
+                {{utf8, <<"data">>}, {binary, <<"Hello">>}},
+                {{utf8, <<"signature">>}, {binary, <<16#DE, 16#AD, 16#BE, 16#EF>>}},
+                {{utf8, <<"empty">>}, {binary, <<>>}},
+                {{utf8, <<"single">>}, {binary, <<255>>}},
+                {{utf8, <<"zeros">>}, {binary, <<0, 0, 0>>}}
+               ],
+
+    true = match("data = 0x48656C6C6F", AppProps),  % data = "Hello"
+    false = match("data = 0x48656C6C", AppProps),   % data != "Hell"
+    true = match("signature = 0xDEADBEEF", AppProps),
+    false = match("signature = 0xDEADBEEE", AppProps),
+    true = match("single = 0xFF", AppProps),
+    false = match("single = 0xFE", AppProps),
+    true = match("zeros = 0x000000", AppProps),
+    false = match("empty = 0x00", AppProps),
+
+    true = match("signature IN (0xCAFEBABE, 0xDEADBEEF)", AppProps),
+    false = match("signature IN (0xCAFEBABE, 0xFEEDFACE)", AppProps),
+    true = match("data IN (0x48656C6C6F, 0x576F726C64)", AppProps), % "Hello" or "World"
+    true = match("data IN (data)", AppProps),
+
+    true = match("signature NOT IN (0xCAFEBABE, 0xFEEDFACE)", AppProps),
+    false = match("signature NOT IN (0xDEADBEEF, 0xCAFEBABE)", AppProps),
+
+    true = match("0xAB <> 0xAC", AppProps),
+    true = match("0xAB != 0xAC", AppProps),
+    false = match("0xAB = 0xAC", AppProps),
+
+    true = match("data = 0x48656C6C6F AND signature = 0xDEADBEEF", AppProps),
+    true = match("data = 0x576F726C64 OR data = 0x48656C6C6F", AppProps),
+    false = match("data = 0x576F726C64 AND signature = 0xDEADBEEF", AppProps),
+
+    true = match("missing_binary IS NULL", AppProps),
+    false = match("data IS NULL", AppProps),
+    true = match("data IS NOT NULL", AppProps),
+
+    Props = #'v1_0.properties'{
+               user_id = {binary, <<255>>},
+               correlation_id = {binary, <<"correlation">>}
+              },
+    true = match("p.user-id = 0xFF", Props, []),
+    false = match("p.user-id = 0xAA", Props, []),
+    true = match("p.correlation-id = 0x636F7272656C6174696F6E", Props, []),
+
+    true = match(
+             "(data = 0x576F726C64 OR data = 0x48656C6C6F) AND signature IN (0xDEADBEEF, 0xCAFEBABE)",
+             AppProps
+            ),
+
+    %% Whitespace around binary constants
+    true = match("signature = 0xDEADBEEF", AppProps),
+    true = match("signature=0xDEADBEEF", AppProps),
+    true = match("signature =  0xDEADBEEF", AppProps),
+
+    false = match("weight = 0x05", app_props()), % number != binary
+    false = match("active = 0x01", app_props()), % boolean != binary
+
+    %% Arithmetic operations with binary constants should fail
+    %% since binaries are not numerical values.
+    false = match("0x01 + 0x02 = 0x03", AppProps),
+    false = match("signature + 1 = 0xDEADBEF0", AppProps),
+
+    %% "The left operand is of greater value than the right operand if:
+    %% the left operand is of the same type as the right operand and the value is greater"
+    true = match("0xBB > 0xAA", AppProps),
+    true = match("0x010101 > zeros", AppProps),
+    true = match("0x010101 >= zeros", AppProps),
+    false = match("0x010101 < zeros", AppProps),
+    false = match("0x010101 <= zeros", AppProps),
+    true = match("0xFE < single", AppProps),
+    true = match("0xFE <= single", AppProps),
+    ok.
 
 like_operator(_Config) ->
     %% Basic LIKE operations
@@ -672,7 +751,7 @@ header_section(_Config) ->
 properties_section(_Config) ->
     Ps = #'v1_0.properties'{
             message_id = {utf8, <<"id-123">>},
-            user_id = {binary,<<"some user ID">>},
+            user_id = {binary, <<10, 11, 12>>},
             to = {utf8, <<"to some queue">>},
             subject = {utf8, <<"some subject">>},
             reply_to = {utf8, <<"reply to some topic">>},
@@ -691,9 +770,8 @@ properties_section(_Config) ->
     true = match("p.message-id LIKE 'id-%'", Ps, APs),
     true = match("p.message-id IN ('id-123', 'id-456')", Ps, APs),
 
-    true = match("p.user-id = 'some user ID'", Ps, APs),
-    true = match("p.user-id LIKE '%user%'", Ps, APs),
-    false = match("p.user-id = 'other user ID'", Ps, APs),
+    true = match("p.user-id = 0x0A0B0C", Ps, APs),
+    false = match("p.user-id = 0xFF", Ps, APs),
 
     true = match("p.to = 'to some queue'", Ps, APs),
     true = match("p.to LIKE 'to some%'", Ps, APs),
@@ -817,6 +895,23 @@ parse_errors(_Config) ->
     %% that do not refer to supported field names are disallowed.
     ?assertEqual(error, parse("header.invalid")),
     ?assertEqual(error, parse("properties.invalid")),
+    %% Invalid binary constants
+    %% No hex digits
+    ?assertEqual(error, parse("data = 0x")),
+    %% Odd number of hex digits
+    ?assertEqual(error, parse("data = 0x1")),
+    ?assertEqual(error, parse("data = 0x123")),
+    %% Invalid hex digit
+    ?assertEqual(error, parse("data = 0xG1")),
+    ?assertEqual(error, parse("data = 0x1G")),
+    %% Lowercase hex letters not allowed
+    ?assertEqual(error, parse("data = 0x1a")),
+    ?assertEqual(error, parse("data = 0xab")),
+    ?assertEqual(error, parse("data = 0xAb")),
+    ?assertEqual(error, parse("data = 0xdead")),
+    %% LIKE operator should not work with binary constants because
+    %% "The pattern expression is evaluated as a string."
+    ?assertEqual(error, parse("data LIKE 0x48")),
     ok.
 
 %%%===================================================================

@@ -156,7 +156,7 @@ multiple_sections(Config) ->
     Filter2 = filter(
                 <<"header.priority = 200 AND "
                   "properties.message-id = 999 AND "
-                  "properties.user-id = 'guest' AND "
+                  "properties.user-id = 0x6775657374 AND "
                   "properties.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
                   "properties.subject = '🐇' AND "
                   "properties.reply-to LIKE '/queues/some%' AND "
