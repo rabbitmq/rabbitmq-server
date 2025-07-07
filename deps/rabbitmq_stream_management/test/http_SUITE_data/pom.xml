@@ -26,14 +26,15 @@
     </developers>
 
     <properties>
-        <stream-client.version>[0.12.0-SNAPSHOT,)</stream-client.version>
+        <stream-client.version>[1.2.0-SNAPSHOT,)</stream-client.version>
         <junit.jupiter.version>5.13.3</junit.jupiter.version>
         <assertj.version>3.27.3</assertj.version>
-        <logback.version>1.2.13</logback.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <logback.version>1.5.18</logback.version>
         <maven.compiler.plugin.version>3.14.0</maven.compiler.plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
         <spotless.version>2.44.5</spotless.version>
-        <google-java-format.version>1.18.1</google-java-format.version>
+        <google-java-format.version>1.27.0</google-java-format.version>
         <okhttp.version>5.0.0</okhttp.version>
         <gson.version>2.13.1</gson.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -45,6 +46,12 @@
             <groupId>com.rabbitmq</groupId>
             <artifactId>stream-client</artifactId>
             <version>${stream-client.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
         </dependency>
 
         <dependency>
@@ -86,6 +93,14 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- add explicitly to update automatically with dependabot -->
+        <dependency>
+            <groupId>com.google.googlejavaformat</groupId>
+            <artifactId>google-java-format</artifactId>
+            <version>${google-java-format.version}</version>
             <scope>test</scope>
         </dependency>
 

@@ -11,7 +11,8 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom
+// Inc. and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -33,7 +34,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -220,16 +220,23 @@ public class FailureTest {
             executorService.submit(
                 () -> {
                   connected.set(false);
-
-                  try { Thread.sleep(2000); } catch (Exception e) {}
-                  Client locator =
-                      cf.get(new Client.ClientParameters().port(streamPortNode2()));
-                  // wait until there's a new leader
+                  AtomicReference<Client> locator = new AtomicReference<>();
                   try {
                     waitAtMost(
                         Duration.ofSeconds(5),
                         () -> {
-                          Client.StreamMetadata m = locator.metadata(stream).get(stream);
+                          try {
+                            locator.set(
+                                cf.get(new Client.ClientParameters().port(streamPortNode2())));
+                            return true;
+                          } catch (Exception e) {
+                            return false;
+                          }
+                        });
+                    waitAtMost(
+                        Duration.ofSeconds(5),
+                        () -> {
+                          Client.StreamMetadata m = locator.get().metadata(stream).get(stream);
                           return m.getLeader() != null
                               && m.getLeader().getPort() != streamPortNode1();
                         });
@@ -238,7 +245,8 @@ public class FailureTest {
                     return;
                   }
 
-                  int newLeaderPort = locator.metadata(stream).get(stream).getLeader().getPort();
+                  int newLeaderPort =
+                      locator.get().metadata(stream).get(stream).getLeader().getPort();
                   Client newPublisher =
                       cf.get(
                           new Client.ClientParameters()
@@ -468,14 +476,23 @@ public class FailureTest {
             // avoid long-running task in the IO thread
             executorService.submit(
                 () -> {
-                  try { Thread.sleep(2000); } catch (Exception e) {}
-                  Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-                  int newReplicaPort = m.getReplicas().get(0).getPort();
+                  AtomicInteger newReplicaPort = new AtomicInteger(-1);
+                  waitAtMost(
+                      Duration.ofSeconds(5),
+                      () -> {
+                        try {
+                          Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+                          newReplicaPort.set(m.getReplicas().get(0).getPort());
+                          return true;
+                        } catch (Exception e) {
+                          return false;
+                        }
+                      });
 
                   Client newConsumer =
                       cf.get(
                           new Client.ClientParameters()
-                              .port(newReplicaPort)
+                              .port(newReplicaPort.get())
                               .shutdownListener(shutdownListenerReference.get())
                               .chunkListener(credit())
                               .messageListener(messageListener));
@@ -588,7 +605,8 @@ public class FailureTest {
   }
 
   @Test
-  void shouldReceiveMetadataUpdateWhenReplicaIsKilledWithPublisherAndConsumerOnSameConnection() throws Exception {
+  void shouldReceiveMetadataUpdateWhenReplicaIsKilledWithPublisherAndConsumerOnSameConnection()
+      throws Exception {
     Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
     Client.StreamMetadata streamMetadata = metadata.get(stream);
@@ -602,8 +620,7 @@ public class FailureTest {
     assertThat(streamMetadata.getLeader().getPort()).isEqualTo(streamPortNode1());
     Client.Broker broker =
         streamMetadata.getReplicas().stream()
-            .filter(
-                r -> r.getPort() == streamPortNode1() || r.getPort() == streamPortNode2())
+            .filter(r -> r.getPort() == streamPortNode1() || r.getPort() == streamPortNode2())
             .findFirst()
             .get();
 
@@ -612,8 +629,7 @@ public class FailureTest {
         cf.get(
             new ClientParameters()
                 .port(broker.getPort())
-                .metadataListener(
-                    (stream, code) -> metadataNotifications.incrementAndGet()));
+                .metadataListener((stream, code) -> metadataNotifications.incrementAndGet()));
     client.declarePublisher((byte) 42, null, stream);
     client.subscribe((byte) 66, stream, OffsetSpecification.first(), 1);
 
