@@ -9,9 +9,9 @@ WHITESPACE  = [\s\t\f\n\r]
 DIGIT       = [0-9]
 INT         = {DIGIT}+
 % Approximate numeric literal with a decimal
-FLOAT       = ({DIGIT}+\.{DIGIT}*|\.{DIGIT}+)([eE][\+\-]?{INT})?
+FLOAT       = ({DIGIT}+\.{DIGIT}*|\.{DIGIT}+)(E[\+\-]?{INT})?
 % Approximate numeric literal in scientific notation without a decimal
-EXPONENT    = {DIGIT}+[eE][\+\-]?{DIGIT}+
+EXPONENT    = {DIGIT}+E[\+\-]?{DIGIT}+
 % We extend the allowed JMS identifier syntax with '.' and '-' even though
 % these two characters return false for Character.isJavaIdentifierPart()
 % to allow identifiers such as properties.group-id
@@ -22,52 +22,52 @@ Rules.
 {WHITESPACE}+  : skip_token.
 
 % Logical operators (case insensitive)
-[aA][nN][dD]   : {token, {'AND', TokenLine}}.
-[oO][rR]       : {token, {'OR', TokenLine}}.
-[nN][oO][tT]   : {token, {'NOT', TokenLine}}.
+AND    : {token, {'AND', TokenLine}}.
+OR     : {token, {'OR', TokenLine}}.
+NOT    : {token, {'NOT', TokenLine}}.
 
 % Special operators (case insensitive)
-[lL][iI][kK][eE]             : {token, {'LIKE', TokenLine}}.
-[iI][nN]                     : {token, {'IN', TokenLine}}.
-[iI][sS]                     : {token, {'IS', TokenLine}}.
-[nN][uU][lL][lL]             : {token, {'NULL', TokenLine}}.
-[eE][sS][cC][aA][pP][eE]     : {token, {'ESCAPE', TokenLine}}.
+LIKE      : {token, {'LIKE', TokenLine}}.
+IN        : {token, {'IN', TokenLine}}.
+IS        : {token, {'IS', TokenLine}}.
+NULL      : {token, {'NULL', TokenLine}}.
+ESCAPE    : {token, {'ESCAPE', TokenLine}}.
 
 % Boolean literals (case insensitive)
-[tT][rR][uU][eE]             : {token, {boolean, TokenLine, true}}.
-[fF][aA][lL][sS][eE]         : {token, {boolean, TokenLine, false}}.
+TRUE     : {token, {boolean, TokenLine, true}}.
+FALSE    : {token, {boolean, TokenLine, false}}.
 
 % Comparison operators
 % "The ‘<>’ operator is synonymous to the ‘!=’ operator."
-<>            : {token, {'<>', TokenLine}}.
-!=            : {token, {'<>', TokenLine}}.
-=             : {token, {'=', TokenLine}}.
->=            : {token, {'>=', TokenLine}}.
-<=            : {token, {'<=', TokenLine}}.
->             : {token, {'>', TokenLine}}.
-<             : {token, {'<', TokenLine}}.
+<>    : {token, {'<>', TokenLine}}.
+!=    : {token, {'<>', TokenLine}}.
+=     : {token, {'=', TokenLine}}.
+>=    : {token, {'>=', TokenLine}}.
+<=    : {token, {'<=', TokenLine}}.
+>     : {token, {'>', TokenLine}}.
+<     : {token, {'<', TokenLine}}.
 
 % Arithmetic operators
-\+            : {token, {'+', TokenLine}}.
--             : {token, {'-', TokenLine}}.
-\*            : {token, {'*', TokenLine}}.
-/             : {token, {'/', TokenLine}}.
-\%            : {token, {'%', TokenLine}}.
+\+    : {token, {'+', TokenLine}}.
+-     : {token, {'-', TokenLine}}.
+\*    : {token, {'*', TokenLine}}.
+/     : {token, {'/', TokenLine}}.
+\%    : {token, {'%', TokenLine}}.
 
 % Parentheses and comma
-\(            : {token, {'(', TokenLine}}.
-\)            : {token, {')', TokenLine}}.
-,             : {token, {',', TokenLine}}.
+\(    : {token, {'(', TokenLine}}.
+\)    : {token, {')', TokenLine}}.
+,     : {token, {',', TokenLine}}.
 
 % Literals
-{INT}         : {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
-{FLOAT}       : {token, {float, TokenLine, list_to_float(to_float(TokenChars))}}.
-{EXPONENT}    : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
-{STRING}      : {token, {string, TokenLine, process_string(TokenChars)}}.
-{IDENTIFIER}  : {token, {identifier, TokenLine, unicode:characters_to_binary(TokenChars)}}.
+{INT}           : {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
+{FLOAT}         : {token, {float, TokenLine, list_to_float(to_float(TokenChars))}}.
+{EXPONENT}      : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
+{STRING}        : {token, {string, TokenLine, process_string(TokenChars)}}.
+{IDENTIFIER}    : {token, {identifier, TokenLine, unicode:characters_to_binary(TokenChars)}}.
 
 % Catch any other characters as errors
-.             : {error, {illegal_character, TokenChars}}.
+.    : {error, {illegal_character, TokenChars}}.
 
 Erlang code.
 
@@ -81,15 +81,13 @@ to_float(Chars) ->
         $. ->
             Chars ++ "0";
         _ ->
-            Chars1 = string:lowercase(Chars),
-            Chars2 = string:replace(Chars1, ".e", ".0e"),
-            lists:flatten(Chars2)
+            Chars1 = string:replace(Chars, ".E", ".0E"),
+            lists:flatten(Chars1)
     end.
 
 parse_scientific_notation(Chars) ->
-    Str = string:lowercase(Chars),
-    {Before, After0} = lists:splitwith(fun(C) -> C =/= $e end, Str),
-    [$e | After] = After0,
+    {Before, After0} = lists:splitwith(fun(C) -> C =/= $E end, Chars),
+    [$E | After] = After0,
     Base = list_to_integer(Before),
     Exp = list_to_integer(After),
     Base * math:pow(10, Exp).

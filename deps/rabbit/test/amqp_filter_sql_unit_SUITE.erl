@@ -162,9 +162,9 @@ comparison_operators(_Config) ->
 
     %% "Boolean comparison is restricted to = and <>."
     %% "If the comparison of non-like type values is attempted, the value of the operation is false."
-    true = match("active = true", app_props()),
-    true = match("premium = false", app_props()),
-    false = match("premium <> false", app_props()),
+    true = match("active = TRUE", app_props()),
+    true = match("premium = FALSE", app_props()),
+    false = match("premium <> FALSE", app_props()),
     false = match("premium >= 'false'", app_props()),
     false = match("premium <= 'false'", app_props()),
     false = match("premium >= 0", app_props()),
@@ -173,8 +173,8 @@ comparison_operators(_Config) ->
     false = match("weight = '5'", app_props()),
     false = match("weight >= '5'", app_props()),
     false = match("weight <= '5'", app_props()),
-    false = match("country <= true", app_props()),
-    false = match("country >= true", app_props()),
+    false = match("country <= TRUE", app_props()),
+    false = match("country >= TRUE", app_props()),
     false = match("country > 1", app_props()),
     false = match("country >= 1", app_props()),
     false = match("country < 1", app_props()),
@@ -575,38 +575,10 @@ complex_expressions(_Config) ->
              app_props()
             ).
 
-%% "Predefined selector literals and operator names are [...] case insensitive."
-%% "Identifiers are case sensitive."
 case_sensitivity(_Config) ->
-    AppProps = app_props(),
-
-    %% 1. Test that operators and literals are case insensitive
-    true = match("country = 'UK' AnD weight = 5", AppProps),
-    true = match("country = 'UK' and weight = 5", AppProps),
-    true = match("country = 'France' Or weight < 6", AppProps),
-    true = match("country = 'France' or weight < 6", AppProps),
-    true = match("NoT country = 'France'", AppProps),
-    true = match("not country = 'France'", AppProps),
-    true = match("description LiKe '%test%'", AppProps),
-    true = match("description like '%test%'", AppProps),
-    true = match("country In ('US', 'UK', 'France')", AppProps),
-    true = match("country in ('US', 'UK', 'France')", AppProps),
-    true = match("missing Is NuLl", AppProps),
-    true = match("missing is null", AppProps),
-    true = match("active = TrUe", AppProps),
-    true = match("active = true", AppProps),
-    true = match("premium = FaLsE", AppProps),
-    true = match("premium = false", AppProps),
-    true = match("distance = 1.2e6", app_props()),
-    true = match("tiny_value = 3.5e-4", app_props()),
-    true = match("3 = 3e0", app_props()),
-    true = match("3 = 3e-0", app_props()),
-    true = match("300 = 3e2", app_props()),
-    true = match("0.03 = 3e-2", app_props()),
-
-    %% 2. Test that identifiers are case sensitive
-    AppPropsCaseSensitiveKeys = AppProps ++ [{{utf8, <<"COUNTRY">>}, {utf8, <<"France">>}},
-                                             {{utf8, <<"Weight">>}, {uint, 10}}],
+    %% Test that identifiers are case sensitive
+    AppPropsCaseSensitiveKeys = app_props() ++ [{{utf8, <<"COUNTRY">>}, {utf8, <<"France">>}},
+                                                {{utf8, <<"Weight">>}, {uint, 10}}],
 
     true = match("country = 'UK'", AppPropsCaseSensitiveKeys),
     true = match("COUNTRY = 'France'", AppPropsCaseSensitiveKeys),
@@ -618,7 +590,7 @@ case_sensitivity(_Config) ->
     false = match("WEIGHT = 5", AppPropsCaseSensitiveKeys),
 
     true = match(
-             "country = 'UK' aNd COUNTRY = 'France' and weight < 6 AND Weight = 10",
+             "country = 'UK' AND COUNTRY = 'France' AND weight < 6 AND Weight = 10",
              AppPropsCaseSensitiveKeys
             ).
 
@@ -767,8 +739,8 @@ properties_section(_Config) ->
     true = match("p.reply-to-group-id IS NOT NULL", Ps, APs),
     false = match("p.reply-to-group-id IS NULL", Ps, APs),
 
-    true = match("p.message-id = 'id-123' and 'some subject' = p.subject", Ps, APs),
-    true = match("p.group-sequence < 500 or p.correlation-id > 700", Ps, APs),
+    true = match("p.message-id = 'id-123' AND 'some subject' = p.subject", Ps, APs),
+    true = match("p.group-sequence < 500 OR p.correlation-id > 700", Ps, APs),
     true = match("(p.content-type LIKE 'text/%') AND p.content-encoding = 'deflate'", Ps, APs),
 
     true = match("p.subject IS NULL", #'v1_0.properties'{}, APs),
