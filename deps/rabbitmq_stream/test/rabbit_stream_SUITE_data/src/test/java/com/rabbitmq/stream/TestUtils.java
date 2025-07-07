@@ -11,7 +11,8 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom
+// Inc. and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -52,7 +53,7 @@ public class TestUtils {
     waitAtMost(Duration.ofSeconds(10), condition);
   }
 
-  static void waitAtMost(Duration duration, BooleanSupplier condition) throws InterruptedException {
+  static void waitAtMost(Duration duration, BooleanSupplier condition) {
     if (condition.getAsBoolean()) {
       return;
     }
@@ -60,7 +61,12 @@ public class TestUtils {
     int waitedTime = 0;
     long timeoutInMs = duration.toMillis();
     while (waitedTime <= timeoutInMs) {
-      Thread.sleep(waitTime);
+      try {
+        Thread.sleep(waitTime);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(e);
+      }
       if (condition.getAsBoolean()) {
         return;
       }

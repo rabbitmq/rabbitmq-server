@@ -11,7 +11,8 @@
 // The Original Code is RabbitMQ.
 //
 // The Initial Developer of the Original Code is Pivotal Software, Inc.
-// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+// Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom
+// Inc. and/or its subsidiaries. All rights reserved.
 //
 
 package com.rabbitmq.stream;
@@ -101,7 +102,8 @@ public class Host {
     return System.getProperty("node2.name", "rabbit-2@" + hostname());
   }
 
-  public static Process killStreamLocalMemberProcess(String stream, String nodename) throws IOException {
+  public static Process killStreamLocalMemberProcess(String stream, String nodename)
+      throws IOException {
     return rabbitmqctl(
         "eval 'case rabbit_stream_manager:lookup_local_member(<<\"/\">>, <<\""
             + stream
