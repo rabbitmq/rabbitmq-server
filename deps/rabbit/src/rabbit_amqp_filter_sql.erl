@@ -15,15 +15,14 @@
 -export_type([parsed_expression/0]).
 
 -export([parse/1,
-         eval/2]).
+         eval/2,
+         is_control_char/1]).
 
 %% [filtex-v1.0-wd09 7.1]
 -define(MAX_EXPRESSION_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
 -define(DEFAULT_MSG_PRIORITY, 4).
-
--define(IS_CONTROL_CHAR(C), C < 32 orelse C =:= 127).
 
 -spec parse(tuple()) ->
     {ok, parsed_expression()} | error.
@@ -332,22 +331,14 @@ parse(Tokens, SQL) ->
 
 transform_ast(Ast0, SQL) ->
     try rabbit_amqp_sql_ast:map(
-          fun({identifier, Ident})
-                when is_binary(Ident) ->
-                  {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
-             ({'like', _Ident, _Pattern, _Escape} = Node) ->
+          fun({'like', _Ident, _Pattern, _Escape} = Node) ->
                   transform_pattern_node(Node);
              (Node) ->
                   Node
           end, Ast0) of
         Ast ->
             {ok, Ast}
-    catch {unsupported_field_name, Name} ->
-              rabbit_log:warning(
-                "field name ~ts in SQL expression ~tp is unsupported",
-                [Name, SQL]),
-              error;
-          {invalid_pattern, Reason} ->
+    catch {invalid_pattern, Reason} ->
               rabbit_log:warning(
                 "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
                 [SQL, Reason]),
@@ -356,10 +347,10 @@ transform_ast(Ast0, SQL) ->
 
 has_binary_identifier(Ast) ->
     rabbit_amqp_sql_ast:search(fun({identifier, Val}) ->
-                                  is_binary(Val);
-                             (_Node) ->
-                                  false
-                          end, Ast).
+                                       is_binary(Val);
+                                  (_Node) ->
+                                       false
+                               end, Ast).
 
 %% If the Pattern contains no wildcard or a single % wildcard,
 %% we will optimise message evaluation by using Erlang pattern matching.
@@ -456,7 +447,15 @@ escape_regex_char(Char0) ->
     end.
 
 %% Let's disallow control characters in the user provided pattern.
-check_char(C) when ?IS_CONTROL_CHAR(C) ->
-    throw({invalid_pattern, {prohibited_control_character, C}});
 check_char(C) ->
-    C.
+    case is_control_char(C) of
+        true ->
+            throw({invalid_pattern, {illegal_control_character, C}});
+        false ->
+            C
+    end.
+
+is_control_char(C) when C < 32 orelse C =:= 127 ->
+    true;
+is_control_char(_) ->
+    false.

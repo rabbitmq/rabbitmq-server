@@ -155,19 +155,19 @@ multiple_sections(Config) ->
 
     Filter2 = filter(
                 <<"header.priority = 200 AND "
-                  "properties.message-id = 999 AND "
-                  "properties.user-id = 0x6775657374 AND "
+                  "properties.message_id = 999 AND "
+                  "properties.user_id = 0x6775657374 AND "
                   "properties.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
                   "properties.subject = '🐇' AND "
-                  "properties.reply-to LIKE '/queues/some%' AND "
-                  "properties.correlation-id IN ('corr-345', 'corr-123') AND "
-                  "properties.content-type = 'text/plain' AND "
-                  "properties.content-encoding = 'some encoding' AND "
-                  "properties.absolute-expiry-time > 0 AND "
-                  "properties.creation-time > 0 AND "
-                  "properties.group-id IS NOT NULL AND "
-                  "properties.group-sequence = 4294967295 AND "
-                  "properties.reply-to-group-id = 'other group ID' AND "
+                  "properties.reply_to LIKE '/queues/some%' AND "
+                  "properties.correlation_id IN ('corr-345', 'corr-123') AND "
+                  "properties.content_type = 'text/plain' AND "
+                  "properties.content_encoding = 'some encoding' AND "
+                  "properties.absolute_expiry_time > 0 AND "
+                  "properties.creation_time > 0 AND "
+                  "properties.group_id IS NOT NULL AND "
+                  "properties.group_sequence = 4294967295 AND "
+                  "properties.reply_to_group_id = 'other group ID' AND "
                   "k1 < 0 AND "
                   "NOT k2 AND "
                   "k3 AND "
@@ -239,7 +239,7 @@ filter_few_messages_from_many(Config) ->
 
     %% Our filter should cause us to receive only the first and
     %% last message out of the 1002 messages in the stream.
-    Filter = filter(<<"properties.group-id IS NOT NULL">>),
+    Filter = filter(<<"properties.group_id IS NOT NULL">>),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"receiver">>, Address,
                        unsettled, configuration, Filter),

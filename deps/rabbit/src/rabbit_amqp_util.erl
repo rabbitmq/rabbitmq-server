@@ -22,58 +22,39 @@
 
 %% [Filter-Expressions-v1.0] § 6.4.4.4
 %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929312
--spec section_field_name_to_atom(binary()) -> field_name() | binary().
+-spec section_field_name_to_atom(binary()) -> field_name() | binary() | error.
 section_field_name_to_atom(<<"header.", FieldName/binary>>) ->
     header_field_name_to_atom(FieldName);
 section_field_name_to_atom(<<"h.", FieldName/binary>>) ->
     header_field_name_to_atom(FieldName);
-section_field_name_to_atom(<<"delivery-annotations.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
-section_field_name_to_atom(<<"d.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
-section_field_name_to_atom(<<"message-annotations.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
-section_field_name_to_atom(<<"m.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
 section_field_name_to_atom(<<"properties.", FieldName/binary>>) ->
     properties_field_name_to_atom(FieldName);
 section_field_name_to_atom(<<"p.", FieldName/binary>>) ->
     properties_field_name_to_atom(FieldName);
-section_field_name_to_atom(<<"application-properties.", FieldName/binary>>) ->
+section_field_name_to_atom(<<"application_properties.", FieldName/binary>>) ->
     FieldName;
 section_field_name_to_atom(<<"a.", FieldName/binary>>) ->
     FieldName;
-section_field_name_to_atom(<<"footer.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
-section_field_name_to_atom(<<"f.", FieldName/binary>>) ->
-    unsupported_field_name(FieldName);
-section_field_name_to_atom(ApplicationPropertiesFieldName) ->
-    %% "When the section is omitted, the assumed section is ‘application-properties’."
-    ApplicationPropertiesFieldName.
+section_field_name_to_atom(_) ->
+    error.
 
-header_field_name_to_atom(<<"priority">>) ->
-    priority;
-header_field_name_to_atom(Other) ->
-    unsupported_field_name(Other).
+header_field_name_to_atom(<<"priority">>) -> priority;
+header_field_name_to_atom(_) -> error.
 
-properties_field_name_to_atom(<<"message-id">>) -> message_id;
-properties_field_name_to_atom(<<"user-id">>) -> user_id;
+properties_field_name_to_atom(<<"message_id">>) -> message_id;
+properties_field_name_to_atom(<<"user_id">>) -> user_id;
 properties_field_name_to_atom(<<"to">>) -> to;
 properties_field_name_to_atom(<<"subject">>) -> subject;
-properties_field_name_to_atom(<<"reply-to">>) -> reply_to;
-properties_field_name_to_atom(<<"correlation-id">>) -> correlation_id;
-properties_field_name_to_atom(<<"content-type">>) -> content_type;
-properties_field_name_to_atom(<<"content-encoding">>) -> content_encoding;
-properties_field_name_to_atom(<<"absolute-expiry-time">>) -> absolute_expiry_time;
-properties_field_name_to_atom(<<"creation-time">>) -> creation_time;
-properties_field_name_to_atom(<<"group-id">>) -> group_id;
-properties_field_name_to_atom(<<"group-sequence">>) -> group_sequence;
-properties_field_name_to_atom(<<"reply-to-group-id">>) -> reply_to_group_id;
-properties_field_name_to_atom(Other) -> unsupported_field_name(Other).
-
--spec unsupported_field_name(binary()) -> no_return().
-unsupported_field_name(Name) ->
-    throw({unsupported_field_name, Name}).
+properties_field_name_to_atom(<<"reply_to">>) -> reply_to;
+properties_field_name_to_atom(<<"correlation_id">>) -> correlation_id;
+properties_field_name_to_atom(<<"content_type">>) -> content_type;
+properties_field_name_to_atom(<<"content_encoding">>) -> content_encoding;
+properties_field_name_to_atom(<<"absolute_expiry_time">>) -> absolute_expiry_time;
+properties_field_name_to_atom(<<"creation_time">>) -> creation_time;
+properties_field_name_to_atom(<<"group_id">>) -> group_id;
+properties_field_name_to_atom(<<"group_sequence">>) -> group_sequence;
+properties_field_name_to_atom(<<"reply_to_group_id">>) -> reply_to_group_id;
+properties_field_name_to_atom(_) -> error.
 
 -spec capabilities([binary()]) ->
     undefined | {array, symbol, [{symbol, binary()}]}.

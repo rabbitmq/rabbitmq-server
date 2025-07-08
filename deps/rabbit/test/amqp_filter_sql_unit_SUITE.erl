@@ -40,7 +40,7 @@ groups() ->
        complex_expressions,
        case_sensitivity,
        whitespace_handling,
-       identifier_rules,
+       identifiers,
        header_section,
        properties_section,
        multiple_sections,
@@ -326,9 +326,9 @@ double_quoted_strings(_Config) ->
                message_id = {utf8, <<"id-123">>},
                subject = {utf8, <<"test">>}
               },
-    true = match("p.message-id = \"id-123\"", Props, []),
+    true = match("p.message_id = \"id-123\"", Props, []),
     true = match("p.subject = \"test\"", Props, []),
-    true = match("p.message-id = 'id-123' AND p.subject = \"test\"", Props, []),
+    true = match("p.message_id = 'id-123' AND p.subject = \"test\"", Props, []),
 
     true = match("country < \"US\"", app_props()),
     true = match("\"US\" >= country", app_props()),
@@ -379,9 +379,9 @@ binary_constants(_Config) ->
                user_id = {binary, <<255>>},
                correlation_id = {binary, <<"correlation">>}
               },
-    true = match("p.user-id = 0xFF", Props, []),
-    false = match("p.user-id = 0xAA", Props, []),
-    true = match("p.correlation-id = 0x636F7272656C6174696F6E", Props, []),
+    true = match("p.user_id = 0xFF", Props, []),
+    false = match("p.user_id = 0xAA", Props, []),
+    true = match("p.correlation_id = 0x636F7272656C6174696F6E", Props, []),
 
     true = match(
              "(data = 0x576F726C64 OR data = 0x48656C6C6F) AND signature IN (0xDEADBEEF, 0xCAFEBABE)",
@@ -515,9 +515,9 @@ in_operator(_Config) ->
                  #'v1_0.header'{priority = {ubyte, 11}}, #'v1_0.properties'{}, app_props()),
     false = match("price IN (h.priority + 0.5)",
                   #'v1_0.header'{priority = {ubyte, 11}}, #'v1_0.properties'{}, app_props()),
-    true = match("10.0 IN (true, p.group-sequence)",
+    true = match("10.0 IN (TRUE, p.group_sequence)",
                  #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
-    true = match("10.00 IN (false, p.group-sequence)",
+    true = match("10.00 IN (FALSE, p.group_sequence)",
                  #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
 
     %% NOT IN
@@ -526,7 +526,7 @@ in_operator(_Config) ->
     false = match("country NOT IN ('🇫🇷', '🇬🇧')", AppPropsUtf8),
     false = match("country NOT IN ('US', 'UK', 'France')", app_props()),
     false = match("'London' NOT IN (city, country)", app_props()),
-    false = match("10.0 NOT IN (true, p.group-sequence)",
+    false = match("10.0 NOT IN (TRUE, p.group_sequence)",
                   #'v1_0.properties'{group_sequence = {uint, 10}}, app_props()),
 
     %% Combined with other operators
@@ -564,8 +564,8 @@ null_handling(_Config) ->
     false = match("0 != missing", app_props()),
     false = match("missing = missing", app_props()),
     false = match("absent = absent", app_props()),
-    false = match("missing AND true", app_props()),
-    false = match("missing OR false", app_props()).
+    false = match("missing AND TRUE", app_props()),
+    false = match("missing OR FALSE", app_props()).
 
 literals(_Config) ->
     %% Exact numeric literals
@@ -787,34 +787,110 @@ whitespace_handling(_Config) ->
     %% 10. Whitespace at beginning and end of expression
     true = match(" \t\n\r country = 'UK' \t\n\r ", app_props()).
 
-%% "An identifier is an unlimited-length character sequence that must begin with a
-%% Java identifier start character; all following characters must be Java identifier
-%% part characters. An identifier start character is any character for which the method
-%% Character.isJavaIdentifierStart returns true. This includes '_' and '$'. An
-%% identifier part character is any character for which the method
-%% Character.isJavaIdentifierPart returns true."
-identifier_rules(_Config) ->
+identifiers(_Config) ->
     Identifiers = [<<"simple">>,
-                   <<"a1b2c3">>,
                    <<"x">>,
-                   <<"_underscore">>,
-                   <<"$dollar">>,
-                   <<"_">>,
-                   <<"$">>,
-                   <<"with_underscore">>,
-                   <<"with$dollar">>,
-                   <<"mixed_$_identifiers_$_123">>],
-    AppProps = [{{utf8, Id}, {utf8, <<"value">>}} || Id <- Identifiers],
-    true = match("simple = 'value'", AppProps),
-    true = match("a1b2c3 = 'value'", AppProps),
-    true = match("x = 'value'", AppProps),
-    true = match("_underscore = 'value'", AppProps),
-    true = match("$dollar = 'value'", AppProps),
-    true = match("_ = 'value'", AppProps),
-    true = match("$ = 'value'", AppProps),
-    true = match("with_underscore = 'value'", AppProps),
-    true = match("with$dollar = 'value'", AppProps),
-    true = match("mixed_$_identifiers_$_123 = 'value'", AppProps).
+                   <<"with_underscore_123">>,
+                   <<"🥕"/utf8>>,
+                   <<"ニンジン"/utf8>>,
+                   <<"with    four    spaces">>,
+                   <<" ">>,
+                   <<"">>,
+                   <<"NOT">>,
+                   <<"not">>,
+                   <<"AND">>,
+                   <<"OR">>,
+                   <<"IN">>,
+                   <<"NULL">>,
+                   <<"-">>,
+                   <<"+">>,
+                   <<"FALSE">>,
+                   <<"!@#$%^&*()_+~`|{}?<>">>,
+                   <<"[ key ]">>,
+                   <<"[[key]]">>,
+                   <<"]">>,
+                   <<"][">>,
+                   <<"[]">>,
+                   <<"properties.to">>,
+                   <<"p.to">>
+                  ],
+    AppProps = [{{utf8, Id}, {boolean, true}} || Id <- Identifiers],
+
+    %% regular identifiers
+    true = match("simple", AppProps),
+    true = match("x", AppProps),
+
+    true = match("with_underscore_123", AppProps),
+    true = match("application_properties.with_underscore_123", AppProps),
+    true = match("a.with_underscore_123", AppProps),
+    true = match("[with_underscore_123]", AppProps),
+
+    %% delimited identifiers
+    true = match("[🥕]", AppProps),
+    true = match("[ニンジン]", AppProps),
+    true = match("[with    four    spaces]", AppProps),
+    true = match("[ ]", AppProps),
+    true = match("[]", AppProps),
+    true = match("[]", AppProps),
+    true = match("[NOT]", AppProps),
+    true = match("[not]", AppProps),
+    true = match("[AND]", AppProps),
+    true = match("[OR]", AppProps),
+    true = match("[IN]", AppProps),
+    true = match("[NULL]", AppProps),
+    true = match("[-]", AppProps),
+    true = match("[+]", AppProps),
+    true = match("[FALSE]", AppProps),
+    true = match("[!@#$%^&*()_+~`|{}?<>]", AppProps),
+    true = match("[[[ key ]]]", AppProps),
+    true = match("[[[[[key]]]]]", AppProps),
+    true = match("[]]]", AppProps),
+    true = match("[]][[]", AppProps),
+    true = match("[[[]]]", AppProps),
+
+    Props = #'v1_0.properties'{to = {utf8, <<"q1">>}},
+    true = match("properties.to = 'q1'", Props, AppProps),
+    true = match("p.to = 'q1'", Props, AppProps),
+    true = match("[properties.to] = TRUE", Props, AppProps),
+    true = match("[p.to] = TRUE", Props, AppProps),
+
+    %% Reserved keywords should not be allowed in regular identifiers.
+    ?assertEqual(error, parse("not")),
+    ?assertEqual(error, parse("Not")),
+    ?assertEqual(error, parse("and")),
+    ?assertEqual(error, parse("or")),
+    ?assertEqual(error, parse("true")),
+    ?assertEqual(error, parse("True")),
+    ?assertEqual(error, parse("false")),
+    ?assertEqual(error, parse("False")),
+    ?assertEqual(error, parse("upper")),
+    ?assertEqual(error, parse("lower")),
+    ?assertEqual(error, parse("left")),
+    ?assertEqual(error, parse("right")),
+    ?assertEqual(error, parse("substring")),
+    ?assertEqual(error, parse("utc")),
+    ?assertEqual(error, parse("date")),
+    ?assertEqual(error, parse("exists")),
+    ?assertEqual(error, parse("null")),
+    ?assertEqual(error, parse("is")),
+    ?assertEqual(error, parse("Is")),
+    ?assertEqual(error, parse("in")),
+    ?assertEqual(error, parse("like")),
+    ?assertEqual(error, parse("escape")),
+
+    %% Regular identifier allows only:
+    %% <letter> {<letter> | <underscore> | <digit> }
+    ?assertEqual(error, parse("my.key")),
+    ?assertEqual(error, parse("my$key")),
+    ?assertEqual(error, parse("$mykey")),
+    ?assertEqual(error, parse("_mykey")),
+    ?assertEqual(error, parse("1mykey")),
+
+    %% Even in delimited identifiers, "Control characters are not permitted".
+    ?assertEqual(error, parse("[\n]")),
+    ?assertEqual(error, parse("[\r]")),
+
+    ok.
 
 header_section(_Config) ->
     Hdr = #'v1_0.header'{priority = {ubyte, 7}},
@@ -845,13 +921,13 @@ properties_section(_Config) ->
             reply_to_group_id = {utf8, <<"other group ID">>}},
     APs = [],
 
-    true = match("p.message-id = 'id-123'", Ps, APs),
-    false = match("'id-123' != p.message-id", Ps, APs),
-    true = match("p.message-id LIKE 'id-%'", Ps, APs),
-    true = match("p.message-id IN ('id-123', 'id-456')", Ps, APs),
+    true = match("p.message_id = 'id-123'", Ps, APs),
+    false = match("'id-123' != p.message_id", Ps, APs),
+    true = match("p.message_id LIKE 'id-%'", Ps, APs),
+    true = match("p.message_id IN ('id-123', 'id-456')", Ps, APs),
 
-    true = match("p.user-id = 0x0A0B0C", Ps, APs),
-    false = match("p.user-id = 0xFF", Ps, APs),
+    true = match("p.user_id = 0x0A0B0C", Ps, APs),
+    false = match("p.user_id = 0xFF", Ps, APs),
 
     true = match("p.to = 'to some queue'", Ps, APs),
     true = match("p.to LIKE 'to some%'", Ps, APs),
@@ -861,45 +937,45 @@ properties_section(_Config) ->
     true = match("p.subject LIKE '%subject'", Ps, APs),
     true = match("p.subject IN ('some subject', 'other subject')", Ps, APs),
 
-    true = match("p.reply-to = 'reply to some topic'", Ps, APs),
-    true = match("p.reply-to LIKE 'reply%topic'", Ps, APs),
-    false = match("p.reply-to LIKE 'reply%queue'", Ps, APs),
+    true = match("p.reply_to = 'reply to some topic'", Ps, APs),
+    true = match("p.reply_to LIKE 'reply%topic'", Ps, APs),
+    false = match("p.reply_to LIKE 'reply%queue'", Ps, APs),
 
-    true = match("p.correlation-id = 789", Ps, APs),
-    true = match("500 < p.correlation-id", Ps, APs),
-    false = match("p.correlation-id < 700", Ps, APs),
+    true = match("p.correlation_id = 789", Ps, APs),
+    true = match("500 < p.correlation_id", Ps, APs),
+    false = match("p.correlation_id < 700", Ps, APs),
 
-    true = match("p.content-type = 'text/plain'", Ps, APs),
-    true = match("p.content-type LIKE 'text/%'", Ps, APs),
-    true = match("p.content-type IN ('text/plain', 'text/html')", Ps, APs),
+    true = match("p.content_type = 'text/plain'", Ps, APs),
+    true = match("p.content_type LIKE 'text/%'", Ps, APs),
+    true = match("p.content_type IN ('text/plain', 'text/html')", Ps, APs),
 
-    true = match("'deflate' = p.content-encoding", Ps, APs),
-    false = match("p.content-encoding = 'gzip'", Ps, APs),
-    true = match("p.content-encoding NOT IN ('gzip', 'compress')", Ps, APs),
+    true = match("'deflate' = p.content_encoding", Ps, APs),
+    false = match("p.content_encoding = 'gzip'", Ps, APs),
+    true = match("p.content_encoding NOT IN ('gzip', 'compress')", Ps, APs),
 
-    true = match("p.absolute-expiry-time = 1311999988888", Ps, APs),
-    true = match("p.absolute-expiry-time > 1311999988000", Ps, APs),
+    true = match("p.absolute_expiry_time = 1311999988888", Ps, APs),
+    true = match("p.absolute_expiry_time > 1311999988000", Ps, APs),
 
-    true = match("p.creation-time = 1311704463521", Ps, APs),
-    true = match("p.creation-time < 1311999988888", Ps, APs),
+    true = match("p.creation_time = 1311704463521", Ps, APs),
+    true = match("p.creation_time < 1311999988888", Ps, APs),
 
-    true = match("p.group-id = 'some group ID'", Ps, APs),
-    true = match("p.group-id LIKE 'some%ID'", Ps, APs),
-    false = match("p.group-id = 'other group ID'", Ps, APs),
+    true = match("p.group_id = 'some group ID'", Ps, APs),
+    true = match("p.group_id LIKE 'some%ID'", Ps, APs),
+    false = match("p.group_id = 'other group ID'", Ps, APs),
 
-    true = match("p.group-sequence = 999", Ps, APs),
-    true = match("p.group-sequence >= 999", Ps, APs),
-    false = match("p.group-sequence > 999", Ps, APs),
+    true = match("p.group_sequence = 999", Ps, APs),
+    true = match("p.group_sequence >= 999", Ps, APs),
+    false = match("p.group_sequence > 999", Ps, APs),
 
-    true = match("p.reply-to-group-id = 'other group ID'", Ps, APs),
-    true = match("p.reply-to-group-id LIKE '%group ID'", Ps, APs),
-    true = match("p.reply-to-group-id != 'some group ID'", Ps, APs),
-    true = match("p.reply-to-group-id IS NOT NULL", Ps, APs),
-    false = match("p.reply-to-group-id IS NULL", Ps, APs),
+    true = match("p.reply_to_group_id = 'other group ID'", Ps, APs),
+    true = match("p.reply_to_group_id LIKE '%group ID'", Ps, APs),
+    true = match("p.reply_to_group_id != 'some group ID'", Ps, APs),
+    true = match("p.reply_to_group_id IS NOT NULL", Ps, APs),
+    false = match("p.reply_to_group_id IS NULL", Ps, APs),
 
-    true = match("p.message-id = 'id-123' AND 'some subject' = p.subject", Ps, APs),
-    true = match("p.group-sequence < 500 OR p.correlation-id > 700", Ps, APs),
-    true = match("(p.content-type LIKE 'text/%') AND p.content-encoding = 'deflate'", Ps, APs),
+    true = match("p.message_id = 'id-123' AND 'some subject' = p.subject", Ps, APs),
+    true = match("p.group_sequence < 500 OR p.correlation_id > 700", Ps, APs),
+    true = match("(p.content_type LIKE 'text/%') AND p.content_encoding = 'deflate'", Ps, APs),
 
     true = match("p.subject IS NULL", #'v1_0.properties'{}, APs),
     false = match("p.subject IS NOT NULL", #'v1_0.properties'{}, APs).
@@ -923,8 +999,8 @@ multiple_sections(_Config) ->
             reply_to_group_id = {utf8, <<"other group ID">>}},
     APs = [{{utf8, <<"key_1">>}, {byte, -1}}],
 
-    true = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence > 90", Hdr, Ps, APs),
-    false = match("-1.0 = key_1 AND 4 < header.priority AND properties.group-sequence < 90", Hdr, Ps, APs).
+    true = match("-1.0 = key_1 AND 4 < header.priority AND properties.group_sequence > 90", Hdr, Ps, APs),
+    false = match("-1.0 = key_1 AND 4 < header.priority AND properties.group_sequence < 90", Hdr, Ps, APs).
 
 section_qualifier(_Config) ->
     Hdr = #'v1_0.header'{priority = {ubyte, 7}},
@@ -934,17 +1010,20 @@ section_qualifier(_Config) ->
     %% supported section qualifiers
     true = match("header.priority = 7", Hdr, Ps, APs),
     true = match("h.priority = 7", Hdr, Ps, APs),
-    true = match("properties.message-id = 'id-123'", Hdr, Ps, APs),
-    true = match("p.message-id = 'id-123'", Hdr, Ps, APs),
-    true = match("application-properties.key_1 = -1", Hdr, Ps, APs),
+    true = match("properties.message_id = 'id-123'", Hdr, Ps, APs),
+    true = match("p.message_id = 'id-123'", Hdr, Ps, APs),
+    true = match("application_properties.key_1 = -1", Hdr, Ps, APs),
     true = match("a.key_1 = -1", Hdr, Ps, APs),
     true = match("key_1 = -1", Hdr, Ps, APs),
 
     %% (currently) unsupported section qualifiers
+    ?assertEqual(error, parse("delivery_annotations.abc")),
     ?assertEqual(error, parse("delivery-annotations.abc")),
     ?assertEqual(error, parse("d.abc")),
+    ?assertEqual(error, parse("message_annotations.abc")),
     ?assertEqual(error, parse("message-annotations.abc")),
     ?assertEqual(error, parse("m.abc")),
+    ?assertEqual(error, parse("application-properties.foo = 'bar'")),
     ?assertEqual(error, parse("footer.abc")),
     ?assertEqual(error, parse("f.abc")),
     ok.
