@@ -62,54 +62,46 @@ map_2({Op, Arg1, Arg2, Arg3}, Fun) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-has_binary_identifier_test() ->
-    false = has_binary_identifier("TRUE"),
-    true = has_binary_identifier("user_key_1 <> 'fake'"),
-    false = has_binary_identifier("properties.subject = 'fake'"),
+search_test() ->
+    false = search("TRUE"),
+    true = search("user_key_1 <> 'fake'"),
+    false = search("properties.subject = 'fake'"),
 
-    false = has_binary_identifier("NOT properties.group-id = 'test'"),
-    false = has_binary_identifier("properties.group-sequence IS NULL"),
-    false = has_binary_identifier("properties.group-sequence IS NOT NULL"),
-    true = has_binary_identifier("NOT user_key = 'test'"),
-    true = has_binary_identifier("custom_field IS NULL"),
+    false = search("NOT properties.group_id = 'test'"),
+    false = search("properties.group_sequence IS NULL"),
+    false = search("properties.group_sequence IS NOT NULL"),
+    true = search("NOT user_key = 'test'"),
+    true = search("custom_field IS NULL"),
 
-    false = has_binary_identifier("properties.group-id = 'g1' AND header.priority > 5"),
-    false = has_binary_identifier("properties.group-sequence * 10 < 100"),
-    false = has_binary_identifier("properties.creation-time >= 12345 OR properties.subject = 'test'"),
-    true = has_binary_identifier("user_key = 'g1' AND header.priority > 5"),
-    true = has_binary_identifier("header.priority > 5 AND user_key = 'g1'"),
-    true = has_binary_identifier("custom_metric * 10 < 100"),
-    true = has_binary_identifier("properties.creation-time >= 12345 OR user_data = 'test'"),
+    false = search("properties.group_id = 'g1' AND header.priority > 5"),
+    false = search("properties.group_sequence * 10 < 100"),
+    false = search("properties.creation_time >= 12345 OR properties.subject = 'test'"),
+    true = search("user_key = 'g1' AND header.priority > 5"),
+    true = search("header.priority > 5 AND user_key = 'g1'"),
+    true = search("custom_metric * 10 < 100"),
+    true = search("properties.creation_time >= 12345 OR user_data = 'test'"),
 
-    false = has_binary_identifier("properties.group-id LIKE 'group_%' ESCAPE '!'"),
-    true = has_binary_identifier("user_tag LIKE 'group_%' ESCAPE '!'"),
+    false = search("properties.group_id LIKE 'group_%' ESCAPE '!'"),
+    true = search("user_tag LIKE 'group_%' ESCAPE '!'"),
 
-    true = has_binary_identifier("user_category IN ('g1', 'g2', 'g3')"),
-    true = has_binary_identifier("p.group-id IN ('g1', user_key, 'g3')"),
-    true = has_binary_identifier("p.group-id IN ('g1', 'g2', a.user_key)"),
-    false = has_binary_identifier("p.group-id IN (p.reply-to-group-id, 'g2', 'g3')"),
-    false = has_binary_identifier("properties.group-id IN ('g1', 'g2', 'g3')"),
+    true = search("user_category IN ('g1', 'g2', 'g3')"),
+    true = search("p.group_id IN ('g1', user_key, 'g3')"),
+    true = search("p.group_id IN ('g1', 'g2', a.user_key)"),
+    false = search("p.group_id IN (p.reply_to_group_id, 'g2', 'g3')"),
+    false = search("properties.group_id IN ('g1', 'g2', 'g3')"),
 
-    false = has_binary_identifier(
-              "(properties.group-sequence + 1) * 2 <= 100 AND " ++
-              "(properties.group-id LIKE 'prod_%' OR h.priority > 5)"),
-    true = has_binary_identifier(
-             "(properties.group-sequence + 1) * 2 <= 100 AND " ++
-             "(user_value LIKE 'prod_%' OR p.absolute-expiry-time < 10)"),
+    false = search("(properties.group_sequence + 1) * 2 <= 100 AND " ++
+                   "(properties.group_id LIKE 'prod_%' OR h.priority > 5)"),
+    true = search("(properties.group_sequence + 1) * 2 <= 100 AND " ++
+                  "(user_value LIKE 'prod_%' OR p.absolute_expiry_time < 10)"),
     ok.
 
-has_binary_identifier(Selector) ->
+search(Selector) ->
     {ok, Tokens, _EndLocation} = rabbit_amqp_sql_lexer:string(Selector),
-    {ok, Ast0} = rabbit_amqp_sql_parser:parse(Tokens),
-    Ast = map(fun({identifier, Ident}) when is_binary(Ident) ->
-                      {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
-                 (Node) ->
-                      Node
-              end, Ast0),
+    {ok, Ast} = rabbit_amqp_sql_parser:parse(Tokens),
     search(fun({identifier, Val}) ->
                    is_binary(Val);
               (_Node) ->
                    false
            end, Ast).
-
 -endif.
