@@ -190,6 +190,7 @@ sub(DecodedToken) ->
 sub(DecodedToken, Default) ->
     maps:get(<<"sub">>, DecodedToken, Default).
 
--spec validate_introspected_token(Token) ->
-    {ok, map()} | {error, term()}
-validate_introspected_token(Token) ->
+-spec validate_introspected_token(map()) ->
+    {ok, map()} | {error, term()}.
+validate_introspected_token(_Token) ->
+    {error, not_implemented}.
