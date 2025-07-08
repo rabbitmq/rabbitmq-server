@@ -40,7 +40,9 @@
          format/2,
          capabilities/0,
          notify_decorators/1,
-         is_stateful/0]).
+         is_stateful/0,
+         disk_footprint/0,
+         disk_limit/0]).
 
 -export([list_with_minimum_quorum/0]).
 
@@ -1356,6 +1358,19 @@ capabilities() ->
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     %% Not supported
     ok.
+
+-spec disk_footprint() -> {ok, Bytes :: non_neg_integer()} | {error, file:posix()}.
+disk_footprint() ->
+    case application:get_env(osiris, data_dir) of
+        {ok, Dir} ->
+            rabbit_disk_usage:scan(Dir);
+        _ ->
+            {ok, 0}
+    end.
+
+-spec disk_limit() -> rabbit_queue_type_disk_monitor:disk_usage_limit_spec() | undefined.
+disk_limit() ->
+    application:get_env(rabbit, stream_queue_disk_limit, undefined).
 
 resend_all(#stream_client{leader = LeaderPid,
                           writer_id = WriterId,
