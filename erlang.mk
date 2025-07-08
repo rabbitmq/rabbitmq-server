@@ -17,7 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-ERLANG_MK_VERSION = f157f11
+ERLANG_MK_VERSION = 2022.05.31-138-g9bc843c
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -59,11 +59,6 @@ gen_verbose_esc_0 = @echo " GEN   " $$@;
 gen_verbose_esc_2 = set -x;
 gen_verbose_esc = $(gen_verbose_esc_$(V))
 
-# Temporary files directory.
-
-ERLANG_MK_TMP ?= $(CURDIR)/.erlang.mk
-export ERLANG_MK_TMP
-
 # "erl" command.
 
 ERL = erl -noinput -boot no_dot_erlang -kernel start_distribution false +P 1024 +Q 1024
@@ -97,6 +92,19 @@ endif
 
 export PLATFORM
 endif
+
+ifeq ($(PLATFORM),msys2)
+core_native_path = $(shell cygpath -m $1)
+else
+core_native_path = $1
+endif
+
+# Temporary files directory.
+
+ERLANG_MK_TMP ?= $(CURDIR)/.erlang.mk
+export ERLANG_MK_TMP
+
+NATIVE_ERLANG_MK_TMP = $(eval NATIVE_ERLANG_MK_TMP := $$(call core_native_path,$(ERLANG_MK_TMP)))$(NATIVE_ERLANG_MK_TMP)
 
 # Core targets.
 
@@ -173,12 +181,6 @@ endef
 define erlang
 $(ERL) $2 -pz $(ERLANG_MK_TMP)/rebar3/_build/prod/lib/*/ebin/ -eval "$(subst $(newline),,$(call escape_dquotes,$1))" -- erlang.mk
 endef
-
-ifeq ($(PLATFORM),msys2)
-core_native_path = $(shell cygpath -m $1)
-else
-core_native_path = $1
-endif
 
 core_http_get = curl -Lf$(if $(filter-out 0,$V),,s)o $(call core_native_path,$1) $2
 
@@ -447,6 +449,8 @@ CACHE_DEPS ?= 0
 
 CACHE_DIR ?= $(if $(XDG_CACHE_HOME),$(XDG_CACHE_HOME),$(HOME)/.cache)/erlang.mk
 export CACHE_DIR
+
+NATIVE_CACHE_DIR = $(eval NATIVE_CACHE_DIR := $$(call core_native_path,$(CACHE_DIR)))$(NATIVE_CACHE_DIR)
 
 HEX_CONFIG ?=
 
@@ -1247,7 +1251,7 @@ define hex_get_tarball.erl
 	Config = $(hex_config.erl),
 	case hex_repo:get_tarball(Config, <<"$1">>, <<"$(strip $2)">>) of
 		{ok, {200, _, Tarball}} ->
-			ok = file:write_file("$(call core_native_path,$3)", Tarball),
+			ok = file:write_file("$3", Tarball),
 			halt(0);
 		{ok, {Status, _, Errors}} ->
 			io:format("Error ~b: ~0p~n", [Status, Errors]),
@@ -1263,7 +1267,7 @@ define dep_fetch_hex
 	$(eval hex_pkg_name := $(if $(word 3,$(dep_$1)),$(word 3,$(dep_$1)),$1)) \
 	$(eval hex_tar_name := $(hex_pkg_name)-$(strip $(word 2,$(dep_$1))).tar) \
 	$(if $(wildcard $(CACHE_DIR)/hex/$(hex_tar_name)),,\
-		$(call erlang,$(call hex_get_tarball.erl,$(hex_pkg_name),$(word 2,$(dep_$1)),$(CACHE_DIR)/hex/$(hex_tar_name)));) \
+		$(call erlang,$(call hex_get_tarball.erl,$(hex_pkg_name),$(word 2,$(dep_$1)),$(NATIVE_CACHE_DIR)/hex/$(hex_tar_name)));) \
 	tar -xOf $(CACHE_DIR)/hex/$(hex_tar_name) contents.tar.gz | tar -C $(DEPS_DIR)/$1 -xzf -;
 endef
 
@@ -1272,7 +1276,7 @@ else
 # Hex only has a package version. No need to look in the Erlang.mk packages.
 define dep_fetch_hex
 	mkdir -p $(ERLANG_MK_TMP)/hex $(DEPS_DIR)/$1; \
-	$(call erlang,$(call hex_get_tarball.erl,$(if $(word 3,$(dep_$1)),$(word 3,$(dep_$1)),$1),$(word 2,$(dep_$1)),$(ERLANG_MK_TMP)/hex/$1.tar)); \
+	$(call erlang,$(call hex_get_tarball.erl,$(if $(word 3,$(dep_$1)),$(word 3,$(dep_$1)),$1),$(word 2,$(dep_$1)),$(NATIVE_ERLANG_MK_TMP)/hex/$1.tar)); \
 	tar -xOf $(ERLANG_MK_TMP)/hex/$1.tar contents.tar.gz | tar -C $(DEPS_DIR)/$1 -xzf -;
 endef
 
@@ -1954,7 +1958,8 @@ define dep_autopatch_mix.erl
 endef
 
 define dep_autopatch_mix
-	sed 's|\(defmodule.*do\)|\1\n  try do\n    Code.compiler_options(on_undefined_variable: :warn)\n    rescue _ -> :ok\n  end\n|g' -i $(DEPS_DIR)/$(1)/mix.exs; \
+	sed 's|\(defmodule.*do\)|\1\n  try do\n    Code.compiler_options(on_undefined_variable: :warn)\n    rescue _ -> :ok\n  end\n|g' $(DEPS_DIR)/$(1)/mix.exs > $(DEPS_DIR)/$(1)/mix.exs.new; \
+	mv $(DEPS_DIR)/$(1)/mix.exs.new $(DEPS_DIR)/$(1)/mix.exs; \
 	$(MAKE) $(DEPS_DIR)/hex_core/ebin/dep_built; \
 	MIX_ENV="$(if $(MIX_ENV),$(strip $(MIX_ENV)),prod)" \
 		$(call erlang,$(call dep_autopatch_mix.erl,$1))
