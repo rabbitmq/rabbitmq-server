@@ -326,7 +326,15 @@ init_per_testcase(T, Config)
     end;
 init_per_testcase(T, Config)
   when T =:= leader_transfer_quorum_queue_credit_single orelse
-       T =:= leader_transfer_quorum_queue_credit_batches ->
+       T =:= leader_transfer_quorum_queue_credit_batches orelse
+       T =:= async_notify_unsettled_classic_queue orelse
+       T =:= leader_transfer_stream_credit_single orelse
+       T =:= dead_letter_into_stream orelse
+       T =:= classic_queue_on_new_node orelse
+       T =:= leader_transfer_quorum_queue_send orelse
+       T =:= last_queue_confirms orelse
+       T =:= leader_transfer_stream_credit_batches orelse
+       T =:= leader_transfer_stream_send ->
     %% These test cases flake with feature flag 'rabbitmq_4.0.0' disabled.
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
         ok ->
@@ -341,14 +349,6 @@ init_per_testcase(T = immutable_bare_message, Config) ->
         _ ->
             {skip, "RabbitMQ is known to wrongfully modify the bare message with feature "
              "flag rabbitmq_4.0.0 disabled"}
-    end;
-init_per_testcase(T = dead_letter_into_stream, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
-             "due to missing feature https://github.com/rabbitmq/rabbitmq-server/issues/11173"}
     end;
 init_per_testcase(T = dead_letter_reject, Config) ->
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of

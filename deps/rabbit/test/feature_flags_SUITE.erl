@@ -197,7 +197,14 @@ init_per_group(clustering, Config) ->
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1, {rabbit, [{forced_feature_flags_on_init, []}]}),
+                Config1, {rabbit, [{forced_feature_flags_on_init, [
+                                                                   restart_streams,
+                                                                   stream_sac_coordinator_unblock_group,
+                                                                   stream_update_config_command,
+                                                                   stream_filtering,
+                                                                   message_containers,
+                                                                   quorum_queue_non_voters
+                                                                  ]}]}),
     rabbit_ct_helpers:run_setup_steps(Config2, [fun prepare_my_plugin/1]);
 init_per_group(activating_plugin, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
@@ -1277,6 +1284,13 @@ activating_plugin_with_new_ff_enabled(Config) ->
     ok.
 
 enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
+        true ->
+            ok;
+        false ->
+            throw({skip, "this test triggers a bug present in 3.13"})
+    end,
+
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
@@ -1307,6 +1321,13 @@ enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
     ok.
 
 restart_node_with_unknown_enabled_feature_flag(Config) ->
+    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
+        true ->
+            ok;
+        false ->
+            throw({skip, "this test triggers a bug present in 3.13"})
+    end,
+
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),

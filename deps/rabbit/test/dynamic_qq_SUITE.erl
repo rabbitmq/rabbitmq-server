@@ -222,6 +222,8 @@ quorum_unaffected_after_vhost_failure(Config) ->
 forget_cluster_node(Config) ->
     %% Tests that quorum queues shrink when forget_cluster_node
     %% operations are issues.
+    quorum_queue_SUITE:check_quorum_queues_v4_compat(Config),
+
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
 
