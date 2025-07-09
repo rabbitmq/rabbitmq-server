@@ -758,10 +758,8 @@ parse_access_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_to_access_token_response(Code, Reason, Headers, Body).
 
 parse_introspect_token_response({error, Reason}) ->
-    ct:log("parse_introspect_token_response error ~p", [Reason]),
     {error, Reason};
 parse_introspect_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
-    ct:log("parse_introspect_token_response ok "),
     map_to_introspect_token_response(Code, Reason, Headers, Body).
 
 -spec format_ssl_options([ssl:tls_client_option()]) -> string().
