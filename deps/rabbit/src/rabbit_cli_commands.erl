@@ -16,8 +16,7 @@
          cmd_hello/1,
          cmd_pager/1,
          cmd_signal/1,
-         cmd_crash/1,
-         cmd_top/1]).
+         cmd_crash/1]).
 
 -rabbitmq_command(
    {#{cli => ["noop"]},
@@ -59,11 +58,6 @@
                       help => "Name of the exchange to declare"}
                    ],
       handler => {?MODULE, cmd_declare_exchange}}}).
-
--rabbitmq_command(
-   {#{cli => ["top"]},
-    [#{help => "Top-like interactive view",
-       handler => {?MODULE, cmd_top}}]}).
 
 -rabbitmq_command(
    {#{cli => ["generate", "completion"]},
@@ -506,24 +500,3 @@ cmd_signal(Context) ->
 
 cmd_crash(_) ->
     erlang:exit(oops).
-
-cmd_top(#{io := IO} = Context) ->
-    Top = spawn_link(fun() -> run_top(IO) end),
-    wait_quit(Context, Top).
-
-run_top(IO) ->
-    receive
-        quit ->
-            ok
-    after 1000 ->
-              _ = rabbit_cli_io:format(IO, "Refresh~n", []),
-              run_top(IO)
-    end.
-
-wait_quit(#{arg_map := _ArgMap, io := _IO}, Top) ->
-    receive
-        {keypress, _} ->
-            erlang:unlink(Top),
-            Top ! quit,
-            ok
-    end.
