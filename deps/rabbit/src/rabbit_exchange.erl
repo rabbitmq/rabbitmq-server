@@ -603,7 +603,6 @@ type_to_route_fun(T) ->
 
 cmd_list_exchanges(
   #rabbit_cli{arg_map = ArgMap,
-              terminal = Terminal,
               legacy = Legacy} = Context) ->
     VHost = <<"/">>, %% TODO: Take from args and use it.
     InfoKeys = rabbit_exchange:info_keys(),
@@ -621,12 +620,7 @@ cmd_list_exchanges(
 
     case Legacy of
         false ->
-            case Terminal of
-                #{stdout := true} ->
-                    ok = rabbit_cli_io:set_paging_mode(Context);
-                _ ->
-                    ok
-            end,
+            ok = rabbit_cli_io:set_paging_mode(Context),
 
             case rabbit_cli_io:supports_colors(Context) of
                 {true, truecolor} ->

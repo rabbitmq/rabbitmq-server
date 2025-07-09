@@ -398,20 +398,30 @@ handle_request(set_interactive_mode, Context) ->
     ?LOG_DEBUG("CLI: interactive mode: ~p", [Ret]),
     {reply, Ret, Context};
 handle_request(
-  set_paging_mode, #rabbit_cli{env = Env, priv = Priv} = Context) ->
-    Cmd = case proplists:get_value("PAGER", Env) of
-              Value when is_list(Value) ->
-                  Value;
-              undefined ->
-                  "less"
-          end,
-    ?LOG_DEBUG("CLI: start pager \"~ts\"", [Cmd]),
-    Pager = erlang:open_port(
-              {spawn, Cmd},
-              [stream, exit_status, binary, use_stdio, out, hide, {env, Env}]),
-    Priv1 = Priv#?MODULE{pager = Pager},
-    Context1 = Context#rabbit_cli{priv = Priv1},
-    {reply, ok, Context1};
+  set_paging_mode,
+  #rabbit_cli{terminal = Terminal,
+              env = Env,
+              priv = #?MODULE{pager = undefined} = Priv} = Context) ->
+    case Terminal of
+        #{stdout := true} ->
+            case proplists:get_value("PAGER", Env) of
+                Cmd when is_list(Cmd) andalso Cmd =/= "" ->
+                    ?LOG_DEBUG("CLI: start pager \"~ts\"", [Cmd]),
+                    Pager = erlang:open_port(
+                              {spawn, Cmd},
+                              [stream, exit_status, binary, use_stdio, out,
+                               hide, {env, Env}]),
+                    Priv1 = Priv#?MODULE{pager = Pager},
+                    Context1 = Context#rabbit_cli{priv = Priv1},
+                    {reply, ok, Context1};
+                _ ->
+                    ?LOG_DEBUG("CLI: $PAGER unset or empty; no pager started"),
+                    {reply, ok, Context}
+            end;
+        _ ->
+            ?LOG_DEBUG("CLI: stdout is not a terminal; no pager started"),
+            {reply, ok, Context}
+    end;
 handle_request({display_siginfo, {Format, Args}}, Context) ->
     io:format(standard_error, Format, Args),
     {reply, ok, Context};
