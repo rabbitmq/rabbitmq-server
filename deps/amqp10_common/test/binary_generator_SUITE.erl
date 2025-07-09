@@ -99,12 +99,34 @@ numerals(_Config) ->
     roundtrip({long, 0}),
     roundtrip({long, 16#7FFFFFFFFFFFFFFF}),
     roundtrip({long, -16#8000000000000000}),
+
     roundtrip({float, 0.0}),
     roundtrip({float, 1.0}),
     roundtrip({float, -1.0}),
     roundtrip({double, 0.0}),
     roundtrip({double, 1.0}),
     roundtrip({double, -1.0}),
+
+    %% float +Inf
+    roundtrip({as_is, 16#72, <<16#7F, 16#80, 16#00, 16#00>>}),
+    %% double +Inf
+    roundtrip({as_is, 16#82, <<16#7F, 16#F0, 16#00, 16#00,
+                               16#00, 16#00, 16#00, 16#00>>}),
+
+    %% decimal32
+    roundtrip({as_is, 16#74, <<16#22, 16#50, 16#00, 16#00>>}), % 0
+    roundtrip({as_is, 16#74, <<16#22, 16#50, 16#00, 16#2A>>}), % 42
+    roundtrip({as_is, 16#74, <<16#A2, 16#40, 16#00, 16#48>>}), % -123.45
+    roundtrip({as_is, 16#74, <<16#78, 16#00, 16#00, 16#00>>}), % +Infinity
+    roundtrip({as_is, 16#74, <<16#7C, 16#00, 16#00, 16#00>>}), % NaN
+    %% decimal64
+    roundtrip({as_is, 16#84, <<16#22, 16#34, 16#00, 16#00,
+                               16#00, 16#00, 16#00, 16#00>>}), % 0
+    %% decimal128
+    roundtrip({as_is, 16#94, <<16#22, 16#08, 16#00, 16#00,
+                               16#00, 16#00, 16#00, 16#00,
+                               16#00, 16#00, 16#00, 16#00,
+                               16#00, 16#00, 16#00, 16#00>>}), % 0
     ok.
 
 utf8(_Config) ->

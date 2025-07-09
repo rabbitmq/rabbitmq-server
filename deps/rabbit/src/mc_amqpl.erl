@@ -152,8 +152,14 @@ convert_from(mc_amqp, Sections, Env) ->
                    Type0
            end,
 
-    Headers0 = [to_091(K, V) || {{utf8, K}, V} <- AP,
-                                ?IS_SHORTSTR_LEN(K)],
+    Headers0 = lists:filtermap(fun({_K, {as_is, _, _}}) ->
+                                       false;
+                                  ({{utf8, K}, V})
+                                    when ?IS_SHORTSTR_LEN(K) ->
+                                       {true, to_091(K, V)};
+                                  (_) ->
+                                       false
+                               end, AP),
     %% Add remaining x- message annotations as headers
     XHeaders = lists:filtermap(fun({{symbol, <<"x-cc">>}, V}) ->
                                        {true, to_091(<<"CC">>, V)};
@@ -161,6 +167,8 @@ convert_from(mc_amqp, Sections, Env) ->
                                        {true, {<<"timestamp_in_ms">>, long, Ts}};
                                   ({{symbol, <<"x-opt-deaths">>}, V}) ->
                                        convert_from_amqp_deaths(V);
+                                  ({_K, {as_is, _, _}}) ->
+                                       false;
                                   ({{symbol, <<"x-", _/binary>> = K}, V})
                                     when ?IS_SHORTSTR_LEN(K) ->
                                        case is_internal_header(K) of
@@ -766,12 +774,23 @@ to_091(Key, null) -> {Key, void, undefined};
 to_091(Key, {list, L}) ->
     to_091_array(Key, L);
 to_091(Key, {map, M}) ->
-    {Key, table, [to_091(unwrap(K), V) || {K, V} <- M]};
+    T = lists:filtermap(fun({K, V}) when element(1, K) =:= as_is orelse
+                                         element(1, V) =:= as_is ->
+                                false;
+                           ({K, V}) ->
+                                {true, to_091(unwrap(K), V)}
+                        end, M),
+    {Key, table, T};
 to_091(Key, {array, _T, L}) ->
     to_091_array(Key, L).
 
 to_091_array(Key, L) ->
-    {Key, array, [to_091(V) || V <- L]}.
+    A = lists:filtermap(fun({as_is, _, _}) ->
+                                false;
+                           (V) ->
+                                {true, to_091(V)}
+                        end, L),
+    {Key, array, A}.
 
 to_091({utf8, V}) -> {longstr, V};
 to_091({symbol, V}) -> {longstr, V};
