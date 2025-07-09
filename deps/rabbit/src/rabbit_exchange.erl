@@ -625,8 +625,8 @@ cmd_list_exchanges(
             case rabbit_cli_io:supports_colors(Context) of
                 {true, truecolor} ->
                     io:format(
-                      "Listing \033[;2;193;18;31mexchanges\033[0m "
-                      "for vhost \033[;2;102;155;188m~ts\033[0m:~n",
+                      "Listing \033[38;2;193;18;31mexchanges\033[0m "
+                      "for vhost \033[38;2;102;155;188m~ts\033[0m:~n",
                       [VHost]);
                 {true, _} ->
                     io:format(
