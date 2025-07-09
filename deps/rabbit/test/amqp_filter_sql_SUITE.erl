@@ -94,7 +94,7 @@ multiple_sections(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
 
-    Now = erlang:system_time(millisecond),
+    Now = os:system_time(millisecond),
     To = rabbitmq_amqp_address:exchange(<<"some exchange">>, <<"routing key">>),
     ReplyTo = rabbitmq_amqp_address:queue(<<"some queue">>),
 
@@ -155,19 +155,19 @@ multiple_sections(Config) ->
 
     Filter2 = filter(
                 <<"header.priority = 200 AND "
-                  "properties.message_id = 999 AND "
-                  "properties.user_id = 0x6775657374 AND "
-                  "properties.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
-                  "properties.subject = '🐇' AND "
-                  "properties.reply_to LIKE '/queues/some%' AND "
-                  "properties.correlation_id IN ('corr-345', 'corr-123') AND "
-                  "properties.content_type = 'text/plain' AND "
-                  "properties.content_encoding = 'some encoding' AND "
-                  "properties.absolute_expiry_time > 0 AND "
-                  "properties.creation_time > 0 AND "
-                  "properties.group_id IS NOT NULL AND "
-                  "properties.group_sequence = 4294967295 AND "
-                  "properties.reply_to_group_id = 'other group ID' AND "
+                  "p.message_id = 999 AND "
+                  "p.user_id = 0x6775657374 AND "
+                  "p.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
+                  "p.subject = '🐇' AND "
+                  "p.reply_to LIKE '/queues/some%' AND "
+                  "p.correlation_id IN ('corr-345', 'corr-123') AND "
+                  "p.content_type = 'text/plain' AND "
+                  "p.content_encoding = 'some encoding' AND "
+                  "p.absolute_expiry_time > UTC() AND "
+                  "p.creation_time > UTC() - 60000 AND "
+                  "p.group_id IS NOT NULL AND "
+                  "p.group_sequence = 4294967295 AND "
+                  "p.reply_to_group_id = 'other group ID' AND "
                   "k1 < 0 AND "
                   "NOT k2 AND "
                   "k3 AND "

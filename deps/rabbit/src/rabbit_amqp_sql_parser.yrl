@@ -18,7 +18,8 @@ Nonterminals
     expression_list
     in_expr
     like_expr
-    is_null_expr.
+    is_null_expr
+    function_call.
 
 Terminals
     integer float boolean string binary identifier
@@ -26,6 +27,7 @@ Terminals
     '+' '-' '*' '/' '%'
     'AND' 'OR' 'NOT'
     'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
+    'UTC'
     '(' ')' ','.
 
 Rootsymbol selector.
@@ -101,6 +103,10 @@ unary_expr -> primary : '$1'.
 primary -> '(' conditional_expr ')' : '$2'.
 primary -> literal : '$1'.
 primary -> identifier_expr : '$1'.
+primary -> function_call : '$1'.
+
+%% Function calls
+function_call -> 'UTC' '(' ')' : {function, 'UTC', []}.
 
 %% Identifiers (header fields or property references)
 identifier_expr -> identifier :
