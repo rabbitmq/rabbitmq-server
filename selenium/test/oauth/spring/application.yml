@@ -43,6 +43,27 @@ spring:
                 - profile
                 - rabbitmq.tag:management
               client-name: mgt_api_client
+          rabbitmq_client_code_opaque:
+            registration:
+              provider: spring
+              client-id: rabbitmq_client_code_opaque
+              require-proof-key: true
+              token-settings:
+                access-token-format: reference   
+              authorization-grant-types: 
+                - authorization_code
+              client-authentication-methods:
+                - none
+              redirect-uris: 
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/js/oidc-oauth/login-callback.html"
+              post-logout-redirect-uris:
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/"
+              scopes: 
+                - openid 
+                - profile 
+                - rabbitmq.tag:administrator
+                - rabbitmq.tag:management
+              client-name: rabbitmq_client_code_opaque
           rabbitmq_client_code:
             registration:
               provider: spring
