@@ -208,7 +208,6 @@ initial_argparse_def() ->
          long => "-node",
          short => $n,
          type => string,
-         nargs => 1,
          help => "Name of the node to control"},
        #{name => verbose,
          long => "-verbose",
