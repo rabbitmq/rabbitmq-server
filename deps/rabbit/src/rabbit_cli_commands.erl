@@ -44,22 +44,6 @@
       handler => {?MODULE, cmd_crash}}}).
 
 -rabbitmq_command(
-   {#{cli => ["declare", "exchange"],
-      http => {put, ["exchanges", vhost, exchange]}},
-    #{help => "Declare new exchange",
-      arguments => [
-                    #{name => vhost,
-                      long => "-vhost",
-                      type => binary,
-                      default => <<"/">>,
-                      help => "Name of the vhost owning the new exchange"},
-                    #{name => exchange,
-                      type => binary,
-                      help => "Name of the exchange to declare"}
-                   ],
-      handler => {?MODULE, cmd_declare_exchange}}}).
-
--rabbitmq_command(
    {#{cli => ["generate", "completion"]},
     #{help => "Generate a completion script for the given shell",
       arguments => [
