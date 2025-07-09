@@ -14,6 +14,9 @@ on:
       mixed_clusters:
         required: true
         type: boolean
+      previous_version:
+        required: false
+        type: string
 jobs:
   test-rabbit:
     name: Test rabbit
@@ -39,6 +42,7 @@ jobs:
       elixir_version: ${{ inputs.elixir_version }}
       metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
+      previous_version: ${{ inputs.previous_version }}
       make_target: ${{ matrix.make_target }}
       plugin: rabbit
 
@@ -50,6 +54,7 @@ jobs:
       elixir_version: ${{ inputs.elixir_version }}
       metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
+      previous_version: ${{ inputs.previous_version }}
       make_target: parallel-ct-set-1
       plugin: rabbitmq_mqtt
 
@@ -63,6 +68,7 @@ jobs:
       elixir_version: ${{ inputs.elixir_version }}
       metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
+      previous_version: ${{ inputs.previous_version }}
       make_target: ct-config_schema ct-unit
       plugin: rabbitmq_peer_discovery_aws
 
@@ -121,5 +127,6 @@ jobs:
       elixir_version: ${{ inputs.elixir_version }}
       metadata_store: ${{ inputs.metadata_store }}
       mixed_clusters: ${{ inputs.mixed_clusters }}
+      previous_version: ${{ inputs.previous_version }}
       make_target: tests
       plugin: ${{ matrix.plugin }}
