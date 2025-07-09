@@ -51,6 +51,7 @@
                    <<"like">>, <<"in">>, <<"is">>, <<"null">>, <<"escape">>,
                    <<"true">>, <<"false">>,
                    <<"exists">>,
+                   <<"nan">>, <<"inf">>,
                    <<"lower">>, <<"upper">>, <<"left">>, <<"right">>,
                    <<"substring">>, <<"utc">>, <<"date">>]).
 
@@ -460,7 +461,7 @@ tab_size() -> 8.
 %% return signal either an unrecognised character or end of current
 %% input.
 
--file("rabbit_amqp_sql_lexer.erl", 428).
+-file("rabbit_amqp_sql_lexer.erl", 429).
 yystate() -> 76.
 
 yystate(79, [95|Ics], Line, Col, Tlen, _, _) ->

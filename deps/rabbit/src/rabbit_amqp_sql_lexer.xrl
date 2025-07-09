@@ -79,6 +79,7 @@ Erlang code.
                    <<"like">>, <<"in">>, <<"is">>, <<"null">>, <<"escape">>,
                    <<"true">>, <<"false">>,
                    <<"exists">>,
+                   <<"nan">>, <<"inf">>,
                    <<"lower">>, <<"upper">>, <<"left">>, <<"right">>,
                    <<"substring">>, <<"utc">>, <<"date">>]).
 

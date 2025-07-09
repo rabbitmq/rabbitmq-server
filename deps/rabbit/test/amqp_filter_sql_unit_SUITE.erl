@@ -878,6 +878,8 @@ identifiers(_Config) ->
     ?assertEqual(error, parse("in")),
     ?assertEqual(error, parse("like")),
     ?assertEqual(error, parse("escape")),
+    ?assertEqual(error, parse("nan")),
+    ?assertEqual(error, parse("inf")),
 
     %% Regular identifier allows only:
     %% <letter> {<letter> | <underscore> | <digit> }
