@@ -4,6 +4,11 @@ on:
     # at 2:20am on Sundays
     - cron: 20 2 * * 0
   workflow_dispatch:
+    inputs:
+      previous_version:
+        description: 'Previous version to test against'
+        required: true
+        default: 'tags/v3.13.7'
 jobs:
   test-mixed-clusters:
     name: Test mixed clusters
