@@ -577,13 +577,10 @@ literals(_Config) ->
     true = match("10.5 = 10.5", app_props()),
     true = match("price = 10.5", app_props()),
     true = match("5.0 > 4.999", app_props()),
-    true = match("10 = 10.", app_props()),
     true = match("0 = 0.0", app_props()),
-    true = match("0 = 0.", app_props()),
-    true = match("0 = .0", app_props()),
 
     true = match("weight = 5.0", app_props()), % int = float
-    true = match("5. = weight", app_props()), % float = int
+    true = match("5.0 = weight", app_props()), % float = int
 
     %% String literals
     true = match("'UK' = 'UK'", app_props()),
@@ -602,7 +599,13 @@ literals(_Config) ->
     %% Literals in expressions
     true = match("weight + 2 > 6", app_props()),
     true = match("price * 2 > 20.0", app_props()),
-    true = match("'UK' <> 'US'", app_props()).
+    true = match("'UK' <> 'US'", app_props()),
+
+    ?assertEqual(error, parse("5. > 0")),
+    ?assertEqual(error, parse(".5 > 0")),
+    ?assertEqual(error, parse(".5E2 > 0")),
+    ?assertEqual(error, parse("5E2 > 0")),
+    ok.
 
 scientific_notation(_Config) ->
     %% Basic scientific notation comparisons
@@ -613,23 +616,21 @@ scientific_notation(_Config) ->
 
     %% Scientific notation literals in expressions
     true = match("1.2E3 = 1200", app_props()),
-    true = match("5E2 = 500", app_props()),
-    true = match("5.E2 = 500", app_props()),
-    true = match("-5E-2 = -0.05", app_props()),
-    true = match("-5.E-2 = -0.05", app_props()),
-    true = match(".5E-1 = 0.05", app_props()),
-    true = match("-.5E-1 = -0.05", app_props()),
-    true = match("1E0 = 1", app_props()),
+    true = match("5.0E2 = 500", app_props()),
+    true = match("5.0E+2 = 500", app_props()),
+    true = match("5.0E-2 = 0.05", app_props()),
+    true = match("-5.0E-2 = -0.05", app_props()),
+    true = match("1.0E0 = 1", app_props()),
 
     %% Arithmetic with scientific notation
     true = match("distance / 1.2E5 = 10", app_props()),
-    true = match("tiny_value * 1E6 = 350", app_props()),
+    true = match("tiny_value * 1.0E+6 = 350", app_props()),
     true = match("1.5E2 + 2.5E2 = 400", app_props()),
-    true = match("3E3 - 2E3 = 1000", app_props()),
+    true = match("3.0E3 - 2.0E3 = 1000", app_props()),
 
     %% Comparisons with scientific notation
-    true = match("distance > 1E6", app_props()),
-    true = match("tiny_value < 1E-3", app_props()),
+    true = match("distance > 1.0E6", app_props()),
+    true = match("tiny_value < 1.0E-3", app_props()),
 
     %% Mixed numeric formats
     true = match("distance / 1200 = 1000", app_props()),
@@ -696,7 +697,6 @@ type_handling(_Config) ->
     false = match("weight / score = 5", app_props()),
     false = match("0 / 0 = 0", app_props()),
     false = match("0 / 0.0 = 0", app_props()),
-    false = match("0 / 0. = 0", app_props()),
     false = match("-1 / 0 = 0", app_props()),
     false = match("score / score = score", app_props()),
 

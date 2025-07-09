@@ -9,10 +9,8 @@ WHITESPACE   = [\s\t\f\n\r]
 DIGIT        = [0-9]
 HEXDIGIT     = [0-9A-F]
 INT          = {DIGIT}+
-% Approximate numeric literal with a decimal
-FLOAT        = ({DIGIT}+\.{DIGIT}*|\.{DIGIT}+)(E[\+\-]?{INT})?
-% Approximate numeric literal in scientific notation without a decimal
-EXPONENT     = {DIGIT}+E[\+\-]?{DIGIT}+
+% decimal constant or approximate number constant
+FLOAT        = {DIGIT}+\.{DIGIT}+(E[\+\-]?{INT})?
 STRING       = '([^']|'')*'|"([^"]|"")*"
 BINARY       = 0x({HEXDIGIT}{HEXDIGIT})+
 REGULAR_ID   = [a-zA-Z][a-zA-Z0-9_]*
@@ -65,8 +63,7 @@ UTC      : {token, {'UTC', TokenLine}}.
 
 % Literals
 {INT}           : {token, {integer, TokenLine, list_to_integer(TokenChars)}}.
-{FLOAT}         : {token, {float, TokenLine, list_to_float(to_float(TokenChars))}}.
-{EXPONENT}      : {token, {float, TokenLine, parse_scientific_notation(TokenChars)}}.
+{FLOAT}         : {token, {float, TokenLine, list_to_float(TokenChars)}}.
 {STRING}        : {token, {string, TokenLine, process_string(TokenChars)}}.
 {BINARY}        : {token, {binary, TokenLine, parse_binary(TokenChars)}}.
 {SECTION_ID}    : process_section_identifier(TokenChars, TokenLine).
@@ -84,27 +81,6 @@ Erlang code.
                    <<"exists">>,
                    <<"lower">>, <<"upper">>, <<"left">>, <<"right">>,
                    <<"substring">>, <<"utc">>, <<"date">>]).
-
-%% "Approximate literals use the Java floating-point literal syntax."
-to_float([$. | _] = Chars) ->
-    %% . Digits [ExponentPart]
-    "0" ++ Chars;
-to_float(Chars) ->
-    %% Digits . [Digits] [ExponentPart]
-    case lists:last(Chars) of
-        $. ->
-            Chars ++ "0";
-        _ ->
-            Chars1 = string:replace(Chars, ".E", ".0E"),
-            lists:flatten(Chars1)
-    end.
-
-parse_scientific_notation(Chars) ->
-    {Before, After0} = lists:splitwith(fun(C) -> C =/= $E end, Chars),
-    [$E | After] = After0,
-    Base = list_to_integer(Before),
-    Exp = list_to_integer(After),
-    Base * math:pow(10, Exp).
 
 parse_binary([$0, $x | HexChars]) ->
     parse_hex_pairs(HexChars, <<>>).
