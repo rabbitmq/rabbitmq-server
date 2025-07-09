@@ -22,21 +22,24 @@ DELIMITED_ID = \[([^\[\]]|\[\[|\]\])*\]
 Rules.
 {WHITESPACE}+  : skip_token.
 
-% Logical operators (case insensitive)
+% Logical operators
 AND    : {token, {'AND', TokenLine}}.
 OR     : {token, {'OR', TokenLine}}.
 NOT    : {token, {'NOT', TokenLine}}.
 
-% Special operators (case insensitive)
+% Special operators
 LIKE      : {token, {'LIKE', TokenLine}}.
 IN        : {token, {'IN', TokenLine}}.
 IS        : {token, {'IS', TokenLine}}.
 NULL      : {token, {'NULL', TokenLine}}.
 ESCAPE    : {token, {'ESCAPE', TokenLine}}.
 
-% Boolean literals (case insensitive)
+% Boolean literals
 TRUE     : {token, {boolean, TokenLine, true}}.
 FALSE    : {token, {boolean, TokenLine, false}}.
+
+% Functions
+UTC      : {token, {'UTC', TokenLine}}.
 
 % Comparison operators
 % "The ‘<>’ operator is synonymous to the ‘!=’ operator."

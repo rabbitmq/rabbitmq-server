@@ -45,6 +45,7 @@ groups() ->
        properties_section,
        multiple_sections,
        section_qualifier,
+       utc_function,
        parse_errors
       ]
      }].
@@ -256,17 +257,17 @@ single_quoted_strings(_Config) ->
 
 double_quoted_strings(_Config) ->
     %% Basic double-quoted string equality
-    true = match("\"UK\" = \"UK\"", []),
+    true = match("\"UK\" = \"UK\""),
     true = match("country = \"UK\"", app_props()),
     false = match("country = \"US\"", app_props()),
 
     %% Mix of single and double quotes
-    true = match("'UK' = \"UK\"", []),
-    true = match("\"UK\" = 'UK'", []),
+    true = match("'UK' = \"UK\""),
+    true = match("\"UK\" = 'UK'"),
     true = match("country = 'UK' AND country = \"UK\"", app_props()),
 
     %% Empty strings
-    true = match("\"\" = ''", []),
+    true = match("\"\" = ''"),
     true = match("\"\" = country", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
     true = match("'' = country", [{{utf8, <<"country">>}, {utf8, <<>>}}]),
 
@@ -274,8 +275,8 @@ double_quoted_strings(_Config) ->
     true = match("country = \"UK\"\"s\"", [{{utf8, <<"country">>}, {utf8, <<"UK\"s">>}}]),
     true = match("country = \"\"\"\"", [{{utf8, <<"country">>}, {utf8, <<$">>}}]),
     true = match("country = \"\"\"\"\"\"", [{{utf8, <<"country">>}, {utf8, <<$", $">>}}]),
-    true = match(" \"\"\"\"\"\" = '\"\"' ", []),
-    true = match("\"UK\"\"s\" = \"UK\"\"s\"", []),
+    true = match(" \"\"\"\"\"\" = '\"\"' "),
+    true = match("\"UK\"\"s\" = \"UK\"\"s\""),
     true = match("\"They said \"\"Hello\"\"\" = key", [{{utf8, <<"key">>}, {utf8, <<"They said \"Hello\"">>}}]),
 
     %% Single quotes inside double-quoted strings (no escaping needed)
@@ -313,8 +314,8 @@ double_quoted_strings(_Config) ->
 
     %% Unicode in double-quoted strings
     true = match("country = \"🇬🇧\"", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧"/utf8>>}}]),
-    true = match("\"🇬🇧\" = '🇬🇧'", []),
-    false = match("\"🇬🇧\" != '🇬🇧'", []),
+    true = match("\"🇬🇧\" = '🇬🇧'"),
+    false = match("\"🇬🇧\" != '🇬🇧'"),
     true = match("country = \"🇬🇧\"\"s\"", [{{utf8, <<"country">>}, {utf8, <<"🇬🇧\"s"/utf8>>}}]),
 
     %% Whitespace inside double-quoted strings
@@ -902,7 +903,7 @@ header_section(_Config) ->
 
     %% Since the default priority is 4, we expect the following expression to evaluate
     %% to true if matched against a message without an explicit priority level set.
-    true = match("h.priority = 4", []).
+    true = match("h.priority = 4").
 
 properties_section(_Config) ->
     Ps = #'v1_0.properties'{
@@ -1028,6 +1029,48 @@ section_qualifier(_Config) ->
     ?assertEqual(error, parse("f.abc")),
     ok.
 
+utc_function(_Config) ->
+    true = match("UTC() > 1000000000000"), % After year 2001
+    true = match("UTC() < 9999999999999"), % Before year 2286
+
+    %% UTC() should work multiple times in same expression
+    true = match("UTC() < UTC() + 30000"),
+    true = match("UTC() > UTC() - 30000"),
+
+    BeforeTest = os:system_time(millisecond) - 30_000,
+    Props = #'v1_0.properties'{
+               creation_time = {timestamp, BeforeTest},
+               absolute_expiry_time = {timestamp, BeforeTest + 3_600_000} % 1 hour later
+              },
+
+    true = match("UTC() >= p.creation_time", Props, []),
+    true = match("p.creation_time <= UTC()", Props, []),
+    false = match("p.creation_time >= UTC()", Props, []),
+    true = match("UTC() < p.absolute_expiry_time", Props, []),
+    true = match("p.absolute_expiry_time > UTC()", Props, []),
+    true = match("UTC() - properties.creation_time < 300000", Props, []),
+    true = match("country = 'UK' AND UTC() > 0", Props, app_props()),
+    true = match("(FALSE OR p.creation_time < UTC()) AND weight = 5", Props, app_props()),
+    true = match("p.creation_time IS NULL AND UTC() > 0", #'v1_0.properties'{}, []),
+
+    %% Timestamp in application-properties
+    true = match("ts1 < UTC()",  [{{utf8, <<"ts1">>}, {timestamp, BeforeTest}}]),
+
+    %% Test with different amount of white spaces
+    true = match("UTC()>=p.creation_time", Props, []),
+    true = match("UTC () >= p.creation_time", Props, []),
+    true = match("UTC ( ) >= p.creation_time", Props, []),
+    true = match("  UTC   (   )   >=   p.creation_time", Props, []),
+    true = match("(UTC()) >= p.creation_time", Props, []),
+    true = match("( UTC () ) >= p.creation_time", Props, []),
+
+    %% Ensure UTC() doesn't accept arguments
+    ?assertEqual(error, parse("UTC(123)")),
+    ?assertEqual(error, parse("UTC( 123 )")),
+    ?assertEqual(error, parse("UTC('arg')")),
+    ?assertEqual(error, parse("UTC(TRUE)")),
+    ok.
+
 parse_errors(_Config) ->
     %% Parsing a non-UTF-8 encoded message selector should fail.
     ?assertEqual(error, parse([255])),
@@ -1106,6 +1149,9 @@ app_props() ->
      {{utf8, <<"missing">>}, null},
      {{utf8, <<"percentage">>}, {ubyte, 75}}
     ].
+
+match(Selector) ->
+    match(Selector, []).
 
 match(Selector, AppProps) ->
     match(Selector, #'v1_0.properties'{}, AppProps).

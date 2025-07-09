@@ -76,6 +76,10 @@ eval0({identifier, FieldName}, State) when is_atom(FieldName) ->
           end,
     get_field_value(FieldName, Msg);
 
+%% Function calls
+eval0({function, 'UTC', []}, _Msg) ->
+    os:system_time(millisecond);
+
 %% Logical operators
 %%
 %% Table 3-4 in
