@@ -1306,27 +1306,20 @@ force_shrink_member_to_current_member(Config) ->
             RaName = ra_name(QQ),
             rabbit_ct_client_helpers:publish(Ch, QQ, 3),
             wait_for_messages_ready([Server0], RaName, 3),
-
-            {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-            #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-            ?assertEqual(3, length(Nodes0)),
+            queue_utils:assert_number_of_replicas(
+              Config, Server0, <<"/">>, QQ, 3),
 
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
                                          force_shrink_member_to_current_member, [<<"/">>, QQ]),
 
             wait_for_messages_ready([Server0], RaName, 3),
-
-            {ok, Q1} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-            #{nodes := Nodes1} = amqqueue:get_type_state(Q1),
-            ?assertEqual(1, length(Nodes1)),
+            queue_utils:assert_number_of_replicas(
+              Config, Server0, <<"/">>, QQ, 1),
 
             %% grow queues back to all nodes
             [rpc:call(Server0, rabbit_quorum_queue, grow, [S, <<"/">>, <<".*">>, all]) || S <- [Server1, Server2]],
-
-            wait_for_messages_ready([Server0], RaName, 3),
-            {ok, Q2} = rpc:call(Server0, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-            #{nodes := Nodes2} = amqqueue:get_type_state(Q2),
-            ?assertEqual(3, length(Nodes2))
+            queue_utils:assert_number_of_replicas(
+              Config, Server0, <<"/">>, QQ, 3)
     end.
 
 force_all_queues_shrink_member_to_current_member(Config) ->
@@ -1351,9 +1344,8 @@ force_all_queues_shrink_member_to_current_member(Config) ->
                  RaName = ra_name(Q),
                  rabbit_ct_client_helpers:publish(Ch, Q, 3),
                  wait_for_messages_ready([Server0], RaName, 3),
-                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-                 ?assertEqual(3, length(Nodes0))
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, <<"/">>, Q, 3)
              end || Q <- QQs],
 
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
@@ -1362,9 +1354,8 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             [begin
                  RaName = ra_name(Q),
                  wait_for_messages_ready([Server0], RaName, 3),
-                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-                 ?assertEqual(1, length(Nodes0))
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, <<"/">>, Q, 1)
              end || Q <- QQs],
 
             %% grow queues back to all nodes
@@ -1373,9 +1364,8 @@ force_all_queues_shrink_member_to_current_member(Config) ->
             [begin
                  RaName = ra_name(Q),
                  wait_for_messages_ready([Server0], RaName, 3),
-                 {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, <<"/">>]),
-                 #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-                 ?assertEqual(3, length(Nodes0))
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, <<"/">>, Q, 3)
              end || Q <- QQs]
     end.
 
@@ -1417,9 +1407,8 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                 QQRes = rabbit_misc:r(VHost, queue, Q),
                 {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
                 wait_for_messages_ready([Server0], RaName, 3),
-                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-                ?assertEqual(3, length(Nodes0))
+                 queue_utils:assert_number_of_replicas(
+                   Config, Server0, VHost, Q, 3)
             end || Q <- QQs, VHost <- VHosts],
 
             rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue,
@@ -1429,11 +1418,13 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                 QQRes = rabbit_misc:r(VHost, queue, Q),
                 {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
                 wait_for_messages_ready([Server0], RaName, 3),
-                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
                 case VHost of
-                    VHost1 -> ?assertEqual(3, length(Nodes0));
-                    VHost2 -> ?assertEqual(1, length(Nodes0))
+                    VHost1 ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost, Q, 3);
+                    VHost2 ->
+                        queue_utils:assert_number_of_replicas(
+                          Config, Server0, VHost, Q, 1)
                 end
             end || Q <- QQs, VHost <- VHosts],
 
@@ -1444,9 +1435,8 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
                 QQRes = rabbit_misc:r(VHost, queue, Q),
                 {ok, RaName} = rpc:call(Server0, rabbit_queue_type_util, qname_to_internal_name, [QQRes]),
                 wait_for_messages_ready([Server0], RaName, 3),
-                {ok, Q0} = rpc:call(Server0, rabbit_amqqueue, lookup, [Q, VHost]),
-                #{nodes := Nodes0} = amqqueue:get_type_state(Q0),
-                ?assertEqual(3, length(Nodes0))
+                queue_utils:assert_number_of_replicas(
+                  Config, Server0, VHost, Q, 3)
             end || Q <- QQs, VHost <- VHosts]
     end.
 
@@ -2946,9 +2936,8 @@ delete_member_member_already_deleted(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_quorum_queue, delete_member,
                           [<<"/">>, QQ, Server2])),
-    {ok, Q} = rpc:call(Server, rabbit_amqqueue, lookup, [QQ, <<"/">>]),
-    #{nodes := Nodes} = amqqueue:get_type_state(Q),
-    ?assertEqual(1, length(Nodes)),
+    queue_utils:assert_number_of_replicas(
+      Config, Server, <<"/">>, QQ, 1),
     ok.
 
 delete_member_during_node_down(Config) ->
