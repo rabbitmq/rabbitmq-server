@@ -739,14 +739,22 @@ map_to_introspect_token_response(Code, Reason, Headers, Body) ->
             Error;
         Value ->
             case Code of
-                200 -> {ok, Value};
-                201 -> {ok, Value};
+                200 -> assert_token_is_active({ok, Value});
+                201 -> assert_token_is_active({ok, Value});
                 204 -> {ok, []};
                 400 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
                 401 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
                 _ ->   {error, Reason}
             end
     end.
+assert_token_is_active({ok, Response} = Value) ->
+    ct:log("Token : ~p", [Response]),
+    case maps:get(<<"active">>, Response, undefined) of 
+        undefined -> {error, introspected_token_not_valid};
+        false -> {error, introspected_token_not_valid};
+        true -> Value 
+    end.
+
 map_to_unsuccessful_introspect_token_response(Map) ->
     #unsuccessful_introspect_token_response{
         error = maps:get(?RESPONSE_ERROR, Map),
