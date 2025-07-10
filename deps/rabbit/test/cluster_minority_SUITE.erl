@@ -387,6 +387,11 @@ remove_node_when_seed_node_is_leader(Config) ->
     AMember = {rabbit_khepri:get_store_id(), A},
     ra:transfer_leadership(AMember, AMember),
     clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
+    ?awaitMatch(
+       {ok, #{cluster_change_permitted := true}, _},
+       rabbit_ct_broker_helpers:rpc(
+         Config1, A, ra, member_overview, [AMember]),
+       60000),
 
     %% Minority partition: A
     partition_3_node_cluster(Config1),
@@ -395,11 +400,6 @@ remove_node_when_seed_node_is_leader(Config) ->
     ct:pal("Member A state: ~0p", [Pong]),
     case Pong of
         {pong, leader} ->
-            ?awaitMatch(
-               {ok, #{cluster_change_permitted := true}, _},
-               rabbit_ct_broker_helpers:rpc(
-                 Config1, A, ra, member_overview, [AMember]),
-               60000),
             ?awaitMatch(
                ok,
                rabbit_control_helper:command(
@@ -418,14 +418,19 @@ remove_node_when_seed_node_is_follower(Config) ->
     Cluster = [A, B, C],
     Config1 = rabbit_ct_broker_helpers:cluster_nodes(Config, Cluster),
 
+    AMember = {rabbit_khepri:get_store_id(), A},
     CMember = {rabbit_khepri:get_store_id(), C},
     ra:transfer_leadership(CMember, CMember),
     clustering_utils:assert_cluster_status({Cluster, Cluster}, Cluster),
+    ?awaitMatch(
+       {ok, #{cluster_change_permitted := true}, _},
+       rabbit_ct_broker_helpers:rpc(
+         Config1, A, ra, member_overview, [AMember]),
+       60000),
 
     %% Minority partition: A
     partition_3_node_cluster(Config1),
 
-    AMember = {rabbit_khepri:get_store_id(), A},
     Pong = ra:ping(AMember, 10000),
     ct:pal("Member A state: ~0p", [Pong]),
     case Pong of
