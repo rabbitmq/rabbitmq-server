@@ -23,8 +23,9 @@ body:
     attributes:
       label: RabbitMQ version used
       options:
-        - 4.0.3
-        - 3.13.7 or older
+        - 4.1.x
+        - 4.0.x
+        - 3.13.x or older
     validations:
       required: true
   - type: dropdown
