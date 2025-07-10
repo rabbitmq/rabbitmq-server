@@ -28,28 +28,40 @@ spring:
             - rabbitmq
       authorizationserver:
         client:
+          introspection_client:
+            registration:
+              provider: spring
+              client-id: introspection_client
+              client-secret: "{noop}introspection_client"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic              
+              client-name: introspection_client            
           mgt_api_client:
             registration:
               provider: spring
               client-id: mgt_api_client
+              client-secret: "{noop}mgt_api_client"
               authorization-grant-types: 
                 - client_credentials
               client-authentication-methods:
                 - client_secret_basic
-              token-settings:
-                access-token-format: reference              
               scopes: 
                 - openid
                 - profile
                 - rabbitmq.tag:management
               client-name: mgt_api_client
+            token:
+              access-token-format: reference
           rabbitmq_client_code_opaque:
             registration:
               provider: spring
               client-id: rabbitmq_client_code_opaque
+              client-secret: "{noop}rabbitmq_client_code_opaque"
               require-proof-key: true
               token-settings:
-                access-token-format: reference   
+                access-token-format: reference
               authorization-grant-types: 
                 - authorization_code
               client-authentication-methods:
