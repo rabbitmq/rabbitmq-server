@@ -16,6 +16,7 @@
 %% Key JWT fields
 %%
 
+-define(ACTIVE_FIELD, <<"active">>). %% FOR INTROSPECTED TOKENS
 -define(AUD_JWT_FIELD, <<"aud">>).
 -define(SCOPE_JWT_FIELD, <<"scope">>).
 -define(TAG_SCOPE_PREFIX, <<"tag:">>).

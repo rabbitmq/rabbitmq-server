@@ -74,9 +74,7 @@ spring:
               provider: spring
               client-id: rabbitmq_client_code_opaque
               client-secret: "{noop}rabbitmq_client_code_opaque"
-              require-proof-key: true
-              token-settings:
-                access-token-format: reference
+              require-proof-key: true              
               authorization-grant-types: 
                 - authorization_code
               client-authentication-methods:
@@ -91,6 +89,8 @@ spring:
                 - rabbitmq.tag:administrator
                 - rabbitmq.tag:management
               client-name: rabbitmq_client_code_opaque
+            token:
+              access-token-format: reference
           rabbitmq_client_code:
             registration:
               provider: spring
