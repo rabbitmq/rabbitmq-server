@@ -49,10 +49,13 @@ groups() ->
                 cannot_introspect_due_to_missing_configuration,
                 {https, [], [
                     {with_introspection_basic_client_credentials, [], [
-                        can_introspect_token
+                        can_introspect_token                        
                     ]},
                     {with_introspection_request_param_client_credentials, [], [
                         can_introspect_token
+                    ]},
+                    {introspection_endpoint_returns_non_active_tokens, [], [
+                        introspected_token_is_not_active
                     ]}
                 ]}                
             ]},
@@ -215,6 +218,25 @@ init_per_group(with_introspection_basic_client_credentials, Config) ->
                 with_introspection_basic_client_credentials, Config)}
             
         ]} | Config];    
+init_per_group(introspection_endpoint_returns_non_active_tokens, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
+        "some-client-id"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
+        "some-client-secret"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
+        basic),        
+    [{introspected_token_is_not_active, [
+            {introspection_endpoint, build_http_mock_behaviour(
+                build_introspection_token_request(?MOCK_OPAQUE_TOKEN, basic, <<"some-client-id">>, 
+                    <<"some-client-secret">>),
+                build_http_200_introspection_token_response([
+                    {active, false},
+                    {scope, <<"openid">>}            
+                ]))},
+            {get_openid_configuration, get_openid_configuration_http_expectation(
+                with_introspection_basic_client_credentials, Config)}
+            
+        ]} | Config]; 
 
 init_per_group(with_introspection_request_param_client_credentials, Config) ->    
     application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
@@ -723,6 +745,9 @@ cannot_introspect_due_to_missing_configuration(_Config)->
 can_introspect_token(_Config) ->
     {ok, _} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
 
+introspected_token_is_not_active(_Config) ->
+    {error, introspected_token_not_valid} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
+
 %%% HELPERS
 
 build_issuer(Scheme) ->
@@ -959,13 +984,15 @@ build_introspection_token_request(Token, request_param, ClientId, ClientSecret) 
             {?REQUEST_CLIENT_SECRET, ClientSecret}
         ]).
 build_http_200_introspection_token_response() ->
+    build_http_200_introspection_token_response([
+            {active, true},
+            {scope, <<"openid">>}            
+    ]).
+build_http_200_introspection_token_response(PayloodList) ->
     [
         {code, 200},
         {content_type, ?CONTENT_JSON},
-        {payload, [
-            {active, true},
-            {scope, <<"openid">>}            
-        ]}
+        {payload, PayloodList}
     ].
 auth_server_error_when_access_token_request_expectation() ->
     build_http_mock_behaviour(build_http_request(
