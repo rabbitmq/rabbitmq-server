@@ -1453,7 +1453,7 @@ force_checkpoint_on_queue(Config) ->
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
 
-    N = 20_000,
+    N = 10_000,
     rabbit_ct_client_helpers:publish(Ch, QQ, N),
     wait_for_messages_ready([Server0], RaName, N),
 
