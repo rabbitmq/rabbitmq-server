@@ -748,7 +748,6 @@ map_to_introspect_token_response(Code, Reason, Headers, Body) ->
             end
     end.
 assert_token_is_active({ok, Response} = Value) ->
-    ct:log("Token : ~p", [Response]),
     case maps:get(<<"active">>, Response, undefined) of 
         undefined -> {error, introspected_token_not_valid};
         false -> {error, introspected_token_not_valid};
