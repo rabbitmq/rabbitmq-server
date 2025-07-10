@@ -38,6 +38,22 @@ spring:
               client-authentication-methods:
                 - client_secret_basic              
               client-name: introspection_client            
+          mgt_api_client_opaque:
+            registration:
+              provider: spring
+              client-id: mgt_api_client_opaque
+              client-secret: "{noop}mgt_api_client_opaque"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+              scopes: 
+                - openid
+                - profile
+                - rabbitmq.tag:management
+              client-name: mgt_api_client_opaque
+            token:
+              access-token-format: reference
           mgt_api_client:
             registration:
               provider: spring
@@ -51,9 +67,8 @@ spring:
                 - openid
                 - profile
                 - rabbitmq.tag:management
-              client-name: mgt_api_client
-            token:
-              access-token-format: reference
+                - rabbitmq.tag:administrator
+              client-name: mgt_api_client            
           rabbitmq_client_code_opaque:
             registration:
               provider: spring

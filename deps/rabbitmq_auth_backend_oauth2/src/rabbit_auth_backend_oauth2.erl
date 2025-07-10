@@ -155,7 +155,15 @@ authenticate(_, AuthProps0) ->
     Token0     = token_from_context(AuthProps),
     TokenResult = case uaa_jwt_jwt:is_jwt_token(Token0) of 
         true -> {ok, Token0};
-        false -> oauth2_client:introspect_token(Token0)
+        false -> 
+            case oauth2_client:introspect_token(Token0) of
+                {ok, Tk1} -> 
+                    rabbit_log:debug("Successfully introspected token : ~p", [Tk1]),
+                    {ok, Tk1};
+                {error, Err1} -> 
+                    rabbit_log:error("Failed to introspected token due to ~p", [Err1]),
+                    {error, Err1}
+            end
     end,
     case TokenResult of 
         {ok, Token} ->
