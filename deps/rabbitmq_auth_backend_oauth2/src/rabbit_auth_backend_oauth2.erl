@@ -188,7 +188,6 @@ authenticate(_, AuthProps0) ->
         {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
     end.
 
-
 -spec with_decoded_token(Token, Fun) -> Result
     when Token :: decoded_jwt_token(),
          Fun :: auth_user_extraction_fun(),
@@ -236,8 +235,11 @@ validate_token_expiry(#{}) -> ok.
           {'error', term() } |
           {'refused', 'signature_invalid' | {'error', term()} | {'invalid_aud', term()}}.
 
-check_token(DecodedToken, _) when is_map(DecodedToken) ->
-    {ok, DecodedToken};
+check_token(DecodedToken, {ResourceServer, _}) when is_map(DecodedToken) ->
+    case maps:is_key(?ACTIVE_FIELD, DecodedToken) of 
+        false -> {ok, DecodedToken};
+        true -> {ok, normalize_token_scope(ResourceServer, DecodedToken)}
+    end;
 
 check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
     case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
@@ -258,7 +260,6 @@ extract_scopes_from_scope_claim(Payload) ->
 -spec normalize_token_scope(
     ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
 normalize_token_scope(ResourceServer, Payload) ->
-
     filter_duplicates(   
         filter_matching_scope_prefix(ResourceServer,
             extract_scopes_from_rich_auth_request(ResourceServer,
@@ -266,7 +267,7 @@ normalize_token_scope(ResourceServer, Payload) ->
                     extract_scopes_from_additional_scopes_key(ResourceServer, 
                         extract_scopes_from_requesting_party_token(ResourceServer,
                             extract_scopes_from_scope_claim(Payload))))))).
-
+    
 filter_duplicates(#{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
     set_scope(lists:usort(Scopes), Payload);
 filter_duplicates(Payload) -> Payload.
@@ -493,5 +494,6 @@ resolve_scope_var(Elem, Token, Vhost) ->
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
+    rabbit_log:debug("tags_from Scopes : ~p", [Scopes]),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
     lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
