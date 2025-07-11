@@ -64,6 +64,8 @@ start_link(Args) ->
     gen_server2:start_link(?MODULE, Args, [{timeout, infinity}]).
 
 init({Upstream, XName}) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION,
+                                  exchange => XName}),
     %% If we are starting up due to a policy change then it's possible
     %% for the exchange to have been deleted before we got here, in which
     %% case it's possible that delete callback would also have been called
@@ -79,7 +81,7 @@ init({Upstream, XName}) ->
             gen_server2:cast(self(), maybe_go),
             {ok, {not_started, {Upstream, UParams, XName}}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(XName, "not found, stopping link", []),
+            ?LOG_WARNING("not found, stopping link", []),
             {stop, gone}
     end.
 
@@ -104,14 +106,12 @@ handle_cast({enqueue, _, _}, State = {not_started, _}) ->
     {noreply, State};
 
 handle_cast({enqueue, Serial, Cmd},
-            State = #state{waiting_cmds = Waiting,
-                           downstream_exchange = XName}) ->
+            State = #state{waiting_cmds = Waiting}) ->
     Waiting1 = gb_trees:insert(Serial, Cmd, Waiting),
     try
         {noreply, play_back_commands(State#state{waiting_cmds = Waiting1})}
     catch exit:{{shutdown, {server_initiated_close, 404, Text}}, _} ->
-            rabbit_federation_link_util:log_warning(
-              XName, "detected upstream changes, restarting link: ~tp", [Text]),
+            ?LOG_WARNING("detected upstream changes, restarting link: ~tp", [Text]),
             {stop, {shutdown, restart}, State}
     end;
 
@@ -176,7 +176,7 @@ handle_info(check_internal_exchange, State = #state{internal_exchange = IntXName
                                                     internal_exchange_interval = Interval}) ->
     case check_internal_exchange(IntXNameBin, State) of
         upstream_not_found ->
-            rabbit_log_federation:warning("Federation link could not find upstream exchange '~ts' and will restart",
+            ?LOG_WARNING("Federation link could not find upstream exchange '~ts' and will restart",
                                           [IntXNameBin]),
             {stop, {shutdown, restart}, State};
         _ ->
@@ -466,25 +466,25 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  unacked               = Unacked,
                                  internal_exchange_interval = Interval}),
                         Bindings),
-              rabbit_log_federation:info("Federation link for ~ts (upstream: ~ts) will perform internal exchange checks "
+              ?LOG_INFO("Federation link for ~ts (upstream: ~ts) will perform internal exchange checks "
                                          "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
 
 log_link_startup_attempt(#upstream{name = Name, channel_use_mode = ChMode}, DownXName) ->
-    rabbit_log_federation:debug("Will try to start a federation link for ~ts, upstream: '~ts', channel use mode: ~ts",
+    ?LOG_DEBUG("Will try to start a federation link for ~ts, upstream: '~ts', channel use mode: ~ts",
                                 [rabbit_misc:rs(DownXName), Name, ChMode]).
 
 %% If channel use mode is 'single', reuse the message transfer channel.
 %% Otherwise open a separate one.
 reuse_command_channel(MainCh, #upstream{name = UName}, DownXName) ->
-    rabbit_log_federation:debug("Will use a single channel for both schema operations and message transfer on links to upstream '~ts' for downstream federated ~ts",
+    ?LOG_DEBUG("Will use a single channel for both schema operations and message transfer on links to upstream '~ts' for downstream federated ~ts",
                                 [UName, rabbit_misc:rs(DownXName)]),
     {ok, MainCh}.
 
 open_command_channel(Conn, Upstream = #upstream{name = UName}, UParams, DownXName, S0) ->
-    rabbit_log_federation:debug("Will open a command channel to upstream '~ts' for downstream federated ~ts",
+    ?LOG_DEBUG("Will open a command channel to upstream '~ts' for downstream federated ~ts",
                                 [UName, rabbit_misc:rs(DownXName)]),
     case amqp_connection:open_channel(Conn) of
         {ok, CCh} ->
@@ -579,12 +579,12 @@ ensure_internal_exchange(IntXNameBin,
                                 connection          = Conn,
                                 channel             = Ch,
                                 downstream_exchange = #resource{virtual_host = DVhost}}) ->
-    rabbit_log_federation:debug("Exchange federation will set up exchange '~ts' in upstream '~ts'",
+    ?LOG_DEBUG("Exchange federation will set up exchange '~ts' in upstream '~ts'",
                                 [IntXNameBin, UName]),
     #upstream_params{params = Params} = rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Will delete upstream exchange '~ts'", [IntXNameBin]),
+    ?LOG_DEBUG("Will delete upstream exchange '~ts'", [IntXNameBin]),
     delete_upstream_exchange(Conn, IntXNameBin),
-    rabbit_log_federation:debug("Will declare an internal upstream exchange '~ts'", [IntXNameBin]),
+    ?LOG_DEBUG("Will declare an internal upstream exchange '~ts'", [IntXNameBin]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                durable     = true,
                                internal    = true,
@@ -609,7 +609,7 @@ check_internal_exchange(IntXNameBin,
                                 downstream_exchange = XName = #resource{virtual_host = DVhost}}) ->
     #upstream_params{params = Params} =
         rabbit_federation_util:deobfuscate_upstream_params(UParams),
-    rabbit_log_federation:debug("Exchange federation will check on exchange '~ts' in upstream '~ts'",
+    ?LOG_DEBUG("Exchange federation will check on exchange '~ts' in upstream '~ts'",
                                 [IntXNameBin, UName]),
     Base = #'exchange.declare'{exchange    = IntXNameBin,
                                passive     = true,
@@ -625,13 +625,11 @@ check_internal_exchange(IntXNameBin,
                                   arguments = XFUArgs},
     rabbit_federation_link_util:disposable_connection_call(
       Params, XFU, fun(404, Text) ->
-                           rabbit_federation_link_util:log_warning(
-                             XName, "detected internal upstream exchange changes,"
-                             " restarting link: ~tp", [Text]),
+                           ?LOG_WARNING("detected internal upstream exchange changes,"
+                                        " restarting link: ~tp", [Text]),
                            upstream_not_found;
                       (Code, Text) ->
-                           rabbit_federation_link_util:log_warning(
-                             XName, "internal upstream exchange check failed: ~tp ~tp",
+                           ?LOG_WARNING("internal upstream exchange check failed: ~tp ~tp",
                              [Code, Text]),
                            error
                    end).

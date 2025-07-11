@@ -36,6 +36,7 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION}),
     Flags = #{
         strategy  => one_for_one,
         intensity => 3,

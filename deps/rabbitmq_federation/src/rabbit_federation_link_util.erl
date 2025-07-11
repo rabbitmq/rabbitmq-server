@@ -10,14 +10,14 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% real
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
          disposable_connection_call/3, ensure_connection_closed/1,
          log_terminate/4, unacked_new/0, ack/3, nack/3, forward/9,
          handle_downstream_down/3, handle_upstream_down/3,
-         get_connection_name/2, log_debug/3, log_info/3, log_warning/3,
-         log_error/3]).
+         get_connection_name/2]).
 
 %% temp
 -export([connection_error/6]).
@@ -55,10 +55,9 @@ start_conn_ch(Fun, OUpstream, OUParams,
                     process_flag(trap_exit, true),
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
-                        log_info(
-                          XorQName, "connected to ~ts",
-                          [rabbit_federation_upstream:params_to_string(
-                             UParams)]),
+                        ?LOG_INFO("Federation ~ts connected to ~ts",
+                          [rabbit_misc:rs(XorQName),
+                           rabbit_federation_upstream:params_to_string(UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
                           OUpstream, OUParams, XorQName, {running, Name}),
@@ -130,45 +129,44 @@ connection_error(remote_start, {{shutdown, {server_initiated_close, Code, Messag
                                Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName,
-                "did not connect to ~ts. Server has closed the connection due to an error, code: ~tp, "
+    ?LOG_WARNING("Federation ~ts did not connect to ~ts. Server has closed the connection due to an error, code: ~tp, "
                 "message: ~ts",
-                [rabbit_federation_upstream:params_to_string(UParams),
+                [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
                  Code, Message]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName, "did not connect to ~ts. Reason: ~tp",
-                [rabbit_federation_upstream:params_to_string(UParams),
+    ?LOG_WARNING("Federation ~ts did not connect to ~ts. Reason: ~tp",
+                [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
                  E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info(XorQName, "disconnected from ~ts~n~tp",
-             [rabbit_federation_upstream:params_to_string(UParams), E]),
+    ?LOG_INFO("Federation ~ts disconnected from ~ts~n~tp",
+             [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(command_channel, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_info(XorQName, "failed to open a command channel for upstream ~ts~n~tp",
-             [rabbit_federation_upstream:params_to_string(UParams), E]),
+    ?LOG_INFO("Federation ~ts failed to open a command channel for upstream ~ts~n~tp",
+             [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, basic_cancel, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, {error, basic_cancel}),
-    log_info(XorQName, "received a 'basic.cancel'", []),
+    ?LOG_INFO("Federation ~ts received a 'basic.cancel'", [rabbit_misc:rs(XorQName)]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
-    log_warning(XorQName, "did not connect locally~n~tp", [E]),
+    ?LOG_WARNING("Federation ~ts did not connect locally~n~tp", [rabbit_misc:rs(XorQName), E]),
     {stop, {shutdown, restart}, State}.
 
 %% If we terminate due to a gen_server call exploding (almost
@@ -285,7 +283,7 @@ log_terminate(shutdown, Upstream, UParams, XorQName) ->
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
-    log_info(XorQName, "disconnecting from ~ts",
+    ?LOG_INFO("disconnecting from ~ts",
              [rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XorQName);
 
@@ -294,21 +292,6 @@ log_terminate(Reason, Upstream, UParams, XorQName) ->
     %% rabbit_federation_status.
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(Reason)).
-
-log_debug(XorQName, Fmt, Args) -> log(debug, XorQName, Fmt, Args).
-log_info(XorQName, Fmt, Args) -> log(info, XorQName, Fmt, Args).
-log_warning(XorQName, Fmt, Args) -> log(warning, XorQName, Fmt, Args).
-log_error(XorQName, Fmt, Args) -> log(error, XorQName, Fmt, Args).
-
-log(Level, XorQName, Fmt0, Args0) ->
-    Fmt = "Federation ~ts " ++ Fmt0,
-    Args = [rabbit_misc:rs(XorQName) | Args0],
-    case Level of
-        debug   -> rabbit_log_federation:debug(Fmt, Args);
-        info    -> rabbit_log_federation:info(Fmt, Args);
-        warning -> rabbit_log_federation:warning(Fmt, Args);
-        error   -> rabbit_log_federation:error(Fmt, Args)
-    end.
 
 %%----------------------------------------------------------------------------
 
@@ -327,12 +310,13 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         end
     catch
           Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~tp: ~tp", [Exception, Reason])
+            ?LOG_ERROR("Federation link could not create a disposable (one-off) channel due to an error ~tp: ~tp",
+                       [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
     try
-        rabbit_log_federation:debug("Disposable connection parameters: ~tp", [Params]),
+        ?LOG_DEBUG("Disposable connection parameters: ~tp", [Params]),
         case open(Params, <<"Disposable exchange federation link connection">>) of
             {ok, Conn, Ch} ->
                 try
@@ -345,15 +329,15 @@ disposable_connection_call(Params, Method, ErrFun) ->
                     ensure_connection_closed(Conn)
                 end;
             {error, {auth_failure, Message}} ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
-                                            "due to an authentication failure: ~ts", [Message]);
+                ?LOG_ERROR("Federation link could not open a disposable (one-off) connection "
+                           "due to an authentication failure: ~ts", [Message]);
             Error ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
-                                            "reason: ~tp", [Error]),
+                ?LOG_ERROR("Federation link could not open a disposable (one-off) connection, "
+                           "reason: ~tp", [Error]),
                 Error
         end
     catch
         Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
-                                        "due to an error ~tp: ~tp", [Exception, Reason])
+            ?LOG_ERROR("Federation link could not create a disposable (one-off) connection "
+                       "due to an error ~tp: ~tp", [Exception, Reason])
     end.

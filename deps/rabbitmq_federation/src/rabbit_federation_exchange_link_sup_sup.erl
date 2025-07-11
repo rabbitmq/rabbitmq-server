@@ -10,6 +10,7 @@
 -behaviour(mirrored_supervisor).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all exchanges (but not queues). We need
@@ -41,8 +42,8 @@ start_child(X) ->
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
           #exchange{name = ExchangeName} = X,
-          rabbit_log_federation:debug("Federation link for exchange ~tp was already started",
-                                      [rabbit_misc:rs(ExchangeName)]),
+          ?LOG_DEBUG("Federation link for exchange ~tp was already started",
+                     [rabbit_misc:rs(ExchangeName)]),
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
@@ -63,9 +64,8 @@ stop_child(X) ->
       ok -> ok;
       {error, Err} ->
         #exchange{name = ExchangeName} = X,
-        rabbit_log_federation:warning(
-          "Attempt to stop a federation link for exchange ~tp failed: ~tp",
-          [rabbit_misc:rs(ExchangeName), Err]),
+        ?LOG_WARNING("Attempt to stop a federation link for exchange ~tp failed: ~tp",
+                     [rabbit_misc:rs(ExchangeName), Err]),
         ok
     end,
     ok = mirrored_supervisor:delete_child(?SUPERVISOR, id(X)).
@@ -73,6 +73,7 @@ stop_child(X) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION}),
     {ok, {{one_for_one, 1200, 60}, []}}.
 
 %% See comment in rabbit_federation_queue_link_sup_sup:id/1

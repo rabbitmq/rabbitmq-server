@@ -10,6 +10,7 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(gen_server2).
 
@@ -52,6 +53,8 @@ q(QName) ->
 
 init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
     QName = amqqueue:get_name(Queue),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION,
+                                  queue => QName}),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} ->
             DeobfuscatedUpstream = rabbit_federation_util:deobfuscate_upstream(Upstream),
@@ -67,7 +70,7 @@ init({Upstream, Queue}) when ?is_amqqueue(Queue) ->
                               upstream        = Upstream,
                               upstream_params = UParams}};
         {error, not_found} ->
-            rabbit_federation_link_util:log_warning(QName, "not found, stopping link", []),
+            ?LOG_WARNING("not found, stopping link", []),
             {stop, gone}
     end.
 
