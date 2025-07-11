@@ -49,8 +49,7 @@
   additional_scopes_key :: binary() | undefined,
   preferred_username_claims :: list(),
   scope_aliases :: map() | undefined,
-  oauth_provider_id :: oauth_provider_id(),
-  access_token_format :: jwt | opaque | undefined
+  oauth_provider_id :: oauth_provider_id()
  }).
 
 -type resource_server() :: #resource_server{}.
