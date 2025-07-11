@@ -41,6 +41,8 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -include("amqqueue.hrl").
 
@@ -467,6 +469,8 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CHAN,
+                                  pid => self()}),
 
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
@@ -746,8 +750,8 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({{Ref, Node}, LateAnswer},
             State = #ch{cfg = #conf{channel = Channel}})
   when is_reference(Ref) ->
-    rabbit_log_channel:warning("Channel ~tp ignoring late answer ~tp from ~tp",
-        [Channel, LateAnswer, Node]),
+    ?LOG_WARNING("Channel ~tp ignoring late answer ~tp from ~tp",
+                 [Channel, LateAnswer, Node]),
     noreply(State);
 
 handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
@@ -862,7 +866,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log_channel:error(
+            ?LOG_ERROR(
                 "Channel error on connection ~tp (~ts, vhost: '~ts',"
                 " user: '~ts'), channel ~tp:~n~ts",
                 [ConnPid, ConnName, VHost, User#user.username,
@@ -2712,13 +2716,13 @@ evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
 
 handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag, tag = ConsumerTag, queue = QName},
 			  State = #ch{cfg = #conf{channel = Channel}}) ->
-    rabbit_log_channel:warning("Consumer '~ts' on channel ~w and ~ts has timed out "
-			       "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
-			       "This timeout value can be configured, see consumers doc guide to learn more",
-			       [ConsumerTag,
-                    Channel,
-                    rabbit_misc:rs(QName),
-                    DeliveryTag, Timeout]),
+    ?LOG_WARNING("Consumer '~ts' on channel ~w and ~ts has timed out "
+                 "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
+                 "This timeout value can be configured, see consumers doc guide to learn more",
+                 [ConsumerTag,
+                  Channel,
+                  rabbit_misc:rs(QName),
+                  DeliveryTag, Timeout]),
     Ex = rabbit_misc:amqp_error(precondition_failed,
 				"delivery acknowledgement on channel ~w timed out. "
 				"Timeout value used: ~tp ms. "
