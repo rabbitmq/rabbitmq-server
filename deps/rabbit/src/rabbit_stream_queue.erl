@@ -1344,9 +1344,10 @@ capabilities() ->
       consumer_arguments => [<<"x-stream-offset">>,
                              <<"x-stream-filter">>,
                              <<"x-stream-match-unfiltered">>],
-      %% AMQP property filter expressions
-      %% https://groups.oasis-open.org/higherlogic/ws/public/document?document_id=66227
-      amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>],
+      %% [Filter-Expressions-v1.0] § 2.2
+      %% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929253
+      amqp_capabilities => [<<"AMQP_FILTEX_PROP_V1_0">>,
+                            <<"AMQP_FILTEX_SQL_V1_0">>],
       server_named => false,
       rebalance_module => ?MODULE,
       can_redeliver => true,
