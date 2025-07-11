@@ -101,17 +101,17 @@ parse(<<16#e0, S:8,CountAndV:S/binary,_/binary>>, B) ->
 parse(<<16#f0, S:32,CountAndV:S/binary,_/binary>>, B) ->
     {parse_array(32, CountAndV), B+5+S};
 %% NaN or +-inf
-parse(<<16#72, V:32, _/binary>>, B) ->
-    {{as_is, 16#72, <<V:32>>}, B+5};
-parse(<<16#82, V:64, _/binary>>, B) ->
-    {{as_is, 16#82, <<V:64>>}, B+9};
+parse(<<16#72, V:4/binary, _/binary>>, B) ->
+    {{as_is, 16#72, V}, B+5};
+parse(<<16#82, V:8/binary, _/binary>>, B) ->
+    {{as_is, 16#82, V}, B+9};
 %% decimals
-parse(<<16#74, V:32, _/binary>>, B) ->
-    {{as_is, 16#74, <<V:32>>}, B+5};
-parse(<<16#84, V:64, _/binary>>, B) ->
-    {{as_is, 16#84, <<V:64>>}, B+9};
-parse(<<16#94, V:128, _/binary>>, B) ->
-    {{as_is, 16#94, <<V:128>>}, B+17};
+parse(<<16#74, V:4/binary, _/binary>>, B) ->
+    {{as_is, 16#74, V}, B+5};
+parse(<<16#84, V:8/binary, _/binary>>, B) ->
+    {{as_is, 16#84, V}, B+9};
+parse(<<16#94, V:16/binary, _/binary>>, B) ->
+    {{as_is, 16#94, V}, B+17};
 parse(<<Type, _/binary>>, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
@@ -317,17 +317,17 @@ pm(<<16#e0, S:8,CountAndV:S/binary,R/binary>>, O, B) ->
 pm(<<16#f0, S:32,CountAndV:S/binary,R/binary>>, O, B) ->
     [parse_array(32, CountAndV) | pm(R, O, B+5+S)];
 %% NaN or +-inf
-pm(<<16#72, V:32, R/binary>>, O, B) ->
-    [{as_is, 16#72, <<V:32>>} | pm(R, O, B+5)];
-pm(<<16#82, V:64, R/binary>>, O, B) ->
-    [{as_is, 16#82, <<V:64>>} | pm(R, O, B+9)];
+pm(<<16#72, V:4/binary, R/binary>>, O, B) ->
+    [{as_is, 16#72, V} | pm(R, O, B+5)];
+pm(<<16#82, V:8/binary, R/binary>>, O, B) ->
+    [{as_is, 16#82, V} | pm(R, O, B+9)];
 %% decimals
-pm(<<16#74, V:32, R/binary>>, O, B) ->
-    [{as_is, 16#74, <<V:32>>} | pm(R, O, B+5)];
-pm(<<16#84, V:64, R/binary>>, O, B) ->
-    [{as_is, 16#84, <<V:64>>} | pm(R, O, B+9)];
-pm(<<16#94, V:128, R/binary>>, O, B) ->
-    [{as_is, 16#94, <<V:128>>} | pm(R, O, B+17)];
+pm(<<16#74, V:4/binary, R/binary>>, O, B) ->
+    [{as_is, 16#74, V} | pm(R, O, B+5)];
+pm(<<16#84, V:8/binary, R/binary>>, O, B) ->
+    [{as_is, 16#84, V} | pm(R, O, B+9)];
+pm(<<16#94, V:16/binary, R/binary>>, O, B) ->
+    [{as_is, 16#94, V} | pm(R, O, B+17)];
 pm(<<Type, _Bin/binary>>, _O, B) ->
     throw({primitive_type_unsupported, Type, {position, B}}).
 
