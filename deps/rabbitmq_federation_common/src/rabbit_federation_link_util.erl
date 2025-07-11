@@ -10,6 +10,7 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% real
 -export([start_conn_ch/5, disposable_channel_call/2, disposable_channel_call/3,
@@ -285,7 +286,7 @@ log_terminate(shutdown, Upstream, UParams, XorQName) ->
     %% the link because configuration has changed. So try to shut down
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
-    log_info(XorQName, "disconnecting from ~ts",
+    ?LOG_INFO("disconnecting from ~ts",
              [rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XorQName);
 
@@ -294,21 +295,6 @@ log_terminate(Reason, Upstream, UParams, XorQName) ->
     %% rabbit_federation_status.
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(Reason)).
-
-log_debug(XorQName, Fmt, Args) -> log(debug, XorQName, Fmt, Args).
-log_info(XorQName, Fmt, Args) -> log(info, XorQName, Fmt, Args).
-log_warning(XorQName, Fmt, Args) -> log(warning, XorQName, Fmt, Args).
-log_error(XorQName, Fmt, Args) -> log(error, XorQName, Fmt, Args).
-
-log(Level, XorQName, Fmt0, Args0) ->
-    Fmt = "Federation ~ts " ++ Fmt0,
-    Args = [rabbit_misc:rs(XorQName) | Args0],
-    case Level of
-        debug   -> rabbit_log_federation:debug(Fmt, Args);
-        info    -> rabbit_log_federation:info(Fmt, Args);
-        warning -> rabbit_log_federation:warning(Fmt, Args);
-        error   -> rabbit_log_federation:error(Fmt, Args)
-    end.
 
 %%----------------------------------------------------------------------------
 
@@ -327,12 +313,13 @@ disposable_channel_call(Conn, Method, ErrFun) ->
         end
     catch
           Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) channel due to an error ~tp: ~tp", [Exception, Reason])
+            ?LOG_ERROR("Federation link could not create a disposable (one-off) channel due to an error ~tp: ~tp",
+                       [Exception, Reason])
     end.
 
 disposable_connection_call(Params, Method, ErrFun) ->
     try
-        rabbit_log_federation:debug("Disposable connection parameters: ~tp", [Params]),
+        ?LOG_DEBUG("Disposable connection parameters: ~tp", [Params]),
         case open(Params, <<"Disposable exchange federation link connection">>) of
             {ok, Conn, Ch} ->
                 try
@@ -345,15 +332,15 @@ disposable_connection_call(Params, Method, ErrFun) ->
                     ensure_connection_closed(Conn)
                 end;
             {error, {auth_failure, Message}} ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection "
-                                            "due to an authentication failure: ~ts", [Message]);
+                ?LOG_ERROR("Federation link could not open a disposable (one-off) connection "
+                           "due to an authentication failure: ~ts", [Message]);
             Error ->
-                rabbit_log_federation:error("Federation link could not open a disposable (one-off) connection, "
-                                            "reason: ~tp", [Error]),
+                ?LOG_ERROR("Federation link could not open a disposable (one-off) connection, "
+                           "reason: ~tp", [Error]),
                 Error
         end
     catch
         Exception:Reason ->
-            rabbit_log_federation:error("Federation link could not create a disposable (one-off) connection "
-                                        "due to an error ~tp: ~tp", [Exception, Reason])
+            ?LOG_ERROR("Federation link could not create a disposable (one-off) connection "
+                       "due to an error ~tp: ~tp", [Exception, Reason])
     end.

@@ -12,6 +12,8 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
 -include("rabbit_queue_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
+-include("rabbit_federation.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all queues (but not exchanges). We need
@@ -43,8 +45,8 @@ start_child(Q) ->
         {ok, _Pid}               -> ok;
         {error, {already_started, _Pid}} ->
           QueueName = amqqueue:get_name(Q),
-          rabbit_log_federation:warning("Federation link for queue ~tp was already started",
-                                        [rabbit_misc:rs(QueueName)]),
+          ?LOG_WARNING("Federation link for queue ~tp was already started",
+                       [rabbit_misc:rs(QueueName)]),
           ok;
         %% A link returned {stop, gone}, the link_sup shut down, that's OK.
         {error, {shutdown, _}} -> ok
@@ -66,9 +68,8 @@ stop_child(Q) ->
       ok -> ok;
       {error, Err} ->
         QueueName = amqqueue:get_name(Q),
-        rabbit_log_federation:warning(
-          "Attempt to stop a federation link for queue ~tp failed: ~tp",
-          [rabbit_misc:rs(QueueName), Err]),
+        ?LOG_WARNING("Attempt to stop a federation link for queue ~tp failed: ~tp",
+                     [rabbit_misc:rs(QueueName), Err]),
         ok
     end,
     _ = mirrored_supervisor:delete_child(?SUPERVISOR, id(Q)).

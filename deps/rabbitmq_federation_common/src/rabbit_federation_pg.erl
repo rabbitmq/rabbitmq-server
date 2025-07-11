@@ -13,13 +13,13 @@
 -export([start_scope/1, stop_scope/1]).
 
 start_scope(Scope) ->
-  rabbit_log_federation:debug("Starting pg scope ~ts", [Scope]),
+  ?LOG_DEBUG("Starting pg scope ~ts", [Scope]),
   _ = pg:start_link(Scope).
 
 stop_scope(Scope) ->
   case whereis(Scope) of
       Pid when is_pid(Pid) ->
-          rabbit_log_federation:debug("Stopping pg scope ~ts", [Scope]),
+          ?LOG_DEBUG("Stopping pg scope ~ts", [Scope]),
           Groups = pg:which_groups(Scope),
           lists:foreach(
             fun(Group) ->
