@@ -469,8 +469,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
-    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CHAN,
-                                  pid => self()}),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CHAN}),
 
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
