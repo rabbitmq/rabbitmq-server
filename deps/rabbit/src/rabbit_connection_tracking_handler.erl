@@ -22,6 +22,7 @@
 -export([close_connections/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "connection tracking event handler"},
@@ -37,6 +38,7 @@
 %%
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     {ok, []}.
 
 handle_event(#event{type = connection_created, props = Details}, State) ->
