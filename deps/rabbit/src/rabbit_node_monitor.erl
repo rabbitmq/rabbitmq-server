@@ -7,6 +7,9 @@
 
 -module(rabbit_node_monitor).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -492,14 +495,14 @@ handle_cast({check_partial_partition, Node, Rep, NodeGUID, MyGUID, RepGUID},
                            case rpc:call(Node, erlang, system_info, [creation]) of
                                {badrpc, _} -> ok;
                                NodeGUID ->
-                                   rabbit_log:warning("Received a 'DOWN' message"
+                                   ?LOG_WARNING("Received a 'DOWN' message"
                                                       " from ~tp but still can"
                                                       " communicate with it ",
                                                       [Node]),
                                    cast(Rep, {partial_partition,
                                                          Node, node(), RepGUID});
                                 _ ->
-                                   rabbit_log:warning("Node ~tp was restarted", [Node]),
+                                   ?LOG_WARNING("Node ~tp was restarted", [Node]),
                                    ok
                            end
                    end),
@@ -530,7 +533,7 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
     ArgsBase = [NotReallyDown, Proxy, NotReallyDown],
     case application:get_env(rabbit, cluster_partition_handling) of
         {ok, pause_minority} ->
-            rabbit_log:error(
+            ?LOG_ERROR(
               FmtBase ++ " * pause_minority mode enabled~n"
               "We will therefore pause until the *entire* cluster recovers",
               ArgsBase),
@@ -538,17 +541,17 @@ handle_cast({partial_partition, NotReallyDown, Proxy, MyGUID},
             {noreply, State};
         {ok, {pause_if_all_down, PreferredNodes, _}} ->
             case in_preferred_partition(PreferredNodes) of
-                true  -> rabbit_log:error(
+                true  -> ?LOG_ERROR(
                            FmtBase ++ "We will therefore intentionally "
                            "disconnect from ~ts", ArgsBase ++ [Proxy]),
                          upgrade_to_full_partition(Proxy);
-                false -> rabbit_log:info(
+                false -> ?LOG_INFO(
                            FmtBase ++ "We are about to pause, no need "
                            "for further actions", ArgsBase)
             end,
             {noreply, State};
         {ok, _} ->
-            rabbit_log:error(
+            ?LOG_ERROR(
               FmtBase ++ "We will therefore intentionally disconnect from ~ts",
               ArgsBase ++ [Proxy]),
             upgrade_to_full_partition(Proxy),
@@ -562,7 +565,7 @@ handle_cast({partial_partition, _GUID, _Reporter, _Proxy}, State) ->
 %% messages reliably when another node disconnects from us. Therefore
 %% we are told just before the disconnection so we can reciprocate.
 handle_cast({partial_partition_disconnect, Other}, State) ->
-    rabbit_log:error("Partial partition disconnect from ~ts", [Other]),
+    ?LOG_ERROR("Partial partition disconnect from ~ts", [Other]),
     disconnect(Other),
     {noreply, State};
 
@@ -571,7 +574,7 @@ handle_cast({partial_partition_disconnect, Other}, State) ->
 %% mnesia propagation.
 handle_cast({node_up, Node, NodeType},
             State = #state{monitors = Monitors}) ->
-    rabbit_log:info("rabbit on node ~tp up", [Node]),
+    ?LOG_INFO("rabbit on node ~tp up", [Node]),
     case rabbit_khepri:is_enabled() of
         true ->
             ok;
@@ -606,7 +609,7 @@ handle_cast({joined_cluster, Node, NodeType}, State) ->
                                   end,
                                   RunningNodes})
     end,
-    rabbit_log:debug("Node '~tp' has joined the cluster", [Node]),
+    ?LOG_DEBUG("Node '~tp' has joined the cluster", [Node]),
     rabbit_event:notify(node_added, [{node, Node}]),
     {noreply, State};
 
@@ -634,7 +637,7 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', _MRef, process, {rabbit, Node}, _Reason},
             State = #state{monitors = Monitors, subscribers = Subscribers}) ->
-    rabbit_log:info("rabbit on node ~tp down", [Node]),
+    ?LOG_INFO("rabbit on node ~tp down", [Node]),
     case rabbit_khepri:is_enabled() of
         true ->
             ok;
@@ -653,7 +656,7 @@ handle_info({'DOWN', _MRef, process, Pid, _Reason},
     {noreply, State#state{subscribers = pmon:erase(Pid, Subscribers)}};
 
 handle_info({nodedown, Node, Info}, State) ->
-    rabbit_log:info("node ~tp down: ~tp",
+    ?LOG_INFO("node ~tp down: ~tp",
                     [Node, proplists:get_value(nodedown_reason, Info)]),
     case rabbit_khepri:is_enabled() of
         true  -> {noreply, State};
@@ -661,7 +664,7 @@ handle_info({nodedown, Node, Info}, State) ->
     end;
 
 handle_info({nodeup, Node, _Info}, State) ->
-    rabbit_log:info("node ~tp up", [Node]),
+    ?LOG_INFO("node ~tp up", [Node]),
     {noreply, State};
 
 handle_info({mnesia_system_event,
@@ -781,13 +784,13 @@ handle_dead_node(Node, State = #state{autoheal = Autoheal}) ->
         {ok, autoheal} ->
             State#state{autoheal = rabbit_autoheal:node_down(Node, Autoheal)};
         {ok, Term} ->
-            rabbit_log:warning("cluster_partition_handling ~tp unrecognised, "
+            ?LOG_WARNING("cluster_partition_handling ~tp unrecognised, "
                                "assuming 'ignore'", [Term]),
             State
     end.
 
 await_cluster_recovery(Condition) ->
-    rabbit_log:warning("Cluster minority/secondary status detected - "
+    ?LOG_WARNING("Cluster minority/secondary status detected - "
                        "awaiting recovery", []),
     run_outside_applications(fun () ->
                                      rabbit:stop(),
@@ -838,7 +841,7 @@ do_run_outside_app_fun(Fun) ->
     try
         Fun()
     catch _:E:Stacktrace ->
-            rabbit_log:error(
+            ?LOG_ERROR(
               "rabbit_outside_app_process:~n~tp~n~tp",
               [E, Stacktrace])
     end.
@@ -1050,14 +1053,14 @@ possibly_partitioned_nodes() ->
     alive_rabbit_nodes() -- rabbit_mnesia:cluster_nodes(running).
 
 startup_log() ->
-    rabbit_log:info("Starting rabbit_node_monitor (partition handling strategy unapplicable with Khepri)", []).
+    ?LOG_INFO("Starting rabbit_node_monitor (partition handling strategy unapplicable with Khepri)", []).
 
 startup_log(Nodes) ->
     {ok, M} = application:get_env(rabbit, cluster_partition_handling),
     startup_log(Nodes, M).
 
 startup_log([], PartitionHandling) ->
-    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
+    ?LOG_INFO("Starting rabbit_node_monitor (in ~tp mode)", [PartitionHandling]);
 startup_log(Nodes, PartitionHandling) ->
-    rabbit_log:info("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
+    ?LOG_INFO("Starting rabbit_node_monitor (in ~tp mode), might be partitioned from ~tp",
                     [PartitionHandling, Nodes]).

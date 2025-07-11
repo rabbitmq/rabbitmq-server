@@ -3,7 +3,7 @@
 -ifdef(TRACE_AMQP).
 -warning("AMQP tracing is enabled").
 -define(TRACE(Format, Args),
-        rabbit_log:debug(
+        ?LOG_DEBUG(
           "~s:~s/~b ~b~n" ++ Format ++ "~n",
           [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY, ?LINE] ++ Args)).
 -else.

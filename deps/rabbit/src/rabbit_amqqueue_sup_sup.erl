@@ -16,6 +16,7 @@
 -export([init/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -74,7 +75,7 @@ start_for_vhost(VHost) ->
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to start a queue process supervisor for vhost ~ts: vhost no longer exists!",
+            ?LOG_ERROR("Failed to start a queue process supervisor for vhost ~ts: vhost no longer exists!",
                              [VHost]),
             {error, {no_such_vhost, VHost}}
     end.
@@ -87,7 +88,7 @@ stop_for_vhost(VHost) ->
             ok = supervisor:delete_child(VHostSup, rabbit_amqqueue_sup_sup);
         %% see start/1
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to stop a queue process supervisor for vhost ~ts: vhost no longer exists!",
+            ?LOG_ERROR("Failed to stop a queue process supervisor for vhost ~ts: vhost no longer exists!",
                              [VHost]),
             ok
     end.

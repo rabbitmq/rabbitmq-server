@@ -8,6 +8,7 @@
 -module(rabbit_binding).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,
@@ -117,7 +118,7 @@ recover_semi_durable_route(Gatherer, Binding, Src, Dst, ToRecover, Fun) ->
                                    gatherer:finish(Gatherer)
                            end);
                 {error, not_found}=Error ->
-                    rabbit_log:warning(
+                    ?LOG_WARNING(
                       "expected exchange ~tp to exist during recovery, "
                       "error: ~tp", [Src, Error]),
                     ok

@@ -18,6 +18,7 @@
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel_mgmt.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(COMPONENT, <<"shovel">>).
 
@@ -47,7 +48,7 @@ resource_exists(ReqData, Context) ->
                         Name ->
                             case get_shovel_node(VHost, Name, ReqData, Context) of
                                 undefined ->
-                                    rabbit_log:error("Shovel with the name '~ts' was not found on virtual host '~ts'. "
+                                    ?LOG_ERROR("Shovel with the name '~ts' was not found on virtual host '~ts'. "
                                                      "It may be failing to connect and report its status.",
                                         [Name, VHost]),
                                     case cowboy_req:method(ReqData) of
@@ -84,7 +85,7 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                     false;
                 Name ->
                     case get_shovel_node(VHost, Name, ReqData, Context) of
-                        undefined -> rabbit_log:error("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
+                        undefined -> ?LOG_ERROR("Could not find shovel data for shovel '~ts' in vhost: '~ts'", [Name, VHost]),
                             case is_restart(ReqData) of
                                 true ->
                                     false;
@@ -98,14 +99,14 @@ delete_resource(ReqData, #context{user = #user{username = Username}}=Context) ->
                             %% We must distinguish between a delete and a restart
                             case is_restart(ReqData) of
                                 true ->
-                                    rabbit_log:info("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
+                                    ?LOG_INFO("Asked to restart shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
                                     try erpc:call(Node, rabbit_shovel_util, restart_shovel, [VHost, Name], ?SHOVEL_CALLS_TIMEOUT_MS) of
                                         ok -> true;
                                         {error, not_found} ->
-                                            rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+                                            ?LOG_ERROR("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
                                             false
                                     catch _:Reason ->
-                                            rabbit_log:error("Failed to restart shovel '~s' on vhost '~s', reason: ~p",
+                                            ?LOG_ERROR("Failed to restart shovel '~s' on vhost '~s', reason: ~p",
                                                              [Name, VHost, Reason]),
                                             false
                                     end;
@@ -170,15 +171,16 @@ find_matching_shovel(VHost, Name, Shovels) ->
 
 -spec try_delete(node(), vhost:name(), any(), rabbit_types:username()) -> boolean().
 try_delete(Node, VHost, Name, Username) ->
-    rabbit_log:info("Asked to delete shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
+    ?LOG_INFO("Asked to delete shovel '~ts' in vhost '~ts' on node '~s'", [Name, VHost, Node]),
     %% this will clear the runtime parameter, the ultimate way of deleting a dynamic Shovel eventually. MK.
     try erpc:call(Node, rabbit_shovel_util, delete_shovel, [VHost, Name, Username], ?SHOVEL_CALLS_TIMEOUT_MS) of
         ok -> true;
         {error, not_found} ->
-            rabbit_log:error("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
+            ?LOG_ERROR("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
             false
+<<<<<<< HEAD
     catch _:Reason ->
-            rabbit_log:error("Failed to delete shovel '~s' on vhost '~s', reason: ~p",
+            ?LOG_ERROR("Failed to delete shovel '~s' on vhost '~s', reason: ~p",
                              [Name, VHost, Reason]),
             false
     end.

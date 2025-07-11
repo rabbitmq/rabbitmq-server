@@ -17,6 +17,7 @@
 
 -include_lib("rabbitmq_peer_discovery_common/include/rabbit_peer_discovery.hrl").
 -include("rabbit_peer_discovery_consul.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([start_link/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -93,7 +94,7 @@ set_up_periodic_health_check() ->
             %% notifications
 
             IntervalInMs = Interval * 500, % note this is 1/2
-            rabbit_log:info("Starting Consul health check notifier (effective interval: ~tp milliseconds)", [IntervalInMs]),
+            ?LOG_INFO("Starting Consul health check notifier (effective interval: ~tp milliseconds)", [IntervalInMs]),
             {ok, TRef} = timer:apply_interval(IntervalInMs, rabbit_peer_discovery_consul,
                                               send_health_check_pass, []),
             {ok, #state{timer_ref = TRef}}

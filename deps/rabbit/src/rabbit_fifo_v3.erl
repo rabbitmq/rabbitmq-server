@@ -15,6 +15,7 @@
 
 -include("rabbit_fifo_v3.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(STATE, rabbit_fifo).
 
@@ -619,7 +620,7 @@ apply(#{index := IncomingRaftIdx} = Meta, {dlx, _} = Cmd,
     update_smallest_raft_index(IncomingRaftIdx, State, Effects);
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
-    rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
+    ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
 convert_msg({RaftIdx, {Header, empty}}) when is_integer(RaftIdx) ->
@@ -1172,7 +1173,7 @@ eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}} = MacState,
                Mem > ?GC_MEM_LIMIT_B ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~ts: full GC sweep complete. "
+            ?LOG_DEBUG("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};
@@ -1188,7 +1189,7 @@ force_eval_gc(Log, #?STATE{cfg = #cfg{resource = QR}},
         true ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~ts: full GC sweep complete. "
+            ?LOG_DEBUG("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};

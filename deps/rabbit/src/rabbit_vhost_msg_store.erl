@@ -8,6 +8,7 @@
 -module(rabbit_vhost_msg_store).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([start/4, stop/2, client_init/4, successfully_recovered_state/2]).
 -export([vhost_store_pid/2]).
@@ -25,7 +26,7 @@ start(VHost, Type, ClientRefs, StartupFunState) when is_list(ClientRefs);
         %% we can get here if a vhost is added and removed concurrently
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} = E ->
-            rabbit_log:error("Failed to start a message store for vhost ~ts: vhost no longer exists!",
+            ?LOG_ERROR("Failed to start a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
             E
     end.
@@ -37,7 +38,7 @@ stop(VHost, Type) ->
             ok = supervisor:delete_child(VHostSup, Type);
         %% see start/4
         {error, {no_such_vhost, VHost}} ->
-            rabbit_log:error("Failed to stop a message store for vhost ~ts: vhost no longer exists!",
+            ?LOG_ERROR("Failed to stop a message store for vhost ~ts: vhost no longer exists!",
                              [VHost]),
 
             ok

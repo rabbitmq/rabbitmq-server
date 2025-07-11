@@ -8,6 +8,7 @@
 -module(rabbit_amqqueue_process).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(gen_server2).
 
@@ -150,7 +151,7 @@ init({Q, Marker}) ->
             %% restart
             QueueName = amqqueue:get_name(Q),
             {ok, Q1} = rabbit_amqqueue:lookup(QueueName),
-            rabbit_log:error("Restarting crashed ~ts.", [rabbit_misc:rs(QueueName)]),
+            ?LOG_ERROR("Restarting crashed ~ts.", [rabbit_misc:rs(QueueName)]),
             gen_server2:cast(self(), init),
             init(Q1)
     end;
@@ -1609,7 +1610,7 @@ handle_cast({force_event_refresh, Ref},
     rabbit_event:notify(queue_created, queue_created_infos(State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
-    rabbit_log:debug("Queue ~ts forced to re-emit events, consumers: ~tp", [rabbit_misc:rs(QName), AllConsumers]),
+    ?LOG_DEBUG("Queue ~ts forced to re-emit events, consumers: ~tp", [rabbit_misc:rs(QName), AllConsumers]),
     [emit_consumer_created(
        Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
        Args, Ref, ActingUser) ||

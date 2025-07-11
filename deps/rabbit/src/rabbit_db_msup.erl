@@ -11,6 +11,7 @@
 -include("mirrored_supervisor.hrl").
 
 -include("include/rabbit_khepri.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          create_tables/0,
@@ -96,7 +97,7 @@ create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id) ->
     rabbit_mnesia:execute_mnesia_transaction(
       fun() ->
               ReadResult = mnesia:wread({?TABLE, {Group, Id}}),
-              rabbit_log:debug("Mirrored supervisor: check_start table ~ts read for key ~tp returned ~tp",
+              ?LOG_DEBUG("Mirrored supervisor: check_start table ~ts read for key ~tp returned ~tp",
                                [?TABLE, {Group, Id}, ReadResult]),
               case ReadResult of
                   []  -> _ = write_in_mnesia(Group, Overall, ChildSpec, Id),
@@ -105,12 +106,12 @@ create_or_update_in_mnesia(Group, Overall, Delegate, ChildSpec, Id) ->
                                                  mirroring_pid = Pid} = S,
                          case Overall of
                              Pid ->
-                                 rabbit_log:debug("Mirrored supervisor: overall matched mirrored pid ~tp", [Pid]),
+                                 ?LOG_DEBUG("Mirrored supervisor: overall matched mirrored pid ~tp", [Pid]),
                                  Delegate;
                              _   ->
-                                 rabbit_log:debug("Mirrored supervisor: overall ~tp did not match mirrored pid ~tp", [Overall, Pid]),
+                                 ?LOG_DEBUG("Mirrored supervisor: overall ~tp did not match mirrored pid ~tp", [Overall, Pid]),
                                  Sup = mirrored_supervisor:supervisor(Pid),
-                                 rabbit_log:debug("Mirrored supervisor: supervisor(~tp) returned ~tp", [Pid, Sup]),
+                                 ?LOG_DEBUG("Mirrored supervisor: supervisor(~tp) returned ~tp", [Pid, Sup]),
                                  case Sup of
                                      dead      ->
                                          _ = write_in_mnesia(Group, Overall, ChildSpec, Id),

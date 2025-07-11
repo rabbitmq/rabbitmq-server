@@ -7,6 +7,9 @@
 
 -module(rabbit_trust_store_http_provider).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(rabbit_trust_store_certificate_provider).
 
 -define(PROFILE, ?MODULE).
@@ -29,14 +32,14 @@ list_certs(_, #http_state{url = Url,
                           headers = Headers} = State) ->
     case (httpc:request(get, {Url, Headers}, HttpOptions, [{body_format, binary}], ?PROFILE)) of
         {ok, {{_, 200, _}, RespHeaders, Body}} ->
-            rabbit_log:debug("Trust store HTTP[S] provider responded with 200 OK"),
+            ?LOG_DEBUG("Trust store HTTP[S] provider responded with 200 OK"),
             Certs = decode_cert_list(Body),
             NewState = new_state(RespHeaders, State),
             {ok, Certs, NewState};
         {ok, {{_,304, _}, _, _}}  -> no_change;
         {ok, {{_,Code,_}, _, Body}} -> {error, {http_error, Code, Body}};
         {error, Reason} ->
-            rabbit_log:error("Trust store HTTP[S] provider request failed: ~tp", [Reason]),
+            ?LOG_ERROR("Trust store HTTP[S] provider request failed: ~tp", [Reason]),
             {error, Reason}
     end.
 
@@ -90,10 +93,10 @@ decode_cert_list(Body) ->
                 {CertId, [{path, Path}]}
             end, Certs)
     catch _:badarg ->
-            rabbit_log:error("Trust store failed to decode an HTTP[S] response: JSON parser failed"),
+            ?LOG_ERROR("Trust store failed to decode an HTTP[S] response: JSON parser failed"),
             [];
           _:Error ->
-            rabbit_log:error("Trust store failed to decode an HTTP[S] response: ~tp", [Error]),
+            ?LOG_ERROR("Trust store failed to decode an HTTP[S] response: ~tp", [Error]),
             []
     end.
 

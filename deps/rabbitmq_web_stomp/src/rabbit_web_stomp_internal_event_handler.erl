@@ -7,6 +7,9 @@
 
 -module(rabbit_web_stomp_internal_event_handler).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_event).
 
 -export([init/1, handle_event/2, handle_call/2, handle_info/2, terminate/2, code_change/3]).
@@ -19,7 +22,7 @@ init([]) ->
 handle_event({event, maintenance_connections_closed, _Info, _, _}, State) ->
   %% we should close our connections
   {ok, NConnections} = rabbit_web_stomp_listener:close_all_client_connections("node is being put into maintenance mode"),
-  rabbit_log:alert("Closed ~b local Web STOMP client connections", [NConnections]),
+  ?LOG_INFO("Closed ~b local Web STOMP client connections", [NConnections]),
   {ok, State};
 handle_event(_Event, State) ->
   {ok, State}.

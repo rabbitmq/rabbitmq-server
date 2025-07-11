@@ -14,6 +14,7 @@
 -include("vhost.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          init/0,
@@ -561,7 +562,7 @@ recover(VHost, Qs) ->
                end, ByType0, Qs),
     maps:fold(fun (Mod, Queues, {R0, F0}) ->
                       {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
-                      rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
+                      ?LOG_INFO("Recovering ~b queues of type ~ts took ~bms",
                                       [length(Queues), Mod, Taken div 1000]),
                       {R0 ++ R, F0 ++ F}
               end, {[], []}, ByType).
