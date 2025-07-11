@@ -89,6 +89,7 @@
                         {list, [tagged_value()]} |
                         {map, [{tagged_value(), tagged_value()}]} |
                         {array, atom(), [tagged_value()]} |
+                        {as_is, TypeCode :: non_neg_integer(), binary()} |
                         null |
                         undefined.
 

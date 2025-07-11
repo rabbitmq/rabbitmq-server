@@ -177,8 +177,8 @@ generate1({array, Type, List}) ->
            [16#e0, S + 1, Count, Array]
     end;
 
-generate1({as_is, TypeCode, Bin}) ->
-    <<TypeCode, Bin>>.
+generate1({as_is, TypeCode, Bin}) when is_binary(Bin) ->
+    [TypeCode, Bin].
 
 constructor(symbol) -> 16#b3;
 constructor(ubyte) -> 16#50;
