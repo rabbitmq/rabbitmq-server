@@ -144,8 +144,7 @@ start_link(Q, Marker) ->
     gen_server2:start_link(?MODULE, {Q, Marker}, []).
 
 init({Q, Marker}) ->
-    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_QUEUE,
-                                  pid => self()}),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_QUEUE}),
     case is_process_alive(Marker) of
         true  ->
             %% start
