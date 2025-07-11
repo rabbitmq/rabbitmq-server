@@ -31,38 +31,27 @@ suite() ->
 
 init_per_suite(Config) ->
     ok = application:load(rabbitmq_mqtt),
+    meck:new(rabbit_runtime_parameters, [passthrough, no_link]),
     Config.
 end_per_suite(Config) ->
     ok = application:unload(rabbitmq_mqtt),
+    meck:unload(rabbit_runtime_parameters),
     Config.
 init_per_group(_, Config) -> Config.
 end_per_group(_, Config) -> Config.
-init_per_testcase(get_vhost, Config) ->
-    mnesia:start(),
-    mnesia:create_table(rabbit_runtime_parameters, [
-        {attributes, record_info(fields, runtime_parameters)},
-        {record_name, runtime_parameters}]),
-    meck:new(rabbit_feature_flags, [passthrough, no_link]),
-    meck:expect(
-      rabbit_feature_flags, is_enabled,
-      fun
-          (khepri_db, _) -> false;
-          (FeatureNames, _)           -> meck:passthrough([FeatureNames])
-      end),
-    Config;
 init_per_testcase(_, Config) -> Config.
-end_per_testcase(get_vhost, Config) ->
-    meck:unload(rabbit_feature_flags),
-    mnesia:stop(),
-    Config;
 end_per_testcase(_, Config) -> Config.
 
 ignore_colons(B) -> application:set_env(rabbitmq_mqtt, ignore_colons_in_username, B).
 
 ignores_colons_in_username_if_option_set(_Config) ->
-    ignore_colons(true),
-    ?assertEqual({rabbit_mqtt_util:env(vhost), <<"a:b:c">>},
-                  rabbit_mqtt_processor:get_vhost_username(<<"a:b:c">>)).
+    clear_vhost_global_parameters(),
+     ignore_colons(true),
+    ?assertEqual(undefined,
+                  rabbit_mqtt_processor:get_vhost_username(<<"a:b:c">>)),
+    ?assertEqual({plugin_configuration_or_default_vhost,
+                  {rabbit_mqtt_util:env(vhost), <<"a:b:c">>}},
+                  rabbit_mqtt_processor:get_vhost(<<"a:b:c">>, none, 1883)).
 
 interprets_colons_in_username_if_option_not_set(_Config) ->
    ignore_colons(false),
@@ -150,26 +139,32 @@ get_vhost(_Config) ->
 
     %% certificate user, port/vhost parameter but no mapping, cert/vhost mapping
     %% should use cert/vhost mapping
-    set_global_parameter(mqtt_default_vhosts, [
-        {<<"O=client,CN=dummy">>,     <<"somevhost">>},
-        {<<"O=client,CN=otheruser">>, <<"othervhost">>}
-    ]),
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {<<"1884">>, <<"othervhost">>}
-    ]),
+    set_global_parameters(
+      [{mqtt_default_vhosts,
+        [
+         {<<"O=client,CN=dummy">>,     <<"somevhost">>},
+         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
+        ]},
+       {mqtt_port_to_vhost_mapping,
+        [
+         {<<"1884">>, <<"othervhost">>}
+        ]}]),
     {_, {<<"somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
     %% certificate user, port/vhost parameter, cert/vhost parameter
     %% cert/vhost parameter takes precedence
-    set_global_parameter(mqtt_default_vhosts, [
-        {<<"O=client,CN=dummy">>,     <<"cert-somevhost">>},
-        {<<"O=client,CN=otheruser">>, <<"othervhost">>}
-    ]),
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {<<"1883">>, <<"port-vhost">>},
-        {<<"1884">>, <<"othervhost">>}
-    ]),
+    set_global_parameters(
+      [{mqtt_default_vhosts,
+        [
+         {<<"O=client,CN=dummy">>,     <<"cert-somevhost">>},
+         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
+        ]},
+       {mqtt_port_to_vhost_mapping,
+        [
+         {<<"1883">>, <<"port-vhost">>},
+         {<<"1884">>, <<"othervhost">>}
+        ]}]),
     {_, {<<"cert-somevhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, <<"O=client,CN=dummy">>, 1883),
     clear_vhost_global_parameters(),
 
@@ -179,28 +174,30 @@ get_vhost(_Config) ->
 
     %% not a certificate user, port/vhost parameter, cert/vhost parameter
     %% port/vhost mapping is used, as cert/vhost should not be used
-    set_global_parameter(mqtt_default_vhosts, [
-        {<<"O=cert">>,                <<"cert-somevhost">>},
-        {<<"O=client,CN=otheruser">>, <<"othervhost">>}
-    ]),
-    set_global_parameter(mqtt_port_to_vhost_mapping, [
-        {<<"1883">>, <<"port-vhost">>},
-        {<<"1884">>, <<"othervhost">>}
-    ]),
+    set_global_parameters(
+      [{mqtt_default_vhosts,
+        [
+         {<<"O=cert">>,                <<"cert-somevhost">>},
+         {<<"O=client,CN=otheruser">>, <<"othervhost">>}
+        ]},
+       {mqtt_port_to_vhost_mapping,
+        [
+         {<<"1883">>, <<"port-vhost">>},
+         {<<"1884">>, <<"othervhost">>}
+        ]}]),
     {_, {<<"port-vhost">>, <<"guest">>}} = rabbit_mqtt_processor:get_vhost(<<"guest">>, none, 1883),
     clear_vhost_global_parameters(),
     ok.
 
 set_global_parameter(Key, Term) ->
-    InsertParameterFun = fun () ->
-        mnesia:write(rabbit_runtime_parameters, #runtime_parameters{key = Key, value = Term}, write)
-                         end,
+    set_global_parameters([{Key, Term}]).
 
-    {atomic, ok} = mnesia:transaction(InsertParameterFun).
+set_global_parameters(KVList) ->
+    meck:expect(
+      rabbit_runtime_parameters, value_global,
+      fun(Key) -> proplists:get_value(Key, KVList, not_found) end).
 
 clear_vhost_global_parameters() ->
-    DeleteParameterFun = fun () ->
-        ok = mnesia:delete(rabbit_runtime_parameters, mqtt_default_vhosts, write),
-        ok = mnesia:delete(rabbit_runtime_parameters, mqtt_port_to_vhost_mapping, write)
-                         end,
-    {atomic, ok} = mnesia:transaction(DeleteParameterFun).
+    meck:expect(
+      rabbit_runtime_parameters, value_global,
+      fun(_) -> not_found end).

@@ -1185,33 +1185,31 @@ get_vhost(UserBin, SslLogin, Port) ->
     get_vhost_ssl(UserBin, SslLogin, Port).
 
 get_vhost_no_ssl(UserBin, Port) ->
-    case vhost_in_username(UserBin) of
-        true  ->
-            {vhost_in_username_or_default, get_vhost_username(UserBin)};
-        false ->
-            PortVirtualHostMapping = rabbit_runtime_parameters:value_global(
-                                       mqtt_port_to_vhost_mapping
-                                      ),
-            case get_vhost_from_port_mapping(Port, PortVirtualHostMapping) of
+    case get_vhost_username(UserBin) of
+        undefined ->
+            case get_vhost_from_port_mapping(Port) of
                 undefined ->
-                    {plugin_configuration_or_default_vhost, {rabbit_mqtt_util:env(vhost), UserBin}};
-                VHost ->
-                    {port_to_vhost_mapping, {VHost, UserBin}}
-            end
+                    VhostFromConfig = rabbit_mqtt_util:env(vhost),
+                    {plugin_configuration_or_default_vhost, {VhostFromConfig, UserBin}};
+                VHostFromPortMapping ->
+                    {port_to_vhost_mapping, {VHostFromPortMapping, UserBin}}
+            end;
+        VHostUser ->
+            {vhost_in_username, VHostUser}
     end.
 
 get_vhost_ssl(UserBin, SslLoginName, Port) ->
-    UserVirtualHostMapping = rabbit_runtime_parameters:value_global(
-                               mqtt_default_vhosts
-                              ),
-    case get_vhost_from_user_mapping(SslLoginName, UserVirtualHostMapping) of
+    case get_vhost_from_user_mapping(SslLoginName) of
         undefined ->
-            PortVirtualHostMapping = rabbit_runtime_parameters:value_global(
-                                       mqtt_port_to_vhost_mapping
-                                      ),
-            case get_vhost_from_port_mapping(Port, PortVirtualHostMapping) of
+            case get_vhost_from_port_mapping(Port) of
                 undefined ->
-                    {vhost_in_username_or_default, get_vhost_username(UserBin)};
+                    case get_vhost_username(UserBin) of
+                        undefined ->
+                            VhostFromConfig = rabbit_mqtt_util:env(vhost),
+                            {plugin_configuration_or_default_vhost, {VhostFromConfig, UserBin}};
+                        VHostUser ->
+                            {vhost_in_username, VHostUser}
+                    end;
                 VHostFromPortMapping ->
                     {port_to_vhost_mapping, {VHostFromPortMapping, UserBin}}
             end;
@@ -1219,30 +1217,23 @@ get_vhost_ssl(UserBin, SslLoginName, Port) ->
             {client_cert_to_vhost_mapping, {VHostFromCertMapping, UserBin}}
     end.
 
-vhost_in_username(UserBin) ->
-    case application:get_env(?APP_NAME, ignore_colons_in_username) of
-        {ok, true} -> false;
-        _ ->
-            %% split at the last colon, disallowing colons in username
-            case re:split(UserBin, ":(?!.*?:)") of
-                [_, _]      -> true;
-                [UserBin]   -> false;
-                []          -> false
-            end
-    end.
-
 get_vhost_username(UserBin) ->
-    Default = {rabbit_mqtt_util:env(vhost), UserBin},
     case application:get_env(?APP_NAME, ignore_colons_in_username) of
-        {ok, true} -> Default;
+        {ok, true} -> undefined;
         _ ->
             %% split at the last colon, disallowing colons in username
             case re:split(UserBin, ":(?!.*?:)") of
                 [Vhost, UserName] -> {Vhost,  UserName};
-                [UserBin]         -> Default;
-                []                -> Default
+                [UserBin]         -> undefined;
+                []                -> undefined
             end
     end.
+
+get_vhost_from_user_mapping(User) ->
+    UserVirtualHostMapping = rabbit_runtime_parameters:value_global(
+                               mqtt_default_vhosts
+                              ),
+    get_vhost_from_user_mapping(User, UserVirtualHostMapping).
 
 get_vhost_from_user_mapping(_User, not_found) ->
     undefined;
@@ -1254,6 +1245,12 @@ get_vhost_from_user_mapping(User, Mapping) ->
         VHost ->
             VHost
     end.
+
+get_vhost_from_port_mapping(Port) ->
+    PortVirtualHostMapping = rabbit_runtime_parameters:value_global(
+                               mqtt_port_to_vhost_mapping
+                              ),
+    get_vhost_from_port_mapping(Port, PortVirtualHostMapping).
 
 get_vhost_from_port_mapping(_Port, not_found) ->
     undefined;
