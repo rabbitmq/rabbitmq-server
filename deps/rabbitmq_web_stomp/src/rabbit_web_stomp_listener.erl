@@ -1,4 +1,4 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
+
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -14,6 +14,9 @@
   close_all_client_connections/1
 ]).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 %% for testing purposes
 -export([get_binding_address/1, get_tcp_port/1, get_tcp_conf/2]).
 
@@ -28,6 +31,7 @@
 
 -spec init() -> ok.
 init() ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     WsFrame = get_env(ws_frame, text),
     CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
     CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false),
@@ -111,14 +115,14 @@ start_tcp_listener(TCPConf0, CowboyOpts0, Routes) ->
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTCP}                  ->
-          rabbit_log_connection:error(
+          ?LOG_ERROR(
               "Failed to start a WebSocket (HTTP) listener. Error: ~tp,"
               " listener settings: ~tp",
               [ErrTCP, TCPConf]),
           throw(ErrTCP)
   end,
   listener_started(?TCP_PROTOCOL, TCPConf),
-  rabbit_log_connection:info(
+  ?LOG_INFO(
       "rabbit_web_stomp: listening for HTTP connections on ~ts:~w",
       [get_binding_address(TCPConf), Port]).
 
@@ -150,14 +154,14 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
       {ok, _}                       -> ok;
       {error, {already_started, _}} -> ok;
       {error, ErrTLS}                  ->
-          rabbit_log_connection:error(
+          ?LOG_ERROR(
               "Failed to start a TLS WebSocket (HTTPS) listener. Error: ~tp,"
               " listener settings: ~tp",
               [ErrTLS, TLSConf]),
           throw(ErrTLS)
   end,
   listener_started(?TLS_PROTOCOL, TLSConf),
-  rabbit_log_connection:info(
+  ?LOG_INFO(
       "rabbit_web_stomp: listening for HTTPS connections on ~ts:~w",
       [get_binding_address(TLSConf), TLSPort]).
 

@@ -78,11 +78,11 @@ handle_cast({connection_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register connection ~tp for tracking, "
                           "its table is not ready yet or the connection terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [ConnId]),
+                    ?LOG_WARNING(Msg, [ConnId]),
                     ok;
                 error:Err ->
                     Msg = "Could not register connection ~tp for tracking: ~tp",
-                    rabbit_log_connection:warning(Msg, [ConnId, Err]),
+                    ?LOG_WARNING(Msg, [ConnId, Err]),
                     ok
             end;
         _OtherNode ->
@@ -107,7 +107,7 @@ handle_cast({vhost_deleted, Details}) ->
     %% Schedule vhost entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_vhost_entry, [VHost]),
-    rabbit_log_connection:info("Closing all connections in vhost '~ts' because it's being deleted", [VHost]),
+    ?LOG_INFO("Closing all connections in vhost '~ts' because it's being deleted", [VHost]),
     shutdown_tracked_items(
         list(VHost),
         rabbit_misc:format("vhost '~ts' is deleted", [VHost]));
@@ -117,7 +117,7 @@ handle_cast({vhost_deleted, Details}) ->
 handle_cast({vhost_down, Details}) ->
     VHost = pget(name, Details),
     Node = pget(node, Details),
-    rabbit_log_connection:info("Closing all connections in vhost '~ts' on node '~ts'"
+    ?LOG_INFO("Closing all connections in vhost '~ts' on node '~ts'"
                                " because the vhost is stopping",
                                [VHost, Node]),
     shutdown_tracked_items(
@@ -128,7 +128,7 @@ handle_cast({user_deleted, Details}) ->
     %% Schedule user entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_user_entry, [Username]),
-    rabbit_log_connection:info("Closing all connections for user '~ts' because the user is being deleted", [Username]),
+    ?LOG_INFO("Closing all connections for user '~ts' because the user is being deleted", [Username]),
     shutdown_tracked_items(
         list_of_user(Username),
         rabbit_misc:format("user '~ts' is deleted", [Username])).
