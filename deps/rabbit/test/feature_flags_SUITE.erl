@@ -2,7 +2,8 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2019-2025 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(feature_flags_SUITE).
@@ -197,14 +198,15 @@ init_per_group(clustering, Config) ->
                  {rmq_nodes_clustered, false},
                  {start_rmq_with_plugins_disabled, true}]),
     Config2 = rabbit_ct_helpers:merge_app_env(
-                Config1, {rabbit, [{forced_feature_flags_on_init, [
-                                                                   restart_streams,
-                                                                   stream_sac_coordinator_unblock_group,
-                                                                   stream_update_config_command,
-                                                                   stream_filtering,
-                                                                   message_containers,
-                                                                   quorum_queue_non_voters
-                                                                  ]}]}),
+                Config1, {rabbit, [{forced_feature_flags_on_init,
+                                    [
+                                     restart_streams,
+                                     stream_sac_coordinator_unblock_group,
+                                     stream_update_config_command,
+                                     stream_filtering,
+                                     message_containers,
+                                     quorum_queue_non_voters
+                                    ]}]}),
     rabbit_ct_helpers:run_setup_steps(Config2, [fun prepare_my_plugin/1]);
 init_per_group(activating_plugin, Config) ->
     Config1 = rabbit_ct_helpers:set_config(
@@ -219,7 +221,8 @@ init_per_group(_, Config) ->
 end_per_group(_, Config) ->
     Config.
 
-init_per_testcase(enable_feature_flag_when_ff_file_is_unwritable = Testcase, Config) ->
+init_per_testcase(
+  enable_feature_flag_when_ff_file_is_unwritable = Testcase, Config) ->
     case erlang:system_info(otp_release) of
         "26" ->
             {skip, "Hits a crash in Mnesia fairly frequently"};
@@ -1284,11 +1287,13 @@ activating_plugin_with_new_ff_enabled(Config) ->
     ok.
 
 enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
+    RabbitMQ40Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                          Config, 'rabbitmq_4.0.0'),
+    case RabbitMQ40Enabled of
         true ->
             ok;
         false ->
-            throw({skip, "this test triggers a bug present in 3.13"})
+            throw({skip, "This test triggers a bug present in 3.13"})
     end,
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
@@ -1321,11 +1326,13 @@ enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
     ok.
 
 restart_node_with_unknown_enabled_feature_flag(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
+    RabbitMQ40Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
+                          Config, 'rabbitmq_4.0.0'),
+    case RabbitMQ40Enabled of
         true ->
             ok;
         false ->
-            throw({skip, "this test triggers a bug present in 3.13"})
+            throw({skip, "This test triggers a bug present in 3.13"})
     end,
 
     FFSubsysOk = is_feature_flag_subsystem_available(Config),

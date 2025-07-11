@@ -15,7 +15,8 @@
          ra_name/1,
          ra_machines_use_same_version/3,
          wait_for_local_stream_member/4,
-         has_local_stream_member_rpc/1
+         has_local_stream_member_rpc/1,
+         assert_number_of_replicas/5
         ]).
 
 -define(WFM_SLEEP, 256).
@@ -191,3 +192,16 @@ has_local_stream_member_rpc(QName) ->
         {error, _} ->
             false
     end.
+
+assert_number_of_replicas(Config, Server, VHost, QQ, Count) ->
+    _ = case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+            khepri ->
+                rabbit_ct_broker_helpers:rpc(
+                  Config, Server, rabbit_khepri, fence, [30000]);
+            mnesia ->
+                ok
+        end,
+    {ok, Q} = rabbit_ct_broker_helpers:rpc(
+                Config, Server, rabbit_amqqueue, lookup, [QQ, VHost]),
+    #{nodes := Nodes} = amqqueue:get_type_state(Q),
+    ?assertEqual(Count, length(Nodes)).
