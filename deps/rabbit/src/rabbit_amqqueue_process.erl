@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -behaviour(gen_server2).
 
@@ -143,6 +144,8 @@ start_link(Q, Marker) ->
     gen_server2:start_link(?MODULE, {Q, Marker}, []).
 
 init({Q, Marker}) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_QUEUE,
+                                  pid => self()}),
     case is_process_alive(Marker) of
         true  ->
             %% start
@@ -1610,7 +1613,8 @@ handle_cast({force_event_refresh, Ref},
     rabbit_event:notify(queue_created, queue_created_infos(State), Ref),
     QName = qname(State),
     AllConsumers = rabbit_queue_consumers:all(Consumers),
-    ?LOG_DEBUG("Queue ~ts forced to re-emit events, consumers: ~tp", [rabbit_misc:rs(QName), AllConsumers]),
+    ?LOG_DEBUG("Queue ~ts forced to re-emit events, consumers: ~tp",
+               [rabbit_misc:rs(QName), AllConsumers]),
     [emit_consumer_created(
        Ch, CTag, ActiveOrExclusive, AckRequired, QName, Prefetch,
        Args, Ref, ActingUser) ||
@@ -1655,7 +1659,8 @@ handle_info({maybe_expire, Vsn}, State = #q{q = Q, expires = Expiry, args_policy
     case is_unused(State) of
         true  ->
             QResource = rabbit_misc:rs(amqqueue:get_name(Q)),
-            rabbit_log_queue:debug("Deleting 'classic ~ts' on expiry after ~tp milliseconds", [QResource, Expiry]),
+            ?LOG_DEBUG("Deleting 'classic ~ts' on expiry after ~tp milliseconds",
+                       [QResource, Expiry]),
             stop(State);
         false -> noreply(State#q{expiry_timer_ref = undefined})
     end;
@@ -1757,16 +1762,16 @@ log_delete_exclusive({ConPid, _ConRef}, State) ->
 log_delete_exclusive(ConPid, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting exclusive queue '~ts' in vhost '~ts' " ++
-                           "because its declaring connection ~tp was closed",
-                           [QName, VHost, ConPid]).
+    ?LOG_DEBUG("Deleting exclusive queue '~ts' in vhost '~ts' " ++
+               "because its declaring connection ~tp was closed",
+               [QName, VHost, ConPid]).
 
 log_auto_delete(Reason, #q{ q = Q }) ->
     Resource = amqqueue:get_name(Q),
     #resource{ name = QName, virtual_host = VHost } = Resource,
-    rabbit_log_queue:debug("Deleting auto-delete queue '~ts' in vhost '~ts' " ++
-                           Reason,
-                           [QName, VHost]).
+    ?LOG_DEBUG("Deleting auto-delete queue '~ts' in vhost '~ts' " ++
+               Reason,
+               [QName, VHost]).
 
 confirm_to_sender(Pid, QName, MsgSeqNos) ->
     rabbit_classic_queue:confirm_to_sender(Pid, QName, MsgSeqNos).
