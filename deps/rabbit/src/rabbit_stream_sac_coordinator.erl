@@ -17,6 +17,7 @@
 -module(rabbit_stream_sac_coordinator).
 
 -include("rabbit_stream_sac_coordinator.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -opaque command() :: #command_register_consumer{} |
                      #command_unregister_consumer{} |
@@ -148,7 +149,7 @@ process_command(Cmd) ->
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
-            rabbit_log:warning("SAC coordinator command ~tp returned error ~tp",
+            ?LOG_WARNING("SAC coordinator command ~tp returned error ~tp",
                                [Cmd, Err]),
             Err
     end.
@@ -286,7 +287,7 @@ apply(#command_activate_consumer{vhost = VH, stream = S, consumer_name = Name},
     {G, Eff} =
         case lookup_group(VH, S, Name, StreamGroups0) of
             undefined ->
-                rabbit_log:warning("Trying to activate consumer in group ~tp, but "
+                ?LOG_WARNING("Trying to activate consumer in group ~tp, but "
                                    "the group does not longer exist",
                                    [{VH, S, Name}]),
                 {undefined, []};
@@ -348,7 +349,7 @@ apply(#command_purge_nodes{nodes = Nodes}, State0) ->
 apply(#command_update_conf{conf = NewConf}, State) ->
     {State#?MODULE{conf = NewConf}, ok, []};
 apply(UnkCmd, State) ->
-    rabbit_log:debug("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
+    ?LOG_DEBUG("~ts: unknown SAC command ~W", [?MODULE, UnkCmd, 10]),
     {State, {error, unknown_command}, []}.
 
 purge_node(Node, #?MODULE{groups = Groups0} = State0) ->

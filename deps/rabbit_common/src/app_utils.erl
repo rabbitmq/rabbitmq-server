@@ -7,6 +7,9 @@
 
 -module(app_utils).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([load_applications/1,
          start_applications/1, start_applications/2, start_applications/3,
          stop_applications/1, stop_applications/2, app_dependency_order/2,
@@ -61,7 +64,7 @@ start_applications(Apps, ErrorHandler, RestartTypes) ->
 stop_applications(Apps, ErrorHandler) ->
     manage_applications(fun lists:foldr/3,
                         fun(App) ->
-                            rabbit_log:info("Stopping application '~ts'", [App]),
+                            ?LOG_INFO("Stopping application '~ts'", [App]),
                             application:stop(App)
                         end,
                         fun(App) -> ensure_all_started(App, #{}) end,

@@ -7,6 +7,8 @@
 
 -module(file_handle_cache).
 
+-include_lib("kernel/include/logger.hrl").
+
 %% A File Handle Cache
 %%
 %% This extends a subset of the functionality of the Erlang file
@@ -1451,19 +1453,19 @@ update_counts(open, Pid, Delta,
               State = #fhc_state { open_count          = OpenCount,
                                    clients             = Clients }) ->
     safe_ets_update_counter(Clients, Pid, {#cstate.opened, Delta},
-      fun() -> rabbit_log:warning("FHC: failed to update counter 'opened', client pid: ~p", [Pid]) end),
+      fun() -> ?LOG_WARNING("FHC: failed to update counter 'opened', client pid: ~p", [Pid]) end),
     State #fhc_state { open_count = OpenCount + Delta};
 update_counts({obtain, file}, Pid, Delta,
               State = #fhc_state {obtain_count_file   = ObtainCountF,
                                   clients             = Clients }) ->
   safe_ets_update_counter(Clients, Pid, {#cstate.obtained_file, Delta},
-      fun() -> rabbit_log:warning("FHC: failed to update counter 'obtained_file', client pid: ~p", [Pid]) end),
+      fun() -> ?LOG_WARNING("FHC: failed to update counter 'obtained_file', client pid: ~p", [Pid]) end),
     State #fhc_state { obtain_count_file = ObtainCountF + Delta};
 update_counts({obtain, socket}, Pid, Delta,
               State = #fhc_state {obtain_count_socket   = ObtainCountS,
                                   clients             = Clients }) ->
   safe_ets_update_counter(Clients, Pid, {#cstate.obtained_socket, Delta},
-    fun() -> rabbit_log:warning("FHC: failed to update counter 'obtained_socket', client pid: ~p", [Pid]) end),
+    fun() -> ?LOG_WARNING("FHC: failed to update counter 'obtained_socket', client pid: ~p", [Pid]) end),
     State #fhc_state { obtain_count_socket = ObtainCountS + Delta};
 update_counts({reserve, file}, Pid, NewReservation,
               State = #fhc_state {reserve_count_file   = ReserveCountF,
@@ -1471,7 +1473,7 @@ update_counts({reserve, file}, Pid, NewReservation,
     [#cstate{reserved_file = R}] = ets:lookup(Clients, Pid),
     Delta = NewReservation - R,
   safe_ets_update_counter(Clients, Pid, {#cstate.reserved_file, Delta},
-    fun() -> rabbit_log:warning("FHC: failed to update counter 'reserved_file', client pid: ~p", [Pid]) end),
+    fun() -> ?LOG_WARNING("FHC: failed to update counter 'reserved_file', client pid: ~p", [Pid]) end),
     State #fhc_state { reserve_count_file = ReserveCountF + Delta};
 update_counts({reserve, socket}, Pid, NewReservation,
               State = #fhc_state {reserve_count_socket   = ReserveCountS,
@@ -1479,7 +1481,7 @@ update_counts({reserve, socket}, Pid, NewReservation,
     [#cstate{reserved_file = R}] = ets:lookup(Clients, Pid),
     Delta = NewReservation - R,
   safe_ets_update_counter(Clients, Pid, {#cstate.reserved_socket, Delta},
-    fun() -> rabbit_log:warning("FHC: failed to update counter 'reserved_socket', client pid: ~p", [Pid]) end),
+    fun() -> ?LOG_WARNING("FHC: failed to update counter 'reserved_socket', client pid: ~p", [Pid]) end),
     State #fhc_state { reserve_count_socket = ReserveCountS + Delta}.
 
 maybe_reduce(State) ->

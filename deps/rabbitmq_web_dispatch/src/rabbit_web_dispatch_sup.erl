@@ -7,6 +7,9 @@
 
 -module(rabbit_web_dispatch_sup).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(supervisor).
 
 -define(SUP, ?MODULE).
@@ -31,7 +34,7 @@ ensure_listener(Listener) ->
             TransportOpts = rabbit_ssl_options:wrap_password_opt(TransportOpts0),
             ProtoOptsMap = maps:from_list(ProtoOpts),
             StreamHandlers = stream_handlers_config(ProtoOpts),
-            rabbit_log:debug("Starting HTTP[S] listener with transport ~ts", [Transport]),
+            ?LOG_DEBUG("Starting HTTP[S] listener with transport ~ts", [Transport]),
             CowboyOptsMap =
                 maps:merge(#{env =>
                                 #{rabbit_listener => Listener},

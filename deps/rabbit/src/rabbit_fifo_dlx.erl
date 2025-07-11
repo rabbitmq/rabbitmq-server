@@ -8,6 +8,7 @@
 
 -include("rabbit_fifo_dlx.hrl").
 -include("rabbit_fifo.hrl").
+-include_lib("kernel/include/logger.hrl").
 -compile({no_auto_import, [apply/3]}).
 
 -export([
@@ -123,7 +124,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
         OldConsumerPid ->
             ok;
         _ ->
-            rabbit_log:debug("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
+            ?LOG_DEBUG("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
                              [OldConsumerPid, ConsumerPid]),
             ensure_worker_terminated(State0)
     end,
@@ -144,7 +145,7 @@ apply(_, {dlx, #checkout{consumer = ConsumerPid,
                            msg_bytes_checkout = BytesCheckout - BytesMoved},
     {State, []};
 apply(_, Cmd, DLH, State) ->
-    rabbit_log:debug("Ignoring command ~tp for dead_letter_handler ~tp", [Cmd, DLH]),
+    ?LOG_DEBUG("Ignoring command ~tp for dead_letter_handler ~tp", [Cmd, DLH]),
     {State, []}.
 
 -spec discard([msg()], rabbit_dead_letter:reason(), dead_letter_handler(), state()) ->
@@ -257,7 +258,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = undefined}) ->
 ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
     case is_local_and_alive(Pid) of
         true ->
-            rabbit_log:debug("rabbit_fifo_dlx_worker ~tp already started for ~ts",
+            ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
                              [Pid, rabbit_misc:rs(QRef)]);
         false ->
             start_worker(QRef)
@@ -269,7 +270,7 @@ ensure_worker_started(QRef, #?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
 %% Ra server process crash in which case another Ra node will become leader.
 start_worker(QRef) ->
     {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
-    rabbit_log:debug("started rabbit_fifo_dlx_worker ~tp for ~ts",
+    ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
                      [Pid, rabbit_misc:rs(QRef)]).
 
 ensure_worker_terminated(#?MODULE{consumer = undefined}) ->
@@ -280,7 +281,7 @@ ensure_worker_terminated(#?MODULE{consumer = #dlx_consumer{pid = Pid}}) ->
             %% Note that we can't return a mod_call effect here
             %% because mod_call is executed on the leader only.
             ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            rabbit_log:debug("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
+            ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
         false ->
             ok
     end.

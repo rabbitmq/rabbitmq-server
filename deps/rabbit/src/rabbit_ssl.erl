@@ -8,6 +8,7 @@
 -module(rabbit_ssl).
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([peer_cert_issuer/1, peer_cert_subject/1, peer_cert_validity/1]).
 -export([peer_cert_subject_items/2, peer_cert_auth_name/1, peer_cert_auth_name/2]).
@@ -161,7 +162,7 @@ peer_cert_auth_name({subject_alternative_name, Type, Index0}, Cert) ->
             %% lists:nth/2 is 1-based
             Index  = Index0 + 1,
             OfType = peer_cert_subject_alternative_names(Cert, otp_san_type(Type)),
-            rabbit_log:debug("Peer certificate SANs of type ~ts: ~tp, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
+            ?LOG_DEBUG("Peer certificate SANs of type ~ts: ~tp, index to use with lists:nth/2: ~b", [Type, OfType, Index]),
             case length(OfType) of
                 0                 -> not_found;
                 N when N < Index  -> not_found;
@@ -198,7 +199,7 @@ auth_config_sane() ->
     {ok, Opts} = application:get_env(rabbit, ssl_options),
     case proplists:get_value(verify, Opts) of
         verify_peer -> true;
-        V           -> rabbit_log:warning("TLS peer verification (authentication) is "
+        V           -> ?LOG_WARNING("TLS peer verification (authentication) is "
                                           "disabled, ssl_options.verify value used: ~tp. "
                                           "See https://www.rabbitmq.com/docs/ssl#peer-verification to learn more.", [V]),
                        false

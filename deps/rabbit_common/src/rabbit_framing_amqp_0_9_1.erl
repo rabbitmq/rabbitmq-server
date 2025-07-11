@@ -8,6 +8,7 @@
 %%
 -module(rabbit_framing_amqp_0_9_1).
 -include("rabbit_framing.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([version/0]).
 -export([lookup_method_name/1]).
@@ -1240,7 +1241,7 @@ lookup_amqp_exception(not_allowed) -> {true, ?NOT_ALLOWED, <<"NOT_ALLOWED">>};
 lookup_amqp_exception(not_implemented) -> {true, ?NOT_IMPLEMENTED, <<"NOT_IMPLEMENTED">>};
 lookup_amqp_exception(internal_error) -> {true, ?INTERNAL_ERROR, <<"INTERNAL_ERROR">>};
 lookup_amqp_exception(Code) ->
-  rabbit_log:warning("Unknown AMQP error code '~p'~n", [Code]),
+  ?LOG_WARNING("Unknown AMQP error code '~p'~n", [Code]),
   {true, ?INTERNAL_ERROR, <<"INTERNAL_ERROR">>}.
 amqp_exception(?FRAME_METHOD) -> frame_method;
 amqp_exception(?FRAME_HEADER) -> frame_header;

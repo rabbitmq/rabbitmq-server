@@ -82,6 +82,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).
@@ -423,7 +424,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 %% TODO: classic queues do not support rebalancing, it looks like they are simply
 %% filtered out with is_replicable(Q). Maybe error instead?
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
-    rabbit_log:info("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
+    ?LOG_INFO("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
                     [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:list_running()),
     NumRunning = length(Running),
@@ -445,10 +446,10 @@ maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     MaxQueuesDesired = (NumToRebalance div NumRunning) + Rem,
     Result = iterative_rebalance(ByNode, MaxQueuesDesired),
     global:del_lock(Id),
-    rabbit_log:info("Finished queue rebalance operation"),
+    ?LOG_INFO("Finished queue rebalance operation"),
     Result;
 maybe_rebalance(false, _Type, _VhostSpec, _QueueSpec) ->
-    rabbit_log:warning("Queue rebalance operation is in progress, please wait."),
+    ?LOG_WARNING("Queue rebalance operation is in progress, please wait."),
     {error, rebalance_in_progress}.
 
 %% Stream queues don't yet support rebalance
@@ -466,7 +467,7 @@ filter_per_type_for_rebalance(TypeModule, Q) ->
 rebalance_module(Q) ->
     case rabbit_queue_type:rebalance_module(Q) of
         undefined ->
-            rabbit_log:error("Undefined rebalance module for queue type: ~s", [amqqueue:get_type(Q)]),
+            ?LOG_ERROR("Undefined rebalance module for queue type: ~s", [amqqueue:get_type(Q)]),
             {error, not_supported};
         RBModule ->
             RBModule
@@ -484,7 +485,7 @@ is_match(Subj, RegEx) ->
 iterative_rebalance(ByNode, MaxQueuesDesired) ->
     case maybe_migrate(ByNode, MaxQueuesDesired) of
         {ok, Summary} ->
-            rabbit_log:info("All queue leaders are balanced"),
+            ?LOG_INFO("All queue leaders are balanced"),
             {ok, Summary};
         {migrated, Other} ->
             iterative_rebalance(Other, MaxQueuesDesired);
@@ -521,23 +522,23 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                     {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)};
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
-                    rabbit_log:info("Migrating queue ~tp from node ~tp with ~tp queues to node ~tp with ~tp queues",
+                    ?LOG_INFO("Migrating queue ~tp from node ~tp with ~tp queues to node ~tp with ~tp queues",
                                        [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
-                            rabbit_log:info("Queue ~tp migrated to ~tp", [Name, NewNode]),
+                            ?LOG_INFO("Queue ~tp migrated to ~tp", [Name, NewNode]),
                             {migrated, update_migrated_queue(NewNode, N, Queue, Queues, ByNode)};
                         {not_migrated, Reason} ->
-                            rabbit_log:warning("Error migrating queue ~tp: ~tp", [Name, Reason]),
+                            ?LOG_WARNING("Error migrating queue ~tp: ~tp", [Name, Reason]),
                             {not_migrated, update_not_migrated_queue(N, Queue, Queues, ByNode)}
                     end
             end;
         [{_, _, true} | _] = All when length(All) > MaxQueuesDesired ->
-            rabbit_log:warning("Node ~tp contains ~tp queues, but all have already migrated. "
+            ?LOG_WARNING("Node ~tp contains ~tp queues, but all have already migrated. "
                                "Do nothing", [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes);
         All ->
-            rabbit_log:debug("Node ~tp only contains ~tp queues, do nothing",
+            ?LOG_DEBUG("Node ~tp only contains ~tp queues, do nothing",
                                [N, length(All)]),
             maybe_migrate(ByNode, MaxQueuesDesired, Nodes)
     end.
@@ -625,7 +626,7 @@ retry_wait(Q, F, E, RetriesLeft) ->
             %% The old check would have crashed here,
             %% instead, log it and run the exit fun. absent & alive is weird,
             %% but better than crashing with badmatch,true
-            rabbit_log:debug("Unexpected alive queue process ~tp", [QPid]),
+            ?LOG_DEBUG("Unexpected alive queue process ~tp", [QPid]),
             E({absent, Q, alive});
         false ->
             ok % Expected result
@@ -1894,7 +1895,7 @@ internal_delete(Queue, ActingUser, Reason) ->
 %% TODO this is used by `rabbit_mnesia:remove_node_if_mnesia_running`
 %% Does it make any sense once mnesia is not used/removed?
 forget_all_durable(Node) ->
-    rabbit_log:info("Will remove all classic queues from node ~ts. The node is likely being removed from the cluster.", [Node]),
+    ?LOG_INFO("Will remove all classic queues from node ~ts. The node is likely being removed from the cluster.", [Node]),
     UpdateFun = fun(Q) ->
                         forget_node_for_queue(Q)
                 end,
@@ -1959,7 +1960,7 @@ on_node_down(Node) ->
             %% `rabbit_khepri:init/0': we also try this deletion when the node
             %% restarts - a time that the cluster is very likely to have a
             %% majority - to ensure these records are deleted.
-            rabbit_log:warning("transient queues for node '~ts' could not be "
+            ?LOG_WARNING("transient queues for node '~ts' could not be "
                                "deleted because of a timeout. These queues "
                                "will be removed when node '~ts' restarts or "
                                "is removed from the cluster.", [Node, Node]),
@@ -1980,7 +1981,7 @@ delete_transient_queues_on_node(Node) ->
         {QueueNames, Deletions} when is_list(QueueNames) ->
             case length(QueueNames) of
                 0 -> ok;
-                N -> rabbit_log:info("~b transient queues from node '~ts' "
+                N -> ?LOG_INFO("~b transient queues from node '~ts' "
                                      "deleted in ~fs",
                                      [N, Node, Time / 1_000_000])
             end,

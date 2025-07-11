@@ -8,6 +8,7 @@
 -module(rabbit_stomp).
 
 -include("rabbit_stomp.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(application).
 -export([start/2, stop/1]).
@@ -87,7 +88,7 @@ parse_default_user([{passcode, Passcode} | Rest], Configuration) ->
     parse_default_user(Rest, Configuration#stomp_configuration{
                                default_passcode = Passcode});
 parse_default_user([Unknown | Rest], Configuration) ->
-    rabbit_log:warning("rabbit_stomp: ignoring invalid default_user "
+    ?LOG_WARNING("rabbit_stomp: ignoring invalid default_user "
                        "configuration option: ~tp", [Unknown]),
     parse_default_user(Rest, Configuration).
 
@@ -97,17 +98,17 @@ report_configuration(#stomp_configuration{
                         ssl_cert_login   = SSLCertLogin}) ->
     case Login of
         undefined -> ok;
-        _         -> rabbit_log:info("rabbit_stomp: default user '~ts' "
+        _         -> ?LOG_INFO("rabbit_stomp: default user '~ts' "
                                      "enabled", [Login])
     end,
 
     case ImplicitConnect of
-        true  -> rabbit_log:info("rabbit_stomp: implicit connect enabled");
+        true  -> ?LOG_INFO("rabbit_stomp: implicit connect enabled");
         false -> ok
     end,
 
     case SSLCertLogin of
-        true  -> rabbit_log:info("rabbit_stomp: ssl_cert_login enabled");
+        true  -> ?LOG_INFO("rabbit_stomp: ssl_cert_login enabled");
         false -> ok
     end,
 

@@ -10,6 +10,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
 -include("rabbit_exchange_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(gen_server2).
 
@@ -205,14 +206,14 @@ terminate(Reason, #state{downstream_connection = DConn,
     _ = timer:cancel(TRef),
     rabbit_federation_link_util:ensure_connection_closed(DConn),
 
-    rabbit_log:debug("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
+    ?LOG_DEBUG("Exchange federation: link is shutting down, resource cleanup mode: ~tp", [Upstream#upstream.resource_cleanup_mode]),
     case Upstream#upstream.resource_cleanup_mode of
         never -> ok;
         _     ->
             %% This is a normal shutdown and we are allowed to clean up the internally used queue and exchange
-            rabbit_log:debug("Federated exchange '~ts' link will delete its internal queue '~ts'", [Upstream#upstream.exchange_name, Queue]),
+            ?LOG_DEBUG("Federated exchange '~ts' link will delete its internal queue '~ts'", [Upstream#upstream.exchange_name, Queue]),
             delete_upstream_queue(Conn, Queue),
-            rabbit_log:debug("Federated exchange '~ts' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
+            ?LOG_DEBUG("Federated exchange '~ts' link will delete its upstream exchange", [Upstream#upstream.exchange_name]),
             delete_upstream_exchange(Conn, IntExchange)
     end,
 

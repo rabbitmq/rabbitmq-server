@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -include("rabbitmq_consistent_hash_exchange.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_exchange_type).
 
@@ -72,7 +73,7 @@ route(#exchange{name = Name,
                     SelectedBucket = jump_consistent_hash(K, N),
                     case maps:get(SelectedBucket, BM, undefined) of
                         undefined ->
-                            rabbit_log:warning("Bucket ~tp not found", [SelectedBucket]),
+                            ?LOG_WARNING("Bucket ~tp not found", [SelectedBucket]),
                             [];
                         Queue ->
                             [Queue]
@@ -122,11 +123,11 @@ recover() ->
     %% starting with RabbitMQ 3.8.4
     case list_exchanges() of
         {error, Reason} ->
-            rabbit_log:error(
+            ?LOG_ERROR(
               "Consistent hashing exchange: failed to recover durable exchange ring state, reason: ~tp",
               [Reason]);
         Xs ->
-            rabbit_log:debug("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
+            ?LOG_DEBUG("Consistent hashing exchange: have ~b durable exchanges to recover", [length(Xs)]),
             %% TODO we need to know if we're first on the cluster to reset storage. In mnesia it's a ram table
             [recover_exchange_and_bindings(X) || X <- lists:usort(Xs)]
     end.
@@ -136,14 +137,14 @@ list_exchanges() ->
     rabbit_db_exchange:match(Pattern).
 
 recover_exchange_and_bindings(#exchange{name = XName} = X) ->
-    rabbit_log:debug("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
+    ?LOG_DEBUG("Consistent hashing exchange: will recover exchange ~ts", [rabbit_misc:rs(XName)]),
     create(none, X),
-    rabbit_log:debug("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
+    ?LOG_DEBUG("Consistent hashing exchange: recovered exchange ~ts", [rabbit_misc:rs(XName)]),
     Bindings = rabbit_binding:list_for_source(XName),
-    rabbit_log:debug("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",
+    ?LOG_DEBUG("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",
                      [length(Bindings), rabbit_misc:rs(XName)]),
     [add_binding(none, X, B) || B <- lists:usort(Bindings)],
-    rabbit_log:debug("Consistent hashing exchange: recovered bindings for exchange ~ts",
+    ?LOG_DEBUG("Consistent hashing exchange: recovered bindings for exchange ~ts",
                      [rabbit_misc:rs(XName)]).
 
 create(_Serial, X) ->
@@ -156,17 +157,17 @@ policy_changed(_X1, _X2) -> ok.
 
 add_binding(_Serial, _X, #binding{source = S, destination = D, key = K}) ->
     Weight = rabbit_data_coercion:to_integer(K),
-    rabbit_log:debug("Consistent hashing exchange: adding binding from "
+    ?LOG_DEBUG("Consistent hashing exchange: adding binding from "
                      "exchange ~ts to destination ~ts with routing key '~ts'", [rabbit_misc:rs(S), rabbit_misc:rs(D), K]),
     case rabbit_db_ch_exchange:create_binding(S, D, Weight, fun chx_hash_ring_update_fun/3) of
         already_exists ->
-            rabbit_log:debug("Consistent hashing exchange: NOT adding binding from "
+            ?LOG_DEBUG("Consistent hashing exchange: NOT adding binding from "
                              "exchange ~s to destination ~s with routing key '~s' "
                              "because this binding (possibly with a different "
                              "routing key) already exists",
                              [rabbit_misc:rs(S), rabbit_misc:rs(D), K]);
         created ->
-            rabbit_log:debug("Consistent hashing exchange: adding binding from "
+            ?LOG_DEBUG("Consistent hashing exchange: adding binding from "
                              "exchange ~s to destination ~s with routing key '~s'",
                              [rabbit_misc:rs(S), rabbit_misc:rs(D), K])
     end.
@@ -190,7 +191,7 @@ chx_hash_ring_update_fun(#chx_hash_ring{bucket_map = BM0,
 
 remove_bindings(_Serial, _X, Bindings) ->
     Ret = rabbit_db_ch_exchange:delete_bindings(Bindings, fun ch_hash_ring_delete_fun/2),
-    [rabbit_log:warning("Can't remove binding: hash ring state for exchange ~s wasn't found",
+    [?LOG_WARNING("Can't remove binding: hash ring state for exchange ~s wasn't found",
                         [rabbit_misc:rs(X)]) || {not_found, X} <- Ret],
     ok.
 

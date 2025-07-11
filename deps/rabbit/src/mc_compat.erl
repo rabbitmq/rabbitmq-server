@@ -3,6 +3,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include("mc.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          %init/3,
@@ -267,7 +268,7 @@ update_x_death_header(Info, Headers) ->
               Headers, <<"x-death">>, array,
               [{table, rabbit_misc:sort_field_table(Info1)} | Others]);
         {<<"x-death">>, InvalidType, Header} ->
-            rabbit_log:warning("Message has invalid x-death header (type: ~tp)."
+            ?LOG_WARNING("Message has invalid x-death header (type: ~tp)."
                                " Resetting header ~tp",
                                [InvalidType, Header]),
             %% if x-death is something other than an array (list)

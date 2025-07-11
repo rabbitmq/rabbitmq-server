@@ -34,6 +34,7 @@
 -export([count_local_tracked_items_of_user/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -214,13 +215,13 @@ ensure_tracked_tables_for_this_node() ->
 
 %% Create tables
 ensure_tracked_channels_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+    ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
                                      {keypos, #tracked_channel.pid}]).
 
 ensure_per_user_tracked_channels_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
+    ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
                     [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 

@@ -9,6 +9,8 @@
 
 -module(code_server_cache).
 
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(gen_server).
 
 %% API
@@ -70,7 +72,7 @@ handle_maybe_call_mfa(true, {Module, Function, Args, Default}, State) ->
         error:undef ->
             handle_maybe_call_mfa_error(Module, Default, State);
         Err:Reason ->
-            rabbit_log:error("Calling ~tp:~tp failed: ~tp:~tp",
+            ?LOG_ERROR("Calling ~tp:~tp failed: ~tp:~tp",
                              [Module, Function, Err, Reason]),
             handle_maybe_call_mfa_error(Module, Default, State)
     end.

@@ -14,6 +14,7 @@
 -dialyzer(no_improper_lists).
 
 -include("rabbit_fifo.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(STATE, ?MODULE).
 
@@ -676,7 +677,7 @@ apply(Meta, {dlx, _} = Cmd,
     checkout(Meta, State0, State1, Effects0);
 apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
-    rabbit_log:debug("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
+    ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
 convert_v3_to_v4(#{} = _Meta, StateV3) ->
@@ -1157,7 +1158,7 @@ handle_aux(_RaState, _, force_checkpoint,
                  bytes_in = BytesIn} = Aux, RaAux) ->
     Ts = erlang:system_time(millisecond),
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
-    rabbit_log:debug("~ts: rabbit_fifo: forcing checkpoint at ~b",
+    ?LOG_DEBUG("~ts: rabbit_fifo: forcing checkpoint at ~b",
                      [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
     {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, BytesIn, true),
     {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
@@ -1178,7 +1179,7 @@ eval_gc(RaAux, MacState,
                Mem > ?GC_MEM_LIMIT_B ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~ts: full GC sweep complete. "
+            ?LOG_DEBUG("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                             [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};
@@ -1195,7 +1196,7 @@ force_eval_gc(RaAux,
         true ->
             garbage_collect(),
             {memory, MemAfter} = erlang:process_info(self(), memory),
-            rabbit_log:debug("~ts: full GC sweep complete. "
+            ?LOG_DEBUG("~ts: full GC sweep complete. "
                             "Process memory changed from ~.2fMB to ~.2fMB.",
                              [rabbit_misc:rs(QR), Mem/?MB, MemAfter/?MB]),
             AuxState#?AUX{gc = Gc#aux_gc{last_raft_idx = Idx}};

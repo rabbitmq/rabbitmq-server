@@ -15,6 +15,7 @@
 
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(ROUTING_HEADER, <<"x-shovelled">>).
 -define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
@@ -42,14 +43,14 @@ delete_shovel(VHost, Name, ActingUser) ->
         not_found ->
             %% Follow the user's obvious intent and delete the runtime parameter just in case the Shovel is in
             %% a starting-failing-restarting loop. MK.
-            rabbit_log:info("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
+            ?LOG_INFO("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
             ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser),
             {error, not_found};
         _Obj ->
             ShovelParameters = rabbit_runtime_parameters:value(VHost, <<"shovel">>, Name),
             case needs_force_delete(ShovelParameters, ActingUser) of
                 false ->
-                    rabbit_log:info("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
+                    ?LOG_INFO("Will delete runtime parameters of shovel '~ts' in virtual host '~ts'", [Name, VHost]),
                     ok = rabbit_runtime_parameters:clear(VHost, <<"shovel">>, Name, ActingUser);
                 true ->
                     report_that_protected_shovel_cannot_be_deleted(Name, VHost, ShovelParameters)

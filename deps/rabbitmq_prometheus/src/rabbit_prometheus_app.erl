@@ -7,6 +7,9 @@
 
 -module(rabbit_prometheus_app).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(application).
 -export([start/2, stop/1]).
 
@@ -125,9 +128,9 @@ do_ensure_port_and_protocol(Port, Protocol, Listener) ->
     {ok, maps:to_list(M1)}.
 
 log_startup(tcp, Listener) ->
-    rabbit_log:info("Prometheus metrics: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
+    ?LOG_INFO("Prometheus metrics: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
 log_startup(tls, Listener) ->
-    rabbit_log:info("Prometheus metrics: HTTPS listener started on port ~w", [port(Listener)]).
+    ?LOG_INFO("Prometheus metrics: HTTPS listener started on port ~w", [port(Listener)]).
 
 
 port(Listener) ->

@@ -1724,7 +1724,7 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
             collect_conf_env_file_output(
               Context, Port, Marker, [Output, UnicodeChunk]);
         {Port, {data, Chunk}} ->
-            rabbit_log:warning("~tp unexpected non-binary chunk in "
+            ?LOG_WARNING("~tp unexpected non-binary chunk in "
                                "conf env file output: ~tp~n", [?MODULE, Chunk])
     end.
 
@@ -2157,5 +2157,5 @@ unicode_characters_to_list(Input) ->
     end.
 
 log_characters_to_list_error(Input, Partial, Rest) ->
-    rabbit_log:error("error converting '~tp' to unicode string "
+    ?LOG_ERROR("error converting '~tp' to unicode string "
                      "(partial '~tp', rest '~tp')", [Input, Partial, Rest]).

@@ -17,6 +17,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -dialyzer({nowarn_function, accept_content/2}).
 
@@ -98,7 +99,7 @@ delete_resource(ReqData, Context = #context{user = #user{username = Username}}) 
         {error, protected_from_deletion} ->
             Msg = "Refusing to delete virtual host '~ts' because it is protected from deletion",
             Reason = iolist_to_binary(io_lib:format(Msg, [VHost])),
-            rabbit_log:error(Msg, [VHost]),
+            ?LOG_ERROR(Msg, [VHost]),
             rabbit_mgmt_util:precondition_failed(Reason, ReqData, Context);
         {error, timeout} ->
             rabbit_mgmt_util:internal_server_error(

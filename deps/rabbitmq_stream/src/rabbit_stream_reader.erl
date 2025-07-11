@@ -24,6 +24,7 @@
 -include("rabbit_stream_metrics.hrl").
 
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -record(statem_data,
         {transport :: module(),
@@ -122,7 +123,7 @@ terminate(Reason, State,
     close(Transport, Connection, ConnectionState),
     rabbit_networking:unregister_non_amqp_connection(self()),
     notify_connection_closed(StatemData),
-    rabbit_log:debug("~ts terminating in state '~ts' with reason '~W'",
+    ?LOG_DEBUG("~ts terminating in state '~ts' with reason '~W'",
                      [?MODULE, State, Reason, 10]).
 
 start_link(KeepaliveSup, Transport, Ref, Opts) ->
@@ -458,7 +459,7 @@ handle_info(Msg,
                                         State#stream_connection_state{blocked =
                                                                           true}}};
         Unknown ->
-            rabbit_log:warning("Received unknown message ~tp", [Unknown]),
+            ?LOG_WARNING("Received unknown message ~tp", [Unknown]),
             close_immediately(Transport, S),
             stop
     end.
@@ -740,7 +741,7 @@ open(info,
                      stream_from_consumers(SubId, Consumers0)
              end,
 
-    rabbit_log:debug("Subscription ~tp on ~tp instructed to become active: "
+    ?LOG_DEBUG("Subscription ~tp on ~tp instructed to become active: "
                      "~tp",
                      [SubId, Stream, Active]),
     {Connection1, ConnState1} =
@@ -759,7 +760,7 @@ open(info,
                                 {false, undefined} ->
                                     undefined;
                                 {false, L} ->
-                                    rabbit_log:debug("Closing Osiris segment of subscription ~tp for "
+                                    ?LOG_DEBUG("Closing Osiris segment of subscription ~tp for "
                                                      "now",
                                                      [SubId]),
                                     osiris_log:close(L),
@@ -786,20 +787,20 @@ open(info,
                                                                                 =>
                                                                                 Consumer1}}};
                     false ->
-                        rabbit_log:warning("Received SAC event for subscription ~tp, which "
+                        ?LOG_WARNING("Received SAC event for subscription ~tp, which "
                                            "is not a SAC. Not doing anything.",
                                            [SubId]),
                         {Connection0, ConnState0}
                 end;
             _ ->
-                rabbit_log:debug("Subscription ~tp on ~tp has been deleted.",
+                ?LOG_DEBUG("Subscription ~tp on ~tp has been deleted.",
                                  [SubId, Stream]),
-                rabbit_log:debug("Active ~tp, message ~tp", [Active, Msg]),
+                ?LOG_DEBUG("Active ~tp, message ~tp", [Active, Msg]),
                 _ = case {Active, Msg} of
                         {false, #{stepping_down := true,
                                   stream := St,
                                   consumer_name := ConsumerName}} ->
-                            rabbit_log:debug("Former active consumer gone, activating consumer " ++
+                            ?LOG_DEBUG("Former active consumer gone, activating consumer " ++
                                              "on stream ~tp, group ~tp", [St, ConsumerName]),
                             sac_activate_consumer(VirtualHost, St, ConsumerName);
                         _ ->
@@ -889,13 +890,13 @@ open(info, check_outstanding_requests,
                                                   request_timeout = Timeout} = Connection0} =
          StatemData) ->
     Time = erlang:monotonic_time(millisecond),
-    rabbit_log:debug("Checking outstanding requests at ~tp: ~tp", [Time, Requests]),
+    ?LOG_DEBUG("Checking outstanding requests at ~tp: ~tp", [Time, Requests]),
     HasTimedOut = maps:fold(fun(_, #request{}, true) ->
                                     true;
                                (K, #request{content = Ctnt, start = Start}, false) ->
                                     case (Time - Start) > Timeout of
                                         true ->
-                                            rabbit_log:debug("Request ~tp with content ~tp has timed out",
+                                            ?LOG_DEBUG("Request ~tp with content ~tp has timed out",
                                                              [K, Ctnt]),
 
                                             true;
@@ -1051,7 +1052,7 @@ open(cast,
      {queue_event, #resource{name = StreamName},
       {osiris_offset, _QueueResource, -1}},
      _StatemData) ->
-    rabbit_log:debug("Stream protocol connection received osiris offset "
+    ?LOG_DEBUG("Stream protocol connection received osiris offset "
                      "event for ~tp with offset ~tp",
                      [StreamName, -1]),
     keep_state_and_data;
@@ -1072,13 +1073,13 @@ open(cast,
     {Connection1, State1} =
         case maps:get(StreamName, StreamSubscriptions, undefined) of
             undefined ->
-                rabbit_log:debug("Stream protocol connection: osiris offset event "
+                ?LOG_DEBUG("Stream protocol connection: osiris offset event "
                                  "for ~tp, but no subscription (leftover messages "
                                  "after unsubscribe?)",
                                  [StreamName]),
                 {Connection, State};
             [] ->
-                rabbit_log:debug("Stream protocol connection: osiris offset event "
+                ?LOG_DEBUG("Stream protocol connection: osiris offset event "
                                  "for ~tp, but no registered consumers!",
                                  [StreamName]),
                 {Connection#stream_connection{stream_subscriptions =
@@ -1183,7 +1184,7 @@ close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
     stop;
 close_sent(info, {resource_alarm, IsThereAlarm},
            StatemData = #statem_data{connection = Connection}) ->
-    rabbit_log:warning("Stream protocol connection ignored a resource "
+    ?LOG_WARNING("Stream protocol connection ignored a resource "
                        "alarm ~tp in state ~ts",
                        [IsThereAlarm, ?FUNCTION_NAME]),
     {keep_state,
@@ -1463,7 +1464,7 @@ handle_frame_pre_auth(Transport,
                       State,
                       {request, CorrelationId, {open, VirtualHost}}) ->
     %% FIXME enforce connection limit (see rabbit_reader:is_over_connection_limit/2)
-    rabbit_log:debug("Open frame received for ~ts", [VirtualHost]),
+    ?LOG_DEBUG("Open frame received for ~ts", [VirtualHost]),
     Connection1 =
         try
             rabbit_access_control:check_vhost_access(User,
@@ -1491,7 +1492,7 @@ handle_frame_pre_auth(Transport,
                 #{<<"advertised_host">> => AdvertisedHost,
                   <<"advertised_port">> => AdvertisedPort},
 
-            rabbit_log:debug("sending open response ok ~ts", [VirtualHost]),
+            ?LOG_DEBUG("sending open response ok ~ts", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,
@@ -1505,7 +1506,7 @@ handle_frame_pre_auth(Transport,
                                                                                virtual_host = VirtualHost}),
             Conn
         catch exit:#amqp_error{explanation = Explanation} ->
-                  rabbit_log:warning("Opening connection failed: ~ts", [Explanation]),
+                  ?LOG_WARNING("Opening connection failed: ~ts", [Explanation]),
                   silent_close_delay(),
                   F = rabbit_stream_core:frame({response, CorrelationId,
                                                 {open,
@@ -1517,7 +1518,7 @@ handle_frame_pre_auth(Transport,
 
     {Connection1, State};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:debug("Received heartbeat frame pre auth"),
+    ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
     rabbit_log_connection:warning("unknown command ~w, closing connection.",
@@ -1585,7 +1586,7 @@ handle_frame_post_auth(Transport,
                        S1,
                        {request, CorrelationId,
                         {sasl_authenticate, NewMechanism, NewSaslBin}}) ->
-    rabbit_log:debug("Open frame received sasl_authenticate for username '~ts'", [Username]),
+    ?LOG_DEBUG("Open frame received sasl_authenticate for username '~ts'", [Username]),
 
     {Connection1, State1} =
       case Auth_Mechanism of
@@ -1631,7 +1632,7 @@ handle_frame_post_auth(Transport,
                                                      [],
                                                      C1,
                                                      S1),
-                                  rabbit_log:debug("Successfully updated secret for username '~ts'", [Username]),
+                                  ?LOG_DEBUG("Successfully updated secret for username '~ts'", [Username]),
                                   {C1#stream_connection{user = NewUser,
                                                         authentication_state = done,
                                                         connection_step = authenticated},
@@ -1766,7 +1767,7 @@ handle_frame_post_auth(Transport,
                              State}
                     end;
                 {PublisherIdTaken, ReferenceTaken} ->
-                    rabbit_log:warning("Error while declaring publisher ~tp for stream '~ts', "
+                    ?LOG_WARNING("Error while declaring publisher ~tp for stream '~ts', "
                                        "with reference '~ts'. ID already taken: ~tp. "
                                        "Reference already taken: ~tp.",
                                        [PublisherId, Stream, WriterRef,
@@ -1981,7 +1982,7 @@ handle_frame_post_auth(Transport,
                             increase_protocol_counter(?SUBSCRIPTION_ID_ALREADY_EXISTS),
                             {Connection, State};
                         false ->
-                            rabbit_log:debug("Creating subscription ~tp to ~tp, with offset "
+                            ?LOG_DEBUG("Creating subscription ~tp to ~tp, with offset "
                                              "specification ~tp, properties ~0p",
                                              [SubscriptionId,
                                               Stream,
@@ -1992,7 +1993,7 @@ handle_frame_post_auth(Transport,
                             case {Sac, ConsumerName}
                             of
                                 {true, undefined} ->
-                                    rabbit_log:warning("Cannot create subcription ~tp, a single active "
+                                    ?LOG_WARNING("Cannot create subcription ~tp, a single active "
                                                        "consumer must have a name",
                                                        [SubscriptionId]),
                                     response(Transport,
@@ -2030,7 +2031,7 @@ handle_frame_post_auth(Transport,
             %% the consumer is not active, it's likely to be credit leftovers
             %% from a formerly active consumer. Taking the credits,
             %% logging and sending an error
-            rabbit_log:debug("Giving credit to an inactive consumer: ~tp",
+            ?LOG_DEBUG("Giving credit to an inactive consumer: ~tp",
                              [SubscriptionId]),
             #consumer{credit = AvailableCredit} = Consumer,
             Consumer1 = Consumer#consumer{credit = AvailableCredit + Credit},
@@ -2067,7 +2068,7 @@ handle_frame_post_auth(Transport,
                                                                       Consumer1}}}
             end;
         _ ->
-            rabbit_log:warning("Giving credit to unknown subscription: ~tp",
+            ?LOG_WARNING("Giving credit to unknown subscription: ~tp",
                                [SubscriptionId]),
 
             Code = ?RESPONSE_CODE_SUBSCRIPTION_ID_DOES_NOT_EXIST,
@@ -2092,7 +2093,7 @@ handle_frame_post_auth(_Transport,
                 ok ->
                     store_offset(Reference, Stream, Offset, Connection0);
                 _ ->
-                    rabbit_log:warning("Not authorized to store offset on stream ~tp",
+                    ?LOG_WARNING("Not authorized to store offset on stream ~tp",
                                        [Stream]),
                     Connection0
             end
@@ -2180,7 +2181,7 @@ handle_frame_post_auth(Transport,
                         {ok,
                          #{leader_node := LeaderPid,
                            replica_nodes := ReturnedReplicas}} ->
-                            rabbit_log:debug("Created stream cluster with leader on ~tp and "
+                            ?LOG_DEBUG("Created stream cluster with leader on ~tp and "
                                              "replicas on ~tp",
                                              [LeaderPid, ReturnedReplicas]),
                             response_ok(Transport,
@@ -2344,8 +2345,8 @@ handle_frame_post_auth(Transport,
                        case {is_binary(Host), is_integer(Port)} of
                            {true, true} -> Acc#{Node => {Host, Port}};
                            _ ->
-                               rabbit_log:warning("Error when retrieving broker '~tp' metadata: ~tp ~tp",
-                                                  [Node, Host, Port]),
+                               ?LOG_WARNING("Error when retrieving broker '~tp' metadata: ~tp ~tp",
+                                            [Node, Host, Port]),
                                Acc
                        end
                     end,
@@ -2444,13 +2445,13 @@ handle_frame_post_auth(Transport,
         ?RESPONSE_CODE_OK ->
             ok;
         RC ->
-            rabbit_log:info("Unexpected consumer update response code: ~tp",
+            ?LOG_INFO("Unexpected consumer update response code: ~tp",
                             [RC])
     end,
     case maps:take(CorrelationId, Requests0) of
         {#request{content = #{subscription_id := SubscriptionId} = Msg}, Rs} ->
             Stream = stream_from_consumers(SubscriptionId, Consumers),
-            rabbit_log:debug("Received consumer update response for subscription "
+            ?LOG_DEBUG("Received consumer update response for subscription "
                              "~tp on stream ~tp, correlation ID ~tp",
                              [SubscriptionId, Stream, CorrelationId]),
             Consumers1 =
@@ -2478,7 +2479,7 @@ handle_frame_post_auth(Transport,
                                     ROS
                             end,
 
-                        rabbit_log:debug("Initializing reader for active consumer "
+                        ?LOG_DEBUG("Initializing reader for active consumer "
                                          "(subscription ~tp, stream ~tp), offset "
                                          "spec is ~tp",
                                          [SubscriptionId, Stream, OffsetSpec]),
@@ -2499,7 +2500,7 @@ handle_frame_post_auth(Transport,
                                   send_limit = SndLmt,
                                   configuration = #consumer_configuration{counters = ConsumerCounters}} = Consumer1,
 
-                        rabbit_log:debug("Dispatching to subscription ~tp (stream ~tp), "
+                        ?LOG_DEBUG("Dispatching to subscription ~tp (stream ~tp), "
                                          "credit(s) ~tp, send limit ~tp",
                                          [SubscriptionId,
                                           Stream,
@@ -2531,7 +2532,7 @@ handle_frame_post_auth(Transport,
                         ConsumerOffset = osiris_log:next_offset(Log2),
 
                         ConsumedMessagesAfter = messages_consumed(ConsumerCounters),
-                        rabbit_log:debug("Subscription ~tp (stream ~tp) is now at offset ~tp with ~tp "
+                        ?LOG_DEBUG("Subscription ~tp (stream ~tp) is now at offset ~tp with ~tp "
                                          "message(s) distributed after subscription",
                                          [SubscriptionId,
                                           Stream,
@@ -2545,12 +2546,12 @@ handle_frame_post_auth(Transport,
                                                                 stream = Stream,
                                                                 properties =
                                                                     Properties}}} ->
-                        rabbit_log:debug("Not an active consumer"),
+                        ?LOG_DEBUG("Not an active consumer"),
 
                         case Msg of
                             #{stepping_down := true} ->
                                 ConsumerName = consumer_name(Properties),
-                                rabbit_log:debug("Subscription ~tp on stream ~tp, group ~tp " ++
+                                ?LOG_DEBUG("Subscription ~tp on stream ~tp, group ~tp " ++
                                                  "has stepped down, activating consumer",
                                                  [SubscriptionId, Stream, ConsumerName]),
                                 _ = sac_activate_consumer(VirtualHost, Stream,
@@ -2562,7 +2563,7 @@ handle_frame_post_auth(Transport,
 
                         Consumers;
                     _ ->
-                        rabbit_log:debug("No consumer found for subscription ~tp",
+                        ?LOG_DEBUG("No consumer found for subscription ~tp",
                                          [SubscriptionId]),
                         Consumers
                 end,
@@ -2570,12 +2571,12 @@ handle_frame_post_auth(Transport,
             {Connection#stream_connection{outstanding_requests = Rs},
              State#stream_connection_state{consumers = Consumers1}};
         {V, _Rs} ->
-            rabbit_log:warning("Unexpected outstanding requests for correlation "
+            ?LOG_WARNING("Unexpected outstanding requests for correlation "
                                "ID ~tp: ~tp",
                                [CorrelationId, V]),
             {Connection, State};
         error ->
-            rabbit_log:warning("Could not find outstanding consumer update request "
+            ?LOG_WARNING("Could not find outstanding consumer update request "
                                "with correlation ID ~tp. No actions taken for "
                                "the subscription.",
                                [CorrelationId]),
@@ -2656,14 +2657,14 @@ handle_frame_post_auth(Transport,
                                                                    BindingKeys,
                                                                    Username) of
                         ok ->
-                            rabbit_log:debug("Created super stream ~tp", [SuperStreamName]),
+                            ?LOG_DEBUG("Created super stream ~tp", [SuperStreamName]),
                             response_ok(Transport,
                                         Connection,
                                         create_super_stream,
                                         CorrelationId),
                             {Connection, State};
                         {error, {validation_failed, Msg}} ->
-                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                            ?LOG_WARNING("Error while trying to create super stream ~tp: ~tp",
                                                [SuperStreamName, Msg]),
                             response(Transport,
                                      Connection,
@@ -2673,7 +2674,7 @@ handle_frame_post_auth(Transport,
                             increase_protocol_counter(?PRECONDITION_FAILED),
                             {Connection, State};
                         {error, {reference_already_exists, Msg}} ->
-                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                            ?LOG_WARNING("Error while trying to create super stream ~tp: ~tp",
                                                [SuperStreamName, Msg]),
                             response(Transport,
                                      Connection,
@@ -2683,7 +2684,7 @@ handle_frame_post_auth(Transport,
                             increase_protocol_counter(?STREAM_ALREADY_EXISTS),
                             {Connection, State};
                         {error, Error} ->
-                            rabbit_log:warning("Error while trying to create super stream ~tp: ~tp",
+                            ?LOG_WARNING("Error while trying to create super stream ~tp: ~tp",
                                                [SuperStreamName, Error]),
                             response(Transport,
                                      Connection,
@@ -2762,7 +2763,7 @@ handle_frame_post_auth(Transport,
                        State,
                        {request, CorrelationId,
                         {close, ClosingCode, ClosingReason}}) ->
-    rabbit_log:debug("Stream protocol reader received close command "
+    ?LOG_DEBUG("Stream protocol reader received close command "
                      "~tp ~tp",
                      [ClosingCode, ClosingReason]),
     Frame =
@@ -2772,13 +2773,13 @@ handle_frame_post_auth(Transport,
     {Connection#stream_connection{connection_step = closing},
      State}; %% we ignore any subsequent frames
 handle_frame_post_auth(_Transport, Connection, State, heartbeat) ->
-    rabbit_log:debug("Received heartbeat frame post auth"),
+    ?LOG_DEBUG("Received heartbeat frame post auth"),
     {Connection, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{socket = S} = Connection,
                        State,
                        Command) ->
-    rabbit_log:warning("unknown command ~tp, sending close command.",
+    ?LOG_WARNING("unknown command ~tp, sending close command.",
                        [Command]),
     CloseReason = <<"unknown frame">>,
     Frame =
@@ -2811,7 +2812,7 @@ init_reader(ConnectionTransport,
                          rabbit_stream_utils:filter_spec(Properties)),
     {ok, Segment} =
         osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
-    rabbit_log:debug("Next offset for subscription ~tp is ~tp",
+    ?LOG_DEBUG("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
 
@@ -2840,7 +2841,7 @@ maybe_dispatch_on_subscription(Transport,
                                SubscriptionProperties,
                                SendFileOct,
                                false = _Sac) ->
-    rabbit_log:debug("Distributing existing messages to subscription "
+    ?LOG_DEBUG("Distributing existing messages to subscription "
                      "~tp on ~tp",
                      [SubscriptionId, Stream]),
     case send_chunks(DeliverVersion,
@@ -2864,7 +2865,7 @@ maybe_dispatch_on_subscription(Transport,
             ConsumerOffset = osiris_log:next_offset(Log1),
             ConsumerOffsetLag = consumer_i(offset_lag, ConsumerState1),
 
-            rabbit_log:debug("Subscription ~tp on ~tp is now at offset ~tp with ~tp "
+            ?LOG_DEBUG("Subscription ~tp on ~tp is now at offset ~tp with ~tp "
                              "message(s) distributed after subscription",
                              [SubscriptionId, Stream, ConsumerOffset,
                               messages_consumed(ConsumerCounters1)]),
@@ -2891,7 +2892,7 @@ maybe_dispatch_on_subscription(_Transport,
                                SubscriptionProperties,
                                _SendFileOct,
                                true = _Sac) ->
-    rabbit_log:debug("No initial dispatch for subscription ~tp for "
+    ?LOG_DEBUG("No initial dispatch for subscription ~tp for "
                      "now, waiting for consumer update response from "
                      "client (single active consumer)",
                      [SubscriptionId]),
@@ -3000,7 +3001,7 @@ handle_subscription(Transport,#stream_connection{
                                            StreamSubscriptions1},
              State1};
         {error, Reason} ->
-            rabbit_log:warning("Cannot create SAC subcription ~tp: ~tp",
+            ?LOG_WARNING("Cannot create SAC subcription ~tp: ~tp",
                                [SubscriptionId, Reason]),
             response(Transport,
                      Connection,
@@ -3037,7 +3038,7 @@ maybe_send_consumer_update(Transport,
 register_request(#stream_connection{outstanding_requests = Requests0,
                                     correlation_id_sequence = CorrIdSeq} = C,
                  RequestContent) ->
-    rabbit_log:debug("Registering RPC request ~tp with correlation ID ~tp",
+    ?LOG_DEBUG("Registering RPC request ~tp with correlation ID ~tp",
                      [RequestContent, CorrIdSeq]),
 
     Requests1 = maps:put(CorrIdSeq, request(RequestContent), Requests0),
@@ -3122,14 +3123,14 @@ ensure_outstanding_requests_timer(C) ->
 ensure_token_expiry_timer(User, #stream_connection{token_expiry_timer = Timer} = Conn) ->
     TimerRef =
     maybe
-        rabbit_log:debug("Checking token expiry"),
+        ?LOG_DEBUG("Checking token expiry"),
         true ?= rabbit_access_control:permission_cache_can_expire(User),
-        rabbit_log:debug("Token can expire"),
+        ?LOG_DEBUG("Token can expire"),
         Ts = rabbit_access_control:expiry_timestamp(User),
-        rabbit_log:debug("Token expiry timestamp: ~tp", [Ts]),
+        ?LOG_DEBUG("Token expiry timestamp: ~tp", [Ts]),
         true ?= is_integer(Ts),
         Time = (Ts - os:system_time(second)) * 1000,
-        rabbit_log:debug("Token expires in ~tp ms, setting timer to close connection", [Time]),
+        ?LOG_DEBUG("Token expires in ~tp ms, setting timer to close connection", [Time]),
         true ?= Time > 0,
         erlang:send_after(Time, self(), token_expired)
     else
@@ -3167,7 +3168,7 @@ maybe_unregister_consumer(VirtualHost,
                         when SubId =:= SubscriptionId ->
                           _ = sac_activate_consumer(VirtualHost, Stream,
                                                     ConsumerName),
-                          rabbit_log:debug("Outstanding SAC activation request for stream '~tp', " ++
+                          ?LOG_DEBUG("Outstanding SAC activation request for stream '~tp', " ++
                                            "group '~tp', sending activation.",
                                            [Stream, ConsumerName]),
                           Acc;
@@ -3394,12 +3395,12 @@ clean_publishers(MemberPid, Stream,
      S0}.
 
 store_offset(Reference, _, _, C) when ?IS_INVALID_REF(Reference) ->
-  rabbit_log:warning("Reference is too long to store offset: ~p", [byte_size(Reference)]),
+  ?LOG_WARNING("Reference is too long to store offset: ~p", [byte_size(Reference)]),
   C;
 store_offset(Reference, Stream, Offset, Connection0) ->
     case lookup_leader(Stream, Connection0) of
         {error, Error} ->
-            rabbit_log:warning("Could not find leader to store offset on ~tp: "
+            ?LOG_WARNING("Could not find leader to store offset on ~tp: "
                                "~tp",
                                [Stream, Error]),
             Connection0;
@@ -3443,7 +3444,7 @@ remove_subscription(SubscriptionId,
     #consumer{log = Log,
               configuration = #consumer_configuration{stream = Stream, member_pid = MemberPid}} =
         Consumer,
-    rabbit_log:debug("Deleting subscription ~tp (stream ~tp)",
+    ?LOG_DEBUG("Deleting subscription ~tp (stream ~tp)",
                      [SubscriptionId, Stream]),
     close_log(Log),
     #{Stream := SubscriptionsForThisStream} = StreamSubscriptions,
@@ -4053,7 +4054,7 @@ sac_call(Call) ->
                 true ->
                     Err;
                 _ ->
-                    rabbit_log:info("Stream SAC coordinator call failed with  ~tp",
+                    ?LOG_INFO("Stream SAC coordinator call failed with  ~tp",
                                     [Reason]),
                     throw({stop, {shutdown, stream_sac_coordinator_error}})
             end;
