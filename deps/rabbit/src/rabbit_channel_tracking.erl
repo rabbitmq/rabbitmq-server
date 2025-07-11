@@ -35,6 +35,8 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 
 -import(rabbit_misc, [pget/2]).
 
@@ -66,11 +68,13 @@ handle_cast({channel_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register channel ~tp for tracking, "
                           "its table is not ready yet or the channel terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [TrackedChId]),
+                    ?LOG_WARNING(Msg, [TrackedChId], #{domain => ?RMQLOG_DOMAIN_CHAN,
+                                                       pid => self()}),
                     ok;
                 error:Err ->
                     Msg = "Could not register channel ~tp for tracking: ~tp",
-                    rabbit_log_connection:warning(Msg, [TrackedChId, Err]),
+                    ?LOG_WARNING(Msg, [TrackedChId, Err], #{domain => ?RMQLOG_DOMAIN_CHAN,
+                                                            pid => self()}),
                     ok
             end;
         _OtherNode ->
@@ -89,9 +93,10 @@ handle_cast({connection_closed, ConnDetails}) ->
                 [] ->
                     ok;
                 TrackedChs ->
-                    rabbit_log_channel:debug(
+                    ?LOG_DEBUG(
                       "Closing ~b channel(s) because connection '~ts' has been closed",
-                      [length(TrackedChs), pget(name, ConnDetails)]),
+                      [length(TrackedChs), pget(name, ConnDetails)],
+                      #{domain => ?RMQLOG_DOMAIN_CHAN, pid => self()}),
                     %% Shutting down channels will take care of unregistering the
                     %% corresponding tracking.
                     shutdown_tracked_items(TrackedChs, undefined),
