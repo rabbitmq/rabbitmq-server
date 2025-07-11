@@ -12,6 +12,7 @@
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% public API
 -export([open/1,
@@ -247,7 +248,7 @@ hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
     end;
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
-    logger:warning("Unsupported protocol version: ~b ~b.~b.~b",
+    ?LOG_WARNING("Unsupported protocol version: ~b ~b.~b.~b",
                              [Protocol, Maj, Min, Rev]),
     {stop, normal, State};
 hdr_sent({call, From}, begin_session,
@@ -342,7 +343,7 @@ opened(info, {'DOWN', MRef, process, _, _Info},
     ok = notify_closed(Config, shutdown),
     {stop, normal};
 opened(_EvtType, Frame, State) ->
-    logger:warning("Unexpected connection frame ~tp when in state ~tp ",
+    ?LOG_WARNING("Unexpected connection frame ~tp when in state ~tp ",
                    [Frame, State]),
     keep_state_and_data.
 

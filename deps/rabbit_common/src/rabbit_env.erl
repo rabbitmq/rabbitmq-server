@@ -2109,7 +2109,7 @@ setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
         {error, {{already_started, _}, _}} ->
             Context;
         Error ->
-            logger:error(
+            ?LOG_ERROR(
               "rabbit_env: Failed to setup distribution (as ~ts) to "
               "query node ~ts: ~tp",
               [Nodename, Remote, Error]),

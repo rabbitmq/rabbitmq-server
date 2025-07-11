@@ -13,7 +13,7 @@
 
 % -define(debug, true).
 -ifdef(debug).
--define(DBG(F, A), error_logger:info_msg(F, A)).
+-define(DBG(F, A), error_?LOG_INFO_msg(F, A)).
 -else.
 -define(DBG(F, A), ok).
 -endif.

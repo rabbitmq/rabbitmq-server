@@ -342,7 +342,7 @@ load_credentials(#state{region = Region}) ->
                 imdsv2_token = undefined
             }};
         {error, Reason} ->
-            error_logger:error_msg(
+            ?LOG_ERROR(
                 "Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n",
                 [Reason]
             ),

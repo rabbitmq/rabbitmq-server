@@ -2,6 +2,7 @@
 -behaviour(cowboy_handler).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([init/2]).
 -export([terminate/3]).
@@ -24,7 +25,7 @@ respond(Files, Req, State) ->
 
 respond_error(Reason, Req, State) ->
     Error = io_lib:format("Error listing certificates ~tp", [Reason]),
-    logger:log(error, "~ts", [Error]),
+    ?LOG_ERROR("~ts", [Error]),
     Req2 = cowboy_req:reply(500, #{}, iolist_to_binary(Error), Req),
     {ok, Req2, State}.
 

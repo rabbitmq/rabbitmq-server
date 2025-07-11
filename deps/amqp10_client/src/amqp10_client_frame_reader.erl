@@ -10,6 +10,7 @@
 
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -141,32 +142,32 @@ handle_event(info, {gun_ws, WsPid, StreamRef, WsFrame}, StateName,
         {binary, Bin} ->
             handle_socket_input(Bin, StateName, State);
         close ->
-            logger:info("peer closed AMQP over WebSocket connection in state '~s'",
+            ?LOG_INFO("peer closed AMQP over WebSocket connection in state '~s'",
                         [StateName]),
             {stop, normal, socket_closed(State)};
         {close, ReasonStatusCode, ReasonUtf8} ->
-            logger:info("peer closed AMQP over WebSocket connection in state '~s', reason: ~b ~ts",
+            ?LOG_INFO("peer closed AMQP over WebSocket connection in state '~s', reason: ~b ~ts",
                         [StateName, ReasonStatusCode, ReasonUtf8]),
             {stop, {shutdown, {ReasonStatusCode, ReasonUtf8}}, socket_closed(State)}
     end;
 handle_event(info, {TcpError, _Sock, Reason}, StateName, State)
   when TcpError == tcp_error orelse TcpError == ssl_error ->
-    logger:warning("AMQP 1.0 connection socket errored, connection state: '~ts', reason: '~tp'",
+    ?LOG_WARNING("AMQP 1.0 connection socket errored, connection state: '~ts', reason: '~tp'",
                    [StateName, Reason]),
     {stop, {error, Reason}, socket_closed(State)};
 handle_event(info, {TcpClosed, _}, StateName, State)
   when TcpClosed == tcp_closed orelse TcpClosed == ssl_closed ->
-    logger:info("AMQP 1.0 connection socket was closed, connection state: '~ts'",
+    ?LOG_INFO("AMQP 1.0 connection socket was closed, connection state: '~ts'",
                 [StateName]),
     {stop, normal, socket_closed(State)};
 handle_event(info, {gun_down, WsPid, _Proto, Reason, _Streams}, StateName,
              #state{socket = {ws, WsPid, _StreamRef}} = State) ->
-    logger:warning("AMQP over WebSocket process ~p lost connection in state: '~s': ~p",
+    ?LOG_WARNING("AMQP over WebSocket process ~p lost connection in state: '~s': ~p",
                    [WsPid, StateName, Reason]),
     {stop, Reason, socket_closed(State)};
 handle_event(info, {'DOWN', _Mref, process, WsPid, Reason}, StateName,
              #state{socket = {ws, WsPid, _StreamRef}} = State) ->
-    logger:warning("AMQP over WebSocket process ~p terminated in state: '~s': ~p",
+    ?LOG_WARNING("AMQP over WebSocket process ~p terminated in state: '~s': ~p",
                    [WsPid, StateName, Reason]),
     {stop, Reason, socket_closed(State)};
 

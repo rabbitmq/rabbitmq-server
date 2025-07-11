@@ -11,6 +11,7 @@
 -include("amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% Public API.
 -export(['begin'/1,
@@ -433,7 +434,7 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
                     notify_credit_exhausted(Link3),
                     {keep_state, State};
                 {transfer_limit_exceeded, Link3, State} ->
-                    logger:warning("transfer_limit_exceeded for link ~tp", [Link3]),
+                    ?LOG_WARNING("transfer_limit_exceeded for link ~tp", [Link3]),
                     Link = detach_with_error_cond(Link3,
                                                   State,
                                                   ?V_1_0_LINK_ERROR_TRANSFER_LIMIT_EXCEEDED,
@@ -445,7 +446,7 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
                             io_lib:format(
                               "~s checksum error: expected ~b, actual ~b",
                               [FooterOpt, Expected, Actual])),
-            logger:warning("deteaching link ~tp due to ~s", [Link2, Description]),
+            ?LOG_WARNING("deteaching link ~tp due to ~s", [Link2, Description]),
             Link = detach_with_error_cond(Link2,
                                           State0,
                                           ?V_1_0_AMQP_ERROR_DECODE_ERROR,
@@ -484,7 +485,7 @@ mapped(cast, #'v1_0.disposition'{role = true,
 
     {keep_state, State#state{outgoing_unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
-    logger:warning("Unhandled session frame ~tp in state ~tp",
+    ?LOG_WARNING("Unhandled session frame ~tp in state ~tp",
                              [Frame, State]),
     {keep_state, State};
 mapped({call, From},
@@ -565,7 +566,7 @@ mapped({call, From}, Msg, State) ->
     {keep_state, State1, {reply, From, Reply}};
 
 mapped(_EvtType, Msg, _State) ->
-    logger:warning("amqp10_session: unhandled msg in mapped state ~W",
+    ?LOG_WARNING("amqp10_session: unhandled msg in mapped state ~W",
                    [Msg, 10]),
     keep_state_and_data.
 
@@ -1364,6 +1365,7 @@ format_status(Status = #{data := Data0}) ->
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 handle_session_flow_test() ->
     % see spec section: 2.5.6 for logic

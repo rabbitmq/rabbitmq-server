@@ -19,6 +19,7 @@
          none/1, none/2, none/3]).
 
 -include("logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -compile({no_auto_import, [error/2, error/3]}).
 
@@ -57,49 +58,49 @@
 debug(Format) -> debug(Format, []).
 debug(Format, Args) -> debug(self(), Format, Args).
 debug(Pid, Format, Args) ->
-    logger:debug(Format, Args, #{pid => Pid,
+    ?LOG_DEBUG(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 info(Format) -> info(Format, []).
 info(Format, Args) -> info(self(), Format, Args).
 info(Pid, Format, Args) ->
-    logger:info(Format, Args, #{pid => Pid,
+    ?LOG_INFO(Format, Args, #{pid => Pid,
                                 domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 notice(Format) -> notice(Format, []).
 notice(Format, Args) -> notice(self(), Format, Args).
 notice(Pid, Format, Args) ->
-    logger:notice(Format, Args, #{pid => Pid,
+    ?LOG_NOTICE(Format, Args, #{pid => Pid,
                                   domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 warning(Format) -> warning(Format, []).
 warning(Format, Args) -> warning(self(), Format, Args).
 warning(Pid, Format, Args) ->
-    logger:warning(Format, Args, #{pid => Pid,
+    ?LOG_WARNING(Format, Args, #{pid => Pid,
                                    domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 error(Format) -> error(Format, []).
 error(Format, Args) -> error(self(), Format, Args).
 error(Pid, Format, Args) ->
-    logger:error(Format, Args, #{pid => Pid,
+    ?LOG_ERROR(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 critical(Format) -> critical(Format, []).
 critical(Format, Args) -> critical(self(), Format, Args).
 critical(Pid, Format, Args) ->
-    logger:critical(Format, Args, #{pid => Pid,
+    ?LOG_CRITICAL(Format, Args, #{pid => Pid,
                                     domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 alert(Format) -> alert(Format, []).
 alert(Format, Args) -> alert(self(), Format, Args).
 alert(Pid, Format, Args) ->
-    logger:alert(Format, Args, #{pid => Pid,
+    ?LOG_ALERT(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 emergency(Format) -> emergency(Format, []).
 emergency(Format, Args) -> emergency(self(), Format, Args).
 emergency(Pid, Format, Args) ->
-    logger:emergency(Format, Args, #{pid => Pid,
+    ?LOG_EMERGENCY(Format, Args, #{pid => Pid,
                                      domain => ?RMQLOG_DOMAIN_FEDERATION}).
 
 none(_Format) -> ok.

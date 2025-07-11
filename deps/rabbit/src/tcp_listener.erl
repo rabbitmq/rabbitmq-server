@@ -7,6 +7,9 @@
 
 -module(tcp_listener).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 %% Represents a running TCP listener (a process that listens for inbound
 %% TCP or TLS connections). Every protocol supported typically has one
 %% or two listeners, plain TCP and (optionally) TLS, but there can
@@ -65,7 +68,7 @@ start_link(IPAddress, Port,
 
 init({IPAddress, Port, {M, F, A}, OnShutdown, Label}) ->
     process_flag(trap_exit, true),
-    logger:info("started ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    ?LOG_INFO("started ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     apply(M, F, A ++ [IPAddress, Port]),
     State0 = #state{
         on_shutdown = OnShutdown,
@@ -85,11 +88,11 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{on_shutdown = OnShutdown, label = Label, ip = IPAddress, port = Port}) ->
-    logger:info("stopped ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
+    ?LOG_INFO("stopped ~ts on ~ts:~tp", [Label, rabbit_misc:ntoab(IPAddress), Port]),
     try
         OnShutdown(IPAddress, Port)
     catch _:Error ->
-        logger:error("Failed to stop ~ts on ~ts:~tp: ~tp",
+        ?LOG_ERROR("Failed to stop ~ts on ~ts:~tp: ~tp",
                      [Label, rabbit_misc:ntoab(IPAddress), Port, Error])
     end.
 
