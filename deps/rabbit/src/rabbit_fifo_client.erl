@@ -11,6 +11,9 @@
 %% Handles command tracking and other non-functional concerns.
 -module(rabbit_fifo_client).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([
          init/1,
          init/2,
@@ -143,13 +146,13 @@ enqueue(QName, Correlation, Msg,
             %% to send it
             {reject_publish, State0};
         {error, {shutdown, delete}} ->
-            rabbit_log:debug("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
+            ?LOG_DEBUG("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
                              [?MODULE, rabbit_misc:rs(QName)]),
             {reject_publish, State0};
         {timeout, _} ->
             {reject_publish, State0};
         Err ->
-            rabbit_log:debug("~ts: QQ ~ts error when registering enqueuer ~p",
+            ?LOG_DEBUG("~ts: QQ ~ts error when registering enqueuer ~p",
                              [?MODULE, rabbit_misc:rs(QName), Err]),
             exit(Err)
     end;
@@ -628,7 +631,7 @@ handle_ra_event(QName, Leader, {applied, Seqs},
                         {ok, _, ActualLeader}
                           when ActualLeader =/= OldLeader ->
                             %% there is a new leader
-                            rabbit_log:debug("~ts: Detected QQ leader change (applied) "
+                            ?LOG_DEBUG("~ts: Detected QQ leader change (applied) "
                                              "from ~w to ~w, "
                                              "resending ~b pending commands",
                                              [?MODULE, OldLeader, ActualLeader,
@@ -698,7 +701,7 @@ handle_ra_event(QName, Leader, {machine, leader_change},
                        pending = Pending} = State0) ->
     %% we need to update leader
     %% and resend any pending commands
-    rabbit_log:debug("~ts: ~s Detected QQ leader change from ~w to ~w, "
+    ?LOG_DEBUG("~ts: ~s Detected QQ leader change from ~w to ~w, "
                      "resending ~b pending commands",
                      [rabbit_misc:rs(QName), ?MODULE, OldLeader,
                       Leader, maps:size(Pending)]),
@@ -710,7 +713,7 @@ handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
 handle_ra_event(QName, _From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = OldLeader,
                        pending = Pending} = State0) ->
-    rabbit_log:debug("~ts: ~s Detected QQ leader change (rejection) from ~w to ~w, "
+    ?LOG_DEBUG("~ts: ~s Detected QQ leader change (rejection) from ~w to ~w, "
                      "resending ~b pending commands",
                      [rabbit_misc:rs(QName), ?MODULE, OldLeader,
                       Leader, maps:size(Pending)]),
@@ -739,7 +742,7 @@ handle_ra_event(QName, Leader, close_cached_segments,
          {_TRef, Last, Cache} ->
              case now_ms() > Last + ?CACHE_SEG_TIMEOUT of
                  true ->
-                     rabbit_log:debug("~ts: closing_cached_segments",
+                     ?LOG_DEBUG("~ts: closing_cached_segments",
                                       [rabbit_misc:rs(QName)]),
                      %% its been long enough, evict all
                      _ = ra_flru:evict_all(Cache),
@@ -982,7 +985,7 @@ add_delivery_count(DelCntIncr, Tag, #state{consumers = CDels0} = State) ->
 get_missing_deliveries(State, From, To, ConsumerTag) ->
     %% find local server
     ConsumerKey = consumer_key(ConsumerTag, State),
-    rabbit_log:debug("get_missing_deliveries for consumer '~s' from ~b to ~b",
+    ?LOG_DEBUG("get_missing_deliveries for consumer '~s' from ~b to ~b",
                      [ConsumerTag, From, To]),
     Cmd = {get_checked_out, ConsumerKey, lists:seq(From, To)},
     ServerId = find_local_or_leader(State),

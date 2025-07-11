@@ -29,6 +29,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -285,7 +286,7 @@ parse_set0(Type, VHost, Name, Pattern, Defn, Priority, ApplyTo, ActingUser) ->
                       {<<"priority">>,   Priority},
                       {<<"apply-to">>,   ApplyTo}],
                      ActingUser),
-            rabbit_log:info("Successfully set policy '~ts' matching ~ts names in virtual host '~ts' using pattern '~ts'",
+            ?LOG_INFO("Successfully set policy '~ts' matching ~ts names in virtual host '~ts' using pattern '~ts'",
                             [Name, ApplyTo, VHost, Pattern]),
             R;
         {error, Reason} ->

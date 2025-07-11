@@ -106,6 +106,7 @@
 -include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -rabbit_boot_step(
    {rabbit_quorum_queue_type,
@@ -129,7 +130,7 @@
 -define(DEFAULT_DELIVERY_LIMIT, 20).
 
 -define(INFO(Str, Args),
-        rabbit_log:info("[~s:~s/~b] " Str,
+        ?LOG_INFO("[~s:~s/~b] " Str,
                         [?MODULE, ?FUNCTION_NAME, ?FUNCTION_ARITY | Args])).
 
 
@@ -284,7 +285,7 @@ start_cluster(Q) ->
                                                ?RPC_TIMEOUT)],
     MinVersion = lists:min([rabbit_fifo:version() | Versions]),
 
-    rabbit_log:debug("Will start up to ~w replicas for quorum queue ~ts with "
+    ?LOG_DEBUG("Will start up to ~w replicas for quorum queue ~ts with "
                      "leader on node '~ts', initial machine version ~b",
                      [QuorumSize, rabbit_misc:rs(QName), LeaderNode, MinVersion]),
     case rabbit_amqqueue:internal_declare(NewQ1, false) of
@@ -354,7 +355,7 @@ gather_policy_config(Q, IsQueueDeclaration) ->
                         undefined ->
                             case IsQueueDeclaration of
                                 true ->
-                                    rabbit_log:info(
+                                    ?LOG_INFO(
                                               "~ts: delivery_limit not set, defaulting to ~b",
                                               [rabbit_misc:rs(QName), ?DEFAULT_DELIVERY_LIMIT]);
                                 false ->
@@ -660,7 +661,7 @@ handle_tick(QName,
                       ok ->
                           ok;
                       repaired ->
-                          rabbit_log:debug("Repaired quorum queue ~ts amqqueue record",
+                          ?LOG_DEBUG("Repaired quorum queue ~ts amqqueue record",
                                            [rabbit_misc:rs(QName)])
                   end,
                   ExpectedNodes = rabbit_nodes:list_members(),
@@ -670,7 +671,7 @@ handle_tick(QName,
                       Stale when length(ExpectedNodes) > 0 ->
                           %% rabbit_nodes:list_members/0 returns [] when there
                           %% is an error so we need to handle that case
-                          rabbit_log:debug("~ts: stale nodes detected in quorum "
+                          ?LOG_DEBUG("~ts: stale nodes detected in quorum "
                                            "queue state. Purging ~w",
                                            [rabbit_misc:rs(QName), Stale]),
                           %% pipeline purge command
@@ -684,13 +685,13 @@ handle_tick(QName,
                   ok
               catch
                   _:Err ->
-                      rabbit_log:debug("~ts: handle tick failed with ~p",
+                      ?LOG_DEBUG("~ts: handle tick failed with ~p",
                                        [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end);
 handle_tick(QName, Config, _Nodes) ->
-    rabbit_log:debug("~ts: handle tick received unexpected config format ~tp",
+    ?LOG_DEBUG("~ts: handle tick received unexpected config format ~tp",
                      [rabbit_misc:rs(QName), Config]).
 
 repair_leader_record(Q, Name) ->
@@ -701,7 +702,7 @@ repair_leader_record(Q, Name) ->
             ok;
         _ ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("~ts: updating leader record to current node ~ts",
+            ?LOG_DEBUG("~ts: updating leader record to current node ~ts",
                              [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
@@ -776,7 +777,7 @@ maybe_apply_policies(Q, #{config := CurrentConfig}) ->
     ShouldUpdate = NewPolicyConfig =/= CurrentPolicyConfig,
     case ShouldUpdate of
         true ->
-            rabbit_log:debug("Re-applying policies to ~ts", [rabbit_misc:rs(amqqueue:get_name(Q))]),
+            ?LOG_DEBUG("Re-applying policies to ~ts", [rabbit_misc:rs(amqqueue:get_name(Q))]),
             policy_changed(Q),
             ok;
         false -> ok
@@ -798,7 +799,7 @@ recover(_Vhost, Queues) ->
                    {error, Err1}
                      when Err1 == not_started orelse
                           Err1 == name_not_registered ->
-                       rabbit_log:warning("Quorum queue recovery: configured member of ~ts was not found on this node. Starting member as a new one. "
+                       ?LOG_WARNING("Quorum queue recovery: configured member of ~ts was not found on this node. Starting member as a new one. "
                                           "Context: ~s",
                                           [rabbit_misc:rs(QName), Err1]),
                        % queue was never started on this node
@@ -806,7 +807,7 @@ recover(_Vhost, Queues) ->
                        case start_server(make_ra_conf(Q0, ServerId)) of
                            ok -> ok;
                            Err2 ->
-                               rabbit_log:warning("recover: quorum queue ~w could not"
+                               ?LOG_WARNING("recover: quorum queue ~w could not"
                                                   " be started ~w", [Name, Err2]),
                                fail
                        end;
@@ -817,7 +818,7 @@ recover(_Vhost, Queues) ->
                        ok;
                    Err ->
                        %% catch all clause to avoid causing the vhost not to start
-                       rabbit_log:warning("recover: quorum queue ~w could not be "
+                       ?LOG_WARNING("recover: quorum queue ~w could not be "
                                           "restarted ~w", [Name, Err]),
                        fail
                end,
@@ -908,7 +909,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
                     ok;
                 false ->
                     %% attempt forced deletion of all servers
-                    rabbit_log:warning(
+                    ?LOG_WARNING(
                       "Could not delete quorum '~ts', not enough nodes "
                        " online to reach a quorum: ~255p."
                        " Attempting force delete.",
@@ -929,7 +930,7 @@ force_delete_queue(Servers) ->
          case catch(ra:force_delete_server(?RA_SYSTEM, S)) of
              ok -> ok;
              Err ->
-                 rabbit_log:warning(
+                 ?LOG_WARNING(
                    "Force delete of ~w failed with: ~w"
                    "This may require manual data clean up",
                    [S, Err]),
@@ -1222,7 +1223,7 @@ policy_changed(Q) ->
             ok;
         Err ->
             FormattedQueueName = rabbit_misc:rs(amqqueue:get_name(Q)),
-            rabbit_log:warning("~s: policy may not have been successfully applied. Error: ~p",
+            ?LOG_WARNING("~s: policy may not have been successfully applied. Error: ~p",
                                [FormattedQueueName, Err]),
             ok
     end.
@@ -1340,7 +1341,7 @@ add_member(VHost, Name, Node, Membership, Timeout)
        is_binary(Name) andalso
        is_atom(Node) ->
     QName = #resource{virtual_host = VHost, name = Name, kind = queue},
-    rabbit_log:debug("Asked to add a replica for queue ~ts on node ~ts",
+    ?LOG_DEBUG("Asked to add a replica for queue ~ts on node ~ts",
                      [rabbit_misc:rs(QName), Node]),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
@@ -1354,7 +1355,7 @@ add_member(VHost, Name, Node, Membership, Timeout)
                     case lists:member(Node, QNodes) of
                         true ->
                           %% idempotent by design
-                          rabbit_log:debug("Quorum ~ts already has a replica on node ~ts",
+                          ?LOG_DEBUG("Quorum ~ts already has a replica on node ~ts",
                                            [rabbit_misc:rs(QName), Node]),
                           ok;
                         false ->
@@ -1422,7 +1423,7 @@ do_add_member(Q, Node, Membership, Timeout)
                                    {erlang, is_list, []},
                                    #{condition => {applied, {RaIndex, RaTerm}}}),
                     _ = rabbit_amqqueue:update(QName, Fun),
-                    rabbit_log:info("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
+                    ?LOG_INFO("Added a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
                     ok;
                 {timeout, _} ->
                     _ = ra:force_delete_server(?RA_SYSTEM, ServerId),
@@ -1433,7 +1434,7 @@ do_add_member(Q, Node, Membership, Timeout)
                     E
             end;
         E ->
-            rabbit_log:warning("Could not add a replica of quorum ~ts on node ~ts: ~p",
+            ?LOG_WARNING("Could not add a replica of quorum ~ts on node ~ts: ~p",
                                [rabbit_misc:rs(QName), Node, E]),
             E
     end.
@@ -1484,7 +1485,7 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     _ = rabbit_amqqueue:update(QName, Fun),
                     case ra:force_delete_server(?RA_SYSTEM, ServerId) of
                         ok ->
-                            rabbit_log:info("Deleted a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
+                            ?LOG_INFO("Deleted a replica of quorum ~ts on node ~ts", [rabbit_misc:rs(QName), Node]),
                             ok;
                         {error, {badrpc, nodedown}} ->
                             ok;
@@ -1507,10 +1508,10 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
     [{rabbit_amqqueue:name(),
       {ok, pos_integer()} | {error, pos_integer(), term()}}].
 shrink_all(Node) ->
-    rabbit_log:info("Asked to remove all quorum queue replicas from node ~ts", [Node]),
+    ?LOG_INFO("Asked to remove all quorum queue replicas from node ~ts", [Node]),
     [begin
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~ts: removing member (replica) on node ~w",
+         ?LOG_INFO("~ts: removing member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          Size = length(get_nodes(Q)),
          case delete_member(Q, Node) of
@@ -1520,7 +1521,7 @@ shrink_all(Node) ->
                  %% this could be timing related and due to a new leader just being
                  %% elected but it's noop command not been committed yet.
                  %% lets sleep and retry once
-                 rabbit_log:info("~ts: failed to remove member (replica) on node ~w "
+                 ?LOG_INFO("~ts: failed to remove member (replica) on node ~w "
                                  "as cluster change is not permitted. "
                                  "retrying once in 500ms",
                                  [rabbit_misc:rs(QName), Node]),
@@ -1529,12 +1530,12 @@ shrink_all(Node) ->
                      ok ->
                          {QName, {ok, Size-1}};
                      {error, Err} ->
-                         rabbit_log:warning("~ts: failed to remove member (replica) on node ~w, error: ~w",
+                         ?LOG_WARNING("~ts: failed to remove member (replica) on node ~w, error: ~w",
                                             [rabbit_misc:rs(QName), Node, Err]),
                          {QName, {error, Size, Err}}
                  end;
              {error, Err} ->
-                 rabbit_log:warning("~ts: failed to remove member (replica) on node ~w, error: ~w",
+                 ?LOG_WARNING("~ts: failed to remove member (replica) on node ~w, error: ~w",
                                     [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
          end
@@ -1554,13 +1555,13 @@ grow(Node, VhostSpec, QueueSpec, Strategy, Membership) ->
     [begin
          Size = length(get_nodes(Q)),
          QName = amqqueue:get_name(Q),
-         rabbit_log:info("~ts: adding a new member (replica) on node ~w",
+         ?LOG_INFO("~ts: adding a new member (replica) on node ~w",
                          [rabbit_misc:rs(QName), Node]),
          case add_member(Q, Node, Membership) of
              ok ->
                  {QName, {ok, Size + 1}};
              {error, Err} ->
-                 rabbit_log:warning(
+                 ?LOG_WARNING(
                    "~ts: failed to add member (replica) on node ~w, error: ~w",
                    [rabbit_misc:rs(QName), Node, Err]),
                  {QName, {error, Size, Err}}
@@ -1647,19 +1648,19 @@ dead_letter_handler(Q, Overflow) ->
 dlh(undefined, undefined, undefined, _, _) ->
     undefined;
 dlh(undefined, RoutingKey, undefined, _, QName) ->
-    rabbit_log:warning("Disabling dead-lettering for ~ts despite configured dead-letter-routing-key '~ts' "
+    ?LOG_WARNING("Disabling dead-lettering for ~ts despite configured dead-letter-routing-key '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), RoutingKey]),
     undefined;
 dlh(undefined, _, Strategy, _, QName) ->
-    rabbit_log:warning("Disabling dead-lettering for ~ts despite configured dead-letter-strategy '~ts' "
+    ?LOG_WARNING("Disabling dead-lettering for ~ts despite configured dead-letter-strategy '~ts' "
                        "because dead-letter-exchange is not configured.",
                        [rabbit_misc:rs(QName), Strategy]),
     undefined;
 dlh(_, _, <<"at-least-once">>, reject_publish, _) ->
     at_least_once;
 dlh(Exchange, RoutingKey, <<"at-least-once">>, drop_head, QName) ->
-    rabbit_log:warning("Falling back to dead-letter-strategy at-most-once for ~ts "
+    ?LOG_WARNING("Falling back to dead-letter-strategy at-most-once for ~ts "
                        "because configured dead-letter-strategy at-least-once is incompatible with "
                        "effective overflow strategy drop-head. To enable dead-letter-strategy "
                        "at-least-once, set overflow strategy to reject-publish.",
@@ -2030,7 +2031,7 @@ overflow(undefined, Def, _QName) -> Def;
 overflow(<<"reject-publish">>, _Def, _QName) -> reject_publish;
 overflow(<<"drop-head">>, _Def, _QName) -> drop_head;
 overflow(<<"reject-publish-dlx">> = V, Def, QName) ->
-    rabbit_log:warning("Invalid overflow strategy ~tp for quorum queue: ~ts",
+    ?LOG_WARNING("Invalid overflow strategy ~tp for quorum queue: ~ts",
                        [V, rabbit_misc:rs(QName)]),
     Def.
 
@@ -2069,7 +2070,7 @@ force_shrink_member_to_current_member(VHost, Name) ->
     Node = node(),
     QName = rabbit_misc:r(VHost, queue, Name),
     QNameFmt = rabbit_misc:rs(QName),
-    rabbit_log:warning("Shrinking ~ts to a single node: ~ts", [QNameFmt, Node]),
+    ?LOG_WARNING("Shrinking ~ts to a single node: ~ts", [QNameFmt, Node]),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?is_amqqueue(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
@@ -2082,19 +2083,19 @@ force_shrink_member_to_current_member(VHost, Name) ->
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
             _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes],
-            rabbit_log:warning("Shrinking ~ts finished", [QNameFmt]);
+            ?LOG_WARNING("Shrinking ~ts finished", [QNameFmt]);
         _ ->
-            rabbit_log:warning("Shrinking failed, ~ts not found", [QNameFmt]),
+            ?LOG_WARNING("Shrinking failed, ~ts not found", [QNameFmt]),
             {error, not_found}
     end.
 
 force_vhost_queues_shrink_member_to_current_member(VHost) when is_binary(VHost) ->
-    rabbit_log:warning("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts", [VHost, node()]),
+    ?LOG_WARNING("Shrinking all quorum queues in vhost '~ts' to a single node: ~ts", [VHost, node()]),
     ListQQs = fun() -> rabbit_amqqueue:list(VHost) end,
     force_all_queues_shrink_member_to_current_member(ListQQs).
 
 force_all_queues_shrink_member_to_current_member() ->
-    rabbit_log:warning("Shrinking all quorum queues to a single node: ~ts", [node()]),
+    ?LOG_WARNING("Shrinking all quorum queues to a single node: ~ts", [node()]),
     ListQQs = fun() -> rabbit_amqqueue:list() end,
     force_all_queues_shrink_member_to_current_member(ListQQs).
 
@@ -2104,7 +2105,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
              QName = amqqueue:get_name(Q),
              {RaName, _} = amqqueue:get_pid(Q),
              OtherNodes = lists:delete(Node, get_nodes(Q)),
-             rabbit_log:warning("Shrinking queue ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
+             ?LOG_WARNING("Shrinking queue ~ts to a single node: ~ts", [rabbit_misc:rs(QName), Node]),
              ok = ra_server_proc:force_shrink_members_to_current_member({RaName, Node}),
              Fun = fun (QQ) ->
                            TS0 = amqqueue:get_type_state(QQ),
@@ -2114,7 +2115,7 @@ force_all_queues_shrink_member_to_current_member(ListQQFun) when is_function(Lis
              _ = rabbit_amqqueue:update(QName, Fun),
              _ = [ra:force_delete_server(?RA_SYSTEM, {RaName, N}) || N <- OtherNodes]
          end || Q <- ListQQFun(), amqqueue:get_type(Q) == ?MODULE],
-    rabbit_log:warning("Shrinking finished"),
+    ?LOG_WARNING("Shrinking finished"),
     ok.
 
 force_checkpoint_on_queue(QName) ->
@@ -2124,7 +2125,7 @@ force_checkpoint_on_queue(QName) ->
             {error, classic_queue_not_supported};
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
-            rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
+            ?LOG_DEBUG("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
             Nodes = amqqueue:get_nodes(Q),
             _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
                  || Node <- Nodes],
@@ -2142,7 +2143,7 @@ force_checkpoint(VhostSpec, QueueSpec) ->
              ok ->
                  {QName, {ok}};
              {error, Err} ->
-                 rabbit_log:warning("~ts: failed to force checkpoint, error: ~w",
+                 ?LOG_WARNING("~ts: failed to force checkpoint, error: ~w",
                                     [rabbit_misc:rs(QName), Err]),
                  {QName, {error, Err}}
          end
@@ -2274,7 +2275,7 @@ wait_for_leader_health_checks(Ref, N, UnhealthyAcc) ->
 check_process_limit_safety(QCount, ProcessLimitThreshold) ->
     case (erlang:system_info(process_count) + QCount) >= ProcessLimitThreshold of
         true ->
-            rabbit_log:warning("Leader health check not permitted, process limit threshold will be exceeded."),
+            ?LOG_WARNING("Leader health check not permitted, process limit threshold will be exceeded."),
             throw({error, leader_health_check_process_limit_exceeded});
         false ->
             ok
@@ -2283,7 +2284,7 @@ check_process_limit_safety(QCount, ProcessLimitThreshold) ->
 maybe_log_leader_health_check_result([]) -> ok;
 maybe_log_leader_health_check_result(Result) ->
     Qs = lists:map(fun(R) -> catch maps:get(<<"readable_name">>, R) end, Result),
-    rabbit_log:warning("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
+    ?LOG_WARNING("Leader health check result (unhealthy leaders detected): ~tp", [Qs]).
 
 policy_apply_to_name() ->
     <<"quorum_queues">>.
@@ -2295,52 +2296,52 @@ drain(TransferCandidates) ->
     ok.
 
 transfer_leadership([]) ->
-    rabbit_log:warning("Skipping leadership transfer of quorum queues: no candidate "
+    ?LOG_WARNING("Skipping leadership transfer of quorum queues: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership(_TransferCandidates) ->
     %% we only transfer leadership for QQs that have local leaders
     Queues = rabbit_amqqueue:list_local_leaders(),
-    rabbit_log:info("Will transfer leadership of ~b quorum queues with current leader on this node",
+    ?LOG_INFO("Will transfer leadership of ~b quorum queues with current leader on this node",
                     [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will trigger a leader election for local quorum queue ~ts",
+        ?LOG_DEBUG("Will trigger a leader election for local quorum queue ~ts",
                          [rabbit_misc:rs(Name)]),
         %% we trigger an election and exclude this node from the list of candidates
         %% by simply shutting its local QQ replica (Ra server)
         RaLeader = amqqueue:get_pid(Q),
-        rabbit_log:debug("Will stop Ra server ~tp", [RaLeader]),
+        ?LOG_DEBUG("Will stop Ra server ~tp", [RaLeader]),
         case rabbit_quorum_queue:stop_server(RaLeader) of
             ok     ->
-                rabbit_log:debug("Successfully stopped Ra server ~tp", [RaLeader]);
+                ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaLeader]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to stop Ra server ~tp: target node was reported as down")
+                ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down")
         end
      end || Q <- Queues],
-    rabbit_log:info("Leadership transfer for quorum queues hosted on this node has been initiated").
+    ?LOG_INFO("Leadership transfer for quorum queues hosted on this node has been initiated").
 
 %% TODO: I just copied it over, it looks like was always called inside maintenance so...
 -spec stop_local_quorum_queue_followers() -> ok.
 stop_local_quorum_queue_followers() ->
     Queues = rabbit_amqqueue:list_local_followers(),
-    rabbit_log:info("Will stop local follower replicas of ~b quorum queues on this node",
+    ?LOG_INFO("Will stop local follower replicas of ~b quorum queues on this node",
                     [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
-        rabbit_log:debug("Will stop a local follower replica of quorum queue ~ts",
+        ?LOG_DEBUG("Will stop a local follower replica of quorum queue ~ts",
                          [rabbit_misc:rs(Name)]),
         %% shut down Ra nodes so that they are not considered for leader election
         {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
         RaNode = {RegisteredName, node()},
-        rabbit_log:debug("Will stop Ra server ~tp", [RaNode]),
+        ?LOG_DEBUG("Will stop Ra server ~tp", [RaNode]),
         case rabbit_quorum_queue:stop_server(RaNode) of
             ok     ->
-                rabbit_log:debug("Successfully stopped Ra server ~tp", [RaNode]);
+                ?LOG_DEBUG("Successfully stopped Ra server ~tp", [RaNode]);
             {error, nodedown} ->
-                rabbit_log:error("Failed to stop Ra server ~tp: target node was reported as down")
+                ?LOG_ERROR("Failed to stop Ra server ~tp: target node was reported as down")
         end
      end || Q <- Queues],
-    rabbit_log:info("Stopped all local replicas of quorum queues hosted on this node").
+    ?LOG_INFO("Stopped all local replicas of quorum queues hosted on this node").
 
 revive() ->
     revive_local_queue_members().
@@ -2350,17 +2351,17 @@ revive_local_queue_members() ->
     %% NB: this function ignores the first argument so we can just pass the
     %% empty binary as the vhost name.
     {Recovered, Failed} = rabbit_quorum_queue:recover(<<>>, Queues),
-    rabbit_log:debug("Successfully revived ~b quorum queue replicas",
+    ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
                      [length(Recovered)]),
     case length(Failed) of
         0 ->
             ok;
         NumFailed ->
-            rabbit_log:error("Failed to revive ~b quorum queue replicas",
+            ?LOG_ERROR("Failed to revive ~b quorum queue replicas",
                              [NumFailed])
     end,
 
-    rabbit_log:info("Restart of local quorum queue replicas is complete"),
+    ?LOG_INFO("Restart of local quorum queue replicas is complete"),
     ok.
 
 queue_vm_stats_sups() ->

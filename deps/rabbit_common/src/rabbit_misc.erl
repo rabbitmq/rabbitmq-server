@@ -13,6 +13,7 @@
 -include("rabbit_misc.hrl").
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -ifdef(TEST).
 -export([decompose_pid/1, compose_pid/4]).
@@ -1284,7 +1285,7 @@ safe_ets_update_counter(Tab, Key, UpdateOp) ->
   try
     ets:update_counter(Tab, Key, UpdateOp)
   catch error:badarg:E ->
-    rabbit_log:debug("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
+    ?LOG_DEBUG("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
     ok
   end.
 
@@ -1354,7 +1355,7 @@ safe_ets_update_counter(Tab, Key, UpdateOp, OnSuccess, OnFailure) ->
   try
     OnSuccess(ets:update_counter(Tab, Key, UpdateOp))
   catch error:badarg:E ->
-    rabbit_log:debug("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
+    ?LOG_DEBUG("error updating ets counter ~p in table ~p: ~p", [Key, Tab, E]),
     OnFailure()
   end.
 
@@ -1373,7 +1374,7 @@ safe_ets_update_element(Tab, Key, ElementSpec) ->
   try
     ets:update_element(Tab, Key, ElementSpec)
   catch error:badarg:E ->
-    rabbit_log:debug("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
+    ?LOG_DEBUG("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
     false
   end.
 
@@ -1410,7 +1411,7 @@ safe_ets_update_element(Tab, Key, ElementSpec, OnSuccess, OnFailure) ->
   try
     OnSuccess(ets:update_element(Tab, Key, ElementSpec))
   catch error:badarg:E ->
-    rabbit_log:debug("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
+    ?LOG_DEBUG("error updating ets element ~p in table ~p: ~p", [Key, Tab, E]),
     OnFailure(),
     false
   end.

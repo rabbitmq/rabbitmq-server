@@ -360,7 +360,7 @@ info(Pid) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
+            ?LOG_ERROR("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -375,7 +375,7 @@ info(Pid, Items) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
+            ?LOG_ERROR("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -411,7 +411,7 @@ refresh_config_local() ->
         try
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel config "
+          ?LOG_ERROR("Failed to refresh channel config "
                            "for channel ~tp. Reason ~tp",
                            [C, Reason])
         end
@@ -425,7 +425,7 @@ refresh_interceptors() ->
         try
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel interceptors "
+          ?LOG_ERROR("Failed to refresh channel interceptors "
                            "for channel ~tp. Reason ~tp",
                            [C, Reason])
         end
@@ -643,7 +643,7 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
        ok = rabbit_writer:flush(WriterPid)
     catch
         _Class:Reason ->
-            rabbit_log:debug("Failed to flush pending writes on a terminating connection, reason: ~tp", [Reason])
+            ?LOG_DEBUG("Failed to flush pending writes on a terminating connection, reason: ~tp", [Reason])
     end,
     {stop, normal, State};
 
@@ -805,7 +805,7 @@ terminate(_Reason,
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
-            rabbit_log:warning("Channel is stopping with ~b pending publisher confirms",
+            ?LOG_WARNING("Channel is stopping with ~b pending publisher confirms",
                                [NumConfirms])
     end.
 

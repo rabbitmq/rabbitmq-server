@@ -6,6 +6,9 @@
 %%
 
 -module(rabbit_trust_store_app).
+
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(application).
 -export([change_SSL_options/0]).
 -export([revert_SSL_options/0]).
@@ -48,7 +51,7 @@ edit(Options) ->
         undefined ->
             ok;
         Val       ->
-            rabbit_log:warning("RabbitMQ trust store plugin is used "
+            ?LOG_WARNING("RabbitMQ trust store plugin is used "
                                "and the verify_fun TLS option is set: ~tp. "
                                "It will be overwritten by the plugin.", [Val]),
             ok

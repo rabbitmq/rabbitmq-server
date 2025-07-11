@@ -41,6 +41,7 @@
          count_local_tracked_items_of_user/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -189,17 +190,17 @@ ensure_tracked_tables_for_this_node() ->
 ensure_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
                                         {keypos, #tracked_connection.id}]),
-    rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
+    ?LOG_INFO("Setting up a table for connection tracking on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE]).
 
 ensure_per_vhost_tracked_connections_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
+    ?LOG_INFO("Setting up a table for per-vhost connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
     ets:new(?TRACKED_CONNECTION_TABLE_PER_VHOST, [named_table, public, {write_concurrency, true}]).
 
 ensure_per_user_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
-    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
+    ?LOG_INFO("Setting up a table for per-user connection counting on this node: ~tp",
                     [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
 -spec tracked_connection_table_name_for(node()) -> atom().
@@ -420,7 +421,7 @@ close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
             ok;
           _:Err ->
             %% ignore, don't terminate
-            rabbit_log:warning("Could not close connection ~tp: ~tp", [Pid, Err]),
+            ?LOG_WARNING("Could not close connection ~tp: ~tp", [Pid, Err]),
             ok
     end;
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->

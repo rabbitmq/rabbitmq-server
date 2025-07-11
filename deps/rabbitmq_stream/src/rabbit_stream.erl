@@ -37,6 +37,7 @@
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -include("rabbit_stream_metrics.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 start(_Type, _Args) ->
     rabbit_stream_metrics:init(),
@@ -97,7 +98,7 @@ port_from_listener() ->
                     undefined, Listeners)
     catch error:Reason ->
               %% can happen if a remote node calls and the current has not fully started yet
-              rabbit_log:info("Error while retrieving stream plugin port: ~tp", [Reason]),
+              ?LOG_INFO("Error while retrieving stream plugin port: ~tp", [Reason]),
               {error, Reason}
     end.
 
@@ -123,7 +124,7 @@ tls_port_from_listener() ->
                     undefined, Listeners)
         catch error:Reason ->
         %% can happen if a remote node calls and the current has not fully started yet
-        rabbit_log:info("Error while retrieving stream plugin port: ~tp", [Reason]),
+        ?LOG_INFO("Error while retrieving stream plugin port: ~tp", [Reason]),
         {error, Reason}
     end.
 

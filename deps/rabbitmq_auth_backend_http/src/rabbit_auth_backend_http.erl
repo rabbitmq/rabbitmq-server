@@ -8,6 +8,7 @@
 -module(rabbit_auth_backend_http).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -180,10 +181,10 @@ do_http_req(Path0, Query) ->
     Request = case rabbit_data_coercion:to_atom(Method) of
         get  ->
             Path = Path0 ++ "?" ++ Query,
-            rabbit_log:debug("auth_backend_http: GET ~ts", [Path]),
+            ?LOG_DEBUG("auth_backend_http: GET ~ts", [Path]),
             {Path, [{"Host", HostHdr}]};
         post ->
-            rabbit_log:debug("auth_backend_http: POST ~ts", [Path0]),
+            ?LOG_DEBUG("auth_backend_http: POST ~ts", [Path0]),
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
     RequestTimeout =
@@ -196,12 +197,12 @@ do_http_req(Path0, Query) ->
             {ok, Val2} -> Val2;
             _ -> RequestTimeout
         end,
-    rabbit_log:debug("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
+    ?LOG_DEBUG("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
     HttpOpts = [{timeout, RequestTimeout},
                 {connect_timeout, ConnectionTimeout}] ++ ssl_options(),
     case httpc:request(Method, Request, HttpOpts, []) of
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
-            rabbit_log:debug("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
+            ?LOG_DEBUG("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
                 true  -> parse_resp(Body);
                 false -> {error, {Code, Body}}
@@ -216,7 +217,7 @@ ssl_options() ->
             Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],
             case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
                 {ok, wildcard} ->
-                    rabbit_log:debug("Enabling wildcard-aware hostname verification for HTTP client connections"),
+                    ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
                     %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
                     %% See https://erlang.org/doc/man/public_key.html#pkix_verify_hostname_match_fun-1.
                     [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | Opts1];

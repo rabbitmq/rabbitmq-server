@@ -2,6 +2,7 @@
 
 -include("rabbit_amqp.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([handle_request/5]).
 
@@ -49,7 +50,7 @@ handle_request(Request, Vhost, User, ConnectionPid, PermCaches0) ->
                             ConnectionPid,
                             PermCaches0)
         catch throw:{?MODULE, StatusCode0, Explanation} ->
-                  rabbit_log:warning("request ~ts ~ts failed: ~ts",
+                  ?LOG_WARNING("request ~ts ~ts failed: ~ts",
                                      [HttpMethod, HttpRequestTarget, Explanation]),
                   {StatusCode0, {utf8, Explanation}, PermCaches0}
         end,

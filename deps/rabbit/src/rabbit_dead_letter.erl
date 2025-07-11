@@ -12,6 +12,7 @@
          detect_cycles/3]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -74,7 +75,7 @@ log_cycle_once(Cycle) ->
         true ->
             ok;
         undefined ->
-            rabbit_log:warning(
+            ?LOG_WARNING(
               "Message dropped because the following list of queues (ordered by "
               "death recency) contains a dead letter cycle without reason 'rejected'. "
               "This list will not be logged again: ~tp",

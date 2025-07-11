@@ -43,6 +43,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_amqp_metrics.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([start_link/2, info/2, force_event_refresh/2,
          shutdown/2]).
@@ -1363,7 +1364,7 @@ handle_method0(#'connection.update_secret'{new_secret = NewSecret, reason = Reas
         %% Any secret update errors coming from the authz backend will be handled in the other branch.
         %% Therefore we optimistically do no error handling here. MK.
         lists:foreach(fun(Ch) ->
-          rabbit_log:debug("Updating user/auth backend state for channel ~tp", [Ch]),
+          ?LOG_DEBUG("Updating user/auth backend state for channel ~tp", [Ch]),
           _ = rabbit_channel:update_user_state(Ch, User1)
         end, all_channels()),
         ok = send_on_channel0(Sock, #'connection.update_secret_ok'{}, Protocol),
@@ -1505,7 +1506,7 @@ auth_phase(Response,
                                        auth_state     = AuthState,
                                        host           = RemoteAddress},
                        sock = Sock}) ->
-    rabbit_log:debug("Client address during authN phase: ~tp", [RemoteAddress]),
+    ?LOG_DEBUG("Client address during authN phase: ~tp", [RemoteAddress]),
     case AuthMechanism:handle_response(Response, AuthState) of
         {refused, Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(RemoteAddress, Username, amqp091),

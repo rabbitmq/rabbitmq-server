@@ -12,6 +12,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(TRACE_VHOSTS, trace_vhosts).
 -define(XNAME, <<"amq.rabbitmq.trace">>).
@@ -103,10 +104,10 @@ start(VHost)
   when is_binary(VHost) ->
     case enabled(VHost) of
         true  ->
-            rabbit_log:info("Tracing is already enabled for vhost '~ts'", [VHost]),
+            ?LOG_INFO("Tracing is already enabled for vhost '~ts'", [VHost]),
             ok;
         false ->
-            rabbit_log:info("Enabling tracing for vhost '~ts'", [VHost]),
+            ?LOG_INFO("Enabling tracing for vhost '~ts'", [VHost]),
             update_config(fun(VHosts) -> lists:usort([VHost | VHosts]) end)
     end.
 
@@ -115,10 +116,10 @@ stop(VHost)
   when is_binary(VHost) ->
     case enabled(VHost) of
         true  ->
-            rabbit_log:info("Disabling tracing for vhost '~ts'", [VHost]),
+            ?LOG_INFO("Disabling tracing for vhost '~ts'", [VHost]),
             update_config(fun(VHosts) -> VHosts -- [VHost] end);
         false ->
-            rabbit_log:info("Tracing is already disabled for vhost '~ts'", [VHost]),
+            ?LOG_INFO("Tracing is already disabled for vhost '~ts'", [VHost]),
             ok
     end.
 
@@ -128,13 +129,13 @@ update_config(Fun) ->
     application:set_env(rabbit, ?TRACE_VHOSTS, VHosts),
     Sessions = rabbit_amqp_session:list_local(),
     NonAmqpPids = rabbit_networking:local_non_amqp_connections(),
-    rabbit_log:debug("Refreshing state of channels, ~b sessions and ~b non "
+    ?LOG_DEBUG("Refreshing state of channels, ~b sessions and ~b non "
                      "AMQP 0.9.1 connections after virtual host tracing changes...",
                      [length(Sessions), length(NonAmqpPids)]),
     Pids = Sessions ++ NonAmqpPids,
     lists:foreach(fun(Pid) -> gen_server:cast(Pid, refresh_config) end, Pids),
     {Time, ok} = timer:tc(fun rabbit_channel:refresh_config_local/0),
-    rabbit_log:debug("Refreshed channel states in ~fs", [Time / 1_000_000]),
+    ?LOG_DEBUG("Refreshed channel states in ~fs", [Time / 1_000_000]),
     ok.
 
 vhosts_with_tracing_enabled() ->

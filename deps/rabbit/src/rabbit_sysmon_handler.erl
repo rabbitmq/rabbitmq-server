@@ -23,6 +23,9 @@
 
 -module(rabbit_sysmon_handler).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_event).
 
 %% API
@@ -89,16 +92,16 @@ handle_event({monitor, PidOrPort, Type, Info}, State=#state{timer_ref=TimerRef})
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
     {Fmt, Args} = format_pretty_proc_or_port_info(PidOrPort),
-    rabbit_log:warning("~tp ~w ~w " ++ Fmt ++ " ~w", [?MODULE, Type, PidOrPort] ++ Args ++ [Info]),
+    ?LOG_WARNING("~tp ~w ~w " ++ Fmt ++ " ~w", [?MODULE, Type, PidOrPort] ++ Args ++ [Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event({suppressed, Type, Info}, State=#state{timer_ref=TimerRef}) ->
     %% Reset the inactivity timeout
     NewTimerRef = reset_timer(TimerRef),
-    rabbit_log:debug("~tp encountered a suppressed event of type ~w: ~w", [?MODULE, Type, Info]),
+    ?LOG_DEBUG("~tp encountered a suppressed event of type ~w: ~w", [?MODULE, Type, Info]),
     {ok, State#state{timer_ref=NewTimerRef}};
 handle_event(Event, State=#state{timer_ref=TimerRef}) ->
     NewTimerRef = reset_timer(TimerRef),
-    rabbit_log:warning("~tp unhandled event: ~tp", [?MODULE, Event]),
+    ?LOG_WARNING("~tp unhandled event: ~tp", [?MODULE, Event]),
     {ok, State#state{timer_ref=NewTimerRef}}.
 
 %%--------------------------------------------------------------------
@@ -136,7 +139,7 @@ handle_info(inactivity_timeout, State) ->
     %% so hibernate to free up resources.
     {ok, State, hibernate};
 handle_info(Info, State) ->
-    rabbit_log:info("handle_info got ~tp", [Info]),
+    ?LOG_INFO("handle_info got ~tp", [Info]),
     {ok, State}.
 
 %%--------------------------------------------------------------------

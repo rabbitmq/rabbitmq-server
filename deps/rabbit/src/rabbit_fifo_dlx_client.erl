@@ -6,6 +6,9 @@
 
 -module(rabbit_fifo_dlx_client).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([checkout/3, settle/2, handle_ra_event/3,
          overview/1]).
 
@@ -47,11 +50,11 @@ process_command(Cmd, #state{leader = Leader} = State, Tries) ->
         {ok, ok, Leader} ->
             {ok, State#state{leader = Leader}};
         {ok, ok, NonLocalLeader} ->
-            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
+            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp because actual leader is ~tp.",
                                [Cmd, Leader, NonLocalLeader]),
             {error, non_local_leader};
         Err ->
-            rabbit_log:warning("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
+            ?LOG_WARNING("Failed to process command ~tp on quorum queue leader ~tp: ~tp~n"
                                "Trying ~b more time(s)...",
                                [Cmd, Leader, Err, Tries]),
             process_command(Cmd, State, Tries - 1)
@@ -63,7 +66,7 @@ handle_ra_event(Leader, {dlx_delivery, _} = Del,
                 #state{leader = _Leader} = State) when node(Leader) == node() ->
     handle_delivery(Del, State);
 handle_ra_event(From, Evt, State) ->
-    rabbit_log:debug("Ignoring ra event ~tp from ~tp", [Evt, From]),
+    ?LOG_DEBUG("Ignoring ra event ~tp from ~tp", [Evt, From]),
     {ok, State, []}.
 
 handle_delivery({dlx_delivery, [{FstId, _} | _] = IdMsgs},

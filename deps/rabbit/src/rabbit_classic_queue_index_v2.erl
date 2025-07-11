@@ -42,6 +42,7 @@
 -define(ENTRY_SIZE,  32). %% bytes
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 %% Set to true to get an awful lot of debug logs.
 -if(false).
 -define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).
@@ -255,7 +256,7 @@ recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
             State = recover_segments(State0, Terms, IsMsgStoreClean,
                                      ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                      CountersRef, Context),
-            rabbit_log:warning("Queue ~ts in vhost ~ts dropped ~b/~b/~b persistent messages "
+            ?LOG_WARNING("Queue ~ts in vhost ~ts dropped ~b/~b/~b persistent messages "
                                "and ~b transient messages after unclean shutdown",
                                [QueueName, VHost,
                                 counters:get(CountersRef, ?RECOVER_DROPPED_PERSISTENT_PER_VHOST),
@@ -329,7 +330,7 @@ recover_segments(State0, ContainsCheckFun, StoreState0, CountersRef, [Segment|Ta
         %% File was either empty or the header was invalid.
         %% We cannot recover this file.
         _ ->
-            rabbit_log:warning("Deleting invalid v2 segment file ~ts (file has invalid header)",
+            ?LOG_WARNING("Deleting invalid v2 segment file ~ts (file has invalid header)",
                                [SegmentFile]),
             ok = file:close(Fd),
             _ = prim_file:delete(SegmentFile),
@@ -436,7 +437,7 @@ recover_segment(State, ContainsCheckFun, StoreState0, CountersRef, Fd,
 recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting queue ~ts in vhost ~ts from v1 to v2 after clean shutdown", [QName, VHost]),
+    ?LOG_INFO("Converting queue ~ts in vhost ~ts from v1 to v2 after clean shutdown", [QName, VHost]),
     {_, _, V1State} = rabbit_queue_index:recover(Name, Terms, IsMsgStoreClean,
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                                  convert),
@@ -445,7 +446,7 @@ recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     %% share code with dirty recovery.
     CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
     State = recover_index_v1_common(State0, V1State, CountersRef),
-    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
+    ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
                     [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
@@ -453,7 +454,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                        ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                        CountersRef) ->
     #resource{virtual_host = VHost, name = QName} = Name,
-    rabbit_log:info("Converting queue ~ts in vhost ~ts from v1 to v2 after unclean shutdown", [QName, VHost]),
+    ?LOG_INFO("Converting queue ~ts in vhost ~ts from v1 to v2 after unclean shutdown", [QName, VHost]),
     %% We ignore the count and bytes returned here because we cannot trust
     %% rabbit_queue_index: it has a bug that may lead to more bytes being
     %% returned than it really has.
@@ -464,7 +465,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                                                  ContainsCheckFun, OnSyncFun, OnSyncMsgFun,
                                                  convert),
     State = recover_index_v1_common(State0, V1State, CountersRef),
-    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
+    ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
                     [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 

@@ -7,6 +7,9 @@
 
 -module(rabbit_ssl_options).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([
     fix/1,
     fix_client/1,
@@ -86,7 +89,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
         Module:module_info()
     catch
         _:Exception ->
-            rabbit_log:error("TLS verify_fun: module ~ts missing: ~tp",
+            ?LOG_ERROR("TLS verify_fun: module ~ts missing: ~tp",
                              [Module, Exception]),
             throw({error, {invalid_verify_fun, missing_module}})
     end,
@@ -109,7 +112,7 @@ make_verify_fun(Module, Function, InitialUserState) ->
                     Module:Function(Args)
             end;
         _ ->
-            rabbit_log:error("TLS verify_fun: no ~ts:~ts/3 exported",
+            ?LOG_ERROR("TLS verify_fun: no ~ts:~ts/3 exported",
               [Module, Function]),
             throw({error, {invalid_verify_fun, function_not_exported}})
     end.

@@ -9,6 +9,9 @@
 %% several others virtual hosts-related modules.
 -module(rabbit_vhosts).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -define(PERSISTENT_TERM_COUNTER_KEY, rabbit_vhosts_reconciliation_run_counter).
 
 %% API
@@ -63,11 +66,11 @@ reconcile() ->
 %% See start_processes_for_all/1.
 -spec reconcile_once() -> 'ok'.
 reconcile_once() ->
-    rabbit_log:debug("Will reconcile virtual host processes on all cluster members..."),
+    ?LOG_DEBUG("Will reconcile virtual host processes on all cluster members..."),
     _ = start_processes_for_all(),
     _ = increment_run_counter(),
     N = get_run_counter(),
-    rabbit_log:debug("Done with virtual host processes reconciliation (run ~tp)", [N]),
+    ?LOG_DEBUG("Done with virtual host processes reconciliation (run ~tp)", [N]),
     ok.
 
 -spec on_node_up(Node :: node()) -> 'ok'.
@@ -77,7 +80,7 @@ on_node_up(_Node) ->
         true  ->
             DelayInSeconds = 10,
             Delay = DelayInSeconds * 1000,
-            rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
+            ?LOG_DEBUG("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
             _ = timer:apply_after(Delay, ?MODULE, reconcile_once, []),
             ok
     end.
@@ -111,13 +114,13 @@ reconciliation_interval() ->
 start_processes_for_all(Nodes) ->
     Names = list_names(),
     N = length(Names),
-    rabbit_log:debug("Will make sure that processes of ~p virtual hosts are running on all reachable cluster nodes", [N]),
+    ?LOG_DEBUG("Will make sure that processes of ~p virtual hosts are running on all reachable cluster nodes", [N]),
     [begin
          try
              start_on_all_nodes(VH, Nodes)
          catch
              _:Err:_Stacktrace  ->
-                 rabbit_log:error("Could not reconcile virtual host ~ts: ~tp", [VH, Err])
+                 ?LOG_ERROR("Could not reconcile virtual host ~ts: ~tp", [VH, Err])
          end
      end || VH <- Names],
     ok.
@@ -153,14 +156,14 @@ maybe_start_timer(FunName) ->
     case N >= 10 of
         true ->
             %% Stop after ten runs
-            rabbit_log:debug("Will stop virtual host process reconciliation after ~tp runs", [N]),
+            ?LOG_DEBUG("Will stop virtual host process reconciliation after ~tp runs", [N]),
             ok;
         false ->
             case is_reconciliation_enabled() of
                 false -> ok;
                 true  ->
                     Delay = DelayInSeconds * 1000,
-                    rabbit_log:debug("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
+                    ?LOG_DEBUG("Will reschedule virtual host process reconciliation after ~b seconds", [DelayInSeconds]),
                     timer:apply_after(Delay, ?MODULE, FunName, [])
             end
     end.

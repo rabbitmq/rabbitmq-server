@@ -13,6 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -87,7 +88,7 @@ session_infos(Pids) ->
                   {ok, Infos} ->
                       {true, Infos};
                   {error, Reason} ->
-                      rabbit_log:warning("failed to get infos for session ~p: ~tp",
+                      ?LOG_WARNING("failed to get infos for session ~p: ~tp",
                                          [Pid, Reason]),
                       false
               end

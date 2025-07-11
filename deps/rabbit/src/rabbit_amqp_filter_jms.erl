@@ -8,6 +8,7 @@
 -feature(maybe_expr, enable).
 
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -type parsed_expression() :: {ApplicationProperties :: boolean(),
                               rabbit_jms_ast:ast()}.
@@ -303,14 +304,14 @@ jms_selector_to_list(JmsSelector) ->
         String when is_list(String) ->
             {ok, String};
         Error ->
-            rabbit_log:warning("JMS message selector ~p is not UTF-8 encoded: ~p",
+            ?LOG_WARNING("JMS message selector ~p is not UTF-8 encoded: ~p",
                                [JmsSelector, Error]),
             error
     end.
 
 check_length(String)
   when length(String) > ?MAX_EXPRESSION_LENGTH ->
-    rabbit_log:warning("JMS message selector length ~b exceeds maximum length ~b",
+    ?LOG_WARNING("JMS message selector length ~b exceeds maximum length ~b",
                        [length(String), ?MAX_EXPRESSION_LENGTH]),
     error;
 check_length(_) ->
@@ -321,14 +322,14 @@ tokenize(String, JmsSelector) ->
         {ok, Tokens, _EndLocation} ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
-            rabbit_log:warning("failed to scan JMS message selector '~ts': ~tp",
+            ?LOG_WARNING("failed to scan JMS message selector '~ts': ~tp",
                                [JmsSelector, ErrDescriptor]),
             error
     end.
 
 check_token_count(Tokens, JmsSelector)
   when length(Tokens) > ?MAX_TOKENS ->
-    rabbit_log:warning("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
+    ?LOG_WARNING("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
                        [JmsSelector, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
@@ -337,7 +338,7 @@ check_token_count(_, _) ->
 parse(Tokens, JmsSelector) ->
     case rabbit_jms_selector_parser:parse(Tokens) of
         {error, Reason} ->
-            rabbit_log:warning("failed to parse JMS message selector '~ts': ~p",
+            ?LOG_WARNING("failed to parse JMS message selector '~ts': ~p",
                                [JmsSelector, Reason]),
             error;
         Ok ->
@@ -357,12 +358,12 @@ transform_ast(Ast0, JmsSelector) ->
         Ast ->
             {ok, Ast}
     catch {unsupported_field, Name} ->
-              rabbit_log:warning(
+              ?LOG_WARNING(
                 "identifier ~ts in JMS message selector ~tp is unsupported",
                 [Name, JmsSelector]),
               error;
           {invalid_pattern, Reason} ->
-              rabbit_log:warning(
+              ?LOG_WARNING(
                 "failed to parse LIKE pattern for JMS message selector ~tp: ~tp",
                 [JmsSelector, Reason]),
               error

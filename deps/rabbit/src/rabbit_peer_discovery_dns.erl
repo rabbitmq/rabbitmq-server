@@ -6,6 +6,9 @@
 %%
 
 -module(rabbit_peer_discovery_dns).
+
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
@@ -27,7 +30,7 @@ list_nodes() ->
       {ok, ClusterFormation} ->
         case proplists:get_value(peer_discovery_dns, ClusterFormation) of
             undefined ->
-              rabbit_log:warning("Peer discovery backend is set to ~ts "
+              ?LOG_WARNING("Peer discovery backend is set to ~ts "
                                  "but final config does not contain rabbit.cluster_formation.peer_discovery_dns. "
                                  "Cannot discover any nodes because seed hostname is not configured!",
                                  [?MODULE]),
@@ -90,7 +93,7 @@ decode_record(ipv6) ->
 
 lookup(SeedHostname, LongNamesUsed, IPv) ->
     IPs   = inet_res:lookup(SeedHostname, in, decode_record(IPv)),
-    rabbit_log:info("Addresses discovered via ~ts records of ~ts: ~ts",
+    ?LOG_INFO("Addresses discovered via ~ts records of ~ts: ~ts",
 		    [string:to_upper(atom_to_list(decode_record(IPv))),
 		     SeedHostname,
 		     string:join([inet_parse:ntoa(IP) || IP <- IPs], ", ")]),
@@ -106,6 +109,6 @@ extract_host({ok, {hostent, FQDN, _, _, _, _}}, true, _Address) ->
 extract_host({ok, {hostent, FQDN, _, _, _, _}}, false, _Address) ->
   lists:nth(1, string:tokens(FQDN, "."));
 extract_host({error, Error}, _, Address) ->
-  rabbit_log:error("Reverse DNS lookup for address ~ts failed: ~tp",
+  ?LOG_ERROR("Reverse DNS lookup for address ~ts failed: ~tp",
                    [inet_parse:ntoa(Address), Error]),
   error.

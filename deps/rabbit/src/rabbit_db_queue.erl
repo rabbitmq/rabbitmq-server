@@ -14,6 +14,7 @@
 -include("amqqueue.hrl").
 
 -include("include/rabbit_khepri.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          get/1,
@@ -341,7 +342,7 @@ count(VHostName) ->
     try
         list_for_count(VHostName)
     catch _:Err ->
-            rabbit_log:error("Failed to fetch number of queues in vhost ~p:~n~p",
+            ?LOG_ERROR("Failed to fetch number of queues in vhost ~p:~n~p",
                              [VHostName, Err]),
             0
     end.

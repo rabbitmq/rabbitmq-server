@@ -13,6 +13,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          parse/2,
@@ -292,7 +293,7 @@ handle_dest(#'basic.nack'{delivery_tag = Seq, multiple = Multiple},
                        end, Seq, Multiple, State);
 
 handle_dest(#'basic.cancel'{}, #{name := Name}) ->
-    rabbit_log:warning("Shovel ~tp received a 'basic.cancel' from the server", [Name]),
+    ?LOG_WARNING("Shovel ~tp received a 'basic.cancel' from the server", [Name]),
     {stop, {shutdown, restart}};
 
 handle_dest({'EXIT', Conn, Reason}, #{dest := #{current := {Conn, _, _}}}) ->
@@ -416,12 +417,12 @@ pop_pending(State = #{dest := Dest}) ->
     end.
 
 make_conn_and_chan([], {VHost, Name} = _ShovelName) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
           "Shovel '~ts' in vhost '~ts' has no more URIs to try for connection",
           [Name, VHost]),
     erlang:error(failed_to_connect_using_provided_uris);
 make_conn_and_chan([], ShovelName) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
           "Shovel '~ts' has no more URIs to try for connection",
           [ShovelName]),
     erlang:error(failed_to_connect_using_provided_uris);
@@ -450,11 +451,11 @@ do_make_conn_and_chan(URIs, ShovelName) ->
     end.
 
 log_connection_failure(Reason, URI, {VHost, Name} = _ShovelName) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
           "Shovel '~ts' in vhost '~ts' failed to connect (URI: ~ts): ~ts",
       [Name, VHost, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]);
 log_connection_failure(Reason, URI, ShovelName) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
           "Shovel '~ts' failed to connect (URI: ~ts): ~ts",
           [ShovelName, amqp_uri:remove_credentials(URI), human_readable_connection_error(Reason)]).
 

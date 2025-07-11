@@ -12,6 +12,7 @@
 -include_lib("kernel/include/file.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -compile(export_all).
 
@@ -227,7 +228,7 @@ non_empty_files(Files) ->
      end || EmptyFile <- empty_files(Files)].
 
 test_logs_working(LogFiles) ->
-    ok = rabbit_log:error("Log a test message"),
+    ok = ?LOG_ERROR("Log a test message"),
     %% give the error loggers some time to catch up
     ?awaitMatch(true,
                 lists:all(fun(LogFile) -> [true] =:= non_empty_files([LogFile]) end, LogFiles),
