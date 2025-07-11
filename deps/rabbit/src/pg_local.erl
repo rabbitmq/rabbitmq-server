@@ -34,6 +34,8 @@
 %%
 -module(pg_local).
 
+-include_lib("kernel/include/logger.hrl").
+
 -export([join/2, leave/2, get_members/1, in_group/2]).
 %% intended for testing only; not part of official API
 -export([sync/0, clear/0]).
@@ -120,7 +122,7 @@ handle_call(clear, _From, S) ->
     {reply, ok, S};
 
 handle_call(Request, From, S) ->
-    error_logger:warning_msg("The pg_local server received an unexpected message:\n"
+    ?LOG_WARNING("The pg_local server received an unexpected message:\n"
                              "handle_call(~tp, ~tp, _)\n",
                              [Request, From]),
     {noreply, S}.

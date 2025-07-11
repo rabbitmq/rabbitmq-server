@@ -317,7 +317,7 @@ find_blocked_global_peers() ->
     Snapshot1 = snapshot_global_dict(),
     timer:sleep(10_000),
     Snapshot2 = snapshot_global_dict(),
-    logger:debug("global's sync tags 10s ago: ~p~n"
+    ?LOG_DEBUG("global's sync tags 10s ago: ~p~n"
                  "global's sync tags now: ~p",
                  [Snapshot1, Snapshot2]),
     find_blocked_global_peers1(Snapshot2, Snapshot1).
@@ -344,11 +344,11 @@ unblock_global_peer(PeerNode) ->
     PeerToThisCid = connection_id(PeerState, ThisNode),
     ThisToPeerCid = connection_id(ThisState, PeerNode),
 
-    logger:info(
+    ?LOG_INFO(
       "global hang workaround: faking nodedown / nodeup between peer node ~s "
       "(connection ID to us: ~p) and our node ~s (connection ID to peer: ~p)",
       [PeerNode, PeerToThisCid, ThisNode, ThisToPeerCid]),
-    logger:debug(
+    ?LOG_DEBUG(
       "peer global state: ~tp~nour global state: ~tp",
       [erpc:call(PeerNode, sys, get_status, [global_name_server]),
        sys:get_status(global_name_server)]),

@@ -9,6 +9,7 @@
 -module(amqp_channels_manager).
 
 -include("amqp_client_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(gen_server).
 

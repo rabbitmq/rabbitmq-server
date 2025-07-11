@@ -45,7 +45,7 @@
 -include_lib("kernel/include/logger.hrl").
 %% Set to true to get an awful lot of debug logs.
 -if(false).
--define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).
+-define(DEBUG(X,Y), ?LOG_DEBUG("~0p: " ++ X, [?FUNCTION_NAME|Y])).
 -else.
 -define(DEBUG(X,Y), _ = X, _ = Y, ok).
 -endif.

@@ -17,6 +17,7 @@
 -module(rabbit_stream_core).
 
 -include("rabbit_stream.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([init/1,
          incoming_data/2,
@@ -778,7 +779,7 @@ parse_request(<<?REQUEST:1,
             <<_Count:32, Bin/binary>> ->
                 parse_map(Bin, #{});
             _ ->
-                logger:warning("Incorrect binary for subscription properties: ~w",
+                ?LOG_WARNING("Incorrect binary for subscription properties: ~w",
                                [PropsBin]),
                 #{}
         end,
