@@ -24,6 +24,7 @@
 
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 -record(statem_data,
         {transport :: module(),
@@ -143,6 +144,7 @@ init([KeepaliveSup,
         heartbeat := Heartbeat,
         transport := ConnTransport}]) ->
     process_flag(trap_exit, true),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     {ok, Sock} =
         rabbit_networking:handshake(Ref,
                                     application:get_env(rabbitmq_stream,
@@ -220,7 +222,7 @@ init([KeepaliveSup,
                                                config = Config});
         {Error, Reason} ->
             rabbit_net:fast_close(RealSocket),
-            rabbit_log_connection:warning("Closing connection because of ~tp ~tp",
+            ?LOG_WARNING("Closing connection because of ~tp ~tp",
                                           [Error, Reason])
     end.
 
@@ -411,7 +413,7 @@ tuned({call, From}, {info, _Items}, _StateData) ->
     {keep_state_and_data, {reply, From, []}}.
 
 state_timeout(State, Transport, Socket) ->
-    rabbit_log_connection:warning("Closing connection because of timeout in state "
+    ?LOG_WARNING("Closing connection because of timeout in state "
                                   "'~ts' likely due to lack of client action.",
                                   [State]),
     close_immediately(Transport, Socket),
@@ -438,16 +440,16 @@ handle_info(Msg,
             setopts(Transport, S, [{active, once}]),
             #stream_connection{connection_step = NewConnectionStep} =
                 Connection1,
-            rabbit_log_connection:debug("Transitioned from ~ts to ~ts",
+            ?LOG_DEBUG("Transitioned from ~ts to ~ts",
                                         [PreviousConnectionStep,
                                          NewConnectionStep]),
             Transition(NewConnectionStep, StatemData, Connection1, State1);
         {Closed, S} ->
-            rabbit_log_connection:debug("Stream protocol connection socket ~w closed",
+            ?LOG_DEBUG("Stream protocol connection socket ~w closed",
                                         [S]),
             stop;
         {Error, S, Reason} ->
-            rabbit_log_connection:warning("Socket error ~tp [~w]", [Reason, S]),
+            ?LOG_WARNING("Socket error ~tp [~w]", [Reason, S]),
             stop;
         {resource_alarm, IsThereAlarm} ->
             {keep_state,
@@ -491,7 +493,7 @@ transition_to_opened(Transport,
                   config = Configuration}}.
 
 invalid_transition(Transport, Socket, From, To) ->
-    rabbit_log_connection:warning("Closing socket ~w. Invalid transition from ~ts "
+    ?LOG_WARNING("Closing socket ~w. Invalid transition from ~ts "
                                   "to ~ts.",
                                   [Socket, From, To]),
     close_immediately(Transport, Socket),
@@ -512,7 +514,7 @@ socket_op(Sock, Fun) ->
         {ok, Res} ->
             Res;
         {error, Reason} ->
-            rabbit_log_connection:warning("Error during socket operation ~tp",
+            ?LOG_WARNING("Error during socket operation ~tp",
                                           [Reason]),
             rabbit_net:fast_close(RealSocket),
             exit(normal)
@@ -636,7 +638,7 @@ open(info, {resource_alarm, IsThereAlarm},
                       #configuration{credits_required_for_unblocking =
                                          CreditsRequiredForUnblocking}} =
          StatemData) ->
-    rabbit_log_connection:debug("Connection ~tp received resource alarm. Alarm "
+    ?LOG_DEBUG("Connection ~tp received resource alarm. Alarm "
                                 "on? ~tp",
                                 [ConnectionName, IsThereAlarm]),
     EnoughCreditsToUnblock =
@@ -648,18 +650,18 @@ open(info, {resource_alarm, IsThereAlarm},
             {false, EnoughCredits} ->
                 not EnoughCredits
         end,
-    rabbit_log_connection:debug("Connection ~tp had blocked status set to ~tp, "
+    ?LOG_DEBUG("Connection ~tp had blocked status set to ~tp, "
                                 "new blocked status is now ~tp",
                                 [ConnectionName, Blocked, NewBlockedState]),
     case {Blocked, NewBlockedState} of
         {true, false} ->
             setopts(Transport, S, [{active, once}]),
             ok = rabbit_heartbeat:resume_monitor(Heartbeater),
-            rabbit_log_connection:debug("Unblocking connection ~tp",
+            ?LOG_DEBUG("Unblocking connection ~tp",
                                         [ConnectionName]);
         {false, true} ->
             ok = rabbit_heartbeat:pause_monitor(Heartbeater),
-            rabbit_log_connection:debug("Blocking connection ~tp after resource alarm",
+            ?LOG_DEBUG("Blocking connection ~tp after resource alarm",
                                         [ConnectionName]);
         _ ->
             ok
@@ -690,7 +692,7 @@ open(info, {OK, S, Data},
         closing ->
             stop;
         close_sent ->
-            rabbit_log_connection:debug("Transitioned to close_sent"),
+            ?LOG_DEBUG("Transitioned to close_sent"),
             setopts(Transport, S, [{active, once}]),
             {next_state, close_sent,
              StatemData#statem_data{connection = Connection1,
@@ -820,14 +822,14 @@ open(info,
 open(info, {Closed, Socket}, #statem_data{connection = Connection})
     when Closed =:= tcp_closed; Closed =:= ssl_closed ->
     _ = demonitor_all_streams(Connection),
-    rabbit_log_connection:warning("Stream reader socket ~w closed [~w]",
+    ?LOG_WARNING("Stream reader socket ~w closed [~w]",
                                   [Socket, self()]),
     stop;
 open(info, {Error, Socket, Reason},
      #statem_data{connection = Connection})
     when Error =:= tcp_error; Error =:= ssl_error ->
     _ = demonitor_all_streams(Connection),
-    rabbit_log_connection:error("Stream reader socket error ~tp [~w] [~w]",
+    ?LOG_ERROR("Stream reader socket error ~tp [~w] [~w]",
                                 [Reason, Socket, self()]),
     stop;
 open(info, {'DOWN', MonitorRef, process, _OsirisPid, _Reason},
@@ -870,14 +872,14 @@ open(info, heartbeat_send,
         ok ->
             keep_state_and_data;
         Unexpected ->
-            rabbit_log_connection:info("Heartbeat send error ~tp, closing connection",
+            ?LOG_INFO("Heartbeat send error ~tp, closing connection",
                                        [Unexpected]),
             _C1 = demonitor_all_streams(Connection),
             stop
     end;
 open(info, heartbeat_timeout,
      #statem_data{connection = #stream_connection{} = Connection}) ->
-    rabbit_log_connection:debug("Heartbeat timeout, closing connection"),
+    ?LOG_DEBUG("Heartbeat timeout, closing connection"),
     _C1 = demonitor_all_streams(Connection),
     stop;
 open(info, {infos, From},
@@ -912,7 +914,7 @@ open(info, check_outstanding_requests,
                             end, false, Requests),
     case HasTimedOut of
         true ->
-            rabbit_log_connection:info("Forcing stream connection ~tp closing: request to client timed out",
+            ?LOG_INFO("Forcing stream connection ~tp closing: request to client timed out",
                                        [self()]),
             _ = demonitor_all_streams(Connection0),
             {stop, {request_timeout, <<"Request timeout">>}};
@@ -924,19 +926,19 @@ open(info, check_outstanding_requests,
     end;
 open(info, token_expired, #statem_data{connection = Connection}) ->
     _ = demonitor_all_streams(Connection),
-    rabbit_log_connection:info("Forcing stream connection ~tp closing because token expired",
+    ?LOG_INFO("Forcing stream connection ~tp closing because token expired",
                                [self()]),
     {stop, {shutdown, <<"Token expired">>}};
 open(info, {shutdown, Explanation} = Reason,
      #statem_data{connection = Connection}) ->
     %% rabbitmq_management or rabbitmq_stream_management plugin
     %% requests to close connection.
-    rabbit_log_connection:info("Forcing stream connection ~tp closing: ~tp",
+    ?LOG_INFO("Forcing stream connection ~tp closing: ~tp",
                                [self(), Explanation]),
     _ = demonitor_all_streams(Connection),
     {stop, Reason};
 open(info, Unknown, _StatemData) ->
-    rabbit_log_connection:warning("Received unknown message ~tp in state ~ts",
+    ?LOG_WARNING("Received unknown message ~tp in state ~ts",
                                   [Unknown, ?FUNCTION_NAME]),
     %% FIXME send close
     keep_state_and_data;
@@ -1110,12 +1112,12 @@ open(cast,
                                                                 SendFileOct)
                                                of
                                                    {error, closed} ->
-                                                       rabbit_log_connection:info("Stream protocol connection has been closed by "
+                                                       ?LOG_INFO("Stream protocol connection has been closed by "
                                                                                   "peer",
                                                                                   []),
                                                        throw({stop, normal});
                                                    {error, Reason} ->
-                                                       rabbit_log_connection:info("Error while sending chunks: ~tp",
+                                                       ?LOG_INFO("Error while sending chunks: ~tp",
                                                                                   [Reason]),
                                                        %% likely a connection problem
                                                        Consumer;
@@ -1155,7 +1157,7 @@ close_sent(enter, _OldState,
                                                StateTimeout}}) ->
     {keep_state_and_data, {state_timeout, StateTimeout, close}};
 close_sent(state_timeout, close, #statem_data{}) ->
-    rabbit_log_connection:warning("Closing connection because of timeout in state "
+    ?LOG_WARNING("Closing connection because of timeout in state "
                                   "'~ts' likely due to lack of client action.",
                                   [?FUNCTION_NAME]),
     stop;
@@ -1168,7 +1170,7 @@ close_sent(info, {tcp, S, Data},
     {Connection1, State1} =
         handle_inbound_data_post_close(Transport, Connection, State, Data),
     #stream_connection{connection_step = Step} = Connection1,
-    rabbit_log_connection:debug("Stream reader has transitioned from ~ts to ~ts",
+    ?LOG_DEBUG("Stream reader has transitioned from ~ts to ~ts",
                                 [?FUNCTION_NAME, Step]),
     case Step of
         closing_done ->
@@ -1180,11 +1182,11 @@ close_sent(info, {tcp, S, Data},
                                     connection_state = State1}}
     end;
 close_sent(info, {tcp_closed, S}, _StatemData) ->
-    rabbit_log_connection:debug("Stream protocol connection socket ~w closed [~w]",
+    ?LOG_DEBUG("Stream protocol connection socket ~w closed [~w]",
                                 [S, self()]),
     stop;
 close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
-    rabbit_log_connection:error("Stream protocol connection socket error: ~tp "
+    ?LOG_ERROR("Stream protocol connection socket error: ~tp "
                                 "[~w] [~w]",
                                 [Reason, S, self()]),
     stop;
@@ -1198,7 +1200,7 @@ close_sent(info, {resource_alarm, IsThereAlarm},
                                 Connection#stream_connection{resource_alarm =
                                                                  IsThereAlarm}}};
 close_sent(info, Msg, _StatemData) ->
-    rabbit_log_connection:warning("Ignored unknown message ~tp in state ~ts",
+    ?LOG_WARNING("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
     keep_state_and_data;
 close_sent({call, From}, {info, _Items}, _StateData) ->
@@ -1346,7 +1348,7 @@ handle_frame_pre_auth(Transport,
                                                                     Username,
                                                                     stream),
                             auth_fail(Username, Msg, Args, C1, State),
-                            rabbit_log_connection:warning(Msg, Args),
+                            ?LOG_WARNING(Msg, Args),
                             silent_close_delay(),
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate,
@@ -1362,7 +1364,7 @@ handle_frame_pre_auth(Transport,
                                                                     Args)}],
                                                C1,
                                                State),
-                            rabbit_log_connection:warning(Msg, Args),
+                            ?LOG_WARNING(Msg, Args),
                             {C1#stream_connection{connection_step = failure},
                              {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
                         {challenge, Challenge, AuthState1} ->
@@ -1393,7 +1395,7 @@ handle_frame_pre_auth(Transport,
                                     rabbit_core_metrics:auth_attempt_failed(Host,
                                                                             Username,
                                                                             stream),
-                                    rabbit_log_connection:warning("User '~ts' can only connect via localhost",
+                                    ?LOG_WARNING("User '~ts' can only connect via localhost",
                                                                   [Username]),
                                     {C1#stream_connection{connection_step =
                                                               failure},
@@ -1430,7 +1432,7 @@ handle_frame_pre_auth(_Transport,
                           Connection,
                       #stream_connection_state{blocked = Blocked} = State,
                       {tune, FrameMax, Heartbeat}) ->
-    rabbit_log_connection:debug("Tuning response ~tp ~tp ",
+    ?LOG_DEBUG("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
@@ -1511,7 +1513,7 @@ handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     ?LOG_DEBUG("Received heartbeat frame pre auth"),
     {Connection, State};
 handle_frame_pre_auth(_Transport, Connection, State, Command) ->
-    rabbit_log_connection:warning("unknown command ~w, closing connection.",
+    ?LOG_WARNING("unknown command ~w, closing connection.",
                                   [Command]),
     {Connection#stream_connection{connection_step = failure}, State}.
 
@@ -1555,7 +1557,7 @@ handle_frame_post_auth(Transport,
                          PublisherId,
                          _WriterRef,
                          Stream}}) ->
-    rabbit_log_connection:info("Cannot create publisher ~tp on stream ~tp, connection "
+    ?LOG_INFO("Cannot create publisher ~tp on stream ~tp, connection "
                                "is blocked because of resource alarm",
                                [PublisherId, Stream]),
     response(Transport,
@@ -1588,7 +1590,7 @@ handle_frame_post_auth(Transport,
                                                                   NewUsername,
                                                                   stream),
                           auth_fail(NewUsername, Msg, Args, C1, S1),
-                          rabbit_log_connection:warning(Msg, Args),
+                          ?LOG_WARNING(Msg, Args),
                           silent_close_delay(),
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate,
@@ -1604,7 +1606,7 @@ handle_frame_post_auth(Transport,
                                                                   Args)}],
                                              C1,
                                              S1),
-                          rabbit_log_connection:warning(Msg, Args),
+                          ?LOG_WARNING(Msg, Args),
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate, ?RESPONSE_SASL_ERROR, <<>>}};
                       {challenge, Challenge, AuthState1} ->
@@ -1642,7 +1644,7 @@ handle_frame_post_auth(Transport,
                     {C2, S1}
               end;
         {OtherMechanism, _} ->
-              rabbit_log_connection:warning("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
+              ?LOG_WARNING("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
                                               [Username, NewMechanism, OtherMechanism]),
               silent_close_delay(),
               CmdBody =
@@ -2036,7 +2038,7 @@ handle_frame_post_auth(Transport,
                              SendFileOct)
             of
                 {error, closed} ->
-                    rabbit_log_connection:info("Stream protocol connection has been closed by "
+                    ?LOG_INFO("Stream protocol connection has been closed by "
                                                "peer",
                                                []),
                     throw({stop, normal});
@@ -2493,12 +2495,12 @@ handle_frame_post_auth(Transport,
                                              SendFileOct)
                             of
                                 {error, closed} ->
-                                    rabbit_log_connection:info("Stream protocol connection has been closed by "
+                                    ?LOG_INFO("Stream protocol connection has been closed by "
                                                                "peer",
                                                                []),
                                     throw({stop, normal});
                                 {error, Reason} ->
-                                    rabbit_log_connection:info("Error while sending chunks: ~tp",
+                                    ?LOG_INFO("Error while sending chunks: ~tp",
                                                                [Reason]),
                                     %% likely a connection problem
                                     Consumer;
@@ -2853,7 +2855,7 @@ maybe_dispatch_on_subscription(Transport,
                      SendFileOct)
     of
         {error, closed} ->
-            rabbit_log_connection:info("Stream protocol connection has been closed by "
+            ?LOG_INFO("Stream protocol connection has been closed by "
                                        "peer",
                                        []),
             throw({stop, normal});
@@ -3231,13 +3233,13 @@ handle_frame_post_close(_Transport,
                         Connection,
                         State,
                         {response, _CorrelationId, {close, _Code}}) ->
-    rabbit_log_connection:info("Received close confirmation from client"),
+    ?LOG_INFO("Received close confirmation from client"),
     {Connection#stream_connection{connection_step = closing_done}, State};
 handle_frame_post_close(_Transport, Connection, State, heartbeat) ->
-    rabbit_log_connection:debug("Received heartbeat command post close"),
+    ?LOG_DEBUG("Received heartbeat command post close"),
     {Connection, State};
 handle_frame_post_close(_Transport, Connection, State, Command) ->
-    rabbit_log_connection:warning("ignored command on close ~tp .",
+    ?LOG_WARNING("ignored command on close ~tp .",
                                   [Command]),
     {Connection, State}.
 
