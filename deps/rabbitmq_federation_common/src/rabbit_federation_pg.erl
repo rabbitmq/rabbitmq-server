@@ -7,6 +7,9 @@
 
 -module(rabbit_federation_pg).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([start_scope/1, stop_scope/1]).
 
 start_scope(Scope) ->
@@ -38,7 +41,7 @@ stop_group(Scope, Group) ->
       fun(MRef) ->
               receive
                   {'DOWN', MRef, process, _Member, _Info} ->
-                      logger:alert("Member ~p stopped: ~0p", [_Member, _Info]),
+                      ?LOG_ALERT("Member ~p stopped: ~0p", [_Member, _Info]),
                       ok
               end
       end, MRefs),

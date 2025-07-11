@@ -19,6 +19,7 @@
          none/1, none/2, none/3]).
 
 -include_lib("rabbit_common/include/logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -compile({no_auto_import, [error/2, error/3]}).
 
@@ -30,7 +31,7 @@ debug(Format, Args) -> debug(self(), Format, Args).
 
 -spec debug(pid() | [tuple()], string(), [any()]) -> 'ok'.
 debug(Pid, Format, Args) ->
-    logger:debug(Format, Args, #{pid => Pid,
+    ?LOG_DEBUG(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec info(string()) -> 'ok'.
@@ -41,7 +42,7 @@ info(Format, Args) -> info(self(), Format, Args).
 
 -spec info(pid() | [tuple()], string(), [any()]) -> 'ok'.
 info(Pid, Format, Args) ->
-    logger:info(Format, Args, #{pid => Pid,
+    ?LOG_INFO(Format, Args, #{pid => Pid,
                                 domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec notice(string()) -> 'ok'.
@@ -52,7 +53,7 @@ notice(Format, Args) -> notice(self(), Format, Args).
 
 -spec notice(pid() | [tuple()], string(), [any()]) -> 'ok'.
 notice(Pid, Format, Args) ->
-    logger:notice(Format, Args, #{pid => Pid,
+    ?LOG_NOTICE(Format, Args, #{pid => Pid,
                                   domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec warning(string()) -> 'ok'.
@@ -63,7 +64,7 @@ warning(Format, Args) -> warning(self(), Format, Args).
 
 -spec warning(pid() | [tuple()], string(), [any()]) -> 'ok'.
 warning(Pid, Format, Args) ->
-    logger:warning(Format, Args, #{pid => Pid,
+    ?LOG_WARNING(Format, Args, #{pid => Pid,
                                    domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec error(string()) -> 'ok'.
@@ -74,7 +75,7 @@ error(Format, Args) -> error(self(), Format, Args).
 
 -spec error(pid() | [tuple()], string(), [any()]) -> 'ok'.
 error(Pid, Format, Args) ->
-    logger:error(Format, Args, #{pid => Pid,
+    ?LOG_ERROR(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec critical(string()) -> 'ok'.
@@ -85,7 +86,7 @@ critical(Format, Args) -> critical(self(), Format, Args).
 
 -spec critical(pid() | [tuple()], string(), [any()]) -> 'ok'.
 critical(Pid, Format, Args) ->
-    logger:critical(Format, Args, #{pid => Pid,
+    ?LOG_CRITICAL(Format, Args, #{pid => Pid,
                                     domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec alert(string()) -> 'ok'.
@@ -96,7 +97,7 @@ alert(Format, Args) -> alert(self(), Format, Args).
 
 -spec alert(pid() | [tuple()], string(), [any()]) -> 'ok'.
 alert(Pid, Format, Args) ->
-    logger:alert(Format, Args, #{pid => Pid,
+    ?LOG_ALERT(Format, Args, #{pid => Pid,
                                  domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec emergency(string()) -> 'ok'.
@@ -107,7 +108,7 @@ emergency(Format, Args) -> emergency(self(), Format, Args).
 
 -spec emergency(pid() | [tuple()], string(), [any()]) -> 'ok'.
 emergency(Pid, Format, Args) ->
-    logger:emergency(Format, Args, #{pid => Pid,
+    ?LOG_EMERGENCY(Format, Args, #{pid => Pid,
                                      domain => ?RMQLOG_DOMAIN_CONN}).
 
 -spec none(string()) -> 'ok'.

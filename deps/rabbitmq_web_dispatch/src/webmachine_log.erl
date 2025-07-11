@@ -19,6 +19,7 @@
 -module(webmachine_log).
 
 -include("webmachine_logger.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([add_handler/2,
          call/2,
@@ -135,7 +136,7 @@ log_access({_, _, _}=LogData) ->
 %% @doc Close a log file.
 -spec log_close(atom(), string(), file:io_device()) -> ok | {error, term()}.
 log_close(Mod, Name, FD) ->
-    logger:info("~tp: closing log file: ~tp", [Mod, Name]),
+    ?LOG_INFO("~tp: closing log file: ~tp", [Mod, Name]),
     file:close(FD).
 
 %% @doc Open a new log file for writing
@@ -148,7 +149,7 @@ log_open(FileName) ->
 -spec log_open(string(), datehour()) -> file:io_device().
 log_open(FileName, DateHour) ->
     LogName = FileName ++ suffix(DateHour),
-    logger:info("opening log file: ~tp", [LogName]),
+    ?LOG_INFO("opening log file: ~tp", [LogName]),
     _ = filelib:ensure_dir(LogName),
     {ok, FD} = file:open(LogName, [read, write, raw]),
     {ok, Location} = file:position(FD, eof),
