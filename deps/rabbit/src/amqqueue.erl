@@ -464,7 +464,7 @@ set_policy_version(#amqqueue{} = Queue, PV) ->
 % type_state (new in v2)
 
 -spec get_type_state(amqqueue()) -> map().
-get_type_state(#amqqueue{type_state = TState}) ->
+get_type_state(#amqqueue{type_state = TState}) when is_map(TState) ->
     TState;
 get_type_state(_) ->
     #{}.
