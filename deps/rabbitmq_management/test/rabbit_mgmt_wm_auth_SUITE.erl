@@ -11,6 +11,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -import(application, [set_env/3, unset_env/2]).
 -import(rabbit_mgmt_wm_auth, [authSettings/0]).
+-import(rabbit_mgmt_test_util, [req/5]).
 -compile(export_all).
 
 all() ->
@@ -27,12 +28,17 @@ all() ->
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
      {group, verify_oauth_scopes},
-     {group, verify_extra_endpoint_params}
+     {group, verify_extra_endpoint_params},
+     {group, run_with_broker}
     ].
 
 groups() ->
     [
-
+      {run_with_broker, [], [
+        {verify_introspection_endpoint, [], [
+          introspect_opaque_token_returns_active_jwt_token
+        ]}        
+      ]},
       {verify_multi_resource_and_provider, [], [
         {with_oauth_enabled, [], [
             {with_oauth_providers_idp1_idp2, [], [
@@ -510,6 +516,26 @@ init_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) 
     ?config(a, Config), oauth_token_endpoint_params, ?config(token_params_1, Config)),
   Config;
 
+init_per_group(run_with_broker, Config) ->
+  Config1 = finish_init(run_with_broker, Config),
+  start_broker(Config1);
+
+init_per_group(verify_introspection_endpoint, Config) ->
+  {ok, _} = application:ensure_all_started(ssl),
+  {ok, _} = application:ensure_all_started(cowboy),
+  
+  PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
+  Port = PortBase + 100,
+    
+  CertsDir = ?config(rmq_certsdir, Config),
+  Endpoints = [ {"/introspect", introspect_endpoint, []}],
+  Dispatch = cowboy_router:compile([{'_', Endpoints}]),
+  {ok, _} = cowboy:start_tls(introspection_http_listener,
+                      [{port, Port},
+                       {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                       {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
+                      #{env => #{dispatch => Dispatch}}),
+  Config;
 
 init_per_group(_, Config) ->
   Config.
@@ -632,10 +658,43 @@ end_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) -
     ?config(a, Config), oauth_token_endpoint_params),
   Config;
 
+end_per_group(run_with_broker, Config) -> 
+  Teardown0 = rabbit_ct_client_helpers:teardown_steps(),
+  Teardown1 = rabbit_ct_broker_helpers:teardown_steps(),
+  Steps = Teardown0 ++ Teardown1,
+  rabbit_ct_helpers:run_teardown_steps(Config, Steps),
+  Config;
+
+end_per_group(verify_introspection_endpoint, Config) ->
+  ok = cowboy:stop_listener(introspection_http_listener),
+  inets:stop(),
+  Config; 
 
 end_per_group(_, Config) ->
   Config.
 
+
+start_broker(Config) ->
+    Setup0 = rabbit_ct_broker_helpers:setup_steps(),
+    Setup1 = rabbit_ct_client_helpers:setup_steps(),
+    Steps = Setup0 ++ Setup1,
+    case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
+        {skip, _} = Skip ->
+            Skip;
+        Config1 ->
+            Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+                    Config1, 'rabbitmq_4.0.0'),
+            case Ret of
+                ok -> Config1;
+                _  -> Ret
+            end
+    end.
+finish_init(Group, Config) ->
+    rabbit_ct_helpers:log_environment(),
+    inets:start(),
+    NodeConf = [{rmq_nodename_suffix, Group}],
+    rabbit_ct_helpers:set_config(Config, NodeConf).
+    
 
 %% -------------------------------------------------------------------
 %% Test cases.
@@ -837,6 +896,10 @@ should_return_mgt_oauth_resource_a_with_authorization_endpoint_params_1(Config) 
 should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_token_endpoint_params, token_params_1).
+
+introspect_opaque_token_returns_active_jwt_token(Config) ->  
+  _Result = req(Config, 0, post, "/introspect", [{"Authorization", "Bearer active"}]).
+
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions
