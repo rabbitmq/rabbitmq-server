@@ -188,3 +188,4 @@ sub(DecodedToken) ->
 -spec sub(map(), any()) -> binary() | undefined.
 sub(DecodedToken, Default) ->
     maps:get(<<"sub">>, DecodedToken, Default).
+

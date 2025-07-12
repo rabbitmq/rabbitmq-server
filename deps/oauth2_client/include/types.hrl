@@ -16,7 +16,8 @@
     token_endpoint :: option(uri_string:uri_string()),
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
-    jwks_uri :: option(uri_string:uri_string())
+    jwks_uri :: option(uri_string:uri_string()),
+    introspection_endpoint :: option(uri_string:uri_string())
 }).
 -type openid_configuration() :: #openid_configuration{}.
 
@@ -28,6 +29,10 @@
     authorization_endpoint :: option(uri_string:uri_string()),
     end_session_endpoint :: option(uri_string:uri_string()),
     jwks_uri :: option(uri_string:uri_string()),
+    introspection_endpoint :: option(uri_string:uri_string()),
+    introspection_client_id :: binary() | undefined,
+    introspection_client_secret :: binary() | undefined,
+    introspection_client_auth_method :: basic | request_param | undefined,
     ssl_options :: option(list())
 }).
 
@@ -73,3 +78,20 @@
 }).
 
 -type refresh_token_request() :: #refresh_token_request{}.
+
+-record(introspect_token_request, {
+  endpoint :: option(uri_string:uri_string()),
+  client_id :: binary() | undefined,
+  client_secret :: binary() | undefined,
+  client_auth_method :: basic | request_param | undefined,
+  ssl_options :: option(list())
+}).
+
+-type introspect_token_request() :: #introspect_token_request{}.
+
+-record(unsuccessful_introspect_token_response, {
+    error :: integer(),
+    error_description :: binary() | string() | undefined
+}).
+
+-type unsuccessful_introspect_token_response() :: #unsuccessful_introspect_token_response{}.

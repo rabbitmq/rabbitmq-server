@@ -151,24 +151,40 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
-    Token     = token_from_context(AuthProps),
-    case resolve_resource_server(Token) of
-        {error, _} = Err0 ->
-            {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
-        {ResourceServer, _} = Tuple ->
-            case check_token(Token, Tuple) of
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
-                {refused, Err} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                {ok, DecodedToken} ->
-                    case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
-                        {error, Err} ->
-                            {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
-                        Else ->
-                            Else
-                    end
+    Token0     = token_from_context(AuthProps),
+    TokenResult = case uaa_jwt_jwt:is_jwt_token(Token0) of 
+        true -> {ok, Token0};
+        false -> 
+            case oauth2_client:introspect_token(Token0) of
+                {ok, Tk1} -> 
+                    rabbit_log:debug("Successfully introspected token : ~p", [Tk1]),
+                    {ok, Tk1};
+                {error, Err1} -> 
+                    rabbit_log:error("Failed to introspected token due to ~p", [Err1]),
+                    {error, Err1}
             end
+    end,
+    case TokenResult of 
+        {ok, Token} ->
+            case resolve_resource_server(Token) of
+                {error, _} = Err0 ->
+                    {refused, "Authentication using OAuth 2/JWT token failed: ~tp", [Err0]};
+                {ResourceServer, _} = Tuple ->
+                    case check_token(Token, Tuple) of
+                        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid", []};
+                        {refused, Err} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                        {ok, DecodedToken} ->
+                            case with_decoded_token(DecodedToken, fun(In) -> auth_user_from_token(In, ResourceServer) end) of
+                                {error, Err} ->
+                                    {refused, "Authentication using an OAuth 2/JWT token failed: ~tp", [Err]};
+                                Else ->
+                                    Else
+                            end
+                    end
+            end;
+        {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
     end.
 
 -spec with_decoded_token(Token, Fun) -> Result
@@ -204,6 +220,7 @@ ensure_same_username(PreferredUsernameClaims, CurrentDecodedToken, NewDecodedTok
         _ -> {error, mismatch_username_after_token_refresh}
     end.
 
+
 validate_token_expiry(#{<<"exp">> := Exp}) when is_integer(Exp) ->
     Now = os:system_time(seconds),
     case Exp =< Now of
@@ -217,8 +234,11 @@ validate_token_expiry(#{}) -> ok.
           {'error', term() } |
           {'refused', 'signature_invalid' | {'error', term()} | {'invalid_aud', term()}}.
 
-check_token(DecodedToken, _) when is_map(DecodedToken) ->
-    {ok, DecodedToken};
+check_token(DecodedToken, {ResourceServer, _}) when is_map(DecodedToken) ->
+    case maps:is_key(?ACTIVE_FIELD, DecodedToken) of 
+        false -> {ok, DecodedToken};
+        true -> {ok, normalize_token_scope(ResourceServer, DecodedToken)}
+    end;
 
 check_token(Token, {ResourceServer, InternalOAuthProvider}) ->
     case decode_and_verify(Token, ResourceServer, InternalOAuthProvider) of
@@ -239,7 +259,6 @@ extract_scopes_from_scope_claim(Payload) ->
 -spec normalize_token_scope(
     ResourceServer :: resource_server(), DecodedToken :: decoded_jwt_token()) -> map().
 normalize_token_scope(ResourceServer, Payload) ->
-
     filter_duplicates(   
         filter_matching_scope_prefix(ResourceServer,
             extract_scopes_from_rich_auth_request(ResourceServer,
@@ -247,7 +266,7 @@ normalize_token_scope(ResourceServer, Payload) ->
                     extract_scopes_from_additional_scopes_key(ResourceServer, 
                         extract_scopes_from_requesting_party_token(ResourceServer,
                             extract_scopes_from_scope_claim(Payload))))))).
-
+    
 filter_duplicates(#{?SCOPE_JWT_FIELD := Scopes} = Payload) -> 
     set_scope(lists:usort(Scopes), Payload);
 filter_duplicates(Payload) -> Payload.
@@ -474,5 +493,6 @@ resolve_scope_var(Elem, Token, Vhost) ->
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
+    rabbit_log:debug("tags_from Scopes : ~p", [Scopes]),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
     lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
