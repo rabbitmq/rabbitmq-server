@@ -14,7 +14,7 @@
     <amqp-client.version>[0.6.0-SNAPSHOT,)</amqp-client.version>
     <logback.version>1.5.18</logback.version>
     <spotless.version>2.45.0</spotless.version>
-    <google-java-format.version>1.27.0</google-java-format.version>
+    <google-java-format.version>1.28.0</google-java-format.version>
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
   </properties>
