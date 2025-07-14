@@ -84,12 +84,12 @@ check_cluster() ->
         {ok, State :: #state{}, timeout() | hibernate} |
         {stop, Reason :: term()} | ignore).
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     Map = ?CONFIG_MODULE:config_map(?CONFIG_KEY),
     case map_size(Map) of
         0 ->
             ?LOG_INFO(
-               "Peer discovery: node cleanup is disabled",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               "Peer discovery: node cleanup is disabled"),
             {ok, #state{}};
         _ ->
             Interval = ?CONFIG_MODULE:get(cleanup_interval, ?CONFIG_MAPPING, Map),
@@ -103,8 +103,7 @@ init([]) ->
                       end,
             ?LOG_INFO(
                "Peer discovery: enabling node cleanup (~ts). Check interval: ~tp seconds.",
-               [WarnMsg, State#state.interval],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               [WarnMsg, State#state.interval]),
             {ok, State}
     end.
 
@@ -126,8 +125,7 @@ init([]) ->
 
 handle_call(check_cluster, _From, State) ->
     ?LOG_DEBUG(
-       "Peer discovery: checking for partitioned nodes to clean up.",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       "Peer discovery: checking for partitioned nodes to clean up."),
     maybe_cleanup(State),
     {reply, ok, State};
 handle_call(_Request, _From, State) ->
@@ -236,26 +234,24 @@ maybe_cleanup(State) ->
                     UnreachableNodes :: [node()]) -> ok.
 maybe_cleanup(_, []) ->
     ?LOG_DEBUG(
-       "Peer discovery: all known cluster nodes are up.",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
+       "Peer discovery: all known cluster nodes are up.");
+       
 maybe_cleanup(State, UnreachableNodes) ->
     ?LOG_DEBUG(
        "Peer discovery: cleanup discovered unreachable nodes: ~tp",
-       [UnreachableNodes],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       [UnreachableNodes]),
     case lists:subtract(as_list(UnreachableNodes), as_list(service_discovery_nodes())) of
         [] ->
             ?LOG_DEBUG(
                "Peer discovery: all unreachable nodes are still "
                "registered with the discovery backend ~tp",
                [rabbit_peer_discovery:backend()],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             ok;
         Nodes ->
             ?LOG_DEBUG(
                "Peer discovery: unreachable nodes are not registered "
-               "with the discovery backend ~tp", [Nodes],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               "with the discovery backend ~tp", [Nodes]),
             maybe_remove_nodes(Nodes, State#state.warn_only)
     end.
 
@@ -272,17 +268,14 @@ maybe_cleanup(State, UnreachableNodes) ->
 maybe_remove_nodes([], _) -> ok;
 maybe_remove_nodes([Node | Nodes], true) ->
     ?LOG_WARNING(
-       "Peer discovery: node ~ts is unreachable", [Node],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       "Peer discovery: node ~ts is unreachable", [Node]),
     maybe_remove_nodes(Nodes, true);
 maybe_remove_nodes([Node | Nodes], false) ->
     ?LOG_WARNING(
-       "Peer discovery: removing unknown node ~ts from the cluster", [Node],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       "Peer discovery: removing unknown node ~ts from the cluster", [Node]),
     _ = rabbit_db_cluster:forget_member(Node, false),
     ?LOG_WARNING(
-        "Peer discovery: removing all quorum queue replicas on node ~ts", [Node],
-        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+        "Peer discovery: removing all quorum queue replicas on node ~ts", [Node]),
     _ = rabbit_quorum_queue:shrink_all(Node),
     maybe_remove_nodes(Nodes, false).
 
@@ -310,13 +303,11 @@ service_discovery_nodes() ->
             Nodes = as_list(OneOrMultipleNodes),
             ?LOG_DEBUG(
                "Peer discovery cleanup: ~tp returned ~tp",
-               [Module, Nodes],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               [Module, Nodes]),
             Nodes;
         {error, Reason} ->
             ?LOG_DEBUG(
                "Peer discovery cleanup: ~tp returned error ~tp",
-               [Module, Reason],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               [Module, Reason]),
             []
     end.
