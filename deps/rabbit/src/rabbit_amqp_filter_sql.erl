@@ -433,7 +433,8 @@ pattern_to_regex([EscapeChar | Rest], EscapeChar, Acc) ->
     end;
 pattern_to_regex([$% | Rest], Escape, Acc) ->
     %% % matches any sequence of characters (0 or more)
-    pattern_to_regex(Rest, Escape, [$*, $. | Acc]);
+    %% "The wildcard matching MUST consume as few characters as possible." (non-greedy)
+    pattern_to_regex(Rest, Escape, [$?, $*, $. | Acc]);
 pattern_to_regex([$_ | Rest], Escape, Acc) ->
     %% _ matches exactly one character
     pattern_to_regex(Rest, Escape, [$. | Acc]);
