@@ -24,12 +24,12 @@ defmodule ListDeprecatedFeaturesCommandTest do
       @df1 => %{
         desc: ~c"My deprecated feature #1",
         provided_by: :ListDeprecatedFeaturesCommandTest,
-        deprecation_phase: :permitted_by_default
+        deprecation_phase: :permitted_by_default,
       },
       @df2 => %{
         desc: ~c"My deprecated feature #2",
         provided_by: :ListDeprecatedFeaturesCommandTest,
-        deprecation_phase: :removed
+        deprecation_phase: :removed,
       }
     }
 
@@ -47,8 +47,8 @@ defmodule ListDeprecatedFeaturesCommandTest do
     ]
 
     full_result = [
-      [{:name, @df1}, {:deprecation_phase, :permitted_by_default}],
-      [{:name, @df2}, {:deprecation_phase, :removed}]
+      [{:name, @df1}, {:deprecation_phase, :permitted_by_default}, {:state, :permitted}],
+      [{:name, @df2}, {:deprecation_phase, :removed}, {:state, :denied}]
     ]
 
     {
@@ -65,7 +65,7 @@ defmodule ListDeprecatedFeaturesCommandTest do
   end
 
   test "merge_defaults with no command, print just use the names" do
-    assert match?({["name", "deprecation_phase"], %{}}, @command.merge_defaults([], %{}))
+    assert match?({["name", "deprecation_phase", "state"], %{}}, @command.merge_defaults([], %{}))
   end
 
   test "validate: return bad_info_key on a single bad arg", context do
@@ -125,7 +125,7 @@ defmodule ListDeprecatedFeaturesCommandTest do
 
   @tag test_timeout: 30000
   test "run: sufficiently long timeouts don't interfere with results", context do
-    matches_found = @command.run(["name", "deprecation_phase"], context[:opts])
+    matches_found = @command.run(["name", "deprecation_phase", "state"], context[:opts])
 
     assert Enum.all?(context[:full_result], fn feature_name ->
              Enum.find(matches_found, fn found -> found == feature_name end)
