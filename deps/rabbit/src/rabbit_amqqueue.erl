@@ -79,9 +79,46 @@
 %% Deprecated feature callback.
 -export([are_transient_nonexcl_used/1]).
 
+%% CLI commands.
+-export([cmd_list_queues/1]).
+
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
+
+-include("src/rabbit_cli_backend.hrl").
+
+-rabbitmq_command(
+   {#{cli => ["list", "queues"]},
+    [rabbit_cli_datagrid,
+     #{help => "List queues",
+       arguments =>
+       [
+        #{name => fields,
+          type => {atom, [name, type, durable, auto_delete, arguments, 
+                         messages, messages_ready, messages_unacknowledged,
+                         consumers, policy, state]},
+          nargs => list,
+          required => false,
+          help => "Fields to include"}
+       ],
+       handler => {?MODULE, cmd_list_queues}}]}).
+-rabbitmq_command(
+   {#{cli => ["list_queues"]},
+    [rabbit_cli_datagrid,
+     #{help => "List queues",
+       arguments =>
+       [
+        #{name => fields,
+          type => {atom, [name, type, durable, auto_delete, arguments,
+                         messages, messages_ready, messages_unacknowledged,
+                         consumers, policy, state]},
+          nargs => list,
+          required => false,
+          help => "Fields to include"}
+       ],
+       handler => {?MODULE, cmd_list_queues},
+       legacy => true}]}).
 
 -define(INTEGER_ARG_TYPES, [byte, short, signedint, long,
                             unsignedbyte, unsignedshort, unsignedint]).
@@ -2182,4 +2219,117 @@ pid_or_crashed(Node, QRes = #resource{virtual_host = VHost, kind = queue}) ->
             end;
         Error = {error, _} -> Error;
         Reason             -> {error, Reason}
+    end.
+
+%% -------------------------------------------------------------------
+%% CLI commands.
+%% -------------------------------------------------------------------
+
+cmd_list_queues(
+  #rabbit_cli{arg_map = ArgMap,
+              legacy = Legacy} = Context) ->
+    VHost = <<"/">>, %% TODO: Take from args and use it.
+    InfoKeys = rabbit_amqqueue:info_keys(),
+    Fields0 = case ArgMap of
+                  #{fields := Arg} ->
+                      Arg;
+                  _ ->
+                      [name, messages]
+              end,
+    Fields1 = lists:filter(
+                  fun(Field) ->
+                          lists:member(Field, InfoKeys)
+                  end, Fields0),
+    Priv = #{fields => Fields1},
+
+    case Legacy of
+        false ->
+            ok = rabbit_cli_io:set_paging_mode(Context),
+            io:format(
+              "Listing queues for vhost ~ts:~n",
+              [VHost]);
+        true ->
+            io:format("Listing queues for vhost ~ts ...~n", [VHost])
+    end,
+
+    %% Start datagrid with callbacks.
+    rabbit_cli_datagrid:process(
+      fun queues_fields/1,
+      fun queues_setup_stream/1,
+      fun queues_next_record/1,
+      fun queues_teardown_stream/1,
+      Priv, Context).
+
+queues_fields(
+  #{fields := Fields} = Priv) ->
+    Fields1 = lists:map(
+                fun
+                    (name = Key) ->
+                        #{name => Key, type => string};
+                    (type = Key) ->
+                        #{name => Key, type => string};
+                    (durable = Key) ->
+                        #{name => Key, type => boolean};
+                    (auto_delete = Key) ->
+                        #{name => Key, type => boolean};
+                    (arguments = Key) ->
+                        #{name => Key, type => term};
+                    (messages = Key) ->
+                        #{name => Key, type => integer};
+                    (messages_ready = Key) ->
+                        #{name => Key, type => integer};
+                    (messages_unacknowledged = Key) ->
+                        #{name => Key, type => integer};
+                    (consumers = Key) ->
+                        #{name => Key, type => integer};
+                    (policy = Key) ->
+                        #{name => Key, type => string};
+                    (state = Key) ->
+                        #{name => Key, type => string};
+                    (Key) ->
+                        #{name => Key, type => term}
+                end, Fields),
+    {ok, Fields1, Priv}.
+
+queues_setup_stream(Priv) ->
+    Queues = rabbit_amqqueue:list(),
+    case Queues of
+        [First | _] ->
+            Next = amqqueue:get_name(First),
+            {ok, Priv#{queues => Queues, next => Next}};
+        [] ->
+            {ok, Priv#{queues => Queues}}
+    end.
+
+queues_teardown_stream(_Priv) ->
+    ok.
+
+queues_next_record(#{queues := Queues, next := Name} = Priv) ->
+    queues_next_record1(Queues, Name, Priv);
+queues_next_record(Priv) ->
+    {ok, none, Priv}.
+
+queues_next_record1(
+  [Queue | Rest], Name2,
+  #{fields := Fields} = Priv) ->
+    case amqqueue:get_name(Queue) =:= Name2 of
+        true ->
+            Record0 = info(Queue, Fields),
+            Record1 = lists:sublist(Record0, length(Fields)),
+            Record2 = [case Value of
+                           #resource{name = N} ->
+                               N;
+                           _ ->
+                               Value
+                       end || {_Key, Value} <- Record1],
+
+            Priv1 = case Rest of
+                        [NextQueue | _] ->
+                            Priv#{next => amqqueue:get_name(NextQueue)};
+                        [] ->
+                            maps:remove(next, Priv)
+                    end,
+            {ok, Record2, Priv1};
+        false ->
+            queues_next_record1(Rest, Name2, Priv)
     end.

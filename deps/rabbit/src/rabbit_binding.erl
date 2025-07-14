@@ -9,6 +9,58 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 
+-include("src/rabbit_cli_backend.hrl").
+
+-rabbitmq_command(
+   {#{cli => ["list", "bindings"]},
+    [rabbit_cli_datagrid,
+     #{help => "List bindings",
+       arguments =>
+       [
+        #{name => fields,
+          type => {atom, [source_name, source_kind, destination_name, destination_kind,
+                         routing_key, arguments, vhost]},
+          nargs => list,
+          required => false,
+          help => "Fields to include"},
+        #{name => source,
+          long => "-source",
+          type => string,
+          required => false,
+          help => "Filter by source exchange name"},
+        #{name => destination,
+          long => "-destination",
+          type => string,
+          required => false,
+          help => "Filter by destination name (queue or exchange)"}
+       ],
+       handler => {?MODULE, cmd_list_bindings}}]}).
+-rabbitmq_command(
+   {#{cli => ["list_bindings"]},
+    [rabbit_cli_datagrid,
+     #{help => "List bindings",
+       arguments =>
+       [
+        #{name => fields,
+          type => {atom, [source_name, source_kind, destination_name, destination_kind,
+                         routing_key, arguments, vhost]},
+          nargs => list,
+          required => false,
+          help => "Fields to include"},
+        #{name => source,
+          long => "-source",
+          type => string,
+          required => false,
+          help => "Filter by source exchange name"},
+        #{name => destination,
+          long => "-destination",
+          type => string,
+          required => false,
+          help => "Filter by destination name (queue or exchange)"}
+       ],
+       handler => {?MODULE, cmd_list_bindings},
+       legacy => true}]}).
+
 -export([recover/0, recover/2, exists/1, add/2, add/3, remove/2, remove/3]).
 -export([list/1, list_for_source/1, list_for_destination/1,
          list_for_source_and_destination/2, list_for_source_and_destination/3,
@@ -24,6 +76,9 @@
 
 %% For testing only
 -export([fetch_deletion/2]).
+
+%% CLI commands.
+-export([cmd_list_bindings/1]).
 
 -define(DEFAULT_EXCHANGE(VHostPath), #resource{virtual_host = VHostPath,
                                                kind = exchange,
@@ -530,4 +585,160 @@ fetch_deletion(XName, Deletions) ->
             {X, WasDeleted, Bindings1};
         error ->
             error
+    end.
+
+%% -------------------------------------------------------------------
+%% CLI commands.
+%% -------------------------------------------------------------------
+
+cmd_list_bindings(
+  #rabbit_cli{arg_map = ArgMap,
+              legacy = Legacy} = Context) ->
+    VHost = <<"/">>, %% TODO: Take from args and use it.
+    InfoKeys = rabbit_binding:info_keys(),
+    Fields0 = case ArgMap of
+                  #{fields := Arg} ->
+                      Arg;
+                  _ ->
+                      [source_name, destination_name, routing_key]
+              end,
+    Fields1 = lists:filter(
+                  fun(Field) ->
+                          lists:member(Field, InfoKeys)
+                  end, Fields0),
+    
+    %% Parse filtering options
+    SourceFilter = maps:get(source, ArgMap, undefined),
+    DestinationFilter = maps:get(destination, ArgMap, undefined),
+    
+    Priv = #{fields => Fields1, 
+             vhost => VHost,
+             source_filter => SourceFilter,
+             destination_filter => DestinationFilter},
+
+    case Legacy of
+        false ->
+            ok = rabbit_cli_io:set_paging_mode(Context),
+            io:format(
+              "Listing bindings for vhost ~ts:~n",
+              [VHost]);
+        true ->
+            io:format("Listing bindings for vhost ~ts ...~n", [VHost])
+    end,
+
+    %% Start datagrid with callbacks.
+    rabbit_cli_datagrid:process(
+      fun bindings_fields/1,
+      fun bindings_setup_stream/1,
+      fun bindings_next_record/1,
+      fun bindings_teardown_stream/1,
+      Priv, Context).
+
+bindings_fields(
+  #{fields := Fields} = Priv) ->
+    Fields1 = lists:map(
+                fun
+                    (source_name = Key) ->
+                        #{name => Key, type => string};
+                    (source_kind = Key) ->
+                        #{name => Key, type => string};
+                    (destination_name = Key) ->
+                        #{name => Key, type => string};
+                    (destination_kind = Key) ->
+                        #{name => Key, type => string};
+                    (routing_key = Key) ->
+                        #{name => Key, type => string};
+                    (arguments = Key) ->
+                        #{name => Key, type => term};
+                    (vhost = Key) ->
+                        #{name => Key, type => string};
+                    (Key) ->
+                        #{name => Key, type => term}
+                end, Fields),
+    {ok, Fields1, Priv}.
+
+bindings_setup_stream(#{vhost := VHost, 
+                        source_filter := SourceFilter,
+                        destination_filter := DestinationFilter} = Priv) ->
+    %% Get bindings based on filters
+    Bindings = case {SourceFilter, DestinationFilter} of
+                   {undefined, undefined} ->
+                       %% No filters, get all bindings
+                       rabbit_binding:list(VHost);
+                   {SourceName, undefined} when is_list(SourceName) ->
+                       %% Filter by source exchange
+                       SourceBin = list_to_binary(SourceName),
+                       SourceResource = rabbit_misc:r(VHost, exchange, SourceBin),
+                       case SourceBin of
+                           <<"">> ->
+                               %% Default exchange - get implicit bindings
+                               implicit_bindings(VHost);
+                           _ ->
+                               %% Named exchange - get explicit bindings  
+                               rabbit_db_binding:get_all_for_source(SourceResource)
+                       end;
+                   {undefined, DestName} when is_list(DestName) ->
+                       %% Filter by destination - try both queue and exchange
+                       DestBin = list_to_binary(DestName),
+                       QueueResource = rabbit_misc:r(VHost, queue, DestBin),
+                       ExchangeResource = rabbit_misc:r(VHost, exchange, DestBin),
+                       QueueBindings = rabbit_db_binding:get_all_for_destination(QueueResource),
+                       ExchangeBindings = rabbit_db_binding:get_all_for_destination(ExchangeResource),
+                       %% Also check for implicit bindings to this queue
+                       ImplicitBindings = implicit_for_destination(QueueResource),
+                       ImplicitBindings ++ QueueBindings ++ ExchangeBindings;
+                   {SourceName, DestName} when is_list(SourceName), is_list(DestName) ->
+                       %% Filter by both source and destination
+                       SourceBin = list_to_binary(SourceName),
+                       DestBin = list_to_binary(DestName),
+                       SourceResource = rabbit_misc:r(VHost, exchange, SourceBin),
+                       QueueResource = rabbit_misc:r(VHost, queue, DestBin),
+                       ExchangeResource = rabbit_misc:r(VHost, exchange, DestBin),
+                       QueueBindings = rabbit_db_binding:get_all(SourceResource, QueueResource, false),
+                       ExchangeBindings = rabbit_db_binding:get_all(SourceResource, ExchangeResource, false),
+                       QueueBindings ++ ExchangeBindings;
+                   _ ->
+                       %% Invalid filter combination
+                       []
+               end,
+    
+    %% Always return the bindings list, with next marker only if non-empty
+    case Bindings of
+        [First | _] ->
+            {ok, Priv#{bindings => Bindings, next => First}};
+        [] ->
+            {ok, Priv#{bindings => []}}
+    end.
+
+bindings_teardown_stream(_Priv) ->
+    ok.
+
+bindings_next_record(#{bindings := Bindings, next := NextBinding} = Priv) ->
+    bindings_next_record1(Bindings, NextBinding, Priv);
+bindings_next_record(Priv) ->
+    {ok, none, Priv}.
+
+bindings_next_record1(
+  [Binding | Rest], NextBinding,
+  #{fields := Fields} = Priv) ->
+    case Binding =:= NextBinding of
+        true ->
+            Record0 = info(Binding, Fields),
+            Record1 = lists:sublist(Record0, length(Fields)),
+            Record2 = [case Value of
+                           #resource{name = N} ->
+                               N;
+                           _ ->
+                               Value
+                       end || {_Key, Value} <- Record1],
+
+            Priv1 = case Rest of
+                        [NextBindingInList | _] ->
+                            Priv#{next => NextBindingInList};
+                        [] ->
+                            maps:remove(next, Priv)
+                    end,
+            {ok, Record2, Priv1};
+        false ->
+            bindings_next_record1(Rest, NextBinding, Priv)
     end.

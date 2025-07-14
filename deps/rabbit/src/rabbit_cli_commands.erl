@@ -177,7 +177,24 @@ merge_arguments([], Args2, Acc) ->
     lists:reverse(Acc) ++ Args2.
 
 merge_commands(Cmds1, Cmds2) ->
-    maps:merge(Cmds1, Cmds2).
+    maps:fold(
+        fun(Key, Value2, Acc) ->
+            case maps:find(Key, Acc) of
+                {ok, Value1} when is_map(Value1) andalso is_map(Value2) ->
+                    %% Both values are maps, merge them recursively
+                    MergedValue = merge_argparse_def(Value1, Value2),
+                    maps:put(Key, MergedValue, Acc);
+                {ok, _Value1} ->
+                    %% Key exists but values are not both maps, replace
+                    maps:put(Key, Value2, Acc);
+                error ->
+                    %% Key doesn't exist, add it
+                    maps:put(Key, Value2, Acc)
+            end
+        end,
+        Cmds1,
+        Cmds2
+    ).
 
 %% -------------------------------------------------------------------
 %% Completion files.
