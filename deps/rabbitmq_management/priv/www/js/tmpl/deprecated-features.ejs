@@ -24,6 +24,7 @@
     <tr>
       <th><%= fmt_sort('Name', 'name') %></th>
       <th><%= fmt_sort('Deprecation phase', 'deprecation_phase') %></th>
+      <th><%= fmt_sort('Current Configuration', 'state') %></th>
       <th>Description</th>
     </tr>
   </thead>
@@ -43,6 +44,7 @@
          <abbr class="status-<%= fmt_string(state_color) %>">In use</abbr>
          <% } %>
          <%= fmt_deprecation_phase(deprecated_feature.deprecation_phase, DEPRECATION_PHASES) %></td>
+         <td><%= fmt_string(deprecated_feature.state) %></td>
          <td>
          <p><%= fmt_string(deprecated_feature.desc) %></p>
          <% if (deprecated_feature.doc_url) { %>

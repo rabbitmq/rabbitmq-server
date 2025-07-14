@@ -361,9 +361,16 @@ get_warning(FeatureProps, Permitted) when is_map(FeatureProps) ->
 %% @returns A map of selected deprecated features.
 
 list(all) ->
-    maps:filter(
-      fun(_, FeatureProps) -> ?IS_DEPRECATION(FeatureProps) end,
-      rabbit_ff_registry_wrapper:list(all));
+    maps:map(fun(FeatureName, FeatureProps) ->
+                     FeatureProps#{state => case is_permitted_nolog(FeatureName)
+                                            of
+                                                true  -> permitted;
+                                                false -> denied
+                                            end}
+             end,
+             maps:filter(
+               fun(_, FeatureProps) -> ?IS_DEPRECATION(FeatureProps) end,
+               rabbit_ff_registry_wrapper:list(all)));
 list(used) ->
     maps:filter(
       fun(FeatureName, FeatureProps) ->
