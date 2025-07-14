@@ -18,7 +18,8 @@
          parse_uri/1,
          set_region/1,
          ensure_imdsv2_token_valid/0,
-         api_get_request/2]).
+         api_get_request/2,
+         status_text/1]).
 
 %% gen-server exports
 -export([start_link/0,
@@ -622,7 +623,7 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
     HostKey = get_connection_key(Host, Port, Path, Options),
     case maps:get(HostKey, State#state.gun_connections, undefined) of
         undefined ->
-            create_gun_connection(State, Host, Port, Path, HostKey, Options);
+            create_gun_connection(State, Host, Port, HostKey, Options);
         ConnPid ->
             case is_process_alive(ConnPid) andalso gun:info(ConnPid) =/= undefined of
                 true ->
@@ -630,7 +631,7 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
                 false ->
                     % Connection is dead, create new one
                     gun:close(ConnPid),
-                    create_gun_connection(State, Host, Port, Path, HostKey, Options)
+                    create_gun_connection(State, Host, Port, HostKey, Options)
             end
     end.
 
@@ -640,7 +641,7 @@ get_connection_key(Host, Port, Path, Options) ->
         false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
     end.
 
-create_gun_connection(State, Host, Port, Path, HostKey, Options) ->
+create_gun_connection(State, Host, Port, HostKey, Options) ->
     % Map HTTP version to Gun protocols, always include http as fallback
     HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
     Protocols = case HttpVersion of
@@ -673,21 +674,26 @@ create_gun_connection(State, Host, Port, Path, HostKey, Options) ->
 
 parse_uri(URI) ->
     case string:split(URI, "://", leading) of
-        [_Scheme, Rest] ->
+        [Scheme, Rest] ->
             case string:split(Rest, "/", leading) of
                 [HostPort] ->
-                    {Host, Port} = parse_host_port(HostPort),
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
                     {Host, Port, "/"};
                 [HostPort, Path] ->
-                    {Host, Port} = parse_host_port(HostPort),
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
                     {Host, Port, "/" ++ Path}
             end
     end.
 
-parse_host_port(HostPort) ->
+parse_host_port(HostPort, Scheme) ->
+    DefaultPort = case Scheme of
+        "https" -> 443;
+        "http" -> 80;
+        _ -> 443  % Fallback to HTTPS
+    end,
     case string:split(HostPort, ":", trailing) of
         [Host] ->
-            {Host, 443};  % Default HTTPS port
+            {Host, DefaultPort};
         [Host, PortStr] ->
             {Host, list_to_integer(PortStr)}
     end.
