@@ -12,9 +12,9 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDeprecatedFeaturesCommand do
   @behaviour RabbitMQ.CLI.CommandBehaviour
   use RabbitMQ.CLI.DefaultOutput
 
-  def formatter(), do: RabbitMQ.CLI.Formatters.Table
+  def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
-  @info_keys ~w(name deprecation_phase provided_by desc doc_url)a
+  @info_keys ~w(name deprecation_phase state provided_by desc doc_url)a
 
   def info_keys(), do: @info_keys
 
@@ -23,7 +23,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListDeprecatedFeaturesCommand do
   def switches(), do: [used: :boolean]
 
   def merge_defaults([], opts) do
-    {["name", "deprecation_phase"], Map.merge(%{used: false}, opts)}
+    {["name", "deprecation_phase", "state"], Map.merge(%{used: false}, opts)}
   end
 
   def merge_defaults(args, opts) do
