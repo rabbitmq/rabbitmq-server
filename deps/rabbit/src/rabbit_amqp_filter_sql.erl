@@ -18,7 +18,8 @@
          eval/2,
          is_control_char/1]).
 
-%% [filtex-v1.0-wd09 7.1]
+%% [Filter-Expressions-v1.0 7.1]
+%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929316
 -define(MAX_EXPRESSION_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
@@ -297,13 +298,16 @@ sql_to_list(SQL) ->
             error
     end.
 
-check_length(String)
-  when length(String) > ?MAX_EXPRESSION_LENGTH ->
-    rabbit_log:warning("SQL expression length ~b exceeds maximum length ~b",
-                       [length(String), ?MAX_EXPRESSION_LENGTH]),
-    error;
-check_length(_) ->
-    ok.
+check_length(String) ->
+    Len = length(String),
+    case Len =< ?MAX_EXPRESSION_LENGTH of
+        true ->
+            ok;
+        false ->
+            rabbit_log:warning("SQL expression length ~b exceeds maximum length ~b",
+                               [Len, ?MAX_EXPRESSION_LENGTH]),
+            error
+    end.
 
 tokenize(String, SQL) ->
     case rabbit_amqp_sql_lexer:string(String) of
@@ -334,12 +338,11 @@ parse(Tokens, SQL) ->
     end.
 
 transform_ast(Ast0, SQL) ->
-    try rabbit_amqp_sql_ast:map(
-          fun({'like', _Ident, _Pattern, _Escape} = Node) ->
-                  transform_pattern_node(Node);
-             (Node) ->
-                  Node
-          end, Ast0) of
+    try rabbit_amqp_sql_ast:map(fun({'like', _Id, _Pat, _Esc} = Node) ->
+                                        transform_pattern_node(Node);
+                                   (Node) ->
+                                        Node
+                                end, Ast0) of
         Ast ->
             {ok, Ast}
     catch {invalid_pattern, Reason} ->
@@ -357,9 +360,8 @@ has_binary_identifier(Ast) ->
                                end, Ast).
 
 %% If the Pattern contains no wildcard or a single % wildcard,
-%% we will optimise message evaluation by using Erlang pattern matching.
-%% Otherwise, we will match with a regex. Even though we compile regexes,
-%% they are slower compared to Erlang pattern matching.
+%% we will evaluate messages using Erlang pattern matching since
+%% that's faster than evaluating compiled regexes.
 transform_pattern_node({Op, Ident, Pattern, Escape}) ->
     Pat = transform_pattern(Pattern, Escape),
     {Op, Ident, {pattern, Pat}}.
