@@ -13,7 +13,6 @@
 -include_lib("rabbit/include/amqqueue.hrl").
 -include("rabbit_queue_federation.hrl").
 -include_lib("kernel/include/logger.hrl").
--include("rabbit_federation.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all queues (but not exchanges). We need
