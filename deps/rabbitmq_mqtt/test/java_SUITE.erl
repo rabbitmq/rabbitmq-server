@@ -67,8 +67,13 @@ init_per_group(Group, Config0) ->
                 [fun merge_app_env/1] ++
                     rabbit_ct_broker_helpers:setup_steps() ++
                     rabbit_ct_client_helpers:setup_steps()),
-    util:enable_plugin(Config1, rabbitmq_mqtt),
-    Config1.
+    case Config1 of
+        _ when is_list(Config1) ->
+            util:enable_plugin(Config1, rabbitmq_mqtt),
+            Config1;
+        {skip, _} ->
+            Config1
+    end.
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config,
