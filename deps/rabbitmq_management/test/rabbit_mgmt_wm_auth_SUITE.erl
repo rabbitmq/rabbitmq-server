@@ -52,7 +52,6 @@ groups() ->
     [
       {run_with_broker, [], [
         {verify_introspection_endpoint, [], [
-          test_login,
           introspect_opaque_token_returns_active_jwt_token
         ]}        
       ]},
@@ -543,16 +542,20 @@ init_per_group(verify_introspection_endpoint, Config) ->
   
   PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
   Port = PortBase + 100,
-    
+  AuthorizationServerURL = uri_string:normalize(#{
+    scheme => "https",port => Port,path => "/introspect",host => "localhost"}),
+
   CertsDir = ?config(rmq_certsdir, Config),
-  Endpoints = [ {"/introspect", introspect_endpoint, []}],
+  Endpoints = [ {"/introspect", introspect_http_handler, []}],
   Dispatch = cowboy_router:compile([{'_', Endpoints}]),
   {ok, _} = cowboy:start_tls(introspection_http_listener,
                       [{port, Port},
                        {certfile, filename:join([CertsDir, "server", "cert.pem"])},
                        {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
                       #{env => #{dispatch => Dispatch}}),
-  Config;
+
+  [ {authorization_server_url, AuthorizationServerURL}, 
+    {authorization_server_ca_cert, filename:join([CertsDir, "testca", "cacert.pem"])} | Config];
 
 init_per_group(_, Config) ->
   Config.
@@ -690,22 +693,45 @@ end_per_group(verify_introspection_endpoint, Config) ->
 end_per_group(_, Config) ->
   Config.
 
+init_per_testcase(introspect_opaque_token_returns_active_jwt_token, Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_endpoint,
+      ?config(authorization_server_url, Config)]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_id, "some-id"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-secret"]),
+  CaCertFile = ?config(authorization_server_ca_cert, Config),
 
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
+   
+  rabbit_ct_helpers:testcase_started(Config, introspect_opaque_token_returns_active_jwt_token).
+            
+end_per_testcase(introspect_opaque_token_returns_active_jwt_token, Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_secret]),
+  Config.
+      
 start_broker(Config) ->
-    Setup0 = rabbit_ct_broker_helpers:setup_steps(),
-    Setup1 = rabbit_ct_client_helpers:setup_steps(),
-    Steps = Setup0 ++ Setup1,
-    case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
-        {skip, _} = Skip ->
-            Skip;
-        Config1 ->
-            Ret = rabbit_ct_broker_helpers:enable_feature_flag(
-                    Config1, 'rabbitmq_4.0.0'),
-            case Ret of
-                ok -> Config1;
-                _  -> Ret
-            end
-    end.
+  Setup0 = rabbit_ct_broker_helpers:setup_steps(),
+  Setup1 = rabbit_ct_client_helpers:setup_steps(),
+  Steps = Setup0 ++ Setup1,
+  case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
+      {skip, _} = Skip ->
+          Skip;
+      Config1 ->
+          Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+                  Config1, 'rabbitmq_4.0.0'),
+          case Ret of
+              ok -> Config1;
+              _  -> Ret
+          end
+  end.
 finish_init(Group, Config) ->
     rabbit_ct_helpers:log_environment(),
     inets:start(),
@@ -914,50 +940,14 @@ should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_token_endpoint_params, token_params_1).
 
-test_login(Config) ->
-    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
-                                       {tags,     <<"management">>}], {group, '2xx'}),
-    %% Let's do a post without any other form of authorization
-    {ok, {{_, CodeAct, _}, Headers, _}} =
-        req(Config, 0, post, "/login",
-            [{"content-type", "application/x-www-form-urlencoded"}],
-            <<"username=myuser&password=myuser">>),
-    ?assertEqual(200, CodeAct),
-
-        %% Extract the authorization header
-    Cookie = list_to_binary(proplists:get_value("set-cookie", Headers)),
-    [_, Auth] = binary:split(Cookie, <<"=">>, []),
-
-    %% Request the overview with the auth obtained
-    {ok, {{_, CodeAct1, _}, _, _}} =
-        req(Config, get, "/overview", [{"Authorization", "Basic " ++ binary_to_list(Auth)}]),
-    ?assertEqual(200, CodeAct1),
-
-    %% Let's request a login with an unknown user
-    {ok, {{_, CodeAct2, _}, Headers2, _}} =
-        req(Config, 0, post, "/login",
-            [{"content-type", "application/x-www-form-urlencoded"}],
-            <<"username=misteryusernumber1&password=myuser">>),
-    ?assertEqual(401, CodeAct2),
-    ?assert(not proplists:is_defined("set-cookie", Headers2)),
-
-    http_delete(Config, "/users/myuser", {group, '2xx'}),
-    passed.
-
-
 introspect_opaque_token_returns_active_jwt_token(Config) -> 
-  Result2 = req(Config, 0, post, "/auth/introspect", [
-    {"Authorization", "Bearer active"}, {"Accept", "application/json"}], []),
-    
-  ct:log("Result: ~p", [Result2]).
-%  _Result2 = httpc:request(post, {uri_base_from(Config, 0, "auth/introspect"), 
-%    [{"Authorization", "Bearer active"}]}, [], []).
- 
-uri_base_from(Config, Node, Base) ->
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mgmt),
-    Prefix = "/api",
-    Uri = list_to_binary(lists:flatten(io_lib:format("http://localhost:~w~ts/~ts", [Port, Prefix, Base]))),
-    binary_to_list(Uri).
+  {ok, {{_HTTP, _, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer active"}], []),
+  JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+  ?assertEqual(true, maps:get(<<"active">>, JSON)),
+  ?assertEqual("rabbitmq.tag:administrator", maps:get(<<"scope">>, JSON)).
+
+
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions
