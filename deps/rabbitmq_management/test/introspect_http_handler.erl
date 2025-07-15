@@ -15,7 +15,8 @@ init(Req, State) ->
                     Body = rabbit_json:encode([{"active", true}, {"scope", "rabbitmq.tag:administrator"}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State};
-                <<"inactive">> -> Body = rabbit_json:encode([{"active", false}, {"scope", "rabbitmq.tag:administrator"}]),
+                <<"inactive">> -> 
+                    Body = rabbit_json:encode([{"active", false}, {"scope", "rabbitmq.tag:administrator"}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State}
             end;

@@ -17,6 +17,7 @@
          is_authorized_vhost_visible/2,
          is_authorized_vhost_visible_for_monitoring/2,
          is_authorized_global_parameters/2]).
+-export([not_authorised/3]).
 -export([user/1]).
 -export([bad_request/3, service_unavailable/3, bad_request_exception/4,
          internal_server_error/3, internal_server_error/4, precondition_failed/3,

@@ -52,7 +52,8 @@ groups() ->
     [
       {run_with_broker, [], [
         {verify_introspection_endpoint, [], [
-          introspect_opaque_token_returns_active_jwt_token
+          introspect_opaque_token_returns_active_jwt_token,
+          introspect_opaque_token_returns_inactive_jwt_token
         ]}        
       ]},
       {verify_multi_resource_and_provider, [], [
@@ -693,7 +694,8 @@ end_per_group(verify_introspection_endpoint, Config) ->
 end_per_group(_, Config) ->
   Config.
 
-init_per_testcase(introspect_opaque_token_returns_active_jwt_token, Config) ->
+init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
+                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint,
       ?config(authorization_server_url, Config)]),
@@ -706,9 +708,10 @@ init_per_testcase(introspect_opaque_token_returns_active_jwt_token, Config) ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
    
-  rabbit_ct_helpers:testcase_started(Config, introspect_opaque_token_returns_active_jwt_token).
+  rabbit_ct_helpers:testcase_started(Config, Testcase).
             
-end_per_testcase(introspect_opaque_token_returns_active_jwt_token, Config) ->
+end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
+                                        Testcase =:= introspect_opaque_token_returns_inactive_jwt_token ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -941,11 +944,18 @@ should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
     Config, a, oauth_token_endpoint_params, token_params_1).
 
 introspect_opaque_token_returns_active_jwt_token(Config) -> 
-  {ok, {{_HTTP, _, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
     {"authorization", "bearer active"}], []),
   JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
   ?assertEqual(true, maps:get(<<"active">>, JSON)),
   ?assertEqual("rabbitmq.tag:administrator", maps:get(<<"scope">>, JSON)).
+
+introspect_opaque_token_returns_inactive_jwt_token(Config) -> 
+  {ok, {{_HTTP, 401, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer inactive"}], []),
+   JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+  ?assertEqual(<<"not_authorised">>, maps:get(<<"error">>, JSON)),
+  ?assertEqual(<<"Introspected token is not active">>, maps:get(<<"reason">>, JSON)).
 
 
 
