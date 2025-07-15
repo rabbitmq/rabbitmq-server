@@ -64,7 +64,9 @@ introspect_token(Token) ->
                                 undefined -> [];
                                 SSL ->  [{ssl, SSL}]
                           end ++ get_default_timeout(),
-            Options = [],            
+            Options = [],         
+            rabbit_log:debug("Sending introspect_request URL:~p Header: ~p Body: ~p",
+                [URL, Header, Body]),
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
             parse_introspect_token_response(Response);
         {error, _} = Error -> Error            
@@ -754,10 +756,14 @@ assert_token_is_active({ok, Response} = Value) ->
         true -> Value 
     end.
 
-map_to_unsuccessful_introspect_token_response(Map) ->
+map_to_unsuccessful_introspect_token_response(Map) when is_map(Map) ->
     #unsuccessful_introspect_token_response{
-        error = maps:get(?RESPONSE_ERROR, Map),
+        error = maps:get(?RESPONSE_ERROR, Map, "unknown"),
         error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
+    };
+map_to_unsuccessful_introspect_token_response(_) ->
+    #unsuccessful_introspect_token_response{
+        error = "unknown"
     }.
 parse_access_token_response({error, Reason}) ->
     {error, Reason};
