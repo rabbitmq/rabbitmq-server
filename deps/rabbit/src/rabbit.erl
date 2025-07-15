@@ -1163,7 +1163,7 @@ pg_local_scope(Prefix) ->
 update_cluster_tags() ->
     Tags = application:get_env(rabbit, cluster_tags, []),
     ?LOG_DEBUG("Seeding cluster tags from application environment key...",
-                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>).
 
 

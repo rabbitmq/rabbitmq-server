@@ -76,7 +76,7 @@ start_for_vhost(VHost) ->
         %% e.g. some integration tests do it
         {error, {no_such_vhost, VHost}} ->
             ?LOG_ERROR("Failed to start a queue process supervisor for vhost ~ts: vhost no longer exists!",
-                             [VHost]),
+                       [VHost]),
             {error, {no_such_vhost, VHost}}
     end.
 
@@ -89,6 +89,6 @@ stop_for_vhost(VHost) ->
         %% see start/1
         {error, {no_such_vhost, VHost}} ->
             ?LOG_ERROR("Failed to stop a queue process supervisor for vhost ~ts: vhost no longer exists!",
-                             [VHost]),
+                       [VHost]),
             ok
     end.

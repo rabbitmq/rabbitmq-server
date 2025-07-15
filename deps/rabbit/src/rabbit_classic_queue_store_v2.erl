@@ -319,7 +319,7 @@ read_from_disk(SeqId, {?MODULE, Offset, Size}, State0) ->
                 ok
             catch C:E:S ->
                 ?LOG_ERROR("Per-queue store CRC32 check failed in ~ts seq id ~b offset ~b size ~b",
-                                 [segment_file(Segment, State), SeqId, Offset, Size]),
+                           [segment_file(Segment, State), SeqId, Offset, Size]),
                 erlang:raise(C, E, S)
             end
     end,
@@ -417,7 +417,7 @@ parse_many_from_disk([<<Size:32/unsigned, _:7, UseCRC32:1, CRC32Expected:16/bits
                 ok
             catch C:E:S ->
                 ?LOG_ERROR("Per-queue store CRC32 check failed in ~ts",
-                                 [segment_file(Segment, State)]),
+                           [segment_file(Segment, State)]),
                 erlang:raise(C, E, S)
             end
     end,

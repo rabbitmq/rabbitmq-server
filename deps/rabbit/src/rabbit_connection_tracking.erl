@@ -118,8 +118,8 @@ handle_cast({vhost_down, Details}) ->
     VHost = pget(name, Details),
     Node = pget(node, Details),
     ?LOG_INFO("Closing all connections in vhost '~ts' on node '~ts'"
-                               " because the vhost is stopping",
-                               [VHost, Node]),
+              " because the vhost is stopping",
+              [VHost, Node]),
     shutdown_tracked_items(
         list_on_node(Node, VHost),
         rabbit_misc:format("vhost '~ts' is down", [VHost]));
@@ -191,17 +191,17 @@ ensure_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
                                         {keypos, #tracked_connection.id}]),
     ?LOG_INFO("Setting up a table for connection tracking on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE]).
+              [?TRACKED_CONNECTION_TABLE]).
 
 ensure_per_vhost_tracked_connections_table_for_this_node() ->
     ?LOG_INFO("Setting up a table for per-vhost connection counting on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
+              [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
     ets:new(?TRACKED_CONNECTION_TABLE_PER_VHOST, [named_table, public, {write_concurrency, true}]).
 
 ensure_per_user_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
     ?LOG_INFO("Setting up a table for per-user connection counting on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE_PER_USER]).
+              [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
 -spec tracked_connection_table_name_for(node()) -> atom().
 

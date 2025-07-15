@@ -781,8 +781,8 @@ handle_method_from_server1(
         State = #state{return_handler = ReturnHandler}) ->
     _ = case ReturnHandler of
         none        -> ?LOG_WARNING("Channel (~tp): received {~tp, ~tp} but there is "
-                                 "no return handler registered",
-                                 [self(), BasicReturn, AmqpMsg]);
+                                    "no return handler registered",
+                                    [self(), BasicReturn, AmqpMsg]);
         {Pid, _Ref} -> Pid ! {BasicReturn, AmqpMsg}
     end,
     {noreply, State};

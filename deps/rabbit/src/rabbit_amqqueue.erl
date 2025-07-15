@@ -427,7 +427,7 @@ rebalance(Type, VhostSpec, QueueSpec) ->
 
 maybe_rebalance({true, Id}, Type, VhostSpec, QueueSpec) ->
     ?LOG_INFO("Starting queue rebalance operation: '~ts' for vhosts matching '~ts' and queues matching '~ts'",
-                    [Type, VhostSpec, QueueSpec]),
+              [Type, VhostSpec, QueueSpec]),
     Running = rabbit_maintenance:filter_out_drained_nodes_consistent_read(rabbit_nodes:list_running()),
     NumRunning = length(Running),
     ToRebalance = [Q || Q <- list(),
@@ -509,7 +509,7 @@ maybe_migrate(ByNode, MaxQueuesDesired, [N | Nodes]) ->
                 _ ->
                     [{Length, Destination} | _] = sort_by_number_of_queues(Candidates, ByNode),
                     ?LOG_INFO("Migrating queue ~tp from node ~tp with ~tp queues to node ~tp with ~tp queues",
-                                       [Name, N, length(All), Destination, Length]),
+                              [Name, N, length(All), Destination, Length]),
                     case Module:transfer_leadership(Q, Destination) of
                         {migrated, NewNode} ->
                             ?LOG_INFO("Queue ~tp migrated to ~tp", [Name, NewNode]),
@@ -1972,8 +1972,8 @@ delete_transient_queues_on_node(Node) ->
             case length(QueueNames) of
                 0 -> ok;
                 N -> ?LOG_INFO("~b transient queues from node '~ts' "
-                                     "deleted in ~fs",
-                                     [N, Node, Time / 1_000_000])
+                               "deleted in ~fs",
+                               [N, Node, Time / 1_000_000])
             end,
             notify_queue_binding_deletions(Deletions),
             rabbit_core_metrics:queues_deleted(QueueNames),

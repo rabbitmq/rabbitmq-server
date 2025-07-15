@@ -24,7 +24,7 @@
     {error, unsuccessful_access_token_response() | any()}.
 get_access_token(OAuthProvider, Request) ->
     ?LOG_DEBUG("get_access_token using OAuthProvider:~p and client_id:~p",
-        [OAuthProvider, Request#access_token_request.client_id]),
+               [OAuthProvider, Request#access_token_request.client_id]),
         URL = OAuthProvider#oauth_provider.token_endpoint,
     Header = [],
     Type = ?CONTENT_URLENCODED,
@@ -221,7 +221,7 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
         JwksUri -> set_env(jwks_uri, JwksUri)
     end,
     ?LOG_DEBUG("Updated oauth_provider details: ~p ",
-        [format_oauth_provider(OAuthProvider)]),
+               [format_oauth_provider(OAuthProvider)]),
     OAuthProvider;
 
 do_update_oauth_provider_endpoints_configuration(OAuthProvider) ->
@@ -273,7 +273,7 @@ get_oauth_provider(ListOfRequiredAttributes) ->
         undefined -> get_root_oauth_provider(ListOfRequiredAttributes);
         DefaultOauthProviderId ->
             ?LOG_DEBUG("Using default_oauth_provider ~p",
-                [DefaultOauthProviderId]),
+                       [DefaultOauthProviderId]),
             get_oauth_provider(DefaultOauthProviderId, ListOfRequiredAttributes)
     end.
 
@@ -296,7 +296,7 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             ?LOG_DEBUG("Resolved oauth_provider ~p",
-                    [format_oauth_provider(OAuthProvider)]),
+                       [format_oauth_provider(OAuthProvider)]),
             {ok, OAuthProvider};
         _ = Attrs ->
             {error, {missing_oauth_provider_attributes, Attrs}}
@@ -305,13 +305,13 @@ ensure_oauth_provider_has_attributes(OAuthProvider, ListOfRequiredAttributes) ->
 get_root_oauth_provider(ListOfRequiredAttributes) ->
     OAuthProvider = lookup_root_oauth_provider(),
     ?LOG_DEBUG("Using root oauth_provider ~p",
-        [format_oauth_provider(OAuthProvider)]),
+               [format_oauth_provider(OAuthProvider)]),
     case find_missing_attributes(OAuthProvider, ListOfRequiredAttributes) of
         [] ->
             {ok, OAuthProvider};
         _ = MissingAttributes ->
             ?LOG_DEBUG("Looking up missing attributes ~p ...",
-                [MissingAttributes]),
+                       [MissingAttributes]),
             case download_oauth_provider(OAuthProvider) of
                 {ok, OAuthProvider2} ->
                     ensure_oauth_provider_has_attributes(OAuthProvider2,
@@ -335,11 +335,11 @@ get_oauth_provider(OAuth2ProviderId, ListOfRequiredAttributes)
 get_oauth_provider(OAuthProviderId, ListOfRequiredAttributes)
         when is_binary(OAuthProviderId) ->
     ?LOG_DEBUG("get_oauth_provider ~p with at least these attributes: ~p",
-        [OAuthProviderId, ListOfRequiredAttributes]),
+               [OAuthProviderId, ListOfRequiredAttributes]),
     case lookup_oauth_provider_config(OAuthProviderId) of
         {error, _} = Error0 ->
             ?LOG_DEBUG("Failed to find oauth_provider ~p configuration due to ~p",
-                [OAuthProviderId, Error0]),
+                       [OAuthProviderId, Error0]),
             Error0;
         Config ->
             ?LOG_DEBUG("Found oauth_provider configuration ~p", [Config]),

@@ -486,7 +486,7 @@ mapped(cast, #'v1_0.disposition'{role = true,
     {keep_state, State#state{outgoing_unsettled = Unsettled}};
 mapped(cast, Frame, State) ->
     ?LOG_WARNING("Unhandled session frame ~tp in state ~tp",
-                             [Frame, State]),
+                 [Frame, State]),
     {keep_state, State};
 mapped({call, From},
        {transfer, _Transfer, _Sections},
@@ -567,7 +567,7 @@ mapped({call, From}, Msg, State) ->
 
 mapped(_EvtType, Msg, _State) ->
     ?LOG_WARNING("amqp10_session: unhandled msg in mapped state ~W",
-                   [Msg, 10]),
+                 [Msg, 10]),
     keep_state_and_data.
 
 end_sent(_EvtType, #'v1_0.end'{} = End, State) ->

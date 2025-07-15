@@ -416,8 +416,8 @@ refresh_config_local() ->
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
           ?LOG_ERROR("Failed to refresh channel config "
-                           "for channel ~tp. Reason ~tp",
-                           [C, Reason])
+                     "for channel ~tp. Reason ~tp",
+                     [C, Reason])
         end
       end,
       list_local()),
@@ -430,8 +430,8 @@ refresh_interceptors() ->
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
           ?LOG_ERROR("Failed to refresh channel interceptors "
-                           "for channel ~tp. Reason ~tp",
-                           [C, Reason])
+                     "for channel ~tp. Reason ~tp",
+                     [C, Reason])
         end
       end,
       list_local()),

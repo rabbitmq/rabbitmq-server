@@ -51,7 +51,7 @@ handle_request(Request, Vhost, User, ConnectionPid, PermCaches0) ->
                             PermCaches0)
         catch throw:{?MODULE, StatusCode0, Explanation} ->
                   ?LOG_WARNING("request ~ts ~ts failed: ~ts",
-                                     [HttpMethod, HttpRequestTarget, Explanation]),
+                               [HttpMethod, HttpRequestTarget, Explanation]),
                   {StatusCode0, {utf8, Explanation}, PermCaches0}
         end,
 

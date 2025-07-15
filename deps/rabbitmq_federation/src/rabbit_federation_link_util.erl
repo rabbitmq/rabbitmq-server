@@ -56,8 +56,8 @@ start_conn_ch(Fun, OUpstream, OUParams,
                     try
                         R = Fun(Conn, Ch, DConn, DCh),
                         ?LOG_INFO("Federation ~ts connected to ~ts",
-                          [rabbit_misc:rs(XorQName),
-                           rabbit_federation_upstream:params_to_string(UParams)]),
+                                  [rabbit_misc:rs(XorQName),
+                                   rabbit_federation_upstream:params_to_string(UParams)]),
                         Name = pget(name, amqp_connection:info(DConn, [name])),
                         rabbit_federation_status:report(
                           OUpstream, OUParams, XorQName, {running, Name}),
@@ -130,31 +130,31 @@ connection_error(remote_start, {{shutdown, {server_initiated_close, Code, Messag
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     ?LOG_WARNING("Federation ~ts did not connect to ~ts. Server has closed the connection due to an error, code: ~tp, "
-                "message: ~ts",
-                [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
-                 Code, Message]),
+                 "message: ~ts",
+                 [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
+                  Code, Message]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote_start, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     ?LOG_WARNING("Federation ~ts did not connect to ~ts. Reason: ~tp",
-                [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
-                 E]),
+                 [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams),
+                  E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(remote, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     ?LOG_INFO("Federation ~ts disconnected from ~ts~n~tp",
-             [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
+              [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(command_channel, E, Upstream, UParams, XorQName, State) ->
     rabbit_federation_status:report(
       Upstream, UParams, XorQName, clean_reason(E)),
     ?LOG_INFO("Federation ~ts failed to open a command channel for upstream ~ts~n~tp",
-             [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
+              [rabbit_misc:rs(XorQName), rabbit_federation_upstream:params_to_string(UParams), E]),
     {stop, {shutdown, restart}, State};
 
 connection_error(local, basic_cancel, Upstream, UParams, XorQName, State) ->
@@ -284,7 +284,7 @@ log_terminate(shutdown, Upstream, UParams, XorQName) ->
     %% nicely so that we do not cause unacked messages to be
     %% redelivered.
     ?LOG_INFO("disconnecting from ~ts",
-             [rabbit_federation_upstream:params_to_string(UParams)]),
+              [rabbit_federation_upstream:params_to_string(UParams)]),
     rabbit_federation_status:remove(Upstream, XorQName);
 
 log_terminate(Reason, Upstream, UParams, XorQName) ->

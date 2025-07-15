@@ -174,9 +174,9 @@ delete(Q0, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q0) ->
                     case IfEmpty of
                         true ->
                             ?LOG_ERROR("Queue ~ts in vhost ~ts is down. "
-                                             "The queue may be non-empty. "
-                                             "Refusing to force-delete.",
-                                             [Name, Vhost]),
+                                       "The queue may be non-empty. "
+                                       "Refusing to force-delete.",
+                                       [Name, Vhost]),
                             {error, not_empty};
                         false ->
                             ?LOG_WARNING("Queue ~ts in vhost ~ts is down. "
@@ -637,7 +637,7 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
     _ = [?LOG_ERROR("Queue ~tp failed to initialise: ~tp",
-                      [Pid, Error]) || {Pid, Error} <- Failures],
+                    [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->

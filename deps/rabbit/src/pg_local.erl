@@ -123,8 +123,8 @@ handle_call(clear, _From, S) ->
 
 handle_call(Request, From, S) ->
     ?LOG_WARNING("The pg_local server received an unexpected message:\n"
-                             "handle_call(~tp, ~tp, _)\n",
-                             [Request, From]),
+                 "handle_call(~tp, ~tp, _)\n",
+                 [Request, From]),
     {noreply, S}.
 
 handle_cast({join, Name, Pid}, S) ->

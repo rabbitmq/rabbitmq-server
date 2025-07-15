@@ -219,13 +219,13 @@ ensure_tracked_tables_for_this_node() ->
 %% Create tables
 ensure_tracked_channels_table_for_this_node() ->
     ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
-                    [?TRACKED_CHANNEL_TABLE]),
+              [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
                                      {keypos, #tracked_channel.pid}]).
 
 ensure_per_user_tracked_channels_table_for_this_node() ->
     ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
-                    [?TRACKED_CHANNEL_TABLE_PER_USER]),
+              [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 
 get_tracked_channels_by_connection_pid(ConnPid) ->

@@ -447,7 +447,7 @@ recover_index_v1_clean(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
     CountersRef = counters:new(?RECOVER_COUNTER_SIZE, []),
     State = recover_index_v1_common(State0, V1State, CountersRef),
     ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
-                    [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
+              [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
 recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean,
@@ -466,7 +466,7 @@ recover_index_v1_dirty(State0 = #qi{ queue_name = Name }, Terms, IsMsgStoreClean
                                                  convert),
     State = recover_index_v1_common(State0, V1State, CountersRef),
     ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b total messages from v1 to v2",
-                    [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
+              [QName, VHost, counters:get(CountersRef, ?RECOVER_COUNT)]),
     State.
 
 %% At this point all messages are persistent because transient messages
