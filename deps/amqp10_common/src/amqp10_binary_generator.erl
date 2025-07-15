@@ -204,9 +204,9 @@ constructor(array) -> 16#f0; % use large array type for all nested arrays
 constructor({described, Descriptor, Primitive}) ->
     [16#00, generate1(Descriptor), constructor(Primitive)].
 
-generate2(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
-generate2(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
-generate2(binary, {binary, V}) -> [<<(size(V)):32>>, V];
+generate2(symbol, {symbol, V}) -> [<<(byte_size(V)):32>>, V];
+generate2(utf8, {utf8, V}) -> [<<(byte_size(V)):32>>, V];
+generate2(binary, {binary, V}) -> [<<(byte_size(V)):32>>, V];
 generate2(boolean, true) -> 16#01;
 generate2(boolean, false) -> 16#00;
 generate2(boolean, {boolean, true}) -> 16#01;
