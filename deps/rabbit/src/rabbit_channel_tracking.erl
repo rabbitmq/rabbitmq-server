@@ -68,13 +68,11 @@ handle_cast({channel_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register channel ~tp for tracking, "
                           "its table is not ready yet or the channel terminated prematurely",
-                    ?LOG_WARNING(Msg, [TrackedChId], #{domain => ?RMQLOG_DOMAIN_CHAN,
-                                                       pid => self()}),
+                    ?LOG_WARNING(Msg, [TrackedChId], #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     ok;
                 error:Err ->
                     Msg = "Could not register channel ~tp for tracking: ~tp",
-                    ?LOG_WARNING(Msg, [TrackedChId, Err], #{domain => ?RMQLOG_DOMAIN_CHAN,
-                                                            pid => self()}),
+                    ?LOG_WARNING(Msg, [TrackedChId, Err], #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     ok
             end;
         _OtherNode ->
@@ -96,7 +94,7 @@ handle_cast({connection_closed, ConnDetails}) ->
                     ?LOG_DEBUG(
                       "Closing ~b channel(s) because connection '~ts' has been closed",
                       [length(TrackedChs), pget(name, ConnDetails)],
-                      #{domain => ?RMQLOG_DOMAIN_CHAN, pid => self()}),
+                      #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     %% Shutting down channels will take care of unregistering the
                     %% corresponding tracking.
                     shutdown_tracked_items(TrackedChs, undefined),
