@@ -53,7 +53,8 @@ groups() ->
       {run_with_broker, [], [
         {verify_introspection_endpoint, [], [
           introspect_opaque_token_returns_active_jwt_token,
-          introspect_opaque_token_returns_inactive_jwt_token
+          introspect_opaque_token_returns_inactive_jwt_token,
+          introspect_opaque_token_returns_401_from_auth_server
         ]}        
       ]},
       {verify_multi_resource_and_provider, [], [
@@ -695,7 +696,8 @@ end_per_group(_, Config) ->
   Config.
 
 init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
-                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token ->
+                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
+                                         Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint,
       ?config(authorization_server_url, Config)]),
@@ -711,7 +713,8 @@ init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_re
   rabbit_ct_helpers:testcase_started(Config, Testcase).
             
 end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
-                                        Testcase =:= introspect_opaque_token_returns_inactive_jwt_token ->
+                                        Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
+                                        Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -957,6 +960,9 @@ introspect_opaque_token_returns_inactive_jwt_token(Config) ->
   ?assertEqual(<<"not_authorised">>, maps:get(<<"error">>, JSON)),
   ?assertEqual(<<"Introspected token is not active">>, maps:get(<<"reason">>, JSON)).
 
+introspect_opaque_token_returns_401_from_auth_server(Config) -> 
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer 401"}], []).
 
 
 %% -------------------------------------------------------------------
