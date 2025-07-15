@@ -2303,7 +2303,7 @@ transfer_leadership(_TransferCandidates) ->
     Queues = rabbit_amqqueue:list_local_leaders(),
     ?LOG_INFO("Will transfer leadership of ~b quorum queues with current leader on this node",
                     [length(Queues)]),
-    [begin
+    _ = [begin
         Name = amqqueue:get_name(Q),
         ?LOG_DEBUG("Will trigger a leader election for local quorum queue ~ts",
                          [rabbit_misc:rs(Name)]),
@@ -2326,7 +2326,7 @@ stop_local_quorum_queue_followers() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     ?LOG_INFO("Will stop local follower replicas of ~b quorum queues on this node",
                     [length(Queues)]),
-    [begin
+    _ = [begin
         Name = amqqueue:get_name(Q),
         ?LOG_DEBUG("Will stop a local follower replica of quorum queue ~ts",
                          [rabbit_misc:rs(Name)]),
