@@ -43,9 +43,12 @@ do_it(ReqData, Context) ->
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
         {bearer, Token} ->             
             case oauth2_client:introspect_token(Token) of 
+                {error, introspected_token_not_valid} -> 
+                    rabbit_log:error("Failed to introspect token due to ~p", [introspected_token_not_valid]),
+                    rabbit_mgmt_util:not_authorised("Introspected token is not active", ReqData, Context);
                 {error, Reason} -> 
                     rabbit_log:error("Failed to introspect token due to ~p", [Reason]),
-                    rabbit_mgmt_util:bad_request(<<"Cannot introspect tokenr">>, ReqData, Context);
+                    rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
                 {ok, JwtToken} -> 
                     rabbit_log:debug("Got jwt token : ~p", [JwtToken]),
                     rabbit_mgmt_util:reply(JwtToken, ReqData, Context)
