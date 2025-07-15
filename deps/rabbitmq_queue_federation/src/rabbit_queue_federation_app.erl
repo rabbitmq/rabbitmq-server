@@ -8,6 +8,7 @@
 -module(rabbit_queue_federation_app).
 
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
+-include_lib("rabbitmq_federation_common/include/logging.hrl").
 -include("rabbit_queue_federation.hrl").
 
 -behaviour(application).
