@@ -10,6 +10,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 %% not defined in v3
 -define(SUBACK_FAILURE, 16#80).
@@ -1241,6 +1242,7 @@ vhost_connection_limit(Config) ->
     {ok, _} = emqtt:connect(C1),
     {ok, C2} = connect_anonymous(Config, <<"client2">>),
     {ok, _} = emqtt:connect(C2),
+    ?awaitMatch(2, count_connections_per_vhost(Config), 30000),
     {ok, C3} = connect_anonymous(Config, <<"client3">>),
     ExpectedError = expected_connection_limit_error(Config),
     unlink(C3),
@@ -1248,6 +1250,13 @@ vhost_connection_limit(Config) ->
     ok = emqtt:disconnect(C1),
     ok = emqtt:disconnect(C2),
     ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
+
+count_connections_per_vhost(Config)  ->
+    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 0),
+    rabbit_ct_broker_helpers:rpc(
+      Config, 0,
+      rabbit_connection_tracking, count_local_tracked_items_in_vhost,
+      [<<"/">>]).
 
 vhost_queue_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_vhost_limit(Config, 0, <<"/">>, max_queues, 1),
