@@ -115,7 +115,8 @@ groups() ->
                                             node_removal_is_not_quorum_critical,
                                             select_nodes_with_least_replicas,
                                             select_nodes_with_least_replicas_node_down,
-                                            subscribe_from_each
+                                            subscribe_from_each,
+                                            get_member_with_highest_index
 
 
                                            ]},
@@ -365,6 +366,8 @@ init_per_testcase(Testcase, Config) ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
         cancel_consumer_gh_3729 when IsMixed andalso RabbitMQ3 ->
             {skip, "this test is not compatible with RabbitMQ 3.13.x"};
+        get_member_with_highest_index when IsMixed ->
+            {skip, "get_member_with_highest_index isn't mixed versions compatible"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -4576,6 +4579,95 @@ leader_health_check(Config) ->
     amqp_connection:close(Conn1),
     amqp_connection:close(Conn2).
 
+get_member_with_highest_index(Config) ->
+    [Node1, Node2, Node3, Node4, Node5] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Q = ?config(queue_name, Config),
+    VHost = <<"/">>,
+
+    Statuses =
+    %%  [{Node, Member, LogIdx, CommitIdx, SnapshotIdx}, ...]
+        [{Node1, leader,   1015, 1010, 1010}, %% highest SnapshotIdx
+         {Node2, follower, 1015, 1010, 1010}, %% highest SnapshotIdx (duplicate)
+         {Node3, follower, 1013, 1013, 1009}, %% highest CommitIdx
+         {Node4, follower, 1016, 1009, 1008}, %% highest LogIdx
+         {Node5, follower, 1013, 1012, undefined}],
+
+    Term = 1,
+    MachineVersion = 7,
+
+    meck:new(rabbit_quorum_queue, [passthrough, no_link]),
+    meck:expect(
+      rabbit_quorum_queue, status,
+      fun(_, _) ->
+          [[{<<"Node Name">>, Node},
+            {<<"Raft State">>, Member},
+            {<<"Last Log Index">>, LogIndex},
+            {<<"Last Written">>, LogIndex},
+            {<<"Last Applied">>, LogIndex},
+            {<<"Commit Index">>, CommitIndex},
+            {<<"Snapshot Index">>, SnapshotIdx},
+            {<<"Term">>, Term},
+            {<<"Machine Version">>, MachineVersion}]
+                || {Node, Member, LogIndex, CommitIndex, SnapshotIdx} <- Statuses]
+      end),
+
+    ct:pal("quorum status: ~tp", [rabbit_quorum_queue:status(VHost, Q)]),
+
+    ExpectedHighestLogIdx =
+        [[{<<"Node Name">>, Node4},
+          {<<"Raft State">>, follower},
+          {<<"Last Log Index">>, 1016},
+          {<<"Last Written">>,1016},
+          {<<"Last Applied">>,1016},
+          {<<"Commit Index">>, 1009},
+          {<<"Snapshot Index">>, 1008},
+          {<<"Term">>, Term},
+          {<<"Machine Version">>, MachineVersion}]],
+
+    [?assertEqual(ExpectedHighestLogIdx,
+        rabbit_quorum_queue:get_member_with_highest_index(VHost, Q, I)) || I <- [log, log_index]],
+
+    ExpectedHighestCommitIdx =
+        [[{<<"Node Name">>, Node3},
+          {<<"Raft State">>, follower},
+          {<<"Last Log Index">>, 1013},
+          {<<"Last Written">>,1013},
+          {<<"Last Applied">>,1013},
+          {<<"Commit Index">>, 1013},
+          {<<"Snapshot Index">>, 1009},
+          {<<"Term">>, Term},
+          {<<"Machine Version">>, MachineVersion}]],
+
+    [?assertEqual(ExpectedHighestCommitIdx,
+        rabbit_quorum_queue:get_member_with_highest_index(VHost, Q, I)) || I <- [commit, commit_index]],
+
+    ExpectedHighestSnapshotIdx =
+        [[{<<"Node Name">>, Node1},
+          {<<"Raft State">>, leader},
+          {<<"Last Log Index">>, 1015},
+          {<<"Last Written">>,1015},
+          {<<"Last Applied">>,1015},
+          {<<"Commit Index">>, 1010},
+          {<<"Snapshot Index">>, 1010},
+          {<<"Term">>, Term},
+          {<<"Machine Version">>, MachineVersion}]],
+        %  Duplicate:
+        %  [{<<"Node Name">>, Node2},
+        %   {<<"Raft State">>, follower},
+        %   {<<"Last Log Index">>, 1015},
+        %   {<<"Last Written">>,1015},
+        %   {<<"Last Applied">>,1015},
+        %   {<<"Commit Index">>, 1010},
+        %   {<<"Snapshot Index">>, 1010},
+        %   {<<"Term">>, Term},
+        %   {<<"Machine Version">>, MachineVersion}],
+
+    [?assertEqual(ExpectedHighestSnapshotIdx,
+        rabbit_quorum_queue:get_member_with_highest_index(VHost, Q, I)) || I <- [snapshot, snapshot_index]],
+
+    ok.
 
 leader_locator_client_local(Config) ->
     [Server1 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
