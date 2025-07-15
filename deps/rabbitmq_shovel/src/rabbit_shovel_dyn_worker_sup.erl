@@ -15,6 +15,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("rabbit_shovel.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("logging.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 start_link(Name, Config) ->
@@ -35,6 +36,7 @@ maybe_start_link(_, Name, Config) ->
 %%----------------------------------------------------------------------------
 
 init([Name, Config0]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_SHOVEL}),
     Config  = rabbit_data_coercion:to_proplist(Config0),
     Delay   = pget(<<"reconnect-delay">>, Config, ?DEFAULT_RECONNECT_DELAY),
     case Name of
