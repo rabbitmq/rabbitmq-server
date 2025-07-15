@@ -9,7 +9,7 @@ init(Req, State) ->
         {ok, KeyValues, _Req} -> 
             ct:log("introspect_http_handler responding with active token: ~p", [KeyValues]),
             case proplists:get_value(<<"token">>, KeyValues) of 
-                undefined -> 
+                <<"401">> -> 
                     {ok, cowboy_req:reply(401, #{}, [], Req), State};
                 <<"active">> -> 
                     Body = rabbit_json:encode([{"active", true}, {"scope", "rabbitmq.tag:administrator"}]),
