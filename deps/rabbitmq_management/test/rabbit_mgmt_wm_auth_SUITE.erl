@@ -14,6 +14,22 @@
 -import(rabbit_mgmt_test_util, [req/5]).
 -compile(export_all).
 
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
+                                assert_keys/2, assert_no_keys/2,
+                                decode_body/1,
+                                http_get/2, http_get/3, http_get/5,
+                                http_get_no_auth/3,
+                                http_get_no_decode/5,
+                                http_put/4, http_put/6,
+                                http_post/4, http_post/6,
+                                http_post_json/4,
+                                http_upload_raw/8,
+                                http_delete/3, http_delete/4, http_delete/5,
+                                http_put_raw/4, http_post_accept_json/4,
+                                req/4, auth_header/2,
+                                assert_permanent_redirect/3,
+                                uri_base_from/2, format_for_upload/1,
+                                amqp_port/1, req/6]).
 all() ->
     [
      {group, without_any_settings},
@@ -36,6 +52,7 @@ groups() ->
     [
       {run_with_broker, [], [
         {verify_introspection_endpoint, [], [
+          test_login,
           introspect_opaque_token_returns_active_jwt_token
         ]}        
       ]},
@@ -897,9 +914,50 @@ should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_token_endpoint_params, token_params_1).
 
-introspect_opaque_token_returns_active_jwt_token(Config) ->  
-  _Result = req(Config, 0, post, "/introspect", [{"Authorization", "Bearer active"}]).
+test_login(Config) ->
+    http_put(Config, "/users/myuser", [{password, <<"myuser">>},
+                                       {tags,     <<"management">>}], {group, '2xx'}),
+    %% Let's do a post without any other form of authorization
+    {ok, {{_, CodeAct, _}, Headers, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=myuser&password=myuser">>),
+    ?assertEqual(200, CodeAct),
 
+        %% Extract the authorization header
+    Cookie = list_to_binary(proplists:get_value("set-cookie", Headers)),
+    [_, Auth] = binary:split(Cookie, <<"=">>, []),
+
+    %% Request the overview with the auth obtained
+    {ok, {{_, CodeAct1, _}, _, _}} =
+        req(Config, get, "/overview", [{"Authorization", "Basic " ++ binary_to_list(Auth)}]),
+    ?assertEqual(200, CodeAct1),
+
+    %% Let's request a login with an unknown user
+    {ok, {{_, CodeAct2, _}, Headers2, _}} =
+        req(Config, 0, post, "/login",
+            [{"content-type", "application/x-www-form-urlencoded"}],
+            <<"username=misteryusernumber1&password=myuser">>),
+    ?assertEqual(401, CodeAct2),
+    ?assert(not proplists:is_defined("set-cookie", Headers2)),
+
+    http_delete(Config, "/users/myuser", {group, '2xx'}),
+    passed.
+
+
+introspect_opaque_token_returns_active_jwt_token(Config) -> 
+  Result2 = req(Config, 0, post, "/auth/introspect", [
+    {"Authorization", "Bearer active"}, {"Accept", "application/json"}], []),
+    
+  ct:log("Result: ~p", [Result2]).
+%  _Result2 = httpc:request(post, {uri_base_from(Config, 0, "auth/introspect"), 
+%    [{"Authorization", "Bearer active"}]}, [], []).
+ 
+uri_base_from(Config, Node, Base) ->
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_mgmt),
+    Prefix = "/api",
+    Uri = list_to_binary(lists:flatten(io_lib:format("http://localhost:~w~ts/~ts", [Port, Prefix, Base]))),
+    binary_to_list(Uri).
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions
