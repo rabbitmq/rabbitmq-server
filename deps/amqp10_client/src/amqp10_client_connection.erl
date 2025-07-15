@@ -249,7 +249,7 @@ hdr_sent(_EvtType, {protocol_header_received, 0, 1, 0, 0}, State) ->
 hdr_sent(_EvtType, {protocol_header_received, Protocol, Maj, Min,
                                 Rev}, State) ->
     ?LOG_WARNING("Unsupported protocol version: ~b ~b.~b.~b",
-                             [Protocol, Maj, Min, Rev]),
+                 [Protocol, Maj, Min, Rev]),
     {stop, normal, State};
 hdr_sent({call, From}, begin_session,
          #state{pending_session_reqs = PendingSessionReqs} = State) ->
@@ -344,7 +344,7 @@ opened(info, {'DOWN', MRef, process, _, _Info},
     {stop, normal};
 opened(_EvtType, Frame, State) ->
     ?LOG_WARNING("Unexpected connection frame ~tp when in state ~tp ",
-                   [Frame, State]),
+                 [Frame, State]),
     keep_state_and_data.
 
 close_sent(_EvtType, heartbeat, _Data) ->

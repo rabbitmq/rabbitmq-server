@@ -193,7 +193,7 @@ handle_cast({hard_error_in_channel, _Pid, Reason}, State) ->
     server_initiated_close(Reason, State);
 handle_cast({channel_internal_error, Pid, Reason}, State) ->
     ?LOG_WARNING("Connection (~tp) closing: internal error in channel (~tp): ~tp",
-              [self(), Pid, Reason]),
+                 [self(), Pid, Reason]),
     internal_error(Pid, Reason, State);
 handle_cast({server_misbehaved, AmqpError}, State) ->
     server_misbehaved_close(AmqpError, State);
@@ -324,7 +324,7 @@ server_initiated_close(Close, State) ->
 
 server_misbehaved_close(AmqpError, State) ->
     ?LOG_WARNING("Connection (~tp) closing: server misbehaved: ~tp",
-              [self(), AmqpError]),
+                 [self(), AmqpError]),
     {0, Close} = rabbit_binary_generator:map_exception(0, AmqpError, ?PROTOCOL),
     set_closing_state(abrupt, #closing{reason = server_misbehaved,
                                        close = Close}, State).

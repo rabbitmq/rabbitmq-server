@@ -269,8 +269,8 @@ update_x_death_header(Info, Headers) ->
               [{table, rabbit_misc:sort_field_table(Info1)} | Others]);
         {<<"x-death">>, InvalidType, Header} ->
             ?LOG_WARNING("Message has invalid x-death header (type: ~tp)."
-                               " Resetting header ~tp",
-                               [InvalidType, Header]),
+                         " Resetting header ~tp",
+                         [InvalidType, Header]),
             %% if x-death is something other than an array (list)
             %% then we reset it: this happens when some clients consume
             %% a message and re-publish is, converting header values

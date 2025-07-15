@@ -242,7 +242,7 @@ handle_event({node_down, Node}, #alarms{alarmed_nodes = AN} = State) ->
                         end,
     {ok, lists:foldr(fun(Source, AccState) ->
                              ?LOG_WARNING("~ts resource limit alarm cleared for dead node ~tp",
-                                                [Source, Node]),
+                                          [Source, Node]),
                              maybe_alert(fun dict_unappend/3, Node, Source, false, AccState)
                      end, State, AlarmsForDeadNode)};
 
@@ -350,7 +350,7 @@ handle_set_alarm(Alarm, State) ->
 
 handle_clear_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING("~ts resource limit alarm cleared on node ~tp",
-                       [Source, Node]),
+                 [Source, Node]),
     {ok, maybe_alert(fun dict_unappend/3, Node, Source, false, State)}.
 
 handle_clear_alarm(file_descriptor_limit, State) ->

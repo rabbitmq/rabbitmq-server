@@ -526,11 +526,11 @@ set_permissions(Username, VirtualHost, ConfigurePerm, WritePerm, ReadPerm, Actin
 
 clear_permissions(Username, VirtualHost, ActingUser) ->
     ?LOG_DEBUG("Asked to clear permissions for user '~ts' in virtual host '~ts'",
-                     [Username, VirtualHost]),
+               [Username, VirtualHost]),
     try
         R = rabbit_db_user:clear_user_permissions(Username, VirtualHost),
         ?LOG_INFO("Successfully cleared permissions for user '~ts' in virtual host '~ts'",
-                        [Username, VirtualHost]),
+                  [Username, VirtualHost]),
         rabbit_event:notify(permission_deleted, [{user,  Username},
                                                  {vhost, VirtualHost},
                                                  {user_who_performed_action, ActingUser}]),
@@ -636,11 +636,11 @@ set_topic_permissions(Username, VirtualHost, Exchange, WritePerm, ReadPerm, Acti
 
 clear_topic_permissions(Username, VirtualHost, ActingUser) ->
     ?LOG_DEBUG("Asked to clear topic permissions for user '~ts' in virtual host '~ts'",
-                     [Username, VirtualHost]),
+               [Username, VirtualHost]),
     try
         R = rabbit_db_user:clear_topic_permissions(Username, VirtualHost, '_'),
         ?LOG_INFO("Successfully cleared topic permissions for user '~ts' in virtual host '~ts'",
-                        [Username, VirtualHost]),
+                  [Username, VirtualHost]),
         rabbit_event:notify(topic_permission_deleted, [{user,  Username},
             {vhost, VirtualHost},
             {user_who_performed_action, ActingUser}]),
@@ -654,12 +654,12 @@ clear_topic_permissions(Username, VirtualHost, ActingUser) ->
 
 clear_topic_permissions(Username, VirtualHost, Exchange, ActingUser) ->
     ?LOG_DEBUG("Asked to clear topic permissions on exchange '~ts' for user '~ts' in virtual host '~ts'",
-                     [Exchange, Username, VirtualHost]),
+               [Exchange, Username, VirtualHost]),
     try
         R = rabbit_db_user:clear_topic_permissions(
               Username, VirtualHost, Exchange),
         ?LOG_INFO("Successfully cleared topic permissions on exchange '~ts' for user '~ts' in virtual host '~ts'",
-                        [Exchange, Username, VirtualHost]),
+                  [Exchange, Username, VirtualHost]),
         rabbit_event:notify(topic_permission_deleted, [{user,  Username},
                                                        {vhost, VirtualHost},
                                                        {user_who_performed_action, ActingUser}]),

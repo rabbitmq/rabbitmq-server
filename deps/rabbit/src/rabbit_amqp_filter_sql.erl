@@ -295,14 +295,14 @@ sql_to_list(SQL) ->
             {ok, String};
         Error ->
             ?LOG_WARNING("JMS message selector ~p is not UTF-8 encoded: ~p",
-                               [JmsSelector, Error]),
+                         [JmsSelector, Error]),
             error
     end.
 
 check_length(String)
   when length(String) > ?MAX_EXPRESSION_LENGTH ->
     ?LOG_WARNING("JMS message selector length ~b exceeds maximum length ~b",
-                       [length(String), ?MAX_EXPRESSION_LENGTH]),
+                 [length(String), ?MAX_EXPRESSION_LENGTH]),
     error;
 check_length(_) ->
     ok.
@@ -313,14 +313,14 @@ tokenize(String, SQL) ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
             ?LOG_WARNING("failed to scan JMS message selector '~ts': ~tp",
-                               [JmsSelector, ErrDescriptor]),
+                         [JmsSelector, ErrDescriptor]),
             error
     end.
 
 check_token_count(Tokens, SQL)
   when length(Tokens) > ?MAX_TOKENS ->
     ?LOG_WARNING("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
-                       [JmsSelector, length(Tokens), ?MAX_TOKENS]),
+                 [JmsSelector, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
     ok.
@@ -329,7 +329,7 @@ parse(Tokens, SQL) ->
     case rabbit_amqp_sql_parser:parse(Tokens) of
         {error, Reason} ->
             ?LOG_WARNING("failed to parse JMS message selector '~ts': ~p",
-                               [JmsSelector, Reason]),
+                         [JmsSelector, Reason]),
             error;
         Ok ->
             Ok
