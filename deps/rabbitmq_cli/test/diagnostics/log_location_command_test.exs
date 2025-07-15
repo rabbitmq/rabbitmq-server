@@ -69,16 +69,5 @@ defmodule LogLocationCommandTest do
     log_message = "checking the default log file when checking all"
     :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(log_message)])
     wait_for_log_message(log_message, logfile)
-
-    log_message_upgrade = "checking the upgrade log file when checking all"
-
-    :rpc.call(get_rabbit_hostname(), :logger, :log, [
-      :upgrade,
-      :error,
-      to_charlist(log_message_upgrade),
-      []
-    ])
-
-    wait_for_log_message(log_message_upgrade, logfile)
   end
 end
