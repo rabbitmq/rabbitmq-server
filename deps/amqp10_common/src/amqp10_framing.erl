@@ -106,10 +106,18 @@ symbolify(FieldName) when is_atom(FieldName) ->
 %% elements) both describe an absence of a value and should be treated
 %% as semantically identical." (see section 1.3)
 
-%% A sequence comes as an arbitrary list of values; it's not a
-%% composite type.
 decode({described, Descriptor, {list, Fields} = Type}) ->
     case amqp10_framing0:record_for(Descriptor) of
+        #'v1_0.flow'{} = Flow ->
+            amqp10_composite:flow(Flow, Fields);
+        #'v1_0.transfer'{} = Transfer ->
+            amqp10_composite:transfer(Transfer, Fields);
+        #'v1_0.disposition'{} = Disposition ->
+            amqp10_composite:disposition(Disposition, Fields);
+        #'v1_0.header'{} = Header ->
+            amqp10_composite:header(Header, Fields);
+        #'v1_0.properties'{} = Properties ->
+            amqp10_composite:properties(Properties, Fields);
         #'v1_0.amqp_sequence'{} ->
             #'v1_0.amqp_sequence'{content = [decode(F) || F <- Fields]};
         #'v1_0.amqp_value'{} ->
@@ -169,9 +177,17 @@ encode_described(list, CodeNumber,
                  #'v1_0.amqp_sequence'{content = Content}) ->
     {described, {ulong, CodeNumber},
      {list, lists:map(fun encode/1, Content)}};
-encode_described(list, CodeNumber, Frame) ->
-    {described, {ulong, CodeNumber},
-     {list, lists:map(fun encode/1, tl(tuple_to_list(Frame)))}};
+encode_described(list, CodeNumber, Rec) ->
+    L = if is_record(Rec, 'v1_0.flow') orelse
+           is_record(Rec, 'v1_0.transfer') orelse
+           is_record(Rec, 'v1_0.disposition') orelse
+           is_record(Rec, 'v1_0.header') orelse
+           is_record(Rec, 'v1_0.properties') ->
+               encode_fields_omit_trailing_null(Rec, true, tuple_size(Rec), []);
+           true ->
+               encode_fields(Rec, 2, tuple_size(Rec))
+        end,
+    {described, {ulong, CodeNumber}, {list, L}};
 encode_described(map, CodeNumber,
                  #'v1_0.application_properties'{content = Content}) ->
     {described, {ulong, CodeNumber}, {map, Content}};
@@ -190,6 +206,21 @@ encode_described('*', CodeNumber, #'v1_0.amqp_value'{content = Content}) ->
     {described, {ulong, CodeNumber}, Content};
 encode_described(annotations, CodeNumber, Frame) ->
     encode_described(map, CodeNumber, Frame).
+
+encode_fields(_, N, Size) when N > Size ->
+    [];
+encode_fields(Tup, N, Size) ->
+    [encode(element(N, Tup)) | encode_fields(Tup, N + 1, Size)].
+
+encode_fields_omit_trailing_null(_, _, 1, L) ->
+    L;
+encode_fields_omit_trailing_null(Tup, Omit, N, L) ->
+    case element(N, Tup) of
+        undefined when Omit ->
+            encode_fields_omit_trailing_null(Tup, Omit, N - 1, L);
+        Val ->
+            encode_fields_omit_trailing_null(Tup, false, N - 1, [encode(Val) | L])
+    end.
 
 encode(X) ->
     amqp10_framing0:encode(X).

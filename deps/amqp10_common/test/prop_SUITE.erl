@@ -25,7 +25,8 @@ groups() ->
        prop_many_primitive_types_parse_many,
        prop_annotated_message,
        prop_server_mode_body,
-       prop_server_mode_bare_message
+       prop_server_mode_bare_message,
+       prop_frame
       ]}
     ].
 
@@ -145,6 +146,16 @@ prop_server_mode_bare_message(_Config) ->
                            FirstBareMsgSectionBin = binary_part(Bin, Pos, size(Bin) - Pos),
                            {Section, _NumBytes} = amqp10_binary_parser:parse(FirstBareMsgSectionBin),
                            equals(FirstBareMsgSection, amqp10_framing:decode(Section))
+                       end)
+      end, [], 1000).
+
+prop_frame(_Config) ->
+    run_proper(
+      fun() -> ?FORALL(Frame,
+                       frame(),
+                       begin
+                           Bin = iolist_to_binary(amqp10_framing:encode_bin(Frame)),
+                           equals([Frame], amqp10_framing:decode_bin(Bin))
                        end)
       end, [], 1000).
 
@@ -298,6 +309,13 @@ amqp_map() ->
                lists:uniq(fun({K, _V}) -> K end, KvList)
               )}.
 
+fields() ->
+    {map, ?LET(KvList,
+               list({amqp_symbol(),
+                     prefer_simple_type()}),
+               lists:uniq(fun({K, _V}) -> K end, KvList)
+              )}.
+
 amqp_array() ->
     Gens = fixed_and_variable_width_types(),
     ?LET(N,
@@ -329,10 +347,51 @@ zero_or_one(Section) ->
           ]).
 
 optional(Field) ->
+    frequency([
+               {2, undefined},
+               {1, Field}
+              ]).
+
+frame() ->
     oneof([
-           undefined,
-           Field
+           flow(),
+           transfer(),
+           disposition()
           ]).
+
+flow() ->
+    #'v1_0.flow'{next_incoming_id = optional(transfer_number()),
+                 incoming_window = amqp_uint(),
+                 next_outgoing_id = transfer_number(),
+                 outgoing_window = amqp_uint(),
+                 handle = optional(handle()),
+                 delivery_count = optional(sequence_no()),
+                 link_credit = optional(amqp_uint()),
+                 available = optional(amqp_uint()),
+                 drain = optional(amqp_boolean()),
+                 echo = optional(amqp_boolean()),
+                 properties = optional(fields())}.
+
+transfer() ->
+    #'v1_0.transfer'{handle = handle(),
+                     delivery_id = optional(delivery_number()),
+                     delivery_tag = optional(delivery_tag()),
+                     message_format = optional(amqp_uint()),
+                     settled = optional(amqp_boolean()),
+                     more = optional(amqp_boolean()),
+                     rcv_settle_mode = optional(receiver_settle_mode()),
+                     state = optional(delivery_state()),
+                     resume = optional(amqp_boolean()),
+                     aborted = optional(amqp_boolean()),
+                     batchable = optional(amqp_boolean())}.
+
+disposition() ->
+    #'v1_0.disposition'{role = role(),
+                        first = delivery_number(),
+                        last = optional(delivery_number()),
+                        settled = optional(amqp_boolean()),
+                        state = optional(delivery_state()),
+                        batchable = optional(amqp_boolean())}.
 
 annotated_message() ->
     ?LET(H,
@@ -427,8 +486,62 @@ non_reserved_annotation_key() ->
                       <<"x-", Bin/binary>>
                   end)}.
 
+delivery_state() ->
+    oneof([received(),
+           accepted(),
+           rejected(),
+           released(),
+           modified()]).
+
+received() ->
+    #'v1_0.received'{section_number = section_number(),
+                     section_offset = section_offset()}.
+
+accepted() ->
+    #'v1_0.accepted'{}.
+
+rejected() ->
+    #'v1_0.rejected'{error = amqp_error()}.
+
+released() ->
+    #'v1_0.released'{}.
+
+modified() ->
+    #'v1_0.modified'{delivery_failed = optional(amqp_boolean()),
+                     undeliverable_here = optional(amqp_boolean()),
+                     message_annotations = optional(fields())}.
+
+amqp_error() ->
+    #'v1_0.error'{condition = amqp_symbol(),
+                  description = optional(amqp_string()),
+                  info = optional(fields())}.
+
+role() ->
+    amqp_boolean().
+
+delivery_number() ->
+    sequence_no().
+
+transfer_number() ->
+    sequence_no().
+
+delivery_tag() ->
+    {binary, binary(32)}.
+
+receiver_settle_mode() ->
+    {ubyte, oneof([0, 1])}.
+
+handle() ->
+    amqp_uint().
+
 sequence_no() ->
     amqp_uint().
+
+section_number() ->
+    amqp_uint().
+
+section_offset() ->
+    amqp_ulong().
 
 milliseconds() ->
     amqp_uint().
