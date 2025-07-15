@@ -56,7 +56,7 @@ defmodule LogLocationCommandTest do
   test "run: prints default log location", context do
     {:ok, logfile} = @command.run([], context[:opts])
     log_message = "file location"
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(log_message)])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(log_message)])
     wait_for_log_message(log_message, logfile)
     {:ok, log_file_data} = File.read(logfile)
     assert String.match?(log_file_data, Regex.compile!(log_message))
@@ -67,12 +67,12 @@ defmodule LogLocationCommandTest do
     [logfile | _] = @command.run([], Map.merge(context[:opts], %{all: true}))
 
     log_message = "checking the default log file when checking all"
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(log_message)])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(log_message)])
     wait_for_log_message(log_message, logfile)
 
     log_message_upgrade = "checking the upgrade log file when checking all"
 
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :log, [
+    :rpc.call(get_rabbit_hostname(), :logger, :log, [
       :upgrade,
       :error,
       to_charlist(log_message_upgrade),

@@ -39,7 +39,6 @@ defmodule RabbitMQCtl.MixfileBase do
           :rabbit_event,
           :rabbit_file,
           :rabbit_net,
-          :rabbit_log,
           :rabbit_misc,
           :rabbit_mnesia,
           :rabbit_nodes_common,
