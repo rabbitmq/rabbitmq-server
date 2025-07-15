@@ -316,7 +316,7 @@ update_config(at_least_once, at_least_once, _, State) ->
 update_config(SameDLH, SameDLH, _, State) ->
     {State, []};
 update_config(OldDLH, NewDLH, QRes, State0) ->
-    LogOnLeader = {mod_call, rabbit_log, debug,
+    LogOnLeader = {mod_call, logger, debug,
                    ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
                     [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
     {State1, Effects0} = switch_from(OldDLH, QRes, State0),
@@ -330,7 +330,7 @@ switch_from(at_least_once, QRes, State) ->
     ensure_worker_terminated(State),
     {Num, Bytes} = stat(State),
     %% Log only on leader.
-    {init(), [{mod_call, rabbit_log, info,
+    {init(), [{mod_call, logger, info,
                ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
                 [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
 switch_from(_, _, State) ->
