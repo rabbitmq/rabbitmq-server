@@ -55,7 +55,7 @@ restart_shovel(VHost, Name) ->
         not_found ->
             {error, not_found};
         _Obj ->
-            rabbit_log_shovel:info("Shovel '~ts' in virtual host '~ts' will be restarted", [Name, VHost]),
+            ?LOG_INFO("Shovel '~ts' in virtual host '~ts' will be restarted", [Name, VHost]),
             ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
             {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
             ok
