@@ -45,7 +45,7 @@ find_steps(Apps) ->
     [Step || {App, _, _} = Step <- All, lists:member(App, Apps)].
 
 run_step(Attributes, AttributeName) ->
-    [begin
+    _ = [begin
         ?LOG_DEBUG("Applying MFA: M = ~ts, F = ~ts, A = ~tp",
                         [M, F, A]),
         case apply(M,F,A) of

@@ -115,7 +115,7 @@ start_processes_for_all(Nodes) ->
     Names = list_names(),
     N = length(Names),
     ?LOG_DEBUG("Will make sure that processes of ~p virtual hosts are running on all reachable cluster nodes", [N]),
-    [begin
+    _ = [begin
          try
              start_on_all_nodes(VH, Nodes)
          catch

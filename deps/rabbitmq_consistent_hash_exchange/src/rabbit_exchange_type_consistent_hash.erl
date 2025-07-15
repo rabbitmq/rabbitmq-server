@@ -143,7 +143,7 @@ recover_exchange_and_bindings(#exchange{name = XName} = X) ->
     Bindings = rabbit_binding:list_for_source(XName),
     ?LOG_DEBUG("Consistent hashing exchange: have ~b bindings to recover for exchange ~ts",
                      [length(Bindings), rabbit_misc:rs(XName)]),
-    [add_binding(none, X, B) || B <- lists:usort(Bindings)],
+    _ = [add_binding(none, X, B) || B <- lists:usort(Bindings)],
     ?LOG_DEBUG("Consistent hashing exchange: recovered bindings for exchange ~ts",
                      [rabbit_misc:rs(XName)]).
 
@@ -191,7 +191,7 @@ chx_hash_ring_update_fun(#chx_hash_ring{bucket_map = BM0,
 
 remove_bindings(_Serial, _X, Bindings) ->
     Ret = rabbit_db_ch_exchange:delete_bindings(Bindings, fun ch_hash_ring_delete_fun/2),
-    [?LOG_WARNING("Can't remove binding: hash ring state for exchange ~s wasn't found",
+    _ = [?LOG_WARNING("Can't remove binding: hash ring state for exchange ~s wasn't found",
                         [rabbit_misc:rs(X)]) || {not_found, X} <- Ret],
     ok.
 

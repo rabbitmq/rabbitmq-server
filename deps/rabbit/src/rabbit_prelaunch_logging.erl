@@ -501,7 +501,7 @@ clear_config_run_number() ->
 -spec configure_logger(rabbit_env:context()) -> ok.
 
 configure_logger(Context) ->
-    logger:set_primary_config(metadata, #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+    _ = logger:set_primary_config(metadata, #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
     %% Configure main handlers.
     %% We distinguish them by their type and possibly other
