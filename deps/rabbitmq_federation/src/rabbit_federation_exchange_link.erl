@@ -625,12 +625,12 @@ check_internal_exchange(IntXNameBin,
                                   arguments = XFUArgs},
     rabbit_federation_link_util:disposable_connection_call(
       Params, XFU, fun(404, Text) ->
-                           ?LOG_WARNING("detected internal upstream exchange changes,"
-                                        " restarting link: ~tp", [Text]),
+                           ?LOG_WARNING("Federation ~ts detected internal upstream exchange changes,"
+                                        " restarting link: ~tp", [rabbit_misc:rs(XName), Text]),
                            upstream_not_found;
                       (Code, Text) ->
-                           ?LOG_WARNING("internal upstream exchange check failed: ~tp ~tp",
-                             [Code, Text]),
+                           ?LOG_WARNING("Federation ~ts internal upstream exchange check failed: ~tp ~tp",
+                             [rabbit_misc:rs(XName), Code, Text]),
                            error
                    end).
 
