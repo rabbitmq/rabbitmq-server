@@ -500,37 +500,29 @@ maps_upsert(Key, TaggedVal, KVList) ->
 
 encode(Sections) when is_list(Sections) ->
     [amqp10_framing:encode_bin(Section) || Section <- Sections,
-                                           not is_empty(Section)].
+                                           not omit(Section)].
 
-is_empty(#'v1_0.header'{durable = undefined,
-                        priority = undefined,
-                        ttl = undefined,
-                        first_acquirer = undefined,
-                        delivery_count = undefined}) ->
+omit(#'v1_0.message_annotations'{content = []}) ->
     true;
-is_empty(#'v1_0.delivery_annotations'{content = []}) ->
+omit(#'v1_0.properties'{message_id = undefined,
+                        user_id = undefined,
+                        to = undefined,
+                        subject = undefined,
+                        reply_to = undefined,
+                        correlation_id = undefined,
+                        content_type = undefined,
+                        content_encoding = undefined,
+                        absolute_expiry_time = undefined,
+                        creation_time = undefined,
+                        group_id = undefined,
+                        group_sequence = undefined,
+                        reply_to_group_id = undefined}) ->
     true;
-is_empty(#'v1_0.message_annotations'{content = []}) ->
+omit(#'v1_0.application_properties'{content = []}) ->
     true;
-is_empty(#'v1_0.properties'{message_id = undefined,
-                            user_id = undefined,
-                            to = undefined,
-                            subject = undefined,
-                            reply_to = undefined,
-                            correlation_id = undefined,
-                            content_type = undefined,
-                            content_encoding = undefined,
-                            absolute_expiry_time = undefined,
-                            creation_time = undefined,
-                            group_id = undefined,
-                            group_sequence = undefined,
-                            reply_to_group_id = undefined}) ->
+omit(#'v1_0.footer'{content = []}) ->
     true;
-is_empty(#'v1_0.application_properties'{content = []}) ->
-    true;
-is_empty(#'v1_0.footer'{content = []}) ->
-    true;
-is_empty(_) ->
+omit(_) ->
     false.
 
 message_annotation(Key, State, Default)

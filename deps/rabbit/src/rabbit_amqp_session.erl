@@ -2182,7 +2182,8 @@ handle_deliver(ConsumerTag, AckRequired,
                           delivery_id = ?UINT(DeliveryId),
                           delivery_tag = {binary, Dtag},
                           message_format = ?UINT(?MESSAGE_FORMAT),
-                          settled = SendSettled},
+                          settled = SendSettled,
+                          more = false},
             Mc1 = rabbit_msg_interceptor:intercept_outgoing(Mc0, MsgIcptCtx),
             Mc2 = mc:convert(mc_amqp, Mc1),
             Mc = mc:set_annotation(redelivered, Redelivered, Mc2),
@@ -2332,7 +2333,8 @@ incoming_mgmt_link_transfer(
                   delivery_id = ?UINT(OutgoingDeliveryId),
                   delivery_tag = {binary, <<>>},
                   message_format = ?UINT(?MESSAGE_FORMAT),
-                  settled = true},
+                  settled = true,
+                  more = false},
     validate_message_size(Response, OutgoingMaxMessageSize),
     Frames = transfer_frames(Transfer, Response, MaxFrameSize),
     PendingDelivery = #pending_management_delivery{frames = Frames},
@@ -3161,19 +3163,20 @@ transfer_frames(Transfer, Sections, unlimited) ->
     [[Transfer, Sections]];
 transfer_frames(Transfer, Sections, MaxFrameSize) ->
     PerformativeSize = iolist_size(amqp10_framing:encode_bin(Transfer)),
-    encode_frames(Transfer, Sections, MaxFrameSize - PerformativeSize, []).
+    MaxPayloadSize = MaxFrameSize - ?FRAME_HEADER_SIZE - PerformativeSize,
+    split_msg(Transfer, Sections, MaxPayloadSize, []).
 
-encode_frames(_T, _Msg, MaxPayloadSize, _Transfers) when MaxPayloadSize =< 0 ->
+split_msg(_T, _Msg, MaxPayloadSize, _Transfers) when MaxPayloadSize =< 0 ->
     protocol_error(?V_1_0_AMQP_ERROR_FRAME_SIZE_TOO_SMALL,
                    "Frame size is too small by ~b bytes",
                    [-MaxPayloadSize]);
-encode_frames(T, Msg, MaxPayloadSize, Transfers) ->
+split_msg(T, Msg, MaxPayloadSize, Transfers) ->
     case iolist_size(Msg) > MaxPayloadSize of
         true ->
             MsgBin = iolist_to_binary(Msg),
             {Chunk, Rest} = split_binary(MsgBin, MaxPayloadSize),
             T1 = T#'v1_0.transfer'{more = true},
-            encode_frames(T, Rest, MaxPayloadSize, [[T1, Chunk] | Transfers]);
+            split_msg(T, Rest, MaxPayloadSize, [[T1, Chunk] | Transfers]);
         false ->
             lists:reverse([[T, Msg] | Transfers])
     end.

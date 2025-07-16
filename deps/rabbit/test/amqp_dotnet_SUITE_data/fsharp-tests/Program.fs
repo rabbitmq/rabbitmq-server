@@ -279,7 +279,11 @@ module Test =
 
     let fragmentation uri =
         for frameSize, size in
-            [1024u, 1024
+            [1024u, 990
+             1024u, 1000
+             1024u, 1010
+             1024u, 1020
+             1024u, 1024
              1024u, 1100
              1024u, 2048
              2048u, 2048] do

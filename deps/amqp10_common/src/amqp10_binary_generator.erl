@@ -99,10 +99,10 @@ generate1({boolean, false}) -> [16#56, 16#00];
 %% bits set to zero and values < 256.
 generate1({ubyte,    V})                           -> [16#50, V];
 generate1({ushort,   V})                           -> <<16#60,V:16/unsigned>>;
-generate1({uint,     V}) when V =:= 0              -> 16#43;
+generate1({uint,     0})                           -> 16#43;
 generate1({uint,     V}) when V < 256              -> [16#52, V];
 generate1({uint,     V})                           -> <<16#70,V:32/unsigned>>;
-generate1({ulong,    V}) when V =:= 0              -> 16#44;
+generate1({ulong,    0})                           -> 16#44;
 generate1({ulong,    V}) when V < 256              -> [16#53, V];
 generate1({ulong,    V})                           -> <<16#80,V:64/unsigned>>;
 generate1({byte,     V})                           -> <<16#51,V:8/signed>>;
@@ -204,9 +204,9 @@ constructor(array) -> 16#f0; % use large array type for all nested arrays
 constructor({described, Descriptor, Primitive}) ->
     [16#00, generate1(Descriptor), constructor(Primitive)].
 
-generate2(symbol, {symbol, V}) -> [<<(size(V)):32>>, V];
-generate2(utf8, {utf8, V}) -> [<<(size(V)):32>>, V];
-generate2(binary, {binary, V}) -> [<<(size(V)):32>>, V];
+generate2(symbol, {symbol, V}) -> [<<(byte_size(V)):32>>, V];
+generate2(utf8, {utf8, V}) -> [<<(byte_size(V)):32>>, V];
+generate2(binary, {binary, V}) -> [<<(byte_size(V)):32>>, V];
 generate2(boolean, true) -> 16#01;
 generate2(boolean, false) -> 16#00;
 generate2(boolean, {boolean, true}) -> 16#01;

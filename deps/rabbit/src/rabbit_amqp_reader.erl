@@ -827,14 +827,9 @@ send_to_new_session(
                                   container_id = ContainerId,
                                   name = ConnName},
       writer = WriterPid} = State) ->
-    %% Subtract fixed frame header size.
-    OutgoingMaxFrameSize = case MaxFrame of
-                               unlimited -> unlimited;
-                               _ -> MaxFrame - 8
-                           end,
     ChildArgs = [WriterPid,
                  ChannelNum,
-                 OutgoingMaxFrameSize,
+                 MaxFrame,
                  User,
                  Vhost,
                  ContainerId,

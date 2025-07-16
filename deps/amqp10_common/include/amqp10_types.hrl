@@ -2,6 +2,10 @@
 
 % [1.6.5]
 -type uint() :: 0..?UINT_MAX.
+
+% [2.3.1]
+-define(FRAME_HEADER_SIZE, 8).
+
 % [2.8.4]
 -type link_handle() :: uint().
 % [2.8.8]
