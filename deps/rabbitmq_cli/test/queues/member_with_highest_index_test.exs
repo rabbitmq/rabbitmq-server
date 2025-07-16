@@ -4,11 +4,11 @@
 ##
 ## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.PickMemberWithHighestIndexCommandTest do
+defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommandTest do
   use ExUnit.Case, async: false
   import TestHelper
 
-  @command RabbitMQ.CLI.Queues.Commands.PickMemberWithHighestIndexCommand
+  @command RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommand
 
   setup_all do
     RabbitMQ.CLI.Core.Distribution.start()

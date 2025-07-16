@@ -4,7 +4,7 @@
 ##
 ## Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
-defmodule RabbitMQ.CLI.Queues.Commands.PickMemberWithHighestIndexCommand do
+defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommand do
   alias RabbitMQ.CLI.Core.DocGuide
   import RabbitMQ.CLI.Core.DataCoercion
 
@@ -42,7 +42,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PickMemberWithHighestIndexCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
-  def usage, do: "pick_member_with_highest_index <queue> [--vhost <vhost>] [--index <commit|commit_index|log|log_index|snapshot|snapshot_index>]"
+  def usage, do: "member_with_highest_index <queue> [--vhost <vhost>] [--index <commit|commit_index|log|log_index|snapshot|snapshot_index>]"
 
   def usage_additional do
     [
@@ -59,7 +59,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PickMemberWithHighestIndexCommand do
 
   def help_section, do: :replication
 
-  def description, do: "Look up the member of a quorum queue with the highest commit, log or snapshot index."
+  def description, do: "Look up first member of a quorum queue with the highest commit, log or snapshot index."
 
   def banner([name], %{node: node, index: index, vhost: vhost}) do
     index = format_index(String.downcase(index))
