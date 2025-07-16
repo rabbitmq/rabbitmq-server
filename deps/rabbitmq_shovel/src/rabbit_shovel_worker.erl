@@ -113,6 +113,7 @@ handle_info(Msg, State) ->
     handle_msg(Msg, State).
 
 handle_msg(Msg, State = #state{config = Config, name = Name}) ->
+    rabbit_log:warning("HANDLING MESSAGE ~p", [Msg]),
     case rabbit_shovel_behaviour:handle_source(Msg, Config) of
         not_handled ->
             case rabbit_shovel_behaviour:handle_dest(Msg, Config) of
