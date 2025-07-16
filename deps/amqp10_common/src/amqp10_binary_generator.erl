@@ -99,10 +99,10 @@ generate1({boolean, false}) -> [16#56, 16#00];
 %% bits set to zero and values < 256.
 generate1({ubyte,    V})                           -> [16#50, V];
 generate1({ushort,   V})                           -> <<16#60,V:16/unsigned>>;
-generate1({uint,     V}) when V =:= 0              -> 16#43;
+generate1({uint,     0})                           -> 16#43;
 generate1({uint,     V}) when V < 256              -> [16#52, V];
 generate1({uint,     V})                           -> <<16#70,V:32/unsigned>>;
-generate1({ulong,    V}) when V =:= 0              -> 16#44;
+generate1({ulong,    0})                           -> 16#44;
 generate1({ulong,    V}) when V < 256              -> [16#53, V];
 generate1({ulong,    V})                           -> <<16#80,V:64/unsigned>>;
 generate1({byte,     V})                           -> <<16#51,V:8/signed>>;
