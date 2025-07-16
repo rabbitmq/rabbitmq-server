@@ -625,8 +625,8 @@ send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
                      channel = Channel,
                      connection_config = Config}) ->
     OutMaxFrameSize = maps:get(outgoing_max_frame_size, Config),
-    Transfer = amqp10_framing:encode_bin(Transfer0),
-    TransferSize = iolist_size(Transfer),
+    Transfer = Transfer0#'v1_0.transfer'{more = false},
+    TransferSize = iolist_size(amqp10_framing:encode_bin(Transfer)),
     Sections = encode_sections(Sections0, FooterOpt),
     SectionsBin = iolist_to_binary(Sections),
     if is_integer(MaxMessageSize) andalso
@@ -637,7 +637,7 @@ send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
            % TODO: this does not take the extended header into account
            % see: 2.3
            MaxPayloadSize = OutMaxFrameSize - TransferSize - ?FRAME_HEADER_SIZE,
-           Frames = build_frames(Channel, Transfer0, SectionsBin, MaxPayloadSize, []),
+           Frames = build_frames(Channel, Transfer, SectionsBin, MaxPayloadSize, []),
            ok = socket_send(Socket, Frames),
            {ok, length(Frames)}
     end.
@@ -722,7 +722,7 @@ set_flow_session_fields(Flow, #state{next_incoming_id = NID,
 
 build_frames(Channel, Trf, Bin, MaxPayloadSize, Acc)
   when byte_size(Bin) =< MaxPayloadSize ->
-    T = amqp10_framing:encode_bin(Trf#'v1_0.transfer'{more = false}),
+    T = amqp10_framing:encode_bin(Trf),
     Frame = amqp10_binary_generator:build_frame(Channel, [T, Bin]),
     lists:reverse([Frame | Acc]);
 build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
