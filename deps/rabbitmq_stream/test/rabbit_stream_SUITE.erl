@@ -819,89 +819,86 @@ store_offset_requires_read_access(Config) ->
 
 offset_lag_calculation(Config) ->
     FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
-    T = gen_tcp,
-    Port = get_port(T, Config),
-    Opts = get_opts(T),
-    {ok, S} = T:connect("localhost", Port, Opts),
-    C = rabbit_stream_core:init(0),
+    Port = get_port(gen_tcp, Config),
     ConnectionName = FunctionName,
-    test_peer_properties(T, S, #{<<"connection_name">> => ConnectionName}, C),
-    test_authenticate(T, S, C),
+    {ok, S, C0} = stream_test_utils:connect_pp(Port,
+                                               #{<<"connection_name">> => ConnectionName}),
 
-    Stream = FunctionName,
-    test_create_stream(T, S, Stream, C),
+    St = FunctionName,
+    {ok, C1} = stream_test_utils:create_stream(S, C0, St),
 
     SubId = 1,
     TheFuture = os:system_time(millisecond) + 60 * 60 * 1_000,
-    lists:foreach(fun(OffsetSpec) ->
-                          test_subscribe(T, S, SubId, Stream,
-                                         OffsetSpec, 10, #{},
-                                         ?RESPONSE_CODE_OK, C),
-                          ConsumerInfo = consumer_offset_info(Config, ConnectionName),
-                          ?assertEqual({0, 0}, ConsumerInfo),
-                          test_unsubscribe(T, S, SubId, C)
-                  end, [first, last, next, 0, 1_000, {timestamp, TheFuture}]),
+    C2 = lists:foldl(
+           fun(OffsetSpec, C00) ->
+                   {ok, C01} = stream_test_utils:subscribe(S, C00, St, SubId,
+                                                           10, #{}, OffsetSpec),
+                   ConsumerInfo = consumer_offset_info(Config, ConnectionName),
+                   ?assertEqual({0, 0}, ConsumerInfo),
+                   {ok, C02} = stream_test_utils:unsubscribe(S, C01, SubId),
+                   C02
+           end, C1, [first, last, next, 0, 1_000, {timestamp, TheFuture}]),
 
-
-    PublisherId = 1,
-    test_declare_publisher(T, S, PublisherId, Stream, C),
+    PubId = 1,
+    {ok, C3} = stream_test_utils:declare_publisher(S, C2, St, PubId),
     MessageCount = 10,
     Body = <<"hello">>,
-    lists:foreach(fun(_) ->
-                          test_publish_confirm(T, S, PublisherId, Body, C)
-                  end, lists:seq(1, MessageCount - 1)),
+    {ok, C4} = stream_test_utils:publish(S, C3, PubId, 1,
+                                         lists:duplicate(MessageCount - 1, Body)),
     %% to make sure to have 2 chunks
     timer:sleep(200),
-    test_publish_confirm(T, S, PublisherId, Body, C),
-    test_delete_publisher(T, S, PublisherId, C),
+    {ok, C5} = stream_test_utils:publish(S, C4, PubId, 1, [Body]),
+    {ok, C6} = stream_test_utils:delete_publisher(S, C5, PubId),
 
     NextOffset = MessageCount,
-    lists:foreach(fun({OffsetSpec, ReceiveDeliver, CheckFun}) ->
-                          test_subscribe(T, S, SubId, Stream,
-                                         OffsetSpec, 1, #{},
-                                         ?RESPONSE_CODE_OK, C),
-                          case ReceiveDeliver of
-                              true ->
-                                  {{deliver, SubId, _}, _} = receive_commands(T, S, C);
-                              _ ->
-                                  ok
-                          end,
-                          {Offset, Lag} = consumer_offset_info(Config, ConnectionName),
-                          CheckFun(Offset, Lag),
-                          test_unsubscribe(T, S, SubId, C)
-                  end, [{first, true,
-                         fun(Offset, Lag) ->
-                                 ?assert(Offset >= 0, "first, at least one chunk consumed"),
-                                 ?assert(Lag > 0, "first, not all messages consumed")
-                         end},
-                        {last, true,
-                         fun(Offset, _Lag) ->
-                                 ?assert(Offset > 0, "offset expected for last")
-                         end},
-                        {next, false,
-                         fun(Offset, Lag) ->
-                                 ?assertEqual(NextOffset, Offset, "next, offset should be at the end of the stream"),
-                                 ?assert(Lag =:= 0, "next, offset lag should be 0")
-                         end},
-                        {0, true,
-                         fun(Offset, Lag) ->
-                                 ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
-                                 ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
-                         end},
-                        {1_000, false,
-                         fun(Offset, Lag) ->
-                                 ?assertEqual(NextOffset, Offset, "offset spec = 1000, offset should be at the end of the stream"),
-                                 ?assert(Lag =:= 0, "offset spec = 1000, offset lag should be 0")
-                         end},
-                        {{timestamp, TheFuture}, false,
-                         fun(Offset, Lag) ->
-                                 ?assertEqual(NextOffset, Offset, "offset spec in future, offset should be at the end of the stream"),
-                                 ?assert(Lag =:= 0, "offset spec in future , offset lag should be 0")
-                         end}]),
+    C7 = lists:foldl(
+           fun({OffsetSpec, ReceiveDeliver, CheckFun}, C00) ->
+                   {ok, C01} = stream_test_utils:subscribe(S, C00, St, SubId,
+                                                           1, #{}, OffsetSpec),
 
-    test_delete_stream(T, S, Stream, C, false),
-    test_close(T, S, C),
+                   C03 = case ReceiveDeliver of
+                             true ->
+                                 {{deliver, SubId, _}, C02} = receive_commands(S, C01),
+                                 C02;
+                             _ ->
+                                 C01
+                         end,
+                   {Offset, Lag} = consumer_offset_info(Config, ConnectionName),
+                   CheckFun(Offset, Lag),
+                   {ok, C04} = stream_test_utils:unsubscribe(S, C03, SubId),
+                   C04
+           end, C6, [{first, true,
+                      fun(Offset, Lag) ->
+                              ?assert(Offset >= 0, "first, at least one chunk consumed"),
+                              ?assert(Lag > 0, "first, not all messages consumed")
+                      end},
+                     {last, true,
+                      fun(Offset, _Lag) ->
+                              ?assert(Offset > 0, "offset expected for last")
+                      end},
+                     {next, false,
+                      fun(Offset, Lag) ->
+                              ?assertEqual(NextOffset, Offset, "next, offset should be at the end of the stream"),
+                              ?assert(Lag =:= 0, "next, offset lag should be 0")
+                      end},
+                     {0, true,
+                      fun(Offset, Lag) ->
+                              ?assert(Offset >= 0, "offset spec = 0, at least one chunk consumed"),
+                              ?assert(Lag > 0, "offset spec = 0, not all messages consumed")
+                      end},
+                     {1_000, false,
+                      fun(Offset, Lag) ->
+                              ?assertEqual(NextOffset, Offset, "offset spec = 1000, offset should be at the end of the stream"),
+                              ?assert(Lag =:= 0, "offset spec = 1000, offset lag should be 0")
+                      end},
+                     {{timestamp, TheFuture}, false,
+                      fun(Offset, Lag) ->
+                              ?assertEqual(NextOffset, Offset, "offset spec in future, offset should be at the end of the stream"),
+                              ?assert(Lag =:= 0, "offset spec in future , offset lag should be 0")
+                      end}]),
 
+    {ok, C8} = stream_test_utils:delete_stream(S, C7, St),
+    {ok, _} = stream_test_utils:close(S, C8),
     ok.
 
 authentication_error_should_close_with_delay(Config) ->
