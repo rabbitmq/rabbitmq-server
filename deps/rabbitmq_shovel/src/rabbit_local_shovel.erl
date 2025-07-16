@@ -127,12 +127,13 @@ init_source(State = #{source := #{queue := QName0,
                                                vhost := VHost} = Current} = Src,
                       name := Name,
                       ack_mode := AckMode}) ->
-    _Mode = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-                true ->
-                    {credited, Prefetch};
-                false ->
-                    {credited, credit_api_v1}
-            end,
+    %% Should it just use v2 ?
+    Mode = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
+               true ->
+                   {credited, Prefetch};
+               false ->
+                   {credited, credit_api_v1}
+           end,
     QName = rabbit_misc:r(VHost, queue, QName0),
     CTag = consumer_tag(Name),
     case rabbit_amqqueue:with(
@@ -147,7 +148,7 @@ init_source(State = #{source := #{queue := QName0,
                             channel_pid => self(),
                             limiter_pid => none,
                             limiter_active => false,
-                            mode => {simple_prefetch, Prefetch},
+                            mode => Mode, %%{simple_prefetch, Prefetch},
                             consumer_tag => CTag,
                             exclusive_consume => false,
                             args => Args,
@@ -160,7 +161,9 @@ init_source(State = #{source := #{queue := QName0,
                            {Remaining, rabbit_queue_type:consume(Q, Spec, QState0)}
                    end
            end) of
-        {Remaining, {ok, QState}} ->
+        {Remaining, {ok, QState1}} ->
+            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, 100, Prefetch, false, QState1),
+            %% TODO handle actions
             State#{source => Src#{current => Current#{queue_states => QState,
                                                       consumer_tag => CTag},
                                   remaining => Remaining,
@@ -518,7 +521,6 @@ check_queue(QName, _QArgs, VHost, User) ->
 
 get_user_vhost_from_amqp_param(Uri) ->
     {ok, AmqpParam} = amqp_uri:parse(Uri),
-    rabbit_log:warning("AMQP PARAM ~p", [AmqpParam]),
     {Username, Password, VHost} =
         case AmqpParam of
             #amqp_params_direct{username = U,
