@@ -21,10 +21,17 @@ connect(Config, Node) ->
     connect(StreamPort).
 
 connect(StreamPort) ->
+    do_connect(StreamPort, #{}).
+
+connect_pp(StreamPort, PeerProperties) ->
+    do_connect(StreamPort, PeerProperties).
+
+do_connect(StreamPort, PeerProperties) ->
     {ok, Sock} = gen_tcp:connect("localhost", StreamPort, [{active, false}, {mode, binary}]),
 
     C0 = rabbit_stream_core:init(0),
-    PeerPropertiesFrame = rabbit_stream_core:frame({request, 1, {peer_properties, #{}}}),
+    PeerPropertiesFrame = rabbit_stream_core:frame({request, 1, {peer_properties,
+                                                                 PeerProperties}}),
     ok = gen_tcp:send(Sock, PeerPropertiesFrame),
     {{response, 1, {peer_properties, _, _}}, C1} = receive_stream_commands(Sock, C0),
 
@@ -78,8 +85,12 @@ delete_publisher(Sock, C0, PublisherId) ->
 subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit) ->
     subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, #{}).
 
+
 subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, Props) ->
-    Cmd = {subscribe, SubscriptionId, Stream, _OffsetSpec = first,
+    subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, Props, first).
+
+subscribe(Sock, C0, Stream, SubscriptionId, InitialCredit, Props, OffsetSpec) ->
+    Cmd = {subscribe, SubscriptionId, Stream, OffsetSpec,
            InitialCredit, Props},
     SubscribeFrame = rabbit_stream_core:frame({request, 1, Cmd}),
     ok = gen_tcp:send(Sock, SubscribeFrame),
