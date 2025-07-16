@@ -34,8 +34,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.ToLongFunction;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +48,7 @@ public class FailureTest {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(FailureTest.class);
 
+  static String testMethod;
   TestUtils.ClientFactory cf;
   String stream;
   ExecutorService executorService;
@@ -55,6 +59,11 @@ public class FailureTest {
     } catch (InterruptedException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  @BeforeEach
+  void init(TestInfo info) {
+    testMethod = info.getTestMethod().get().getName();
   }
 
   @AfterEach
@@ -142,9 +151,9 @@ public class FailureTest {
     waitAtMost(
         Duration.ofSeconds(10),
         () -> {
-          LOGGER.info("Getting metadata for {}", stream);
+          log("Getting metadata for {}", stream);
           Client.StreamMetadata m = publisher.metadata(stream).get(stream);
-          LOGGER.info("Metadata for {} (expecting 2 replicas): {}", stream, m);
+          log("Metadata for {} (expecting 2 replicas): {}", stream, m);
           return m.getReplicas().size() == 2;
         });
 
@@ -195,6 +204,7 @@ public class FailureTest {
     Map<Long, Message> published = new ConcurrentHashMap<>();
     Set<Message> confirmed = ConcurrentHashMap.newKeySet();
 
+    // match confirmed messages to published messages
     Client.PublishConfirmListener publishConfirmListener =
         (publisherId, publishingId) -> {
           Message confirmedMessage;
@@ -212,18 +222,22 @@ public class FailureTest {
     AtomicReference<Client> publisher = new AtomicReference<>();
     CountDownLatch reconnectionLatch = new CountDownLatch(1);
     AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
+    // shutdown listener reconnects to node 2 to locate the node the stream leader is on
+    // it then re-creates a publisher connected to this node
     Client.ShutdownListener shutdownListener =
         shutdownContext -> {
           if (shutdownContext.getShutdownReason()
               == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
+            log("Connection got closed, reconnecting");
             // avoid long-running task in the IO thread
             executorService.submit(
                 () -> {
                   connected.set(false);
                   AtomicReference<Client> locator = new AtomicReference<>();
                   try {
+                    log("Reconnecting to node 2");
                     waitAtMost(
-                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(20),
                         () -> {
                           try {
                             locator.set(
@@ -233,14 +247,35 @@ public class FailureTest {
                             return false;
                           }
                         });
+                    log("Reconnected to node 2, looking up new stream leader");
                     waitAtMost(
-                        Duration.ofSeconds(5),
+                        Duration.ofSeconds(20),
                         () -> {
                           Client.StreamMetadata m = locator.get().metadata(stream).get(stream);
                           return m.getLeader() != null
                               && m.getLeader().getPort() != streamPortNode1();
                         });
+                    log("New stream leader is on another node than node 1");
                   } catch (Throwable e) {
+                    log("Error while trying to connect to new stream leader");
+                    if (locator.get() == null) {
+                      log("Could not reconnect");
+                    } else {
+                      try {
+                        Client.StreamMetadata m = locator.get().metadata(stream).get(stream);
+                        if (m.getLeader() == null) {
+                          log("The stream has no leader");
+                        } else {
+                          log(
+                              "The stream is on node with port {} (node 1 = {}, node 2 = {})",
+                              m.getLeader().getPort(),
+                              streamPortNode1(),
+                              streamPortNode2());
+                        }
+                      } catch (Exception ex) {
+                        log("Error while checking failure: {}", ex.getMessage());
+                      }
+                    }
                     reconnectionLatch.countDown();
                     return;
                   }
@@ -278,6 +313,9 @@ public class FailureTest {
 
     AtomicBoolean keepPublishing = new AtomicBoolean(true);
 
+    AtomicLong publishSequence = new AtomicLong(0);
+    ToLongFunction<Object> publishSequenceFunction = value -> publishSequence.getAndIncrement();
+
     executorService.submit(
         () -> {
           while (keepPublishing.get()) {
@@ -295,7 +333,11 @@ public class FailureTest {
                       .build();
               try {
                 long publishingId =
-                    publisher.get().publish((byte) 1, Collections.singletonList(message)).get(0);
+                    publisher
+                        .get()
+                        .publish(
+                            (byte) 1, Collections.singletonList(message), publishSequenceFunction)
+                        .get(0);
                 published.put(publishingId, message);
               } catch (Exception e) {
                 // keep going
@@ -314,6 +356,7 @@ public class FailureTest {
     int confirmedCount = confirmed.size();
 
     try {
+      // stop the first node (this is where the stream leader is)
       Host.rabbitmqctl("stop_app");
 
       assertThat(reconnectionLatch.await(10, TimeUnit.SECONDS)).isTrue();
@@ -324,6 +367,7 @@ public class FailureTest {
     } finally {
       Host.rabbitmqctl("start_app");
     }
+    // making sure we published a few messages and got the confirmations
     assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
     confirmedCount = confirmed.size();
 
@@ -339,6 +383,7 @@ public class FailureTest {
     // let's publish for a bit of time
     Thread.sleep(2000);
 
+    // making sure we published messages and got the confirmations
     assertThat(confirmed).hasSizeGreaterThan(confirmedCount);
 
     keepPublishing.set(false);
@@ -639,5 +684,9 @@ public class FailureTest {
 
     Host.killStreamLeaderProcess(stream);
     waitUntil(() -> metadataNotifications.get() == 2);
+  }
+
+  private static void log(String format, Object... args) {
+    LOGGER.info("[" + testMethod + "] " + format, args);
   }
 }
