@@ -636,7 +636,7 @@ send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
        true ->
            % TODO: this does not take the extended header into account
            % see: 2.3
-           MaxPayloadSize = OutMaxFrameSize - TransferSize - ?FRAME_HEADER_SIZE,
+           MaxPayloadSize = OutMaxFrameSize - ?FRAME_HEADER_SIZE - TransferSize,
            Frames = build_frames(Channel, Transfer, SectionsBin, MaxPayloadSize, []),
            ok = socket_send(Socket, Frames),
            {ok, length(Frames)}
