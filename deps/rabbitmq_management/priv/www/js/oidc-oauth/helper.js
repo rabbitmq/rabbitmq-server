@@ -280,12 +280,28 @@ function oauth_redirectToLogin(error) {
 }
 export function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(function(user) {
-      set_token_auth(user.access_token);
-      oauth_redirectToHome();
+      set_token_auth(user.access_token)
+      if (is_jwt_token(user.access_token)) {
+        console.log("Detected opaque token. Introspecting it ...")
+        set_token_auth(introspect_token())
+        console.log("Introspected token")
+      }
+      oauth_redirectToHome()
     }).catch(function(err) {
       _management_logger.error(err)
       oauth_redirectToLogin(err)
     });
+}
+function introspect_token() {
+  return JSON.parse(sync_post({}, '/auth/introspect'))
+}
+
+function is_jwt_token(token) {
+  if (token != null) {
+    atob(token).split(".").length == 3
+  }else {
+    return false
+  }
 }
 
 export function oauth_initiateLogout() {
