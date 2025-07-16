@@ -2344,8 +2344,8 @@ handle_frame_post_auth(Transport,
                        case {is_binary(Host), is_integer(Port)} of
                            {true, true} -> Acc#{Node => {Host, Port}};
                            _ ->
-                               rabbit_log:warning("Error when retrieving broker metadata: ~tp ~tp",
-                                                  [Host, Port]),
+                               rabbit_log:warning("Error when retrieving broker '~tp' metadata: ~tp ~tp",
+                                                  [Node, Host, Port]),
                                Acc
                        end
                     end,
