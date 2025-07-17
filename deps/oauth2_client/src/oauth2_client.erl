@@ -7,7 +7,7 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
-        introspect_token/1,
+        introspect_token/1,sign_token/1,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
         build_openid_discovery_endpoint/3,
@@ -51,7 +51,7 @@ refresh_access_token(OAuthProvider, Request) ->
     parse_access_token_response(Response).
 
 -spec introspect_token(binary()) -> 
-    {ok, map()} |
+    {ok, binary()} |
     {error, unsuccessful_access_token_response() | any()}.
 introspect_token(Token) ->
     case build_introspection_request() of 
@@ -68,9 +68,55 @@ introspect_token(Token) ->
             rabbit_log:debug("Sending introspect_request URL:~p Header: ~p Body: ~p",
                 [URL, Header, Body]),
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
-            parse_introspect_token_response(Response);
+            case parse_introspect_token_response(Response) of
+                {error, _} = Error -> Error;
+                {ok, _} = Ret -> Ret
+            end;
         {error, _} = Error -> Error            
     end.    
+
+sign_token(TokenPayload) ->
+    case get_opaque_token_signing_key() of 
+        {error, _} = Error -> Error;
+        SK -> 
+            ct:log("Signing with ~p", [SK]),
+            case SK#signing_key.type of 
+                hs256 -> 
+                    {_, Value} = sign_token_hs(TokenPayload, SK#signing_key.key, SK#signing_key.id),
+                    {ok, Value};
+                _ -> {error, not_implemented}
+            end
+    end.
+
+sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
+    sign_token_hs(Token, Jwk, TokenKey).
+
+%%sign_token_hs(Token, Jwk, TokenKey) ->
+%%    sign_token_hs(Token, Jwk, TokenKey, true).
+
+sign_token_hs(Token, Jwk, TokenKey) ->
+    Jws0 = #{
+      <<"alg">> => <<"HS256">>,
+      <<"kid">> => TokenKey
+    },
+    Jws = maps:put(<<"kid">>, TokenKey, Jws0),
+    sign_token(Token, Jwk, Jws).
+    
+sign_token_rsa(Token, Jwk, TokenKey) ->
+    Jws = #{
+      <<"alg">> => <<"RS256">>,
+      <<"kid">> => TokenKey
+    },
+    sign_token(Token, Jwk, Jws).
+
+sign_token_no_kid(Token, Jwk) ->
+    Signed = jose_jwt:sign(Jwk, Token),
+    jose_jws:compact(Signed).
+
+sign_token(Token, Jwk, Jws) ->
+    Signed = jose_jwt:sign(Jwk, Jws, Token),
+    jose_jws:compact(Signed).
+
 
 build_introspect_request_parameters(Token, #introspect_token_request{
         client_auth_method = Method, 
@@ -373,6 +419,63 @@ unlock(LockId) ->
                 {Nodes, _Retries} ->
                     global:del_lock({oauth2_config_lock, Value}, Nodes)
             end
+    end.
+
+-spec get_opaque_token_signing_key() -> {ok, signing_key()} | {error, any()}.
+get_opaque_token_signing_key() -> 
+    case get_env(opaque_token_signing_key) of 
+        undefined -> {error, missing_opaque_token_signing_key};
+        Map -> 
+            parse_signing_key_configuration(Map)
+    end.
+
+parse_signing_key_configuration(Map) ->
+    SK0 = case maps:get(id, Map, undefined) of 
+        undefined -> {error, missing_signing_key_id};
+        Id -> #signing_key{id = Id}
+    end,
+    case {SK0, maps:get(type, Map, hs256)} of 
+        {{error, _} = Error, _} -> 
+            Error;
+        {_, hs256} -> 
+            Sk1 = case maps:get(key, Map, undefined) of 
+                undefined -> {error, missing_symmetrical_key_value};
+                SymKey -> SK0#signing_key{
+                    type = hs256, 
+                    key = case make_jwk(#{
+                        <<"alg">> => <<"HS256">>,
+                        <<"value">> => SymKey,
+                        <<"kty">> => <<"MAC">>,
+                        <<"use">> => <<"sig">>}) of 
+                            {error, _} = Error -> Error;
+                            {ok, Val} -> Val
+                        end
+                }
+            end,
+            case Sk1#signing_key.key of 
+                {error, _} = Error1 -> Error1;
+                _ -> Sk1
+            end;
+        {_, rs256} -> 
+            Sk2 = case maps:get(key_pem_file, Map, undefined) of 
+                undefined -> 
+                    {error, missing_key_pem_file};
+                PrivateKey -> 
+                    case maps:get(cert_pem_file, Map, undefined) of 
+                        undefined -> 
+                            {error, missing_cert_pem_file};
+                        PublicKey -> 
+                            SK0#signing_key{type = hs256, 
+                                private_key = PrivateKey,
+                                public_key = PublicKey}
+                    end
+            end,
+            case {Sk2#signing_key.private_key, Sk2#signing_key.public_key} of 
+                {{error, _} = Error2, _} -> Error2;
+                {_, {error, _} = Error3} -> Error3;
+                {_, _} -> Sk2
+            end;
+        {_, _} -> {error, unsupported_signing_type}
     end.
 
 -spec get_oauth_provider(list()) -> {ok, oauth_provider()} | {error, any()}.
@@ -820,3 +923,79 @@ get_env(Par, Def) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, Def).
 set_env(Par, Val) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
+
+
+-include_lib("jose/include/jose_jwk.hrl").
+
+-spec make_jwk(binary() | map()) -> {ok, #{binary() => binary()}} | {error, term()}.
+make_jwk(Json) when is_binary(Json); is_list(Json) ->
+    JsonMap = jose:decode(iolist_to_binary(Json)),
+    make_jwk(JsonMap);
+
+make_jwk(JsonMap) when is_map(JsonMap) ->
+    case JsonMap of
+        #{<<"kty">> := <<"MAC">>, <<"value">> := _Value} ->
+            {ok, mac_to_oct(JsonMap)};
+        #{<<"kty">> := <<"RSA">>, <<"n">> := _N, <<"e">> := _E} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"oct">>, <<"k">> := _K} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"OKP">>, <<"crv">> := _Crv, <<"x">> := _X} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"EC">>} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := Kty} when Kty == <<"oct">>;
+                                 Kty == <<"MAC">>;
+                                 Kty == <<"RSA">>;
+                                 Kty == <<"OKP">>;
+                                 Kty == <<"EC">> ->
+            {error, {fields_missing_for_kty, Kty}};
+        #{<<"kty">> := _Kty} ->
+            {error, unknown_kty};
+        #{} ->
+            {error, no_kty}
+    end.
+
+from_pem(Pem) ->
+    case jose_jwk:from_pem(Pem) of
+        #jose_jwk{} = Jwk -> {ok, Jwk};
+        Other             ->
+            error_logger:warning_msg("Error parsing jwk from pem: ", [Other]),
+            {error, invalid_pem_string}
+    end.
+
+from_pem_file(FileName) ->
+    case filelib:is_file(FileName) of
+        false ->
+            {error, enoent};
+        true  ->
+            case jose_jwk:from_pem_file(FileName) of
+                #jose_jwk{} = Jwk -> {ok, Jwk};
+                Other             ->
+                    error_logger:warning_msg("Error parsing jwk from pem file: ", [Other]),
+                    {error, invalid_pem_file}
+            end
+    end.
+
+mac_to_oct(#{<<"kty">> := <<"MAC">>, <<"value">> := Value} = Key) ->
+    OktKey = maps:merge(Key,
+                        #{<<"kty">> => <<"oct">>,
+                          <<"k">> => base64url:encode(Value)}),
+    fix_alg(OktKey).
+
+fix_alg(#{<<"alg">> := Alg} = Key) ->
+    Algs = uaa_algs(),
+    case maps:get(Alg, Algs, undefined) of
+        undefined -> Key;
+        Val       -> Key#{<<"alg">> := Val}
+    end;
+fix_alg(#{} = Key) -> Key.
+
+uaa_algs() ->
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt_decoder, []),
+    DefaultAlgs = #{<<"HMACSHA256">> => <<"HS256">>,
+                    <<"HMACSHA384">> => <<"HS384">>,
+                    <<"HMACSHA512">> => <<"HS512">>,
+                    <<"SHA256withRSA">> => <<"RS256">>,
+                    <<"SHA512withRSA">> => <<"RS512">>},
+    proplists:get_value(uaa_algs, UaaEnv, DefaultAlgs).

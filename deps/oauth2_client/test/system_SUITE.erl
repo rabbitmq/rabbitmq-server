@@ -49,7 +49,7 @@ groups() ->
                 cannot_introspect_due_to_missing_configuration,
                 {https, [], [
                     {with_introspection_basic_client_credentials, [], [
-                        can_introspect_token                        
+                        can_introspect_token
                     ]},
                     {with_introspection_request_param_client_credentials, [], [
                         can_introspect_token
@@ -190,6 +190,13 @@ init_per_group(with_default_oauth_provider, Config) ->
     OAuthProvider = ?config(oauth_provider, Config),
     application:set_env(rabbitmq_auth_backend_oauth2, default_oauth_provider,
         OAuthProvider#oauth_provider.id),
+    Config;
+
+init_per_group(with_hs256_signing, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
+        #{ id => <<"some-id">>,
+           type => hs256, 
+           key => <<"some-key-value">> }),
     Config;
 
 init_per_group(with_introspection_endpoint, Config) ->    
@@ -743,7 +750,9 @@ cannot_introspect_due_to_missing_configuration(_Config)->
     application:unset_env(rabbitmq_auth_backend_oauth2, introspection_client_secret).
 
 can_introspect_token(_Config) ->
-    {ok, _} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
+    {ok, Value} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    ct:log("JWT : ~p", [Value]),
+    ok.
 
 introspected_token_is_not_active(_Config) ->
     {error, introspected_token_not_valid} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
@@ -807,6 +816,8 @@ build_https_oauth_provider(Id, CaCertFile) ->
         jwks_uri = build_jwks_uri("https"),
         ssl_options = ssl_options(verify_peer, false, CaCertFile)
     }.
+oauth_provider_to_proplist(undefined) -> [];
+
 oauth_provider_to_proplist(#oauth_provider{
         issuer = Issuer,
         token_endpoint = TokenEndpoint,

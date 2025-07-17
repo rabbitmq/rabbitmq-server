@@ -470,7 +470,6 @@ end}.
 {mapping, "management.oauth_provider_url", "rabbitmq_management.oauth_provider_url",
       [{datatype, string}]}.
 
-
 %% Your client application's identifier as registered with the OIDC/OAuth2
 {mapping, "management.oauth_client_id", "rabbitmq_management.oauth_client_id",
       [{datatype, string}]}.

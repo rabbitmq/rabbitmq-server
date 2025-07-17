@@ -122,6 +122,67 @@
     [list_to_binary(V) || {_, V} <- lists:reverse(Settings)]
  end}.
 
+%% Signing key used by RabbitMQ to convert an introspected opaque token 
+%% into a JWT token for the management UI use case. For messaging 
+%% use cases like AMQP it is not necessary because when a user authenticates with 
+%% an opaque token, RabbitMQ introspects the opaque token to obtain the actual 
+%% JWT's payload with the scopes and those scopes are kept along with the connection
+%% in RabbitMQ's memory for as long as the connection stays alive, exactly as if the user 
+%% would have presented a JWT from the beginning. 
+%% For the management UI use case, there is no server-side state 
+%% hence the management UI has to convert an opaque token into a 
+%% JWT token so that RabbitMQ can validate the JWT token without making 
+%% an external HTTP request to the introspection endpoint. If the management ui 
+%% sends an opaque token, RabbitMQ, in order to validate the token, has to 
+%% introspect it.
+%%
+%% Here it is how this signing key is used:
+%% When a management user logs in for the first time with an 
+%% opaque token, the token is instrospected and validated it. 
+%% If the token is valid, RabbitMQ issues a JWT token whose payload 
+%% is the introspected token and the signing key is configured in 
+%% `auth_oauth2.opaque_token_signing_key`. 
+%% 
+%% The issued JWT token has the same expiry date, scopes, etc as the original
+%% opaque token. In other words, RabbitMQ does not add anything. 
+%% It only wraps it with a digital signature.
+%% 
+%% Maybe it is necessary a rabbitmqctl command to rotate the signing key like: 
+%% rabbitmqctl rotate_opaque_token_signing_key <new_id> <type> [<value> | <key_pem_file> <cert_pem_file>]
+%%
+%% Note: This feature is only necessary when the management UI needs to authenticate with OAuth2 
+%% using opaque tokens. In all other cases, this feature is not necessary.
+%% 
+%% Example:
+%% auth_oauth2.opaque_token_signing_key.id = rabbit_kid
+%% for symmetrical key
+%% auth_oauth2.opaque_token_signing_key.type = HS256 
+%% auth_oauth2.opaque_token_signing_key.key = "hello-world-symmetrical-key"
+%% for asymmetrical key
+%% auth_oauth2.opaque_token_signing_key.type = RS256 
+%% auth_oauth2.opaque_token_signing_key.key_pem_file = rabbit_key.pem
+%% auth_oauth2.opaque_token_signing_key.cert_pem_file = rabbit_cert.pem
+
+{mapping, "auth_oauth2.opaque_token_signing_key.id", 
+      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.id",
+      [{datatype, string}]}.
+
+{mapping, "auth_oauth2.opaque_token_signing_key.type", 
+      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.type",
+      [{datatype, {enum, [HS256, RS256]}}]}.
+
+{mapping, "auth_oauth2.opaque_token_signing_key.key", 
+      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.key",
+      [{datatype, string}]}.
+
+{mapping, "auth_oauth2.opaque_token_signing_key.key_file", 
+      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.key_pem_file",
+      [{datatype, file}, {validators, ["file_accessible"]}]}.
+
+{mapping, "auth_oauth2.opaque_token_signing_key.cert_file", 
+      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.cert_pem_file",
+      [{datatype, file}, {validators, ["file_accessible"]}]}.
+
 
 
 %% ID of the default signing key

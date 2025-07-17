@@ -24,11 +24,15 @@ all() ->
     build_openid_discovery_endpoint,
     {group, ssl_options},
     {group, merge},
-    {group, get_expiration_time}
+    {group, get_expiration_time},
+    {group, sign_token}
 ].
 
 groups() ->
 [
+    {sign_token, [], [
+        can_sign_token
+    ]},
     {ssl_options, [], [
         no_ssl_options_triggers_verify_peer,
         choose_verify_over_peer_verification,
@@ -298,3 +302,12 @@ access_token_response_without_expiration_time(_) ->
     },
     ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+
+
+can_sign_token(_Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
+        #{ id => <<"key-id">>, type => hs256, key => <<"some-key">>}),
+
+    {ok, Value } = oauth2_client:sign_token(#{"scopes" => "a b"}),
+    ct:log("JWT : ~p", [Value]),
+    ok.

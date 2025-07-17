@@ -95,3 +95,12 @@
 }).
 
 -type unsuccessful_introspect_token_response() :: #unsuccessful_introspect_token_response{}.
+
+-record(signing_key, {
+    id :: string(),
+    type :: hs256 | rs256,
+    key :: option(binary()),
+    private_key :: option(binary()),
+    public_key :: option(binary())
+}).
+-type signing_key() :: #signing_key{}.
