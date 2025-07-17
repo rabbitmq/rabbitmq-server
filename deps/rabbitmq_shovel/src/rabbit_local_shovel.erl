@@ -264,10 +264,12 @@ handle_source(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
                                rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
                        end, Seq, Multiple, State);
 
-handle_source({queue_event, _, {Type, _, _}}, _State) when Type =:= confirm;
-                                                           Type =:= reject_publish ->
-    not_handled;
-handle_source({queue_event, QRef, Evt}, #{source := Source = #{current := Current = #{queue_states := QueueStates0}}} = State0) ->
+handle_source({queue_event, #resource{name = Queue,
+                                      kind = queue,
+                                      virtual_host = VHost} = QRef, Evt},
+              #{source := Source = #{queue := Queue,
+                                     current := Current = #{queue_states := QueueStates0,
+                                                            vhost := VHost}}} = State0) ->
     case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
         {ok, QState1, Actions} ->
             State = State0#{source => Source#{current => Current#{queue_states => QState1}}},
