@@ -17,9 +17,8 @@
 %%--------------------------------------------------------------------
 
 init(Req, _) ->
-    Ret = {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}},
-    rabbit_log:debug("init rabbit_mgmt_wm_oauth_introspect"),
-    Ret.
+    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
+    
 %{cowboy_rest, rabbit_mgmt_headers:set_no_cache_headers(
 %        rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), ?MODULE), State}.
 
@@ -39,9 +38,9 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 do_it(ReqData, Context) ->
-    rabbit_log:debug("to_json rabbit_mgmt_wm_oauth_introspect"),
+    rabbit_log:debug("Requested introspect token via management api"),
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
-        {bearer, Token} ->             
+        {bearer, Token} ->          
             case oauth2_client:introspect_token(Token) of 
                 {error, introspected_token_not_valid} -> 
                     rabbit_log:error("Failed to introspect token due to ~p", [introspected_token_not_valid]),
@@ -49,9 +48,14 @@ do_it(ReqData, Context) ->
                 {error, Reason} -> 
                     rabbit_log:error("Failed to introspect token due to ~p", [Reason]),
                     rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
-                {ok, JwtToken} -> 
-                    rabbit_log:debug("Got jwt token : ~p", [JwtToken]),
-                    rabbit_mgmt_util:reply(JwtToken, ReqData, Context)
+                {ok, JwtPayload} -> 
+                    rabbit_log:debug("Got token payload : ~p", [JwtPayload]),
+                    case oauth2_client:issue_jwt_token(JwtPayload) of 
+                        {ok, JWT} ->
+                            rabbit_mgmt_util:reply(JWT, ReqData, Context);
+                        {error, Reason} ->
+                            rabbit_mgmt_util:not_authorised(Reason, ReqData, Context)
+                    end
             end;
         _ -> 
             rabbit_mgmt_util:bad_request(<<"Opaque token not found in authorization header">>, ReqData, Context)
