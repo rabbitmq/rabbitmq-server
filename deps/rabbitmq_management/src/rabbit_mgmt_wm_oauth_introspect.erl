@@ -49,8 +49,7 @@ do_it(ReqData, Context) ->
                     rabbit_log:error("Failed to introspect token due to ~p", [Reason]),
                     rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
                 {ok, JwtPayload} -> 
-                    rabbit_log:debug("Got token payload : ~p", [JwtPayload]),
-                    case oauth2_client:issue_jwt_token(JwtPayload) of 
+                    case oauth2_client:sign_token(JwtPayload) of 
                         {ok, JWT} ->
                             rabbit_mgmt_util:reply(JWT, ReqData, Context);
                         {error, Reason} ->
