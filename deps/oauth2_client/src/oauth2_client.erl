@@ -8,6 +8,7 @@
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
         introspect_token/1,sign_token/1,
+        get_opaque_token_signing_key/0,get_opaque_token_signing_key/1,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
         build_openid_discovery_endpoint/3,
@@ -51,7 +52,7 @@ refresh_access_token(OAuthProvider, Request) ->
     parse_access_token_response(Response).
 
 -spec introspect_token(binary()) -> 
-    {ok, binary()} |
+    {ok, map()} |
     {error, unsuccessful_access_token_response() | any()}.
 introspect_token(Token) ->
     case build_introspection_request() of 
@@ -75,6 +76,7 @@ introspect_token(Token) ->
         {error, _} = Error -> Error            
     end.    
 
+-spec sign_token(map()) -> {ok, binary()} | {error, any()}.
 sign_token(TokenPayload) ->
     case get_opaque_token_signing_key() of 
         {error, _} = Error -> Error;
@@ -427,6 +429,15 @@ get_opaque_token_signing_key() ->
         undefined -> {error, missing_opaque_token_signing_key};
         Map -> 
             parse_signing_key_configuration(Map)
+    end.
+
+-spec get_opaque_token_signing_key(string()|binary()) -> {ok, signing_key()} | {error, any()}.
+get_opaque_token_signing_key(KeyId) -> 
+    Map = get_env(opaque_token_signing_key),
+    case maps:get(id, Map, undefined) of 
+        undefined -> {error, missing_opaque_token_signing_key};
+        KeyId -> parse_signing_key_configuration(Map);
+        _ -> {error, missing_opaque_token_signing_key}
     end.
 
 parse_signing_key_configuration(Map) ->
