@@ -199,7 +199,8 @@ module Test =
         for spec in specs do
             printfn "testing streams spec %A" spec
             let filterSet = Map()
-            filterSet.Add(Symbol "rabbitmq:stream-offset-spec", spec)
+            let describedValue = DescribedValue(Symbol "rabbitmq:stream-offset-spec", spec)
+            filterSet.Add(Symbol "my offset", describedValue)
             let source = Source(Address = address,
                                 FilterSet = filterSet)
             let attach = Attach(Source = source)
