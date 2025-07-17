@@ -47,6 +47,10 @@
         ]).
 
 -define(QUEUE, lqueue).
+%% "Note that, despite its name, the delivery-count is not a count but a
+%% sequence number initialized at an arbitrary point by the sender."
+%% See rabbit_amqp_session.erl
+-define(INITIAL_DELIVERY_COUNT, 16#ff_ff_ff_ff - 4).
 
 -record(pending_ack, {
                       delivery_tag,
@@ -162,7 +166,7 @@ init_source(State = #{source := #{queue := QName0,
                    end
            end) of
         {Remaining, {ok, QState1}} ->
-            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, 100, Prefetch, false, QState1),
+            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, Prefetch, false, QState1),
             %% TODO handle actions
             State#{source => Src#{current => Current#{queue_states => QState,
                                                       consumer_tag => CTag},
