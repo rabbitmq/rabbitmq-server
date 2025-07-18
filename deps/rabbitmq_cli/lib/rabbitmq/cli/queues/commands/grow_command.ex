@@ -49,17 +49,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, "strategy '#{s}' is not recognised."}
   end
 
-  def do_validate([n, _], _)
-      when (is_integer(n) and n <= 0) do
-    {:validation_failure, "target quorum cluster size '#{n}' must be greater than 0."}
-  end
-
-  def do_validate([n, _], %{membership: m})
-      when (is_integer(n) and not (m == "voter" or m == "promotable")) do
-    {:validation_failure, "voter status '#{m}' must be 'voter' or 'promotable' to grow to target quorum cluster size '#{n}'."}
-  end
-
-  def do_validate(_, %{membership: m})
+  def validate(_, %{membership: m})
       when not (m == "promotable" or
                   m == "non_voter" or
                   m == "voter") do
@@ -88,7 +78,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     )
   end
 
-  def run([node_or_quorum_cluster_size, strategy], %{
+  def run([node, strategy], %{
         node: node_name,
         vhost_pattern: vhost_pat,
         queue_pattern: queue_pat,
@@ -96,16 +86,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         errors_only: errors_only
       }) do
 
-    node_or_quorum_cluster_size =
-      case Integer.parse(node_or_quorum_cluster_size) do
-        {cluster_size, _} when is_integer(cluster_size) ->
-          cluster_size
-
-        :error ->
-          to_atom(node_or_quorum_cluster_size)
-      end
-
-    args = [node_or_quorum_cluster_size, vhost_pat, queue_pat, to_atom(strategy)]
+    args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
 
     args =
       case to_atom(membership) do
@@ -146,11 +127,11 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
 
   def usage,
     do:
-      "grow <node | quorum_cluster_size> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
+      "grow <node> <all | even> [--vhost-pattern <pattern>] [--queue-pattern <pattern>] [--membership <promotable|voter>]"
 
   def usage_additional do
     [
-      ["<node | quorum_cluster_size>", "node name to place replicas on or desired quorum cluster size"],
+      ["<node>", "node name to place replicas on"],
       [
         "<all | even>",
         "add a member for all matching queues or just those whose membership count is an even number"
