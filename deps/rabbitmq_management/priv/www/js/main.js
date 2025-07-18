@@ -1389,7 +1389,8 @@ function sync_req(type, params0, path_template, options) {
     var req = xmlHttpRequest();
     req.open(type, 'api' + path, false);
     req.setRequestHeader('content-type', 'application/json');
-    req.setRequestHeader('authorization', authorization_header());
+    let authorization = authorization_header()
+    req.setRequestHeader('authorization', authorization);
 
     if (options != undefined || options != null) {
         if (options.headers != undefined || options.headers != null) {
