@@ -158,10 +158,10 @@ authenticate(_, AuthProps0) ->
         false -> 
             case oauth2_client:introspect_token(Token0) of
                 {ok, Tk1} -> 
-                    rabbit_log:debug("Successfully introspected token : ~p", [Tk1]),
+                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
                     {ok, Tk1};
                 {error, Err1} -> 
-                    rabbit_log:error("Failed to introspected token due to ~p", [Err1]),
+                    ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),
                     {error, Err1}
             end
     end,
@@ -494,6 +494,6 @@ resolve_scope_var(Elem, Token, Vhost) ->
 -spec tags_from(decoded_jwt_token()) -> list(atom()).
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
-    rabbit_log:debug("tags_from Scopes : ~p", [Scopes]),
+    ?LOG_DEBUG("tags_from Scopes : ~p", [Scopes]),
     TagScopes = filter_matching_scope_prefix_and_drop_it(Scopes, ?TAG_SCOPE_PREFIX),
     lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
