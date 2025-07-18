@@ -409,6 +409,15 @@ init({ReaderPid, WriterPid, ChannelNum, MaxFrameSize, User, Vhost, ContainerId, 
          outgoing_window = ?UINT(RemoteOutgoingWindow),
          handle_max = ClientHandleMax}}) ->
     process_flag(trap_exit, true),
+    case application:get_env(rabbit, session_min_heap_size) of
+        {ok, MinHeapSize} ->
+            %% Increasing min_heap_size to e.g. 987 words can greatly speed up
+            %% stream filtering due to less minor garbage collections.
+            process_flag(min_heap_size, MinHeapSize),
+            ok;
+        undefined ->
+            ok
+    end,
     rabbit_process_flag:adjust_for_message_handling_proc(),
     logger:update_process_metadata(#{channel_number => ChannelNum,
                                      amqp_container => ContainerId,
