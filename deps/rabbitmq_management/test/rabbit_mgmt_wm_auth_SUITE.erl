@@ -709,7 +709,11 @@ init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_re
 
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
-   
+
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, opaque_token_signing_key, 
+      #{ id => <<"rabbit_key">>, type => hs256, key => <<"some-key">>}]),
+     
   rabbit_ct_helpers:testcase_started(Config, Testcase);
 
 init_per_testcase(Testcase, Config) ->
