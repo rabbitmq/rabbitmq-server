@@ -51,7 +51,7 @@ do_it(ReqData, Context) ->
                 {ok, JwtPayload} -> 
                     case oauth2_client:sign_token(JwtPayload) of 
                         {ok, JWT} ->
-                            rabbit_mgmt_util:reply(JWT, ReqData, Context);
+                            rabbit_mgmt_util:reply([{token, JWT}], ReqData, Context);
                         {error, Reason} ->
                             rabbit_mgmt_util:not_authorised(Reason, ReqData, Context)
                     end

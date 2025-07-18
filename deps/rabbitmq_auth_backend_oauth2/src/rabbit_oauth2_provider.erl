@@ -147,12 +147,12 @@ get_signing_keys(OauthProviderId) ->
 
 get_signing_key(KeyId) ->
     case maps:get(KeyId, get_signing_keys(root), undefined) of 
-        undefined -> oauth2_client:get_opaque_signing_key(KeyId);
+        undefined -> oauth2_client:get_opaque_token_signing_key(KeyId);
         V -> V 
     end.
 get_signing_key(KeyId, OAuthProviderId) ->
     case maps:get(KeyId, get_signing_keys(OAuthProviderId), undefined) of 
-        undefined -> oauth2_client:get_opaque_signing_key(KeyId);
+        undefined -> oauth2_client:get_opaque_token_signing_key(KeyId);
         V -> V
     end.
 

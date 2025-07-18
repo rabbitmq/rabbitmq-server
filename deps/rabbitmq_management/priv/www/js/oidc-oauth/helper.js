@@ -298,9 +298,9 @@ export function oauth_completeLogin() {
     });
 }
 function introspect_token() {
-  let json = sync_post({}, '/auth/introspect')
-  console.log("token : " + JSON.stringify(json))
-  return JSON.parse(json.responseText)
+  let jwt = JSON.parse(sync_post({}, '/auth/introspect').responseText)
+  console.log("jwt token : " + jwt)
+  return jwt.token
 }
 
 function is_jwt_token(token) {
