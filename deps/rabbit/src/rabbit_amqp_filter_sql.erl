@@ -294,33 +294,36 @@ sql_to_list(SQL) ->
         String when is_list(String) ->
             {ok, String};
         Error ->
-            ?LOG_WARNING("JMS message selector ~p is not UTF-8 encoded: ~p",
-                         [JmsSelector, Error]),
+            ?LOG_WARNING("SQL expression ~p is not UTF-8 encoded: ~p",
+                         [SQL, Error]),
             error
     end.
 
-check_length(String)
-  when length(String) > ?MAX_EXPRESSION_LENGTH ->
-    ?LOG_WARNING("JMS message selector length ~b exceeds maximum length ~b",
-                 [length(String), ?MAX_EXPRESSION_LENGTH]),
-    error;
-check_length(_) ->
-    ok.
+check_length(String) ->
+    Len = length(String),
+    case Len =< ?MAX_EXPRESSION_LENGTH of
+        true ->
+            ok;
+        false ->
+            ?LOG_WARNING("SQL expression length ~b exceeds maximum length ~b",
+                         [Len, ?MAX_EXPRESSION_LENGTH]),
+            error
+    end.
 
 tokenize(String, SQL) ->
     case rabbit_amqp_sql_lexer:string(String) of
         {ok, Tokens, _EndLocation} ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
-            ?LOG_WARNING("failed to scan JMS message selector '~ts': ~tp",
-                         [JmsSelector, ErrDescriptor]),
+            ?LOG_WARNING("failed to scan SQL expression '~ts': ~tp",
+                         [SQL, ErrDescriptor]),
             error
     end.
 
 check_token_count(Tokens, SQL)
   when length(Tokens) > ?MAX_TOKENS ->
-    ?LOG_WARNING("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
-                 [JmsSelector, length(Tokens), ?MAX_TOKENS]),
+    ?LOG_WARNING("SQL expression '~ts' with ~b tokens exceeds token limit ~b",
+                 [SQL, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
     ok.
@@ -328,8 +331,8 @@ check_token_count(_, _) ->
 parse(Tokens, SQL) ->
     case rabbit_amqp_sql_parser:parse(Tokens) of
         {error, Reason} ->
-            ?LOG_WARNING("failed to parse JMS message selector '~ts': ~p",
-                         [JmsSelector, Reason]),
+            ?LOG_WARNING("failed to parse SQL expression '~ts': ~p",
+                         [SQL, Reason]),
             error;
         Ok ->
             Ok
@@ -343,15 +346,10 @@ transform_ast(Ast0, SQL) ->
                                 end, Ast0) of
         Ast ->
             {ok, Ast}
-    catch {unsupported_field, Name} ->
+    catch {invalid_pattern, Reason} ->
               ?LOG_WARNING(
-                "identifier ~ts in JMS message selector ~tp is unsupported",
-                [Name, JmsSelector]),
-              error;
-          {invalid_pattern, Reason} ->
-              ?LOG_WARNING(
-                "failed to parse LIKE pattern for JMS message selector ~tp: ~tp",
-                [JmsSelector, Reason]),
+                 "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
+                 [SQL, Reason]),
               error
     end.
 
