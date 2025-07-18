@@ -78,7 +78,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowToCountCommandTest do
   end
 
   test "validate: when wrong membership is provided, returns failure" do
-    assert @command.validate(["quorum-queue-a", "all"], %{membership: "banana"}) ==
+    assert @command.validate([7, "all"], %{membership: "banana"}) ==
              {:validation_failure, "voter status 'banana' is not recognised."}
   end
 

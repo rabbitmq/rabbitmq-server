@@ -56,12 +56,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowToCountCommand do
   end
 
   def validate_execution_environment(args, opts) do
-    Validators.chain(
-      [
-        &Validators.rabbit_is_running/2
-      ],
-      [args, opts]
-    )
+    Validators.rabbit_is_running(args, opts)
   end
 
   def run([node_count, strategy], %{
