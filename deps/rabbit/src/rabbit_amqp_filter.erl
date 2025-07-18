@@ -10,7 +10,7 @@
 
 -type expression() :: undefined |
                       {property, rabbit_amqp_filter_prop:parsed_expressions()} |
-                      {jms, rabbit_amqp_filter_jms:parsed_expression()}.
+                      {sql, rabbit_amqp_filter_sql:parsed_expression()}.
 
 -export_type([expression/0]).
 
@@ -20,5 +20,5 @@ eval(undefined, _Mc) ->
     true;
 eval({property, Expr}, Mc) ->
     rabbit_amqp_filter_prop:eval(Expr, Mc);
-eval({jms, Expr}, Mc) ->
-    rabbit_amqp_filter_jms:eval(Expr, Mc).
+eval({sql, Expr}, Mc) ->
+    rabbit_amqp_filter_sql:eval(Expr, Mc).

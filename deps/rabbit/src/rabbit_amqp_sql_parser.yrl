@@ -1,8 +1,8 @@
-%%% This is the grammar file for JMS message selectors:
-%%% https://jakarta.ee/specifications/messaging/3.1/jakarta-messaging-spec-3.1#message-selector
+%%% This is the grammar file for SQL Filter Expressions:
+%%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929276
 %%%
-%%% To manually generate the parser file rabbit_jms_selector_parser.erl run:
-%%% yecc:file("rabbit_jms_selector_parser.yrl", [deterministic]).
+%%% To manually generate the parser file rabbit_amqp_sql_parser.erl run:
+%%% yecc:file("rabbit_amqp_sql_parser.yrl", [deterministic]).
 
 Nonterminals
     selector
@@ -15,19 +15,19 @@ Nonterminals
     primary
     literal
     identifier_expr
-    string_list
-    string_item
-    between_expr
+    expression_list
     in_expr
     like_expr
-    is_null_expr.
+    is_null_expr
+    function_call.
 
 Terminals
-    integer float boolean string identifier
+    integer float boolean string binary identifier
     '=' '<>' '>' '<' '>=' '<='
-    '+' '-' '*' '/'
+    '+' '-' '*' '/' '%'
     'AND' 'OR' 'NOT'
-    'BETWEEN' 'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
+    'LIKE' 'IN' 'IS' 'NULL' 'ESCAPE'
+    'UTC'
     '(' ')' ','.
 
 Rootsymbol selector.
@@ -37,7 +37,7 @@ Left 100 'OR'.
 Left 200 'AND'.
 Nonassoc 300 '=' '<>' '>' '<' '>=' '<='.
 Left 400 '+' '-'.
-Left 500 '*' '/'.
+Left 500 '*' '/' '%'.
 Unary 600 'NOT'.
 
 %% "A selector is a conditional expression"
@@ -59,15 +59,10 @@ comparison_expr -> additive_expr '>' additive_expr : {'>', '$1', '$3'}.
 comparison_expr -> additive_expr '<' additive_expr : {'<', '$1', '$3'}.
 comparison_expr -> additive_expr '>=' additive_expr : {'>=', '$1', '$3'}.
 comparison_expr -> additive_expr '<=' additive_expr : {'<=', '$1', '$3'}.
-comparison_expr -> between_expr : '$1'.
 comparison_expr -> like_expr : '$1'.
 comparison_expr -> in_expr : '$1'.
 comparison_expr -> is_null_expr : '$1'.
 comparison_expr -> additive_expr : '$1'.
-
-%% BETWEEN expression
-between_expr -> additive_expr 'BETWEEN' additive_expr 'AND' additive_expr : {'between', '$1', '$3', '$5'}.
-between_expr -> additive_expr 'NOT' 'BETWEEN' additive_expr 'AND' additive_expr : {'not', {'between', '$1', '$4', '$6'}}.
 
 %% LIKE expression
 like_expr -> additive_expr 'LIKE' string :
@@ -80,11 +75,10 @@ like_expr -> additive_expr 'NOT' 'LIKE' string 'ESCAPE' string :
     {'not', {'like', '$1', process_like_pattern('$4'), process_escape_char('$6')}}.
 
 %% IN expression
-in_expr -> additive_expr 'IN' '(' string_list ')' : {'in', '$1', lists:uniq('$4')}.
-in_expr -> additive_expr 'NOT' 'IN' '(' string_list ')' : {'not', {'in', '$1', lists:uniq('$5')}}.
-string_list -> string_item : ['$1'].
-string_list -> string_item ',' string_list : ['$1'|'$3'].
-string_item -> string : extract_value('$1').
+in_expr -> additive_expr 'IN' '(' expression_list ')' : {'in', '$1', '$4'}.
+in_expr -> additive_expr 'NOT' 'IN' '(' expression_list ')' : {'not', {'in', '$1', '$5'}}.
+expression_list -> additive_expr : ['$1'].
+expression_list -> additive_expr ',' expression_list : ['$1'|'$3'].
 
 %% IS NULL expression
 is_null_expr -> identifier_expr 'IS' 'NULL' : {'is_null', '$1'}.
@@ -97,6 +91,7 @@ additive_expr -> multiplicative_expr : '$1'.
 
 multiplicative_expr -> multiplicative_expr '*' unary_expr : {'*', '$1', '$3'}.
 multiplicative_expr -> multiplicative_expr '/' unary_expr : {'/', '$1', '$3'}.
+multiplicative_expr -> multiplicative_expr '%' unary_expr : {'%', '$1', '$3'}.
 multiplicative_expr -> unary_expr : '$1'.
 
 %% Handle unary operators through grammar structure instead of precedence
@@ -108,6 +103,10 @@ unary_expr -> primary : '$1'.
 primary -> '(' conditional_expr ')' : '$2'.
 primary -> literal : '$1'.
 primary -> identifier_expr : '$1'.
+primary -> function_call : '$1'.
+
+%% Function calls
+function_call -> 'UTC' '(' ')' : {function, 'UTC', []}.
 
 %% Identifiers (header fields or property references)
 identifier_expr -> identifier :
@@ -117,6 +116,7 @@ identifier_expr -> identifier :
 literal -> integer : {integer, extract_value('$1')}.
 literal -> float : {float, extract_value('$1')}.
 literal -> string : {string, extract_value('$1')}.
+literal -> binary : {binary, extract_value('$1')}.
 literal -> boolean : {boolean, extract_value('$1')}.
 
 Erlang code.

@@ -94,7 +94,7 @@ multiple_sections(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
 
-    Now = erlang:system_time(millisecond),
+    Now = os:system_time(millisecond),
     To = rabbitmq_amqp_address:exchange(<<"some exchange">>, <<"routing key">>),
     ReplyTo = rabbitmq_amqp_address:queue(<<"some queue">>),
 
@@ -155,19 +155,19 @@ multiple_sections(Config) ->
 
     Filter2 = filter(
                 <<"header.priority = 200 AND "
-                  "properties.message-id = 999 AND "
-                  "properties.user-id = 'guest' AND "
-                  "properties.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
-                  "properties.subject = '🐇' AND "
-                  "properties.reply-to LIKE '/queues/some%' AND "
-                  "properties.correlation-id IN ('corr-345', 'corr-123') AND "
-                  "properties.content-type = 'text/plain' AND "
-                  "properties.content-encoding = 'some encoding' AND "
-                  "properties.absolute-expiry-time > 0 AND "
-                  "properties.creation-time > 0 AND "
-                  "properties.group-id IS NOT NULL AND "
-                  "properties.group-sequence = 4294967295 AND "
-                  "properties.reply-to-group-id = 'other group ID' AND "
+                  "p.message_id = 999 AND "
+                  "p.user_id = 0x6775657374 AND "
+                  "p.to LIKE '/exch_nges/some=%20exchange/rout%' ESCAPE '=' AND "
+                  "p.subject = '🐇' AND "
+                  "p.reply_to LIKE '/queues/some%' AND "
+                  "p.correlation_id IN ('corr-345', 'corr-123') AND "
+                  "p.content_type = 'text/plain' AND "
+                  "p.content_encoding = 'some encoding' AND "
+                  "p.absolute_expiry_time > UTC() AND "
+                  "p.creation_time > UTC() - 60000 AND "
+                  "p.group_id IS NOT NULL AND "
+                  "p.group_sequence = 4294967295 AND "
+                  "p.reply_to_group_id = 'other group ID' AND "
                   "k1 < 0 AND "
                   "NOT k2 AND "
                   "k3 AND "
@@ -239,7 +239,7 @@ filter_few_messages_from_many(Config) ->
 
     %% Our filter should cause us to receive only the first and
     %% last message out of the 1002 messages in the stream.
-    Filter = filter(<<"properties.group-id is not null">>),
+    Filter = filter(<<"properties.group_id IS NOT NULL">>),
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        Session, <<"receiver">>, Address,
                        unsettled, configuration, Filter),
@@ -338,7 +338,7 @@ invalid_filter(Config) ->
                   #{arguments => #{<<"x-queue-type">> => {utf8, <<"stream">>}}}),
 
     %% Trigger a lexer error.
-    Filter1 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter1 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"@#$%^&">>}}},
     {ok, Receiver1} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 1">>, Address,
@@ -356,7 +356,7 @@ invalid_filter(Config) ->
     ok = detach_link_sync(Receiver1),
 
     %% Trigger a parser error. We use allowed tokens here, but the grammar is incorrect.
-    Filter2 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter2 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"FALSE FALSE">>}}},
     {ok, Receiver2} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 2">>, Address,
@@ -375,7 +375,7 @@ invalid_filter(Config) ->
     PropsFilter = [{{symbol, <<"subject">>}, {utf8, <<"some subject">>}}],
     Filter3 = #{<<"prop name">> => #filter{descriptor = ?DESCRIPTOR_NAME_PROPERTIES_FILTER,
                                            value = {map, PropsFilter}},
-                ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+                ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, <<"TRUE">>}}},
     {ok, Receiver3} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 3">>, Address,
@@ -393,7 +393,7 @@ invalid_filter(Config) ->
 
     %% Send invalid UTF-8 in the SQL expression.
     InvalidUTF8 = <<255>>,
-    Filter4 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SELECTOR_FILTER,
+    Filter4 = #{?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_CODE_SQL_FILTER,
                                             value = {utf8, InvalidUTF8}}},
     {ok, Receiver4} = amqp10_client:attach_receiver_link(
                         Session, <<"receiver 4">>, Address,
@@ -432,7 +432,7 @@ filter(String)
   when is_binary(String) ->
     #{<<"from start">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
                                   value = {symbol, <<"first">>}},
-      ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_NAME_SELECTOR_FILTER,
+      ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_NAME_SQL_FILTER,
                                   value = {utf8, String}}}.
 
 assert_credit_exhausted(Receiver, Line) ->

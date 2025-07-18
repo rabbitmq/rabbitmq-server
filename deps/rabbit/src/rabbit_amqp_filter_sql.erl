@@ -4,44 +4,43 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.  All rights reserved.
 
--module(rabbit_amqp_filter_jms).
+-module(rabbit_amqp_filter_sql).
 -feature(maybe_expr, enable).
 
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
 
 -type parsed_expression() :: {ApplicationProperties :: boolean(),
-                              rabbit_jms_ast:ast()}.
+                              rabbit_amqp_sql_ast:ast()}.
 
 -export_type([parsed_expression/0]).
 
 -export([parse/1,
-         eval/2]).
+         eval/2,
+         is_control_char/1]).
 
-%% [filtex-v1.0-wd09 7.1]
+%% [Filter-Expressions-v1.0 7.1]
+%% https://docs.oasis-open.org/amqp/filtex/v1.0/csd01/filtex-v1.0-csd01.html#_Toc67929316
 -define(MAX_EXPRESSION_LENGTH, 4096).
 -define(MAX_TOKENS, 200).
 
-%% defined in both AMQP and JMS
 -define(DEFAULT_MSG_PRIORITY, 4).
-
--define(IS_CONTROL_CHAR(C), C < 32 orelse C =:= 127).
 
 -spec parse(tuple()) ->
     {ok, parsed_expression()} | error.
-parse({described, Descriptor, {utf8, JmsSelector}}) ->
+parse({described, Descriptor, {utf8, SQL}}) ->
     maybe
         ok ?= check_descriptor(Descriptor),
-        {ok, String} ?= jms_selector_to_list(JmsSelector),
+        {ok, String} ?= sql_to_list(SQL),
         ok ?= check_length(String),
-        {ok, Tokens} ?= tokenize(String, JmsSelector),
-        ok ?= check_token_count(Tokens, JmsSelector),
-        {ok, Ast0} ?= parse(Tokens, JmsSelector),
-        {ok, Ast} ?= transform_ast(Ast0, JmsSelector),
+        {ok, Tokens} ?= tokenize(String, SQL),
+        ok ?= check_token_count(Tokens, SQL),
+        {ok, Ast0} ?= parse(Tokens, SQL),
+        {ok, Ast} ?= transform_ast(Ast0, SQL),
         AppProps = has_binary_identifier(Ast),
         {ok, {AppProps, Ast}}
     end.
 
-%% Evaluates a parsed JMS message selector expression.
+%% Evaluates a parsed SQL expression.
 -spec eval(parsed_expression(), mc:state()) -> boolean().
 eval({ApplicationProperties, Ast}, Msg) ->
     State = case ApplicationProperties of
@@ -59,8 +58,9 @@ eval({ApplicationProperties, Ast}, Msg) ->
 eval0({Type, Value}, _Msg)
   when Type =:= integer orelse
        Type =:= float orelse
+       Type =:= boolean orelse
        Type =:= string orelse
-       Type =:= boolean ->
+       Type =:= binary ->
     Value;
 
 %% Identifier lookup
@@ -76,6 +76,10 @@ eval0({identifier, FieldName}, State) when is_atom(FieldName) ->
                   Mc
           end,
     get_field_value(FieldName, Msg);
+
+%% Function calls
+eval0({function, 'UTC', []}, _Msg) ->
+    os:system_time(millisecond);
 
 %% Logical operators
 %%
@@ -141,7 +145,8 @@ eval0({Op, Expr1, Expr2}, Msg)
   when Op =:= '+' orelse
        Op =:= '-' orelse
        Op =:= '*' orelse
-       Op =:= '/' ->
+       Op =:= '/' orelse
+       Op =:= '%' ->
     arithmetic(Op, eval0(Expr1, Msg), eval0(Expr2, Msg));
 
 %% Unary operators
@@ -159,15 +164,9 @@ eval0({unary_minus, Expr}, Msg) ->
     end;
 
 %% Special operators
-eval0({'between', Expr, From, To}, Msg) ->
+eval0({'in', Expr, ExprList}, Msg) ->
     Value = eval0(Expr, Msg),
-    FromVal = eval0(From, Msg),
-    ToVal = eval0(To, Msg),
-    between(Value, FromVal, ToVal);
-
-eval0({'in', Expr, ValueList}, Msg) ->
-    Value = eval0(Expr, Msg),
-    is_in(Value, ValueList);
+    is_in(Value, ExprList, Msg);
 
 eval0({'is_null', Expr}, Msg) ->
     eval0(Expr, Msg) =:= undefined;
@@ -186,20 +185,23 @@ eval0({'like', Expr, {pattern, Pattern}}, Msg) ->
 %% "Comparison or arithmetic with an unknown value always yields an unknown value."
 compare(_Op, Left, Right) when Left =:= undefined orelse Right =:= undefined ->
     undefined;
-%% "Only like type values can be compared.
-%% One exception is that it is valid to compare exact numeric values and approximate numeric values.
-%% String and Boolean comparison is restricted to = and <>."
+%% "Only like type values can be compared. One exception is that it is valid to
+%% compare exact numeric values and approximate numeric values"
 compare('=', Left, Right) ->
     Left == Right;
 compare('<>', Left, Right) ->
     Left /= Right;
-compare('>', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('>', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                               is_binary(Left) andalso is_binary(Right) ->
     Left > Right;
-compare('<', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('<', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                               is_binary(Left) andalso is_binary(Right) ->
     Left < Right;
-compare('>=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('>=', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                                is_binary(Left) andalso is_binary(Right) ->
     Left >= Right;
-compare('<=', Left, Right) when is_number(Left) andalso is_number(Right) ->
+compare('<=', Left, Right) when is_number(Left) andalso is_number(Right) orelse
+                                is_binary(Left) andalso is_binary(Right) ->
     Left =< Right;
 compare(_, _, _) ->
     %% "If the comparison of non-like type values is attempted,
@@ -216,30 +218,18 @@ arithmetic('*', Left, Right) when is_number(Left) andalso is_number(Right) ->
     Left * Right;
 arithmetic('/', Left, Right) when is_number(Left) andalso is_number(Right) andalso Right /= 0 ->
     Left / Right;
+arithmetic('%', Left, Right) when is_integer(Left) andalso is_integer(Right) andalso Right =/= 0 ->
+    Left rem Right;
 arithmetic(_, _, _) ->
     undefined.
 
-between(Value, From, To)
-  when Value =:= undefined orelse
-       From =:= undefined orelse
-       To =:= undefined ->
-    undefined;
-between(Value, From, To)
-  when is_number(Value) andalso
-       is_number(From) andalso
-       is_number(To) ->
-    From =< Value andalso Value =< To;
-between(_, _, _) ->
-    %% BETWEEN requires arithmetic expressions
-    %% "a string cannot be used in an arithmetic expression"
-    false.
-
-is_in(undefined, _) ->
+is_in(undefined, _, _) ->
     %% "If identifier of an IN or NOT IN operation is NULL,
     %% the value of the operation is unknown."
     undefined;
-is_in(Value, List) ->
-    lists:member(Value, List).
+is_in(Value, ExprList, Msg) ->
+    IsEqual = fun(Expr) -> eval0(Expr, Msg) == Value end,
+    lists:any(IsEqual, ExprList).
 
 like(Subject, {exact, Pattern}) ->
     Subject =:= Pattern;
@@ -291,94 +281,87 @@ get_field_value(Name, Msg) ->
             undefined
     end.
 
-check_descriptor({symbol, ?DESCRIPTOR_NAME_SELECTOR_FILTER}) ->
+check_descriptor({symbol, ?DESCRIPTOR_NAME_SQL_FILTER}) ->
     ok;
-check_descriptor({ulong, ?DESCRIPTOR_CODE_SELECTOR_FILTER}) ->
+check_descriptor({ulong, ?DESCRIPTOR_CODE_SQL_FILTER}) ->
     ok;
 check_descriptor(_) ->
     error.
 
-jms_selector_to_list(JmsSelector) ->
-    case unicode:characters_to_list(JmsSelector) of
+sql_to_list(SQL) ->
+    case unicode:characters_to_list(SQL) of
         String when is_list(String) ->
             {ok, String};
         Error ->
-            rabbit_log:warning("JMS message selector ~p is not UTF-8 encoded: ~p",
-                               [JmsSelector, Error]),
+            rabbit_log:warning("SQL expression ~p is not UTF-8 encoded: ~p",
+                               [SQL, Error]),
             error
     end.
 
-check_length(String)
-  when length(String) > ?MAX_EXPRESSION_LENGTH ->
-    rabbit_log:warning("JMS message selector length ~b exceeds maximum length ~b",
-                       [length(String), ?MAX_EXPRESSION_LENGTH]),
-    error;
-check_length(_) ->
-    ok.
+check_length(String) ->
+    Len = length(String),
+    case Len =< ?MAX_EXPRESSION_LENGTH of
+        true ->
+            ok;
+        false ->
+            rabbit_log:warning("SQL expression length ~b exceeds maximum length ~b",
+                               [Len, ?MAX_EXPRESSION_LENGTH]),
+            error
+    end.
 
-tokenize(String, JmsSelector) ->
-    case rabbit_jms_selector_lexer:string(String) of
+tokenize(String, SQL) ->
+    case rabbit_amqp_sql_lexer:string(String) of
         {ok, Tokens, _EndLocation} ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
-            rabbit_log:warning("failed to scan JMS message selector '~ts': ~tp",
-                               [JmsSelector, ErrDescriptor]),
+            rabbit_log:warning("failed to scan SQL expression '~ts': ~tp",
+                               [SQL, ErrDescriptor]),
             error
     end.
 
-check_token_count(Tokens, JmsSelector)
+check_token_count(Tokens, SQL)
   when length(Tokens) > ?MAX_TOKENS ->
-    rabbit_log:warning("JMS message selector '~ts' with ~b tokens exceeds token limit ~b",
-                       [JmsSelector, length(Tokens), ?MAX_TOKENS]),
+    rabbit_log:warning("SQL expression '~ts' with ~b tokens exceeds token limit ~b",
+                       [SQL, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
     ok.
 
-parse(Tokens, JmsSelector) ->
-    case rabbit_jms_selector_parser:parse(Tokens) of
+parse(Tokens, SQL) ->
+    case rabbit_amqp_sql_parser:parse(Tokens) of
         {error, Reason} ->
-            rabbit_log:warning("failed to parse JMS message selector '~ts': ~p",
-                               [JmsSelector, Reason]),
+            rabbit_log:warning("failed to parse SQL expression '~ts': ~p",
+                               [SQL, Reason]),
             error;
         Ok ->
             Ok
     end.
 
-transform_ast(Ast0, JmsSelector) ->
-    try rabbit_jms_ast:map(
-          fun({identifier, Ident})
-                when is_binary(Ident) ->
-                  {identifier, rabbit_amqp_util:section_field_name_to_atom(Ident)};
-             ({'like', _Ident, _Pattern, _Escape} = Node) ->
-                  transform_pattern_node(Node);
-             (Node) ->
-                  Node
-          end, Ast0) of
+transform_ast(Ast0, SQL) ->
+    try rabbit_amqp_sql_ast:map(fun({'like', _Id, _Pat, _Esc} = Node) ->
+                                        transform_pattern_node(Node);
+                                   (Node) ->
+                                        Node
+                                end, Ast0) of
         Ast ->
             {ok, Ast}
-    catch {unsupported_field, Name} ->
+    catch {invalid_pattern, Reason} ->
               rabbit_log:warning(
-                "identifier ~ts in JMS message selector ~tp is unsupported",
-                [Name, JmsSelector]),
-              error;
-          {invalid_pattern, Reason} ->
-              rabbit_log:warning(
-                "failed to parse LIKE pattern for JMS message selector ~tp: ~tp",
-                [JmsSelector, Reason]),
+                "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
+                [SQL, Reason]),
               error
     end.
 
 has_binary_identifier(Ast) ->
-    rabbit_jms_ast:search(fun({identifier, Val}) ->
-                                  is_binary(Val);
-                             (_Node) ->
-                                  false
-                          end, Ast).
+    rabbit_amqp_sql_ast:search(fun({identifier, Val}) ->
+                                       is_binary(Val);
+                                  (_Node) ->
+                                       false
+                               end, Ast).
 
 %% If the Pattern contains no wildcard or a single % wildcard,
-%% we will optimise message evaluation by using Erlang pattern matching.
-%% Otherwise, we will match with a regex. Even though we compile regexes,
-%% they are slower compared to Erlang pattern matching.
+%% we will evaluate messages using Erlang pattern matching since
+%% that's faster than evaluating compiled regexes.
 transform_pattern_node({Op, Ident, Pattern, Escape}) ->
     Pat = transform_pattern(Pattern, Escape),
     {Op, Ident, {pattern, Pat}}.
@@ -390,7 +373,7 @@ transform_pattern(Pattern, Escape) ->
         {single_percent, Chars, PercentPos} ->
             single_percent(Chars, PercentPos);
         regex ->
-            Re = jms_pattern_to_regex(Pattern, Escape, []),
+            Re = pattern_to_regex(Pattern, Escape, []),
             case re:compile("^" ++ Re ++ "$", [unicode]) of
                 {ok, CompiledRe} ->
                     CompiledRe;
@@ -441,23 +424,24 @@ single_percent(Chars, Pos) ->
     {{prefix, byte_size(PrefixBin), PrefixBin},
      {suffix, byte_size(SuffixBin), SuffixBin}}.
 
-jms_pattern_to_regex([], _Escape, Acc) ->
+pattern_to_regex([], _Escape, Acc) ->
     lists:reverse(Acc);
-jms_pattern_to_regex([EscapeChar | Rest], EscapeChar, Acc) ->
+pattern_to_regex([EscapeChar | Rest], EscapeChar, Acc) ->
     case Rest of
         [] ->
             throw({invalid_pattern, invalid_escape_at_end});
         [NextChar | Rest1] ->
-            jms_pattern_to_regex(Rest1, EscapeChar, escape_regex_char(NextChar) ++ Acc)
+            pattern_to_regex(Rest1, EscapeChar, escape_regex_char(NextChar) ++ Acc)
     end;
-jms_pattern_to_regex([$% | Rest], Escape, Acc) ->
+pattern_to_regex([$% | Rest], Escape, Acc) ->
     %% % matches any sequence of characters (0 or more)
-    jms_pattern_to_regex(Rest, Escape, [$*, $. | Acc]);
-jms_pattern_to_regex([$_ | Rest], Escape, Acc) ->
+    %% "The wildcard matching MUST consume as few characters as possible." (non-greedy)
+    pattern_to_regex(Rest, Escape, [$?, $*, $. | Acc]);
+pattern_to_regex([$_ | Rest], Escape, Acc) ->
     %% _ matches exactly one character
-    jms_pattern_to_regex(Rest, Escape, [$. | Acc]);
-jms_pattern_to_regex([Char | Rest], Escape, Acc) ->
-    jms_pattern_to_regex(Rest, Escape, escape_regex_char(Char) ++ Acc).
+    pattern_to_regex(Rest, Escape, [$. | Acc]);
+pattern_to_regex([Char | Rest], Escape, Acc) ->
+    pattern_to_regex(Rest, Escape, escape_regex_char(Char) ++ Acc).
 
 %% Escape user provided characters that have special meaning in Erlang regex.
 escape_regex_char(Char0) ->
@@ -470,7 +454,15 @@ escape_regex_char(Char0) ->
     end.
 
 %% Let's disallow control characters in the user provided pattern.
-check_char(C) when ?IS_CONTROL_CHAR(C) ->
-    throw({invalid_pattern, {prohibited_control_character, C}});
 check_char(C) ->
-    C.
+    case is_control_char(C) of
+        true ->
+            throw({invalid_pattern, {illegal_control_character, C}});
+        false ->
+            C
+    end.
+
+is_control_char(C) when C < 32 orelse C =:= 127 ->
+    true;
+is_control_char(_) ->
+    false.
