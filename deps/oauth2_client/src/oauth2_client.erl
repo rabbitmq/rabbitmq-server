@@ -66,8 +66,6 @@ introspect_token(Token) ->
                                 SSL ->  [{ssl, SSL}]
                           end ++ get_default_timeout(),
             Options = [],         
-            rabbit_log:debug("Sending introspect_request URL:~p Header: ~p Body: ~p",
-                [URL, Header, Body]),
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
             case parse_introspect_token_response(Response) of
                 {error, _} = Error -> Error;
@@ -81,7 +79,6 @@ sign_token(TokenPayload) ->
     case get_opaque_token_signing_key() of 
         {error, _} = Error -> Error;
         SK -> 
-            ct:log("Signing with ~p", [SK]),
             case SK#signing_key.type of 
                 hs256 -> 
                     {_, Value} = sign_token_hs(TokenPayload, SK#signing_key.key, SK#signing_key.id),
@@ -92,9 +89,6 @@ sign_token(TokenPayload) ->
 
 sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
     sign_token_hs(Token, Jwk, TokenKey).
-
-%%sign_token_hs(Token, Jwk, TokenKey) ->
-%%    sign_token_hs(Token, Jwk, TokenKey, true).
 
 sign_token_hs(Token, Jwk, TokenKey) ->
     Jws0 = #{
@@ -110,10 +104,6 @@ sign_token_rsa(Token, Jwk, TokenKey) ->
       <<"kid">> => TokenKey
     },
     sign_token(Token, Jwk, Jws).
-
-sign_token_no_kid(Token, Jwk) ->
-    Signed = jose_jwt:sign(Jwk, Token),
-    jose_jws:compact(Signed).
 
 sign_token(Token, Jwk, Jws) ->
     Signed = jose_jwt:sign(Jwk, Jws, Token),
