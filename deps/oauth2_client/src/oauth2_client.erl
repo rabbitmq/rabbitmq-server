@@ -7,6 +7,8 @@
 -module(oauth2_client).
 -export([get_access_token/2, get_expiration_time/1,
         refresh_access_token/2,
+        introspect_token/1,sign_token/1,
+        get_opaque_token_signing_key/0,get_opaque_token_signing_key/1,
         get_oauth_provider/1, get_oauth_provider/2,
         get_openid_configuration/2,
         build_openid_discovery_endpoint/3,
@@ -48,6 +50,134 @@ refresh_access_token(OAuthProvider, Request) ->
     Options = [],
     Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
     parse_access_token_response(Response).
+
+-spec introspect_token(binary()) -> 
+    {ok, map()} |
+    {error, unsuccessful_access_token_response() | any()}.
+introspect_token(Token) ->
+    case build_introspection_request() of 
+        {ok, Request} -> 
+            URL = Request#introspect_token_request.endpoint,
+            Header = build_introspect_authorization_header_if_any(Request),
+            Type = ?CONTENT_URLENCODED,
+            Body = build_introspect_request_parameters(Token, Request),
+            HTTPOptions = case Request#introspect_token_request.ssl_options of
+                                undefined -> [];
+                                SSL ->  [{ssl, SSL}]
+                          end ++ get_default_timeout(),
+            Options = [],         
+            Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
+            case parse_introspect_token_response(Response) of
+                {error, _} = Error -> Error;
+                {ok, _} = Ret -> Ret
+            end;
+        {error, _} = Error -> Error            
+    end.    
+
+-spec sign_token(map()) -> {ok, binary()} | {error, any()}.
+sign_token(TokenPayload) ->
+    case get_opaque_token_signing_key() of 
+        {error, _} = Error -> Error;
+        SK -> 
+            case SK#signing_key.type of 
+                hs256 -> 
+                    {_, Value} = sign_token_hs(TokenPayload, SK#signing_key.key, SK#signing_key.id),
+                    {ok, Value};
+                _ -> {error, not_implemented}
+            end
+    end.
+
+sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
+    sign_token_hs(Token, Jwk, TokenKey).
+
+sign_token_hs(Token, Jwk, TokenKey) ->
+    Jws0 = #{
+      <<"alg">> => <<"HS256">>,
+      <<"kid">> => TokenKey
+    },
+    Jws = maps:put(<<"kid">>, TokenKey, Jws0),
+    sign_token(Token, Jwk, Jws).
+    
+sign_token_rsa(Token, Jwk, TokenKey) ->
+    Jws = #{
+      <<"alg">> => <<"RS256">>,
+      <<"kid">> => TokenKey
+    },
+    sign_token(Token, Jwk, Jws).
+
+sign_token(Token, Jwk, Jws) ->
+    Signed = jose_jwt:sign(Jwk, Jws, Token),
+    jose_jws:compact(Signed).
+
+
+build_introspect_request_parameters(Token, #introspect_token_request{
+        client_auth_method = Method, 
+        client_id = ClientId, 
+        client_secret = ClientSecret}) ->
+    QueryList = case Method of 
+        request_param -> [
+            client_id_request_parameter(ClientId),
+            client_secret_request_parameter(ClientSecret)
+            ];
+        _ -> []
+    end,
+    uri_string:compose_query([{?REQUEST_TOKEN, Token} | QueryList]).
+
+
+build_introspect_authorization_header_if_any(#introspect_token_request{
+        client_auth_method = Method, 
+        client_id = ClientId, 
+        client_secret = ClientSecret}) ->
+    case Method of 
+        basic ->
+            Credentials = erlang:iolist_to_binary([ClientId, <<":">>,ClientSecret ]),
+            AuthStr = base64:encode_to_string(Credentials),
+            [{"Authorization", "Basic " ++ AuthStr}];
+        _ -> []
+    end.
+
+build_introspection_request() ->
+     Result = case get_oauth_provider([introspection_endpoint]) of
+        {ok, Provider} -> 
+            case {Provider#oauth_provider.introspection_client_id, 
+                    Provider#oauth_provider.introspection_client_secret} of
+                {undefined, _} -> {error, not_found_introspection_endpoint};
+                {_, undefined} -> {error, not_found_introspection_endpoint};
+                {_, _} -> {ok, build_introspection_request(Provider)}
+            end;
+        {error, _} = Error -> Error
+    end,
+    case Result of 
+        {ok, _} -> Result;
+        {error, _} -> 
+            Providers = maps:filter(fun(K,_V) -> 
+                case get_oauth_provider(K, [introspection_endpoint]) of 
+                    {error, _} -> false;
+                    {ok, P} -> 
+                        case {P#oauth_provider.introspection_client_id, 
+                            P#oauth_provider.introspection_client_secret,
+                            P#oauth_provider.introspection_endpoint} of
+                            {undefined, _, _} -> false;                    
+                            {_Id, _Secret, undefined} -> false;
+                            {_Id, _Secret, _Endpoint} -> true
+                        end
+                end
+            end, get_env(oauth_providers, #{})),
+            case maps:size(Providers) of 
+                0 -> {error, not_found_introspection_endpoint};
+                1 -> {ok, build_introspection_request(lists:last(maps:values(Providers))) };
+                _ -> {error, too_many_introspection_endpoints}
+            end
+    end.    
+
+build_introspection_request(Provider) ->
+    #introspect_token_request{
+        endpoint = Provider#oauth_provider.introspection_endpoint,
+        client_id = Provider#oauth_provider.introspection_client_id,
+        client_secret = Provider#oauth_provider.introspection_client_secret,
+        client_auth_method = Provider#oauth_provider.introspection_client_auth_method,
+        ssl_options = Provider#oauth_provider.ssl_options
+    }.
 
 append_paths(Path1, Path2) ->
     erlang:iolist_to_binary([Path1, Path2]).
@@ -121,10 +251,15 @@ merge_openid_configuration(OpenId, OAuthProvider0) ->
         EndSessionEndpoint ->
             OAuthProvider2#oauth_provider{end_session_endpoint = EndSessionEndpoint}
     end,
-    case OpenId#openid_configuration.jwks_uri of
+    OAuthProvider4 = case OpenId#openid_configuration.introspection_endpoint of
         undefined -> OAuthProvider3;
+        IntrospectionEndpoint ->
+            OAuthProvider3#oauth_provider{introspection_endpoint = IntrospectionEndpoint}
+    end,
+    case OpenId#openid_configuration.jwks_uri of
+        undefined -> OAuthProvider4;
         JwksUri ->
-            OAuthProvider3#oauth_provider{jwks_uri = JwksUri}
+            OAuthProvider4#oauth_provider{jwks_uri = JwksUri}
     end.
 
 -spec merge_oauth_provider(oauth_provider(), proplists:proplist()) ->
@@ -145,10 +280,15 @@ merge_oauth_provider(OAuthProvider, Proplist) ->
         EndSessionEndpoint -> [{end_session_endpoint, EndSessionEndpoint} |
             proplists:delete(end_session_endpoint, Proplist1)]
     end,
-    case OAuthProvider#oauth_provider.jwks_uri of
+    Proplist3 = case OAuthProvider#oauth_provider.introspection_endpoint of
         undefined ->  Proplist2;
+        IntrospectionEndpoint -> [{introspection_endpoint, IntrospectionEndpoint} |
+            proplists:delete(introspection_endpoint, Proplist2)]
+    end,
+    case OAuthProvider#oauth_provider.jwks_uri of
+        undefined ->  Proplist3;
         JwksEndPoint -> [{jwks_uri, JwksEndPoint} |
-            proplists:delete(jwks_uri, Proplist2)]
+            proplists:delete(jwks_uri, Proplist3)]
     end.
 
 parse_openid_configuration_response({error, Reason}) ->
@@ -176,6 +316,8 @@ map_to_openid_configuration(Map) ->
         authorization_endpoint = maps:get(?RESPONSE_AUTHORIZATION_ENDPOINT,
             Map, undefined),
         end_session_endpoint = maps:get(?RESPONSE_END_SESSION_ENDPOINT,
+            Map, undefined),
+        introspection_endpoint = maps:get(?RESPONSE_INTROSPECTION_ENDPOINT,
             Map, undefined),
         jwks_uri = maps:get(?RESPONSE_JWKS_URI, Map, undefined)
     }.
@@ -215,6 +357,10 @@ do_update_oauth_provider_endpoints_configuration(OAuthProvider) when
     case OAuthProvider#oauth_provider.end_session_endpoint of
         undefined -> do_nothing;
         EndSessionEndpoint -> set_env(end_session_endpoint, EndSessionEndpoint)
+    end,
+    case OAuthProvider#oauth_provider.introspection_endpoint of
+        undefined -> do_nothing;
+        IntrospectionEndpoint -> set_env(introspection_endpoint, IntrospectionEndpoint)
     end,
     case OAuthProvider#oauth_provider.jwks_uri of
         undefined -> do_nothing;
@@ -265,6 +411,72 @@ unlock(LockId) ->
                 {Nodes, _Retries} ->
                     global:del_lock({oauth2_config_lock, Value}, Nodes)
             end
+    end.
+
+-spec get_opaque_token_signing_key() -> {ok, signing_key()} | {error, any()}.
+get_opaque_token_signing_key() -> 
+    case get_env(opaque_token_signing_key) of 
+        undefined -> {error, missing_opaque_token_signing_key};
+        List -> 
+            parse_signing_key_configuration(List)
+    end.
+
+-spec get_opaque_token_signing_key(string()|binary()) -> {ok, signing_key()} | {error, any()}.
+get_opaque_token_signing_key(KeyId) -> 
+    List = get_env(opaque_token_signing_key),
+    case proplists:get_value(id, List, undefined) of 
+        undefined -> {error, missing_opaque_token_signing_key};
+        KeyId -> parse_signing_key_configuration(List);
+        _ -> {error, missing_opaque_token_signing_key}
+    end.
+
+parse_signing_key_configuration(List) ->
+    SK0 = case proplists:get_value(id, List, undefined) of 
+        undefined -> {error, missing_signing_key_id};
+        Id -> #signing_key{id = Id}
+    end,
+    case {SK0, proplists:get_value(type, List, hs256)} of 
+        {{error, _} = Error, _} -> 
+            Error;
+        {_, hs256} -> 
+            Sk1 = case proplists:get_value(key, List, undefined) of 
+                undefined -> {error, missing_symmetrical_key_value};
+                SymKey -> SK0#signing_key{
+                    type = hs256, 
+                    key = case make_jwk(#{
+                        <<"alg">> => <<"HS256">>,
+                        <<"value">> => SymKey,
+                        <<"kty">> => <<"MAC">>,
+                        <<"use">> => <<"sig">>}) of 
+                            {error, _} = Error -> Error;
+                            {ok, Val} -> Val
+                        end
+                }
+            end,
+            case Sk1#signing_key.key of 
+                {error, _} = Error1 -> Error1;
+                _ -> Sk1
+            end;
+        {_, rs256} -> 
+            Sk2 = case proplists:get_value(key_pem_file, List, undefined) of 
+                undefined -> 
+                    {error, missing_key_pem_file};
+                PrivateKey -> 
+                    case proplists:get_value(cert_pem_file, List, undefined) of 
+                        undefined -> 
+                            {error, missing_cert_pem_file};
+                        PublicKey -> 
+                            SK0#signing_key{type = hs256, 
+                                private_key = PrivateKey,
+                                public_key = PublicKey}
+                    end
+            end,
+            case {Sk2#signing_key.private_key, Sk2#signing_key.public_key} of 
+                {{error, _} = Error2, _} -> Error2;
+                {_, {error, _} = Error3} -> Error3;
+                {_, _} -> Sk2
+            end;
+        {_, _} -> {error, unsupported_signing_type}
     end.
 
 -spec get_oauth_provider(list()) -> {ok, oauth_provider()} | {error, any()}.
@@ -396,6 +608,10 @@ lookup_root_oauth_provider() ->
         token_endpoint = get_env(token_endpoint),
         authorization_endpoint = get_env(authorization_endpoint),
         end_session_endpoint = get_env(end_session_endpoint),
+        introspection_endpoint = get_env(introspection_endpoint),
+        introspection_client_auth_method = get_env(introspection_client_auth_method),
+        introspection_client_id = get_env(introspection_client_id),
+        introspection_client_secret = get_env(introspection_client_secret),
         ssl_options = extract_ssl_options_as_list(Map)
     }.
 
@@ -498,13 +714,17 @@ build_refresh_token_request_body(Request) ->
 grant_type_request_parameter(Type) ->
     {?REQUEST_GRANT_TYPE, Type}.
 
-client_id_request_parameter(ClientId) ->
-    {?REQUEST_CLIENT_ID,
-        binary_to_list(ClientId)}.
+client_id_request_parameter(ClientId) when is_binary(ClientId) ->
+    {?REQUEST_CLIENT_ID, binary_to_list(ClientId)};
 
-client_secret_request_parameter(ClientSecret) ->
-    {?REQUEST_CLIENT_SECRET,
-        binary_to_list(ClientSecret)}.
+client_id_request_parameter(ClientId) ->
+    {?REQUEST_CLIENT_ID, ClientId}.
+
+client_secret_request_parameter(ClientSecret)when is_binary(ClientSecret) ->
+    {?REQUEST_CLIENT_SECRET, binary_to_list(ClientSecret)};
+
+client_secret_request_parameter(ClientSecret)  ->
+    {?REQUEST_CLIENT_SECRET, ClientSecret}.
 
 refresh_token_request_parameter(Request) ->
     {?REQUEST_REFRESH_TOKEN, Request#refresh_token_request.refresh_token}.
@@ -530,9 +750,11 @@ get_ssl_options_if_any(OAuthProvider) ->
     end.
 get_timeout_of_default(Timeout) ->
     case Timeout of
-        undefined -> [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
+        undefined -> get_default_timeout();
         Timeout -> [{timeout, Timeout}]
     end.
+get_default_timeout() ->
+    [{timeout, ?DEFAULT_HTTP_TIMEOUT}].
 
 is_json(?CONTENT_JSON) -> true;
 is_json(_) -> false.
@@ -585,6 +807,14 @@ map_to_oauth_provider(PropList) when is_list(PropList) ->
             proplists:get_value(authorization_endpoint, PropList, undefined),
         end_session_endpoint =
             proplists:get_value(end_session_endpoint, PropList, undefined),
+        introspection_endpoint =
+            proplists:get_value(introspection_endpoint, PropList, undefined),
+        introspection_client_id =
+            proplists:get_value(introspection_client_id, PropList, undefined),
+        introspection_client_secret =
+            proplists:get_value(introspection_client_secret, PropList, undefined),
+        introspection_client_auth_method = 
+            proplists:get_value(introspection_client_auth_method, PropList, basic),
         jwks_uri =
             proplists:get_value(jwks_uri, PropList, undefined),
         ssl_options =
@@ -607,10 +837,47 @@ map_to_access_token_response(Code, Reason, Headers, Body) ->
                 _ ->   {error, Reason}
             end
     end.
+map_to_introspect_token_response(Code, Reason, Headers, Body) ->
+    case decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body) of
+        {error, {error, InternalError}} ->
+            {error, InternalError};
+        {error, _} = Error ->
+            Error;
+        Value ->
+            case Code of
+                200 -> assert_token_is_active({ok, Value});
+                201 -> assert_token_is_active({ok, Value});
+                204 -> {ok, []};
+                400 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
+                401 -> {error, map_to_unsuccessful_introspect_token_response(Value)};
+                _ ->   {error, Reason}
+            end
+    end.
+assert_token_is_active({ok, Response} = Value) ->
+    case maps:get(<<"active">>, Response, undefined) of 
+        undefined -> {error, introspected_token_not_valid};
+        false -> {error, introspected_token_not_valid};
+        true -> Value 
+    end.
+
+map_to_unsuccessful_introspect_token_response(Map) when is_map(Map) ->
+    #unsuccessful_introspect_token_response{
+        error = maps:get(?RESPONSE_ERROR, Map, "unknown"),
+        error_description = maps:get(?RESPONSE_ERROR_DESCRIPTION, Map, undefined)
+    };
+map_to_unsuccessful_introspect_token_response(_) ->
+    #unsuccessful_introspect_token_response{
+        error = "unknown"
+    }.
 parse_access_token_response({error, Reason}) ->
     {error, Reason};
 parse_access_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
     map_to_access_token_response(Code, Reason, Headers, Body).
+
+parse_introspect_token_response({error, Reason}) ->
+    {error, Reason};
+parse_introspect_token_response({ok,{{_,Code,Reason}, Headers, Body}}) ->
+    map_to_introspect_token_response(Code, Reason, Headers, Body).
 
 -spec format_ssl_options([ssl:tls_client_option()]) -> string().
 format_ssl_options(TlsOptions) ->
@@ -635,13 +902,19 @@ format_oauth_provider(OAuthProvider) ->
     lists:flatten(io_lib:format("{id: ~p, issuer: ~p, discovery_endpoint: ~p, " ++
         " token_endpoint: ~p, " ++
         "authorization_endpoint: ~p, end_session_endpoint: ~p, " ++
-        "jwks_uri: ~p, ssl_options: ~p }", [
+        "introspection{endpoint: ~p, client_id: ~p, has client_secret: ~p} jwks_uri: ~p, ssl_options: ~p }", [
         format_oauth_provider_id(OAuthProvider#oauth_provider.id),
         OAuthProvider#oauth_provider.issuer,
         OAuthProvider#oauth_provider.discovery_endpoint,
         OAuthProvider#oauth_provider.token_endpoint,
         OAuthProvider#oauth_provider.authorization_endpoint,
         OAuthProvider#oauth_provider.end_session_endpoint,
+        OAuthProvider#oauth_provider.introspection_endpoint,
+        OAuthProvider#oauth_provider.introspection_client_id,
+        case OAuthProvider#oauth_provider.introspection_client_secret of 
+            undefined -> false;
+            _ -> true 
+        end,
         OAuthProvider#oauth_provider.jwks_uri,
         format_ssl_options(OAuthProvider#oauth_provider.ssl_options)])).
 
@@ -651,3 +924,79 @@ get_env(Par, Def) ->
     application:get_env(rabbitmq_auth_backend_oauth2, Par, Def).
 set_env(Par, Val) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
+
+
+-include_lib("jose/include/jose_jwk.hrl").
+
+-spec make_jwk(binary() | map()) -> {ok, #{binary() => binary()}} | {error, term()}.
+make_jwk(Json) when is_binary(Json); is_list(Json) ->
+    JsonMap = jose:decode(iolist_to_binary(Json)),
+    make_jwk(JsonMap);
+
+make_jwk(JsonMap) when is_map(JsonMap) ->
+    case JsonMap of
+        #{<<"kty">> := <<"MAC">>, <<"value">> := _Value} ->
+            {ok, mac_to_oct(JsonMap)};
+        #{<<"kty">> := <<"RSA">>, <<"n">> := _N, <<"e">> := _E} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"oct">>, <<"k">> := _K} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"OKP">>, <<"crv">> := _Crv, <<"x">> := _X} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := <<"EC">>} ->
+            {ok, fix_alg(JsonMap)};
+        #{<<"kty">> := Kty} when Kty == <<"oct">>;
+                                 Kty == <<"MAC">>;
+                                 Kty == <<"RSA">>;
+                                 Kty == <<"OKP">>;
+                                 Kty == <<"EC">> ->
+            {error, {fields_missing_for_kty, Kty}};
+        #{<<"kty">> := _Kty} ->
+            {error, unknown_kty};
+        #{} ->
+            {error, no_kty}
+    end.
+
+from_pem(Pem) ->
+    case jose_jwk:from_pem(Pem) of
+        #jose_jwk{} = Jwk -> {ok, Jwk};
+        Other             ->
+            error_logger:warning_msg("Error parsing jwk from pem: ", [Other]),
+            {error, invalid_pem_string}
+    end.
+
+from_pem_file(FileName) ->
+    case filelib:is_file(FileName) of
+        false ->
+            {error, enoent};
+        true  ->
+            case jose_jwk:from_pem_file(FileName) of
+                #jose_jwk{} = Jwk -> {ok, Jwk};
+                Other             ->
+                    error_logger:warning_msg("Error parsing jwk from pem file: ", [Other]),
+                    {error, invalid_pem_file}
+            end
+    end.
+
+mac_to_oct(#{<<"kty">> := <<"MAC">>, <<"value">> := Value} = Key) ->
+    OktKey = maps:merge(Key,
+                        #{<<"kty">> => <<"oct">>,
+                          <<"k">> => base64url:encode(Value)}),
+    fix_alg(OktKey).
+
+fix_alg(#{<<"alg">> := Alg} = Key) ->
+    Algs = uaa_algs(),
+    case maps:get(Alg, Algs, undefined) of
+        undefined -> Key;
+        Val       -> Key#{<<"alg">> := Val}
+    end;
+fix_alg(#{} = Key) -> Key.
+
+uaa_algs() ->
+    UaaEnv = application:get_env(rabbitmq_auth_backend_oauth2, uaa_jwt_decoder, []),
+    DefaultAlgs = #{<<"HMACSHA256">> => <<"HS256">>,
+                    <<"HMACSHA384">> => <<"HS384">>,
+                    <<"HMACSHA512">> => <<"HS512">>,
+                    <<"SHA256withRSA">> => <<"RS256">>,
+                    <<"SHA512withRSA">> => <<"RS512">>},
+    proplists:get_value(uaa_algs, UaaEnv, DefaultAlgs).

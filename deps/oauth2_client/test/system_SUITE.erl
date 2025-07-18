@@ -1,4 +1,3 @@
-%% This Source Code Form is subject to the terms of the Mozilla Public
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
@@ -17,6 +16,8 @@
 
 -compile(export_all).
 
+-define(MOCK_OPAQUE_TOKEN, <<"some opaque token">>).
+-define(MOCK_INTROSPECTION_ENDPOINT, <<"/introspect">>).
 -define(MOCK_TOKEN_ENDPOINT, <<"/token">>).
 -define(AUTH_PORT, 8000).
 -define(ISSUER_PATH, "/somepath").
@@ -28,7 +29,8 @@ all() ->
 [
     {group, https_down},
     {group, https},
-    {group, with_all_oauth_provider_settings}
+    {group, with_all_oauth_provider_settings},
+    {group, verify_introspect_token}
 
 ].
 
@@ -39,6 +41,44 @@ groups() ->
         {group, verify_get_oauth_provider},
         jwks_uri_takes_precedence_over_jwks_url,
         jwks_url_is_used_in_absense_of_jwks_uri
+    ]},
+    {verify_introspect_token, [], [
+        {with_all_oauth_provider_settings, [], [
+            cannot_introspect_due_to_missing_configuration,
+            {with_introspection_endpoint, [], [
+                cannot_introspect_due_to_missing_configuration,
+                {https, [], [
+                    {with_introspection_basic_client_credentials, [], [
+                        can_introspect_token
+                    ]},
+                    {with_introspection_request_param_client_credentials, [], [
+                        can_introspect_token
+                    ]},
+                    {introspection_endpoint_returns_non_active_tokens, [], [
+                        introspected_token_is_not_active
+                    ]}
+                ]}                
+            ]},
+            {https, [], [
+                {with_introspection_basic_client_credentials, [], [
+                    cannot_introspect_due_to_missing_configuration
+                ]},
+                {with_introspection_request_param_client_credentials, [], [
+                    cannot_introspect_due_to_missing_configuration
+                ]}
+            ]},
+            {with_discovered_introspection_endpoint, [], [
+                cannot_introspect_due_to_missing_configuration,
+                {https, [], [
+                    {with_introspection_basic_client_credentials, [], [
+                        can_introspect_token
+                    ]},
+                    {with_introspection_request_param_client_credentials, [], [
+                        can_introspect_token
+                    ]}
+                ]}                
+            ]}
+        ]}        
     ]},
     {without_all_oauth_providers_settings, [], [
         {group, verify_get_oauth_provider}
@@ -152,6 +192,74 @@ init_per_group(with_default_oauth_provider, Config) ->
         OAuthProvider#oauth_provider.id),
     Config;
 
+init_per_group(with_hs256_signing, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
+        #{ id => <<"some-id">>,
+           type => hs256, 
+           key => <<"some-key-value">> }),
+    Config;
+
+init_per_group(with_introspection_endpoint, Config) ->    
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_endpoint,
+        build_token_introspection_endpoint("https")),
+    Config;
+
+init_per_group(with_discovered_introspection_endpoint, Config) ->
+    Payload1 = [ {?RESPONSE_INTROSPECTION_ENDPOINT, build_token_introspection_endpoint("https")} | 
+        build_http_get_openid_configuration_payload() ],
+    [{expected_openid_configuration_payload, Payload1} | Config];
+
+init_per_group(with_introspection_basic_client_credentials, Config) ->    
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
+        "some-client-id"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
+        "some-client-secret"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
+        basic),        
+    [{can_introspect_token, [
+            {introspection_endpoint, build_http_mock_behaviour(
+                build_introspection_token_request(?MOCK_OPAQUE_TOKEN, basic, <<"some-client-id">>, 
+                    <<"some-client-secret">>),
+                build_http_200_introspection_token_response())},
+            {get_openid_configuration, get_openid_configuration_http_expectation(
+                with_introspection_basic_client_credentials, Config)}
+            
+        ]} | Config];    
+init_per_group(introspection_endpoint_returns_non_active_tokens, Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
+        "some-client-id"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
+        "some-client-secret"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
+        basic),        
+    [{introspected_token_is_not_active, [
+            {introspection_endpoint, build_http_mock_behaviour(
+                build_introspection_token_request(?MOCK_OPAQUE_TOKEN, basic, <<"some-client-id">>, 
+                    <<"some-client-secret">>),
+                build_http_200_introspection_token_response([
+                    {active, false},
+                    {scope, <<"openid">>}            
+                ]))},
+            {get_openid_configuration, get_openid_configuration_http_expectation(
+                with_introspection_basic_client_credentials, Config)}
+            
+        ]} | Config]; 
+
+init_per_group(with_introspection_request_param_client_credentials, Config) ->    
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id,
+        "some-client-id"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret,
+        "some-client-secret"),
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_auth_method,
+        request_param),
+    [{can_introspect_token, [
+            {introspection_endpoint, build_http_mock_behaviour(
+                build_introspection_token_request(?MOCK_OPAQUE_TOKEN, request_param, <<"some-client-id">>, 
+                    <<"some-client-secret">>),
+                build_http_200_introspection_token_response())}
+        ]} | Config];
+
+
 init_per_group(_, Config) ->
     Config.
 
@@ -161,20 +269,24 @@ get_http_oauth_server_expectations(TestCase, Config) ->
         undefined ->
             [   {token_endpoint, build_http_mock_behaviour(build_http_access_token_request(),
                     build_http_200_access_token_response())},
-                {get_openid_configuration, get_openid_configuration_http_expectation(TestCase)}
+                {get_openid_configuration, get_openid_configuration_http_expectation(TestCase, Config)}
             ];
         Expectations ->
             Expectations
     end.
-get_openid_configuration_http_expectation(TestCaseAtom) ->
+get_openid_configuration_http_expectation(TestCaseAtom, Config) ->
     TestCase = binary_to_list(atom_to_binary(TestCaseAtom)),
-    Payload = case string:find(TestCase, "returns_partial_payload") of
-        nomatch ->
-            build_http_get_openid_configuration_payload();
-         _ ->
-            List0 = proplists:delete(authorization_endpoint,
-                build_http_get_openid_configuration_payload()),
-            proplists:delete(end_session_endpoint, List0)
+    Payload = case ?config(expected_openid_configuration_payload, Config) of 
+        undefined ->
+            case string:find(TestCase, "returns_partial_payload") of
+                nomatch ->
+                    build_http_get_openid_configuration_payload();
+                _ ->
+                    List0 = proplists:delete(authorization_endpoint,
+                        build_http_get_openid_configuration_payload()),
+                    proplists:delete(end_session_endpoint, List0)
+            end;
+        P -> P
     end,
     Path = case string:find(TestCase, "path") of
         nomatch ->  "";
@@ -189,7 +301,6 @@ get_openid_configuration_http_expectation(TestCaseAtom) ->
 
 lookup_expectation(Endpoint, Config) ->
     proplists:get_value(Endpoint, ?config(oauth_server_expectations, Config)).
-
 
 
 configure_all_oauth_provider_settings(Config) ->
@@ -309,6 +420,22 @@ end_per_group(https_and_rabbitmq_node, Config) ->
 
 end_per_group(with_default_oauth_provider, Config) ->
     application:unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
+    Config;
+
+end_per_group(with_introspection_endpoint, Config) ->    
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint),
+    Config;
+
+end_per_group(with_introspection_basic_client_credentials, Config) ->    
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method),
+    Config;
+
+end_per_group(with_introspection_request_param_client_credentials, Config) ->    
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_id),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_secret),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_endpoint_client_auth_method),
     Config;
 
 end_per_group(_, Config) ->
@@ -598,18 +725,37 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
                 Jwks_uri)
     end.
 
-jwks_url_is_used_in_absense_of_jwks_uri(Config) ->
+jwks_url_is_used_in_absense_of_jwks_uri(_Config) ->
     {ok, #oauth_provider{
         jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
     ?assertEqual(
         proplists:get_value(jwks_url, get_env(key_config, []), undefined),
         Jwks_uri).
 
-jwks_uri_takes_precedence_over_jwks_url(Config) ->
+jwks_uri_takes_precedence_over_jwks_url(_Config) ->
     {ok, #oauth_provider{
         jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
     ?assertEqual(get_env(jwks_uri), Jwks_uri).
 
+
+cannot_introspect_due_to_missing_configuration(_Config)->
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_id, "some-client-id"),    
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_client_id),
+
+    application:set_env(rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-client-secret"),
+    {error, not_found_introspection_endpoint} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    application:unset_env(rabbitmq_auth_backend_oauth2, introspection_client_secret).
+
+can_introspect_token(_Config) ->
+    {ok, Value} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN),
+    ct:log("JWT : ~p", [Value]),
+    ok.
+
+introspected_token_is_not_active(_Config) ->
+    {error, introspected_token_not_valid} = oauth2_client:introspect_token(?MOCK_OPAQUE_TOKEN).
 
 %%% HELPERS
 
@@ -636,6 +782,12 @@ build_jwks_uri(Scheme, Path) ->
                          host => "localhost",
                          port => rabbit_data_coercion:to_integer(?AUTH_PORT),
                          path => Path}).
+
+build_token_introspection_endpoint(Scheme) ->
+    uri_string:recompose(#{scheme => Scheme,
+                        host => "localhost",
+                        port => rabbit_data_coercion:to_integer(?AUTH_PORT),
+                        path => "/introspect"}).
 
 build_access_token_request(Request) ->
     #access_token_request {
@@ -664,6 +816,8 @@ build_https_oauth_provider(Id, CaCertFile) ->
         jwks_uri = build_jwks_uri("https"),
         ssl_options = ssl_options(verify_peer, false, CaCertFile)
     }.
+oauth_provider_to_proplist(undefined) -> [];
+
 oauth_provider_to_proplist(#oauth_provider{
         issuer = Issuer,
         token_endpoint = TokenEndpoint,
@@ -688,6 +842,7 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
         {'_', [{Path, oauth_http_mock, Expected} || #{request := #{path := Path}}
             = Expected <- Expectations ]}
     ]),
+    ct:log("start_https_oauth_server with Expectations: ~p", [Expectations]),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -698,6 +853,7 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
+    ct:log("start_https_oauth_server"),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -707,6 +863,7 @@ start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expecte
             #{env => #{dispatch => Dispatch}}).
 
 stop_https_auth_server() ->
+    ct:log("stop_https_auth_server"),
     cowboy:stop_listener(mock_http_auth_listener).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
@@ -816,6 +973,38 @@ denies_access_token_expectation() ->
             {?REQUEST_CLIENT_SECRET, <<"password">>}
         ]), build_http_400_access_token_response()
     ).
+build_introspection_token_request(Token, basic, ClientId, ClientSecret) ->
+    Map = build_http_request(
+        <<"POST">>,
+        ?MOCK_INTROSPECTION_ENDPOINT,
+        [
+            {?REQUEST_TOKEN, Token}            
+        ]),
+    Credentials = binary_to_list(<<ClientId/binary,":",ClientSecret/binary>>),
+    AuthStr = base64:encode_to_string(Credentials),    
+    maps:put(headers, #{
+            <<"authorization">> =>  list_to_binary("Basic " ++ AuthStr)
+        }, Map);
+build_introspection_token_request(Token, request_param, ClientId, ClientSecret) ->
+    build_http_request(
+        <<"POST">>,
+        ?MOCK_INTROSPECTION_ENDPOINT,
+        [
+            {?REQUEST_TOKEN, Token},
+            {?REQUEST_CLIENT_ID, ClientId},
+            {?REQUEST_CLIENT_SECRET, ClientSecret}
+        ]).
+build_http_200_introspection_token_response() ->
+    build_http_200_introspection_token_response([
+            {active, true},
+            {scope, <<"openid">>}            
+    ]).
+build_http_200_introspection_token_response(PayloodList) ->
+    [
+        {code, 200},
+        {content_type, ?CONTENT_JSON},
+        {payload, PayloodList}
+    ].
 auth_server_error_when_access_token_request_expectation() ->
     build_http_mock_behaviour(build_http_request(
         <<"POST">>,

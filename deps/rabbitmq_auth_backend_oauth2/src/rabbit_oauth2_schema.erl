@@ -12,6 +12,8 @@
 -define(RESOURCE_SERVERS, "resource_servers").
 -define(OAUTH_PROVIDERS, "oauth_providers").
 -define(SIGNING_KEYS, "signing_keys").
+-define(OPAQUE_TOKEN_SIGNING_KEY, "opaque_token_signing_key").
+
 -define(AUTH_OAUTH2_SCOPE_ALIASES, ?AUTH_OAUTH2 ++ "." ++ ?SCOPE_ALIASES).
 -define(AUTH_OAUTH2_RESOURCE_SERVERS, ?AUTH_OAUTH2 ++ "." ++ ?RESOURCE_SERVERS).
 -define(AUTH_OAUTH2_OAUTH_PROVIDERS, ?AUTH_OAUTH2 ++ "." ++ ?OAUTH_PROVIDERS).
@@ -25,7 +27,8 @@
     translate_resource_servers/1,
     translate_signing_keys/1,
     translate_endpoint_params/2,
-    translate_scope_aliases/1
+    translate_scope_aliases/1,
+    translate_opaque_token_signing_key/1
 ]).
 
 resource_servers_key_synonym(Key) -> maps:get(Key, ?RESOURCE_SERVERS_SYNONYMS, Key).
@@ -193,6 +196,13 @@ translate_endpoint_params(Variable, Conf) ->
     [{list_to_binary(Param), list_to_binary(V)} || {["auth_oauth2", _, Param], V}
          <- Params0].
 
+-spec translate_opaque_token_signing_key([{list(), binary()}]) -> 
+    [{binary(), binary()}].
+translate_opaque_token_signing_key(Conf) ->
+    Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2.opaque_token_signing_key",
+        Conf),
+    extract_opaque_token_signing_key_properties(Params0). 
+
 validator_file_exists(Attr, Filename) ->
     case file:read_file(Filename) of
         {ok, _} ->
@@ -232,27 +242,51 @@ merge_list_of_maps(ListOfMaps) ->
 extract_oauth_providers_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
+    MapValueFun = fun(V) -> 
+        case V of 
+            L when is_list(L) -> list_to_binary(L);
+            B when is_binary(B) -> B;
+            _ -> V
+        end end,
 
     OAuthProviders = [{Name, mapOauthProviderProperty(
         {
             list_to_atom(Key),
-            list_to_binary(V)})
+            MapValueFun(V)})
         } || {[?AUTH_OAUTH2, ?OAUTH_PROVIDERS, Name, Key], V} <- Settings ],
     maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
 
+extract_opaque_token_signing_key_properties(Settings) ->
+    MapValueFun = fun(K, V) -> 
+        case {K, V} of 
+            {"type", A} when is_atom(A) -> A;
+            {"type", _} -> list_to_atom(V);
+            {"id", L} when is_list(L) -> list_to_binary(L);
+            {"id", B} when is_binary(B) -> B;
+            {"key", L} when is_list(L) -> list_to_binary(L);
+            {"key", B} when is_binary(B) -> B
+        end end,
+
+    Translation = [{
+        list_to_atom(Key),
+        MapValueFun(Key, V)
+    } || {[?AUTH_OAUTH2, ?OPAQUE_TOKEN_SIGNING_KEY, Key], V} <- Settings ],
+    Translation.
 
 extract_resource_server_properties(Settings) ->
     KeyFun = fun extract_key_as_binary/1,
     ValueFun = fun extract_value/1,
 
-    OAuthProviders = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
+    ResourceServers = [{Name, {list_to_atom(resource_servers_key_synonym(Key)), list_to_binary(V)}}
         || {[?AUTH_OAUTH2, ?RESOURCE_SERVERS, Name, Key], V} <- Settings ],
-    maps:groups_from_list(KeyFun, ValueFun, OAuthProviders).
+    maps:groups_from_list(KeyFun, ValueFun, ResourceServers).
+
 
 mapOauthProviderProperty({Key, Value}) ->
     {Key, case Key of
         issuer -> validator_https_uri(Key, Value);
         token_endpoint -> validator_https_uri(Key, Value);
+        introspection_endpoint -> validator_https_uri(Key, Value);
         jwks_uri -> validator_https_uri(Key, Value);
         end_session_endpoint -> validator_https_uri(Key, Value);
         authorization_endpoint -> validator_https_uri(Key, Value);
