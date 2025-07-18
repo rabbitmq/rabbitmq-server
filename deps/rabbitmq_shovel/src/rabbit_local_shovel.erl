@@ -51,6 +51,7 @@
 %% sequence number initialized at an arbitrary point by the sender."
 %% See rabbit_amqp_session.erl
 -define(INITIAL_DELIVERY_COUNT, 16#ff_ff_ff_ff - 4).
+-define(DEFAULT_MAX_LINK_CREDIT, 170).
 
 -record(pending_ack, {
                       delivery_tag,
@@ -125,7 +126,6 @@ connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
     end.
 
 init_source(State = #{source := #{queue := QName0,
-                                  prefetch_count := Prefetch,
                                   consumer_args := Args,
                                   current := #{queue_states := QState0,
                                                vhost := VHost} = Current} = Src,
@@ -138,6 +138,8 @@ init_source(State = #{source := #{queue := QName0,
                false ->
                    {credited, credit_api_v1}
            end,
+    MaxLinkCredit = application:get_env(
+                      rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT),
     QName = rabbit_misc:r(VHost, queue, QName0),
     CTag = consumer_tag(Name),
     case rabbit_amqqueue:with(
@@ -166,7 +168,7 @@ init_source(State = #{source := #{queue := QName0,
                    end
            end) of
         {Remaining, {ok, QState1}} ->
-            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, Prefetch, false, QState1),
+            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, MaxLinkCredit, false, QState1),
             %% TODO handle actions
             State2 = State#{source => Src#{current => Current#{queue_states => QState,
                                                                consumer_tag => CTag},
