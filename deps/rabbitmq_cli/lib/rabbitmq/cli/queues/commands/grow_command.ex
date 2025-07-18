@@ -33,17 +33,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, :too_many_args}
   end
 
-  def validate(args = [n, s], opts) do
-    case Integer.parse(n) do
-      {cluster_size, _} when is_integer(cluster_size) ->
-        do_validate([cluster_size, s], opts)
-
-      :error ->
-        do_validate(args, opts)
-    end
-  end
-
-  def do_validate([_, s], _)
+  def validate([_, s], _)
       when not (s == "all" or
                   s == "even") do
     {:validation_failure, "strategy '#{s}' is not recognised."}
@@ -56,7 +46,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     {:validation_failure, "voter status '#{m}' is not recognised."}
   end
 
-  def do_validate(_, _) do
+  def validate(_, _) do
     :ok
   end
 
@@ -64,15 +54,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     Validators.chain(
       [
         &Validators.rabbit_is_running/2,
-        fn args = [n, _], opts ->
-          case Integer.parse(n) do
-            {cluster_size, _} when is_integer(cluster_size) ->
-              :ok
-
-            :error ->
-              Validators.existing_cluster_member(args, opts)
-          end
-        end
+        &Validators.existing_cluster_member/2
       ],
       [args, opts]
     )
@@ -85,7 +67,6 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         membership: membership,
         errors_only: errors_only
       }) do
-
     args = [to_atom(node), vhost_pat, queue_pat, to_atom(strategy)]
 
     args =
@@ -155,14 +136,8 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
     do:
       "Grows quorum queue clusters by adding a member (replica) on the specified node for all matching queues"
 
-  def banner([node_or_quorum_cluster_size, strategy], %{queue_pattern: queue_pattern}) do
-      case Integer.parse(node_or_quorum_cluster_size) do
-        {cluster_size, _} when is_integer(cluster_size) ->
-          "Growing #{strategy} quorum queues matching '#{queue_pattern}' to a target cluster size of '#{cluster_size}'..."
-
-        :error ->
-          "Growing #{strategy} quorum queues matching '#{queue_pattern}' to #{node_or_quorum_cluster_size}..."
-      end
+  def banner([node, strategy], _) do
+    "Growing #{strategy} quorum queues on #{node}..."
   end
 
   #
