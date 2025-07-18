@@ -38,15 +38,15 @@ content_types_provided(ReqData, Context) ->
    {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 do_it(ReqData, Context) ->
-    rabbit_log:debug("Requested introspect token via management api"),
+    ?LOG_DEBUG("Requested introspect token via management api"),
     case cowboy_req:parse_header(<<"authorization">>, ReqData) of
         {bearer, Token} ->          
             case oauth2_client:introspect_token(Token) of 
                 {error, introspected_token_not_valid} -> 
-                    rabbit_log:error("Failed to introspect token due to ~p", [introspected_token_not_valid]),
+                    ?LOG_ERROR("Failed to introspect token due to ~p", [introspected_token_not_valid]),
                     rabbit_mgmt_util:not_authorised("Introspected token is not active", ReqData, Context);
                 {error, Reason} -> 
-                    rabbit_log:error("Failed to introspect token due to ~p", [Reason]),
+                    ?LOG_ERROR("Failed to introspect token due to ~p", [Reason]),
                     rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
                 {ok, JwtPayload} -> 
                     case oauth2_client:sign_token(JwtPayload) of 

@@ -148,7 +148,7 @@ get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
                 _        -> {error, unknown_signing_key_type}
             end;
         SK -> 
-            rabbit_log:debug("Opaque token Signing key ~p found", [KeyId]),
+            ?LOG_DEBUG("Opaque token Signing key ~p found", [KeyId]),
             {ok, SK#signing_key.key}
     end.
 
