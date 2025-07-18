@@ -301,9 +301,9 @@ add_rem_counter(Config, {Initial, Ops}, {AddFun, RemFun}, Tables) ->
 
 connection(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
-    [_] = read_table_rpc(Config, connection_created),
-    [_] = read_table_rpc(Config, connection_metrics),
-    [_] = read_table_rpc(Config, connection_coarse_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, connection_created), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, connection_metrics), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, connection_coarse_metrics), 30000),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     force_metric_gc(Config),
     ?awaitMatch([], read_table_rpc(Config, connection_created),
@@ -317,25 +317,25 @@ connection(Config) ->
 channel(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, Chan} = amqp_connection:open_channel(Conn),
-    [_] = read_table_rpc(Config, channel_created),
-    [_] = read_table_rpc(Config, channel_metrics),
-    [_] = read_table_rpc(Config, channel_process_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, channel_created), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_metrics), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_process_metrics), 30000),
     ok = amqp_channel:close(Chan),
-    [] = read_table_rpc(Config, channel_created),
-    [] = read_table_rpc(Config, channel_metrics),
-    [] = read_table_rpc(Config, channel_process_metrics),
+    ?awaitMatch([], read_table_rpc(Config, channel_created), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_process_metrics), 30000),
     ok = rabbit_ct_client_helpers:close_connection(Conn).
 
 channel_connection_close(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
     {ok, _} = amqp_connection:open_channel(Conn),
-    [_] = read_table_rpc(Config, channel_created),
-    [_] = read_table_rpc(Config, channel_metrics),
-    [_] = read_table_rpc(Config, channel_process_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, channel_created), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_metrics), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_process_metrics), 30000),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
-    [] = read_table_rpc(Config, channel_created),
-    [] = read_table_rpc(Config, channel_metrics),
-    [] = read_table_rpc(Config, channel_process_metrics).
+    ?awaitMatch([], read_table_rpc(Config, channel_created), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_process_metrics), 30000).
 
 channel_queue_delete_queue(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config),
@@ -344,14 +344,14 @@ channel_queue_delete_queue(Config) ->
     ensure_exchange_metrics_populated(Chan, Queue),
     ensure_channel_queue_metrics_populated(Chan, Queue),
     force_channel_stats(Config),
-    [_] = read_table_rpc(Config, channel_queue_metrics),
-    [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, channel_queue_metrics), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_queue_exchange_metrics), 30000),
 
     delete_queue(Chan, Queue),
     force_metric_gc(Config),
     % ensure  removal of queue cleans up channel_queue metrics
-    [] = read_table_rpc(Config, channel_queue_exchange_metrics),
-    [] = read_table_rpc(Config, channel_queue_metrics),
+    ?awaitMatch([], read_table_rpc(Config, channel_queue_exchange_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_queue_metrics), 30000),
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     ok.
 
@@ -362,26 +362,26 @@ channel_queue_exchange_consumer_close_connection(Config) ->
     ensure_exchange_metrics_populated(Chan, Queue),
     force_channel_stats(Config),
 
-    [_] = read_table_rpc(Config, channel_exchange_metrics),
-    [_] = read_table_rpc(Config, channel_queue_exchange_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, channel_exchange_metrics), 30000),
+    ?awaitMatch([_], read_table_rpc(Config, channel_queue_exchange_metrics), 30000),
 
     ensure_channel_queue_metrics_populated(Chan, Queue),
     force_channel_stats(Config),
-    [_] = read_table_rpc(Config, channel_queue_metrics),
+    ?awaitMatch([_], read_table_rpc(Config, channel_queue_metrics), 30000),
 
     Sub = #'basic.consume'{queue = Queue},
       #'basic.consume_ok'{consumer_tag = _} =
         amqp_channel:call(Chan, Sub),
 
-    [_] = read_table_rpc(Config, consumer_created),
+    ?awaitMatch([_], read_table_rpc(Config, consumer_created), 30000),
 
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     % ensure cleanup happened
     force_metric_gc(Config),
-    [] = read_table_rpc(Config, channel_exchange_metrics),
-    [] = read_table_rpc(Config, channel_queue_exchange_metrics),
-    [] = read_table_rpc(Config, channel_queue_metrics),
-    [] = read_table_rpc(Config, consumer_created),
+    ?awaitMatch([], read_table_rpc(Config, channel_exchange_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_queue_exchange_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, channel_queue_metrics), 30000),
+    ?awaitMatch([], read_table_rpc(Config, consumer_created), 30000),
     ok.
 
 

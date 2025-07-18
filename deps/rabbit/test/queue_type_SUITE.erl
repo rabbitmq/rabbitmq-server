@@ -111,7 +111,7 @@ end_per_testcase(Testcase, Config) ->
 
 smoke(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
     QName = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr,
@@ -191,7 +191,7 @@ smoke(Config) ->
                   }, ProtocolQueueTypeCounters),
 
 
-    ok = rabbit_ct_client_helpers:close_channel(Ch),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
 
     ?assertMatch(
        #{consumers := 0,
@@ -202,7 +202,7 @@ smoke(Config) ->
 
 ack_after_queue_delete(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
     QName = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr,
@@ -223,12 +223,13 @@ ack_after_queue_delete(Config) ->
     after 1000 ->
               ok
     end,
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     flush(),
     ok.
 
 stream(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
-    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, Server),
     QName = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QName, 0, 0},
                  declare(Ch, QName, [{<<"x-queue-type">>, longstr,
@@ -238,7 +239,7 @@ stream(Config) ->
     publish_and_confirm(Ch, QName, <<"msg1">>),
     Args = [{<<"x-stream-offset">>, longstr, <<"last">>}],
 
-    SubCh = rabbit_ct_client_helpers:open_channel(Config, 2),
+    {SubConn, SubCh} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 2),
     qos(SubCh, 10, false),
     ok = queue_utils:wait_for_local_stream_member(2, <<"/">>, QName, Config),
 
@@ -262,6 +263,8 @@ stream(Config) ->
             exit(Err)
     end,
 
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(SubConn, SubCh),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
 
     ok.
 
