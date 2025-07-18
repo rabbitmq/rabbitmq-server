@@ -131,10 +131,10 @@ init_source(State = #{source := #{queue := QName0,
                                                vhost := VHost} = Current} = Src,
                       name := Name,
                       ack_mode := AckMode}) ->
-    %% Should it just use v2 ?
+    %% TODO put this shovel behind the rabbitmq_4.0.0 feature flag
     Mode = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
                true ->
-                   {credited, Prefetch};
+                   {credited, ?INITIAL_DELIVERY_COUNT};
                false ->
                    {credited, credit_api_v1}
            end,
@@ -152,7 +152,7 @@ init_source(State = #{source := #{queue := QName0,
                             channel_pid => self(),
                             limiter_pid => none,
                             limiter_active => false,
-                            mode => Mode, %%{simple_prefetch, Prefetch},
+                            mode => Mode,
                             consumer_tag => CTag,
                             exclusive_consume => false,
                             args => Args,
@@ -168,10 +168,11 @@ init_source(State = #{source := #{queue := QName0,
         {Remaining, {ok, QState1}} ->
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, Prefetch, false, QState1),
             %% TODO handle actions
-            State#{source => Src#{current => Current#{queue_states => QState,
-                                                      consumer_tag => CTag},
-                                  remaining => Remaining,
-                                  remaining_unacked => Remaining}};
+            State2 = State#{source => Src#{current => Current#{queue_states => QState,
+                                                               consumer_tag => CTag},
+                                           remaining => Remaining,
+                                           remaining_unacked => Remaining}},
+            handle_queue_actions(Actions, State2);
         {0, {error, autodelete}} ->
             exit({shutdown, autodelete});
         {_Remaining, {error, Reason}} ->
@@ -261,12 +262,6 @@ close_source(#{source := #{current := #{queue_states := QStates0,
 close_source(_) ->
     %% No consumer tag, no consumer to cancel
     ok.
-
-handle_source(#'basic.ack'{delivery_tag = Seq, multiple = Multiple},
-              State = #{ack_mode := on_confirm}) ->
-    confirm_to_inbound(fun(Tag, Multi, StateX) ->
-                               rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
-                       end, Seq, Multiple, State);
 
 handle_source({queue_event, #resource{name = Queue,
                                       kind = queue,
@@ -413,8 +408,10 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(AckRequired, Msgs, S0);
-         (_, _) ->
-              not_handled
+         (Action, S0) ->
+              %% TODO handle credit_reply
+              rabbit_log:warning("ACTION NOT HANDLED ~p", [Action]),
+              S0
          %% ({queue_down, QRef}, S0) ->
          %%      State;
          %% ({block, QName}, S0) ->
@@ -563,9 +560,9 @@ settle(Op, DeliveryTag, Multiple, #{unacked_message_q := UAMQ0,
     MsgIds = [Ack#pending_ack.msg_id || Ack <- Acked],
     case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, QState0) of
         {ok, QState1, Actions} ->
-            QState = handle_queue_actions(Actions, QState1),
-            State#{source => Src#{current => Current#{queue_states => QState}},
-                   unacked_message_q => UAMQ};
+            State#{source => Src#{current => Current#{queue_states => QState1}},
+                   unacked_message_q => UAMQ},
+            handle_queue_actions(Actions, State);
         {'protocol_error', Type, Reason, Args} ->
             rabbit_log:error("Shovel failed to settle ~p acknowledgments with ~tp: ~tp",
                              [Op, Type, io_lib:format(Reason, Args)]),

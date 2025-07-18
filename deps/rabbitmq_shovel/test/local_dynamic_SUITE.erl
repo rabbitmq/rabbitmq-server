@@ -51,7 +51,6 @@ groups() ->
                   local_to_local_no_ack,
                   local_to_local_quorum_no_ack,
                   local_to_local_stream_no_ack,
-                  local_to_local_dest_stream_no_ack,
                   local_to_local_on_publish,
                   local_to_local_quorum_on_publish,
                   local_to_local_stream_on_publish,
@@ -611,42 +610,14 @@ local_to_local_quorum_no_ack(Config) ->
 local_to_local_stream_no_ack(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    VHost = <<"/">>,
-    declare_queue(Config, VHost, Src, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
-    declare_queue(Config, VHost, Dest, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
-    shovel_test_utils:set_param_nowait(Config, ?PARAM,
-                                    [{<<"src-protocol">>, <<"local">>},
-                                     {<<"src-predeclared">>, true},
-                                     {<<"src-queue">>, Src},
-                                     {<<"dest-protocol">>, <<"local">>},
-                                     {<<"dest-predeclared">>, true},
-                                     {<<"dest-queue">>, Dest},
-                                     {<<"ack-mode">>, <<"no-ack">>}
-                                    ]),
-    %% Streams require consumer acknowledgments
-    shovel_test_utils:await_no_shovel(Config, ?PARAM),
-    %% The shovel parameter is only deleted when 'delete-after'
-    %% is used. In any other failure, the shovel should
-    %% remain and try to restart
-    ?awaitMatch([{_Name, dynamic, {terminated, _}, _, _}],
-                rabbit_ct_broker_helpers:rpc(Config, 0,
-                                             rabbit_shovel_status, status, []),
-                30000),
-    ?assertNotMatch(
-       not_found,
-       rabbit_ct_broker_helpers:rpc(
-         Config, 0, rabbit_runtime_parameters, lookup,
-         [VHost, <<"shovel">>, ?PARAM])).
-
-local_to_local_dest_stream_no_ack(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
+    declare_queue(Config, <<"/">>, Src, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     declare_queue(Config, <<"/">>, Dest, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
     with_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
                                           [{<<"src-protocol">>, <<"local">>},
                                            {<<"src-queue">>, Src},
+                                           {<<"src-predeclared">>, true},
                                            {<<"dest-protocol">>, <<"local">>},
                                            {<<"dest-predeclared">>, true},
                                            {<<"dest-queue">>, Dest},
