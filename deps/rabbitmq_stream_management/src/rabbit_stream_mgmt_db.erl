@@ -12,6 +12,7 @@
 
 -include_lib("rabbitmq_stream/include/rabbit_stream_metrics.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([get_all_consumers/1,
          get_all_publishers/1]).
@@ -183,7 +184,7 @@ ets_select(T, Spec) ->
         ets:select(T, Spec)
     catch error:Reason ->
               %% badarg can occur if the table has no been created yet
-              rabbit_log:warning("Error while querying ETS table '~tp': ~tp",
+              ?LOG_WARNING("Error while querying ETS table '~tp': ~tp",
                                  [T, Reason]),
               []
     end.

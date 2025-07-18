@@ -8,6 +8,7 @@
 -module(rabbit_oauth2_provider).
 
 -include("oauth2.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
     get_internal_oauth_provider/0, get_internal_oauth_provider/1,
@@ -101,7 +102,7 @@ do_replace_signing_keys(SigningKeys, root) ->
         proplists:get_value(signing_keys, KeyConfig1, #{}),
         SigningKeys)} | KeyConfig1],
     set_env(key_config, KeyConfig2),
-    rabbit_log:debug("Replacing signing keys for key_config with ~p keys",
+    ?LOG_DEBUG("Replacing signing keys for key_config with ~p keys",
         [maps:size(SigningKeys)]),
     SigningKeys;
 
@@ -115,7 +116,7 @@ do_replace_signing_keys(SigningKeys, OauthProviderId) ->
 
     OauthProviders = maps:put(OauthProviderId, OauthProvider, OauthProviders0),
     set_env(oauth_providers, OauthProviders),
-    rabbit_log:debug("Replacing signing keys for ~p -> ~p with ~p keys",
+    ?LOG_DEBUG("Replacing signing keys for ~p -> ~p with ~p keys",
         [OauthProviderId, OauthProvider, maps:size(SigningKeys)]),
     SigningKeys.
 

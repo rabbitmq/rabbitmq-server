@@ -8,6 +8,7 @@
 -module(rabbit_access_control).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([check_user_pass_login/2, check_user_login/2, check_user_login/3, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4,
@@ -59,10 +60,10 @@ check_user_login(Username, AuthProps, Modules) ->
                     %% it gives us
                     case try_authenticate(Mod, Username, AuthProps) of
                         {ok, ModNUser = #auth_user{username = Username2, impl = Impl}} ->
-                            rabbit_log:debug("User '~ts' authenticated successfully by backend ~ts", [Username2, Mod]),
+                            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, Mod]),
                             user(ModNUser, {ok, [{Mod, Impl}], []});
                         Else ->
-                            rabbit_log:debug("User '~ts' failed authentication by backend ~ts", [Username, Mod]),
+                            ?LOG_DEBUG("User '~ts' failed authentication by backend ~ts", [Username, Mod]),
                             Else
                     end;
                 (_, {ok, User}) ->
@@ -72,7 +73,7 @@ check_user_login(Username, AuthProps, Modules) ->
             {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
         catch
             Type:Error:Stacktrace ->
-                rabbit_log:debug("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
+                ?LOG_DEBUG("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
                 {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
 
@@ -85,7 +86,7 @@ try_authenticate_and_try_authorize(ModN, ModZs0, Username, AuthProps) ->
             end,
     case try_authenticate(ModN, Username, AuthProps) of
         {ok, ModNUser = #auth_user{username = Username2}} ->
-            rabbit_log:debug("User '~ts' authenticated successfully by backend ~ts", [Username2, ModN]),
+            ?LOG_DEBUG("User '~ts' authenticated successfully by backend ~ts", [Username2, ModN]),
             user(ModNUser, try_authorize(ModZs, Username2, AuthProps));
         Else ->
             Else
@@ -227,7 +228,7 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
         {error, E}  ->
             FullErrStr = ErrStr ++ ", backend ~ts returned an error: ~tp",
             FullErrArgs = ErrArgs ++ [Module, E],
-            rabbit_log:error(FullErrStr, FullErrArgs),
+            ?LOG_ERROR(FullErrStr, FullErrArgs),
             rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs)
     end.
 

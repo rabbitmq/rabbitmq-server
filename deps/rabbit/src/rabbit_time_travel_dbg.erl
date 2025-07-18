@@ -17,6 +17,9 @@
 %% allowing you to easily figure out what happened.
 
 -module(rabbit_time_travel_dbg).
+
+-include_lib("kernel/include/logger.hrl").
+
 -compile(export_all).
 -compile(nowarn_export_all).
 
@@ -62,7 +65,7 @@ loop(Q) ->
                 [io_lib:format("~0p~n", [E]) || E <- queue:to_list(Q)]),
             loop(Q);
         print ->
-            _ = [logger:error("~0p", [E]) || E <- queue:to_list(Q)],
+            _ = [?LOG_ERROR("~0p", [E]) || E <- queue:to_list(Q)],
             loop(Q);
         stop ->
             ok;

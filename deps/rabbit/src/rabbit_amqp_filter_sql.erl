@@ -8,6 +8,7 @@
 -feature(maybe_expr, enable).
 
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -type parsed_expression() :: {ApplicationProperties :: boolean(),
                               rabbit_amqp_sql_ast:ast()}.
@@ -293,8 +294,8 @@ sql_to_list(SQL) ->
         String when is_list(String) ->
             {ok, String};
         Error ->
-            rabbit_log:warning("SQL expression ~p is not UTF-8 encoded: ~p",
-                               [SQL, Error]),
+            ?LOG_WARNING("SQL expression ~p is not UTF-8 encoded: ~p",
+                         [SQL, Error]),
             error
     end.
 
@@ -304,8 +305,8 @@ check_length(String) ->
         true ->
             ok;
         false ->
-            rabbit_log:warning("SQL expression length ~b exceeds maximum length ~b",
-                               [Len, ?MAX_EXPRESSION_LENGTH]),
+            ?LOG_WARNING("SQL expression length ~b exceeds maximum length ~b",
+                         [Len, ?MAX_EXPRESSION_LENGTH]),
             error
     end.
 
@@ -314,15 +315,15 @@ tokenize(String, SQL) ->
         {ok, Tokens, _EndLocation} ->
             {ok, Tokens};
         {error, {_Line, _Mod, ErrDescriptor}, _Location} ->
-            rabbit_log:warning("failed to scan SQL expression '~ts': ~tp",
-                               [SQL, ErrDescriptor]),
+            ?LOG_WARNING("failed to scan SQL expression '~ts': ~tp",
+                         [SQL, ErrDescriptor]),
             error
     end.
 
 check_token_count(Tokens, SQL)
   when length(Tokens) > ?MAX_TOKENS ->
-    rabbit_log:warning("SQL expression '~ts' with ~b tokens exceeds token limit ~b",
-                       [SQL, length(Tokens), ?MAX_TOKENS]),
+    ?LOG_WARNING("SQL expression '~ts' with ~b tokens exceeds token limit ~b",
+                 [SQL, length(Tokens), ?MAX_TOKENS]),
     error;
 check_token_count(_, _) ->
     ok.
@@ -330,8 +331,8 @@ check_token_count(_, _) ->
 parse(Tokens, SQL) ->
     case rabbit_amqp_sql_parser:parse(Tokens) of
         {error, Reason} ->
-            rabbit_log:warning("failed to parse SQL expression '~ts': ~p",
-                               [SQL, Reason]),
+            ?LOG_WARNING("failed to parse SQL expression '~ts': ~p",
+                         [SQL, Reason]),
             error;
         Ok ->
             Ok
@@ -346,9 +347,9 @@ transform_ast(Ast0, SQL) ->
         Ast ->
             {ok, Ast}
     catch {invalid_pattern, Reason} ->
-              rabbit_log:warning(
-                "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
-                [SQL, Reason]),
+              ?LOG_WARNING(
+                 "failed to parse LIKE pattern for SQL expression ~tp: ~tp",
+                 [SQL, Reason]),
               error
     end.
 

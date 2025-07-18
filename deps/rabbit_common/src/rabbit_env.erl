@@ -1724,7 +1724,7 @@ collect_conf_env_file_output(Context, Port, Marker, Output) ->
             collect_conf_env_file_output(
               Context, Port, Marker, [Output, UnicodeChunk]);
         {Port, {data, Chunk}} ->
-            rabbit_log:warning("~tp unexpected non-binary chunk in "
+            ?LOG_WARNING("~tp unexpected non-binary chunk in "
                                "conf env file output: ~tp~n", [?MODULE, Chunk])
     end.
 
@@ -2109,7 +2109,7 @@ setup_dist_for_remote_query(#{from_remote_node := {Remote, _}} = Context,
         {error, {{already_started, _}, _}} ->
             Context;
         Error ->
-            logger:error(
+            ?LOG_ERROR(
               "rabbit_env: Failed to setup distribution (as ~ts) to "
               "query node ~ts: ~tp",
               [Nodename, Remote, Error]),
@@ -2157,5 +2157,5 @@ unicode_characters_to_list(Input) ->
     end.
 
 log_characters_to_list_error(Input, Partial, Rest) ->
-    rabbit_log:error("error converting '~tp' to unicode string "
+    ?LOG_ERROR("error converting '~tp' to unicode string "
                      "(partial '~tp', rest '~tp')", [Input, Partial, Rest]).

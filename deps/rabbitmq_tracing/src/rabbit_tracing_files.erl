@@ -8,6 +8,7 @@
 -module(rabbit_tracing_files).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([list/0, exists/1, delete/1, full_path/1]).
 
@@ -41,7 +42,7 @@ file_info(Name) ->
                {ok, Info} ->
                    Info#file_info.size;
                {error, Error} ->
-                   rabbit_log:warning("error getting file info for ~ts: ~tp",
+                   ?LOG_WARNING("error getting file info for ~ts: ~tp",
                                       [Name, Error]),
                    0
            end,

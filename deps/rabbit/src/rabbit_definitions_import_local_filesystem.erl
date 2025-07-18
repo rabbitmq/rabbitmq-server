@@ -15,6 +15,9 @@
 %%  * rabbit_definitions_import_http
 %%  * rabbit_definitions_hashing
 -module(rabbit_definitions_import_local_filesystem).
+
+-include_lib("kernel/include/logger.hrl").
+
 -export([
     is_enabled/0,
     %% definition source options
@@ -48,7 +51,7 @@ load(Proplist) when is_list(Proplist) ->
     case pget(local_path, Proplist, undefined) of
         undefined -> {error, "local definition file path is not configured: local_path is not set"};
         Path      ->
-            rabbit_log:debug("Asked to import definitions from a local file or directory at '~ts'", [Path]),
+            ?LOG_DEBUG("Asked to import definitions from a local file or directory at '~ts'", [Path]),
             IsDir = filelib:is_dir(Path),
             case IsDir of
                 true ->
@@ -75,7 +78,7 @@ load_with_hashing(Proplist, PreviousHash, Algo) ->
 
 -spec load_with_hashing(IsDir :: boolean(), Path :: file:name_all(), PreviousHash :: binary() | 'undefined', Algo :: crypto:sha1() | crypto:sha2()) -> binary() | 'undefined'.
 load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
-    rabbit_log:debug("Loading definitions with content hashing enabled, path: ~ts, is directory?: ~tp, previous hash value: ~ts",
+    ?LOG_DEBUG("Loading definitions with content hashing enabled, path: ~ts, is directory?: ~tp, previous hash value: ~ts",
                      [Path, IsDir, rabbit_misc:hexify(PreviousHash)]),
     case compiled_definitions_from_local_path(IsDir, Path) of
         %% the directory is empty or no files could be read
@@ -87,12 +90,12 @@ load_with_hashing(IsDir, Path, PreviousHash, Algo) when is_boolean(IsDir) ->
                     case rabbit_definitions_hashing:hash(Algo, Defs) of
                         PreviousHash -> PreviousHash;
                         Other        ->
-                            rabbit_log:debug("New hash: ~ts", [rabbit_misc:hexify(Other)]),
+                            ?LOG_DEBUG("New hash: ~ts", [rabbit_misc:hexify(Other)]),
                             _ = load_from_local_path(IsDir, Path),
                             Other
                     end;
                 false ->
-                    rabbit_log:error("Definitions file at path ~p failed validation. The file must be a valid JSON document "
+                    ?LOG_ERROR("Definitions file at path ~p failed validation. The file must be a valid JSON document "
                                      "and all virtual host-scoped resources must have a virtual host field to be set. "
                                      "Definition files exported for a single virtual host CANNOT be imported at boot time", [Path]),
                     {error, not_json}
@@ -107,10 +110,10 @@ location() ->
 
 -spec load_from_local_path(IsDir :: boolean(), Path :: file:name_all()) -> ok | {error, term()}.
 load_from_local_path(true, Dir) ->
-    rabbit_log:info("Applying definitions from directory ~ts", [Dir]),
+    ?LOG_INFO("Applying definitions from directory ~ts", [Dir]),
     load_from_files(file:list_dir(Dir), Dir);
 load_from_local_path(false, File) ->
-    rabbit_log:info("Applying definitions from regular file at ~ts", [File]),
+    ?LOG_INFO("Applying definitions from regular file at ~ts", [File]),
     load_from_single_file(File).
 
 %%
@@ -169,7 +172,7 @@ compiled_definitions_from_local_path(true = _IsDir, Dir) ->
                 end, ReadResults),
             [Body || {ok, Body} <- Successes];
         {error, E} ->
-            rabbit_log:error("Could not list files in '~ts', error: ~tp", [Dir, E]),
+            ?LOG_ERROR("Could not list files in '~ts', error: ~tp", [Dir, E]),
             {error, {could_not_read_defs, {Dir, E}}}
     end;
 compiled_definitions_from_local_path(false = _IsDir, Path) ->
@@ -184,7 +187,7 @@ read_file_contents(Path) ->
         {ok, Body} ->
             Body;
         {error, E} ->
-            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
+            ?LOG_ERROR("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
             {error, {could_not_read_defs, {Path, E}}}
     end.
 
@@ -193,7 +196,7 @@ load_from_files({ok, Filenames0}, Dir) ->
     Filenames2 = [filename:join(Dir, F) || F <- Filenames1],
     load_from_multiple_files(Filenames2);
 load_from_files({error, E}, Dir) ->
-    rabbit_log:error("Could not read definitions from directory ~ts, Error: ~tp", [Dir, E]),
+    ?LOG_ERROR("Could not read definitions from directory ~ts, Error: ~tp", [Dir, E]),
     {error, {could_not_read_defs, E}}.
 
 load_from_multiple_files([]) ->
@@ -205,7 +208,7 @@ load_from_multiple_files([File|Rest]) ->
     end.
 
 load_from_single_file(Path) ->
-    rabbit_log:debug("Will try to load definitions from a local file or directory at '~ts'", [Path]),
+    ?LOG_DEBUG("Will try to load definitions from a local file or directory at '~ts'", [Path]),
 
     case file:read_file_info(Path, [raw]) of
         {ok, FileInfo} ->
@@ -215,10 +218,10 @@ load_from_single_file(Path) ->
                 true ->
                     case rabbit_misc:raw_read_file(Path) of
                         {ok, Body} ->
-                            rabbit_log:info("Applying definitions from file at '~ts'", [Path]),
+                            ?LOG_INFO("Applying definitions from file at '~ts'", [Path]),
                             import_raw(Body);
                         {error, E} ->
-                            rabbit_log:error("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
+                            ?LOG_ERROR("Could not read definitions from file at '~ts', error: ~tp", [Path, E]),
                             {error, {could_not_read_defs, {Path, E}}}
                     end;
                 false ->

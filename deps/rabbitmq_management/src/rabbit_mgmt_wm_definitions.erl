@@ -17,6 +17,7 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -96,7 +97,7 @@ accept_json(ReqData0, Context) ->
     BodySizeLimit = application:get_env(rabbitmq_management, max_http_body_size, ?MANAGEMENT_DEFAULT_HTTP_MAX_BODY_SIZE),
     case rabbit_mgmt_util:read_complete_body_with_limit(ReqData0, BodySizeLimit) of
         {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
-            _ = rabbit_log:warning("HTTP API: uploaded definition file size (~tp) exceeded the maximum request body limit of ~tp bytes. "
+            _ = ?LOG_WARNING("HTTP API: uploaded definition file size (~tp) exceeded the maximum request body limit of ~tp bytes. "
                                    "Use the 'management.http.max_body_size' key in rabbitmq.conf to increase the limit if necessary", [BytesRead, LimitApplied]),
             rabbit_mgmt_util:bad_request("Exceeded HTTP request body size limit", ReqData0, Context);
         {ok, Body, ReqData} ->
@@ -191,7 +192,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
     _ = disable_idle_timeout(ReqData),
     case decode(Body) of
       {error, E} ->
-        rabbit_log:error("Encountered an error when parsing definitions: ~tp", [E]),
+        ?LOG_ERROR("Encountered an error when parsing definitions: ~tp", [E]),
         rabbit_mgmt_util:bad_request(rabbit_data_coercion:to_binary("failed_to_parse_json"),
                                     ReqData, Context);
       {ok, Map} ->
@@ -199,7 +200,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
             none ->
                 case apply_defs(Map, Username) of
                   {error, E} ->
-                        rabbit_log:error("Encountered an error when importing definitions: ~tp", [E]),
+                        ?LOG_ERROR("Encountered an error when importing definitions: ~tp", [E]),
                         rabbit_mgmt_util:bad_request(E, ReqData, Context);
                   ok -> {true, ReqData, Context}
                 end;
@@ -209,7 +210,7 @@ accept(Body, ReqData, Context = #context{user = #user{username = Username}}) ->
             VHost when is_binary(VHost) ->
                 case apply_defs(Map, Username, VHost) of
                     {error, E} ->
-                        rabbit_log:error("Encountered an error when importing definitions: ~tp", [E]),
+                        ?LOG_ERROR("Encountered an error when importing definitions: ~tp", [E]),
                         rabbit_mgmt_util:bad_request(E, ReqData, Context);
                     ok -> {true, ReqData, Context}
                 end

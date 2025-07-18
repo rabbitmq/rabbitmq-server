@@ -131,7 +131,6 @@ reset() ->
 
 init_per_testcase(_TC, Config) ->
     reset(),
-    meck:new(rabbit_log, []),
     meck:new(rabbit_peer_discovery_httpc, [passthrough]),
     meck:new(rabbit_nodes, [passthrough]),
     Config.
@@ -508,7 +507,6 @@ list_nodes_return_value_nodes_in_warning_state_filtered_out_test(_Config) ->
            ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 registration_with_all_default_values_test(_Config) ->
-          meck:expect(rabbit_log, debug, fun(_Message) -> ok end),
           meck:expect(rabbit_peer_discovery_httpc, put,
             fun(Scheme, Host, Port, Path, Args, Headers, _HttpOpts, Body) ->
               ?assertEqual("http", Scheme),
@@ -523,7 +521,6 @@ registration_with_all_default_values_test(_Config) ->
               {ok, []}
             end),
           ?assertEqual(ok, rabbit_peer_discovery_consul:register()),
-          ?assert(meck:validate(rabbit_log)),
           ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 registration_with_cluster_name_test(_Config) ->
@@ -760,16 +757,12 @@ health_check_with_acl_token_test(_Config) ->
          ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 health_check_error_handling_test(_Config) ->
-         meck:expect(rabbit_log, error, fun(_Message, _Args) ->
-           ok
-         end),
          meck:expect(rabbit_peer_discovery_httpc, put,
            fun(_Scheme, _Host, _Port, _Path, _Args, _Headers, _HttpOpts, _Body) ->
              {error, "testing"}
            end),
          ?assertEqual(ok, rabbit_peer_discovery_consul:send_health_check_pass()),
-         ?assert(meck:validate(rabbit_peer_discovery_httpc)),
-         ?assert(meck:validate(rabbit_log)).
+         ?assert(meck:validate(rabbit_peer_discovery_httpc)).
 
 
 unregistration_with_all_defaults_test(_Config) ->

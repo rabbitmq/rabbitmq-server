@@ -41,6 +41,8 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -include("amqqueue.hrl").
 
@@ -360,7 +362,7 @@ info(Pid) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
+            ?LOG_ERROR("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -375,7 +377,7 @@ info(Pid, Items) ->
         end
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("Timed out getting channel ~tp info", [Pid]),
+            ?LOG_ERROR("Timed out getting channel ~tp info", [Pid]),
             throw(timeout)
     end.
 
@@ -411,9 +413,9 @@ refresh_config_local() ->
         try
           gen_server2:call(C, refresh_config, infinity)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel config "
-                           "for channel ~tp. Reason ~tp",
-                           [C, Reason])
+          ?LOG_ERROR("Failed to refresh channel config "
+                     "for channel ~tp. Reason ~tp",
+                     [C, Reason])
         end
       end,
       list_local()),
@@ -425,9 +427,9 @@ refresh_interceptors() ->
         try
           gen_server2:call(C, refresh_interceptors, ?REFRESH_TIMEOUT)
         catch _:Reason ->
-          rabbit_log:error("Failed to refresh channel interceptors "
-                           "for channel ~tp. Reason ~tp",
-                           [C, Reason])
+          ?LOG_ERROR("Failed to refresh channel interceptors "
+                     "for channel ~tp. Reason ~tp",
+                     [C, Reason])
         end
       end,
       list_local()),
@@ -465,6 +467,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
       Capabilities, CollectorPid, LimiterPid, AmqpParams]) ->
     process_flag(trap_exit, true),
     rabbit_process_flag:adjust_for_message_handling_proc(),
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CHAN}),
 
     ?LG_PROCESS_TYPE(channel),
     ?store_proc_name({ConnName, Channel}),
@@ -643,7 +646,7 @@ handle_cast(terminate, State = #ch{cfg = #conf{writer_pid = WriterPid}}) ->
        ok = rabbit_writer:flush(WriterPid)
     catch
         _Class:Reason ->
-            rabbit_log:debug("Failed to flush pending writes on a terminating connection, reason: ~tp", [Reason])
+            ?LOG_DEBUG("Failed to flush pending writes on a terminating connection, reason: ~tp", [Reason])
     end,
     {stop, normal, State};
 
@@ -749,8 +752,8 @@ handle_info({'EXIT', _Pid, Reason}, State) ->
 handle_info({{Ref, Node}, LateAnswer},
             State = #ch{cfg = #conf{channel = Channel}})
   when is_reference(Ref) ->
-    rabbit_log_channel:warning("Channel ~tp ignoring late answer ~tp from ~tp",
-        [Channel, LateAnswer, Node]),
+    ?LOG_WARNING("Channel ~tp ignoring late answer ~tp from ~tp",
+                 [Channel, LateAnswer, Node]),
     noreply(State);
 
 handle_info(tick, State0 = #ch{queue_states = QueueStates0}) ->
@@ -805,7 +808,7 @@ terminate(_Reason,
     case rabbit_confirms:size(State#ch.unconfirmed) of
         0 -> ok;
         NumConfirms ->
-            rabbit_log:warning("Channel is stopping with ~b pending publisher confirms",
+            ?LOG_WARNING("Channel is stopping with ~b pending publisher confirms",
                                [NumConfirms])
     end.
 
@@ -866,7 +869,7 @@ handle_exception(Reason, State = #ch{cfg = #conf{protocol = Protocol,
     {_Result, State1} = notify_queues(State),
     case rabbit_binary_generator:map_exception(Channel, Reason, Protocol) of
         {Channel, CloseMethod} ->
-            rabbit_log_channel:error(
+            ?LOG_ERROR(
                 "Channel error on connection ~tp (~ts, vhost: '~ts',"
                 " user: '~ts'), channel ~tp:~n~ts",
                 [ConnPid, ConnName, VHost, User#user.username,
@@ -2719,13 +2722,13 @@ evaluate_consumer_timeout1(PA = #pending_ack{delivered_at = Time},
 
 handle_consumer_timed_out(Timeout,#pending_ack{delivery_tag = DeliveryTag, tag = ConsumerTag, queue = QName},
 			  State = #ch{cfg = #conf{channel = Channel}}) ->
-    rabbit_log_channel:warning("Consumer '~ts' on channel ~w and ~ts has timed out "
-			       "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
-			       "This timeout value can be configured, see consumers doc guide to learn more",
-			       [ConsumerTag,
-                    Channel,
-                    rabbit_misc:rs(QName),
-                    DeliveryTag, Timeout]),
+    ?LOG_WARNING("Consumer '~ts' on channel ~w and ~ts has timed out "
+                 "waiting for a consumer acknowledgement of a delivery with delivery tag = ~b. Timeout used: ~tp ms. "
+                 "This timeout value can be configured, see consumers doc guide to learn more",
+                 [ConsumerTag,
+                  Channel,
+                  rabbit_misc:rs(QName),
+                  DeliveryTag, Timeout]),
     Ex = rabbit_misc:amqp_error(precondition_failed,
 				"delivery acknowledgement on channel ~w timed out. "
 				"Timeout value used: ~tp ms. "

@@ -8,6 +8,7 @@
 -module(rabbit_sharding_shard).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([maybe_shard_exchanges/0,
          ensure_sharded_queues/1,
@@ -90,7 +91,7 @@ declare_queue(XName, Durable, N, Node) ->
             ok
     catch
         _Error:Reason ->
-            rabbit_log:error("sharding failed to declare queue for exchange ~tp"
+            ?LOG_ERROR("sharding failed to declare queue for exchange ~tp"
                              " - soft error:~n~tp",
                              [exchange_bin(XName), Reason]),
             error
@@ -119,7 +120,7 @@ binding_action(F, XName, RoutingKey, N, Node, ErrMsg) ->
            ?SHARDING_USER) of
         ok              -> ok;
         {error, Reason} ->
-            rabbit_log:error(ErrMsg, [QBin, exchange_bin(XName), Reason]),
+            ?LOG_ERROR(ErrMsg, [QBin, exchange_bin(XName), Reason]),
             error
     end.
 

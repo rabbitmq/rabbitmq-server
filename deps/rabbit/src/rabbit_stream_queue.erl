@@ -70,6 +70,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(INFO_KEYS, [name, durable, auto_delete, arguments, leader, members, online, state,
                     messages, messages_ready, messages_unacknowledged, committed_offset,
@@ -332,7 +333,7 @@ consume(Q, Spec, #stream_client{} = QState0)
               args := Args,
               ok_msg := OkMsg,
               acting_user := ActingUser} = Spec,
-            rabbit_log:debug("~s:~s Local pid resolved ~0p",
+            ?LOG_DEBUG("~s:~s Local pid resolved ~0p",
                              [?MODULE, ?FUNCTION_NAME, LocalPid]),
             case parse_offset_arg(
                    rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
@@ -643,17 +644,17 @@ handle_event(_QName, {stream_local_member_change, Pid},
 handle_event(_QName, {stream_local_member_change, Pid},
              #stream_client{name = QName,
                             readers = Readers0} = State) ->
-    rabbit_log:debug("Local member change event for ~tp", [QName]),
+    ?LOG_DEBUG("Local member change event for ~tp", [QName]),
     Readers1 = maps:fold(fun(T, #stream{log = Log0, reader_options = Options} = S0, Acc) ->
                                  Offset = osiris_log:next_offset(Log0),
                                  osiris_log:close(Log0),
                                  CounterSpec = {{?MODULE, QName, self()}, []},
-                                 rabbit_log:debug("Re-creating Osiris reader for consumer ~tp at offset ~tp "
+                                 ?LOG_DEBUG("Re-creating Osiris reader for consumer ~tp at offset ~tp "
                                                   " with options ~tp",
                                                   [T, Offset, Options]),
                                  {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec, Options),
                                  NextOffset = osiris_log:next_offset(Log1) - 1,
-                                 rabbit_log:debug("Registering offset listener at offset ~tp", [NextOffset]),
+                                 ?LOG_DEBUG("Registering offset listener at offset ~tp", [NextOffset]),
                                  osiris:register_offset_listener(Pid, NextOffset),
                                  S1 = S0#stream{listening_offset = NextOffset,
                                                 log = Log1},
@@ -1000,7 +1001,7 @@ init(Q) when ?is_amqqueue(Q) ->
         {ok, stream_not_found, _} ->
             {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
-            rabbit_log:warning("Failed to start stream client ~tp: coordinator unavailable",
+            ?LOG_WARNING("Failed to start stream client ~tp: coordinator unavailable",
                                [rabbit_misc:rs(QName)]),
             E
     end.
@@ -1019,7 +1020,7 @@ update(Q, State)
 update_leader_pid(Pid, #stream_client{leader = Pid} =  State) ->
     State;
 update_leader_pid(Pid, #stream_client{} =  State) ->
-    rabbit_log:debug("stream client: new leader detected ~w", [Pid]),
+    ?LOG_DEBUG("stream client: new leader detected ~w", [Pid]),
     resend_all(State#stream_client{leader = Pid}).
 
 state_info(_) ->
@@ -1080,11 +1081,11 @@ delete_replica(VHost, Name, Node) ->
     end.
 
 delete_all_replicas(Node) ->
-    rabbit_log:info("Asked to remove all stream replicas from node ~ts", [Node]),
+    ?LOG_INFO("Asked to remove all stream replicas from node ~ts", [Node]),
     Streams = rabbit_amqqueue:list_stream_queues_on(Node),
     lists:map(fun(Q) ->
                       QName = amqqueue:get_name(Q),
-                      rabbit_log:info("~ts: removing replica on node ~w",
+                      ?LOG_INFO("~ts: removing replica on node ~w",
                                       [rabbit_misc:rs(QName), Node]),
                       #{name := StreamId} = amqqueue:get_type_state(Q),
                       {ok, Reply, _} = rabbit_stream_coordinator:delete_replica(StreamId, Node),
@@ -1092,7 +1093,7 @@ delete_all_replicas(Node) ->
                           ok ->
                               {QName, ok};
                           Err ->
-                              rabbit_log:warning("~ts: failed to remove replica on node ~w, error: ~w",
+                              ?LOG_WARNING("~ts: failed to remove replica on node ~w, error: ~w",
                                                  [rabbit_misc:rs(QName), Node, Err]),
                               {QName, {error, Err}}
                       end
@@ -1286,7 +1287,7 @@ chunk_iterator(#stream{credit = Credit,
                   end,
             {end_of_stream, Str};
         {error, Err} ->
-            rabbit_log:info("stream client: failed to create chunk iterator ~p", [Err]),
+            ?LOG_INFO("stream client: failed to create chunk iterator ~p", [Err]),
             exit(Err)
     end.
 
@@ -1365,7 +1366,7 @@ resend_all(#stream_client{leader = LeaderPid,
     case Msgs of
         [] -> ok;
         [{Seq, _} | _] ->
-            rabbit_log:debug("stream client: resending from seq ~w num ~b",
+            ?LOG_DEBUG("stream client: resending from seq ~w num ~b",
                              [Seq, maps:size(Corrs)])
     end,
     [begin
@@ -1444,7 +1445,7 @@ revive() ->
 
 -spec transfer_leadership_of_stream_coordinator([node()]) -> ok.
 transfer_leadership_of_stream_coordinator([]) ->
-    rabbit_log:warning("Skipping leadership transfer of stream coordinator: no candidate "
+    ?LOG_WARNING("Skipping leadership transfer of stream coordinator: no candidate "
                        "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_stream_coordinator(TransferCandidates) ->
     % try to transfer to the node with the lowest uptime; the assumption is that
@@ -1456,9 +1457,9 @@ transfer_leadership_of_stream_coordinator(TransferCandidates) ->
     BestCandidate = element(1, hd(lists:keysort(2, Candidates))),
     case rabbit_stream_coordinator:transfer_leadership([BestCandidate]) of
         {ok, Node} ->
-            rabbit_log:info("Leadership transfer for stream coordinator completed. The new leader is ~p", [Node]);
+            ?LOG_INFO("Leadership transfer for stream coordinator completed. The new leader is ~p", [Node]);
         Error ->
-            rabbit_log:warning("Skipping leadership transfer of stream coordinator: ~p", [Error])
+            ?LOG_WARNING("Skipping leadership transfer of stream coordinator: ~p", [Error])
     end.
 
 queue_vm_stats_sups() ->

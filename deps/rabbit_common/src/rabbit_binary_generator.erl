@@ -8,6 +8,7 @@
 -module(rabbit_binary_generator).
 -include("rabbit_framing.hrl").
 -include("rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([build_simple_method_frame/3,
          build_simple_content_frames/4,
@@ -223,7 +224,7 @@ lookup_amqp_exception(#amqp_error{name        = Name,
     ExplBin = amqp_exception_explanation(Text, Expl),
     {ShouldClose, Code, ExplBin, Method};
 lookup_amqp_exception(Other, Protocol) ->
-    rabbit_log:warning("Non-AMQP exit reason '~tp'", [Other]),
+    ?LOG_WARNING("Non-AMQP exit reason '~tp'", [Other]),
     {ShouldClose, Code, Text} = Protocol:lookup_amqp_exception(internal_error),
     {ShouldClose, Code, Text, none}.
 

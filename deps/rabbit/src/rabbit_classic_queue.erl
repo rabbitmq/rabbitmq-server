@@ -4,6 +4,7 @@
 
 -include("amqqueue.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% TODO possible to use sets / maps instead of lists?
 %% Check performance with QoS 1 and 1 million target queues.
@@ -177,13 +178,13 @@ delete(Q0, IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_classic(Q0) ->
                     #resource{name = Name, virtual_host = Vhost} = QName,
                     case IfEmpty of
                         true ->
-                            rabbit_log:error("Queue ~ts in vhost ~ts is down. "
-                                             "The queue may be non-empty. "
-                                             "Refusing to force-delete.",
-                                             [Name, Vhost]),
+                            ?LOG_ERROR("Queue ~ts in vhost ~ts is down. "
+                                       "The queue may be non-empty. "
+                                       "Refusing to force-delete.",
+                                       [Name, Vhost]),
                             {error, not_empty};
                         false ->
-                            rabbit_log:warning("Queue ~ts in vhost ~ts is down. "
+                            ?LOG_WARNING("Queue ~ts in vhost ~ts is down. "
                                                "Forcing queue deletion.",
                                                [Name, Vhost]),
                             case delete_crashed_internal(Q, ActingUser) of
@@ -219,7 +220,7 @@ recover(VHost, Queues) ->
             FailedQs = find_missing_queues(Queues,RecoveredQs),
             {RecoveredQs, FailedQs};
         {error, Reason} ->
-            rabbit_log:error("Failed to start queue supervisor for vhost '~ts': ~ts", [VHost, Reason]),
+            ?LOG_ERROR("Failed to start queue supervisor for vhost '~ts': ~ts", [VHost, Reason]),
             throw({error, Reason})
     end.
 
@@ -588,8 +589,8 @@ recover_durable_queues(QueuesAndRecoveryTerms) ->
         gen_server2:mcall(
           [{rabbit_amqqueue_sup_sup:start_queue_process(node(), Q),
             {init, {self(), Terms}}} || {Q, Terms} <- QueuesAndRecoveryTerms]),
-    [rabbit_log:error("Queue ~tp failed to initialise: ~tp",
-                      [Pid, Error]) || {Pid, Error} <- Failures],
+    _ = [?LOG_ERROR("Queue ~tp failed to initialise: ~tp",
+                    [Pid, Error]) || {Pid, Error} <- Failures],
     [Q || {_, {new, Q}} <- Results].
 
 capabilities() ->

@@ -59,6 +59,7 @@
 -module(amqp_connection).
 
 -include("amqp_client_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([open_channel/1, open_channel/2, open_channel/3, register_blocked_handler/2]).
 -export([start/1, start/2, close/1, close/2, close/3, close/4]).
@@ -427,7 +428,7 @@ maybe_update_call_timeout(BaseTimeout, CallTimeout)
     ok;
 maybe_update_call_timeout(BaseTimeout, CallTimeout) ->
     EffectiveSafeCallTimeout = amqp_util:safe_call_timeout(BaseTimeout),
-    ?LOG_WARN("AMQP 0-9-1 client call timeout was ~tp ms, is updated to a safe effective "
+    ?LOG_WARNING("AMQP 0-9-1 client call timeout was ~tp ms, is updated to a safe effective "
               "value of ~tp ms", [CallTimeout, EffectiveSafeCallTimeout]),
     amqp_util:update_call_timeout(EffectiveSafeCallTimeout),
     ok.

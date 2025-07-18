@@ -21,6 +21,9 @@
 
 -module(rabbit_vhost_process).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -define(VHOST_CHECK_INTERVAL, 5000).
 
 -behaviour(gen_server2).
@@ -35,7 +38,7 @@ start_link(VHost) ->
 
 init([VHost]) ->
     process_flag(trap_exit, true),
-    rabbit_log:debug("Recovering data for virtual host ~ts", [VHost]),
+    ?LOG_DEBUG("Recovering data for virtual host ~ts", [VHost]),
     try
         %% Recover the vhost data and save it to vhost registry.
         ok = rabbit_vhost:recover(VHost),
@@ -45,7 +48,7 @@ init([VHost]) ->
         {ok, VHost}
     catch _:Reason:Stacktrace ->
         rabbit_amqqueue:mark_local_durable_queues_stopped(VHost),
-        rabbit_log:error("Unable to recover vhost ~tp data. Reason ~tp~n"
+        ?LOG_ERROR("Unable to recover vhost ~tp data. Reason ~tp~n"
                          " Stacktrace ~tp",
                          [VHost, Reason, Stacktrace]),
         {stop, Reason}
@@ -61,7 +64,7 @@ handle_info(check_vhost, VHost) ->
     case rabbit_vhost:exists(VHost) of
         true  -> {noreply, VHost};
         false ->
-            rabbit_log:warning("Virtual host '~ts' is gone. "
+            ?LOG_WARNING("Virtual host '~ts' is gone. "
                                "Stopping its top level supervisor.",
                                [VHost]),
             %% Stop vhost's top supervisor in a one-off process to avoid a deadlock:

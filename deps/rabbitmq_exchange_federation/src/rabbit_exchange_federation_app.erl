@@ -8,7 +8,9 @@
 -module(rabbit_exchange_federation_app).
 
 -include_lib("rabbitmq_federation_common/include/rabbit_federation.hrl").
+-include_lib("rabbitmq_federation_common/include/logging.hrl").
 -include("rabbit_exchange_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(application).
 -export([start/2, stop/1]).
@@ -43,6 +45,7 @@ stop(_State) ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_FEDERATION}),
     Flags = #{
         strategy  => one_for_one,
         intensity => 3,

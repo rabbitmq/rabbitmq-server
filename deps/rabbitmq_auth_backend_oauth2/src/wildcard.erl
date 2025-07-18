@@ -7,6 +7,9 @@
 
 -module(wildcard).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([match/2]).
 
 -spec match(Subject :: binary(), Pattern :: binary()) -> boolean().
@@ -52,7 +55,7 @@ parse_pattern(Pattern) ->
     Parts = binary:split(Pattern, <<"*">>, [global]),
     try lists:map(fun(Part) -> cow_qs:urldecode(Part) end, Parts)
     catch Type:Error ->
-        rabbit_log:warning("Invalid pattern ~tp : ~tp",
+        ?LOG_WARNING("Invalid pattern ~tp : ~tp",
                            [Pattern, {Type, Error}]),
         invalid
     end.

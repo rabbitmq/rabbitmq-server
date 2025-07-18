@@ -20,6 +20,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_misc.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -157,7 +158,7 @@ is_vhost_alive(VHost, {Username, _Password}, Pid) ->
     case rabbit_vhost_sup_sup:is_vhost_alive(VHost) of
         true  -> true;
         false ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
                 "Error on direct client connection ~tp~n"
                 "access to vhost '~ts' refused for user '~ts': "
                 "vhost '~ts' is down",
@@ -173,7 +174,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
     try rabbit_vhost_limit:is_over_connection_limit(VHost) of
         false         -> false;
         {true, Limit} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
                 "Error on direct client connection ~tp~n"
                 "access to vhost '~ts' refused for user '~ts': "
                 "vhost connection limit (~tp) is reached",
@@ -181,7 +182,7 @@ is_over_vhost_connection_limit(VHost, {Username, _Password}, Pid) ->
             true
     catch
         throw:{error, {no_such_vhost, VHost}} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
                 "Error on direct client connection ~tp~n"
                 "vhost ~ts not found", [Pid, VHost]),
             true
@@ -211,7 +212,7 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
                     {error, Reason}
             end;
         {true, Limit} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
                 "Error on Direct connection ~tp~n"
                 "access refused for user '~ts': "
                 "user connection limit (~tp) is reached",
@@ -237,7 +238,7 @@ start_channel(Number, ClientChannelPid, ConnPid, ConnName, Protocol,
                     User, VHost, Capabilities, Collector, AmqpParams}]),
             {ok, ChannelPid};
         {true, Limit} ->
-            rabbit_log_connection:error(
+            ?LOG_ERROR(
                 "Error on direct connection ~tp~n"
                 "number of channels opened for user '~ts' has reached the "
                 "maximum allowed limit of (~w)",

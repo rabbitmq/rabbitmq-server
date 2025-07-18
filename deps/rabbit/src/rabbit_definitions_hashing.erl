@@ -20,6 +20,7 @@
 -behaviour(rabbit_runtime_parameter).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2, pget/3]).
 
@@ -109,7 +110,7 @@ stored_vhost_specific_hash(VHostName) ->
 
 -spec store_global_hash(Value :: term()) -> ok.
 store_global_hash(Value) ->
-    rabbit_log:debug("Storing global imported definitions content hash, hex value: ~ts", [rabbit_misc:hexify(Value)]),
+    ?LOG_DEBUG("Storing global imported definitions content hash, hex value: ~ts", [rabbit_misc:hexify(Value)]),
     store_global_hash(Value, ?INTERNAL_USER).
 
 -spec store_global_hash(Value0 :: term(), Username :: rabbit_types:username()) -> ok.

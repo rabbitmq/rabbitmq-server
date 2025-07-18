@@ -15,6 +15,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% Use a much lower limit for creating bindings over the HTTP API.
 %% The payload is not meant to be even 50 KiB in size.
@@ -104,7 +105,7 @@ accept_content(ReqData0, {_Mode, Context}) ->
                     {{true, Loc}, ReqData, Context2}
             end;
         {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
-            rabbit_log:warning("HTTP API: binding creation request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+            ?LOG_WARNING("HTTP API: binding creation request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
             rabbit_mgmt_util:bad_request("Payload size limit exceeded", ReqData0, Context)
     end.
 

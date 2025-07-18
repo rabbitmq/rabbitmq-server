@@ -7,16 +7,19 @@
 
 -module(rabbit_federation_pg).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([start_scope/1, stop_scope/1]).
 
 start_scope(Scope) ->
-  rabbit_log_federation:debug("Starting pg scope ~ts", [Scope]),
+  ?LOG_DEBUG("Starting pg scope ~ts", [Scope]),
   _ = pg:start_link(Scope).
 
 stop_scope(Scope) ->
   case whereis(Scope) of
       Pid when is_pid(Pid) ->
-          rabbit_log_federation:debug("Stopping pg scope ~ts", [Scope]),
+          ?LOG_DEBUG("Stopping pg scope ~ts", [Scope]),
           Groups = pg:which_groups(Scope),
           lists:foreach(
             fun(Group) ->
@@ -38,7 +41,7 @@ stop_group(Scope, Group) ->
       fun(MRef) ->
               receive
                   {'DOWN', MRef, process, _Member, _Info} ->
-                      logger:alert("Member ~p stopped: ~0p", [_Member, _Info]),
+                      ?LOG_ALERT("Member ~p stopped: ~0p", [_Member, _Info]),
                       ok
               end
       end, MRefs),

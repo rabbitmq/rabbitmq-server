@@ -13,6 +13,7 @@
 -export([description/0, should_offer/1, init/1, handle_response/2]).
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -rabbit_boot_step({?MODULE,
                    [{description, "external TLS peer verification-based authentication mechanism"},
@@ -52,7 +53,7 @@ init(Sock) ->
                            not_found -> {refused, none, "no name found", []};
                            Name      ->
                                Val = rabbit_data_coercion:to_binary(Name),
-                               rabbit_log:debug("auth mechanism TLS extracted username '~ts' from peer certificate", [Val]),
+                               ?LOG_DEBUG("auth mechanism TLS extracted username '~ts' from peer certificate", [Val]),
                                Val
                        end;
                    {error, no_peercert} ->
