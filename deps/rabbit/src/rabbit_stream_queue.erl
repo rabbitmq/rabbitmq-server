@@ -535,6 +535,7 @@ credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
 
 supports_stateful_delivery() -> true.
 
+
 deliver(QSs, Msg, Options) ->
     lists:foldl(
       fun({Q, stateless}, {Qs, Actions}) ->
