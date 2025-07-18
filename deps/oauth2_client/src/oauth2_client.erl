@@ -427,29 +427,29 @@ unlock(LockId) ->
 get_opaque_token_signing_key() -> 
     case get_env(opaque_token_signing_key) of 
         undefined -> {error, missing_opaque_token_signing_key};
-        Map -> 
-            parse_signing_key_configuration(Map)
+        List -> 
+            parse_signing_key_configuration(List)
     end.
 
 -spec get_opaque_token_signing_key(string()|binary()) -> {ok, signing_key()} | {error, any()}.
 get_opaque_token_signing_key(KeyId) -> 
-    Map = get_env(opaque_token_signing_key),
-    case maps:get(id, Map, undefined) of 
+    List = get_env(opaque_token_signing_key),
+    case proplists:get_value(id, List, undefined) of 
         undefined -> {error, missing_opaque_token_signing_key};
-        KeyId -> parse_signing_key_configuration(Map);
+        KeyId -> parse_signing_key_configuration(List);
         _ -> {error, missing_opaque_token_signing_key}
     end.
 
-parse_signing_key_configuration(Map) ->
-    SK0 = case maps:get(id, Map, undefined) of 
+parse_signing_key_configuration(List) ->
+    SK0 = case proplists:get_value(id, List, undefined) of 
         undefined -> {error, missing_signing_key_id};
         Id -> #signing_key{id = Id}
     end,
-    case {SK0, maps:get(type, Map, hs256)} of 
+    case {SK0, proplists:get_value(type, List, hs256)} of 
         {{error, _} = Error, _} -> 
             Error;
         {_, hs256} -> 
-            Sk1 = case maps:get(key, Map, undefined) of 
+            Sk1 = case proplists:get_value(key, List, undefined) of 
                 undefined -> {error, missing_symmetrical_key_value};
                 SymKey -> SK0#signing_key{
                     type = hs256, 
@@ -468,11 +468,11 @@ parse_signing_key_configuration(Map) ->
                 _ -> Sk1
             end;
         {_, rs256} -> 
-            Sk2 = case maps:get(key_pem_file, Map, undefined) of 
+            Sk2 = case proplists:get_value(key_pem_file, List, undefined) of 
                 undefined -> 
                     {error, missing_key_pem_file};
                 PrivateKey -> 
-                    case maps:get(cert_pem_file, Map, undefined) of 
+                    case proplists:get_value(cert_pem_file, List, undefined) of 
                         undefined -> 
                             {error, missing_cert_pem_file};
                         PublicKey -> 
