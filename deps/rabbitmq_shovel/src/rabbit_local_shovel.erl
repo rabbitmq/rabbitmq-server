@@ -58,6 +58,12 @@
                       msg_id
                      }).
 
+%% This is a significantly reduced version of its rabbit_amqp_session counterpart.
+%% Local shovels always use the maximum credit allowed.
+-record(credit_req, {
+  delivery_count :: sequence_no()
+}).
+
 parse(_Name, {source, Source}) ->
     Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
                                proplists:get_value(prefetch_count, Source,
@@ -168,13 +174,16 @@ init_source(State = #{source := #{queue := QName0,
            end) of
         {Remaining, {ok, QState1}} ->
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, MaxLinkCredit, false, QState1),
-            %% TODO handle actions
             State2 = State#{source => Src#{current => Current#{queue_states => QState,
                                                                consumer_tag => CTag},
                                            remaining => Remaining,
                                            remaining_unacked => Remaining,
                                            delivery_count => ?INITIAL_DELIVERY_COUNT,
-                                           credit => MaxLinkCredit}},
+                                           queue_delivery_count => ?INITIAL_DELIVERY_COUNT,
+                                           credit => MaxLinkCredit,
+                                           queue_credit => MaxLinkCredit,
+                                           at_least_one_credit_req_in_flight => true,
+                                           stashed_credit_req => none}},
             handle_queue_actions(Actions, State2);
         {0, {error, autodelete}} ->
             exit({shutdown, autodelete});
@@ -331,7 +340,6 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
     Queues = rabbit_amqqueue:lookup_many(QNames),
     case rabbit_queue_type:deliver(Queues, Msg, Options, QState) of
         {ok, QState1, Actions} ->
-            %% TODO handle credit?
             State1 = State#{dest => Dest1#{current => Current1#{queue_states => QState1}}},
             #{dest := Dst1} = State2 = rabbit_shovel_behaviour:incr_forwarded(State1),
             State4 = rabbit_shovel_behaviour:decr_remaining_unacked(
@@ -411,9 +419,8 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(AckRequired, Msgs, S0);
-         ({credit_reply, _, _, _, _, _}, S0) ->
-              %% TODO handle credit_reply
-              S0;
+         ({credit_reply, _, _, _, _, _} = Action, S0) ->
+              handle_credit_reply(Action, S0);
          (Action, S0) ->
               rabbit_log:warning("ACTION NOT HANDLED ~p", [Action]),
               S0
@@ -429,7 +436,7 @@ handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
     lists:foldl(fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
                         DeliveryTag = next_tag(S0),
                         S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
-                        sent_pending_delivery(rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S))
+                        sent_delivery(rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S))
                 end, State, Msgs).
 
 next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
@@ -559,14 +566,14 @@ settle(Op, DeliveryTag, Multiple, #{unacked_message_q := UAMQ0,
                              source := #{queue := Queue,
                                          current := Current = #{queue_states := QState0,
                                                                 consumer_tag := CTag,
-                                                                vhost := VHost}} = Src} = State) ->
+                                                                vhost := VHost}} = Src} = State0) ->
     {Acked, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
     QRef = rabbit_misc:r(VHost, queue, Queue),
     MsgIds = [Ack#pending_ack.msg_id || Ack <- Acked],
     case rabbit_queue_type:settle(QRef, Op, CTag, MsgIds, QState0) of
         {ok, QState1, Actions} ->
-            State#{source => Src#{current => Current#{queue_states => QState1}},
-                   unacked_message_q => UAMQ},
+            State = State0#{source => Src#{current => Current#{queue_states => QState1}},
+                            unacked_message_q => UAMQ},
             handle_queue_actions(Actions, State);
         {'protocol_error', Type, Reason, Args} ->
             rabbit_log:error("Shovel failed to settle ~p acknowledgments with ~tp: ~tp",
@@ -646,30 +653,100 @@ confirm_to_inbound(ConfirmFun, Seq, Multiple,
                                            State#{dest =>
                                                       Dst#{unacked => Unacked1}}).
 
-sent_pending_delivery(#{source := #{current := #{consumer_tag := CTag,
-                                                 vhost := VHost,
-                                                 queue_states := QState0
-                                                 } = Current,
-                                    delivery_count := DeliveryCount0,
-                                    credit := Credit0,
-                                    queue := QName0} = Src} = State0) ->
-    %% TODO add check for credit request in-flight
+sent_delivery(#{source := #{current := #{consumer_tag := CTag,
+                                         vhost := VHost,
+                                         queue_states := QState0
+                                        } = Current,
+                            delivery_count := DeliveryCount0,
+                            credit := Credit0,
+                            queue_delivery_count := QDeliveryCount0,
+                            queue_credit := QCredit0,
+                            at_least_one_credit_req_in_flight := HaveCreditReqInFlight,
+                            queue := QName0} = Src,
+                dest := #{unacked := Unacked}} = State0) ->
     QName = rabbit_misc:r(VHost, queue, QName0),
     DeliveryCount = serial_number:add(DeliveryCount0, 1),
     Credit = max(0, Credit0 - 1),
-    {ok, QState, Actions} = case Credit =:= 0 of
+    QDeliveryCount = serial_number:add(QDeliveryCount0, 1),
+    QCredit = max(0, QCredit0 - 1),
+    MaxLinkCredit = max_link_credit(),
+    GrantLinkCredit = grant_link_credit(HaveCreditReqInFlight, Credit, MaxLinkCredit, maps:size(Unacked)),
+    Src1 = case HaveCreditReqInFlight andalso GrantLinkCredit of
+      true ->
+        Req = #credit_req {
+          delivery_count = DeliveryCount
+        },
+        maps:put(stashed_credit_req, Req, Src);
+      false ->
+        Src
+    end,
+    {ok, QState, Actions} = case GrantLinkCredit of
                                 true ->
                                     rabbit_queue_type:credit(
                                       QName, CTag, DeliveryCount, max_link_credit(),
                                       false, QState0);
-                                false ->
+                                _ ->
                                     {ok, QState0, []}
                             end,
-    State = State0#{source => Src#{current => Current#{queue_states => QState},
+    CreditReqInFlight = case GrantLinkCredit of
+                            true -> true;
+                            false -> HaveCreditReqInFlight
+                        end,
+    State = State0#{source => Src1#{current => Current#{queue_states => QState},
                                    credit => Credit,
-                                   delivery_count => DeliveryCount
+                                   delivery_count => DeliveryCount,
+                                   queue_credit => QCredit,
+                                   queue_delivery_count => QDeliveryCount,
+                                   at_least_one_credit_req_in_flight => CreditReqInFlight
                                   }},
     handle_queue_actions(Actions, State).
 
 max_link_credit() ->
     application:get_env(rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT).
+
+grant_link_credit(true = _HaveCreditReqInFlight, _Credit, _MaxLinkCredit, _NumUnconfirmed) ->
+    false;
+grant_link_credit(false = _HaveCreditReqInFlight, Credit, MaxLinkCredit, NumUnconfirmed) ->
+    Credit =< MaxLinkCredit div 2 andalso
+    NumUnconfirmed < MaxLinkCredit.
+
+%% Drain is ignored because local shovels do not use it.
+handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Drain},
+                    #{source := #{credit := CCredit,
+                                  queue_delivery_count := QDeliveryCount,
+                                  stashed_credit_req := StashedCreditReq,
+                                  queue := QName0,
+                                  current := Current = #{queue_states := QState0,
+                                                         vhost := VHost}} = Src} = State0) ->
+    %% Assertion: Our (receiver) delivery-count should be always
+    %% in sync with the delivery-count of the sending queue.
+    QDeliveryCount = DeliveryCount,
+    case StashedCreditReq of
+        #credit_req{delivery_count = StashedDeliveryCount} ->
+          MaxLinkCredit = max_link_credit(),
+          QName = rabbit_misc:r(VHost, queue, QName0),
+          {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, StashedDeliveryCount,
+            MaxLinkCredit, false, QState0),
+          State = State0#{source => Src#{queue_credit => MaxLinkCredit,
+            at_least_one_credit_req_in_flight => true,
+            stashed_credit_req => none,
+            current => Current#{queue_states => QState}}},
+          handle_queue_actions(Actions, State);
+        none when Credit =:= 0 andalso
+                  CCredit > 0 ->
+            MaxLinkCredit = max_link_credit(),
+            QName = rabbit_misc:r(VHost, queue, QName0),
+            {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, DeliveryCount, MaxLinkCredit, false, QState0),
+            State = State0#{source => Src#{queue_credit => MaxLinkCredit,
+                                           at_least_one_credit_req_in_flight => true,
+                                           current => Current#{queue_states => QState}}},
+            handle_queue_actions(Actions, State);
+        none ->
+            %% Although we (the receiver) usually determine link credit, we set here
+            %% our link credit to what the queue says our link credit is (which is safer
+            %% in case credit requests got applied out of order in quorum queues).
+            %% This should be fine given that we asserted earlier that our delivery-count is
+            %% in sync with the delivery-count of the sending queue.
+            State0#{source => Src#{queue_credit => Credit,
+                                   at_least_one_credit_req_in_flight => false}}
+    end.
