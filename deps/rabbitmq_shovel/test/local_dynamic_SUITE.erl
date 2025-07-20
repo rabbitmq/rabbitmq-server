@@ -65,7 +65,8 @@ groups() ->
                   local_to_local_delete_src_queue,
                   local_to_local_delete_dest_queue,
                   local_to_local_vhost_access,
-                  local_to_local_user_access
+                  local_to_local_user_access,
+                  local_to_local_credit_flow
                  ]}
     ].
 
@@ -916,6 +917,21 @@ local_to_local_user_access(Config) ->
             none]),
     shovel_test_utils:await_no_shovel(Config, ?PARAM).
 
+local_to_local_credit_flow(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_session(Config,
+      fun (Sess) ->
+             shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-queue">>, Dest}
+                                          ]),
+              publish_many(Sess, Src, Dest, <<"tag1">>, 500),
+              expect_many(Sess, Dest, 500)
+      end).
+
 %%----------------------------------------------------------------------------
 with_session(Config, Fun) ->
     with_session(Config, <<"/">>, Fun).
@@ -944,12 +960,17 @@ publish(Sender, Tag, Payload) when is_binary(Payload) ->
               exit(publish_disposition_not_received)
     end.
 
-publish(Session, Source, Dest, Tag, Payload) ->
+publish(Session, Source, Dest, Tag, Payloads) ->
     LinkName = <<"dynamic-sender-", Dest/binary>>,
     {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
                                                     unsettled, unsettled_state),
     ok = await_amqp10_event(link, Sender, attached),
-    publish(Sender, Tag, Payload),
+    case is_list(Payloads) of
+        true ->
+            [publish(Sender, Tag, Payload) || Payload <- Payloads];
+        false ->
+            publish(Sender, Tag, Payloads)
+    end,
     amqp10_client:detach_link(Sender).
 
 publish_expect(Session, Source, Dest, Tag, Payload) ->
@@ -957,14 +978,14 @@ publish_expect(Session, Source, Dest, Tag, Payload) ->
     expect_one(Session, Dest).
 
 publish_many(Session, Source, Dest, Tag, N) ->
-    [publish(Session, Source, Dest, Tag, integer_to_binary(Payload))
-     || Payload <- lists:seq(1, N)].
+    Payloads = [integer_to_binary(Payload) || Payload <- lists:seq(1, N)],
+    publish(Session, Source, Dest, Tag, Payloads).
 
 await_amqp10_event(On, Ref, Evt) ->
     receive
         {amqp10_event, {On, Ref, Evt}} -> ok
     after 5000 ->
-          exit({amqp10_event_timeout, On, Ref, Evt})
+            exit({amqp10_event_timeout, On, Ref, Evt})
     end.
 
 expect_one(Session, Dest) ->
