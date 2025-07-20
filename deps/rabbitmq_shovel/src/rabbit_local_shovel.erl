@@ -138,8 +138,7 @@ init_source(State = #{source := #{queue := QName0,
                false ->
                    {credited, credit_api_v1}
            end,
-    MaxLinkCredit = application:get_env(
-                      rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT),
+    MaxLinkCredit = max_link_credit(),
     QName = rabbit_misc:r(VHost, queue, QName0),
     CTag = consumer_tag(Name),
     case rabbit_amqqueue:with(
@@ -173,7 +172,9 @@ init_source(State = #{source := #{queue := QName0,
             State2 = State#{source => Src#{current => Current#{queue_states => QState,
                                                                consumer_tag => CTag},
                                            remaining => Remaining,
-                                           remaining_unacked => Remaining}},
+                                           remaining_unacked => Remaining,
+                                           delivery_count => ?INITIAL_DELIVERY_COUNT,
+                                           credit => MaxLinkCredit}},
             handle_queue_actions(Actions, State2);
         {0, {error, autodelete}} ->
             exit({shutdown, autodelete});
@@ -410,8 +411,10 @@ handle_queue_actions(Actions, State) ->
     lists:foldl(
       fun({deliver, _CTag, AckRequired, Msgs}, S0) ->
               handle_deliver(AckRequired, Msgs, S0);
-         (Action, S0) ->
+         ({credit_reply, _, _, _, _, _}, S0) ->
               %% TODO handle credit_reply
+              S0;
+         (Action, S0) ->
               rabbit_log:warning("ACTION NOT HANDLED ~p", [Action]),
               S0
          %% ({queue_down, QRef}, S0) ->
@@ -426,8 +429,8 @@ handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
     lists:foldl(fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
                         DeliveryTag = next_tag(S0),
                         S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
-                        rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S)
-               end, State, Msgs).
+                        sent_pending_delivery(rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S))
+                end, State, Msgs).
 
 next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
     DeliveryTag.
@@ -642,3 +645,31 @@ confirm_to_inbound(ConfirmFun, Seq, Multiple,
     rabbit_shovel_behaviour:decr_remaining(Removed,
                                            State#{dest =>
                                                       Dst#{unacked => Unacked1}}).
+
+sent_pending_delivery(#{source := #{current := #{consumer_tag := CTag,
+                                                 vhost := VHost,
+                                                 queue_states := QState0
+                                                 } = Current,
+                                    delivery_count := DeliveryCount0,
+                                    credit := Credit0,
+                                    queue := QName0} = Src} = State0) ->
+    %% TODO add check for credit request in-flight
+    QName = rabbit_misc:r(VHost, queue, QName0),
+    DeliveryCount = serial_number:add(DeliveryCount0, 1),
+    Credit = max(0, Credit0 - 1),
+    {ok, QState, Actions} = case Credit =:= 0 of
+                                true ->
+                                    rabbit_queue_type:credit(
+                                      QName, CTag, DeliveryCount, max_link_credit(),
+                                      false, QState0);
+                                false ->
+                                    {ok, QState0, []}
+                            end,
+    State = State0#{source => Src#{current => Current#{queue_states => QState},
+                                   credit => Credit,
+                                   delivery_count => DeliveryCount
+                                  }},
+    handle_queue_actions(Actions, State).
+
+max_link_credit() ->
+    application:get_env(rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT).
