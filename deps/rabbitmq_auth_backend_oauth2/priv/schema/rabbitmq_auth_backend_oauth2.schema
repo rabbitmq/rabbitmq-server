@@ -164,30 +164,33 @@
 %% auth_oauth2.opaque_token_signing_key.cert_pem_file = rabbit_cert.pem
 
 {mapping, "auth_oauth2.opaque_token_signing_key.id", 
-      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.id",
+      "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.id",
       [{datatype, string}]}.
 
+{translation,
+ "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.id",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.opaque_token_signing_key.id", Conf)) end}.
+
 {mapping, "auth_oauth2.opaque_token_signing_key.type", 
-      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.type",
+      "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.type",
       [{datatype, {enum, [hs256, rs256]}}]}.
 
 {mapping, "auth_oauth2.opaque_token_signing_key.key", 
-      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.key",
+      "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.key",
       [{datatype, string}]}.
 
+{translation,
+ "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.key",
+ fun(Conf) -> list_to_binary(cuttlefish:conf_get("auth_oauth2.opaque_token_signing_key.key", Conf)) end}.
+
 {mapping, "auth_oauth2.opaque_token_signing_key.key_file", 
-      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.key_pem_file",
+      "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.key_pem_file",
       [{datatype, file}, {validators, ["file_accessible"]}]}.
 
 {mapping, "auth_oauth2.opaque_token_signing_key.cert_file", 
-      "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.cert_pem_file",
+      "rabbitmq_auth_backend_oauth2.opaque_token_signing_key.cert_pem_file",
       [{datatype, file}, {validators, ["file_accessible"]}]}.
 
-%%{translation,
-%% "rabbitmq_auth_backend_oauth2.opaque_token_signing_key",
-%% fun(Conf) ->
-%%    rabbit_oauth2_schema:translate_opaque_token_signing_key(Conf)
-%% end}.
 
 %% ID of the default signing key
 %%
