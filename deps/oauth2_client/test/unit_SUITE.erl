@@ -306,7 +306,7 @@ access_token_response_without_expiration_time(_) ->
 
 can_sign_token(_Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
-        [{ <<"id">>, <<"key-id">>, <<"type">>, hs256, <<"key">>, <<"some-key">>}]),
+        [{ id, <<"key-id">>}, {type, hs256}, {key, <<"some-key">>}]),
 
     {ok, Value } = oauth2_client:sign_token(#{"scopes" => "a b"}),
     ct:log("JWT : ~p", [Value]),
