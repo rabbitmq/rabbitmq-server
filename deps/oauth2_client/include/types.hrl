@@ -90,7 +90,7 @@
 -type introspect_token_request() :: #introspect_token_request{}.
 
 -record(unsuccessful_introspect_token_response, {
-    error :: integer(),
+    error :: binary() | string() | number(),
     error_description :: binary() | string() | undefined
 }).
 
@@ -99,8 +99,8 @@
 -record(signing_key, {
     id :: string(),
     type :: hs256 | rs256,
-    key :: option(binary()),
-    private_key :: option(binary()),
-    public_key :: option(binary())
+    key :: option(#{binary() => binary()})
+%    private_key :: option(binary()),
+%    public_key :: option(binary())
 }).
 -type signing_key() :: #signing_key{}.
