@@ -1499,8 +1499,7 @@ writer_close(#writer{fd = Fd}) ->
     file:close(Fd).
 
 mark_handle_open(FileHandlesEts, File, Ref) ->
-    %% This is fine to fail (already exists). Note it could fail with
-    %% the value being close, and not have it updated to open.
+    %% This is fine to fail (already exists).
     ets:insert_new(FileHandlesEts, {{Ref, File}, erlang:monotonic_time()}),
     true.
 
