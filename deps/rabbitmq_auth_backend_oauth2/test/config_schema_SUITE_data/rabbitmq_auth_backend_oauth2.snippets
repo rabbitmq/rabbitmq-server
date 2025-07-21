@@ -46,6 +46,7 @@
                       <<"id2">> => {pem, <<"I'm not a certificate">>}
                   }
               },
+              {opaque_token_signing_key,[]},
               {jwks_url, "https://my-jwt-issuer/jwks.json"},
               {cacertfile, "test/config_schema_SUITE_data/certs/cacert.pem"},
               {peer_verification, verify_none},
@@ -363,5 +364,22 @@
             }}                       
         ]}
        ], []
+  },
+  {opaque_token_signing_key, 
+      "auth_oauth2.resource_server_id = new_resource_server_id
+       auth_oauth2.opaque_token_signing_key.id = opaque-id
+       auth_oauth2.opaque_token_signing_key.type = hs256
+       auth_oauth2.opaque_token_signing_key.key = opaque-signing-key-value",
+       [
+        {rabbitmq_auth_backend_oauth2, [
+            {resource_server_id, <<"new_resource_server_id">>},
+            {opaque_token_signing_key, [
+              {id, <<"opaque-id">>},
+              {type, hs256},
+              {key, <<"opaque-signing-key-value">>}
+            ]}                       
+        ]}
+       ], []
   }
+  
 ].

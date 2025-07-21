@@ -423,11 +423,14 @@ get_opaque_token_signing_key() ->
 
 -spec get_opaque_token_signing_key(string()|binary()) -> {ok, signing_key()} | {error, any()}.
 get_opaque_token_signing_key(KeyId) -> 
-    List = get_env(opaque_token_signing_key),
-    case proplists:get_value(id, List, undefined) of 
+    case get_env(opaque_token_signing_key) of 
         undefined -> {error, missing_opaque_token_signing_key};
-        KeyId -> parse_signing_key_configuration(List);
-        _ -> {error, missing_opaque_token_signing_key}
+        List ->
+            case proplists:get_value(id, List, undefined) of 
+                undefined -> {error, missing_opaque_token_signing_key};
+                KeyId -> parse_signing_key_configuration(List);
+                _ -> {error, missing_opaque_token_signing_key}
+            end
     end.
 
 parse_signing_key_configuration(List) ->
