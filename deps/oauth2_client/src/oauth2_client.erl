@@ -20,6 +20,7 @@
 
 -include("oauth2_client.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("jose/include/jose_jwk.hrl").
 
 -spec get_access_token(oauth_provider(), access_token_request()) ->
     {ok, successful_access_token_response()} |
@@ -78,17 +79,10 @@ introspect_token(Token) ->
 sign_token(TokenPayload) ->
     case get_opaque_token_signing_key() of 
         {error, _} = Error -> Error;
-        SK -> 
-            case SK#signing_key.type of 
-                hs256 -> 
-                    {_, Value} = sign_token_hs(TokenPayload, SK#signing_key.key, SK#signing_key.id),
-                    {ok, Value};
-                _ -> {error, not_implemented}
-            end
+        {ok, SK} -> 
+            {_, Value} = sign_token_hs(TokenPayload, SK#signing_key.key, SK#signing_key.id),
+            {ok, Value}
     end.
-
-sign_token_hs(Token, #{<<"kid">> := TokenKey} = Jwk) ->
-    sign_token_hs(Token, Jwk, TokenKey).
 
 sign_token_hs(Token, Jwk, TokenKey) ->
     Jws0 = #{
@@ -98,13 +92,6 @@ sign_token_hs(Token, Jwk, TokenKey) ->
     Jws = maps:put(<<"kid">>, TokenKey, Jws0),
     sign_token(Token, Jwk, Jws).
     
-sign_token_rsa(Token, Jwk, TokenKey) ->
-    Jws = #{
-      <<"alg">> => <<"RS256">>,
-      <<"kid">> => TokenKey
-    },
-    sign_token(Token, Jwk, Jws).
-
 sign_token(Token, Jwk, Jws) ->
     Signed = jose_jwt:sign(Jwk, Jws, Token),
     jose_jws:compact(Signed).
@@ -418,7 +405,7 @@ get_opaque_token_signing_key() ->
     case get_env(opaque_token_signing_key) of 
         undefined -> {error, missing_opaque_token_signing_key};
         List -> 
-            parse_signing_key_configuration(List)
+            {ok, parse_signing_key_configuration(List)}
     end.
 
 -spec get_opaque_token_signing_key(string()|binary()) -> {ok, signing_key()} | {error, any()}.
@@ -436,49 +423,50 @@ get_opaque_token_signing_key(KeyId) ->
 parse_signing_key_configuration(List) ->
     SK0 = case proplists:get_value(id, List, undefined) of 
         undefined -> {error, missing_signing_key_id};
-        Id -> #signing_key{id = Id}
+        Id -> #signing_key{id = Id, type = hs256}
     end,
     case {SK0, proplists:get_value(type, List, hs256)} of 
         {{error, _} = Error, _} -> 
             Error;
         {_, hs256} -> 
-            Sk1 = case proplists:get_value(key, List, undefined) of 
+            SK1OrError = case proplists:get_value(key, List, undefined) of 
                 undefined -> {error, missing_symmetrical_key_value};
-                SymKey -> SK0#signing_key{
-                    type = hs256, 
-                    key = case make_jwk(#{
-                        <<"alg">> => <<"HS256">>,
-                        <<"value">> => SymKey,
-                        <<"kty">> => <<"MAC">>,
-                        <<"use">> => <<"sig">>}) of 
-                            {error, _} = Error -> Error;
-                            {ok, Val} -> Val
-                        end
-                }
-            end,
-            case Sk1#signing_key.key of 
+                SymKey -> 
+                    case make_jwk(#{
+                            <<"alg">> => <<"HS256">>,
+                            <<"value">> => SymKey,
+                            <<"kty">> => <<"MAC">>,
+                            <<"use">> => <<"sig">>}) of 
+                        {error, _} = Error -> Error;
+                        {ok, Val} ->  
+                            SK0#signing_key{
+                                key =Val
+                            }
+                    end                
+                end,
+            case SK1OrError of 
                 {error, _} = Error1 -> Error1;
-                _ -> Sk1
+                SK1 -> SK1
             end;
-        {_, rs256} -> 
-            Sk2 = case proplists:get_value(key_pem_file, List, undefined) of 
-                undefined -> 
-                    {error, missing_key_pem_file};
-                PrivateKey -> 
-                    case proplists:get_value(cert_pem_file, List, undefined) of 
-                        undefined -> 
-                            {error, missing_cert_pem_file};
-                        PublicKey -> 
-                            SK0#signing_key{type = hs256, 
-                                private_key = PrivateKey,
-                                public_key = PublicKey}
-                    end
-            end,
-            case {Sk2#signing_key.private_key, Sk2#signing_key.public_key} of 
-                {{error, _} = Error2, _} -> Error2;
-                {_, {error, _} = Error3} -> Error3;
-                {_, _} -> Sk2
-            end;
+%        {_, rs256} -> 
+%            Sk2 = case proplists:get_value(key_pem_file, List, undefined) of 
+%                undefined -> 
+%                    {error, missing_key_pem_file};
+%                PrivateKey -> 
+%                    case proplists:get_value(cert_pem_file, List, undefined) of 
+%                        undefined -> 
+%                            {error, missing_cert_pem_file};
+%                        PublicKey -> 
+%                            SK0#signing_key{type = hs256, 
+%                                private_key = PrivateKey,
+%                                public_key = PublicKey}
+%                    end
+%            end,
+%            case {Sk2#signing_key.private_key, Sk2#signing_key.public_key} of 
+%                {{error, _} = Error2, _} -> Error2;
+%               {_, {error, _} = Error3} -> Error3;
+%                {_, _} -> Sk2
+%            end;
         {_, _} -> {error, unsupported_signing_type}
     end.
 
@@ -929,62 +917,23 @@ set_env(Par, Val) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
 
 
--include_lib("jose/include/jose_jwk.hrl").
 
--spec make_jwk(binary() | map()) -> {ok, #{binary() => binary()}} | {error, term()}.
-make_jwk(Json) when is_binary(Json); is_list(Json) ->
-    JsonMap = jose:decode(iolist_to_binary(Json)),
-    make_jwk(JsonMap);
+-spec make_jwk(map()) -> {ok, #{binary() => binary()}} | {error, term()}.
 
 make_jwk(JsonMap) when is_map(JsonMap) ->
     case JsonMap of
         #{<<"kty">> := <<"MAC">>, <<"value">> := _Value} ->
             {ok, mac_to_oct(JsonMap)};
-        #{<<"kty">> := <<"RSA">>, <<"n">> := _N, <<"e">> := _E} ->
-            {ok, fix_alg(JsonMap)};
-        #{<<"kty">> := <<"oct">>, <<"k">> := _K} ->
-            {ok, fix_alg(JsonMap)};
-        #{<<"kty">> := <<"OKP">>, <<"crv">> := _Crv, <<"x">> := _X} ->
-            {ok, fix_alg(JsonMap)};
-        #{<<"kty">> := <<"EC">>} ->
-            {ok, fix_alg(JsonMap)};
-        #{<<"kty">> := Kty} when Kty == <<"oct">>;
-                                 Kty == <<"MAC">>;
-                                 Kty == <<"RSA">>;
-                                 Kty == <<"OKP">>;
-                                 Kty == <<"EC">> ->
-            {error, {fields_missing_for_kty, Kty}};
         #{<<"kty">> := _Kty} ->
             {error, unknown_kty};
         #{} ->
             {error, no_kty}
     end.
 
-from_pem(Pem) ->
-    case jose_jwk:from_pem(Pem) of
-        #jose_jwk{} = Jwk -> {ok, Jwk};
-        Other             ->
-            error_logger:warning_msg("Error parsing jwk from pem: ", [Other]),
-            {error, invalid_pem_string}
-    end.
-
-from_pem_file(FileName) ->
-    case filelib:is_file(FileName) of
-        false ->
-            {error, enoent};
-        true  ->
-            case jose_jwk:from_pem_file(FileName) of
-                #jose_jwk{} = Jwk -> {ok, Jwk};
-                Other             ->
-                    error_logger:warning_msg("Error parsing jwk from pem file: ", [Other]),
-                    {error, invalid_pem_file}
-            end
-    end.
-
 mac_to_oct(#{<<"kty">> := <<"MAC">>, <<"value">> := Value} = Key) ->
     OktKey = maps:merge(Key,
                         #{<<"kty">> => <<"oct">>,
-                          <<"k">> => base64url:encode(Value)}),
+                          <<"k">> => base64:encode(Value)}),
     fix_alg(OktKey).
 
 fix_alg(#{<<"alg">> := Alg} = Key) ->
