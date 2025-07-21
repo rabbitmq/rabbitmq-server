@@ -183,11 +183,11 @@
       "rabbitmq_auth_backend_oauth2.key_config.opaque_token_signing_key.cert_pem_file",
       [{datatype, file}, {validators, ["file_accessible"]}]}.
 
-{translation,
- "rabbitmq_auth_backend_oauth2.opaque_token_signing_key",
- fun(Conf) ->
-    rabbit_oauth2_schema:translate_opaque_token_signing_key(Conf)
- end}.
+%%{translation,
+%% "rabbitmq_auth_backend_oauth2.opaque_token_signing_key",
+%% fun(Conf) ->
+%%    rabbit_oauth2_schema:translate_opaque_token_signing_key(Conf)
+%% end}.
 
 %% ID of the default signing key
 %%
