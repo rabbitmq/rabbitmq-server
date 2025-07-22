@@ -11,6 +11,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbit/include/mc.hrl").
 -include("rabbit_shovel.hrl").
 
@@ -188,12 +189,12 @@ init_source(State = #{source := #{queue := QName0,
         {0, {error, autodelete}} ->
             exit({shutdown, autodelete});
         {_Remaining, {error, Reason}} ->
-            rabbit_log:error(
-              "Shovel '~ts' in vhost '~ts' failed to consume: ~ts",
-              [Name, VHost, Reason]),
+            ?LOG_ERROR(
+               "Shovel '~ts' in vhost '~ts' failed to consume: ~ts",
+               [Name, VHost, Reason]),
             exit({shutdown, failed_to_consume_from_source});
         {unlimited, {error, not_implemented, Reason, ReasonArgs}} ->
-            rabbit_log:error(
+            ?LOG_ERROR(
               "Shovel '~ts' in vhost '~ts' failed to consume: ~ts",
               [Name, VHost, io_lib:format(Reason, ReasonArgs)]),
             exit({shutdown, failed_to_consume_from_source});
@@ -267,8 +268,8 @@ close_source(#{source := #{current := #{queue_states := QStates0,
         {error, not_found} ->
             ok;
         {error, Reason} ->
-            rabbit_log:warning("Local shovel failed to remove consumer ~tp: ~tp",
-                               [CTag, Reason]),
+            ?LOG_WARNING("Local shovel failed to remove consumer ~tp: ~tp",
+                         [CTag, Reason]),
             ok
     end;
 close_source(_) ->
@@ -421,8 +422,7 @@ handle_queue_actions(Actions, State) ->
               handle_deliver(AckRequired, Msgs, S0);
          ({credit_reply, _, _, _, _, _} = Action, S0) ->
               handle_credit_reply(Action, S0);
-         (Action, S0) ->
-              rabbit_log:warning("ACTION NOT HANDLED ~p", [Action]),
+         (_Action, S0) ->
               S0
          %% ({queue_down, QRef}, S0) ->
          %%      State;
@@ -558,7 +558,7 @@ get_user_vhost_from_amqp_param(Uri) ->
                     exit({shutdown, {access_refused, Username}})
             end;
         {refused, Username, _Msg, _Module} ->
-            rabbit_log:error("Local shovel user ~ts was refused access"),
+            ?LOG_ERROR("Local shovel user ~ts was refused access"),
             exit({shutdown, {access_refused, Username}})
     end.
 
@@ -576,8 +576,8 @@ settle(Op, DeliveryTag, Multiple, #{unacked_message_q := UAMQ0,
                             unacked_message_q => UAMQ},
             handle_queue_actions(Actions, State);
         {'protocol_error', Type, Reason, Args} ->
-            rabbit_log:error("Shovel failed to settle ~p acknowledgments with ~tp: ~tp",
-                             [Op, Type, io_lib:format(Reason, Args)]),
+            ?LOG_ERROR("Shovel failed to settle ~p acknowledgments with ~tp: ~tp",
+                       [Op, Type, io_lib:format(Reason, Args)]),
             exit({shutdown, {ack_failed, Reason}})
     end.
 
