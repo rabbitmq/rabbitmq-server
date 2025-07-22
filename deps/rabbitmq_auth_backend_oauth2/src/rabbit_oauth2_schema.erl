@@ -197,7 +197,7 @@ translate_endpoint_params(Variable, Conf) ->
          <- Params0].
 
 -spec translate_opaque_token_signing_key([{list(), binary()}]) -> 
-    [{binary(), binary()}].
+    [{atom(), binary()}].
 translate_opaque_token_signing_key(Conf) ->
     Params0 = cuttlefish_variable:filter_by_prefix("auth_oauth2.opaque_token_signing_key",
         Conf),
