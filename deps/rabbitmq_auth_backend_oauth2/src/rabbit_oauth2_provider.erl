@@ -153,7 +153,7 @@ get_signing_key(KeyId, OAuthProviderId) ->
         undefined -> 
             case oauth2_client:get_opaque_token_signing_key(KeyId) of 
                 {ok, SK} -> SK;
-                {error, _} -> undefined                
+                {error, _} -> undefined
             end;
         V -> V 
     end.

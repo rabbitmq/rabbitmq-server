@@ -415,7 +415,7 @@ get_opaque_token_signing_key(KeyId) ->
         List ->
             case proplists:get_value(id, List, undefined) of 
                 undefined -> {error, missing_opaque_token_signing_key};
-                KeyId -> parse_signing_key_configuration(List);
+                KeyId -> {ok, parse_signing_key_configuration(List)};
                 _ -> {error, missing_opaque_token_signing_key}
             end
     end.
@@ -440,7 +440,7 @@ parse_signing_key_configuration(List) ->
                         {error, _} = Error -> Error;
                         {ok, Val} ->  
                             SK0#signing_key{
-                                key =Val
+                                key = Val
                             }
                     end                
                 end,
