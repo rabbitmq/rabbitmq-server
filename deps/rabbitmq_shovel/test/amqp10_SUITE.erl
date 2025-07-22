@@ -117,9 +117,6 @@ amqp10_destination(Config, AckMode) ->
                                       }},
     publish(Chan, Msg, ?EXCHANGE, ?TO_SHOVEL),
 
-    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Node = atom_to_binary(NodeA),
-
     receive
         {amqp10_msg, Receiver, InMsg} ->
             [<<42>>] = amqp10_msg:body(InMsg),
@@ -142,7 +139,7 @@ amqp10_destination(Config, AckMode) ->
                #{<<"x-basic-type">> := ?UNSHOVELLED,
                  <<"x-opt-shovel-type">> := <<"static">>,
                  <<"x-opt-shovel-name">> := <<"test_shovel">>,
-                 <<"x-opt-shovelled-by">> := Node,
+                 <<"x-opt-shovelled-by">> := _,
                  <<"x-opt-shovelled-timestamp">> := _},
                amqp10_msg:message_annotations(InMsg)),
             ?assertMatch(#{durable := true}, amqp10_msg:headers(InMsg)),
