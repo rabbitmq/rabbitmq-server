@@ -13,6 +13,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("amqp10_client/include/amqp10_client.hrl").
 -include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("amqp10_common/include/amqp10_filter.hrl").
 
@@ -26,7 +27,8 @@ groups() ->
        amqp_credit_multiple_grants,
        amqp_credit_single_grant,
        amqp_attach_sub_batch,
-       amqp_filter_expression
+       amqp_property_filter,
+       amqp_sql_filter
       ]
      }].
 
@@ -272,9 +274,9 @@ amqp_attach_sub_batch(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:close_connection(Connection).
 
-%% Test that AMQP filter expressions work when messages
+%% Test that AMQP property filter works when messages
 %% are published via the stream protocol and consumed via AMQP.
-amqp_filter_expression(Config) ->
+amqp_property_filter(Config) ->
     Stream = atom_to_binary(?FUNCTION_NAME),
     publish_via_stream_protocol(Stream, Config),
 
@@ -317,6 +319,87 @@ amqp_filter_expression(Config) ->
     ok = amqp10_client:detach_link(Receiver),
     ok = amqp10_client:close_connection(Connection).
 
+amqp_sql_filter(Config) ->
+    Stream = atom_to_binary(?FUNCTION_NAME),
+    Address = <<"/queue/", Stream/binary>>,
+
+    AppProps1 = #'v1_0.application_properties'{content = [{{utf8, <<"key">>}, {byte, 1}}]},
+    AppProps2 = #'v1_0.application_properties'{content = [{{utf8, <<"key">>}, {byte, 2}}]},
+    {ok, S, C0} = stream_test_utils:connect(Config, 0),
+    {ok, C1} = stream_test_utils:create_stream(S, C0, Stream),
+    PublisherId = 55,
+    {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PublisherId),
+    Bodies = lists:duplicate(2000, <<"middle">>),
+    UncompressedSubbatch1 = stream_test_utils:sub_batch_entry_uncompressed(1, AppProps1, [<<"first">>]),
+    UncompressedSubbatch2 = stream_test_utils:sub_batch_entry_uncompressed(2, AppProps2, Bodies),
+    UncompressedSubbatch3 = stream_test_utils:sub_batch_entry_uncompressed(3, AppProps2, Bodies),
+    UncompressedSubbatch4 = stream_test_utils:sub_batch_entry_uncompressed(4, AppProps1, [<<"last">>]),
+    {ok, _, C3} = stream_test_utils:publish_entries(S, C2, PublisherId, 1, UncompressedSubbatch1),
+    {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PublisherId, 1, UncompressedSubbatch2),
+    {ok, _, C5} = stream_test_utils:publish_entries(S, C4, PublisherId, 1, UncompressedSubbatch3),
+    {ok, _, C6} = stream_test_utils:publish_entries(S, C5, PublisherId, 1, UncompressedSubbatch4),
+    {ok, _} = stream_test_utils:close(S, C6),
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+
+    SQL = <<"a.key % 2 = 1">>,
+    Filter = #{<<"from start">> => #filter{descriptor = <<"rabbitmq:stream-offset-spec">>,
+                                           value = {symbol, <<"first">>}},
+               ?FILTER_NAME_SQL => #filter{descriptor = ?DESCRIPTOR_NAME_SQL_FILTER,
+                                           value = {utf8, SQL}}},
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, Address,
+                        settled, configuration, Filter),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, Address,
+                        settled, configuration, Filter),
+    receive {amqp10_event, {link, Receiver1, attached}} -> ok
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver2, attached}} -> ok
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    ok = amqp10_client:flow_link_credit(Receiver1, 3, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver2, 3, never, true),
+
+    %% For two links filtering on the same session, we expect that RabbitMQ
+    %% delivers messages concurrently (instead of scanning the entire stream
+    %% for the 1st receiver before scanning the entire stream for the 2nd receiver).
+    receive {amqp10_msg, _, First1} ->
+                ?assertEqual([<<"first">>], amqp10_msg:body(First1))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, First2} ->
+                ?assertEqual([<<"first">>], amqp10_msg:body(First2))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    receive {amqp10_msg, _, Last1} ->
+                ?assertEqual([<<"last">>], amqp10_msg:body(Last1))
+    after 60_000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, Last2} ->
+                ?assertEqual([<<"last">>], amqp10_msg:body(Last2))
+    after 60_000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    receive {amqp10_event, {link, Receiver1, credit_exhausted}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_event, {link, Receiver2, credit_exhausted}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = amqp10_client:detach_link(Receiver1),
+    ok = amqp10_client:detach_link(Receiver2),
+    ok = amqp10_client:close_connection(Connection),
+    receive {amqp10_event, {connection, Connection, {closed, normal}}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end.
+
 %% -------------------------------------------------------------------
 %% Helpers
 %% -------------------------------------------------------------------
@@ -330,15 +413,16 @@ publish_via_stream_protocol(Stream, Config) ->
     {ok, C2} = stream_test_utils:declare_publisher(S, C1, Stream, PublisherId),
 
     M1 = stream_test_utils:simple_entry(1, <<"m1">>),
-    M2 = stream_test_utils:simple_entry(2, <<"m2">>, #'v1_0.application_properties'{
-                                                        content = [{{utf8, <<"my key">>},
-                                                                    {utf8, <<"my value">>}}]}),
+    AppProps = #'v1_0.application_properties'{content = [{{utf8, <<"my key">>},
+                                                          {utf8, <<"my value">>}}]},
+    M2 = stream_test_utils:simple_entry(2, <<"m2">>, AppProps),
     M3 = stream_test_utils:simple_entry(3, <<"m3">>),
     Messages1 = [M1, M2, M3],
 
     {ok, _, C3} = stream_test_utils:publish_entries(S, C2, PublisherId, length(Messages1), Messages1),
 
-    UncompressedSubbatch = stream_test_utils:sub_batch_entry_uncompressed(4, [<<"m4">>, <<"m5">>, <<"m6">>]),
+    UncompressedSubbatch = stream_test_utils:sub_batch_entry_uncompressed(
+                             4, AppProps, [<<"m4">>, <<"m5">>, <<"m6">>]),
     {ok, _, C4} = stream_test_utils:publish_entries(S, C3, PublisherId, 1, UncompressedSubbatch),
 
     CompressedSubbatch = stream_test_utils:sub_batch_entry_compressed(5, [<<"m7">>, <<"m8">>, <<"m9">>]),
