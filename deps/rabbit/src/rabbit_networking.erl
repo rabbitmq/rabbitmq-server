@@ -583,11 +583,13 @@ handshake(Ref, ProxyProtocolEnabled, BufferStrategy) ->
                 {ok, ProxyInfo} ->
                     {ok, Sock} = ranch_handshake(Ref),
                     ok = tune_buffer_size(Sock, BufferStrategy),
+                    ok = file_handle_cache:obtain(),
                     {ok, {rabbit_proxy_socket, Sock, ProxyInfo}}
             end;
         false ->
             {ok, Sock} = ranch_handshake(Ref),
             ok = tune_buffer_size(Sock, BufferStrategy),
+            ok = file_handle_cache:obtain(),
             {ok, Sock}
     end.
 
