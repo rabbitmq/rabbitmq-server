@@ -302,14 +302,14 @@ handle_source(_Msg, _State) ->
 
 handle_dest({queue_event, _QRef, {confirm, MsgSeqNos, _QPid}},
             #{ack_mode := on_confirm} = State) ->
-    confirm_to_inbound(fun(Tag, Multi, StateX) ->
-                               rabbit_shovel_behaviour:ack(Tag, Multi, StateX)
-                       end, MsgSeqNos, false, State);
+    confirm_to_inbound(fun(Tag, StateX) ->
+                               rabbit_shovel_behaviour:ack(Tag, false, StateX)
+                       end, MsgSeqNos, State);
 handle_dest({queue_event, _QRef, {reject_publish, Seq, _QPid}},
             #{ack_mode := on_confirm} = State) ->
-    confirm_to_inbound(fun(Tag, Multi, StateX) ->
-                               rabbit_shovel_behaviour:nack(Tag, Multi, StateX)
-                       end, Seq, false, State);
+    confirm_to_inbound(fun(Tag, StateX) ->
+                               rabbit_shovel_behaviour:nack(Tag, false, StateX)
+                       end, Seq, State);
 handle_dest({{'DOWN', #resource{name = Queue,
                                 kind = queue,
                                 virtual_host = VHost}}, _, _, _, _}  ,
@@ -626,32 +626,18 @@ route(Msg, #{current := #{vhost := VHost}}) ->
     Exchange = rabbit_exchange:lookup_or_die(ExchangeName),
     rabbit_exchange:route(Exchange, Msg, #{return_binding_keys => true}).
 
-remove_delivery_tags(Seq, false, Unacked, 0) ->
-    {maps:remove(Seq, Unacked), 1};
-remove_delivery_tags(Seq, true, Unacked, Count) ->
-    case maps:size(Unacked) of
-        0  -> {Unacked, Count};
-        _ ->
-            maps:fold(fun(K, _V, {Acc, Cnt}) when K =< Seq ->
-                              {maps:remove(K, Acc), Cnt + 1};
-                         (_K, _V, Acc) -> Acc
-                      end, {Unacked, 0}, Unacked)
-    end.
-
-
-confirm_to_inbound(ConfirmFun, SeqNos, Multiple, State)
+confirm_to_inbound(ConfirmFun, SeqNos, State)
   when is_list(SeqNos) ->
     lists:foldl(fun(Seq, State0) ->
-                        confirm_to_inbound(ConfirmFun, Seq, Multiple, State0)
+                        confirm_to_inbound(ConfirmFun, Seq, State0)
                 end, State, SeqNos);
-confirm_to_inbound(ConfirmFun, Seq, Multiple,
+confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
-    State = ConfirmFun(InTag, Multiple, State0),
-    {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    rabbit_shovel_behaviour:decr_remaining(Removed,
-                                           State#{dest =>
-                                                      Dst#{unacked => Unacked1}}).
+    State = ConfirmFun(InTag, State0),
+    Unacked1 = maps:remove(Seq, Unacked),
+    rabbit_shovel_behaviour:decr_remaining(
+      1, State#{dest => Dst#{unacked => Unacked1}}).
 
 sent_delivery(#{source := #{current := #{consumer_tag := CTag,
                                          vhost := VHost,
