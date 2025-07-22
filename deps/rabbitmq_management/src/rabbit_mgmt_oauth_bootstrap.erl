@@ -9,6 +9,7 @@
 
 -export([init/2]).
 -include("rabbit_mgmt.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -37,10 +38,28 @@ set_token_auth(AuthSettings, Req0) ->
         true ->
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
                 {bearer, Token} -> 
-                    {
-                        Req0, 
-                        ["set_token_auth('", Token, "');"]
-                    };
+                    case oauth2_client:is_jwt_token(Token) of 
+                        true -> 
+                            {
+                                Req0, 
+                                ["set_token_auth('", Token, "');"]
+                            };
+                        false -> 
+                            case oauth2_client:introspect_token(Token) of
+                                {ok, Tk1} -> 
+                                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
+                                    {
+                                        Req0, 
+                                        ["set_token_auth('", Tk1, "');"]
+                                    };
+                                {error, Err1} -> 
+                                    ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),
+                                    {
+                                        Req0, 
+                                        []
+                                    }
+                            end      
+                    end;
                 _ -> 
                     Cookies = cowboy_req:parse_cookies(Req0),
                     case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 

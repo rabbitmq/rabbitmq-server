@@ -54,7 +54,8 @@ groups() ->
         {verify_introspection_endpoint, [], [
           introspect_opaque_token_returns_active_jwt_token,
           introspect_opaque_token_returns_inactive_jwt_token,
-          introspect_opaque_token_returns_401_from_auth_server
+          introspect_opaque_token_returns_401_from_auth_server,
+          idp_introspect_opaque_token
         ]}        
       ]},
       {verify_multi_resource_and_provider, [], [
@@ -697,7 +698,9 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
                                          Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
-                                         Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
+                                         Testcase =:= introspect_opaque_token_returns_401_from_auth_server orelse 
+                                         Testcase =:= idp_introspect_opaque_token ->
+
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint,
       ?config(authorization_server_url, Config)]),
@@ -721,7 +724,8 @@ init_per_testcase(Testcase, Config) ->
 
 end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
-                                        Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
+                                        Testcase =:= introspect_opaque_token_returns_401_from_auth_server orelse
+                                        Testcase =:= idp_introspect_opaque_token ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -958,21 +962,23 @@ should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
 
 introspect_opaque_token_returns_active_jwt_token(Config) -> 
   {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
-    {"authorization", "bearer active"}], []),
-  
-  Split = binary:split(rabbit_data_coercion:to_binary(ResBody), <<".">>),
-  ct:log("split: ~p", [Split]).
+    {"authorization", "bearer active"}], []).
 
 introspect_opaque_token_returns_inactive_jwt_token(Config) -> 
   {ok, {{_HTTP, 401, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
     {"authorization", "bearer inactive"}], []),
-   JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+  JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
   ?assertEqual(<<"not_authorised">>, maps:get(<<"error">>, JSON)),
   ?assertEqual(<<"Introspected token is not active">>, maps:get(<<"reason">>, JSON)).
 
 introspect_opaque_token_returns_401_from_auth_server(Config) -> 
   {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = req(Config, 0, post, "/auth/introspect", [
     {"authorization", "bearer 401"}], []).
+
+idp_introspect_opaque_token(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
+  ct:log("response idp:  ~p ~p", [URI, Result]).
 
 
 %% -------------------------------------------------------------------
