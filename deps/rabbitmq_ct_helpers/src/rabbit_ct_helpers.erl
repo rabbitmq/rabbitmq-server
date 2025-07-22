@@ -1134,16 +1134,12 @@ await_condition(ConditionFun, Timeout) ->
 await_condition_with_retries(_ConditionFun, 0) ->
     ct:fail("Condition did not materialize in the expected period of time");
 await_condition_with_retries(ConditionFun, RetriesLeft) ->
-    try ConditionFun() of
+    case ConditionFun() of
         false ->
             timer:sleep(50),
             await_condition_with_retries(ConditionFun, RetriesLeft - 1);
         true ->
             ok
-    catch
-        _:_ ->
-            timer:sleep(50),
-            await_condition_with_retries(ConditionFun, RetriesLeft - 1)
     end.
 
 await_condition_ignoring_exceptions(ConditionFun) ->
