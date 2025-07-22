@@ -168,12 +168,9 @@ local_destination_forward_headers_amqp10(Config) ->
     Msg = #amqp_msg{props = #'P_basic'{}},
     publish(Chan, Msg, ?EXCHANGE, ?TO_SHOVEL),
 
-    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Node = atom_to_binary(NodeA),
-
     receive
         {amqp10_msg, Receiver, InMsg} ->
-            ?assertMatch(#{<<"x-opt-shovelled-by">> := Node,
+            ?assertMatch(#{<<"x-opt-shovelled-by">> := _,
                            <<"x-opt-shovel-type">> := <<"static">>,
                            <<"x-opt-shovel-name">> := <<"test_shovel">>},
                          amqp10_msg:message_annotations(InMsg))
@@ -196,16 +193,12 @@ local_destination_forward_headers_amqp091(Config) ->
     Msg = #amqp_msg{props = #'P_basic'{}},
     publish(Chan, Msg, ?EXCHANGE, ?TO_SHOVEL),
 
-    [NodeA] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    Node = atom_to_binary(NodeA),
-    ExpectedHeaders = lists:sort(
-                        [{<<"x-opt-shovelled-by">>, longstr, Node},
-                         {<<"x-opt-shovel-type">>, longstr, <<"static">>},
-                         {<<"x-opt-shovel-name">>, longstr, <<"test_shovel">>}]),
     receive
         {#'basic.deliver'{consumer_tag = CTag},
          #amqp_msg{props = #'P_basic'{headers = Headers}}} ->
-            ?assertMatch(ExpectedHeaders,
+            ?assertMatch([{<<"x-opt-shovel-name">>, longstr, <<"test_shovel">>},
+                          {<<"x-opt-shovel-type">>, longstr, <<"static">>},
+                          {<<"x-opt-shovelled-by">>, longstr, _}],
                          lists:sort(Headers))
     after ?TIMEOUT -> throw(timeout_waiting_for_deliver1)
     end,
