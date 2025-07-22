@@ -154,15 +154,16 @@ build_mocha_image() {
 }
 
 kill_container_if_exist() {
-  if docker stop $1 &> /dev/null; then
-     docker rm $1 &> /dev/null
-  fi
+  docker kill $1 &> /dev/null 
+  docker rm $1 &> /dev/null
 }
 wait_for_message() {
-  attemps_left=10
+  delay=${3:-5}
+  attemps_left=${4:-10}
+  
   while ! docker logs $1 2>&1 | grep -q "$2";
   do
-      sleep 5
+      sleep $delay
       print "Waiting 5sec for $1 to start ($attemps_left attempts left )..."
       ((attemps_left--))
       if [[ "$attemps_left" -lt 1 ]]; then
@@ -185,17 +186,20 @@ wait_for_oidc_endpoint() {
 wait_for_oidc_endpoint_local() {
   NAME=$1
   BASE_URL=$2
-  CURL_ARGS="-k --tlsv1.2 -L --fail "
-  DELAY_BETWEEN_ATTEMPTS=5
+  CURL_ARGS="--tlsv1.2 -L --fail "
+  DELAY_BETWEEN_ATTEMPTS=10
   if [[ $# -eq 3 ]]; then
     CURL_ARGS="$CURL_ARGS --cacert $3"
     DELAY_BETWEEN_ATTEMPTS=10
+  else 
+    CURL_ARGS="$CURL_ARGS -k " 
   fi
   max_retry=15
   counter=0
   print "Waiting for OIDC discovery endpoint $NAME ... (BASE_URL: $BASE_URL)"
   until (curl $CURL_ARGS ${BASE_URL}/.well-known/openid-configuration >/dev/null 2>&1)
   do
+    echo "Failed $?"
     sleep $DELAY_BETWEEN_ATTEMPTS
     [[ counter -eq $max_retry ]] && print "Failed!" && exit 1
     print "Trying again. Try #$counter"
@@ -208,7 +212,7 @@ wait_for_oidc_endpoint_docker() {
   BASE_URL=$2
   CURL_ARGS="-k --tlsv1.2 -L --fail "
   DOCKER_ARGS="--rm --net ${DOCKER_NETWORK} "
-  DELAY_BETWEEN_ATTEMPTS=5
+  DELAY_BETWEEN_ATTEMPTS=10
   if [[ $# -gt 2  ]]; then
     DOCKER_ARGS="$DOCKER_ARGS -v $3:/tmp/ca_certificate.pem"
     CURL_ARGS="$CURL_ARGS --cacert /tmp/ca_certificate.pem"
