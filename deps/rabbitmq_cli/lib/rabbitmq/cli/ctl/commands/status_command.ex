@@ -142,8 +142,6 @@ defmodule RabbitMQ.CLI.Ctl.Commands.StatusCommand do
           xs -> alarm_lines(xs, node_name)
         end
 
-    IO.inspect(m[:tags])
-
     tags_section =
       [
         "\n#{bright("Tags")}\n"
