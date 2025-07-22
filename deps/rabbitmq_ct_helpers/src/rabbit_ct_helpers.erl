@@ -55,6 +55,10 @@
     await_condition/2,
     await_condition_with_retries/2,
 
+    await_condition_ignoring_exceptions/1,
+    await_condition_ignoring_exceptions/2,
+    await_condition_with_retries_ignoring_exceptions/2,
+
     eventually/1, eventually/3,
     consistently/1, consistently/3,
     
@@ -1136,6 +1140,28 @@ await_condition_with_retries(ConditionFun, RetriesLeft) ->
             await_condition_with_retries(ConditionFun, RetriesLeft - 1);
         true ->
             ok
+    end.
+
+await_condition_ignoring_exceptions(ConditionFun) ->
+    await_condition_ignoring_exceptions(ConditionFun, 10_000).
+
+await_condition_ignoring_exceptions(ConditionFun, Timeout) ->
+    Retries = ceil(Timeout / 50),
+    await_condition_with_retries_ignoring_exceptions(ConditionFun, Retries).
+
+await_condition_with_retries_ignoring_exceptions(_ConditionFun, 0) ->
+    ct:fail("Condition did not materialize in the expected period of time");
+await_condition_with_retries_ignoring_exceptions(ConditionFun, RetriesLeft) ->
+    try ConditionFun() of
+        false ->
+            timer:sleep(50),
+            await_condition_with_retries_ignoring_exceptions(ConditionFun, RetriesLeft - 1);
+        true ->
+            ok
+    catch
+        _:_ ->
+            timer:sleep(50),
+            await_condition_with_retries_ignoring_exceptions(ConditionFun, RetriesLeft - 1)
     end.
 
 %% Pass in any EUnit test object. Example:
