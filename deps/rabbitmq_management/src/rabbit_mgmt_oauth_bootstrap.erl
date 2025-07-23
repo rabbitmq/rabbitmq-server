@@ -38,7 +38,7 @@ set_oauth_settings(AuthSettings) ->
     ["set_oauth_settings(", JsonAuthSettings, ");"].
 
 set_token_auth(AuthSettings, Req0) ->
-    TokenOrError = case proplists:get_value(oauth_enabled, AuthSettings, false) of
+    ReqTokenTuple = case proplists:get_value(oauth_enabled, AuthSettings, false) of
         true ->
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
                 {bearer, Token} -> 
@@ -74,8 +74,7 @@ set_token_auth(AuthSettings, Req0) ->
                 undefined
             }
     end,
-    case TokenOrError of 
-        {error, _} = Error -> Error;
+    case ReqTokenTuple of 
         {Req, undefined} -> {Req, []};
         {Req, Tk} ->
             case oauth2_client:is_jwt_token(Tk) of 
