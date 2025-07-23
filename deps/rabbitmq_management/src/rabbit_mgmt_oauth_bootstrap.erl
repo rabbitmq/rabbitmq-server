@@ -49,6 +49,7 @@ set_token_auth(AuthSettings, Req0) ->
                     };
                 _ -> 
                     Cookies = cowboy_req:parse_cookies(Req0),
+                    ?LOG_DEBUG("parsing cookies ~p", [Cookies]),
                     case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 
                         {_, Token} ->                             
                             ?LOG_DEBUG("set_token_auth cookie token ~p", [Token]),
@@ -80,7 +81,7 @@ set_token_auth(AuthSettings, Req0) ->
             case oauth2_client:is_jwt_token(Tk) of 
                 true -> 
                     {
-                        Req0, 
+                        Req, 
                         ["set_token_auth('", Tk, "');"]
                     };
                 false -> 
@@ -88,7 +89,7 @@ set_token_auth(AuthSettings, Req0) ->
                         {ok, Tk1} -> 
                             ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
                             {
-                                Req0, 
+                                Req, 
                                 ["set_token_auth('", Tk1, "');"]
                             };
                         {error, _} = Err1 -> 
