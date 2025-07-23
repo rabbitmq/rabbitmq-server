@@ -22,7 +22,7 @@ bootstrap_oauth(Req0, State) ->
     Dependencies = oauth_dependencies(),
     case set_token_auth(AuthSettings, Req0) of 
         {error, Reason} -> 
-            rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
+            rabbit_mgmt_util:not_authorised(Reason, Req0, State);
         {Req1, SetTokenAuth} ->
             JSContent = import_dependencies(Dependencies) ++
                         set_oauth_settings(AuthSettings) ++
@@ -64,26 +64,27 @@ set_token_auth(AuthSettings, Req0) ->
                             };
                         false -> {
                                 Req0, 
-                                []
+                                undefined
                             }
                     end
             end;
         false -> {
                 Req0, 
-                []
+                undefined
             }
     end,
     case TokenOrError of 
         {error, _} = Error -> Error;
-        {Req, Token} ->
-            case oauth2_client:is_jwt_token(Token) of 
+        {Req, undefined} -> {Req, []};
+        {Req, Tk} ->
+            case oauth2_client:is_jwt_token(Tk) of 
                 true -> 
                     {
                         Req0, 
-                        ["set_token_auth('", Token, "');"]
+                        ["set_token_auth('", Tk, "');"]
                     };
                 false -> 
-                    case map_opaque_to_jwt_token(Token) of
+                    case map_opaque_to_jwt_token(Tk) of
                         {ok, Tk1} -> 
                             ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
                             {
@@ -98,12 +99,12 @@ set_token_auth(AuthSettings, Req0) ->
 
 
 map_opaque_to_jwt_token(OpaqueToken) ->
-    case oauth2_client:introspect_token(Token) of 
+    case oauth2_client:introspect_token(OpaqueToken) of 
         {error, introspected_token_not_valid} = Error -> Error;        
         {ok, JwtPayload} -> 
             case oauth2_client:sign_token(JwtPayload) of 
                 {ok, JWT} -> {ok, JWT};
-                {error, Reason} -> Error
+                {error, _} = Err1 -> Err1
             end
     end.
 
