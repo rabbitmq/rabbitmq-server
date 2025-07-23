@@ -15,7 +15,8 @@
         merge_openid_configuration/2,
         merge_oauth_provider/2,
         extract_ssl_options_as_list/1,
-        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1
+        format_ssl_options/1, format_oauth_provider/1, format_oauth_provider_id/1,
+        is_jwt_token/1
         ]).
 
 -include("oauth2_client.hrl").
@@ -916,7 +917,13 @@ get_env(Par, Def) ->
 set_env(Par, Val) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
 
-
+-spec is_jwt_token(binary() | map()) -> boolean().
+is_jwt_token(Token) when is_binary(Token) ->
+    case binary:split(Token, <<".">>, [global]) of 
+        [_, _, _] -> true;
+        _ -> false
+    end;
+is_jwt_token(_Token) -> true.
 
 -spec make_jwk(map()) -> {ok, #{binary() => binary()}} | {error, term()}.
 

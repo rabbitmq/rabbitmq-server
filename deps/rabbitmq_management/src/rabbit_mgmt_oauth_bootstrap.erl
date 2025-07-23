@@ -38,6 +38,8 @@ set_token_auth(AuthSettings, Req0) ->
         true ->
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
                 {bearer, Token} -> 
+                    ?LOG_DEBUG("set_token_auth bearer token ~p", [Token]),
+    
                     case oauth2_client:is_jwt_token(Token) of 
                         true -> 
                             {
@@ -64,6 +66,7 @@ set_token_auth(AuthSettings, Req0) ->
                     Cookies = cowboy_req:parse_cookies(Req0),
                     case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 
                         {_, Token} -> 
+                            ?LOG_DEBUG("set_token_auth cookie token ~p", [Token]),
                             {
                                 cowboy_req:set_resp_cookie(
                                     ?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, <<"">>, Req0, #{
@@ -84,6 +87,23 @@ set_token_auth(AuthSettings, Req0) ->
                 Req0, 
                 []
             }
+    end.
+
+map_opaque_to_jwt_token(OpaqueToken) ->
+    case oauth2_client:introspect_token(Token) of 
+        {error, introspected_token_not_valid} -> 
+            ?LOG_ERROR("Failed to introspect token due to ~p", [introspected_token_not_valid]),
+            rabbit_mgmt_util:not_authorised("Introspected token is not active", ReqData, Context);
+        {error, Reason} -> 
+            ?LOG_ERROR("Failed to introspect token due to ~p", [Reason]),
+            rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
+        {ok, JwtPayload} -> 
+            case oauth2_client:sign_token(JwtPayload) of 
+                {ok, JWT} ->
+                    rabbit_mgmt_util:reply([{token, JWT}], ReqData, Context);
+                {error, Reason} ->
+                    rabbit_mgmt_util:not_authorised(Reason, ReqData, Context)
+            end
     end.
 
 import_dependencies(Dependencies) ->
