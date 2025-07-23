@@ -853,7 +853,6 @@ start_https_oauth_server(Port, CertsDir, Expectations) when is_list(Expectations
 
 start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expected) ->
     Dispatch = cowboy_router:compile([{'_', [{Path, oauth_http_mock, Expected}]}]),
-    ct:log("start_https_oauth_server"),
     {ok, _} = cowboy:start_tls(
         mock_http_auth_listener,
             [{port, Port},
@@ -863,7 +862,6 @@ start_https_oauth_server(Port, CertsDir, #{request := #{path := Path}} = Expecte
             #{env => #{dispatch => Dispatch}}).
 
 stop_https_auth_server() ->
-    ct:log("stop_https_auth_server"),
     cowboy:stop_listener(mock_http_auth_listener).
 
 -spec ssl_options(ssl:verify_type(), boolean(), file:filename()) -> list().
