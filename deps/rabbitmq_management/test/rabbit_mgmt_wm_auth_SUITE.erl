@@ -59,7 +59,8 @@ groups() ->
             oauth_bootstrap_with_jwt_token_in_header,
             oauth_bootstrap_with_jwt_token_in_cookie,
             oauth_bootstrap_with_opaque_token_in_cookie,
-            oauth_bootstrap_cannot_introspect_opaque_token,
+            oauth_bootstrap_cannot_introspect_opaque_token_in_header,
+            oauth_bootstrap_cannot_introspect_opaque_token_in_cookie,
             oauth_bootstrap_without_any_token
           ]}          
         ]}        
@@ -713,7 +714,8 @@ init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_re
 init_per_testcase(Testcase, Config) when Testcase =:= oauth_bootstrap_with_jwt_token_in_header orelse 
                                          Testcase =:= oauth_bootstrap_with_jwt_token_in_cookie orelse 
                                          Testcase =:= oauth_bootstrap_with_opaque_token_in_cookie orelse
-                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_header orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_cookie orelse
                                          Testcase =:= oauth_bootstrap_without_any_token ->                                          
   rabbit_ct_helpers:testcase_started(
     setup_introspection_configuration(setup_oauth2_management_configuration(Config)), Testcase);
@@ -782,7 +784,8 @@ end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_ret
 end_per_testcase(Testcase, Config) when Testcase =:= oauth_bootstrap_with_jwt_token_in_header orelse 
                                          Testcase =:= oauth_bootstrap_with_jwt_token_in_cookie orelse 
                                          Testcase =:= oauth_bootstrap_with_opaque_token_in_cookie orelse
-                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_header orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_cookie orelse
                                          Testcase =:= oauth_bootstrap_without_any_token ->                                          
   teardown_introspection_configuration(teardown_oauth2_management_configuration(Config));
 
@@ -1046,13 +1049,18 @@ oauth_bootstrap_with_jwt_token_in_cookie(Config) ->
 
 oauth_bootstrap_with_opaque_token_in_cookie(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
-  Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
+  Result = httpc:request(get, {URI, [{"cookie", "access_token=active"}]}, [], []), 
   ct:log("response idp:  ~p ~p", [URI, Result]).
 
-oauth_bootstrap_cannot_introspect_opaque_token(Config) ->
+oauth_bootstrap_cannot_introspect_opaque_token_in_header(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
   {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = 
     httpc:request(get, {URI, [{"Authorization", "bearer inactive"}]}, [], []).   
+
+oauth_bootstrap_cannot_introspect_opaque_token_in_cookie(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = 
+    httpc:request(get, {URI, [{"cookie", "access_token=inactive"}]}, [], []).   
 
 oauth_bootstrap_without_any_token(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
