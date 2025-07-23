@@ -558,7 +558,7 @@ get_user_vhost_from_amqp_param(Uri) ->
                     exit({shutdown, {access_refused, Username}})
             end;
         {refused, Username, _Msg, _Module} ->
-            ?LOG_ERROR("Local shovel user ~ts was refused access"),
+            ?LOG_ERROR("Local shovel user ~ts was refused access", [Username]),
             exit({shutdown, {access_refused, Username}})
     end.
 
@@ -628,9 +628,10 @@ route(Msg, #{current := #{vhost := VHost}}) ->
 
 confirm_to_inbound(ConfirmFun, SeqNos, State)
   when is_list(SeqNos) ->
-    lists:foldl(fun(Seq, State0) ->
-                        confirm_to_inbound(ConfirmFun, Seq, State0)
-                end, State, SeqNos);
+    State1 = lists:foldl(fun(Seq, State0) ->
+                                 confirm_to_inbound(ConfirmFun, Seq, State0)
+                         end, State, SeqNos),
+    maybe_grant_or_stash_credit(State1);
 confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
@@ -639,37 +640,47 @@ confirm_to_inbound(ConfirmFun, Seq,
     rabbit_shovel_behaviour:decr_remaining(
       1, State#{dest => Dst#{unacked => Unacked1}}).
 
-sent_delivery(#{source := #{current := #{consumer_tag := CTag,
-                                         vhost := VHost,
-                                         queue_states := QState0
-                                        } = Current,
-                            delivery_count := DeliveryCount0,
+sent_delivery(#{source := #{delivery_count := DeliveryCount0,
                             credit := Credit0,
                             queue_delivery_count := QDeliveryCount0,
-                            queue_credit := QCredit0,
-                            at_least_one_credit_req_in_flight := HaveCreditReqInFlight,
-                            queue := QName0} = Src,
-                dest := #{unacked := Unacked}} = State0) ->
-    QName = rabbit_misc:r(VHost, queue, QName0),
+                            queue_credit := QCredit0} = Src
+               } = State0) ->
     DeliveryCount = serial_number:add(DeliveryCount0, 1),
     Credit = max(0, Credit0 - 1),
     QDeliveryCount = serial_number:add(QDeliveryCount0, 1),
     QCredit = max(0, QCredit0 - 1),
+    State = State0#{source => Src#{credit => Credit,
+                                   delivery_count => DeliveryCount,
+                                   queue_credit => QCredit,
+                                   queue_delivery_count => QDeliveryCount
+                                  }},
+    maybe_grant_or_stash_credit(State).
+
+maybe_grant_or_stash_credit(#{source := #{queue := QName0,
+                                    credit := Credit,
+                                    delivery_count := DeliveryCount,
+                                    at_least_one_credit_req_in_flight := HaveCreditReqInFlight,
+                                    current := #{consumer_tag := CTag,
+                                                 vhost := VHost,
+                                                 queue_states := QState0} = Current
+                                   } = Src,
+                        dest := #{unacked := Unacked}} = State0) ->
     MaxLinkCredit = max_link_credit(),
-    GrantLinkCredit = grant_link_credit(HaveCreditReqInFlight, Credit, MaxLinkCredit, maps:size(Unacked)),
+    GrantLinkCredit = grant_link_credit(Credit, MaxLinkCredit, maps:size(Unacked)),
     Src1 = case HaveCreditReqInFlight andalso GrantLinkCredit of
-      true ->
-        Req = #credit_req {
-          delivery_count = DeliveryCount
-        },
-        maps:put(stashed_credit_req, Req, Src);
-      false ->
-        Src
-    end,
-    {ok, QState, Actions} = case GrantLinkCredit of
+               true ->
+                   Req = #credit_req {
+                            delivery_count = DeliveryCount
+                           },
+                   maps:put(stashed_credit_req, Req, Src);
+               false ->
+                   Src
+           end,
+    {ok, QState, Actions} = case (GrantLinkCredit and not HaveCreditReqInFlight) of
                                 true ->
+                                    QName = rabbit_misc:r(VHost, queue, QName0),
                                     rabbit_queue_type:credit(
-                                      QName, CTag, DeliveryCount, max_link_credit(),
+                                      QName, CTag, DeliveryCount, MaxLinkCredit,
                                       false, QState0);
                                 _ ->
                                     {ok, QState0, []}
@@ -679,20 +690,14 @@ sent_delivery(#{source := #{current := #{consumer_tag := CTag,
                             false -> HaveCreditReqInFlight
                         end,
     State = State0#{source => Src1#{current => Current#{queue_states => QState},
-                                   credit => Credit,
-                                   delivery_count => DeliveryCount,
-                                   queue_credit => QCredit,
-                                   queue_delivery_count => QDeliveryCount,
-                                   at_least_one_credit_req_in_flight => CreditReqInFlight
-                                  }},
+                                    at_least_one_credit_req_in_flight => CreditReqInFlight
+                                   }},
     handle_queue_actions(Actions, State).
 
 max_link_credit() ->
     application:get_env(rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT).
 
-grant_link_credit(true = _HaveCreditReqInFlight, _Credit, _MaxLinkCredit, _NumUnconfirmed) ->
-    false;
-grant_link_credit(false = _HaveCreditReqInFlight, Credit, MaxLinkCredit, NumUnconfirmed) ->
+grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     Credit =< MaxLinkCredit div 2 andalso
     NumUnconfirmed < MaxLinkCredit.
 
