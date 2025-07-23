@@ -14,6 +14,8 @@
 
 -compile(export_all).
 
+-import(shovel_test_utils, [await_amqp10_event/3, await_credit/1]).
+
 -define(PARAM, <<"test">>).
 
 all() ->
@@ -106,6 +108,7 @@ init_per_testcase(Testcase, Config0) ->
     VHost = list_to_binary(atom_to_list(Testcase) ++ "_vhost"),
     Config = [{srcq, SrcQ}, {destq, DestQ}, {destq2, DestQ2},
               {alt_vhost, VHost} | Config0],
+
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
@@ -953,6 +956,8 @@ publish(Sender, Tag, Payload) when is_binary(Payload) ->
     Headers = #{durable => true},
     Msg = amqp10_msg:set_headers(Headers,
                                  amqp10_msg:new(Tag, Payload, false)),
+    %% N.B.: this function does not attach a link and does not
+    %%       need to use await_credit/1
     ok = amqp10_client:send_msg(Sender, Msg),
     receive
         {amqp10_disposition, {accepted, Tag}} -> ok
@@ -965,6 +970,7 @@ publish(Session, Source, Dest, Tag, Payloads) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
                                                     unsettled, unsettled_state),
     ok = await_amqp10_event(link, Sender, attached),
+    ok = await_credit(Sender),
     case is_list(Payloads) of
         true ->
             [publish(Sender, Tag, Payload) || Payload <- Payloads];
@@ -980,13 +986,6 @@ publish_expect(Session, Source, Dest, Tag, Payload) ->
 publish_many(Session, Source, Dest, Tag, N) ->
     Payloads = [integer_to_binary(Payload) || Payload <- lists:seq(1, N)],
     publish(Session, Source, Dest, Tag, Payloads).
-
-await_amqp10_event(On, Ref, Evt) ->
-    receive
-        {amqp10_event, {On, Ref, Evt}} -> ok
-    after 5000 ->
-            exit({amqp10_event_timeout, On, Ref, Evt})
-    end.
 
 expect_one(Session, Dest) ->
     LinkName = <<"dynamic-receiver-", Dest/binary>>,
