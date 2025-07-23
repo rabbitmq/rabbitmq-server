@@ -227,37 +227,87 @@ filter_few_messages_from_many(Config) ->
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
              amqp10_msg:new(<<"t1">>, <<"first msg">>))),
-    ok = send_messages(Sender, 1000, false),
+    ok = send_messages(Sender, 5000, false),
     ok = amqp10_client:send_msg(
            Sender,
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
              amqp10_msg:new(<<"t2">>, <<"last msg">>))),
-    ok = wait_for_accepts(1002),
-    ok = detach_link_sync(Sender),
+    ok = wait_for_accepts(5002),
     flush(sent),
 
     %% Our filter should cause us to receive only the first and
     %% last message out of the 1002 messages in the stream.
     Filter = filter(<<"properties.group_id IS NOT NULL">>),
-    {ok, Receiver} = amqp10_client:attach_receiver_link(
-                       Session, <<"receiver">>, Address,
-                       unsettled, configuration, Filter),
-
-    ok = amqp10_client:flow_link_credit(Receiver, 2, never, true),
-    receive {amqp10_msg, Receiver, M1} ->
-                ?assertEqual([<<"first msg">>], amqp10_msg:body(M1)),
-                ok = amqp10_client:accept_msg(Receiver, M1)
-    after 30000 -> ct:fail({missing_msg, ?LINE})
+    {ok, Receiver1} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 1">>, Address,
+                        settled, configuration, Filter),
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver 2">>, Address,
+                        settled, configuration, Filter),
+    receive {amqp10_event, {link, Receiver1, attached}} -> ok
+    after 9000 -> ct:fail({missing_msg, ?LINE})
     end,
-    receive {amqp10_msg, Receiver, M2} ->
-                ?assertEqual([<<"last msg">>], amqp10_msg:body(M2)),
-                ok = amqp10_client:accept_msg(Receiver, M2)
-    after 30000 -> ct:fail({missing_msg, ?LINE})
+    receive {amqp10_event, {link, Receiver2, attached}} -> ok
+    after 9000 -> ct:fail({missing_msg, ?LINE})
     end,
-    ok = assert_credit_exhausted(Receiver, ?LINE),
-    ok = detach_link_sync(Receiver),
 
+    ok = amqp10_client:flow_link_credit(Receiver1, 3, never, true),
+    ok = amqp10_client:flow_link_credit(Receiver2, 3, never, false),
+
+    %% For two links filtering on the same session, we expect that RabbitMQ
+    %% delivers messages concurrently (instead of scanning the entire stream
+    %% for the 1st receiver before scanning the entire stream for the 2nd receiver).
+    receive {amqp10_msg, _, First1} ->
+                ?assertEqual([<<"first msg">>], amqp10_msg:body(First1))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, First2} ->
+                ?assertEqual([<<"first msg">>], amqp10_msg:body(First2))
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    receive {amqp10_msg, _, Last1} ->
+                ?assertEqual([<<"last msg">>], amqp10_msg:body(Last1))
+    after 60_000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    receive {amqp10_msg, _, Last2} ->
+                ?assertEqual([<<"last msg">>], amqp10_msg:body(Last2))
+    after 60_000 -> ct:fail({missing_msg, ?LINE})
+    end,
+
+    %% We previously set drain=true for Receiver1
+    ok = assert_credit_exhausted(Receiver1, ?LINE),
+    ok = amqp10_client:send_msg(
+           Sender,
+           amqp10_msg:set_properties(
+             #{group_id => <<"my group ID">>},
+             amqp10_msg:new(<<"t3">>, <<"one more">>))),
+    receive {amqp10_disposition, {accepted, <<"t3">>}} -> ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+    receive {amqp10_msg, R2, Msg1} ->
+                ?assertEqual([<<"one more">>], amqp10_msg:body(Msg1)),
+                ?assertEqual(Receiver2, R2)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = assert_credit_exhausted(Receiver2, ?LINE),
+
+    ok = amqp10_client:flow_link_credit(Receiver1, 1_000_000_000, never, true),
+    receive {amqp10_msg, R1, Msg2} ->
+                ?assertEqual([<<"one more">>], amqp10_msg:body(Msg2)),
+                ?assertEqual(Receiver1, R1)
+    after 9000 -> ct:fail({missing_msg, ?LINE})
+    end,
+    ok = assert_credit_exhausted(Receiver1, ?LINE),
+
+    receive {amqp10_msg, _, _} -> ct:fail(unexpected_delivery)
+    after 10 -> ok
+    end,
+
+    ok = detach_link_sync(Receiver1),
+    ok = detach_link_sync(Receiver2),
+    ok = detach_link_sync(Sender),
     {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, Stream),
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = end_session_sync(Session),

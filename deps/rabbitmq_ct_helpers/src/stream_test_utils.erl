@@ -150,11 +150,9 @@ simple_entry(Sequence, Body, AppProps)
 
 %% Here, each AMQP 1.0 encoded message consists of an application-properties section and a data section.
 %% All data sections are delivered uncompressed in 1 batch.
-sub_batch_entry_uncompressed(Sequence, Bodies) ->
+sub_batch_entry_uncompressed(Sequence, AppProps, Bodies) ->
+    Sect0 = iolist_to_binary(amqp10_framing:encode_bin(AppProps)),
     Batch = lists:foldl(fun(Body, Acc) ->
-                                AppProps = #'v1_0.application_properties'{
-                                              content = [{{utf8, <<"my key">>}, {utf8, <<"my value">>}}]},
-                                Sect0 = iolist_to_binary(amqp10_framing:encode_bin(AppProps)),
                                 Sect1 = iolist_to_binary(amqp10_framing:encode_bin(#'v1_0.data'{content = Body})),
                                 Sect = <<Sect0/binary, Sect1/binary>>,
                                 <<Acc/binary, 0:1, (byte_size(Sect)):31, Sect/binary>>
