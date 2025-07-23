@@ -100,7 +100,5 @@
     id :: string(),
     type :: hs256 | rs256,
     key :: option(#{binary() => binary()})
-%    private_key :: option(binary()),
-%    public_key :: option(binary())
 }).
 -type signing_key() :: #signing_key{}.
