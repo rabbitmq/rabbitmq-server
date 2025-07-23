@@ -20,52 +20,37 @@ init(Req0, State) ->
 bootstrap_oauth(Req0, State) ->
     AuthSettings = rabbit_mgmt_wm_auth:authSettings(),
     Dependencies = oauth_dependencies(),
-    {Req1, SetTokenAuth} = set_token_auth(AuthSettings, Req0),
-    JSContent = import_dependencies(Dependencies) ++
-                set_oauth_settings(AuthSettings) ++
-                SetTokenAuth ++
-                export_dependencies(Dependencies),
-    
-    {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
-        JSContent, Req1), State}.
+    case set_token_auth(AuthSettings, Req0) of 
+        {error, Reason} -> 
+            rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
+        {Req1, SetTokenAuth} ->
+            JSContent = import_dependencies(Dependencies) ++
+                        set_oauth_settings(AuthSettings) ++
+                        SetTokenAuth ++
+                        export_dependencies(Dependencies),
+            
+            {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"text/javascript; charset=utf-8">>},
+                JSContent, Req1), State}
+    end.
 
 set_oauth_settings(AuthSettings) ->
     JsonAuthSettings = rabbit_json:encode(rabbit_mgmt_format:format_nulls(AuthSettings)),
     ["set_oauth_settings(", JsonAuthSettings, ");"].
 
 set_token_auth(AuthSettings, Req0) ->
-    case proplists:get_value(oauth_enabled, AuthSettings, false) of
+    TokenOrError = case proplists:get_value(oauth_enabled, AuthSettings, false) of
         true ->
             case cowboy_req:parse_header(<<"authorization">>, Req0) of
                 {bearer, Token} -> 
-                    ?LOG_DEBUG("set_token_auth bearer token ~p", [Token]),
-    
-                    case oauth2_client:is_jwt_token(Token) of 
-                        true -> 
-                            {
-                                Req0, 
-                                ["set_token_auth('", Token, "');"]
-                            };
-                        false -> 
-                            case oauth2_client:introspect_token(Token) of
-                                {ok, Tk1} -> 
-                                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
-                                    {
-                                        Req0, 
-                                        ["set_token_auth('", Tk1, "');"]
-                                    };
-                                {error, Err1} -> 
-                                    ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),
-                                    {
-                                        Req0, 
-                                        []
-                                    }
-                            end      
-                    end;
+                    ?LOG_DEBUG("set_token_auth bearer token ~p", [Token]),                    
+                    {
+                        Req0, 
+                        Token
+                    };
                 _ -> 
                     Cookies = cowboy_req:parse_cookies(Req0),
                     case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 
-                        {_, Token} -> 
+                        {_, Token} ->                             
                             ?LOG_DEBUG("set_token_auth cookie token ~p", [Token]),
                             {
                                 cowboy_req:set_resp_cookie(
@@ -75,7 +60,7 @@ set_token_auth(AuthSettings, Req0) ->
                                         path => ?OAUTH2_ACCESS_TOKEN_COOKIE_PATH,
                                         same_site => strict
                                     }), 
-                                ["set_token_auth('", Token, "');"]
+                                Token
                             };
                         false -> {
                                 Req0, 
@@ -87,22 +72,38 @@ set_token_auth(AuthSettings, Req0) ->
                 Req0, 
                 []
             }
+    end,
+    case TokenOrError of 
+        {error, _} = Error -> Error;
+        {Req, Token} ->
+            case oauth2_client:is_jwt_token(Token) of 
+                true -> 
+                    {
+                        Req0, 
+                        ["set_token_auth('", Token, "');"]
+                    };
+                false -> 
+                    case map_opaque_to_jwt_token(Token) of
+                        {ok, Tk1} -> 
+                            ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
+                            {
+                                Req0, 
+                                ["set_token_auth('", Tk1, "');"]
+                            };
+                        {error, _} = Err1 -> 
+                            Err1
+                    end      
+            end
     end.
+
 
 map_opaque_to_jwt_token(OpaqueToken) ->
     case oauth2_client:introspect_token(Token) of 
-        {error, introspected_token_not_valid} -> 
-            ?LOG_ERROR("Failed to introspect token due to ~p", [introspected_token_not_valid]),
-            rabbit_mgmt_util:not_authorised("Introspected token is not active", ReqData, Context);
-        {error, Reason} -> 
-            ?LOG_ERROR("Failed to introspect token due to ~p", [Reason]),
-            rabbit_mgmt_util:not_authorised(Reason, ReqData, Context);
+        {error, introspected_token_not_valid} = Error -> Error;        
         {ok, JwtPayload} -> 
             case oauth2_client:sign_token(JwtPayload) of 
-                {ok, JWT} ->
-                    rabbit_mgmt_util:reply([{token, JWT}], ReqData, Context);
-                {error, Reason} ->
-                    rabbit_mgmt_util:not_authorised(Reason, ReqData, Context)
+                {ok, JWT} -> {ok, JWT};
+                {error, Reason} -> Error
             end
     end.
 
