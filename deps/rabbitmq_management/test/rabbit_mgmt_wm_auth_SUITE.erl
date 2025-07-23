@@ -55,7 +55,7 @@ groups() ->
           %introspect_opaque_token_returns_active_jwt_token,
           %introspect_opaque_token_returns_inactive_jwt_token,
           %introspect_opaque_token_returns_401_from_auth_server,
-          idp_introspect_opaque_token
+          oauth_bootstrap
         ]}        
       ]},
       {verify_multi_resource_and_provider, [], [
@@ -699,7 +699,7 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
                                          Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
                                          Testcase =:= introspect_opaque_token_returns_401_from_auth_server orelse 
-                                         Testcase =:= idp_introspect_opaque_token ->
+                                         Testcase =:= oauth_bootstrap ->
 
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint,
@@ -735,7 +735,7 @@ init_per_testcase(Testcase, Config) ->
 end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
                                         Testcase =:= introspect_opaque_token_returns_401_from_auth_server orelse
-                                        Testcase =:= idp_introspect_opaque_token ->
+                                        Testcase =:= oauth_bootstrap ->
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
@@ -995,7 +995,7 @@ introspect_opaque_token_returns_401_from_auth_server(Config) ->
   {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = req(Config, 0, post, "/auth/introspect", [
     {"authorization", "bearer 401"}], []).
 
-idp_introspect_opaque_token(Config) ->
+oauth_bootstrap(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
   Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
   ct:log("response idp:  ~p ~p", [URI, Result]).
