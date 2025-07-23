@@ -31,7 +31,9 @@ all() ->
 groups() ->
 [
     {sign_token, [], [
-        can_sign_token
+        can_sign_token,
+        is_jwt_token,
+        is_not_jwt_token
     ]},
     {ssl_options, [], [
         no_ssl_options_triggers_verify_peer,
@@ -311,3 +313,13 @@ can_sign_token(_Config) ->
     {ok, Value } = oauth2_client:sign_token(#{"scopes" => "a b"}),
     ct:log("JWT : ~p", [Value]),
     ok.
+
+is_jwt_token(Config) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    AccessToken = maps:remove(<<"exp">>, ?UTIL_MOD:fixture_token()),
+    ct:log("AccesToken ~p", [AccessToken]),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(AccessToken, Jwk),
+    ?assertEqual(true, oauth2_client:is_jwt_token(EncodedToken)).
+
+is_not_jwt_token(_) ->
+    ?assertEqual(false, oauth2_client:is_jwt_token(<<"some opaque token">>)).

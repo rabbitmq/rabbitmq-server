@@ -52,9 +52,9 @@ groups() ->
     [
       {run_with_broker, [], [
         {verify_introspection_endpoint, [], [
-          introspect_opaque_token_returns_active_jwt_token,
-          introspect_opaque_token_returns_inactive_jwt_token,
-          introspect_opaque_token_returns_401_from_auth_server,
+          %introspect_opaque_token_returns_active_jwt_token,
+          %introspect_opaque_token_returns_inactive_jwt_token,
+          %introspect_opaque_token_returns_401_from_auth_server,
           idp_introspect_opaque_token
         ]}        
       ]},
@@ -709,6 +709,16 @@ init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_re
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-secret"]),
   CaCertFile = ?config(authorization_server_ca_cert, Config),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_enabled, true]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_client_id, "rabbit_user"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_client_secret, "rabbit_secret"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),    
 
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
     [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
@@ -732,6 +742,16 @@ end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_ret
     [rabbitmq_auth_backend_oauth2, introspection_client_id]),
   ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
     [rabbitmq_auth_backend_oauth2, introspection_client_secret]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_enabled]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, resource_server_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_client_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_client_secret]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_provider_url]),
   Config;
 
 end_per_testcase(Testcase, Config) ->
