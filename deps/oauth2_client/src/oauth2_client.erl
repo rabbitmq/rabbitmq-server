@@ -917,7 +917,9 @@ get_env(Par, Def) ->
 set_env(Par, Val) ->
     application:set_env(rabbitmq_auth_backend_oauth2, Par, Val).
 
--spec is_jwt_token(binary() | map()) -> boolean().
+-spec is_jwt_token(list() | binary() | map()) -> boolean().
+is_jwt_token(Token) when is_list(Token) ->
+    is_jwt_token(list_to_binary(Token));
 is_jwt_token(Token) when is_binary(Token) ->
     case binary:split(Token, <<".">>, [global]) of 
         [_, _, _] -> true;

@@ -1030,7 +1030,14 @@ introspect_opaque_token_returns_401_from_auth_server(Config) ->
 oauth_bootstrap_with_jwt_token_in_header(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
   Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
-  ct:log("response idp:  ~p ~p", [URI, Result]).
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = Result,
+  ct:log("resbody: ~p", [ResBody]),
+  case string:find(ResBody,"set_token_auth(") of 
+    nomatch -> ct:fail("expected setting token");
+    Reminder -> 
+      {match, [Token | _]} = re:run(Reminder, "'([^']*)'", [{capture, [1], list}]),
+      ?assertEqual(true, oauth2_client:is_jwt_token(Token))
+  end.
 
 oauth_bootstrap_with_jwt_token_in_cookie(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
@@ -1044,13 +1051,16 @@ oauth_bootstrap_with_opaque_token_in_cookie(Config) ->
 
 oauth_bootstrap_cannot_introspect_opaque_token(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
-  Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
-  ct:log("response idp:  ~p ~p", [URI, Result]).
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = 
+    httpc:request(get, {URI, [{"Authorization", "bearer inactive"}]}, [], []).   
 
 oauth_bootstrap_without_any_token(Config) ->
   URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
-  Result = httpc:request(get, {URI, [{"Authorization", "bearer active"}]}, [], []), 
-  ct:log("response idp:  ~p ~p", [URI, Result]).
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = httpc:request(get, {URI, []}, [], []), 
+  case string:find(ResBody,"set_token_auth(") of 
+    nomatch -> ok;
+    Reminder -> ct:fail("expected no set_token_auth call")
+  end.
 
 
 %% -------------------------------------------------------------------
