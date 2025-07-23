@@ -120,8 +120,8 @@ expired_credentials_test_() ->
 format_response_test_() ->
   [
     {"ok", fun() ->
-      Response = {ok, {{"HTTP/1.1", 200, "Ok"}, [{"Content-Type", "text/xml"}], "<test>Value</test>"}},
-      Expectation = {ok, {[{"Content-Type", "text/xml"}], [{"test", "Value"}]}},
+      Response = {ok, {{"HTTP/1.1", 200, "Ok"}, [{<<"Content-Type">>, <<"text/xml">>}], "<test>Value</test>"}},
+      Expectation = {ok, {[{<<"Content-Type">>, <<"text/xml">>}], [{"test", "Value"}]}},
       ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
      end},
     {"error", fun() ->
@@ -172,13 +172,13 @@ gen_server_call_test_() ->
             %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
             %% end),
           meck:expect(gun, await,
-                      fun(_Pid, _, _) -> {response, nofin, 200, [{"content-type", "application/json"}]} end),
+                      fun(_Pid, _, _) -> {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]} end),
           meck:expect(gun, await_body,
                       fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end),
 
             %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
             %% end),
-          Expectation = {reply, {ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State#state{gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}}},
+          Expectation = {reply, {ok, {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}}, State#state{gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}}},
           Result = rabbitmq_aws:handle_call({request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State),
           ?assertEqual(Expectation, Result),
           meck:validate(gun)
@@ -364,11 +364,11 @@ perform_request_test_() ->
           meck:expect(gun, get,
                       fun(_Pid, "/?Action=DescribeTags&Version=2015-10-01", _Headers) -> nofin end),
           meck:expect(gun, await,
-                      fun(_Pid, _, _) -> {response, nofin, 200, [{"content-type", "application/json"}]} end),
+                      fun(_Pid, _, _) -> {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]} end),
           meck:expect(gun, await_body,
                       fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end),
 
-          Expectation = {{ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State#state{gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}}},
+          Expectation = {{ok, {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}}, State#state{gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}}},
           Result = rabbitmq_aws:perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
           ?assertEqual(Expectation, Result),
           meck:validate(gun)
@@ -476,7 +476,7 @@ api_get_request_test_() ->
           meck:expect(gun, get,
                       fun(_Pid, _Path, _Headers) -> nofin end),
           meck:expect(gun, await,
-                      fun(_Pid, _, _) -> {response, nofin, 200, [{"content-type", "application/json"}]} end),
+                      fun(_Pid, _, _) -> {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]} end),
           meck:expect(gun, await_body,
                       fun(_Pid, _, _) -> {ok, <<"{\"data\": \"value\"}">>} end),
 
@@ -540,8 +540,8 @@ api_get_request_test_() ->
           %% meck:expect(gun, get, 3, meck:seq(
           %%             fun(_Pid, _Path, _Headers) -> {error, "network errors"} end),
           meck:expect(gun, await, 3, meck:seq([{error, "network error"},
-                                               {response, nofin, 500, [{"content-type", "application/json"}]},
-                                               {response, nofin, 200, [{"content-type", "application/json"}]}])),
+                                               {response, nofin, 500, [{<<"content-type">>, <<"application/json">>}]},
+                                               {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}])),
 
           meck:expect(gun, await_body, 3, meck:seq([{ok, <<"{\"error\": \"server error\"}">>},
                                                     {ok, <<"{\"data\": \"value\"}">>}])),

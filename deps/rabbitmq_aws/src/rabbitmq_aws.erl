@@ -9,7 +9,7 @@
 -behavior(gen_server).
 
 %% API exports
--export([get/2, get/3,
+-export([get/2, get/3, put/4,
          post/4,
          refresh_credentials/0,
          request/5, request/6, request/7,
@@ -73,6 +73,18 @@ get(Service, Path, Headers) ->
 %% @end
 post(Service, Path, Body, Headers) ->
   request(Service, post, Path, Body, Headers).
+
+
+-spec put(Service :: string(),
+          Path :: path(),
+          Body :: body(),
+          Headers :: headers()) -> result().
+%% @doc Perform a HTTP Post request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+put(Service, Path, Body, Headers) ->
+  request(Service, put, Path, Body, Headers).
 
 
 -spec refresh_credentials() -> ok | error.
@@ -287,6 +299,8 @@ endpoint_tld(_Other) ->
 %% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
   {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+format_response({ok, {{_Version, 206, _Message}, Headers, Body}}) ->
+  {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
   {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({error, Reason}) ->
@@ -297,9 +311,9 @@ format_response({error, Reason}) ->
 %%      {Type, Subtype}.
 %% @end
 get_content_type(Headers) ->
-  Value = case proplists:get_value("content-type", Headers, undefined) of
+  Value = case proplists:get_value(<<"content-type">>, Headers, undefined) of
     undefined ->
-      proplists:get_value("Content-Type", Headers, "text/xml");
+      proplists:get_value(<<"Content-Type">>, Headers, "text/xml");
     Other -> Other
   end,
     parse_content_type(Value).
@@ -368,6 +382,8 @@ local_time() ->
 -spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
 %% @doc Attempt to decode the response body by its MIME
 %% @end
+maybe_decode_body(_, <<>>) ->
+    <<>>;
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
   rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
@@ -381,6 +397,8 @@ maybe_decode_body(_ContentType, Body) ->
 -spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
 %% @doc parse a content type string returning a tuple of type/subtype
 %% @end
+parse_content_type(ContentType) when is_binary(ContentType)->
+    parse_content_type(binary_to_list(ContentType));
 parse_content_type(ContentType) ->
   Parts = string:tokens(ContentType, ";"),
   [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
@@ -437,25 +455,23 @@ perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
 %%      expired, perform the request and return the response.
 %% @end
 perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host) ->
-  URI = endpoint(State, Host, Service, Path),
-  SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
-  ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
-    perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
+    URI = endpoint(State, Host, Service, Path),
+    SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
+    perform_request_with_creds(State, Method, URI, SignedHeaders, Body, Options).
 
 
 -spec perform_request_with_creds(State :: state(), Method :: method(), URI :: string(),
-                                 Headers :: headers(), ContentType :: string() | undefined,
+                                 Headers :: headers(),
                                  Body :: body(), Options :: http_options())
     -> {Result :: result(), NewState :: state()}.
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
-perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
+perform_request_with_creds(State, Method, URI, Headers, "", Options0) ->
   {Response, NewState} = gun_request(State, Method, URI, Headers, <<>>, Options0),
   {format_response(Response), NewState};
-perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
-  GunHeaders = [{"content-type", ContentType} | Headers],
-  {Response, NewState} = gun_request(State, Method, URI, GunHeaders, Body, Options0),
+perform_request_with_creds(State, Method, URI, Headers, Body, Options0) ->
+  {Response, NewState} = gun_request(State, Method, URI, Headers, Body, Options0),
   {format_response(Response), NewState}.
 
 
@@ -580,11 +596,15 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
 
 %% Gun HTTP client functions
 gun_request(State, Method, URI, Headers, Body, Options) ->
+    HeadersBin = lists:map(
+                   fun({Key, Value}) ->
+                           {list_to_binary(Key), list_to_binary(Value)}
+                   end, Headers),
     {Host, Port, Path} = parse_uri(URI),
     {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Path, Options),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
     try
-        StreamRef = do_gun_request(ConnPid, Method, Path, Headers, Body),
+        StreamRef = do_gun_request(ConnPid, Method, Path, HeadersBin, Body),
         case gun:await(ConnPid, StreamRef, Timeout) of
             {response, fin, Status, RespHeaders} ->
                 Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
@@ -637,7 +657,7 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
     end.
 
 get_connection_key(Host, Port, Path, Options) ->
-    case proplists:get_value(connection_per_path, Options, false) of
+    case proplists:get_value(connection_per_path, Options, true) of
         true -> Host ++ ":" ++ integer_to_list(Port) ++ Path;  % Per-path
         false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
     end.
@@ -700,9 +720,11 @@ parse_host_port(HostPort, Scheme) ->
     end.
 
 status_text(200) -> "OK";
+status_text(206) -> "Partial Content";
 status_text(400) -> "Bad Request";
 status_text(401) -> "Unauthorized";
 status_text(403) -> "Forbidden";
 status_text(404) -> "Not Found";
+status_text(416) -> "Range Not Satisfiable";
 status_text(500) -> "Internal Server Error";
 status_text(Code) -> integer_to_list(Code).
