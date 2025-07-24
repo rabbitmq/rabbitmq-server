@@ -153,7 +153,7 @@ expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
 authenticate(_, AuthProps0) ->
     AuthProps = to_map(AuthProps0),
     Token0     = token_from_context(AuthProps),
-    TokenResult = case uaa_jwt_jwt:is_jwt_token(Token0) of 
+    TokenResult = case oauth2_client:is_jwt_token(Token0) of 
         true -> {ok, Token0};
         false -> 
             case oauth2_client:introspect_token(Token0) of

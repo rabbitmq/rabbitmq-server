@@ -42,10 +42,3 @@ get_aud(Token) ->
     catch Type:Err:Stacktrace ->
         {error, {invalid_token, Type, Err, Stacktrace}}
     end.
-
-is_jwt_token(Token) when is_binary(Token) ->
-    case binary:split(Token, <<".">>, [global]) of 
-        [_, _, _] -> true;
-        _ -> false
-    end;
-is_jwt_token(_Token) -> true.

@@ -302,7 +302,6 @@ access_token_response_without_expiration_time(_) ->
     AccessTokenResponse = #successful_access_token_response{
         access_token = EncodedToken
     },
-    ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
 
 
@@ -310,14 +309,11 @@ can_sign_token(_Config) ->
     application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
         [{ id, <<"key-id">>}, {type, hs256}, {key, <<"some-key">>}]),
 
-    {ok, Value } = oauth2_client:sign_token(#{"scopes" => "a b"}),
-    ct:log("JWT : ~p", [Value]),
-    ok.
+    {ok, _ } = oauth2_client:sign_token(#{"scopes" => "a b"}).
 
 is_jwt_token(Config) ->
     Jwk = ?UTIL_MOD:fixture_jwk(),
     AccessToken = maps:remove(<<"exp">>, ?UTIL_MOD:fixture_token()),
-    ct:log("AccesToken ~p", [AccessToken]),
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(AccessToken, Jwk),
     ?assertEqual(true, oauth2_client:is_jwt_token(EncodedToken)).
 
