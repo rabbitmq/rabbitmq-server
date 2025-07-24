@@ -20,6 +20,7 @@
          set_region/1,
          ensure_imdsv2_token_valid/0,
          api_get_request/2,
+         close_connection/3,
          status_text/1]).
 
 %% gen-server exports
@@ -98,8 +99,10 @@ put(Service, Path, Body, Headers, Options) ->
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
-  gen_server:call(rabbitmq_aws, refresh_credentials).
+    gen_server:call(rabbitmq_aws, refresh_credentials).
 
+close_connection(Service, Path, Options) ->
+    gen_server:cast(?MODULE, {close_connection, Service, Path, Options}).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
@@ -214,8 +217,11 @@ code_change(_, _, State) ->
 handle_call(Msg, _From, State) ->
   handle_msg(Msg, State).
 
+
+handle_cast({close_connection, Service, Path, Options}, State) ->
+    {noreply, close_connection(Service, Path, Options, State)};
 handle_cast(_Request, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 
 handle_info(_Info, State) ->
@@ -664,7 +670,6 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
     end.
 
 get_connection_key(Host, Port, Path, Options) ->
-    io:format(">>~p~n",[Options]),
     case proplists:get_value(connection_per_path, Options, false) of
         true -> Host ++ ":" ++ integer_to_list(Port) ++ Path;  % Per-path
         false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
@@ -700,6 +705,20 @@ create_gun_connection(State, Host, Port, HostKey, Options) ->
         {error, Reason} ->
             error({gun_open_failed, Reason})
     end.
+
+close_connection(Service, Path, Options, State) ->
+    URI = endpoint(State, undefined, Service, Path),
+    {Host, Port, Path} = parse_uri(URI),
+    HostKey = get_connection_key(Host, Port, Path, Options),
+    case maps:get(HostKey, State#state.gun_connections, undefined) of
+        undefined ->
+            State;
+        ConnPid ->
+            gun:close(ConnPid),
+            NewConnections = maps:remove(HostKey, State#state.gun_connections),
+            State#state{gun_connections = NewConnections}
+    end.
+
 
 parse_uri(URI) ->
     case string:split(URI, "://", leading) of
