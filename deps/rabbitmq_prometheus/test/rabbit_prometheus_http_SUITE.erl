@@ -884,6 +884,7 @@ detailed_raft_metrics_test(Config) ->
 
     ok.
 
+
 basic_auth(Config) ->
     http_get(Config, [{"accept-encoding", "deflate"}], 401),
     AuthHeader = rabbit_mgmt_test_util:auth_header("guest", "guest"),
