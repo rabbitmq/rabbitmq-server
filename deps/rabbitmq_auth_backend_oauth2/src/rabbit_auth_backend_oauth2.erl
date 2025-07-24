@@ -110,29 +110,45 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
-    case resolve_resource_server(NewToken) of
-        {error, _} = Err0 -> Err0;
-        {ResourceServer, _} = Tuple ->
-            case check_token(NewToken, Tuple) of
-                %% avoid logging the token
-                {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
-                    {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
-                {refused, Err} ->
-                    {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
-                {ok, DecodedToken} ->
-                    CurToken = AuthUser#auth_user.impl,
-                    case ensure_same_username(
-                            ResourceServer#resource_server.preferred_username_claims,
-                            CurToken(), DecodedToken) of
-                        ok ->
-                            Tags = tags_from(DecodedToken),
-                            {ok, AuthUser#auth_user{tags = Tags,
-                                                    impl = fun() -> DecodedToken end}};
-                        {error, mismatch_username_after_token_refresh} ->
-                            {refused,
-                                "Not allowed to change username on refreshed token"}
-                    end
+    TokenResult = case oauth2_client:is_jwt_token(NewToken) of 
+        true -> {ok, NewToken};
+        false -> 
+            case oauth2_client:introspect_token(NewToken) of
+                {ok, Tk1} -> 
+                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
+                    {ok, Tk1};
+                {error, Err1} -> 
+                    ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),
+                    {error, Err1}
             end
+    end,
+    case TokenResult of 
+        {ok, Token} ->
+            case resolve_resource_server(Token) of
+                {error, _} = Err0 -> Err0;
+                {ResourceServer, _} = Tuple ->
+                    case check_token(Token, Tuple) of
+                        %% avoid logging the token
+                        {refused, {error, {invalid_token, error, _Err, _Stacktrace}}} ->
+                            {refused, "Authentication using an OAuth 2/JWT token failed: provided token is invalid"};
+                        {refused, Err} ->
+                            {refused, rabbit_misc:format("Authentication using an OAuth 2/JWT token failed: ~tp", [Err])};
+                        {ok, DecodedToken} ->
+                            CurToken = AuthUser#auth_user.impl,
+                            case ensure_same_username(
+                                    ResourceServer#resource_server.preferred_username_claims,
+                                    CurToken(), DecodedToken) of
+                                ok ->
+                                    Tags = tags_from(DecodedToken),
+                                    {ok, AuthUser#auth_user{tags = Tags,
+                                                            impl = fun() -> DecodedToken end}};
+                                {error, mismatch_username_after_token_refresh} ->
+                                    {refused,
+                                        "Not allowed to change username on refreshed token"}
+                            end
+                    end
+            end;
+        {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
     end.
 
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
