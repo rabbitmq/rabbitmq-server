@@ -546,12 +546,15 @@ local_to_local_delete_after_queue_length(Config) ->
                                                   {<<"dest-protocol">>, <<"local">>},
                                                   {<<"dest-queue">>, Dest}
                                                  ]),
-              shovel_test_utils:await_no_shovel(Config, ?PARAM),
               %% The shovel parameter is only deleted when 'delete-after'
               %% is used. In any other failure, the shovel should
               %% remain and try to restart
               expect_many(Sess, Dest, 18),
-              ?assertMatch(not_found, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters, lookup, [<<"/">>, <<"shovel">>, ?PARAM])),
+              ?awaitMatch(not_found, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters, lookup, [<<"/">>, <<"shovel">>, ?PARAM]), 30_000),
+              ?awaitMatch([],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30_000),
               publish_many(Sess, Src, Dest, <<"tag1">>, 5),
               expect_none(Sess, Dest)
       end).
