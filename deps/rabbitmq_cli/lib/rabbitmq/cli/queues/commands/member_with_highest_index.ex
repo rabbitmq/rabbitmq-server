@@ -17,7 +17,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommand do
   def aliases(), do: [o: :offline_members, i: :index, t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/", index: "commit", offline_members: true}, opts)}
+    {args, Map.merge(%{vhost: "/", index: "commit", offline_members: false}, opts)}
   end
 
   def run([name] = _args, %{vhost: vhost, index: index, node: node_name, offline_members: offline_members}) do
