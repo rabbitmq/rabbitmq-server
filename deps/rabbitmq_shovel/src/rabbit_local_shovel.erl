@@ -66,9 +66,6 @@
 }).
 
 parse(_Name, {source, Source}) ->
-    Prefetch = parse_parameter(prefetch_count, fun parse_non_negative_integer/1,
-                               proplists:get_value(prefetch_count, Source,
-                                                   ?DEFAULT_PREFETCH)),
     Queue = parse_parameter(queue, fun parse_binary/1,
                             proplists:get_value(queue, Source)),
     CArgs = proplists:get_value(consumer_args, Source, []),
@@ -77,7 +74,6 @@ parse(_Name, {source, Source}) ->
       resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
-      prefetch_count => Prefetch,
       consumer_args => CArgs};
 parse(_Name, {destination, Dest}) ->
     Exchange = parse_parameter(dest_exchange, fun parse_binary/1,
