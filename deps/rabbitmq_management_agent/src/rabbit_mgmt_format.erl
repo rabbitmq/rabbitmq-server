@@ -15,7 +15,7 @@
 -export([to_amqp_table/1, listener/1, web_context/1, properties/1, basic_properties/1]).
 -export([record/2, to_basic_properties/1]).
 -export([addr/1, port/1]).
--export([format_nulls/1, escape_html_tags/1]).
+-export([format_nulls/1]).
 -export([print/2, print/1]).
 
 -export([format_queue_stats/1, format_queue_basic_stats/1,
@@ -541,27 +541,6 @@ format_null_item([{_K, _V} | _T] = L) ->
     format_nulls(L);
 format_null_item(Value) ->
     Value.
-
-
--spec escape_html_tags(string()) -> binary().
-
-escape_html_tags(S) ->
-    escape_html_tags(rabbit_data_coercion:to_list(S), []).
-
-
--spec escape_html_tags(string(), string()) -> binary().
-
-escape_html_tags([], Acc) ->
-    rabbit_data_coercion:to_binary(lists:reverse(Acc));
-escape_html_tags("<" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&lt;", Acc));
-escape_html_tags(">" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&gt;", Acc));
-escape_html_tags("&" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&amp;", Acc));
-escape_html_tags([C | Rest], Acc) ->
-    escape_html_tags(Rest, [C | Acc]).
-
 
 -spec clean_consumer_details(proplists:proplist()) -> proplists:proplist().
 clean_consumer_details(Obj) ->

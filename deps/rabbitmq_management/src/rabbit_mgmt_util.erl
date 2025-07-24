@@ -876,8 +876,7 @@ with_vhost_and_props(Fun, ReqData, Context) ->
                             bad_request(Error, ReqData1, Context)
                     end;
                 {error, Reason} ->
-                    bad_request(rabbit_mgmt_format:escape_html_tags(Reason),
-                                ReqData1, Context)
+                    bad_request(Reason, ReqData1, Context)
             end
     end.
 

@@ -60,8 +60,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = Username}}) 
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->
-                              rabbit_mgmt_util:bad_request(
-                                rabbit_mgmt_format:escape_html_tags(Reason), ReqData, Context)
+                              rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
                       end
               end)
     end.

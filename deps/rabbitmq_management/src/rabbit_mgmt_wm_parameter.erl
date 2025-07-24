@@ -61,10 +61,7 @@ accept_content(ReqData0, Context = #context{user = User}) ->
                           ok ->
                               {true, ReqData, Context};
                           {error_string, Reason} ->
-                              S = rabbit_mgmt_format:escape_html_tags(
-                                    rabbit_data_coercion:to_list(Reason)),
-                              rabbit_mgmt_util:bad_request(
-                                rabbit_data_coercion:to_binary(S), ReqData, Context)
+                              rabbit_mgmt_util:bad_request(Reason, ReqData, Context)
                       end
               end)
     end.
