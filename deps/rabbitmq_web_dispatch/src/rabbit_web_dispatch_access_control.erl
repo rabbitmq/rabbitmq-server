@@ -275,8 +275,8 @@ not_authorised(Reason, ReqData, Context) ->
 
 halt_response(Code, Type, Reason, ReqData, Context) ->
     ReasonFormatted = format_reason(Reason),
-    Json = #{<<"error">>  => Type,
-             <<"reason">> => ReasonFormatted},
+    Json = #{error  => Type,
+             reason => ReasonFormatted},
     ReqData1 = cowboy_req:reply(Code,
         #{<<"content-type">> => <<"application/json">>},
         rabbit_json:encode(Json), ReqData),
@@ -288,7 +288,7 @@ not_authenticated(Reason, ReqData, Context, _AuthConfig) ->
 format_reason(Tuple) when is_tuple(Tuple) ->
     tuple(Tuple);
 format_reason(Binary) when is_binary(Binary) ->
-    Binary;
+    unicode:characters_to_binary(Binary);
 format_reason(Other) ->
     case is_string(Other) of
         true ->  print("~ts", [Other]);

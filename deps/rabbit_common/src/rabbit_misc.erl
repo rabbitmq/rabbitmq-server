@@ -69,7 +69,7 @@
 -export([get_parent/0]).
 -export([store_proc_name/1, store_proc_name/2, get_proc_name/0]).
 -export([moving_average/4]).
--export([escape_html_tags/1, b64decode_or_throw/1]).
+-export([b64decode_or_throw/1]).
 -export([get_env/3]).
 -export([get_channel_operation_timeout/0]).
 -export([random/1]).
@@ -1181,25 +1181,6 @@ moving_average(Time,  HalfLife,  Next, Current) ->
 
 random(N) ->
     rand:uniform(N).
-
--spec escape_html_tags(string()) -> binary().
-
-escape_html_tags(S) ->
-    escape_html_tags(rabbit_data_coercion:to_list(S), []).
-
-
--spec escape_html_tags(string(), string()) -> binary().
-
-escape_html_tags([], Acc) ->
-    rabbit_data_coercion:to_binary(lists:reverse(Acc));
-escape_html_tags("<" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&lt;", Acc));
-escape_html_tags(">" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&gt;", Acc));
-escape_html_tags("&" ++ Rest, Acc) ->
-    escape_html_tags(Rest, lists:reverse("&amp;", Acc));
-escape_html_tags([C | Rest], Acc) ->
-    escape_html_tags(Rest, [C | Acc]).
 
 %% If the server we are talking to has non-standard net_ticktime, and
 %% our connection lasts a while, we could get disconnected because of

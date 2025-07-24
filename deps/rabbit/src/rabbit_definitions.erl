@@ -710,6 +710,8 @@ format({shutdown, _} = Error) ->
     ?LOG_DEBUG("Metadata store is unavailable: ~p", [Error]),
     rabbit_data_coercion:to_binary(
       rabbit_misc:format("Metadata store is unavailable. Please try again.", []));
+format(E) when is_binary(E) ->
+    E;
 format(E) ->
     rabbit_data_coercion:to_binary(rabbit_misc:format("~tp", [E])).
 
@@ -733,8 +735,8 @@ add_parameter(VHost, Param, Username) ->
     case Result of
         ok                -> ok;
         {error_string, E} ->
-            S = rabbit_misc:format(" (~ts/~ts/~ts)", [VHost, Comp, Key]),
-            exit(rabbit_data_coercion:to_binary(rabbit_misc:escape_html_tags(E ++ S)))
+            S = rabbit_misc:format(" (vhost: \"~ts\" / component: \"~ts\" / key: \"~ts\")", [VHost, Comp, Key]),
+            exit(rabbit_data_coercion:to_utf8_binary(E ++ S))
     end.
 
 add_global_parameter(Param, Username) ->
@@ -770,8 +772,8 @@ add_policy(VHost, Param, Username) ->
            maps:get('apply-to', Param, <<"all">>),
            Username) of
         ok                -> ok;
-        {error_string, E} -> S = rabbit_misc:format(" (~ts/~ts)", [VHost, Key]),
-                             exit(rabbit_data_coercion:to_binary(rabbit_misc:escape_html_tags(E ++ S)))
+        {error_string, E} -> S = rabbit_misc:format(" (vhost: \"~ts\" key: \"~ts\")", [VHost, Key]),
+                             exit(rabbit_data_coercion:to_utf8_binary(E ++ S))
     end.
 
 -spec add_vhost(map(), rabbit_types:username()) -> ok | no_return().
