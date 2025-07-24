@@ -75,11 +75,12 @@ aliases() ->
     [].
 
 output({stream, ShovelStatus}, _Opts) ->
-    Formatted = [fmt_name(Name,
-                          fmt_status(Status,
-                                     #{type => Type,
-                                       last_changed => fmt_ts(Timestamp)}))
-                 || {Name, Type, Status, Timestamp} <- ShovelStatus],
+    Formatted = [fmt_metrics(Metrics,
+                             fmt_name(Name,
+                                      fmt_status(Status,
+                                                 #{type => Type,
+                                                   last_changed => fmt_ts(Timestamp)})))
+                 || {Name, Type, Status, Metrics, Timestamp} <- ShovelStatus],
     {stream, Formatted};
 output(E, _Opts) ->
     'Elixir.RabbitMQ.CLI.DefaultOutput':output(E).
@@ -129,3 +130,6 @@ details_to_map(Proplist) ->
             {dest_exchange, destination_exchange}, {dest_exchange_key, destination_exchange_key}],
     maps:from_list([{New, proplists:get_value(Old, Proplist)}
                     || {Old, New} <- Keys, proplists:is_defined(Old, Proplist)]).
+
+fmt_metrics(Metrics, Map) ->
+    maps:merge(Metrics, Map).
