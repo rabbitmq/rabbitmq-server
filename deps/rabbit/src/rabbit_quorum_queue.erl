@@ -68,7 +68,7 @@
          notify_decorators/3,
          spawn_notify_decorators/3]).
 
--export([get_member_with_highest_index/3]).
+-export([get_member_with_highest_index/4]).
 
 -export([is_enabled/0,
          is_compatible/3,
@@ -1337,9 +1337,9 @@ get_sys_status(Proc) ->
 
     end.
 
--spec get_member_with_highest_index(rabbit_types:vhost(), rabbit_misc:resource_name(), atom()) ->
+-spec get_member_with_highest_index(rabbit_types:vhost(), rabbit_misc:resource_name(), atom(), boolean()) ->
     [[{binary(), term()}]] | {error, term()}.
-get_member_with_highest_index(Vhost, QueueName, IndexName) ->
+get_member_with_highest_index(Vhost, QueueName, IndexName, IncludeOfflineMembers) ->
     case ?MODULE:status(Vhost, QueueName) of
         Status when is_list(Status) ->
             IndexNameInternal = rabbit_data_coercion:to_atom(IndexName),
@@ -1348,9 +1348,14 @@ get_member_with_highest_index(Vhost, QueueName, IndexName) ->
                     {_HighestIndexValue, HighestEntry} =
                         lists:foldl(
                             fun(Entry, {PreviousIndexValue, _PreviousEntry} = Acc) ->
-                                case rabbit_misc:pget(Key, Entry) of
-                                    CurrentIndexValue when is_integer(CurrentIndexValue),
-                                                           CurrentIndexValue > PreviousIndexValue ->
+                                State = rabbit_misc:pget(<<"Raft State">>, Entry),
+                                case {rabbit_misc:pget(Key, Entry), IncludeOfflineMembers} of
+                                    {CurrentIndexValue, false} when is_integer(CurrentIndexValue),
+                                                                    CurrentIndexValue > PreviousIndexValue,
+                                                                    State /= noproc ->
+                                        {CurrentIndexValue, Entry};
+                                    {CurrentIndexValue, true} when is_integer(CurrentIndexValue),
+                                                                   CurrentIndexValue > PreviousIndexValue ->
                                         {CurrentIndexValue, Entry};
                                     _ ->
                                         Acc

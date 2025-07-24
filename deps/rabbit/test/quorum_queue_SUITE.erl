@@ -4591,8 +4591,8 @@ get_member_with_highest_index(Config) ->
         [{Node1, leader,   1015, 1010, 1010}, %% highest SnapshotIdx
          {Node2, follower, 1015, 1010, 1010}, %% highest SnapshotIdx (duplicate)
          {Node3, follower, 1013, 1013, 1009}, %% highest CommitIdx
-         {Node4, follower, 1016, 1009, 1008}, %% highest LogIdx
-         {Node5, follower, 1013, 1012, undefined}],
+         {Node4, follower, 1016, 1009, undefined}, %% highest LogIdx
+         {Node5, noproc,   1050, 1050, 1050}], %% highest but noproc
 
     Term = 1,
     MachineVersion = 7,
@@ -4622,7 +4622,7 @@ get_member_with_highest_index(Config) ->
           {<<"Last Written">>,1016},
           {<<"Last Applied">>,1016},
           {<<"Commit Index">>, 1009},
-          {<<"Snapshot Index">>, 1008},
+          {<<"Snapshot Index">>, undefined},
           {<<"Term">>, Term},
           {<<"Machine Version">>, MachineVersion}]],
 
@@ -4666,6 +4666,21 @@ get_member_with_highest_index(Config) ->
 
     [?assertEqual(ExpectedHighestSnapshotIdx,
         rabbit_quorum_queue:get_member_with_highest_index(VHost, Q, I)) || I <- [snapshot, snapshot_index]],
+
+    ExpectedHighestIdxForAll =
+        [[{<<"Node Name">>, Node5},
+          {<<"Raft State">>, noproc},
+          {<<"Last Log Index">>, 1050},
+          {<<"Last Written">>,1050},
+          {<<"Last Applied">>,1050},
+          {<<"Commit Index">>, 1050},
+          {<<"Snapshot Index">>, 1050},
+          {<<"Term">>, Term},
+          {<<"Machine Version">>, MachineVersion}]],
+
+    [?assertEqual(ExpectedHighestIdxForAll,
+        rabbit_quorum_queue:get_member_with_highest_index(VHost, Q, I, true))
+            || I <- [log, log_index, commit, commit_index, snapshot, snapshot_index]],
 
     ok.
 

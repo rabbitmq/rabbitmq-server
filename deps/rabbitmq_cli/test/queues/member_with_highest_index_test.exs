@@ -48,7 +48,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommandTest do
              {:badrpc, _},
              @command.run(
                ["quorum-queue-a"],
-               %{node: :jake@thedog, vhost: "/", index: "log", timeout: 200}
+               %{node: :jake@thedog, vhost: "/", index: "log", offline_members: true, timeout: 200}
              )
            )
   end

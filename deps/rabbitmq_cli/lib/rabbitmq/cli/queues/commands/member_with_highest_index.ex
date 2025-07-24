@@ -13,18 +13,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommand do
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def switches(), do: [index: :string, timeout: :integer]
-  def aliases(), do: [i: :index, t: :timeout]
+  def switches(), do: [offline_members: :boolean, index: :string, timeout: :integer]
+  def aliases(), do: [o: :offline_members, i: :index, t: :timeout]
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{vhost: "/", index: "commit"}, opts)}
+    {args, Map.merge(%{vhost: "/", index: "commit", offline_members: true}, opts)}
   end
 
-  def run([name] = _args, %{vhost: vhost, index: index, node: node_name}) do
+  def run([name] = _args, %{vhost: vhost, index: index, node: node_name, offline_members: offline_members}) do
     case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :get_member_with_highest_index, [
            vhost,
            name,
-           to_atom(String.downcase(index))
+           to_atom(String.downcase(index)),
+           offline_members
          ]) do
       {:error, :classic_queue_not_supported} ->
         index = format_index(String.downcase(index))
@@ -42,11 +43,12 @@ defmodule RabbitMQ.CLI.Queues.Commands.MemberWithHighestIndexCommand do
 
   def formatter(), do: RabbitMQ.CLI.Formatters.PrettyTable
 
-  def usage, do: "member_with_highest_index <queue> [--vhost <vhost>] [--index <commit|commit_index|log|log_index|snapshot|snapshot_index>]"
+  def usage, do: "member_with_highest_index <queue> [--vhost <vhost>] [--offline-members] [--index <commit|commit_index|log|log_index|snapshot|snapshot_index>]"
 
   def usage_additional do
     [
       ["<queue>", "quorum queue name"],
+      ["--offline-members", "include members which are down (in noproc state)"],
       ["--index <commit|commit_index|log|log_index|snapshot|snapshot_index>", "name of the index to use to lookup highest member"]
     ]
   end
