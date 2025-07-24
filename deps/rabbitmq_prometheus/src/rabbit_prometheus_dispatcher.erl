@@ -30,7 +30,7 @@ build_dispatcher() ->
         prometheus_vm_msacc_collector
     ],
     prometheus_registry:register_collectors(
-        case application:get_env(rabbitmq_prometheus, return_per_object_metrics, fasle) of
+        case application:get_env(rabbitmq_prometheus, return_per_object_metrics, false) of
             false -> CoreCollectors;
             true  -> PerObjectCollectors
         end
