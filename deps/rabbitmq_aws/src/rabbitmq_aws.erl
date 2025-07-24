@@ -9,7 +9,8 @@
 -behavior(gen_server).
 
 %% API exports
--export([get/2, get/3, put/4,
+-export([get/2, get/3, get/4,
+         put/4, put/5,
          post/4,
          refresh_credentials/0,
          request/5, request/6, request/7,
@@ -60,7 +61,10 @@ get(Service, Path) ->
 %%      format.
 %% @end
 get(Service, Path, Headers) ->
-  request(Service, get, Path, "", Headers).
+  request(Service, get, Path, "", Headers, []).
+
+get(Service, Path, Headers, Options) ->
+  request(Service, get, Path, "", Headers, Options).
 
 
 -spec post(Service :: string(),
@@ -84,7 +88,10 @@ post(Service, Path, Body, Headers) ->
 %%      format.
 %% @end
 put(Service, Path, Body, Headers) ->
-  request(Service, put, Path, Body, Headers).
+    put(Service, Path, Body, Headers, []).
+
+put(Service, Path, Body, Headers, Options) ->
+    request(Service, put, Path, Body, Headers, Options).
 
 
 -spec refresh_credentials() -> ok | error.
@@ -657,7 +664,8 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
     end.
 
 get_connection_key(Host, Port, Path, Options) ->
-    case proplists:get_value(connection_per_path, Options, true) of
+    io:format(">>~p~n",[Options]),
+    case proplists:get_value(connection_per_path, Options, false) of
         true -> Host ++ ":" ++ integer_to_list(Port) ++ Path;  % Per-path
         false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
     end.

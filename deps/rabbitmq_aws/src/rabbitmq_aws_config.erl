@@ -746,26 +746,8 @@ region_from_availability_zone(Value) ->
 %% @doc Attempt to obtain EC2 IMDSv2 token.
 %% @end
 load_imdsv2_token() ->
-<<<<<<< HEAD
-  TokenUrl = imdsv2_token_url(),
-  ?LOG_INFO("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
-  case httpc:request(put, {TokenUrl, [{?METADATA_TOKEN_TTL_HEADER, integer_to_list(?METADATA_TOKEN_TTL_SECONDS)}]},
-    [{timeout, ?DEFAULT_HTTP_TIMEOUT}], []) of
-    {ok, {{_, 200, _}, _, Value}} ->
-      ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
-      Value;
-    {error, {{_, 400, _}, _, _}} ->
-      ?LOG_WARNING("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
-      undefined;
-    Other ->
-      ?LOG_WARNING(
-        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
-        "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
-      undefined
-  end.
-=======
     TokenUrl = imdsv2_token_url(),
-    rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
+    ?LOG_INFO("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
                                                 % Parse metadata service URL
     {Host, Port, Path} = rabbitmq_aws:parse_uri(TokenUrl),
                                                 % Simple Gun connection for metadata service
@@ -779,23 +761,23 @@ load_imdsv2_token() ->
                     StreamRef = gun:put(ConnPid, Path, Headers, <<>>),
                     Result = case gun:await(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT) of
                                  {response, fin, 200, _RespHeaders} ->
-                                     rabbit_log:debug("Successfully obtained EC2 IMDSv2 token."),
+                                     ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
                                      <<>>; % Empty body for fin response
                                  {response, nofin, 200, _RespHeaders} ->
                                      {ok, Body} = gun:await_body(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT),
-                                     rabbit_log:debug("Successfully obtained EC2 IMDSv2 token."),
+                                     ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
                                      binary_to_list(Body);
                                  {response, _, 400, _RespHeaders} ->
-                                     rabbit_log:warning("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
+                                     ?LOG_WARNING("Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."),
                                      undefined;
                                  {error, Reason} ->
-                                     rabbit_log:warning(
-                                       get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
+                                     ?LOG_WARNING(
+                                        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
                                                                                   "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
                                      undefined;
                                  Other ->
-                                     rabbit_log:warning(
-                                       get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
+                                     ?LOG_WARNING(
+                                        get_instruction_on_instance_metadata_error("Failed to obtain EC2 IMDSv2 token: ~tp. "
                                                                                   "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Other]),
                                      undefined
                              end,
@@ -803,19 +785,17 @@ load_imdsv2_token() ->
                     Result;
                 {error, Reason} ->
                     gun:close(ConnPid),
-                    rabbit_log:warning(
-                      get_instruction_on_instance_metadata_error("Failed to connect for EC2 IMDSv2 token: ~tp. "
+                    ?LOG_WARNING(
+                       get_instruction_on_instance_metadata_error("Failed to connect for EC2 IMDSv2 token: ~tp. "
                                                                  "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
                     undefined
             end;
         {error, Reason} ->
-            rabbit_log:warning(
-              get_instruction_on_instance_metadata_error("Failed to open connection for EC2 IMDSv2 token: ~tp. "
+            ?LOG_WARNING(
+               get_instruction_on_instance_metadata_error("Failed to open connection for EC2 IMDSv2 token: ~tp. "
                                                          "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."), [Reason]),
             undefined
     end.
->>>>>>> f04e9ce16a (Fully remove httpc)
-
 
 -spec instance_metadata_request_headers() -> headers().
 %% @doc Return headers used for instance metadata service requests.
