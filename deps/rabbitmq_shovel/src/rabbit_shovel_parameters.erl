@@ -174,7 +174,6 @@ local_src_validation(_Def, User) ->
      {<<"src-queue">>, fun rabbit_parameter_validation:binary/2, optional},
      {<<"src-queue-args">>,   fun validate_queue_args/2, optional},
      {<<"src-consumer-args">>, fun validate_consumer_args/2, optional},
-     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
      {<<"src-delete-after">>, fun validate_delete_after/2, optional},
      {<<"src-predeclared">>,  fun rabbit_parameter_validation:boolean/2, optional}
     ].
@@ -602,8 +601,6 @@ parse_local_source(Def) ->
     end,
     DeleteAfter = pget(<<"src-delete-after">>, Def,
                        pget(<<"delete-after">>, Def, <<"never">>)),
-    PrefetchCount = pget(<<"src-prefetch-count">>, Def,
-                         pget(<<"prefetch-count">>, Def, 1000)),
     %% Details are only used for status report in rabbitmqctl, as vhost is not
     %% available to query the runtime parameters.
     Details = maps:from_list([{K, V} || {K, V} <- [{exchange, SrcX},
@@ -614,7 +611,6 @@ parse_local_source(Def) ->
                   resource_decl => SrcDeclFun,
                   queue => Queue,
                   delete_after => opt_b2a(DeleteAfter),
-                  prefetch_count => PrefetchCount,
                   consumer_args => SrcCArgs
                  }, Details), DestHeaders}.
 
