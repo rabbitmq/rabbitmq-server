@@ -464,7 +464,7 @@ encode_queue(Q, NumMsgs, NumConsumers) ->
     {Leader :: node() | none, Replicas :: [node(),...]}.
 queue_topology(Q) ->
     Leader = amqqueue:get_leader_node(Q),
-    Replicas = amqqueue:get_nodes(Q),
+    Replicas = rabbit_amqqueue:get_nodes(Q),
     {Leader, Replicas}.
 
 decode_exchange({map, KVList}) ->

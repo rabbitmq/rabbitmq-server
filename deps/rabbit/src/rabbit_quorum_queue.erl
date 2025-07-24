@@ -2176,7 +2176,7 @@ force_checkpoint_on_queue(QName) ->
         {ok, Q} when ?amqqueue_is_quorum(Q) ->
             {RaName, _} = amqqueue:get_pid(Q),
             rabbit_log:debug("Sending command to force ~ts to take a checkpoint", [QNameFmt]),
-            Nodes = amqqueue:get_nodes(Q),
+            Nodes = rabbit_amqqueue:get_nodes(Q),
             _ = [ra:cast_aux_command({RaName, Node}, force_checkpoint)
                  || Node <- Nodes],
             ok;

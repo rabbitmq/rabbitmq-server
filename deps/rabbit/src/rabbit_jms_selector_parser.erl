@@ -1,6 +1,4 @@
--file("rabbit_jms_selector_parser.yrl", 0).
 -module(rabbit_jms_selector_parser).
--file("rabbit_jms_selector_parser.erl", 3).
 -export([parse/1, parse_and_scan/1, format_error/1]).
 -file("rabbit_jms_selector_parser.yrl", 122).
 
@@ -26,9 +24,7 @@ process_escape_char({string, Line, Value}) ->
 %%
 %% %CopyrightBegin%
 %%
-%% SPDX-License-Identifier: Apache-2.0
-%%
-%% Copyright Ericsson AB 1996-2025. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2021. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -50,16 +46,10 @@ process_escape_char({string, Line, Value}) ->
 
 -type yecc_ret() :: {'error', _} | {'ok', _}.
 
--ifdef (YECC_PARSE_DOC).
--doc ?YECC_PARSE_DOC.
--endif.
 -spec parse(Tokens :: list()) -> yecc_ret().
 parse(Tokens) ->
     yeccpars0(Tokens, {no_func, no_location}, 0, [], []).
 
--ifdef (YECC_PARSE_AND_SCAN_DOC).
--doc ?YECC_PARSE_AND_SCAN_DOC.
--endif.
 -spec parse_and_scan({function() | {atom(), atom()}, [_]}
                      | {atom(), atom(), [_]}) -> yecc_ret().
 parse_and_scan({F, A}) ->
@@ -68,9 +58,6 @@ parse_and_scan({M, F, A}) ->
     Arity = length(A),
     yeccpars0([], {{fun M:F/Arity, A}, no_location}, 0, [], []).
 
--ifdef (YECC_FORMAT_ERROR_DOC).
--doc ?YECC_FORMAT_ERROR_DOC.
--endif.
 -spec format_error(any()) -> [char() | list()].
 format_error(Message) ->
     case io_lib:deep_char_list(Message) of
@@ -212,7 +199,7 @@ yecctoken2string1(Other) ->
 
 
 
--file("rabbit_jms_selector_parser.erl", 215).
+-file("rabbit_jms_selector_parser.erl", 202).
 
 -dialyzer({nowarn_function, yeccpars2/7}).
 -compile({nowarn_unused_function,  yeccpars2/7}).
