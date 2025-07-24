@@ -49,7 +49,6 @@ set_token_auth(AuthSettings, Req0) ->
                     };
                 _ -> 
                     Cookies = cowboy_req:parse_cookies(Req0),
-                    ?LOG_DEBUG("parsing cookies ~p", [Cookies]),
                     case lists:keyfind(?OAUTH2_ACCESS_TOKEN_COOKIE_NAME, 1, Cookies) of 
                         {_, Token} ->                             
                             ?LOG_DEBUG("set_token_auth cookie token ~p", [Token]),

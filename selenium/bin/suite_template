@@ -164,7 +164,7 @@ wait_for_message() {
   while ! docker logs $1 2>&1 | grep -q "$2";
   do
       sleep $delay
-      print "Waiting 5sec for $1 to start ($attemps_left attempts left )..."
+      print "Waiting $delay sec for $1 to start ($attemps_left attempts left )..."
       ((attemps_left--))
       if [[ "$attemps_left" -lt 1 ]]; then
         print "Timed out waiting"
