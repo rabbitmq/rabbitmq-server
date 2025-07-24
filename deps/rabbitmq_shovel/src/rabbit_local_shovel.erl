@@ -300,16 +300,19 @@ handle_source({{'DOWN', #resource{name = Queue,
 handle_source(_Msg, _State) ->
     not_handled.
 
-handle_dest({queue_event, _QRef, {confirm, MsgSeqNos, _QPid}},
-            #{ack_mode := on_confirm} = State) ->
-    confirm_to_inbound(fun(Tag, StateX) ->
-                               rabbit_shovel_behaviour:ack(Tag, false, StateX)
-                       end, MsgSeqNos, State);
-handle_dest({queue_event, _QRef, {reject_publish, Seq, _QPid}},
-            #{ack_mode := on_confirm} = State) ->
-    confirm_to_inbound(fun(Tag, StateX) ->
-                               rabbit_shovel_behaviour:nack(Tag, false, StateX)
-                       end, Seq, State);
+handle_dest({queue_event, QRef, Evt},
+            #{ack_mode := on_confirm,
+              dest := Dest = #{current := Current = #{queue_states := QueueStates0}}} = State0) ->
+    case rabbit_queue_type:handle_event(QRef, Evt, QueueStates0) of
+        {ok, QState1, Actions} ->
+            State = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
+            handle_dest_queue_actions(Actions, State);
+        {eol, Actions} ->
+            _ = handle_dest_queue_actions(Actions, State0),
+            {stop, {outbound_link_or_channel_closure, queue_deleted}};
+        {protocol_error, _Type, Reason, ReasonArgs} ->
+            {stop, list_to_binary(io_lib:format(Reason, ReasonArgs))}
+    end;
 handle_dest({{'DOWN', #resource{name = Queue,
                                 kind = queue,
                                 virtual_host = VHost}}, _, _, _, _}  ,
@@ -424,12 +427,6 @@ handle_queue_actions(Actions, State) ->
               handle_credit_reply(Action, S0);
          (_Action, S0) ->
               S0
-         %% ({queue_down, QRef}, S0) ->
-         %%      State;
-         %% ({block, QName}, S0) ->
-         %%      State;
-         %% ({unblock, QName}, S0) ->
-         %%      State
       end, State, Actions).
 
 handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
@@ -444,6 +441,22 @@ next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
 
 increase_next_tag(#{source := Source = #{current := Current = #{next_tag := DeliveryTag}}} = State) ->
     State#{source => Source#{current => Current#{next_tag => DeliveryTag + 1}}}.
+
+handle_dest_queue_actions(Actions, State) ->
+    lists:foldl(
+      fun({settled, _QName, MsgSeqNos}, S0) ->
+              maybe_grant_or_stash_credit(
+                confirm_to_inbound(fun(Tag, StateX) ->
+                                           rabbit_shovel_behaviour:ack(Tag, false, StateX)
+                                   end, MsgSeqNos, S0));
+         ({rejected, _QName, MsgSeqNos}, S0) ->
+              maybe_grant_or_stash_credit(
+                confirm_to_inbound(fun(Tag, StateX) ->
+                                           rabbit_shovel_behaviour:nack(Tag, false, StateX)
+                                   end, MsgSeqNos, S0));
+         (_Action, S0) ->
+              S0
+      end, State, Actions).
 
 record_pending(false, _DeliveryTag, _MsgId, State) ->
     State;
@@ -628,10 +641,9 @@ route(Msg, #{current := #{vhost := VHost}}) ->
 
 confirm_to_inbound(ConfirmFun, SeqNos, State)
   when is_list(SeqNos) ->
-    State1 = lists:foldl(fun(Seq, State0) ->
-                                 confirm_to_inbound(ConfirmFun, Seq, State0)
-                         end, State, SeqNos),
-    maybe_grant_or_stash_credit(State1);
+    lists:foldl(fun(Seq, State0) ->
+                        confirm_to_inbound(ConfirmFun, Seq, State0)
+                end, State, SeqNos);
 confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
