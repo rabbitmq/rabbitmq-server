@@ -1598,12 +1598,10 @@ transfer_leadership(Q, Destination) ->
     end.
 
 queue_length(Q) ->
-    Name = amqqueue:get_name(Q),
-    case ets:lookup(ra_metrics, Name) of
-        [] -> 0;
-        [{_, _, SnapIdx, _, _, LastIdx, _}] ->
-            LastIdx - SnapIdx
-    end.
+    ServerId = amqqueue:get_pid(Q),
+    #{snapshot_index := SnapIdx,
+      last_written_index := LastIdx} = key_metrics_rpc(ServerId),
+    LastIdx - SnapIdx.
 
 get_replicas(Q) ->
     get_nodes(Q).
@@ -1985,6 +1983,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
              SnapshotInterval, CheckpointInterval,
              Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
+    #resource{name = QNameBin} = QName,
     RaMachine = ra_machine(Q),
     [{ClusterName, _} | _] = Members = members(Q),
     UId = ra:new_uid(ra_lib:to_binary(ClusterName)),
@@ -2000,6 +1999,8 @@ make_ra_conf(Q, ServerId, TickTimeout,
                                   uid => UId,
                                   friendly_name => FName,
                                   metrics_key => QName,
+                                  metrics_labels => #{vhost => amqqueue:get_vhost(Q),
+                                                      queue => QNameBin},
                                   initial_members => Members,
                                   log_init_args => LogCfg,
                                   tick_timeout => TickTimeout,

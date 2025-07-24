@@ -3145,6 +3145,9 @@ reconnect_consumer_and_wait_channel_down(Config) ->
         {#'basic.deliver'{redelivered  = false}, _} ->
             wait_for_messages_ready(Servers, RaName, 0),
             wait_for_messages_pending_ack(Servers, RaName, 1)
+    after 30000 ->
+            flush(1),
+            exit(basic_deliver_timeout)
     end,
     Up = [Leader, F2],
     rabbit_ct_broker_helpers:block_traffic_between(F1, Leader),

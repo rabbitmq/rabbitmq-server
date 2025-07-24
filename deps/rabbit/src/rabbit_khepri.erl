@@ -276,6 +276,7 @@ setup(_Context) ->
                       {default_ra_system, ?RA_SYSTEM}]}],
            [{persistent, true}]),
     RaServerConfig = #{cluster_name => ?RA_CLUSTER_NAME,
+                       metrics_labels => #{ra_system => ?RA_SYSTEM, module => ?MODULE},
                        friendly_name => ?RA_FRIENDLY_NAME},
     case khepri:start(?RA_SYSTEM, RaServerConfig) of
         {ok, ?STORE_ID} ->
