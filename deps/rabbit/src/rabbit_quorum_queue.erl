@@ -68,7 +68,8 @@
          notify_decorators/3,
          spawn_notify_decorators/3]).
 
--export([get_member_with_highest_index/4]).
+-export([get_member_with_highest_index/3,
+         get_member_with_highest_index/4]).
 
 -export([is_enabled/0,
          is_compatible/3,
@@ -1336,6 +1337,11 @@ get_sys_status(Proc) ->
             {error, other}
 
     end.
+
+-spec get_member_with_highest_index(rabbit_types:vhost(), rabbit_misc:resource_name(), atom()) ->
+    [[{binary(), term()}]] | {error, term()}.
+get_member_with_highest_index(Vhost, QueueName, IndexName) ->
+    get_member_with_highest_index(Vhost, QueueName, IndexName, false).
 
 -spec get_member_with_highest_index(rabbit_types:vhost(), rabbit_misc:resource_name(), atom(), boolean()) ->
     [[{binary(), term()}]] | {error, term()}.
