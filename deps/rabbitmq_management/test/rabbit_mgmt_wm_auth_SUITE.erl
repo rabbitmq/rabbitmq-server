@@ -11,8 +11,25 @@
 -include_lib("eunit/include/eunit.hrl").
 -import(application, [set_env/3, unset_env/2]).
 -import(rabbit_mgmt_wm_auth, [authSettings/0]).
+-import(rabbit_mgmt_test_util, [req/5]).
 -compile(export_all).
 
+-import(rabbit_mgmt_test_util, [assert_list/2, assert_item/2, test_item/2,
+                                assert_keys/2, assert_no_keys/2,
+                                decode_body/1,
+                                http_get/2, http_get/3, http_get/5,
+                                http_get_no_auth/3,
+                                http_get_no_decode/5,
+                                http_put/4, http_put/6,
+                                http_post/4, http_post/6,
+                                http_post_json/4,
+                                http_upload_raw/8,
+                                http_delete/3, http_delete/4, http_delete/5,
+                                http_put_raw/4, http_post_accept_json/4,
+                                req/4, auth_header/2,
+                                assert_permanent_redirect/3,
+                                uri_base_from/2, format_for_upload/1,
+                                amqp_port/1, req/6]).
 all() ->
     [
      {group, without_any_settings},
@@ -27,12 +44,27 @@ all() ->
      {group, verify_oauth_initiated_logon_type_for_idp_initiated},
      {group, verify_oauth_disable_basic_auth},
      {group, verify_oauth_scopes},
-     {group, verify_extra_endpoint_params}
+     {group, verify_extra_endpoint_params},
+     {group, run_with_broker}
     ].
 
 groups() ->
     [
-
+      {run_with_broker, [], [
+        {verify_introspection_endpoint, [], [
+          introspect_opaque_token_returns_active_jwt_token,
+          introspect_opaque_token_returns_inactive_jwt_token,
+          introspect_opaque_token_returns_401_from_auth_server,
+          {verify_oauth_bootstrap_js, [], [
+            oauth_bootstrap_with_jwt_token_in_header,
+            oauth_bootstrap_with_jwt_token_in_cookie,
+            oauth_bootstrap_with_opaque_token_in_cookie,
+            oauth_bootstrap_cannot_introspect_opaque_token_in_header,
+            oauth_bootstrap_cannot_introspect_opaque_token_in_cookie,
+            oauth_bootstrap_without_any_token
+          ]}          
+        ]}        
+      ]},
       {verify_multi_resource_and_provider, [], [
         {with_oauth_enabled, [], [
             {with_oauth_providers_idp1_idp2, [], [
@@ -510,6 +542,31 @@ init_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) 
     ?config(a, Config), oauth_token_endpoint_params, ?config(token_params_1, Config)),
   Config;
 
+init_per_group(run_with_broker, Config) ->
+  Config1 = finish_init(run_with_broker, Config),
+  start_broker(Config1);
+
+init_per_group(verify_introspection_endpoint, Config) ->
+  {ok, _} = application:ensure_all_started(ssl),
+  {ok, _} = application:ensure_all_started(cowboy),
+  
+  PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
+  Port = PortBase + 100,
+  AuthorizationServerURL = uri_string:normalize(#{
+    scheme => "https",port => Port,path => "/introspect",host => "localhost"}),
+
+  CertsDir = ?config(rmq_certsdir, Config),
+  Endpoints = [ {"/introspect", introspect_http_handler, []}],
+  Dispatch = cowboy_router:compile([{'_', Endpoints}]),
+  {ok, _} = cowboy:start_tls(introspection_http_listener,
+                      [{port, Port},
+                       {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                       {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
+                      #{env => #{dispatch => Dispatch}}),
+
+  [ {authorization_server_url, AuthorizationServerURL}, 
+    {authorization_server_ca_cert, filename:join([CertsDir, "testca", "cacert.pem"])} | Config];
+
 
 init_per_group(_, Config) ->
   Config.
@@ -632,9 +689,129 @@ end_per_group(with_mgt_resource_server_a_with_token_endpoint_params_1, Config) -
     ?config(a, Config), oauth_token_endpoint_params),
   Config;
 
+end_per_group(run_with_broker, Config) -> 
+  Teardown0 = rabbit_ct_client_helpers:teardown_steps(),
+  Teardown1 = rabbit_ct_broker_helpers:teardown_steps(),
+  Steps = Teardown0 ++ Teardown1,
+  rabbit_ct_helpers:run_teardown_steps(Config, Steps),
+  Config;
+
+end_per_group(verify_introspection_endpoint, Config) ->
+  ok = cowboy:stop_listener(introspection_http_listener),
+  inets:stop(),
+  Config; 
 
 end_per_group(_, Config) ->
   Config.
+
+init_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
+                                         Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
+                                         Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
+
+  setup_introspection_configuration(Config),
+  rabbit_ct_helpers:testcase_started(Config, Testcase);
+
+init_per_testcase(Testcase, Config) when Testcase =:= oauth_bootstrap_with_jwt_token_in_header orelse 
+                                         Testcase =:= oauth_bootstrap_with_jwt_token_in_cookie orelse 
+                                         Testcase =:= oauth_bootstrap_with_opaque_token_in_cookie orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_header orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_cookie orelse
+                                         Testcase =:= oauth_bootstrap_without_any_token ->                                          
+  rabbit_ct_helpers:testcase_started(
+    setup_introspection_configuration(setup_oauth2_management_configuration(Config)), Testcase);
+
+init_per_testcase(Testcase, Config) ->
+  Config.
+
+setup_introspection_configuration(Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_endpoint,
+      ?config(authorization_server_url, Config)]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_id, "some-id"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-secret"]),
+  CaCertFile = ?config(authorization_server_ca_cert, Config),    
+
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
+
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, opaque_token_signing_key, 
+      [{id, <<"rabbit_key">>}, {type, hs256}, {key, <<"some-key">>}]]),
+  Config.
+    
+teardown_introspection_configuration(Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, introspection_client_secret]),
+  Config.
+
+setup_oauth2_management_configuration(Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_enabled, true]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_auth_backend_oauth2, resource_server_id, "rabbitmq"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_client_id, "rabbit_user"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_client_secret, "rabbit_secret"]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+    [rabbitmq_management, oauth_provider_url, "http://localhost:8080/uaa"]),
+  Config.
+
+teardown_oauth2_management_configuration(Config) ->
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_enabled]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_auth_backend_oauth2, resource_server_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_client_id]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_client_secret]),
+  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+    [rabbitmq_management, oauth_provider_url]),
+  Config.
+  
+end_per_testcase(Testcase, Config) when Testcase =:= introspect_opaque_token_returns_active_jwt_token orelse
+                                        Testcase =:= introspect_opaque_token_returns_inactive_jwt_token orelse 
+                                        Testcase =:= introspect_opaque_token_returns_401_from_auth_server ->
+  teardown_introspection_configuration(Config);
+
+end_per_testcase(Testcase, Config) when Testcase =:= oauth_bootstrap_with_jwt_token_in_header orelse 
+                                         Testcase =:= oauth_bootstrap_with_jwt_token_in_cookie orelse 
+                                         Testcase =:= oauth_bootstrap_with_opaque_token_in_cookie orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_header orelse
+                                         Testcase =:= oauth_bootstrap_cannot_introspect_opaque_token_in_cookie orelse
+                                         Testcase =:= oauth_bootstrap_without_any_token ->                                          
+  teardown_introspection_configuration(teardown_oauth2_management_configuration(Config));
+
+end_per_testcase(Testcase, Config) ->
+  Config.
+
+start_broker(Config) ->
+  Setup0 = rabbit_ct_broker_helpers:setup_steps(),
+  Setup1 = rabbit_ct_client_helpers:setup_steps(),
+  Steps = Setup0 ++ Setup1,
+  case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
+      {skip, _} = Skip ->
+          Skip;
+      Config1 ->
+          Ret = rabbit_ct_broker_helpers:enable_feature_flag(
+                  Config1, 'rabbitmq_4.0.0'),
+          case Ret of
+              ok -> Config1;
+              _  -> Ret
+          end
+  end.
+finish_init(Group, Config) ->
+    rabbit_ct_helpers:log_environment(),
+    inets:start(),
+    NodeConf = [{rmq_nodename_suffix, Group}],
+    rabbit_ct_helpers:set_config(Config, NodeConf).
 
 
 %% -------------------------------------------------------------------
@@ -837,6 +1014,65 @@ should_return_mgt_oauth_resource_a_with_authorization_endpoint_params_1(Config) 
 should_return_mgt_oauth_resource_a_with_token_endpoint_params_1(Config) ->
   assertEqual_on_attribute_for_oauth_resource_server(authSettings(),
     Config, a, oauth_token_endpoint_params, token_params_1).
+
+introspect_opaque_token_returns_active_jwt_token(Config) -> 
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer active"}], []).
+
+introspect_opaque_token_returns_inactive_jwt_token(Config) -> 
+  {ok, {{_HTTP, 401, _}, _Headers, ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer inactive"}], []),
+  JSON = rabbit_json:decode(rabbit_data_coercion:to_binary(ResBody)),
+  ?assertEqual(<<"not_authorised">>, maps:get(<<"error">>, JSON)),
+  ?assertEqual(<<"Introspected token is not active">>, maps:get(<<"reason">>, JSON)).
+
+introspect_opaque_token_returns_401_from_auth_server(Config) -> 
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = req(Config, 0, post, "/auth/introspect", [
+    {"authorization", "bearer 401"}], []).
+
+oauth_bootstrap_with_jwt_token_in_header(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  Result = httpc:request(get, {URI, [{"Authorization", "bearer abc.dee.fff"}]}, [], []), 
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = Result,
+  ct:log("resbody: ~p", [ResBody]),
+  case string:find(ResBody,"set_token_auth('abc.dee.fff')") of 
+    nomatch -> ct:fail("expected setting token");
+    _ -> ok
+  end.
+
+oauth_bootstrap_with_jwt_token_in_cookie(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  Result = httpc:request(get, {URI, [{"cookie", "access_token=abc.dee.fff"}]}, [], []), 
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = Result,
+  ct:log("resbody: ~p", [ResBody]),
+  case string:find(ResBody,"set_token_auth('abc.dee.fff')") of 
+    nomatch -> ct:fail("expected setting token");
+    _ -> ok
+  end.
+
+oauth_bootstrap_with_opaque_token_in_cookie(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  Result = httpc:request(get, {URI, [{"cookie", "access_token=active"}]}, [], []), 
+  ct:log("response idp:  ~p ~p", [URI, Result]).
+
+oauth_bootstrap_cannot_introspect_opaque_token_in_header(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = 
+    httpc:request(get, {URI, [{"Authorization", "bearer inactive"}]}, [], []).   
+
+oauth_bootstrap_cannot_introspect_opaque_token_in_cookie(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  {ok, {{_HTTP, 401, _}, _Headers, _ResBody}} = 
+    httpc:request(get, {URI, [{"cookie", "access_token=inactive"}]}, [], []).   
+
+oauth_bootstrap_without_any_token(Config) ->
+  URI = rabbit_mgmt_test_util:uri_base_from(Config, 0, "") ++ "js/oidc-oauth/bootstrap.js",
+  {ok, {{_HTTP, 200, _}, _Headers, ResBody}} = httpc:request(get, {URI, []}, [], []), 
+  case string:find(ResBody,"set_token_auth(") of 
+    nomatch -> ok;
+    Reminder -> ct:fail("expected no set_token_auth call")
+  end.
+
 
 %% -------------------------------------------------------------------
 %% Utility/helper functions

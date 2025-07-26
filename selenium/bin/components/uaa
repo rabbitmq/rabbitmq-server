@@ -24,7 +24,7 @@ start_uaa() {
   begin "Starting UAA ..."
 
   init_uaa
-  kill_container_if_exist uaa
+  kill_container_if_exist uaa 
 
   MOUNT_UAA_CONF_DIR=$CONF_DIR/uaa
 
@@ -44,6 +44,7 @@ start_uaa() {
     --env JAVA_OPTS="-Djava.security.policy=unlimited -Djava.security.egd=file:/dev/./urandom" \
     ${UAA_DOCKER_IMAGE}
    
-  wait_for_oidc_endpoint uaa $UAA_URL
+  wait_for_message uaa "Server startup in" 20 10
+  wait_for_oidc_endpoint uaa $UAA_URL $MOUNT_UAA_CONF_DIR/ca_uaa_certificate.pem
   end "UAA is ready"
 }

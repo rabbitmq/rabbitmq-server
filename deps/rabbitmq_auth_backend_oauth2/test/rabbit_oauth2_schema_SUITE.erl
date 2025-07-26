@@ -41,7 +41,8 @@ all() ->
         test_without_oauth_providers_with_endpoint_params,
         test_scope_aliases_configured_as_list_of_properties,
         test_scope_aliases_configured_as_map,
-        test_scope_aliases_configured_as_list_of_missing_properties
+        test_scope_aliases_configured_as_list_of_missing_properties,
+        test_opaque_token_signing_key
     ].
 
 
@@ -325,6 +326,21 @@ test_scope_aliases_configured_as_map(_) ->
         <<"admin">> := [<<"rabbitmq.tag:administrator">>],
         <<"developer">> := [<<"rabbitmq.tag:management">>, <<"rabbitmq.read:*/*">>]
     } = rabbit_oauth2_schema:translate_scope_aliases(CuttlefishConf).
+
+test_opaque_token_signing_key(_) ->
+    CuttlefishConf = [
+        {["auth_oauth2","opaque_token_signing_key","id"],
+            "key-id"},
+        {["auth_oauth2","opaque_token_signing_key","type"],
+            "hs256"},
+        {["auth_oauth2","opaque_token_signing_key","key"],
+            "signing-key"}
+    ],
+    [
+        {id, <<"key-id">>},
+        {type, hs256},
+        {key, <<"signing-key">>}
+    ] = rabbit_oauth2_schema:translate_opaque_token_signing_key(CuttlefishConf).
 
 
 cert_filename(Conf) ->
