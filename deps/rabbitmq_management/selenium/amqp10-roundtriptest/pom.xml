@@ -11,7 +11,7 @@
     <junit.jupiter.version>5.13.3</junit.jupiter.version>
     <qpid-jms-client.version>2.7.0</qpid-jms-client.version>
     <logback.version>1.2.13</logback.version>
-    <spotless.version>2.45.0</spotless.version>
+    <spotless.version>2.46.1</spotless.version>
     <google-java-format.version>1.17.0</google-java-format.version>
     <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
     <maven-surefire-plugin.version>3.1.2</maven-surefire-plugin.version>
