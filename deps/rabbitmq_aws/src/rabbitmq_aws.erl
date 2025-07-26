@@ -670,9 +670,15 @@ get_or_create_gun_connection(State, Host, Port, Path, Options) ->
     end.
 
 get_connection_key(Host, Port, Path, Options) ->
-    case proplists:get_value(connection_per_path, Options, false) of
-        true -> Host ++ ":" ++ integer_to_list(Port) ++ Path;  % Per-path
-        false -> Host ++ ":" ++ integer_to_list(Port)          % Per-host (default)
+    case proplists:get_value(connection_key_type, Options, host) of
+        host ->
+            Host ++ ":" ++ integer_to_list(Port);
+        path ->
+            Host ++ ":" ++ integer_to_list(Port) ++ Path;
+        {path_custom, Extra} ->
+            Host ++ ":" ++ integer_to_list(Port) ++ Path ++ ":" ++ Extra;
+        _ ->
+            Host ++ ":" ++ integer_to_list(Port)
     end.
 
 create_gun_connection(State, Host, Port, HostKey, Options) ->
