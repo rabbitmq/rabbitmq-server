@@ -485,7 +485,7 @@ identity_info_test(Config) ->
 
 specific_erlang_metrics_present_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
-    ?assertEqual(match, re:run(Body, "^erlang_vm_dist_node_queue_size_bytes{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^erlang_vm_dirty_io_schedulers ", [{capture, none}, multiline])).
 
 global_metrics_present_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),

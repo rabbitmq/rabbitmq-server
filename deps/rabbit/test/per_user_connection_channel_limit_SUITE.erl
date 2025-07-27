@@ -374,7 +374,13 @@ single_node_list_in_user(Config) ->
     [Conn4] = open_connections(Config, [{0, Username1}]),
     [_Chan4] = open_channels(Conn4, 1),
     close_connections([Conn4]),
-    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
+    rabbit_ct_helpers:await_condition(
+        fun () ->
+            case connections_in(Config, Username1) of
+                [#tracked_connection{username = Username1}] -> true;
+                _ -> false
+            end
+        end),
     [#tracked_channel{username = Username1}] = channels_in(Config, Username1),
 
     [Conn5, Conn6] = open_connections(Config, [{0, Username2}, {0, Username2}]),
