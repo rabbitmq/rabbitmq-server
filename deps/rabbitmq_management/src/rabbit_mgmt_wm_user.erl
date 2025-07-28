@@ -46,17 +46,31 @@ to_json(ReqData, Context) ->
 
 accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}) ->
     Username = rabbit_mgmt_util:id(user, ReqData0),
-    rabbit_mgmt_util:with_decode(
-      [], ReqData0, Context,
-      fun(_, User, ReqData) ->
-              _ = put_user(User#{name => Username}, ActingUser),
-              {true, ReqData, Context}
-      end).
+    case rabbit_mgmt_util:is_protected_user(Username) of
+        true ->
+            rabbit_mgmt_util:bad_request(
+              <<"User updates via API are disabled for this user">>,
+              ReqData0, Context);
+        false ->
+            rabbit_mgmt_util:with_decode(
+              [], ReqData0, Context,
+              fun(_, User, ReqData) ->
+                      _ = put_user(User#{name => Username}, ActingUser),
+                      {true, ReqData, Context}
+              end)
+    end.
 
 delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}) ->
     User = rabbit_mgmt_util:id(user, ReqData),
-    rabbit_auth_backend_internal:delete_user(User, ActingUser),
-    {true, ReqData, Context}.
+    case rabbit_mgmt_util:is_protected_user(User) of
+        true ->
+            rabbit_mgmt_util:bad_request(
+              <<"User deletion via API is disabled for this user">>,
+              ReqData, Context);
+        false ->
+            rabbit_auth_backend_internal:delete_user(User, ActingUser),
+            {true, ReqData, Context}
+    end.
 
 is_authorized(ReqData, Context) ->
     rabbit_mgmt_util:is_authorized_admin(ReqData, Context).
