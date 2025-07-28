@@ -353,7 +353,7 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                                State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
                                rabbit_shovel_behaviour:decr_remaining(1, State3)
                        end),
-            handle_queue_actions(Actions, State4);
+            handle_dest_queue_actions(Actions, State4);
         {error, Reason} ->
             exit({shutdown, Reason})
     end.
@@ -426,11 +426,13 @@ handle_queue_actions(Actions, State) ->
       end, State, Actions).
 
 handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
-    lists:foldl(fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
-                        DeliveryTag = next_tag(S0),
-                        S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
-                        sent_delivery(rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S))
-                end, State, Msgs).
+    maybe_grant_or_stash_credit(
+      lists:foldl(
+        fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
+                DeliveryTag = next_tag(S0),
+                S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
+                rabbit_shovel_behaviour:forward(DeliveryTag, Mc, sent_delivery(S))
+        end, State, Msgs)).
 
 next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
     DeliveryTag.
@@ -450,6 +452,7 @@ handle_dest_queue_actions(Actions, State) ->
                 confirm_to_inbound(fun(Tag, StateX) ->
                                            rabbit_shovel_behaviour:nack(Tag, false, StateX)
                                    end, MsgSeqNos, S0));
+         %% TODO handle {block, QName}
          (_Action, S0) ->
               S0
       end, State, Actions).
@@ -661,8 +664,7 @@ sent_delivery(#{source := #{delivery_count := DeliveryCount0,
                                    delivery_count => DeliveryCount,
                                    queue_credit => QCredit,
                                    queue_delivery_count => QDeliveryCount
-                                  }},
-    maybe_grant_or_stash_credit(State).
+                                  }}.
 
 maybe_grant_or_stash_credit(#{source := #{queue := QName0,
                                     credit := Credit,
