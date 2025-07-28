@@ -68,7 +68,8 @@ groups() ->
                   local_to_local_delete_dest_queue,
                   local_to_local_vhost_access,
                   local_to_local_user_access,
-                  local_to_local_credit_flow
+                  local_to_local_credit_flow,
+                  local_to_local_stream_credit_flow
                  ]}
     ].
 
@@ -936,6 +937,33 @@ local_to_local_credit_flow(Config) ->
                                           ]),
               publish_many(Sess, Src, Dest, <<"tag1">>, 500),
               expect_many(Sess, Dest, 500)
+      end).
+
+local_to_local_stream_credit_flow(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    VHost = <<"/">>,
+    declare_queue(Config, VHost, Src, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+    declare_queue(Config, VHost, Dest, [{<<"x-queue-type">>, longstr, <<"stream">>}]),
+    with_session(Config,
+      fun (Sess) ->
+             shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"src-predeclared">>, true},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-queue">>, Dest},
+                                           {<<"dest-predeclared">>, true}
+                                          ]),
+
+              Receiver = subscribe(Sess, Dest),
+              publish_many(Sess, Src, Dest, <<"tag1">>, 500),
+              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 500}, _}],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30000),
+              _ = expect(Receiver, 500, []),
+              amqp10_client:detach_link(Receiver)
       end).
 
 %%----------------------------------------------------------------------------
