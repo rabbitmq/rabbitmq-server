@@ -13,7 +13,7 @@ The process is fairly standard:
  * Create a branch with a descriptive name
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
- * Submit a filled out and signed [Contributor Agreement](https://cla.pivotal.io/) if needed (see below)
+ * Submit a filled out and signed [Contributor Agreement](https://github.com/rabbitmq/cla) if needed (see below)
  * Be patient. We will get to your pull request eventually
 
 
@@ -35,8 +35,8 @@ killall -9 beam.smp; killall -9 erl; killall -9 make; killall -9 epmd; killall -
 cd deps/rabbit
 
 # cleans build artifacts
-git clean -xfffd
 gmake clean; gmake distclean
+git clean -xfffd
 
 # builds the broker and all of its dependencies
 gmake
@@ -193,9 +193,8 @@ See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 ## Contributor Agreement
 
 If you want to contribute a non-trivial change, please submit a signed copy of our
-[Contributor Agreement](https://cla.pivotal.io/) around the time
-you submit your pull request. This will make it much easier (in some cases, possible)
-for the RabbitMQ team at Pivotal to merge your contribution.
+[Contributor Agreement](https://github.com/rabbitmq/cla) before submitting
+a pull request to `teamrabbitmq </> gmail dot c0m` and set the subject to "RabbitMQ CLA".
 
 ## Where to Ask Questions
 
