@@ -256,7 +256,7 @@ declare(Q, _Node) when ?amqqueue_is_quorum(Q) ->
 
 start_cluster(Q) ->
     QName = amqqueue:get_name(Q),
-    Durable = amqqueue:is_durable(Q),
+    Durable = true = amqqueue:is_durable(Q),
     AutoDelete = amqqueue:is_auto_delete(Q),
     Arguments = amqqueue:get_arguments(Q),
     Opts = amqqueue:get_options(Q),
