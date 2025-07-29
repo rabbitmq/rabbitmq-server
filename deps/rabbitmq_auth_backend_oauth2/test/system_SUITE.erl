@@ -26,7 +26,8 @@ all() ->
      {group, token_refresh},
      {group, extra_scopes_source},
      {group, scope_aliases},
-     {group, rich_authorization_requests}
+     {group, rich_authorization_requests},
+     {group, with_introspection_endpoint}
     ].
 
 groups() ->
@@ -83,6 +84,10 @@ groups() ->
        amqp_token_refresh_expire,
        amqp_token_refresh_vhost_permission,
        amqp_token_refresh_revoked_permissions
+      ]},
+      {with_introspection_endpoint, [], [
+        test_successful_connection_with_valid_opaque_token,
+        test_unsuccessful_connection_with_invalid_opaque_token
       ]}
     ].
 
@@ -113,6 +118,27 @@ end_per_suite(Config) ->
 init_per_group(amqp, Config) ->
     {ok, _} = application:ensure_all_started(rabbitmq_amqp_client),
     Config;
+init_per_group(with_introspection_endpoint, Config) ->
+    {ok, _} = application:ensure_all_started(ssl),
+    {ok, _} = application:ensure_all_started(cowboy),
+  
+    PortBase = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_ports_base),
+    Port = PortBase + 100,
+    AuthorizationServerURL = uri_string:normalize(#{
+        scheme => "https",port => Port,path => "/introspect",host => "localhost"}),
+
+    CertsDir = ?config(rmq_certsdir, Config),
+    Endpoints = [ {"/introspect", introspect_http_handler, []}],
+    Dispatch = cowboy_router:compile([{'_', Endpoints}]),
+    {ok, _} = cowboy:start_tls(introspection_http_listener,
+                        [{port, Port},
+                        {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                        {keyfile, filename:join([CertsDir, "server", "key.pem"])}],
+                        #{env => #{dispatch => Dispatch}}),
+
+    [ {authorization_server_url, AuthorizationServerURL}, 
+        {authorization_server_ca_cert, filename:join([CertsDir, "testca", "cacert.pem"])} | Config];
+
 init_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
@@ -123,12 +149,45 @@ init_per_group(_Group, Config) ->
 
 end_per_group(amqp, Config) ->
     Config;
+
+end_per_group(with_introspection_endpoint, Config) ->
+  ok = cowboy:stop_listener(introspection_http_listener),
+  inets:stop(),
+  Config; 
+
 end_per_group(_Group, Config) ->
     %% The broker is managed by {init,end}_per_testcase().
     lists:foreach(fun(Value) ->
                           rabbit_ct_broker_helpers:delete_vhost(Config, Value)
                   end,
                   [<<"vhost1">>, <<"vhost2">>, <<"vhost3">>, <<"vhost4">>]),
+    Config.
+
+setup_introspection_configuration(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, introspection_endpoint,
+        ?config(authorization_server_url, Config)]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, introspection_client_id, "some-id"]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, introspection_client_secret, "some-secret"]),
+    CaCertFile = ?config(authorization_server_ca_cert, Config),    
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, CaCertFile}]]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, opaque_token_signing_key, 
+        [{id, <<"rabbit_key">>}, {type, hs256}, {key, <<"some-key">>}]]),
+    Config.
+
+teardown_introspection_configuration(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, introspection_endpoint]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, introspection_client_id]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, introspection_client_secret]),
     Config.
 
 %%
@@ -234,20 +293,23 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
     Config;
 
 init_per_testcase(multiple_resource_server_ids, Config) ->
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-      [rabbitmq_auth_backend_oauth2, scope_prefix, <<"rmq.">> ]),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-      [rabbitmq_auth_backend_oauth2, resource_servers, #{
-          <<"prod">> => [ ],
-          <<"dev">> => [ ]
-      }]),
-  rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
-  Config;
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, scope_prefix, <<"rmq.">> ]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers, #{
+            <<"prod">> => [ ],
+            <<"dev">> => [ ]
+        }]),
+    rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
+    Config;
+
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token ->
+    rabbit_ct_helpers:testcase_started(
+        setup_introspection_configuration(Config), Testcase);
 
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config.
-
 
 
 %%
@@ -263,52 +325,55 @@ end_per_testcase(Testcase, Config) when Testcase =:= test_failed_token_refresh_c
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_complex_claim_as_a_map orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_list orelse
                                         Testcase =:= test_successful_connection_with_complex_claim_as_a_binary ->
-  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
-  rabbit_ct_helpers:testcase_finished(Config, Testcase),
-  Config;
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_single_scope_alias_in_extra_scopes_source ->
-  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, scope_aliases]),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
-  rabbit_ct_helpers:testcase_finished(Config, Testcase),
-  Config;
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, scope_aliases]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_with_multiple_scope_aliases_in_extra_scopes_source ->
-  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, scope_aliases]),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
-  rabbit_ct_helpers:testcase_finished(Config, Testcase),
-  Config;
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost4">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, scope_aliases]),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, extra_scopes_source]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case1 orelse
                                         Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case2 ->
-  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost2">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, scope_aliases]),
-  rabbit_ct_helpers:testcase_finished(Config, Testcase),
-  Config;
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost2">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, scope_aliases]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_scope_alias_in_scope_field_case3 ->
-  rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost3">>),
-  ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-        [rabbitmq_auth_backend_oauth2, scope_aliases]),
-  rabbit_ct_helpers:testcase_finished(Config, Testcase),
-  Config;
+    rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost3">>),
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+            [rabbitmq_auth_backend_oauth2, scope_aliases]),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase),
+    Config;
 
 end_per_testcase(multiple_resource_server_ids, Config) ->
-  rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-      [rabbitmq_auth_backend_oauth2, scope_prefix ]),
-  rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
-      [rabbitmq_auth_backend_oauth2, resource_servers ]),
-  rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
-  Config;
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, scope_prefix ]),
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
+        [rabbitmq_auth_backend_oauth2, resource_servers ]),
+    rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
+    Config;
+
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token ->
+    teardown_introspection_configuration(Config);
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_broker_helpers:delete_vhost(Config, <<"vhost1">>),
@@ -447,6 +512,18 @@ test_successful_connection_without_verify_aud(Config) ->
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
     close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_valid_opaque_token(Config) ->     
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, <<"active">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_unsuccessful_connection_with_invalid_opaque_token(Config) ->
+    {error, Error} = open_unmanaged_connection(Config, 0, <<"username">>, <<"inactive">>),
+    ct:log("Error : ~p", [Error]).
+
 
 mqtt(Config) ->
     Topic = <<"test/topic">>,
@@ -1062,3 +1139,4 @@ flush(Prefix) ->
     after 1 ->
               ok
     end.
+
