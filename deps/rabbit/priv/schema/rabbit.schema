@@ -1012,6 +1012,20 @@ end}.
 {mapping, "max_message_size", "rabbit.max_message_size",
     [{datatype, integer}, {validators, ["max_message_size"]}]}.
 
+{mapping, "cluster_exchange_limit", "rabbit.cluster_exchange_limit",
+  [{datatype, [{atom, infinity}, integer]}, {validators, ["non_negative_integer"]}]}.
+
+{translation, "rabbit.cluster_exchange_limit",
+ fun(Conf) ->
+  case cuttlefish:conf_get("cluster_exchange_limit", Conf, undefined) of
+      undefined -> cuttlefish:unset();
+      infinity  -> infinity;
+      Val when is_integer(Val) -> Val;
+      _         -> cuttlefish:invalid("should be a non-negative integer")
+  end
+ end
+}.
+
 %% Customising Socket Options.
 %%
 %% See (https://www.erlang.org/doc/man/inet.html#setopts-2) for

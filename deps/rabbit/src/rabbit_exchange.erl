@@ -101,9 +101,13 @@ serial(X) ->
       Internal :: boolean(),
       Args :: rabbit_framing:amqp_table(),
       Username :: rabbit_types:username(),
-      Ret :: {ok, rabbit_types:exchange()} | {error, timeout}.
+      Ret :: {ok, rabbit_types:exchange()} |
+             {error, timeout} |
+             %% May exit with `#amqp_error{}` if validations fail:
+             rabbit_types:channel_exit().
 
 declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
+    ok = check_exchange_limits(XName),
     X = rabbit_exchange_decorator:set(
           rabbit_policy:set(#exchange{name        = XName,
                                       type        = Type,
@@ -138,6 +142,25 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
             rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
             {ok, X}
+    end.
+
+check_exchange_limits(XName) ->
+    Limit = rabbit_misc:get_env(rabbit, cluster_exchange_limit, infinity),
+    case rabbit_db_exchange:count() >= Limit of
+        false ->
+            ok;
+        true ->
+            case rabbit_db_exchange:exists(XName) of
+                true ->
+                    %% Allow re-declares of existing exchanges when at the
+                    %% exchange limit.
+                    ok;
+                false ->
+                    rabbit_misc:protocol_error(
+                      precondition_failed,
+                      "cannot declare ~ts: exchange limit of ~tp is reached",
+                      [rabbit_misc:rs(XName), Limit])
+            end
     end.
 
 %% Used with binaries sent over the wire; the type may not exist.
