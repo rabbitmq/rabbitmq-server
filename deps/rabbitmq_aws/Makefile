@@ -6,6 +6,7 @@ define PROJECT_ENV
 []
 endef
 
+DEPS = gun
 LOCAL_DEPS = crypto inets ssl xmerl public_key
 BUILD_DEPS = rabbit_common
 # We do not depend on rabbit therefore can't run the broker.
