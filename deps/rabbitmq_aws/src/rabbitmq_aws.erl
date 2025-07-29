@@ -9,24 +9,28 @@
 -behavior(gen_server).
 
 %% API exports
--export([get/2, get/3,
-         post/4,
-         refresh_credentials/0,
-         request/5, request/6, request/7,
-         set_credentials/2,
-         has_credentials/0,
-         set_region/1,
-         ensure_imdsv2_token_valid/0,
-         api_get_request/2]).
+-export([
+    get/2, get/3,
+    post/4,
+    refresh_credentials/0,
+    request/5, request/6, request/7,
+    set_credentials/2,
+    has_credentials/0,
+    set_region/1,
+    ensure_imdsv2_token_valid/0,
+    api_get_request/2
+]).
 
 %% gen-server exports
--export([start_link/0,
-         init/1,
-         terminate/2,
-         code_change/3,
-         handle_call/3,
-         handle_cast/2,
-         handle_info/2]).
+-export([
+    start_link/0,
+    init/1,
+    terminate/2,
+    code_change/3,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2
+]).
 
 %% Export all for unit tests
 -ifdef(TEST).
@@ -39,101 +43,117 @@
 %% exported wrapper functions
 %%====================================================================
 
--spec get(Service :: string(),
-          Path :: path()) -> result().
+-spec get(
+    Service :: string(),
+    Path :: path()
+) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON, or XML
 %%      format.
 %% @end
 get(Service, Path) ->
-  get(Service, Path, []).
+    get(Service, Path, []).
 
-
--spec get(Service :: string(),
-          Path :: path(),
-          Headers :: headers()) -> result().
+-spec get(
+    Service :: string(),
+    Path :: path(),
+    Headers :: headers()
+) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
 get(Service, Path, Headers) ->
-  request(Service, get, Path, "", Headers).
+    request(Service, get, Path, "", Headers).
 
-
--spec post(Service :: string(),
-           Path :: path(),
-           Body :: body(),
-           Headers :: headers()) -> result().
+-spec post(
+    Service :: string(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers()
+) -> result().
 %% @doc Perform a HTTP Post request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
 post(Service, Path, Body, Headers) ->
-  request(Service, post, Path, Body, Headers).
-
+    request(Service, post, Path, Body, Headers).
 
 -spec refresh_credentials() -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
-  gen_server:call(rabbitmq_aws, refresh_credentials).
-
+    gen_server:call(rabbitmq_aws, refresh_credentials).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials(State) ->
+<<<<<<< HEAD
   rabbit_log:debug("Refreshing AWS credentials..."),
   {_, NewState} = load_credentials(State),
   rabbit_log:debug("AWS credentials have been refreshed"),
   set_credentials(NewState).
+=======
+    ?LOG_DEBUG("Refreshing AWS credentials..."),
+    {_, NewState} = load_credentials(State),
+    ?LOG_DEBUG("AWS credentials have been refreshed"),
+    set_credentials(NewState).
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
 
-
--spec request(Service :: string(),
-              Method :: method(),
-              Path :: path(),
-              Body :: body(),
-              Headers :: headers()) -> result().
+-spec request(
+    Service :: string(),
+    Method :: method(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers()
+) -> result().
 %% @doc Perform a HTTP request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers) ->
-  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
+    gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
 
-
--spec request(Service :: string(),
-              Method :: method(),
-              Path :: path(),
-              Body :: body(),
-              Headers :: headers(),
-              HTTPOptions :: http_options()) -> result().
+-spec request(
+    Service :: string(),
+    Method :: method(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers(),
+    HTTPOptions :: http_options()
+) -> result().
 %% @doc Perform a HTTP request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers, HTTPOptions) ->
-  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}).
+    gen_server:call(
+        rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}
+    ).
 
-
--spec request(Service :: string(),
-              Method :: method(),
-              Path :: path(),
-              Body :: body(),
-              Headers :: headers(),
-              HTTPOptions :: http_options(),
-              Endpoint :: host()) -> result().
+-spec request(
+    Service :: string(),
+    Method :: method(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers(),
+    HTTPOptions :: http_options(),
+    Endpoint :: host()
+) -> result().
 %% @doc Perform a HTTP request to the AWS API for the specified service, overriding
 %%      the endpoint URL to use when invoking the API. This is useful for local testing
 %%      of services such as DynamoDB. The response will automatically be decoded
 %%      if it is either in JSON or XML format.
 %% @end
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
-  gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}).
+    gen_server:call(
+        rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}
+    ).
 
 -spec set_credentials(state()) -> ok.
 set_credentials(NewState) ->
-  gen_server:call(rabbitmq_aws, {set_credentials, NewState}).
+    gen_server:call(rabbitmq_aws, {set_credentials, NewState}).
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
 %% @doc Manually set the access credentials for requests. This should
@@ -142,122 +162,113 @@ set_credentials(NewState) ->
 %%      configuration or the AWS Instance Metadata service.
 %% @end
 set_credentials(AccessKey, SecretAccessKey) ->
-  gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
-
+    gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
 -spec set_region(Region :: string()) -> ok.
 %% @doc Manually set the AWS region to perform API requests to.
 %% @end
 set_region(Region) ->
-  gen_server:call(rabbitmq_aws, {set_region, Region}).
+    gen_server:call(rabbitmq_aws, {set_region, Region}).
 
 -spec set_imdsv2_token(imdsv2token()) -> ok.
 %% @doc Manually set the Imdsv2Token used to perform instance metadata service requests.
 %% @end
 set_imdsv2_token(Imdsv2Token) ->
-  gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
-
+    gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
 
 -spec get_imdsv2_token() -> imdsv2token() | 'undefined'.
 %% @doc return the current Imdsv2Token used to perform instance metadata service requests.
 %% @end
 get_imdsv2_token() ->
-  {ok, Imdsv2Token} = gen_server:call(rabbitmq_aws, get_imdsv2_token),
-  Imdsv2Token.
-
+    {ok, Imdsv2Token} = gen_server:call(rabbitmq_aws, get_imdsv2_token),
+    Imdsv2Token.
 
 %%====================================================================
 %% gen_server functions
 %%====================================================================
 
 start_link() ->
-  gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
-  {ok, #state{}}.
-
+    {ok, #state{}}.
 
 terminate(_, _) ->
-  ok.
-
+    ok.
 
 code_change(_, _, State) ->
-  {ok, State}.
+    {ok, State}.
 
 handle_call(Msg, _From, State) ->
-  handle_msg(Msg, State).
+    handle_msg(Msg, State).
 
 handle_cast(_Request, State) ->
-  {noreply, State}.
-
+    {noreply, State}.
 
 handle_info(_Info, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
 handle_msg({request, Service, Method, Headers, Path, Body, Options, Host}, State) ->
-    {Response, NewState} = perform_request(State, Service, Method, Headers, Path, Body, Options, Host),
+    {Response, NewState} = perform_request(
+        State, Service, Method, Headers, Path, Body, Options, Host
+    ),
     {reply, Response, NewState};
-
 handle_msg(get_state, State) ->
     {reply, {ok, State}, State};
-
 handle_msg(refresh_credentials, State) ->
     {Reply, NewState} = load_credentials(State),
     {reply, Reply, NewState};
-
 handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
-    {reply, ok, State#state{access_key = AccessKey,
-                            secret_access_key = SecretAccessKey,
-                            security_token = undefined,
-                            expiration = undefined,
-                            error = undefined}};
-
+    {reply, ok, State#state{
+        access_key = AccessKey,
+        secret_access_key = SecretAccessKey,
+        security_token = undefined,
+        expiration = undefined,
+        error = undefined
+    }};
 handle_msg({set_credentials, NewState}, State) ->
-  {reply, ok, State#state{access_key = NewState#state.access_key,
-                          secret_access_key = NewState#state.secret_access_key,
-                          security_token = NewState#state.security_token,
-                          expiration = NewState#state.expiration,
-                          error = NewState#state.error}};
-
+    {reply, ok, State#state{
+        access_key = NewState#state.access_key,
+        secret_access_key = NewState#state.secret_access_key,
+        security_token = NewState#state.security_token,
+        expiration = NewState#state.expiration,
+        error = NewState#state.error
+    }};
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
-
 handle_msg({set_imdsv2_token, Imdsv2Token}, State) ->
     {reply, ok, State#state{imdsv2_token = Imdsv2Token}};
-
 handle_msg(has_credentials, State) ->
     {reply, has_credentials(State), State};
-
 handle_msg(get_imdsv2_token, State) ->
     {reply, {ok, State#state.imdsv2_token}, State};
-
 handle_msg(_Request, State) ->
     {noreply, State}.
 
-
--spec endpoint(State :: state(), Host :: string(),
-               Service :: string(), Path :: string()) -> string().
+-spec endpoint(
+    State :: state(),
+    Host :: string(),
+    Service :: string(),
+    Path :: string()
+) -> string().
 %% @doc Return the endpoint URL, either by constructing it with the service
 %%      information passed in, or by using the passed in Host value.
 %% @ednd
 endpoint(#state{region = Region}, undefined, Service, Path) ->
-  lists:flatten(["https://", endpoint_host(Region, Service), Path]);
+    lists:flatten(["https://", endpoint_host(Region, Service), Path]);
 endpoint(_, Host, _, Path) ->
-  lists:flatten(["https://", Host, Path]).
-
+    lists:flatten(["https://", Host, Path]).
 
 -spec endpoint_host(Region :: region(), Service :: string()) -> host().
 %% @doc Construct the endpoint hostname for the request based upon the service
 %%      and region.
 %% @end
 endpoint_host(Region, Service) ->
-  lists:flatten(string:join([Service, Region, endpoint_tld(Region)], ".")).
-
+    lists:flatten(string:join([Service, Region, endpoint_tld(Region)], ".")).
 
 -spec endpoint_tld(Region :: region()) -> host().
 %% @doc Construct the endpoint hostname TLD for the request based upon the region.
@@ -276,27 +287,29 @@ endpoint_tld(_Other) ->
 %% maybe_decode_body/2 method.
 %% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
-  {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+    {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
-  {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+    {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({error, Reason}) ->
-  {error, Reason, undefined}.
+    {error, Reason, undefined}.
 
 -spec get_content_type(Headers :: headers()) -> {Type :: string(), Subtype :: string()}.
 %% @doc Fetch the content type from the headers and return it as a tuple of
 %%      {Type, Subtype}.
 %% @end
 get_content_type(Headers) ->
-  Value = case proplists:get_value("content-type", Headers, undefined) of
-    undefined ->
-      proplists:get_value("Content-Type", Headers, "text/xml");
-    Other -> Other
-  end,
-  parse_content_type(Value).
+    Value =
+        case proplists:get_value("content-type", Headers, undefined) of
+            undefined ->
+                proplists:get_value("Content-Type", Headers, "text/xml");
+            Other ->
+                Other
+        end,
+    parse_content_type(Value).
 
 -spec has_credentials() -> boolean().
 has_credentials() ->
-  gen_server:call(rabbitmq_aws, has_credentials).
+    gen_server:call(rabbitmq_aws, has_credentials).
 
 -spec has_credentials(state()) -> boolean().
 %% @doc check to see if there are credentials made available in the current state
@@ -306,16 +319,15 @@ has_credentials(#state{error = Error}) when Error /= undefined -> false;
 has_credentials(#state{access_key = Key}) when Key /= undefined -> true;
 has_credentials(_) -> false.
 
-
 -spec expired_credentials(Expiration :: calendar:datetime()) -> boolean().
 %% @doc Indicates if the date that is passed in has expired.
 %% end
-expired_credentials(undefined) -> false;
+expired_credentials(undefined) ->
+    false;
 expired_credentials(Expiration) ->
-  Now = calendar:datetime_to_gregorian_seconds(local_time()),
-  Expires = calendar:datetime_to_gregorian_seconds(Expiration),
-  Now >= Expires.
-
+    Now = calendar:datetime_to_gregorian_seconds(local_time()),
+    Expires = calendar:datetime_to_gregorian_seconds(Expiration),
+    Now >= Expires.
 
 -spec load_credentials(State :: state()) -> {ok, state()} | {error, state()}.
 %% @doc Load the credentials using the following order of configuration precedence:
@@ -324,6 +336,7 @@ expired_credentials(Expiration) ->
 %%        - EC2 Instance Metadata Service
 %% @end
 load_credentials(#state{region = Region}) ->
+<<<<<<< HEAD
   case rabbitmq_aws_config:credentials() of
     {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
       {ok, #state{region = Region,
@@ -344,118 +357,190 @@ load_credentials(#state{region = Region}) ->
                      imdsv2_token = undefined}}
   end.
 
+=======
+    case rabbitmq_aws_config:credentials() of
+        {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
+            {ok, #state{
+                region = Region,
+                error = undefined,
+                access_key = AccessKey,
+                secret_access_key = SecretAccessKey,
+                expiration = Expiration,
+                security_token = SecurityToken,
+                imdsv2_token = undefined
+            }};
+        {error, Reason} ->
+            ?LOG_ERROR(
+                "Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n",
+                [Reason]
+            ),
+            {error, #state{
+                region = Region,
+                error = Reason,
+                access_key = undefined,
+                secret_access_key = undefined,
+                expiration = undefined,
+                security_token = undefined,
+                imdsv2_token = undefined
+            }}
+    end.
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
 
 -spec local_time() -> calendar:datetime().
 %% @doc Return the current local time.
 %% @end
 local_time() ->
-  [Value] = calendar:local_time_to_universal_time_dst(calendar:local_time()),
-  Value.
+    [Value] = calendar:local_time_to_universal_time_dst(calendar:local_time()),
+    Value.
 
-
--spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) -> list() | body().
+-spec maybe_decode_body(ContentType :: {nonempty_string(), nonempty_string()}, Body :: body()) ->
+    list() | body().
 %% @doc Attempt to decode the response body by its MIME
 %% @end
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
-  rabbitmq_aws_json:decode(Body);
+    rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
-  rabbitmq_aws_json:decode(Body);
+    rabbitmq_aws_json:decode(Body);
 maybe_decode_body({_, "xml"}, Body) ->
-  rabbitmq_aws_xml:parse(Body);
+    rabbitmq_aws_xml:parse(Body);
 maybe_decode_body(_ContentType, Body) ->
-  Body.
-
+    Body.
 
 -spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
 %% @doc parse a content type string returning a tuple of type/subtype
 %% @end
 parse_content_type(ContentType) ->
-  Parts = string:tokens(ContentType, ";"),
-  [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
-  {Type, Subtype}.
+    Parts = string:tokens(ContentType, ";"),
+    [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
+    {Type, Subtype}.
 
-
--spec perform_request(State :: state(), Service :: string(), Method :: method(),
-                      Headers :: headers(), Path :: path(), Body :: body(),
-                      Options :: http_options(), Host :: string() | undefined)
-    -> {Result :: result(), NewState :: state()}.
+-spec perform_request(
+    State :: state(),
+    Service :: string(),
+    Method :: method(),
+    Headers :: headers(),
+    Path :: path(),
+    Body :: body(),
+    Options :: http_options(),
+    Host :: string() | undefined
+) ->
+    {Result :: result(), NewState :: state()}.
 %% @doc Make the API request and return the formatted response.
 %% @end
 perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_has_creds(has_credentials(State), State, Service, Method,
-                            Headers, Path, Body, Options, Host).
+    perform_request_has_creds(
+        has_credentials(State),
+        State,
+        Service,
+        Method,
+        Headers,
+        Path,
+        Body,
+        Options,
+        Host
+    ).
 
-
--spec perform_request_has_creds(HasCreds :: boolean(), State :: state(),
-                                Service  :: string(), Method :: method(),
-                                Headers  :: headers(), Path :: path(), Body :: body(),
-                                Options  :: http_options(), Host :: string() | undefined)
-    -> {Result :: result(), NewState :: state()}.
+-spec perform_request_has_creds(
+    HasCreds :: boolean(),
+    State :: state(),
+    Service :: string(),
+    Method :: method(),
+    Headers :: headers(),
+    Path :: path(),
+    Body :: body(),
+    Options :: http_options(),
+    Host :: string() | undefined
+) ->
+    {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if there are credentials. If there are,
 %%      validate they have not or will not expire, performing the request if not,
 %%      otherwise return an error result.
 %% @end
 perform_request_has_creds(true, State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_creds_expired(expired_credentials(State#state.expiration), State,
-                                Service, Method, Headers, Path, Body, Options, Host);
+    perform_request_creds_expired(
+        expired_credentials(State#state.expiration),
+        State,
+        Service,
+        Method,
+        Headers,
+        Path,
+        Body,
+        Options,
+        Host
+    );
 perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
-  perform_request_creds_error(State).
+    perform_request_creds_error(State).
 
-
--spec perform_request_creds_expired(CredsExp :: boolean(), State :: state(),
-                                    Service  :: string(), Method :: method(),
-                                    Headers  :: headers(), Path :: path(), Body :: body(),
-                                    Options  :: http_options(), Host :: string() | undefined)
-  -> {Result :: result(), NewState :: state()}.
+-spec perform_request_creds_expired(
+    CredsExp :: boolean(),
+    State :: state(),
+    Service :: string(),
+    Method :: method(),
+    Headers :: headers(),
+    Path :: path(),
+    Body :: body(),
+    Options :: http_options(),
+    Host :: string() | undefined
+) ->
+    {Result :: result(), NewState :: state()}.
 %% @doc Invoked after checking to see if the current credentials have expired.
 %%      If they haven't, perform the request, otherwise try and refresh the
 %%      credentials before performing the request.
 %% @end
 perform_request_creds_expired(false, State, Service, Method, Headers, Path, Body, Options, Host) ->
-  perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
+    perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
 perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
-  perform_request_creds_error(State#state{error = "Credentials expired!"}).
+    perform_request_creds_error(State#state{error = "Credentials expired!"}).
 
-
--spec perform_request_with_creds(State :: state(), Service :: string(), Method :: method(),
-                                 Headers :: headers(), Path :: path(), Body :: body(),
-                                 Options :: http_options(), Host :: string() | undefined)
-    -> {Result :: result(), NewState :: state()}.
+-spec perform_request_with_creds(
+    State :: state(),
+    Service :: string(),
+    Method :: method(),
+    Headers :: headers(),
+    Path :: path(),
+    Body :: body(),
+    Options :: http_options(),
+    Host :: string() | undefined
+) ->
+    {Result :: result(), NewState :: state()}.
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
 perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host) ->
-  URI = endpoint(State, Host, Service, Path),
-  SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
-  ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
-  perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
+    URI = endpoint(State, Host, Service, Path),
+    SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
+    ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
+    perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
 
-
--spec perform_request_with_creds(State :: state(), Method :: method(), URI :: string(),
-                                 Headers :: headers(), ContentType :: string() | undefined,
-                                 Body :: body(), Options :: http_options())
-    -> {Result :: result(), NewState :: state()}.
+-spec perform_request_with_creds(
+    State :: state(),
+    Method :: method(),
+    URI :: string(),
+    Headers :: headers(),
+    ContentType :: string() | undefined,
+    Body :: body(),
+    Options :: http_options()
+) ->
+    {Result :: result(), NewState :: state()}.
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
 perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
-  Options1 = ensure_timeout(Options0),
-  Response = httpc:request(Method, {URI, Headers}, Options1, []),
-  {format_response(Response), State};
+    Options1 = ensure_timeout(Options0),
+    Response = httpc:request(Method, {URI, Headers}, Options1, []),
+    {format_response(Response), State};
 perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
-  Options1 = ensure_timeout(Options0),
-  Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
-  {format_response(Response), State}.
-
+    Options1 = ensure_timeout(Options0),
+    Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
+    {format_response(Response), State}.
 
 -spec perform_request_creds_error(State :: state()) ->
-  {result_error(), NewState :: state()}.
+    {result_error(), NewState :: state()}.
 %% @doc Return the error response when there are not any credentials to use with
 %%      the request.
 %% @end
 perform_request_creds_error(State) ->
-  {{error, {credentials, State#state.error}}, State}.
-
+    {{error, {credentials, State#state.error}}, State}.
 
 %% @doc Ensure that the timeout option is set and greater than 0 and less
 %%      than about 1/2 of the default gen_server:call timeout. This gives
@@ -473,29 +558,46 @@ ensure_timeout(Options) ->
             Options1 ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}]
     end.
 
-
--spec sign_headers(State :: state(), Service :: string(), Method :: method(),
-                   URI :: string(), Headers :: headers(), Body :: body()) -> headers().
+-spec sign_headers(
+    State :: state(),
+    Service :: string(),
+    Method :: method(),
+    URI :: string(),
+    Headers :: headers(),
+    Body :: body()
+) -> headers().
 %% @doc Build the signed headers for the API request.
 %% @end
-sign_headers(#state{access_key = AccessKey,
-                    secret_access_key = SecretKey,
-                    security_token = SecurityToken,
-                    region = Region}, Service, Method, URI, Headers, Body) ->
-  rabbitmq_aws_sign:headers(#request{access_key = AccessKey,
-                                  secret_access_key = SecretKey,
-                                  security_token = SecurityToken,
-                                  region = Region,
-                                  service = Service,
-                                  method = Method,
-                                  uri = URI,
-                                  headers = Headers,
-                                  body = Body}).
+sign_headers(
+    #state{
+        access_key = AccessKey,
+        secret_access_key = SecretKey,
+        security_token = SecurityToken,
+        region = Region
+    },
+    Service,
+    Method,
+    URI,
+    Headers,
+    Body
+) ->
+    rabbitmq_aws_sign:headers(#request{
+        access_key = AccessKey,
+        secret_access_key = SecretKey,
+        security_token = SecurityToken,
+        region = Region,
+        service = Service,
+        method = Method,
+        uri = URI,
+        headers = Headers,
+        body = Body
+    }).
 
 -spec expired_imdsv2_token('undefined' | imdsv2token()) -> boolean().
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
+<<<<<<< HEAD
   rabbit_log:debug("EC2 IMDSv2 token has not yet been obtained"),
   true;
 expired_imdsv2_token({_, _, undefined}) ->
@@ -507,18 +609,35 @@ expired_imdsv2_token({_, _, Expiration}) ->
   rabbit_log:debug("EC2 IMDSv2 token has expired: ~tp", [HasExpired]),
   HasExpired.
 
+=======
+    ?LOG_DEBUG("EC2 IMDSv2 token has not yet been obtained"),
+    true;
+expired_imdsv2_token({_, _, undefined}) ->
+    ?LOG_DEBUG("EC2 IMDSv2 token is not available"),
+    true;
+expired_imdsv2_token({_, _, Expiration}) ->
+    Now = calendar:datetime_to_gregorian_seconds(local_time()),
+    HasExpired = Now >= Expiration,
+    ?LOG_DEBUG("EC2 IMDSv2 token has expired: ~tp", [HasExpired]),
+    HasExpired.
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
 
 -spec ensure_imdsv2_token_valid() -> security_token().
 ensure_imdsv2_token_valid() ->
-  Imdsv2Token = get_imdsv2_token(),
-  case expired_imdsv2_token(Imdsv2Token) of
-    true -> Value = rabbitmq_aws_config:load_imdsv2_token(),
-            Expiration = calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
-            set_imdsv2_token(#imdsv2token{token = Value,
-                                          expiration = Expiration}),
+    Imdsv2Token = get_imdsv2_token(),
+    case expired_imdsv2_token(Imdsv2Token) of
+        true ->
+            Value = rabbitmq_aws_config:load_imdsv2_token(),
+            Expiration =
+                calendar:datetime_to_gregorian_seconds(local_time()) + ?METADATA_TOKEN_TTL_SECONDS,
+            set_imdsv2_token(#imdsv2token{
+                token = Value,
+                expiration = Expiration
+            }),
             Value;
-    _    -> Imdsv2Token#imdsv2token.token
-  end.
+        _ ->
+            Imdsv2Token#imdsv2token.token
+    end.
 
 -spec ensure_credentials_valid() -> ok.
 %% @doc Invoked before each AWS service API request to check if the current credentials are available and that they have not expired.
@@ -526,29 +645,45 @@ ensure_imdsv2_token_valid() ->
 %%      If the credentials are not available or have expired, then refresh them before performing the request.
 %% @end
 ensure_credentials_valid() ->
+<<<<<<< HEAD
   rabbit_log:debug("Making sure AWS credentials are available and still valid"),
   {ok, State} = gen_server:call(rabbitmq_aws, get_state),
   case has_credentials(State) of
     true -> case expired_credentials(State#state.expiration) of
               true -> refresh_credentials(State);
               _    -> ok
+=======
+    ?LOG_DEBUG("Making sure AWS credentials are available and still valid"),
+    {ok, State} = gen_server:call(rabbitmq_aws, get_state),
+    case has_credentials(State) of
+        true ->
+            case expired_credentials(State#state.expiration) of
+                true -> refresh_credentials(State);
+                _ -> ok
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
             end;
-    _    ->  refresh_credentials(State)
-  end.
-
+        _ ->
+            refresh_credentials(State)
+    end.
 
 -spec api_get_request(string(), path()) -> {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
+<<<<<<< HEAD
   rabbit_log:debug("Invoking AWS request {Service: ~tp; Path: ~tp}...", [Service, Path]),
   api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+=======
+    ?LOG_DEBUG("Invoking AWS request {Service: ~tp; Path: ~tp}...", [Service, Path]),
+    api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
 
-
--spec api_get_request_with_retries(string(), path(), integer(), integer()) -> {'ok', list()} | {'error', term()}.
+-spec api_get_request_with_retries(string(), path(), integer(), integer()) ->
+    {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service with retries.
 %% @end
 api_get_request_with_retries(_, _, 0, _) ->
+<<<<<<< HEAD
   rabbit_log:warning("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
   {error, "AWS service is unavailable"};
 api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
@@ -566,3 +701,27 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
                                   timer:sleep(WaitTimeBetweenRetries),
                                   api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
   end.
+=======
+    ?LOG_WARNING("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
+    {error, "AWS service is unavailable"};
+api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
+    ensure_credentials_valid(),
+    case get(Service, Path) of
+        {ok, {_Headers, Payload}} ->
+            ?LOG_DEBUG("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
+            {ok, Payload};
+        {error, {credentials, _}} ->
+            {error, credentials};
+        {error, Message, Response} ->
+            ?LOG_WARNING("Error occurred: ~ts", [Message]),
+            case Response of
+                {_, Payload} ->
+                    ?LOG_WARNING("Failed AWS request: ~ts~nResponse: ~tp", [Path, Payload]);
+                _ ->
+                    ok
+            end,
+            ?LOG_WARNING("Will retry AWS request, remaining retries: ~b", [Retries]),
+            timer:sleep(WaitTimeBetweenRetries),
+            api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+    end.
+>>>>>>> a4fffbd7e (erlfmt entire plugin)
