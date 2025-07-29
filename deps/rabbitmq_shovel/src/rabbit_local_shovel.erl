@@ -318,10 +318,10 @@ handle_dest(_Msg, State) ->
     State.
 
 ack(DeliveryTag, Multiple, State) ->
-    settle(complete, DeliveryTag, Multiple, State).
+    maybe_grant_or_stash_credit(settle(complete, DeliveryTag, Multiple, State)).
 
 nack(DeliveryTag, Multiple, State) ->
-    settle(discard, DeliveryTag, Multiple, State).
+    maybe_grant_or_stash_credit(settle(discard, DeliveryTag, Multiple, State)).
 
 forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                                unacked := Unacked} = Dest,
@@ -398,11 +398,6 @@ parse_parameter(Param, Fun, Value) ->
             fail({invalid_parameter_value, Param, Err})
     end.
 
-parse_non_negative_integer(N) when is_integer(N) andalso N >= 0 ->
-    N;
-parse_non_negative_integer(N) ->
-    fail({require_non_negative_integer, N}).
-
 parse_binary(Binary) when is_binary(Binary) ->
     Binary;
 parse_binary(NotABinary) ->
@@ -431,8 +426,8 @@ handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
         fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
                 DeliveryTag = next_tag(S0),
                 S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
-                rabbit_shovel_behaviour:forward(DeliveryTag, Mc, sent_delivery(S))
-        end, State, Msgs)).
+                rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S)
+        end, sent_delivery(State, length(Msgs)), Msgs)).
 
 next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
     DeliveryTag.
@@ -443,15 +438,13 @@ increase_next_tag(#{source := Source = #{current := Current = #{next_tag := Deli
 handle_dest_queue_actions(Actions, State) ->
     lists:foldl(
       fun({settled, _QName, MsgSeqNos}, S0) ->
-              maybe_grant_or_stash_credit(
-                confirm_to_inbound(fun(Tag, StateX) ->
-                                           rabbit_shovel_behaviour:ack(Tag, false, StateX)
-                                   end, MsgSeqNos, S0));
+              confirm_to_inbound(fun(Tag, StateX) ->
+                                         rabbit_shovel_behaviour:ack(Tag, false, StateX)
+                                 end, MsgSeqNos, S0);
          ({rejected, _QName, MsgSeqNos}, S0) ->
-              maybe_grant_or_stash_credit(
-                confirm_to_inbound(fun(Tag, StateX) ->
-                                           rabbit_shovel_behaviour:nack(Tag, false, StateX)
-                                   end, MsgSeqNos, S0));
+              confirm_to_inbound(fun(Tag, StateX) ->
+                                         rabbit_shovel_behaviour:nack(Tag, false, StateX)
+                                 end, MsgSeqNos, S0);
          %% TODO handle {block, QName}
          (_Action, S0) ->
               S0
@@ -646,25 +639,25 @@ confirm_to_inbound(ConfirmFun, SeqNos, State)
 confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
-    State = ConfirmFun(InTag, State0),
     Unacked1 = maps:remove(Seq, Unacked),
-    rabbit_shovel_behaviour:decr_remaining(
-      1, State#{dest => Dst#{unacked => Unacked1}}).
+    State = rabbit_shovel_behaviour:decr_remaining(
+              1, State0#{dest => Dst#{unacked => Unacked1}}),
+    ConfirmFun(InTag, State).
 
 sent_delivery(#{source := #{delivery_count := DeliveryCount0,
                             credit := Credit0,
                             queue_delivery_count := QDeliveryCount0,
                             queue_credit := QCredit0} = Src
-               } = State0) ->
-    DeliveryCount = serial_number:add(DeliveryCount0, 1),
-    Credit = max(0, Credit0 - 1),
-    QDeliveryCount = serial_number:add(QDeliveryCount0, 1),
-    QCredit = max(0, QCredit0 - 1),
-    State = State0#{source => Src#{credit => Credit,
-                                   delivery_count => DeliveryCount,
-                                   queue_credit => QCredit,
-                                   queue_delivery_count => QDeliveryCount
-                                  }}.
+               } = State0, NumMsgs) ->
+    DeliveryCount = serial_number:add(DeliveryCount0, NumMsgs),
+    Credit = max(0, Credit0 - NumMsgs),
+    QDeliveryCount = serial_number:add(QDeliveryCount0, NumMsgs),
+    QCredit = max(0, QCredit0 - NumMsgs),
+    State0#{source => Src#{credit => Credit,
+                           delivery_count => DeliveryCount,
+                           queue_credit => QCredit,
+                           queue_delivery_count => QDeliveryCount
+                          }}.
 
 maybe_grant_or_stash_credit(#{source := #{queue := QName0,
                                     credit := Credit,
