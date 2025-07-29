@@ -1547,7 +1547,7 @@ grow(QuorumClusterSize, VhostSpec, QueueSpec, Strategy, Membership)
 
     TargetQuorumClusterSize =
         if QuorumClusterSize > TotalRunning ->
-            %% we cant grow beyond total running nodes
+            %% we can't grow beyond total running nodes
             TotalRunning;
         true ->
             QuorumClusterSize
@@ -1608,6 +1608,12 @@ maybe_grow(Q, Node, Membership, Size, QNodes) ->
             {QName, {error, Size, Err}}
     end.
 
+%% Compare local membership states of all nodes in parallel.
+%%
+%% Note a few things:
+%% 1. This function intentionally queries local member state and not the leader
+%% 2. ra:key_metrics/1 is sequential and not parallel
+%% 3. ra:key_metrics/1 is not multicall-friendly because it relies on erlang:node/0
 check_all_memberships(RaName, QNodes, CompareMembership) ->
     case rpc:multicall(QNodes, ets, lookup, [ra_state, RaName]) of
         {Result, []} ->
