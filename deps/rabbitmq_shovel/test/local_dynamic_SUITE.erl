@@ -958,8 +958,8 @@ local_to_local_credit_flow(Config, AckMode) ->
                                            {<<"dest-queue">>, Dest},
                                            {<<"ack-mode">>, AckMode}
                                           ]),
-              publish_many(Sess, Src, Dest, <<"tag1">>, 500),
-              expect_many(Sess, Dest, 500)
+              publish_many(Sess, Src, Dest, <<"tag1">>, 1000),
+              expect_many(Sess, Dest, 1000)
       end).
 
 local_to_local_quorum_credit_flow_on_confirm(Config) ->
@@ -988,8 +988,8 @@ local_to_local_quorum_credit_flow(Config, AckMode) ->
                                            {<<"dest-predeclared">>, true},
                                            {<<"ack-mode">>, AckMode}
                                           ]),
-              publish_many(Sess, Src, Dest, <<"tag1">>, 500),
-              expect_many(Sess, Dest, 500)
+              publish_many(Sess, Src, Dest, <<"tag1">>, 1000),
+              expect_many(Sess, Dest, 1000)
       end).
 
 local_to_local_stream_credit_flow_on_confirm(Config) ->
@@ -1020,12 +1020,12 @@ local_to_local_stream_credit_flow(Config, AckMode) ->
                                           ]),
 
               Receiver = subscribe(Sess, Dest),
-              publish_many(Sess, Src, Dest, <<"tag1">>, 500),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 500}, _}],
+              publish_many(Sess, Src, Dest, <<"tag1">>, 1000),
+              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1000}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
                                                        rabbit_shovel_status, status, []),
                           30000),
-              _ = expect(Receiver, 500, []),
+              _ = expect(Receiver, 1000, []),
               amqp10_client:detach_link(Receiver)
       end).
 
