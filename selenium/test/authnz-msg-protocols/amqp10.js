@@ -51,13 +51,14 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
-      let tokenFormat = process.env.OAUTH_TOKEN_FORMAT || 'jwt'
+      let scopes = process.env.OAUTH_SCOPES
       log("oauthProviderUrl  : " + oauthProviderUrl)
       log("oauthClientId  : " + oauthClientId)
       log("oauthClientSecret  : " + oauthClientSecret)
+      log("oauthScope  : " + scopes)
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
       log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
-      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint, scopes)
       log("Obtained access token : " + password)
       amqpSettings.password = password
       setAmqpOptions(amqpSettings)

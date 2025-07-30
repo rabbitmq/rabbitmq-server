@@ -236,13 +236,16 @@ module.exports = {
     }
   },
 
-  tokenFor: (client_id, client_secret, url = uaaUrl, token_format = "jwt") => {
+  tokenFor: (client_id, client_secret, url = uaaUrl, scope) => {
     const req = new XMLHttpRequest()
-    const params = 'client_id=' + client_id +
+    let params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
-      '&token_format=' + token_format + 
+//      '&token_format=' + token_format + 
       '&response_type=token'
+    if (scope != undefined && scope != "") {
+      params = params + '&scope=' + scope
+    } 
 
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')

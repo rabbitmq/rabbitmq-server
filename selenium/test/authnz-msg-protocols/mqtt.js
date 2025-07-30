@@ -44,9 +44,10 @@ describe('Having MQTT protocol enbled and the following auth_backends: ' + backe
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
+      let scope = process.env.OAUTH_SCOPES
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
       log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
-      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint, scope)
       log("Obtained access token : " + password)
     }
     mqttOptions = {
