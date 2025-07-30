@@ -1,7 +1,7 @@
 const assert = require('assert')
 const { log, tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
-const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
+const { getAmqpConnectionOptions: amqpOptions, open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
 
 var receivedAmqpMessageCount = 0
 var untilConnectionEstablished = new Promise((resolve, reject) => {
@@ -31,6 +31,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let password = process.env.RABBITMQ_AMQP_PASSWORD
   let usemtls = process.env.AMQP_USE_MTLS
   let amqp;
+  let amqpSettings = amqpOptions()
 
   before(function () {    
     if (backends.includes("http") && (username.includes("http") || usemtls)) {
@@ -48,16 +49,20 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
+      let tokenFormat = process.env.OAUTH_TOKEN_FORMAT || 'jwt'
       log("oauthProviderUrl  : " + oauthProviderUrl)
+      log("oauthClientId  : " + oauthClientId)
+      log("oauthClientSecret  : " + oauthClientSecret)
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
       log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
-      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint, tokenFormat)
       log("Obtained access token : " + password)
+      amqpSettings.password = password
     }
   })
 
   it('can open an AMQP 1.0 connection', async function () {     
-    amqp = openAmqp()
+    amqp = openAmqp("mq-queue", amqpSettings)
     await untilConnectionEstablished
     var untilMessageReceived = new Promise((resolve, reject) => {
       onAmqp('message', function(context) {

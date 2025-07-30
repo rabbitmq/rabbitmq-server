@@ -236,17 +236,18 @@ module.exports = {
     }
   },
 
-  tokenFor: (client_id, client_secret, url = uaaUrl) => {
+  tokenFor: (client_id, client_secret, url = uaaUrl, token_format = "jwt") => {
     const req = new XMLHttpRequest()
     const params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
-      '&token_format=jwt' +
+      '&token_format=' + token_format + 
       '&response_type=token'
 
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     req.setRequestHeader('Accept', 'application/json')
+    req.setRequestHeader("Authorization", "Basic " + btoa(client_id+":"+client_secret));
     req.send(params)
     if (req.status == 200) return JSON.parse(req.responseText).access_token
     else {
