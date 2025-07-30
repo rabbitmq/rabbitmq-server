@@ -85,7 +85,7 @@ jobs:
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}        
         path: |
-           $SELENIUM_ARTIFACTS/*
+           ${{ env.SELENIUM_ARTIFACTS }}/*
 
   summary-selenium:
     needs:
