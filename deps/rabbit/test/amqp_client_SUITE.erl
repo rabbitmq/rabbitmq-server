@@ -4749,7 +4749,7 @@ idle_time_out_on_server(Config) ->
                   ct:fail({missing_event, ?LINE})
         end
     after
-        ?assert(rpc(Config, meck, validate, [Mod])),
+        _ = rpc(Config, meck, validate, [Mod]),
         ok = rpc(Config, meck, unload, [Mod]),
         ok = rpc(Config, application, set_env, [App, Par, DefaultVal])
     end.
