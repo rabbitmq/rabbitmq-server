@@ -32,6 +32,7 @@ groups() ->
                   start_and_get_a_dynamic_amqp091_shovel_with_publish_properties,
                   start_and_get_a_dynamic_amqp091_shovel_with_missing_publish_properties,
                   start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties,
+                  start_and_get_a_dynamic_local_shovel,
                   create_and_delete_a_dynamic_shovel_that_successfully_connects,
                   create_and_delete_a_dynamic_shovel_that_fails_to_connect
                  ]},
@@ -205,6 +206,20 @@ start_and_get_a_dynamic_amqp091_shovel_with_empty_publish_properties(Config) ->
     await_shovel_removed(Config, ID),
 
     declare_amqp091_shovel_with_publish_properties(Config, Name, #{}),
+    await_shovel_startup(Config, ID),
+    Sh = get_shovel(Config, Name),
+    ?assertEqual(Name, maps:get(name, Sh)),
+    delete_shovel(Config, Name),
+
+    ok.
+
+start_and_get_a_dynamic_local_shovel(Config) ->
+    remove_all_dynamic_shovels(Config, <<"/">>),
+    Name = rabbit_data_coercion:to_binary(?FUNCTION_NAME),
+    ID = {<<"/">>, Name},
+    await_shovel_removed(Config, ID),
+
+    declare_local_shovel(Config, Name),
     await_shovel_startup(Config, ID),
     Sh = get_shovel(Config, Name),
     ?assertEqual(Name, maps:get(name, Sh)),
@@ -452,6 +467,22 @@ declare_amqp091_shovel_with_publish_properties(Config, Name, Props) ->
                 <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
                 <<"dest-queue">> => <<"amqp091.dest.test">>,
                 <<"dest-publish-properties">> => Props
+            }
+        }, ?CREATED).
+
+declare_local_shovel(Config, Name) ->
+    Port = integer_to_binary(
+        rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp)),
+    http_put(Config, io_lib:format("/parameters/shovel/%2f/~ts", [Name]),
+        #{
+            value => #{
+                <<"src-protocol">> => <<"local">>,
+                <<"src-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"src-queue">>  => <<"local.src.test">>,
+                <<"src-delete-after">> => <<"never">>,
+                <<"dest-protocol">> => <<"local">>,
+                <<"dest-uri">> => <<"amqp://localhost:", Port/binary>>,
+                <<"dest-queue">> => <<"local.dest.test">>
             }
         }, ?CREATED).
 
