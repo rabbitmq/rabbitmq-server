@@ -148,7 +148,7 @@ update_state(AuthUser, NewToken) ->
                             end
                     end
             end;
-        {error, Error} -> {refused, "Unable to introspect token: ~p", [Error]}
+        {error, Error} -> {refused, "Unable to introspect token"}
     end.
 
 expiry_timestamp(#auth_user{impl = DecodedTokenFun}) ->
