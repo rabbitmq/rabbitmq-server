@@ -76,7 +76,8 @@ jobs:
       run: |        
         IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
         CONF_DIR_PREFIX="$(mktemp -d)" RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
-         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging        
+         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging 
+        echo "Producing env var SELENIUM_ARTIFACTS with value $CONF_DIR_PREFIX"
         echo "SELENIUM_ARTIFACTS=$CONF_DIR_PREFIX" >> $GITHUB_ENV
         
     - name: Upload Test Artifacts
