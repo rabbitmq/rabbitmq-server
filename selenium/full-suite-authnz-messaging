@@ -7,6 +7,4 @@ authnz-messaging/auth-internal-backend.sh
 authnz-messaging/auth-internal-mtls-backend.sh
 authnz-messaging/auth-internal-http-backends.sh
 authnz-messaging/auth-ldap-backend.sh
-authnz-messaging/auth-oauth-backend-with-devproducer.sh
-authnz-messaging/auth-oauth-backend-with-prodproducer.sh
 authnz-messaging/auth-oauth-backend-with-opaque-tokens.sh
