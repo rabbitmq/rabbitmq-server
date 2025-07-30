@@ -41,20 +41,21 @@ function getConnectionOptions() {
 }
 module.exports = {  
   getAmqpConnectionOptions: () => { return connectionOptions },
+  setAmqpConnectionOptions: (options) => { connectionOptions = options },
   getAmqpUrl: () => {
     return connectionOptions.scheme + '://' +
         connectionOptions.username + ":" + connectionOptions.password + "@" +
         connectionOptions.host + ":" + connectionOptions.port
   },
-  open: (queueName = "my-queue", connOptions = connectionOptions) => {
+  open: (queueName = "my-queue") => {
     let promise = new Promise((resolve, reject) => {
       container.on('connection_open', function(context) {
         resolve()
       })
     })
-    console.log("Opening amqp connection using " + JSON.stringify(connOptions))
+    console.log("Opening amqp connection using " + JSON.stringify(connectionOptions))
     
-    let connection = container.connect(connOptions)
+    let connection = container.connect(connectionOptions)
     let receiver = connection.open_receiver({
       source: queueName,
       target: 'receiver-target',
