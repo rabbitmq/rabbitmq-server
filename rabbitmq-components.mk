@@ -46,8 +46,13 @@ dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.4.0
 dep_gen_batch_server = hex 0.8.8
 dep_jose = hex 1.11.10
+<<<<<<< HEAD
 dep_khepri = hex 0.16.0
 dep_khepri_mnesia_migration = hex 0.7.2
+=======
+dep_khepri = hex 0.17.2
+dep_khepri_mnesia_migration = hex 0.8.0
+>>>>>>> eaf4b5d6e (Update Khepri from 0.17.1 to 0.17.2)
 dep_meck = hex 1.0.0
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.8
 dep_prometheus = hex 4.11.0
