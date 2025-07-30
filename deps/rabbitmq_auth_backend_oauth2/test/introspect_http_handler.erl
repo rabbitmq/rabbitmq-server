@@ -12,11 +12,16 @@ init(Req, State) ->
                 <<"401">> -> 
                     {ok, cowboy_req:reply(401, #{}, [], Req), State};
                 <<"active">> -> 
-                    Body = rabbit_json:encode([{"active", true}, {"scope", "rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*"}]),
+                    Body = rabbit_json:encode([
+                        {"active", true}, 
+                        {"aud", <<"rabbitmq">>},
+                        {"scope", <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State};
                 <<"inactive">> -> 
-                    Body = rabbit_json:encode([{"active", false}, {"scope", "rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*"}]),
+                    Body = rabbit_json:encode([
+                        {"active", false}, 
+                        {"scope", <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State}
             end;
