@@ -28,6 +28,16 @@ spring:
             - rabbitmq
       authorizationserver:
         client:
+          introspection_client:
+            registration:
+              provider: spring
+              client-id: introspection_client
+              client-secret: "{noop}introspection_client"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic              
+              client-name: introspection_client
           producer:
             registration:
               provider: spring
@@ -36,17 +46,70 @@ spring:
               authorization-grant-types: 
                 - client_credentials
               client-authentication-methods:
-                - client_secret_post
-#              token-settings:
-#                access-token-format: reference              
-              scopes: 
+                - client_secret_basic
+              scope: 
                 - openid
                 - profile
                 - rabbitmq.tag:management
-                - rabbitmq.configure:*/*
-                - rabbitmq.read:*/*
-                - rabbitmq.write:*/*
+                - rabbitmq.configure:*/* 
+                - rabbitmq.read:*/* 
+                - rabbitmq.write:*/* 
               client-name: producer
+            token:
+              access-token-format: reference        
+          mgt_api_client_opaque:
+            registration:
+              provider: spring
+              client-id: mgt_api_client_opaque
+              client-secret: "{noop}mgt_api_client_opaque"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+              scope: 
+                - openid
+                - profile
+                - rabbitmq.tag:management
+              client-name: mgt_api_client_opaque
+            token:
+              access-token-format: reference
+          mgt_api_client:
+            registration:
+              provider: spring
+              client-id: mgt_api_client
+              client-secret: "{noop}mgt_api_client"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+              scope: 
+                - openid
+                - profile
+                - rabbitmq.tag:management
+                - rabbitmq.tag:administrator
+              client-name: mgt_api_client            
+          rabbitmq_client_code_opaque:
+            registration:
+              provider: spring
+              client-id: rabbitmq_client_code_opaque
+              client-secret: "{noop}rabbitmq_client_code_opaque"
+              require-proof-key: true              
+              authorization-grant-types: 
+                - authorization_code
+              client-authentication-methods:
+                - none
+              redirect-uris: 
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/js/oidc-oauth/login-callback.html"
+              post-logout-redirect-uris:
+                - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/"
+              scopes: 
+                - openid 
+                - profile 
+                - rabbitmq.tag:administrator
+                - rabbitmq.tag:management
+              client-name: rabbitmq_client_code_opaque
+            token:
+              access-token-format: reference
           rabbitmq_client_code:
             registration:
               provider: spring

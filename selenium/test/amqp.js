@@ -46,15 +46,15 @@ module.exports = {
         connectionOptions.username + ":" + connectionOptions.password + "@" +
         connectionOptions.host + ":" + connectionOptions.port
   },
-  open: (queueName = "my-queue") => {
+  open: (queueName = "my-queue", connOptions = connectionOptions) => {
     let promise = new Promise((resolve, reject) => {
       container.on('connection_open', function(context) {
         resolve()
       })
     })
-    console.log("Opening amqp connection using " + JSON.stringify(connectionOptions))
+    console.log("Opening amqp connection using " + JSON.stringify(connOptions))
     
-    let connection = container.connect(connectionOptions)
+    let connection = container.connect(connOptions)
     let receiver = connection.open_receiver({
       source: queueName,
       target: 'receiver-target',
