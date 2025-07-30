@@ -720,9 +720,11 @@ shrink_coordinator_cluster(Config) ->
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Q = ?config(queue_name, Config),
 
-
     ?assertEqual({'queue.declare_ok', Q, 0, 0},
                  declare(Config, Server0, Q, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+
+    %% Wait for the replicas to be ready before stopping a node.
+    check_leader_and_replicas(Config, [Server0, Server1, Server2]),
 
     ok = rabbit_control_helper:command(stop_app, Server2),
     ok = rabbit_control_helper:command(forget_cluster_node, Server0, [atom_to_list(Server2)], []),
