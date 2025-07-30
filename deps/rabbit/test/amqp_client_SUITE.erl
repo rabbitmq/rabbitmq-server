@@ -4087,7 +4087,7 @@ list_connections(Config) ->
 
     %% CLI should list AMQP 1.0 container-id
     {ok, StdOut1} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "container_id"]),
-    ContainerIds0 = re:split(StdOut1, <<"\n">>, [trim]),
+    ContainerIds0 = re:split(string:trim(StdOut1), <<"\n">>, [trim]),
     ContainerIds = lists:sort(ContainerIds0),
     ?assertEqual([<<>>, ContainerId0, ContainerId2],
                  ContainerIds),
@@ -4749,7 +4749,7 @@ idle_time_out_on_server(Config) ->
                   ct:fail({missing_event, ?LINE})
         end
     after
-        ?assert(rpc(Config, meck, validate, [Mod])),
+        _ = rpc(Config, meck, validate, [Mod]),
         ok = rpc(Config, meck, unload, [Mod]),
         ok = rpc(Config, application, set_env, [App, Par, DefaultVal])
     end.

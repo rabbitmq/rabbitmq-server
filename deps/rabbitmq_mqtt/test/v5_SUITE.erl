@@ -1079,12 +1079,7 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
     {ok, _, [Qos]} = emqtt:subscribe(Subv3, Topic, Qos),
     Sender = spawn_link(?MODULE, send, [self(), Pub, Topic, 0]),
     receive {publish, #{payload := <<"1">>,
-                        client_pid := Subv3,
-                        packet_id := PacketId}} ->
-                case Qos of
-                    0 -> ok;
-                    1 -> emqtt:puback(Subv3, PacketId)
-                end
+                        client_pid := Subv3}} -> ok
     after ?TIMEOUT -> ct:fail("did not receive 1")
     end,
     %% Upgrade session from v3 to v5 while another client is sending messages.
@@ -1108,7 +1103,7 @@ session_upgrade_v3_v5_qos(Qos, Config) ->
         0 ->
             assert_received_no_duplicates();
         1 ->
-            ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(2, NumSent - 1)],
+            ExpectedPayloads = [integer_to_binary(I) || I <- lists:seq(1, NumSent - 1)],
             ok = expect_publishes(Subv5, Topic, ExpectedPayloads)
     end,
     ok = emqtt:disconnect(Pub),
