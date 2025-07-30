@@ -9,6 +9,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
 -compile([export_all, nowarn_export_all]).
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
@@ -136,6 +139,14 @@ shovel(SrcNode, DestNode, ShovelNode, Config) ->
     ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, clear,
              [<<"/">>, <<"shovel">>, ShovelName, none]),
     ExpectedQueueLen = 0,
+    ?awaitMatch(
+       [ExpectedQueueLen],
+       rpc(Config, ?OLD, ?MODULE, queues_length, []),
+       30000),
+    ?awaitMatch(
+       [ExpectedQueueLen],
+       rpc(Config, ?NEW, ?MODULE, queues_length, []),
+       30000),
     ?assertEqual([ExpectedQueueLen], rpc(Config, ?OLD, ?MODULE, delete_queues, [])),
     ?assertEqual([ExpectedQueueLen], rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
 
@@ -169,6 +180,12 @@ flush(Prefix) ->
     after 1 ->
               ok
     end.
+
+queues_length() ->
+    [begin
+         [{messages, N}] = rabbit_amqqueue:info(Q, [messages]),
+         N
+     end || Q <- rabbit_amqqueue:list()].
 
 delete_queues() ->
     [begin
