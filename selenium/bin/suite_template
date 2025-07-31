@@ -473,7 +473,7 @@ do_generate-ca-server-client-kpi() {
   cd $ROOT/tls-gen/basic
   cp openssl.cnf openssl.cnf.bak
   if [ -f "$FOLDER/openssl.cnf.in" ]; then     
-    cp $FOLDER/openssl.cnf.in >> openssl.cnf
+    cat $FOLDER/openssl.cnf.in >> openssl.cnf
   fi 
   if [[ ! -z "${DEBUG}" ]]; then
     print "Used this openssl.conf"
