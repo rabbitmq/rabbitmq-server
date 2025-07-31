@@ -66,15 +66,19 @@ jobs:
     - name: Run full UI suite on a 3-node rabbitmq cluster
       id: tests
       run: |
-        IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
-        CONF_DIR_PREFIX="$(mktemp -d)" RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG \
-          ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
-        echo "SELENIUM_ARTIFACTS=$CONF_DIR_PREFIX" >> "$GITHUB_ENV"
+        export IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
+        export CONF_DIR_PREFIX="$(mktemp -d)"
+        export RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG
+        echo "Running selenium tests with "
+        echo " - CONF_DIR_PREFIX: ${CONF_DIR_PREFIX}"
+        echo " - IMAGE_TAG: ${IMAGE_TAG}"
+        echo " - RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"       
+        echo "SELENIUM_ARTIFACTS=${CONF_DIR_PREFIX}" >> $GITHUB_ENV
+        ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui        
         
     - name: Upload Test Artifacts
-      if: always()
+      if: ${{ failure() && steps.tests.outcome == 'failure' }}
       uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
-        path: |
-          ${{ env.SELENIUM_ARTIFACTS }}/*
+        path: ${{ env.SELENIUM_ARTIFACTS }}/*
