@@ -3,6 +3,7 @@ authnz-mgt/oauth-with-keycloak.sh
 authnz-mgt/basic-auth-with-mgt-prefix.sh
 authnz-mgt/oauth-with-uaa.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
+authnz-mgt/oauth-with-spring-with-opaque-tokens.sh
 mgt/vhosts.sh
 mgt/exchanges.sh
 mgt/queuesAndStreams.sh
