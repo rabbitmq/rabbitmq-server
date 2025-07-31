@@ -3979,7 +3979,7 @@ list_connections(Config) ->
     end,
 
     {ok, StdOut0} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "protocol"]),
-    Protocols0 = re:split(StdOut0, <<"\n">>, [trim]),
+    Protocols0 = re:split(string:trim(StdOut0), <<"\n">>, [trim]),
     %% Remove any whitespaces.
     Protocols1 = [binary:replace(Subject, <<" ">>, <<>>, [global]) || Subject <- Protocols0],
     Protocols = lists:sort(Protocols1),
