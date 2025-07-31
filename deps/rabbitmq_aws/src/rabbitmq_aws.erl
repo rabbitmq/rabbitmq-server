@@ -21,7 +21,6 @@
     set_region/1,
     ensure_imdsv2_token_valid/0,
     api_get_request/2,
-    close_connection/3,
     status_text/1,
     %% New concurrent API
     open_connection/1, open_connection/2,
@@ -126,9 +125,6 @@ put(Service, Path, Body, Headers, Options) ->
 refresh_credentials() ->
     gen_server:call(rabbitmq_aws, refresh_credentials).
 
-close_connection(Service, Path, Options) ->
-    gen_server:cast(?MODULE, {close_connection, Service, Path, Options}).
-
 %%====================================================================
 %% New Concurrent API Functions
 %%====================================================================
@@ -188,7 +184,7 @@ direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
     % Sign headers directly (no gen_server call)
     SignedHeaders = sign_headers_with_context(CredContext, Method, URI, Headers, Body),
     % Make Gun request directly
-    perform_direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
+    direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
@@ -294,14 +290,6 @@ init([]) ->
     {ok, #state{}}.
 
 terminate(_, State) ->
-    %% Close all Gun connections
-    maps:fold(
-        fun(_Host, ConnPid, _Acc) ->
-            gun:close(ConnPid)
-        end,
-        ok,
-        State#state.gun_connections
-    ),
     ok.
 
 code_change(_, _, State) ->
@@ -310,8 +298,6 @@ code_change(_, _, State) ->
 handle_call(Msg, _From, State) ->
     handle_msg(Msg, State).
 
-handle_cast({close_connection, Service, Path, Options}, State) ->
-    {noreply, close_connection(Service, Path, Options, State)};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -352,23 +338,12 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
         error = undefined
     }};
 handle_msg({set_credentials, NewState}, State) ->
-    spawn(fun() ->
-        maps:fold(
-            fun(_Host, ConnPid, _Acc) ->
-                gun:close(ConnPid)
-            end,
-            ok,
-            State#state.gun_connections
-        )
-    end),
     {reply, ok, State#state{
         access_key = NewState#state.access_key,
         secret_access_key = NewState#state.secret_access_key,
         security_token = NewState#state.security_token,
         expiration = NewState#state.expiration,
-        error = NewState#state.error,
-        % Potentially new credentials, so clear the connection pool?
-        gun_connections = #{}
+        error = NewState#state.error
     }};
 handle_msg({set_region, Region}, State) ->
     {reply, ok, State#state{region = Region}};
@@ -469,7 +444,7 @@ expired_credentials(Expiration) ->
 %%        - Credentials file
 %%        - EC2 Instance Metadata Service
 %% @end
-load_credentials(#state{region = Region, gun_connections = GunConnections}) ->
+load_credentials(#state{region = Region}) ->
     case rabbitmq_aws_config:credentials() of
         {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
             {ok, #state{
@@ -479,8 +454,7 @@ load_credentials(#state{region = Region, gun_connections = GunConnections}) ->
                 secret_access_key = SecretAccessKey,
                 expiration = Expiration,
                 security_token = SecurityToken,
-                imdsv2_token = undefined,
-                gun_connections = GunConnections
+                imdsv2_token = undefined
             }};
         {error, Reason} ->
             ?LOG_ERROR(
@@ -494,8 +468,7 @@ load_credentials(#state{region = Region, gun_connections = GunConnections}) ->
                 secret_access_key = undefined,
                 expiration = undefined,
                 security_token = undefined,
-                imdsv2_token = undefined,
-                gun_connections = GunConnections
+                imdsv2_token = undefined
             }}
     end.
 
@@ -800,30 +773,28 @@ gun_request(State, Method, URI, Headers, Body, Options) ->
         Headers
     ),
     {Host, Port, Path} = parse_uri(URI),
-    {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Path, Options),
+    ConnPid = create_gun_connection(Host, Port, Path, Options),
     Timeout = proplists:get_value(timeout, ensure_timeout(Options), ?DEFAULT_HTTP_TIMEOUT),
-    try
-        StreamRef = do_gun_request(ConnPid, Method, Path, HeadersBin, Body),
-        case gun:await(ConnPid, StreamRef, Timeout) of
-            {response, fin, Status, RespHeaders} ->
-                Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
-                {Response, NewState};
-            {response, nofin, Status, RespHeaders} ->
-                {ok, RespBody} = gun:await_body(ConnPid, StreamRef, Timeout),
-                Response =
-                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}},
-                {Response, NewState};
-            {error, Reason} ->
-                {{error, Reason}, NewState}
-        end
-    catch
-        _:Error ->
-            % Connection failed, remove from pool and return error
-            HostKey = get_connection_key(Host, Port, Path, Options),
-            NewConnections = maps:remove(HostKey, NewState#state.gun_connections),
-            gun:close(ConnPid),
-            {{error, Error}, NewState#state{gun_connections = NewConnections}}
-    end.
+    Response = try
+                   StreamRef = do_gun_request(ConnPid, Method, Path, HeadersBin, Body),
+                   case gun:await(ConnPid, StreamRef, Timeout) of
+                       {response, fin, Status, RespHeaders} ->
+                           Response = {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}},
+                           {Response, NewState};
+                       {response, nofin, Status, RespHeaders} ->
+                           {ok, RespBody} = gun:await_body(ConnPid, StreamRef, Timeout),
+                           Response =
+                               {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}},
+                           {Response, NewState};
+                       {error, Reason} ->
+                           {{error, Reason}, NewState}
+                   end
+               catch
+                   _:Error ->
+                       {{error, Error}, NewState}
+               end,
+    gun:close(ConnPid),
+    Reponse.
 
 do_gun_request(ConnPid, get, Path, Headers, _Body) ->
     gun:get(ConnPid, Path, Headers);
@@ -840,35 +811,7 @@ do_gun_request(ConnPid, patch, Path, Headers, Body) ->
 do_gun_request(ConnPid, options, Path, Headers, _Body) ->
     gun:options(ConnPid, Path, Headers, #{}).
 
-get_or_create_gun_connection(State, Host, Port, Path, Options) ->
-    HostKey = get_connection_key(Host, Port, Path, Options),
-    case maps:get(HostKey, State#state.gun_connections, undefined) of
-        undefined ->
-            create_gun_connection(State, Host, Port, HostKey, Options);
-        ConnPid ->
-            case is_process_alive(ConnPid) andalso gun:info(ConnPid) =/= undefined of
-                true ->
-                    {ConnPid, State};
-                false ->
-                    % Connection is dead, create new one
-                    gun:close(ConnPid),
-                    create_gun_connection(State, Host, Port, HostKey, Options)
-            end
-    end.
-
-get_connection_key(Host, Port, Path, Options) ->
-    case proplists:get_value(connection_key_type, Options, host) of
-        host ->
-            Host ++ ":" ++ integer_to_list(Port);
-        path ->
-            Host ++ ":" ++ integer_to_list(Port) ++ Path;
-        {path_custom, Extra} ->
-            Host ++ ":" ++ integer_to_list(Port) ++ Path ++ ":" ++ Extra;
-        _ ->
-            Host ++ ":" ++ integer_to_list(Port)
-    end.
-
-create_gun_connection(State, Host, Port, HostKey, Options) ->
+create_gun_connection(Host, Port, HostKey, Options) ->
     % Map HTTP version to Gun protocols, always include http as fallback
     HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
     Protocols =
@@ -894,28 +837,13 @@ create_gun_connection(State, Host, Port, HostKey, Options) ->
         {ok, ConnPid} ->
             case gun:await_up(ConnPid, ConnectTimeout) of
                 {ok, _Protocol} ->
-                    NewConnections = maps:put(HostKey, ConnPid, State#state.gun_connections),
-                    NewState = State#state{gun_connections = NewConnections},
-                    {ConnPid, NewState};
+                    ConnPid;
                 {error, Reason} ->
                     gun:close(ConnPid),
                     error({gun_connection_failed, Reason})
             end;
         {error, Reason} ->
             error({gun_open_failed, Reason})
-    end.
-
-close_connection(Service, Path, Options, State) ->
-    URI = endpoint(State, undefined, Service, Path),
-    {Host, Port, Path} = parse_uri(URI),
-    HostKey = get_connection_key(Host, Port, Path, Options),
-    case maps:get(HostKey, State#state.gun_connections, undefined) of
-        undefined ->
-            State;
-        ConnPid ->
-            gun:close(ConnPid),
-            NewConnections = maps:remove(HostKey, State#state.gun_connections),
-            State#state{gun_connections = NewConnections}
     end.
 
 parse_uri(URI) ->
@@ -1038,7 +966,7 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
     }).
 
 %% Direct Gun request (extracted from existing gun_request function)
--spec perform_direct_gun_request(
+-spec direct_gun_request(
     GunPid :: gun:conn_ref(),
     Method :: method(),
     Path :: path(),
@@ -1046,7 +974,7 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
     Body :: body(),
     Options :: list()
 ) -> result().
-perform_direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
+direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
     HeadersBin = lists:map(
         fun({Key, Value}) ->
             {list_to_binary(Key), list_to_binary(Value)}
