@@ -18,6 +18,25 @@ spring:
   security:
     oauth2:
       users:
+        - username: rabbitmq_management
+          password: rabbitmq_management 
+          scopes: 
+            - openid 
+            - profile 
+            - rabbitmq.read:*/*
+            - rabbitmq.write:*/*
+            - rabbitmq.configure:*/*
+            - rabbitmq.tag:management
+          audiencies: 
+            - rabbitmq
+        - username: rabbit_no_management
+          password: rabbit_no_management 
+          scopes: 
+            - openid 
+            - profile 
+            - rabbitmq.read:*/*            
+          audiencies: 
+            - rabbitmq
         - username: rabbit_admin
           password: rabbit_admin 
           scopes: 
