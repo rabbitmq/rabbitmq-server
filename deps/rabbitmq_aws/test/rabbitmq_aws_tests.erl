@@ -27,7 +27,7 @@ init_test_() ->
                 os:unsetenv("AWS_SECRET_ACCESS_KEY"),
                 Expectation =
                     {state, "Sésame", "ouvre-toi", undefined, undefined, "us-west-3", undefined,
-                        undefined, #{}},
+                        undefined},
                 ?assertEqual(Expectation, State)
             end},
             {"error", fun() ->
@@ -39,7 +39,7 @@ init_test_() ->
                 ok = gen_server:stop(Pid),
                 Expectation =
                     {state, undefined, undefined, undefined, undefined, "us-west-3", undefined,
-                        test_result, #{}},
+                        test_result},
                 ?assertEqual(Expectation, State),
                 meck:validate(rabbitmq_aws_config)
             end}
@@ -50,8 +50,7 @@ terminate_test() ->
         ok,
         rabbitmq_aws:terminate(
             foo,
-            {state, undefined, undefined, undefined, undefined, "us-west-3", undefined, test_result,
-                #{}}
+            {state, undefined, undefined, undefined, undefined, "us-west-3", undefined, test_result}
         )
     ).
 
@@ -224,9 +223,7 @@ gen_server_call_test_() ->
                         {reply,
                             {ok,
                                 {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
-                            State#state{
-                                gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}
-                            }},
+                            State},
                     Result = rabbitmq_aws:handle_call(
                         {request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State
                     ),
@@ -456,7 +453,7 @@ perform_request_test_() ->
 
                     Expectation = {
                         {ok, {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
-                        State#state{gun_connections = #{"ec2.us-east-1.amazonaws.com:443" => pid}}
+                        State
                     },
                     Result = rabbitmq_aws:perform_request(
                         State, Service, Method, Headers, Path, Body, Options, Host

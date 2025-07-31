@@ -29,12 +29,13 @@ headers(Request) ->
     URI = rabbitmq_aws_urilib:parse(Request#request.uri),
     {_, Host, _} = URI#uri.authority,
 
-    BodyLength = case Request#request.body of
-                     Body when is_binary(Body) ->
-                         size(Body);
-                     Body when is_list(Body) ->
-                         length(Body)
-                 end,
+    BodyLength =
+        case Request#request.body of
+            Body when is_binary(Body) ->
+                size(Body);
+            Body when is_list(Body) ->
+                length(Body)
+        end,
 
     Headers = append_headers(
         RequestTimestamp,
