@@ -17,7 +17,8 @@
 -export([init/1,
          info/2,
          mainloop/2,
-         set_credential/2]).
+         set_credential/2,
+         notify_session_ending/3]).
 
 -export([system_continue/3,
          system_terminate/4,
@@ -77,6 +78,11 @@ server_properties() ->
 -spec set_credential(pid(), binary()) -> ok.
 set_credential(Pid, Credential) ->
     Pid ! {set_credential, Credential},
+    ok.
+
+-spec notify_session_ending(pid(), pid(), non_neg_integer()) -> ok.
+notify_session_ending(ConnPid, SessionPid, ChannelNum) ->
+    ConnPid ! {session_ending, SessionPid, ChannelNum},
     ok.
 
 %%--------------------------------------------------------------------------
@@ -233,6 +239,8 @@ handle_other({set_credential, Cred}, State) ->
 handle_other(credential_expired, State) ->
     Error = error_frame(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, "credential expired", []),
     handle_exception(State, 0, Error);
+handle_other({session_ending, SessionPid, ChannelNum}, State) ->
+    untrack_channel(ChannelNum, SessionPid, State);
 handle_other(Other, _State) ->
     %% internal error -> something worth dying for
     exit({unexpected_message, Other}).

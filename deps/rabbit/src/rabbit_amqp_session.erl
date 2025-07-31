@@ -638,10 +638,11 @@ log_error_and_close_session(
   Error, State = #state{cfg = #cfg{reader_pid = ReaderPid,
                                    writer_pid = WriterPid,
                                    channel_num = Ch}}) ->
-    End = #'v1_0.end'{error = Error},
     ?LOG_WARNING("Closing session for connection ~p: ~tp",
                  [ReaderPid, Error]),
-    ok = rabbit_amqp_writer:send_command_sync(WriterPid, Ch, End),
+    rabbit_amqp_reader:notify_session_ending(ReaderPid, self(), Ch),
+    ok = rabbit_amqp_writer:send_command_sync(
+           WriterPid, Ch, #'v1_0.end'{error = Error}),
     {stop, {shutdown, Error}, State}.
 
 %% Batch confirms / rejects to publishers.
@@ -1178,9 +1179,11 @@ handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
     reply_frames(Reply, State);
 
 handle_frame(#'v1_0.end'{},
-             State0 = #state{cfg = #cfg{writer_pid = WriterPid,
+             State0 = #state{cfg = #cfg{reader_pid = ReaderPid,
+                                        writer_pid = WriterPid,
                                         channel_num = Ch}}) ->
     State = send_delivery_state_changes(State0),
+    rabbit_amqp_reader:notify_session_ending(ReaderPid, self(), Ch),
     ok = try rabbit_amqp_writer:send_command_sync(WriterPid, Ch, #'v1_0.end'{})
          catch exit:{Reason, {gen_server, call, _ArgList}}
                  when Reason =:= shutdown orelse
