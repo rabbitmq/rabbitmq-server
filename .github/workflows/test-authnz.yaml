@@ -74,10 +74,13 @@ jobs:
     - name: Run Suites
       id: tests
       run: |        
-        IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
-        CONF_DIR_PREFIX="$(mktemp -d)" 
-        RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG
-        echo "Producing env var SELENIUM_ARTIFACTS with value ${CONF_DIR_PREFIX}"
+        export IMAGE_TAG=$(find PACKAGES/rabbitmq-server-generic-unix-*.tar.xz | awk -F 'PACKAGES/rabbitmq-server-generic-unix-|.tar.xz' '{print $2}')
+        export CONF_DIR_PREFIX="$(mktemp -d)" 
+        export RABBITMQ_DOCKER_IMAGE=pivotalrabbitmq/rabbitmq:$IMAGE_TAG
+        echo "Running selenium tests with "
+        echo " - CONF_DIR_PREFIX: ${CONF_DIR_PREFIX}"
+        echo " - IMAGE_TAG: ${IMAGE_TAG}"
+        echo " - RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"        
         echo "SELENIUM_ARTIFACTS=${CONF_DIR_PREFIX}" >> $GITHUB_ENV        
         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging 
                 
