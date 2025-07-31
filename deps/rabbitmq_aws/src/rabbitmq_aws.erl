@@ -744,7 +744,7 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
 gun_request(Method, URI, Headers, Body, Options) ->
     {Host, Port, Path} = parse_uri(URI),
     GunPid = create_gun_connection(Host, Port, Options),
-    Reply = direct_gun_request(GunPid, Method, Path, Headers, Body, ensure_timeout(Options)),
+    Reply = direct_gun_request(GunPid, Method, Path, Headers, Body, Options),
     gun:close(GunPid),
     Reply.
 
