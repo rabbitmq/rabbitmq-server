@@ -22,7 +22,14 @@
     ensure_imdsv2_token_valid/0,
     api_get_request/2,
     close_connection/3,
-    status_text/1
+    status_text/1,
+    %% New concurrent API
+    open_connection/1, open_connection/2,
+    close_direct_connection/1,
+    direct_get/3, direct_get/4,
+    direct_post/4, direct_post/5,
+    direct_put/4, direct_put/5,
+    direct_request/6
 ]).
 
 %% gen-server exports
@@ -43,6 +50,16 @@
 
 -include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
+
+%% Types for new concurrent API
+-type connection_handle() :: {gun:conn_ref(), credential_context()}.
+-type credential_context() :: #{
+    access_key => access_key(),
+    secret_access_key => secret_access_key(),
+    security_token => security_token(),
+    region => region(),
+    service => string()
+}.
 
 %%====================================================================
 %% exported wrapper functions
@@ -111,6 +128,67 @@ refresh_credentials() ->
 
 close_connection(Service, Path, Options) ->
     gen_server:cast(?MODULE, {close_connection, Service, Path, Options}).
+
+%%====================================================================
+%% New Concurrent API Functions
+%%====================================================================
+
+%% Open a connection and return handle for direct use
+-spec open_connection(Service :: string()) -> {ok, connection_handle()} | {error, term()}.
+open_connection(Service) ->
+    open_connection(Service, []).
+
+-spec open_connection(Service :: string(), Options :: list()) -> {ok, connection_handle()} | {error, term()}.
+open_connection(Service, Options) ->
+    gen_server:call(?MODULE, {open_direct_connection, Service, Options}).
+
+%% Close a direct connection
+-spec close_direct_connection(Handle :: connection_handle()) -> ok.
+close_direct_connection({GunPid, _CredContext}) ->
+    gun:close(GunPid).
+
+%% Direct API calls that bypass gen_server
+-spec direct_get(Handle :: connection_handle(), Path :: path(), Headers :: headers()) -> result().
+direct_get(Handle, Path, Headers) ->
+    direct_request(Handle, get, Path, <<>>, Headers, []).
+
+-spec direct_get(Handle :: connection_handle(), Path :: path(), Headers :: headers(), Options :: list()) -> result().
+direct_get(Handle, Path, Headers, Options) ->
+    direct_request(Handle, get, Path, <<>>, Headers, Options).
+
+-spec direct_post(Handle :: connection_handle(), Path :: path(), Body :: body(), Headers :: headers()) -> result().
+direct_post(Handle, Path, Body, Headers) ->
+    direct_request(Handle, post, Path, Body, Headers, []).
+
+-spec direct_post(Handle :: connection_handle(), Path :: path(), Body :: body(), Headers :: headers(), Options :: list()) -> result().
+direct_post(Handle, Path, Body, Headers, Options) ->
+    direct_request(Handle, post, Path, Body, Headers, Options).
+
+-spec direct_put(Handle :: connection_handle(), Path :: path(), Body :: body(), Headers :: headers()) -> result().
+direct_put(Handle, Path, Body, Headers) ->
+    direct_request(Handle, put, Path, Body, Headers, []).
+
+-spec direct_put(Handle :: connection_handle(), Path :: path(), Body :: body(), Headers :: headers(), Options :: list()) -> result().
+direct_put(Handle, Path, Body, Headers, Options) ->
+    direct_request(Handle, put, Path, Body, Headers, Options).
+
+-spec direct_request(
+    Handle :: connection_handle(),
+    Method :: method(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers(),
+    Options :: list()
+) -> result().
+direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
+    #{service := Service, region := Region} = CredContext,
+    % Build URI for signing
+    Host = endpoint_host(Region, Service),
+    URI = "https://" ++ Host ++ Path,
+    % Sign headers directly (no gen_server call)
+    SignedHeaders = sign_headers_with_context(CredContext, Method, URI, Headers, Body),
+    % Make Gun request directly
+    perform_direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
@@ -248,6 +326,18 @@ handle_msg({request, Service, Method, Headers, Path, Body, Options, Host}, State
         State, Service, Method, Headers, Path, Body, Options, Host
     ),
     {reply, Response, NewState};
+handle_msg({open_direct_connection, Service, Options}, State) ->
+    case ensure_credentials_valid_internal(State) of
+        {ok, ValidState} ->
+            case create_direct_connection(ValidState, Service, Options) of
+                {ok, Handle} ->
+                    {reply, {ok, Handle}, ValidState};
+                {error, Reason} ->
+                    {reply, {error, Reason}, ValidState}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end;
 handle_msg(get_state, State) ->
     {reply, {ok, State}, State};
 handle_msg(refresh_credentials, State) ->
@@ -711,7 +801,7 @@ gun_request(State, Method, URI, Headers, Body, Options) ->
     ),
     {Host, Port, Path} = parse_uri(URI),
     {ConnPid, NewState} = get_or_create_gun_connection(State, Host, Port, Path, Options),
-    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
+    Timeout = proplists:get_value(timeout, ensure_timeout(Options), ?DEFAULT_HTTP_TIMEOUT),
     try
         StreamRef = do_gun_request(ConnPid, Method, Path, HeadersBin, Body),
         case gun:await(ConnPid, StreamRef, Timeout) of
@@ -865,3 +955,130 @@ status_text(404) -> "Not Found";
 status_text(416) -> "Range Not Satisfiable";
 status_text(500) -> "Internal Server Error";
 status_text(Code) -> integer_to_list(Code).
+
+%%====================================================================
+%% New Concurrent API Helper Functions
+%%====================================================================
+
+%% Create a direct connection handle
+-spec create_direct_connection(State :: state(), Service :: string(), Options :: list()) ->
+    {ok, connection_handle()} | {error, term()}.
+create_direct_connection(State, Service, Options) ->
+    Region = State#state.region,
+    Host = endpoint_host(Region, Service),
+    Port = 443,
+
+    HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
+    Protocols =
+        case HttpVersion of
+            "HTTP/2" -> [http2, http];
+            "HTTP/2.0" -> [http2, http];
+            "HTTP/1.1" -> [http];
+            "HTTP/1.0" -> [http];
+            % Default: try HTTP/2, fallback to HTTP/1.1
+            _ -> [http2, http]
+        end,
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, 5000),
+    GunOpts = #{
+        transport => tls,
+            %% if
+            %%     Port == 443 -> tls;
+            %%     true -> tcp
+            %% end,
+        protocols => Protocols,
+        connect_timeout => ConnectTimeout
+    },
+
+    case gun:open(Host, Port, GunOpts) of
+        {ok, GunPid} ->
+            case gun:await_up(GunPid, ConnectTimeout) of
+                {ok, _Protocol} ->
+                    CredContext = #{
+                        access_key => State#state.access_key,
+                        secret_access_key => State#state.secret_access_key,
+                        security_token => State#state.security_token,
+                        region => Region,
+                        service => Service
+                    },
+                    {ok, {GunPid, CredContext}};
+                {error, Reason} ->
+                    gun:close(GunPid),
+                    {error, {connection_failed, Reason}}
+            end;
+        {error, Reason} ->
+            {error, {gun_open_failed, Reason}}
+    end.
+
+%% Sign headers using credential context (no gen_server state needed)
+-spec sign_headers_with_context(
+    CredContext :: credential_context(),
+    Method :: method(),
+    URI :: string(),
+    Headers :: headers(),
+    Body :: body()
+) -> headers().
+sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
+    #{
+        access_key := AccessKey,
+        secret_access_key := SecretKey,
+        security_token := SecurityToken,
+        region := Region,
+        service := Service
+    } = CredContext,
+    rabbitmq_aws_sign:headers(#request{
+        access_key = AccessKey,
+        secret_access_key = SecretKey,
+        security_token = SecurityToken,
+        region = Region,
+        service = Service,
+        method = Method,
+        uri = URI,
+        headers = Headers,
+        body = Body
+    }).
+
+%% Direct Gun request (extracted from existing gun_request function)
+-spec perform_direct_gun_request(
+    GunPid :: gun:conn_ref(),
+    Method :: method(),
+    Path :: path(),
+    Headers :: headers(),
+    Body :: body(),
+    Options :: list()
+) -> result().
+perform_direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
+    HeadersBin = lists:map(
+        fun({Key, Value}) ->
+            {list_to_binary(Key), list_to_binary(Value)}
+        end,
+        Headers
+    ),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
+    try
+        StreamRef = do_gun_request(GunPid, Method, Path, HeadersBin, Body),
+        case gun:await(GunPid, StreamRef, Timeout) of
+            {response, fin, Status, RespHeaders} ->
+                format_response({ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}});
+            {response, nofin, Status, RespHeaders} ->
+                {ok, RespBody} = gun:await_body(GunPid, StreamRef, Timeout),
+                format_response({ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}});
+            {error, Reason} ->
+                {error, Reason}
+        end
+    catch
+        _:Error ->
+            {error, Error}
+    end.
+
+%% Internal credential validation (extracted from existing logic)
+-spec ensure_credentials_valid_internal(State :: state()) -> {ok, state()} | {error, term()}.
+ensure_credentials_valid_internal(State) ->
+    case has_credentials(State) of
+        true ->
+            case expired_credentials(State#state.expiration) of
+                false -> {ok, State};
+                true -> load_credentials(State)
+            end;
+        false ->
+            load_credentials(State)
+    end.
