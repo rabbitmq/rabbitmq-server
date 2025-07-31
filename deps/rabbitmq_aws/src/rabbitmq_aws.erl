@@ -212,7 +212,9 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
 %%      of services such as DynamoDB. The response will automatically be decoded
 %%      if it is either in JSON or XML format.
 %% @end
-request({GunPid, _CredContext} = Handle, Method, Path, Body, Headers, HTTPOptions, _) when is_pid(GunPid) ->
+request({GunPid, _CredContext} = Handle, Method, Path, Body, Headers, HTTPOptions, _) when
+    is_pid(GunPid)
+->
     direct_request(Handle, Method, Path, Body, Headers, HTTPOptions);
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
     gen_server:call(
@@ -900,21 +902,22 @@ direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
         Headers
     ),
     Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
-    Response = try
-                   StreamRef = do_gun_request(GunPid, Method, Path, HeadersBin, Body),
-                   case gun:await(GunPid, StreamRef, Timeout) of
-                       {response, fin, Status, RespHeaders} ->
-                           {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}};
-                       {response, nofin, Status, RespHeaders} ->
-                           {ok, RespBody} = gun:await_body(GunPid, StreamRef, Timeout),
-                           {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}};
-                       {error, Reason} ->
-                           {error, Reason}
-                   end
-               catch
-                   _:Error ->
-                       {error, Error}
-               end,
+    Response =
+        try
+            StreamRef = do_gun_request(GunPid, Method, Path, HeadersBin, Body),
+            case gun:await(GunPid, StreamRef, Timeout) of
+                {response, fin, Status, RespHeaders} ->
+                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}};
+                {response, nofin, Status, RespHeaders} ->
+                    {ok, RespBody} = gun:await_body(GunPid, StreamRef, Timeout),
+                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}};
+                {error, Reason} ->
+                    {error, Reason}
+            end
+        catch
+            _:Error ->
+                {error, Error}
+        end,
     format_response(Response).
 
 %% Internal credential validation (extracted from existing logic)
