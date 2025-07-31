@@ -8,6 +8,7 @@ require('chromedriver')
 var chrome = require("selenium-webdriver/chrome");
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
+const SpringLoginPage = require('./pageobjects/SpringLoginPage')
 const assert = require('assert')
 
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
@@ -215,6 +216,8 @@ module.exports = {
         preferredIdp = "uaa"
       } else if (process.env.PROFILES.includes("keycloak")) {
         preferredIdp = "keycloak"
+      } else if (process.env.PROFILES.includes("spring")) {
+        preferredIdp = "spring"
       } else {
         throw new Error("Missing uaa or keycloak profiles")
       }
@@ -222,6 +225,7 @@ module.exports = {
     switch(preferredIdp) {
       case "uaa": return new UAALoginPage(d)
       case "keycloak": return new KeycloakLoginPage(d)
+      case "spring": return new SpringLoginPage(d)
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
