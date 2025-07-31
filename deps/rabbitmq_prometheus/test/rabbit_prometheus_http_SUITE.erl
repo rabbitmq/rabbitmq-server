@@ -782,6 +782,10 @@ exchange_names_metric(Config) ->
     ok.
 
 stream_pub_sub_metrics(Config) ->
+    {_, Body0} = http_get_with_pal(Config, "/metrics", [], 200),
+    Metrics = parse_response(Body0),
+    ct:pal("Initial metrics: ~p", [Metrics]),
+
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
     MsgPerBatch1 = 2,
     {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),
