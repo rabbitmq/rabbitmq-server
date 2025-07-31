@@ -26,6 +26,9 @@ all() ->
       {group, khepri_migration}
     ].
 
+suite() ->
+    [{timetrap, {minutes, 5}}].
+
 groups() ->
     [
      {routing_tests, [], routing_tests()},
