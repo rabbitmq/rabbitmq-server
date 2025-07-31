@@ -124,7 +124,7 @@ start_processes_for_all(Nodes) ->
 
 -spec start_processes_for_all() -> 'ok'.
 start_processes_for_all() ->
-    start_processes_for_all(rabbit_nodes:list_reachable()).
+    start_processes_for_all(rabbit_nodes:list_running()).
 
 %% Same as rabbit_vhost_sup_sup:start_on_all_nodes/0.
 -spec start_on_all_nodes(vhost:name(), [node()]) -> 'ok'.
