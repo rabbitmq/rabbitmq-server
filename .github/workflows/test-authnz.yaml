@@ -85,7 +85,7 @@ jobs:
         ${SELENIUM_DIR}/run-suites.sh full-suite-authnz-messaging 
                 
     - name: Upload Test Artifacts
-      if: always()
+      if: ${{ failure() && steps.tests.outcome == 'failure' }}
       uses: actions/upload-artifact@v4.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}        
