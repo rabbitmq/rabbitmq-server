@@ -23,8 +23,6 @@ spring:
         - username: rabbitmq_management
           password: rabbitmq_management 
           scopes: 
-            - openid 
-            - profile 
             - rabbitmq.read:*/*
             - rabbitmq.write:*/*
             - rabbitmq.configure:*/*
@@ -34,16 +32,12 @@ spring:
         - username: rabbit_no_management
           password: rabbit_no_management 
           scopes: 
-            - openid 
-            - profile 
             - rabbitmq.read:*/*            
           audiencies: 
             - rabbitmq
         - username: rabbit_admin
           password: rabbit_admin 
           scopes: 
-            - openid 
-            - profile 
             - rabbitmq.tag:administrator
           audiencies: 
             - rabbitmq
@@ -124,8 +118,6 @@ spring:
                 - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/"
               scopes: 
                 - openid 
-                - profile 
-                - rabbitmq.tag:administrator
-                - rabbitmq.tag:management
+                - profile                
               client-name: rabbitmq_client_code
               
