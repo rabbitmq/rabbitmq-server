@@ -24,11 +24,17 @@ all() ->
     build_openid_discovery_endpoint,
     {group, ssl_options},
     {group, merge},
-    {group, get_expiration_time}
+    {group, get_expiration_time},
+    {group, sign_token}
 ].
 
 groups() ->
 [
+    {sign_token, [], [
+        can_sign_token,
+        is_jwt_token,
+        is_not_jwt_token
+    ]},
     {ssl_options, [], [
         no_ssl_options_triggers_verify_peer,
         choose_verify_over_peer_verification,
@@ -108,6 +114,15 @@ merge_oauth_provider(_) ->
                   {authorization_endpoint, OAuthProvider4#oauth_provider.authorization_endpoint},
                   {token_endpoint, OAuthProvider4#oauth_provider.token_endpoint}],
                   Proplist5),
+
+    OAuthProvider5 = OAuthProvider4#oauth_provider{introspection_endpoint = "https://introspection"},
+    Proplist6 = oauth2_client:merge_oauth_provider(OAuthProvider5, Proplist5),
+    ?assertEqual([{jwks_uri, OAuthProvider5#oauth_provider.jwks_uri},
+                  {introspection_endpoint, OAuthProvider5#oauth_provider.introspection_endpoint},
+                  {end_session_endpoint, OAuthProvider5#oauth_provider.end_session_endpoint},
+                  {authorization_endpoint, OAuthProvider5#oauth_provider.authorization_endpoint},
+                  {token_endpoint, OAuthProvider5#oauth_provider.token_endpoint}],
+                  Proplist6),              
 
     % ensure id, issuer, ssl_options and discovery_endpoint are not affected
     ?assertEqual(OAuthProvider#oauth_provider.id,
@@ -287,5 +302,20 @@ access_token_response_without_expiration_time(_) ->
     AccessTokenResponse = #successful_access_token_response{
         access_token = EncodedToken
     },
-    ct:log("AccessTokenResponse ~p", [AccessTokenResponse]),
     ?assertEqual({error, missing_exp_field}, oauth2_client:get_expiration_time(AccessTokenResponse)).
+
+
+can_sign_token(_Config) ->
+    application:set_env(rabbitmq_auth_backend_oauth2, opaque_token_signing_key,
+        [{ id, <<"key-id">>}, {type, hs256}, {key, <<"some-key">>}]),
+
+    {ok, _ } = oauth2_client:sign_token(#{"scopes" => "a b"}).
+
+is_jwt_token(Config) ->
+    Jwk = ?UTIL_MOD:fixture_jwk(),
+    AccessToken = maps:remove(<<"exp">>, ?UTIL_MOD:fixture_token()),
+    {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(AccessToken, Jwk),
+    ?assertEqual(true, oauth2_client:is_jwt_token(EncodedToken)).
+
+is_not_jwt_token(_) ->
+    ?assertEqual(false, oauth2_client:is_jwt_token(<<"some opaque token">>)).

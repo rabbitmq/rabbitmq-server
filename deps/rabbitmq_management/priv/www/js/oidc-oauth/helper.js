@@ -124,6 +124,11 @@ export function oauth_initiate(oauth) {
           if (!status.loggedIn) {
             clear_auth();
           } else {
+            if (!is_jwt_token(status.user.access_token)) {
+              console.log("Introspect opaque token ...")
+              set_token_auth(introspect_token(status.user.access_token))
+              console.log("Introspected token")
+            }
             oauth.logged_in = true;
             oauth.expiryDate = new Date(status.user.expires_at * 1000);  // it is epoch in seconds
             let current = new Date();
@@ -190,6 +195,12 @@ function oauth_initialize_user_manager(resource_server) {
     });
     mgr.events.addUserLoaded(function(user) {
       set_token_auth(user.access_token)
+/*      if (!is_jwt_token(user.access_token)) {
+        console.log("addUserLoaded: Detected opaque token. Introspecting it ...")
+        set_token_auth(introspect_token())
+        console.log("Introspected token")
+      }
+*/        
     });
 
 }
@@ -280,12 +291,25 @@ function oauth_redirectToLogin(error) {
 }
 export function oauth_completeLogin() {
     mgr.signinRedirectCallback().then(function(user) {
-      set_token_auth(user.access_token);
-      oauth_redirectToHome();
+      set_token_auth(user.access_token)      
+      oauth_redirectToHome()
     }).catch(function(err) {
       _management_logger.error(err)
       oauth_redirectToLogin(err)
     });
+}
+function introspect_token() {
+  let jwt = JSON.parse(sync_post({}, '/auth/introspect').responseText)
+  console.log("jwt token : " + jwt)
+  return jwt.token
+}
+
+function is_jwt_token(token) {
+  if (token != null) {
+    return token.split(".").length == 3
+  }else {
+    return false
+  }
 }
 
 export function oauth_initiateLogout() {

@@ -8,6 +8,7 @@ require('chromedriver')
 var chrome = require("selenium-webdriver/chrome");
 const UAALoginPage = require('./pageobjects/UAALoginPage')
 const KeycloakLoginPage = require('./pageobjects/KeycloakLoginPage')
+const SpringLoginPage = require('./pageobjects/SpringLoginPage')
 const assert = require('assert')
 
 const runLocal = String(process.env.RUN_LOCAL).toLowerCase() != 'false'
@@ -215,6 +216,8 @@ module.exports = {
         preferredIdp = "uaa"
       } else if (process.env.PROFILES.includes("keycloak")) {
         preferredIdp = "keycloak"
+      } else if (process.env.PROFILES.includes("spring")) {
+        preferredIdp = "spring"
       } else {
         throw new Error("Missing uaa or keycloak profiles")
       }
@@ -222,6 +225,7 @@ module.exports = {
     switch(preferredIdp) {
       case "uaa": return new UAALoginPage(d)
       case "keycloak": return new KeycloakLoginPage(d)
+      case "spring": return new SpringLoginPage(d)
       default: new Error("Unsupported ipd " + preferredIdp)
     }
   },
@@ -236,17 +240,21 @@ module.exports = {
     }
   },
 
-  tokenFor: (client_id, client_secret, url = uaaUrl) => {
+  tokenFor: (client_id, client_secret, url = uaaUrl, scope) => {
     const req = new XMLHttpRequest()
-    const params = 'client_id=' + client_id +
+    let params = 'client_id=' + client_id +
       '&client_secret=' + client_secret +
       '&grant_type=client_credentials' +
-      '&token_format=jwt' +
+//      '&token_format=' + token_format + 
       '&response_type=token'
+    if (scope != undefined && scope != "") {
+      params = params + '&scope=' + scope
+    } 
 
     req.open('POST', url, false)
     req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded')
     req.setRequestHeader('Accept', 'application/json')
+    req.setRequestHeader("Authorization", "Basic " + btoa(client_id+":"+client_secret));
     req.send(params)
     if (req.status == 200) return JSON.parse(req.responseText).access_token
     else {

@@ -57,7 +57,7 @@ groups() -> [
             {with_rabbitmq1_verify_aud_false, [], [
                 resolve_resource_server_for_none_audience_returns_error
             ]}
-        ]},
+        ]},       
         verify_rabbitmq1_server_configuration,
         {verify_configuration_inheritance_with_rabbitmq2, [],
             verify_configuration_inheritance_with_rabbitmq2()},
