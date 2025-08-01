@@ -23,12 +23,15 @@ public class ScopeAuthority implements GrantedAuthority {
         return authority;
     }
 
-    public static List<String> getAllUnauthorized(AbstractAuthenticationToken principal,
-            Set<String> authorized) {
+    @Override
+    public String toString() {
+        return "Scope:" + authority; 
+    }
+
+    public static List<String> getAuthorites(AbstractAuthenticationToken principal) {
         return principal.getAuthorities()
 					.stream()
 					.filter(a -> a instanceof ScopeAuthority)
-					.filter(a -> !authorized.contains(a.getAuthority()))
 					.map(a -> a.getAuthority()).toList();
     }
     
