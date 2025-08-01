@@ -120,6 +120,7 @@ public class SecurityConfig {
 	public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
 		logger.info("Creating jwtTokenCustomizer ...");
 		return (context) -> {
+			logger.info("Calling jwtTokenCustomizer with tokenType: {}", context.getTokenType());
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
 				AbstractAuthenticationToken principal = context.getPrincipal();
 				logger.info("registered client: {}", context.getRegisteredClient());
