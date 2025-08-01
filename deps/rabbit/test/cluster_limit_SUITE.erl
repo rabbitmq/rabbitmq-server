@@ -12,6 +12,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -compile([nowarn_export_all, export_all]).
 
+-define(EXCHANGE_LIMIT, 10).
 
 all() ->
     [
@@ -22,7 +23,8 @@ groups() ->
     [
      {clustered, [],
       [
-       {size_2, [], [queue_limit]}
+       {size_2, [], [queue_limit,
+                     exchange_limit]}
       ]}
     ].
 
@@ -34,7 +36,8 @@ init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:merge_app_env(
                 Config0, {rabbit, [{quorum_tick_interval, 1000},
-                                   {cluster_queue_limit, 3}]}),
+                                   {cluster_queue_limit, 3},
+                                   {cluster_exchange_limit, ?EXCHANGE_LIMIT}]}),
     rabbit_ct_helpers:run_setup_steps(Config1, []).
 
 end_per_suite(Config) ->
@@ -101,47 +104,98 @@ queue_limit(Config) ->
     Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
     Q1 = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q1, 0, 0},
-                 declare(Ch, Q1)),
+                 declare_queue(Ch, Q1)),
 
     Q2 = ?config(alt_queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q2, 0, 0},
-                 declare(Ch, Q2)),
+                 declare_queue(Ch, Q2)),
 
     Q3 = ?config(alt_2_queue_name, Config),
     ?assertEqual({'queue.declare_ok', Q3, 0, 0},
-                 declare(Ch, Q3)),
+                 declare_queue(Ch, Q3)),
     Q4 = ?config(over_limit_queue_name, Config),
     ExpectedError = list_to_binary(io_lib:format("PRECONDITION_FAILED - cannot declare queue '~s': queue limit in cluster (3) is reached", [Q4])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
-       declare(Ch, Q4)),
+       declare_queue(Ch, Q4)),
 
     %% Trying the second server, in the cluster, but no queues on it,
     %% but should still fail as the limit is cluster wide.
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
-       declare(Ch2, Q4)),
+       declare_queue(Ch2, Q4)),
 
     %Trying other types of queues
     ChQQ = rabbit_ct_client_helpers:open_channel(Config, Server0),
     ChStream = rabbit_ct_client_helpers:open_channel(Config, Server1),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
-       declare(ChQQ, Q4, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+       declare_queue(ChQQ, Q4, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
     ?assertExit(
        {{shutdown, {server_initiated_close, 406, ExpectedError}}, _},
-       declare(ChStream, Q4, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
+       declare_queue(ChStream, Q4, [{<<"x-queue-type">>, longstr, <<"stream">>}])),
     rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
     ok.
 
-declare(Ch, Q) ->
-    declare(Ch, Q, []).
+exchange_limit(Config) ->
+    DefaultXs = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_exchange, count, []),
+    ?assert(?EXCHANGE_LIMIT > DefaultXs),
 
-declare(Ch, Q, Args) ->
+    [Server0, Server1] =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server1),
+
+    %% Reach the limit.
+    [begin
+         XName = list_to_binary(rabbit_misc:format("x-~b", [N])),
+         #'exchange.declare_ok'{} = declare_exchange(Ch1, XName, <<"fanout">>)
+     end || N <- lists:seq(DefaultXs, ?EXCHANGE_LIMIT - 1)],
+
+    %% Trying to declare the next exchange fails.
+    OverLimitXName = <<"over-limit-x">>,
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406,
+                    <<"PRECONDITION_FAILED", _/binary>>}}, _},
+       declare_exchange(Ch1, OverLimitXName, <<"fanout">>)),
+
+    %% Existing exchanges can be re-declared.
+    ExistingX = list_to_binary(rabbit_misc:format("x-~b", [DefaultXs])),
+    #'exchange.declare_ok'{} = declare_exchange(Ch2, ExistingX, <<"fanout">>),
+
+    %% The limit is cluster wide: the other node cannot declare the exchange
+    %% either.
+    ?assertExit(
+       {{shutdown, {server_initiated_close, 406,
+                    <<"PRECONDITION_FAILED", _/binary>>}}, _},
+       declare_exchange(Ch2, OverLimitXName, <<"fanout">>)),
+
+    %% Clean up extra exchanges
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    [begin
+         XName = list_to_binary(rabbit_misc:format("x-~b", [N])),
+         #'exchange.delete_ok'{} = amqp_channel:call(
+                                     Ch3,
+                                     #'exchange.delete'{exchange = XName})
+     end || N <- lists:seq(DefaultXs, ?EXCHANGE_LIMIT - 1)],
+
+    ok.
+
+%% -------------------------------------------------------------------
+
+declare_queue(Ch, Q) ->
+    declare_queue(Ch, Q, []).
+
+declare_queue(Ch, Q, Args) ->
     amqp_channel:call(Ch, #'queue.declare'{queue     = Q,
                                            durable   = true,
                                            auto_delete = false,
                                            arguments = Args}).
+
+declare_exchange(Ch, Name, Type) ->
+    amqp_channel:call(Ch, #'exchange.declare'{exchange = Name,
+                                              type = Type,
+                                              durable = true}).
 
 delete_queues() ->
     [rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
