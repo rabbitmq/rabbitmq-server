@@ -70,8 +70,11 @@ introspect_token(Token) ->
             Options = [],         
             Response = httpc:request(post, {URL, Header, Type, Body}, HTTPOptions, Options),
             case parse_introspect_token_response(Response) of
-                {error, _} = Error -> Error;
-                {ok, _} = Ret -> Ret
+                {error, _} = Error -> 
+                    Error;
+                {ok, _} = Ret -> 
+                    ?LOG_DEBUG("Received introspected token: ~p", [Ret]),
+                    Ret
             end;
         {error, _} = Error -> Error            
     end.    
