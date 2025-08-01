@@ -279,9 +279,14 @@ start_cluster(Q) ->
     UIDs = maps:from_list([{Node, ra:new_uid(ra_lib:to_binary(RaName))}
                            || Node <- [LeaderNode | FollowerNodes]]),
     NewQ0 = amqqueue:set_pid(Q, LeaderId),
-    NewQ1 = amqqueue:set_type_state(NewQ0,
-                                    #{nodes => [LeaderNode | FollowerNodes],
-                                      uids => UIDs}),
+    NewQ1 = case rabbit_feature_flags:is_enabled(track_qq_members_uids) of
+        false ->
+            amqqueue:set_type_state(NewQ0,
+                                    #{nodes => [LeaderNode | FollowerNodes]});
+        true ->
+            amqqueue:set_type_state(NewQ0,
+                                    #{nodes => UIDs})
+    end,
 
     Versions = [V || {ok, V} <- erpc:multicall(FollowerNodes,
                                                rabbit_fifo, version, [],
@@ -726,7 +731,7 @@ repair_amqqueue_nodes(Q0) ->
     {Name, _} = amqqueue:get_pid(Q0),
     Members = ra_leaderboard:lookup_members(Name),
     RaNodes = [N || {_, N} <- Members],
-    #{nodes := Nodes} = amqqueue:get_type_state(Q0),
+    Nodes = get_nodes(Q0),
     case lists:sort(RaNodes) =:= lists:sort(Nodes) of
         true ->
             %% up to date
@@ -735,7 +740,18 @@ repair_amqqueue_nodes(Q0) ->
             %% update amqqueue record
             Fun = fun (Q) ->
                           TS0 = amqqueue:get_type_state(Q),
-                          TS = TS0#{nodes => RaNodes},
+                          TS = case rabbit_feature_flags:is_enabled(track_qq_members_uids)
+                                    andalso has_uuid_tracking(TS0)
+                               of
+                                   false ->
+                                       TS0#{nodes => RaNodes};
+                                   true ->
+                                       RaUids = maps:from_list([{N, erpc:call(N, ra_directory, uid_of,
+                                                               [?RA_SYSTEM, Name],
+                                                               ?RPC_TIMEOUT)}
+                                                 || N <- RaNodes]),
+                                       TS0#{nodes => RaUids}
+                               end,
                           amqqueue:set_type_state(Q, TS)
                   end,
             _ = rabbit_amqqueue:update(QName, Fun),
@@ -796,10 +812,9 @@ recover(_Vhost, Queues) ->
          QName = amqqueue:get_name(Q0),
          MutConf = make_mutable_config(Q0),
          RaUId = ra_directory:uid_of(?RA_SYSTEM, Name),
-         QTypeState0 = amqqueue:get_type_state(Q0),
-         RaUIds = maps:get(uids, QTypeState0, undefined),
-         QTypeState = case RaUIds of
-             undefined ->
+         #{nodes := Nodes} = QTypeState0 = amqqueue:get_type_state(Q0),
+         QTypeState = case Nodes of
+             List when is_list(List) ->
                  %% Queue is not aware of node to uid mapping, do nothing
                  QTypeState0;
              #{node() := RaUId} ->
@@ -810,7 +825,7 @@ recover(_Vhost, Queues) ->
                  %% does not match the one returned by ra_directory, regen uid
                  maybe_delete_data_dir(RaUId),
                  NewRaUId = ra:new_uid(ra_lib:to_binary(Name)),
-                 QTypeState0#{uids := RaUIds#{node() => NewRaUId}}
+                 QTypeState0#{nodes := Nodes#{node() => NewRaUId}}
          end,
          Q = amqqueue:set_type_state(Q0, QTypeState),
          Res = case ra:restart_server(?RA_SYSTEM, ServerId, MutConf) of
@@ -1413,21 +1428,20 @@ do_add_member(Q0, Node, Membership, Timeout)
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q0),
-    QTypeState0 = amqqueue:get_type_state(Q0),
-    RaUIds = maps:get(uids, QTypeState0, undefined),
-    QTypeState = case RaUIds of
-        undefined ->
-            %% Queue is not aware of node to uid mapping, do nothing
-            QTypeState0;
-        #{Node := _} ->
-            %% Queue is aware and uid for targeted node exists, do nothing
-            QTypeState0;
-        _ ->
-            %% Queue is aware but current node has no UId, regen uid
-            NewRaUId = ra:new_uid(ra_lib:to_binary(RaName)),
-            QTypeState0#{uids := RaUIds#{Node => NewRaUId}}
-    end,
-    Q = amqqueue:set_type_state(Q0, QTypeState),
+    QTypeState0 = #{nodes := _Nodes}= amqqueue:get_type_state(Q0),
+    NewRaUId = ra:new_uid(ra_lib:to_binary(RaName)),
+    %QTypeState = case Nodes of
+    %    L when is_list(L) ->
+    %        %% Queue is not aware of node to uid mapping, just add the new node
+    %        QTypeState0#{nodes := lists:usort([Node | Nodes])};
+    %    #{Node := _} ->
+    %        %% Queue is aware and uid for targeted node exists, do nothing
+    %        QTypeState0;
+    %    _ ->
+    %        %% Queue is aware but current node has no UId, regen uid
+    %        QTypeState0#{nodes := Nodes#{Node => NewRaUId}}
+    %end,
+    Q = amqqueue:set_type_state(Q0, QTypeState0),
     MachineVersion = erpc_call(Node, rabbit_fifo, version, [], infinity),
     Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
     case ra:start_server(?RA_SYSTEM, Conf) of
@@ -1443,8 +1457,12 @@ do_add_member(Q0, Node, Membership, Timeout)
                 {ok, {RaIndex, RaTerm}, Leader} ->
                     Fun = fun(Q1) ->
                                   Q2 = update_type_state(
-                                         Q1, fun(#{nodes := Nodes} = Ts) ->
-                                                     Ts#{nodes => lists:usort([Node | Nodes])}
+                                         Q1, fun(#{nodes := NodesList} = Ts) when is_list(NodesList) ->
+                                                     Ts#{nodes => lists:usort([Node | NodesList])};
+                                                (#{nodes := #{Node := _} = _NodesMap} = Ts) ->
+                                                     Ts;
+                                                (#{nodes := NodesMap} = Ts) when is_map(NodesMap) ->
+                                                     Ts#{nodes => maps:put(Node, NewRaUId, NodesMap)}
                                              end),
                                   amqqueue:set_pid(Q2, Leader)
                           end,
@@ -1517,12 +1535,10 @@ delete_member(Q, Node) when ?amqqueue_is_quorum(Q) ->
                     Fun = fun(Q1) ->
                                   update_type_state(
                                     Q1,
-                                    fun(#{nodes := Nodes,
-                                          uids := UIds} = Ts) ->
-                                            Ts#{nodes => lists:delete(Node, Nodes),
-                                                uids => maps:remove(Node, UIds)};
-                                       (#{nodes := Nodes} = Ts) ->
-                                            Ts#{nodes => lists:delete(Node, Nodes)}
+                                    fun(#{nodes := Nodes} = Ts) when is_list(Nodes) ->
+                                            Ts#{nodes => lists:delete(Node, Nodes)};
+                                       (#{nodes := Nodes} = Ts) when is_map(Nodes) ->
+                                            Ts#{nodes => maps:remove(Node, Nodes)}
                                     end)
                           end,
                     _ = rabbit_amqqueue:update(QName, Fun),
@@ -2069,7 +2085,12 @@ make_mutable_config(Q) ->
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),
-    Nodes.
+    case Nodes of
+        List when is_list(List) ->
+            List;
+        Map when is_map(Map) ->
+            maps:keys(Map)
+    end.
 
 get_connected_nodes(Q) when ?is_amqqueue(Q) ->
     ErlangNodes = [node() | nodes()],
@@ -2425,3 +2446,8 @@ queue_vm_stats_sups() ->
 queue_vm_ets() ->
     {[quorum_ets],
      [[ra_log_ets]]}.
+
+has_uuid_tracking(#{nodes := Nodes}) when is_map(Nodes) ->
+    true;
+has_uuid_tracking(_QTypeState) ->
+    false.

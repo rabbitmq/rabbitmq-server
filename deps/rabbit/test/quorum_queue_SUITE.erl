@@ -2852,10 +2852,14 @@ add_member_2(Config) ->
                                   {<<"x-quorum-initial-group-size">>, long, 1}])),
     ?assertEqual(ok, rpc:call(Server0, rabbit_quorum_queue, add_member,
                               [<<"/">>, QQ, Server0, 5000])),
-    Info = rpc:call(Server0, rabbit_quorum_queue, infos,
-                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    #{online := Onlines} = ?awaitMatch(#{online := [_One, _Two]},
+                                       maps:from_list(rpc:call(Server0,
+                                                               rabbit_quorum_queue,
+                                                               infos,
+                                                               [rabbit_misc:r(<<"/">>, queue, QQ)])),
+                                       3000),
     Servers = lists:sort([Server0, Server1]),
-    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
+    ?assertEqual(Servers, lists:sort(Onlines)).
 
 delete_member_not_running(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
