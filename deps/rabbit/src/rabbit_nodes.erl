@@ -23,6 +23,7 @@
          filter_running/1, filter_not_running/1,
          is_serving/1, list_serving/0, list_not_serving/0,
          filter_serving/1, filter_not_serving/1,
+         list_serving_with_plugin/1, filter_with_plugin/2,
          name_type/0, running_count/0, total_count/0,
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
@@ -457,10 +458,63 @@ filter_not_serving(Nodes) ->
     Serving = do_filter_serving(Members),
     Members -- Serving.
 
+%% @doc Combined list_serving/0 and rabbit_plugins:is_enabled_on_node/2
+%%      to return nodes that are running, not under maintenance mode
+%%      and have a specific plugin enabled.
+%% @see list_serving/0
+%% @see rabbit_plugins:is_enabled_on_node/2
+-spec list_serving_with_plugin(PluginName :: rabbit_plugins:plugin_name()) -> [node()].
+list_serving_with_plugin(PluginName) ->
+    Members = list_serving(),
+    filter_with_plugin(PluginName, Members).
+
+%% @doc Filters the given list of nodes to only select those belonging to the
+%% cluster and having a specific plugin enabled.
+%%
+%% The cluster being considered is the one which the node running this
+%% function belongs to.
+%%
+%% @see filter_serving/1.
+-spec filter_with_plugin(rabbit_plugins:plugin_name(), [node()]) -> [node()].
+filter_with_plugin(PluginName, Nodes) ->
+    Members = filter_members(Nodes),
+    do_filter_with_plugin(PluginName, Members).
+
+
+%% @doc Filters the given list of cluster members to only select those who
+%% accept clients.
+%%
+%% The given list of nodes must have been verified to only contain cluster
+%% members.
+%%
+%% @private
+
+do_filter_with_plugin(PluginName, Members) ->
+    %% All clustered members having a specific plugin enabled
+    Rets = erpc:multicall(
+                Members, rabbit_plugins, is_enabled, [PluginName], ?FILTER_RPC_TIMEOUT),
+    RetPerMember = lists:zip(Members, Rets),
+    lists:filtermap(
+      fun
+          ({Member, {ok, true}}) ->
+              {true, Member};
+          ({_, {ok, false}}) ->
+              false;
+          ({_, {error, {erpc, Reason}}})
+            when Reason =:= noconnection orelse Reason =:= timeout ->
+              false;
+          ({Member, Error}) ->
+              ?LOG_ERROR(
+                 "~s:~s: Failed to query node ~ts: ~p",
+                 [?MODULE, ?FUNCTION_NAME, Member, Error],
+                 #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+              false
+      end, RetPerMember).
+
 -spec do_filter_serving(Members) -> Members when
       Members :: [node()].
 %% @doc Filters the given list of cluster members to only select those who
-%% accept clients.
+%% accept client connections.
 %%
 %% The given list of nodes must have been verified to only contain cluster
 %% members.
