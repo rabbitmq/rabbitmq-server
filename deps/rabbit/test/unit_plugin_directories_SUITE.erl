@@ -61,6 +61,10 @@ listing_plugins_from_multiple_directories(Config) ->
               end,
     Path = FirstDir ++ PathSep ++ SecondDir,
     Got = lists:sort([{Name, Vsn} || #plugin{name = Name, version = Vsn} <- rabbit_plugins:list(Path)]),
+    PluginsMap = maps:from_list(Got),
+    ?assert(maps:is_key(plugin_first_dir, PluginsMap)),
+    ?assert(maps:is_key(plugin_second_dir, PluginsMap)),
+    ?assert(maps:is_key(plugin_both, PluginsMap)),
     %% `rabbit` was loaded automatically by `rabbit_plugins:list/1`.
     %% We want to unload it now so it does not interfere with other
     %% testcases.

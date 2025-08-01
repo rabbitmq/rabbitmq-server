@@ -13,10 +13,15 @@
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
 -export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
+-export([is_enabled/1, is_enabled_on_node/2]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
 %%----------------------------------------------------------------------------
+
+-export_type([
+    plugin_name/0
+]).
 
 -type plugin_name() :: atom().
 
@@ -128,6 +133,29 @@ active() ->
     InstalledPlugins = plugin_names(list(plugins_dir())),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
+
+%% @doc Returns true if the plugin is enabled on the current node.
+
+-spec is_enabled(Name :: plugin_name()) -> boolean().
+
+is_enabled(Name) ->
+    EnabledPlugins = active(),
+    lists:member(Name, EnabledPlugins).
+
+%% @doc Returns true if the plugin is enabled on the given node.
+
+-spec is_enabled_on_node(Name :: plugin_name(), Node :: node()) -> boolean().
+
+is_enabled_on_node(Name, Node) ->
+    try
+        case erpc:call(Node, ?MODULE, is_enabled, [Name], 5000) of
+            true -> true;
+            _    -> false
+        end
+    catch
+        error:{erpc, _} -> false;
+        _Class:_Reason:_Stacktrace -> false
+    end.
 
 %% @doc Get the list of plugins which are ready to be enabled.
 
