@@ -16,6 +16,7 @@
          flush/1,
          wait_for_credit/1,
          wait_for_accepts/1,
+         send_message/2,
          send_messages/3, send_messages/4,
          detach_link_sync/1,
          end_session_sync/1,
@@ -87,18 +88,10 @@ wait_for_accepts(N) ->
               ct:fail({missing_accepted, N})
     end.
 
-send_messages(Sender, Left, Settled) ->
-    send_messages(Sender, Left, Settled, <<>>).
-
-send_messages(_, 0, _, _) ->
-    ok;
-send_messages(Sender, Left, Settled, BodySuffix) ->
-    Bin = integer_to_binary(Left),
-    Body = <<Bin/binary, BodySuffix/binary>>,
-    Msg = amqp10_msg:new(Bin, Body, Settled),
+send_message(Sender, Msg) ->
     case amqp10_client:send_msg(Sender, Msg) of
         ok ->
-            send_messages(Sender, Left - 1, Settled, BodySuffix);
+            ok;
         {error, insufficient_credit} ->
             ok = wait_for_credit(Sender),
             %% The credited event we just processed could have been received some time ago,
@@ -110,8 +103,20 @@ send_messages(Sender, Left, Settled, BodySuffix) ->
             %%    but do not process the credited event in our mailbox.
             %% So, we must be defensive here and assume that the next amqp10_client:send/2 call might return {error, insufficient_credit}
             %% again causing us then to really wait to receive a credited event (instead of just processing an old credited event).
-            send_messages(Sender, Left, Settled, BodySuffix)
+            send_message(Sender, Msg)
     end.
+
+send_messages(Sender, Left, Settled) ->
+    send_messages(Sender, Left, Settled, <<>>).
+
+send_messages(_, 0, _, _) ->
+    ok;
+send_messages(Sender, Left, Settled, BodySuffix) ->
+    Bin = integer_to_binary(Left),
+    Body = <<Bin/binary, BodySuffix/binary>>,
+    Msg = amqp10_msg:new(Bin, Body, Settled),
+    ok = send_message(Sender, Msg),
+    send_messages(Sender, Left - 1, Settled, BodySuffix).
 
 detach_link_sync(Link) ->
     ok = amqp10_client:detach_link(Link),
