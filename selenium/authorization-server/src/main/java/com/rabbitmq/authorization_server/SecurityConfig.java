@@ -28,6 +28,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenClaimsContext;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -116,11 +117,29 @@ public class SecurityConfig {
 
 	Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
 
+	@Bean 
+	public OAuth2TokenCustomizer<OAuth2TokenClaimsContext>  accessTokenCustomizer() {
+		logger.info("Creating accessTokenCustomizer ...");
+		return (context) -> {
+			logger.info("Calling accessTokenCustomizer with tokenType: {}", context.getTokenType().getValue());
+			AbstractAuthenticationToken principal = context.getPrincipal();
+			logger.info("registered client: {}", context.getRegisteredClient());
+			logger.info("principal : {}", principal);
+			logger.info("token format : {} ",
+					context.getRegisteredClient().getTokenSettings().getAccessTokenFormat().getValue());
+			logger.info("authorities : {}", principal.getAuthorities());
+			logger.info("authorized scopes : {}", context.getAuthorizedScopes());
+				
+			context.getClaims()
+					.audience(AudienceAuthority.getAll(principal))
+					.claim("extra_scope", ScopeAuthority.getAuthorites(principal));
+		};
+	}
 	@Bean
 	public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
 		logger.info("Creating jwtTokenCustomizer ...");
 		return (context) -> {
-			logger.info("Calling jwtTokenCustomizer with tokenType: {}", context.getTokenType());
+			logger.info("Calling jwtTokenCustomizer with tokenType: {}", context.getTokenType().getValue());
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
 				AbstractAuthenticationToken principal = context.getPrincipal();
 				logger.info("registered client: {}", context.getRegisteredClient());
