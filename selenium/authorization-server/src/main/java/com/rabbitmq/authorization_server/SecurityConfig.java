@@ -5,6 +5,8 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +38,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
+	
 	@Bean 
 	@Order(1)
 	public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
@@ -112,21 +114,24 @@ public class SecurityConfig {
 		return keyPair;
 	}
 
+	Logger logger = LoggerFactory.getLogger(SecurityConfig.class);
+
 	@Bean
 	public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+		logger.info("Creating jwtTokenCustomizer ...");
 		return (context) -> {
 			if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
 				AbstractAuthenticationToken principal = context.getPrincipal();
-				System.out.println("registered client: " + context.getRegisteredClient());
-				System.out.println("token format : " + 
+				logger.info("registered client: {}", context.getRegisteredClient());
+				logger.info("principal : {}", principal);
+				logger.info("token format : {} ",
 					context.getRegisteredClient().getTokenSettings().getAccessTokenFormat().getValue());
-				System.out.println("authorities : " + principal.getAuthorities());
-				System.out.println("authorized scopes : " + context.getAuthorizedScopes());
+				logger.info("authorities : {}", principal.getAuthorities());
+				logger.info("authorized scopes : {}", context.getAuthorizedScopes());
 				
 				context.getClaims()
 					.audience(AudienceAuthority.getAll(principal))
-					.claim("extra_scope", ScopeAuthority.getAllUnauthorized(principal, 
-						context.getAuthorizedScopes()));				
+					.claim("extra_scope", ScopeAuthority.getAuthorites(principal));				
 			}
 		};
 	}
