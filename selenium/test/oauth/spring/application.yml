@@ -70,8 +70,7 @@ spring:
                 - client_secret_basic
               scopes: 
                 - openid
-                - profile
-                - rabbitmq.tag:management
+                - profile               
               client-name: mgt_api_client_opaque
             token:
               access-token-format: reference
@@ -106,9 +105,7 @@ spring:
                 - "${RABBITMQ_SCHEME}://${RABBITMQ_HOST}${RABBITMQ_PATH}/"
               scopes: 
                 - openid 
-                - profile 
-                - rabbitmq.tag:administrator
-                - rabbitmq.tag:management
+                - profile                 
               client-name: rabbitmq_client_code_opaque
             token:
               access-token-format: reference
