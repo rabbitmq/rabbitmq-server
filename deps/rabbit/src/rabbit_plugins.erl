@@ -175,6 +175,7 @@ list() ->
     PluginsPath = plugins_dir(),
     list(PluginsPath).
 
+
 %% @doc Get the list of plugins which are ready to be enabled.
 
 -spec list(string()) -> [#plugin{}].
