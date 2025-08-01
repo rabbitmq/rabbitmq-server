@@ -23,6 +23,11 @@ public class AudienceAuthority implements GrantedAuthority {
         return authority;
     }
     
+     @Override
+    public String toString() {
+        return "Audience:" + authority; 
+    }
+
     public static List<String> getAll(AbstractAuthenticationToken principal) {
         return principal.getAuthorities()
 					.stream().filter(a -> a instanceof AudienceAuthority)

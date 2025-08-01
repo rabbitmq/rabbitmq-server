@@ -1,3 +1,6 @@
+logging.level:
+  com.rabbitmq.authorization_server: DEBUG
+
 server:
   port: 8443
   ssl:
