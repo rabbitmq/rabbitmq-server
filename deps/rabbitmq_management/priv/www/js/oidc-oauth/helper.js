@@ -195,11 +195,12 @@ function oauth_initialize_user_manager(resource_server) {
     });
     mgr.events.addUserLoaded(function(user) {
       set_token_auth(user.access_token)
-      if (is_jwt_token(user.access_token)) {
-        console.log("Detected opaque token. Introspecting it ...")
+/*      if (!is_jwt_token(user.access_token)) {
+        console.log("addUserLoaded: Detected opaque token. Introspecting it ...")
         set_token_auth(introspect_token())
         console.log("Introspected token")
       }
+*/        
     });
 
 }
@@ -305,7 +306,7 @@ function introspect_token() {
 
 function is_jwt_token(token) {
   if (token != null) {
-    token.split(".").length == 3
+    return token.split(".").length == 3
   }else {
     return false
   }
