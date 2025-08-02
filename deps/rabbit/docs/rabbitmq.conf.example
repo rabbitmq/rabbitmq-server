@@ -108,6 +108,13 @@
 # ssl_options.certfile             = /path/to/cert.pem
 # ssl_options.keyfile              = /path/to/key.pem
 #
+#
+## ssl_options.password supports encrypted values,
+## see https://www.rabbitmq.com/docs/configure#configuration-encryption
+## and 'rabbitmqctl help encrypt_conf_value'
+# ssl_options.password = encrypted:kDnCy25dRvI8xs4nrJ6hp34ffL0ODKAzHrT6R8eOqR3TKL8lbI12M15wkA1SGmmL
+#
+#
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
 #
@@ -309,6 +316,12 @@
 # default_permissions.configure = .*
 # default_permissions.read = .*
 # default_permissions.write = .*
+
+## default_pass supports encrypted values,
+## see https://www.rabbitmq.com/docs/configure#configuration-encryption
+### and 'rabbitmqctl help encrypt_conf_value'
+# default_user = guest
+# default_pass = encrypted:uL+A4nxXdgaqjGbs92Vo36ApOruJp76cCSsklS6/mT6jo2r0hfamM1nMO/Yirwfz
 
 ## Tags for default user
 ##
