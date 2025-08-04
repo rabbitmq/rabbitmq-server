@@ -189,10 +189,24 @@ init_per_group(Group, Config0) ->
                Config0,
                [{rmq_nodes_count, Nodes},
                 {rmq_nodename_suffix, Suffix}]),
+<<<<<<< HEAD
     rabbit_ct_helpers:run_steps(
       Config,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
+=======
+    Config1 = rabbit_ct_helpers:run_steps(
+                Config,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    case Config1 of
+        _ when is_list(Config1) ->
+            util:enable_plugin(Config1, rabbitmq_mqtt),
+            Config1;
+        {skip, _} ->
+            Config1
+    end.
+>>>>>>> 8bdbb0fc2 (mqtt_shared_SUITE: Handle error returned by rabbit_ct_broker_helpers)
 
 end_per_group(G, Config)
   when G =:= cluster_size_1;
