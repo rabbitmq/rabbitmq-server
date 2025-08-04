@@ -53,7 +53,7 @@ start_fakeportal() {
     --env IDP_TOKEN_ENDPOINT="${IDP_TOKEN_ENDPOINT}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_${IDP}_certificate.pem \
+    --env NODE_EXTRA_CA_CERTS=/etc/${IDP}/ca_${IDP}_certificate.pem \
     -v ${TEST_CONFIG_DIR}/${IDP}:/etc/${IDP} \
     -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeportal

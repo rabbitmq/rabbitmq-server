@@ -5,6 +5,7 @@ authnz-mgt/oauth-with-uaa.sh
 authnz-mgt/oauth-with-spring.sh
 authnz-mgt/oauth-idp-initiated-with-uaa-and-prefix.sh
 authnz-mgt/oauth-with-spring-with-opaque-tokens.sh
+authnz-mgt/oauth-idp-initiated-with-spring-opaque-tokens.sh
 mgt/vhosts.sh
 mgt/exchanges.sh
 mgt/queuesAndStreams.sh
