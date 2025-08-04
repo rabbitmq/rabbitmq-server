@@ -978,36 +978,30 @@ from_mnesia_to_khepri(Config) ->
 
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db) of
         ok ->
-            case rabbit_ct_broker_helpers:enable_feature_flag(Config, rabbit_consistent_hash_exchange_raft_based_metadata_store) of
-                ok ->
-                    [amqp_channel:call(Chan,
-                                       #'basic.publish'{exchange = CHX, routing_key = rnd()},
-                                       #amqp_msg{props = #'P_basic'{}, payload = <<>>})
-                     || _ <- lists:duplicate(IterationCount, const)],
-                    amqp_channel:wait_for_confirms(Chan, 300),
-                    timer:sleep(500),
-                    Counts =
-                        [begin
-                             #'queue.declare_ok'{message_count = M} =
-                                 amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
-                                                                           exclusive = true}),
-                             M
-                         end || Q <- Queues],
-                    ?assertEqual(IterationCount, lists:sum(Counts)), %% All messages got routed
-                    %% Chi-square test
-                    %% H0: routing keys are not evenly distributed according to weight
-                    Expected = [IterationCount div 6, IterationCount div 6, (IterationCount div 6) * 2, (IterationCount div 6) * 2],
-                    Obs = lists:zip(Counts, Expected),
-                    Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
-                    ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35, observations (counts, expected): ~p",
-                           [Chi, Obs]),
-                    clean_up_test_topology(Config, CHX, Queues),
-                    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-                    ok;
-                Skip ->
-                    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
-                    Skip
-            end;
+            [amqp_channel:call(Chan,
+                               #'basic.publish'{exchange = CHX, routing_key = rnd()},
+                               #amqp_msg{props = #'P_basic'{}, payload = <<>>})
+             || _ <- lists:duplicate(IterationCount, const)],
+            amqp_channel:wait_for_confirms(Chan, 300),
+            timer:sleep(500),
+            Counts =
+                [begin
+                     #'queue.declare_ok'{message_count = M} =
+                         amqp_channel:call(Chan, #'queue.declare' {queue     = Q,
+                                                                   exclusive = true}),
+                     M
+                 end || Q <- Queues],
+            ?assertEqual(IterationCount, lists:sum(Counts)), %% All messages got routed
+            %% Chi-square test
+            %% H0: routing keys are not evenly distributed according to weight
+            Expected = [IterationCount div 6, IterationCount div 6, (IterationCount div 6) * 2, (IterationCount div 6) * 2],
+            Obs = lists:zip(Counts, Expected),
+            Chi = lists:sum([((O - E) * (O - E)) / E || {O, E} <- Obs]),
+            ct:pal("Chi-square test for 3 degrees of freedom is ~p, p = 0.01 is 11.35, observations (counts, expected): ~p",
+                   [Chi, Obs]),
+            clean_up_test_topology(Config, CHX, Queues),
+            rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
+            ok;
         Skip ->
             rabbit_ct_client_helpers:close_connection_and_channel(Conn, Chan),
             Skip
