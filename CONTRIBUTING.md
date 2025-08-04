@@ -7,13 +7,13 @@ Pull requests is the primary place of discussing code changes.
 
 The process is fairly standard:
 
+ * Make sure you (or your employer/client) [signs the Contributor License Agreement](https://github.com/rabbitmq/cla) if needed (see below)
  * Present your idea to the RabbitMQ core team using [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions) or [RabbitMQ community Discord server](https://rabbitmq.com/discord)
  * Fork the repository or repositories you plan on contributing to
  * Run `git clean -xfffd && gmake clean && gmake distclean && gmake` to build all subprojects from scratch
  * Create a branch with a descriptive name
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
- * Submit a filled out and signed [Contributor Agreement](https://github.com/rabbitmq/cla) if needed (see below)
  * Be patient. We will get to your pull request eventually
 
 
@@ -192,9 +192,11 @@ See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ## Contributor Agreement
 
-If you want to contribute a non-trivial change, please submit a signed copy of our
-[Contributor Agreement](https://github.com/rabbitmq/cla) before submitting
-a pull request to `teamrabbitmq </> gmail dot c0m` and set the subject to "RabbitMQ CLA".
+Before submitting your first pull request, please submit a signed copy of our
+[Contributor Agreement](https://github.com/rabbitmq/cla) over email  to `teamrabbitmq </> gmail dot c0m` with the subject of "RabbitMQ CLA".
+
+Team RabbitMQ will not be able to accept contributions from individuals and legal entities (companies, non-profits)
+that haven't signed the CLA.
 
 ## Where to Ask Questions
 
