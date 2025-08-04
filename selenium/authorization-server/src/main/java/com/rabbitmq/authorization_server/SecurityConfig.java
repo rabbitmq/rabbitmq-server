@@ -5,6 +5,9 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.util.UUID;
+import java.util.Collection;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +32,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenClaimsContext;
+
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
 
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
@@ -130,9 +135,20 @@ public class SecurityConfig {
 			logger.info("authorities : {}", principal.getAuthorities());
 			logger.info("authorized scopes : {}", context.getAuthorizedScopes());
 				
-			context.getClaims()
-					.audience(AudienceAuthority.getAll(principal))
-					.claim("extra_scope", ScopeAuthority.getAuthorites(principal));
+			if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
+				Collection<String> extra_scope = context.getRegisteredClient().getScopes();
+				logger.info("granting extra_scope: {}", extra_scope);
+				context.getClaims()
+					.claim("extra_scope", extra_scope);
+			} else {
+				Collection<String> extra_scope = ScopeAuthority.getAuthorites(principal);
+				List<String> audience = AudienceAuthority.getAll(principal);
+				logger.info("granting extra_scope: {}", extra_scope);
+				logger.info("granting audience: {}", audience);
+				context.getClaims()
+					.audience(audience)
+					.claim("extra_scope", extra_scope);
+			}
 		};
 	}
 	@Bean
