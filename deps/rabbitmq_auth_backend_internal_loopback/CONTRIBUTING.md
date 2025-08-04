@@ -7,13 +7,13 @@ Pull requests is the primary place of discussing code changes.
 
 The process is fairly standard:
 
+ * Make sure you (or your employer/client) [signs the Contributor License Agreement](https://github.com/rabbitmq/cla) if needed (see below)
  * Present your idea to the RabbitMQ core team using [GitHub Discussions](https://github.com/rabbitmq/rabbitmq-server/discussions) or [RabbitMQ community Discord server](https://rabbitmq.com/discord)
  * Fork the repository or repositories you plan on contributing to
  * Run `git clean -xfffd && gmake clean && gmake distclean && gmake` to build all subprojects from scratch
  * Create a branch with a descriptive name
  * Make your changes, run tests, ensure correct code formatting, commit with a [descriptive message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html), push to your fork
  * Submit pull requests with an explanation what has been changed and **why**
- * Submit a filled out and signed [Contributor Agreement](https://cla.pivotal.io/) if needed (see below)
  * Be patient. We will get to your pull request eventually
 
 
@@ -35,8 +35,8 @@ killall -9 beam.smp; killall -9 erl; killall -9 make; killall -9 epmd; killall -
 cd deps/rabbit
 
 # cleans build artifacts
-git clean -xfffd
 gmake clean; gmake distclean
+git clean -xfffd
 
 # builds the broker and all of its dependencies
 gmake
@@ -79,6 +79,27 @@ Or, with Nu shell:
 with-env {'RABBITMQ_METADATA_STORE': 'khepri'} { gmake ct-quorum_queue }
 ```
 
+### Running Mixed Version Tests
+
+For some components, it's important to run tests in a mixed-version cluster, to make sure the upgrades
+are handled correctly. For example, you may want to make sure that the quorum_queue suite passes, when
+there's a mix of RabbitMQ 4.1 and 4.2 nodes in the cluster.
+
+Here's how you can do that:
+
+```shell
+# download the older version, eg:
+https://github.com/rabbitmq/rabbitmq-server/releases/download/v4.1.1/rabbitmq-server-generic-unix-4.1.1.tar.xz
+
+# unpack it
+tar xf rabbitmq-server-generic-unix-4.1.1.tar.xz
+
+# run the test with SECONDARY_DIST pointing at the extracted folder
+SECONDARY_DIST=rabbitmq_server-4.1.1 make -C deps/rabbit ct-quorum_queue
+```
+
+Odd-numbered nodes (eg. 1 and 3) will be started using the main repository, while even-numbered nodes (eg. node 2)
+will run the older version.
 
 ## Running Single Nodes from Source
 
@@ -192,10 +213,11 @@ See [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 ## Contributor Agreement
 
-If you want to contribute a non-trivial change, please submit a signed copy of our
-[Contributor Agreement](https://cla.pivotal.io/) around the time
-you submit your pull request. This will make it much easier (in some cases, possible)
-for the RabbitMQ team at Pivotal to merge your contribution.
+Before submitting your first pull request, please submit a signed copy of our
+[Contributor Agreement](https://github.com/rabbitmq/cla) over email  to `teamrabbitmq </> gmail dot c0m` with the subject of "RabbitMQ CLA".
+
+Team RabbitMQ will not be able to accept contributions from individuals and legal entities (companies, non-profits)
+that haven't signed the CLA.
 
 ## Where to Ask Questions
 
