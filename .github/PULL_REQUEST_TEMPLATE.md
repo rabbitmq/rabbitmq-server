@@ -21,12 +21,10 @@ _Put an `x` in the boxes that apply_
 
 _Put an `x` in the boxes that apply.
 You can also fill these out after creating the PR.
-If you're unsure about any of them, don't hesitate to ask on the mailing list.
-We're here to help!
 This is simply a reminder of what we are going to look for before merging your code._
 
+- [ ] **Mandatory**: I (or my employer/client) have have signed the CA (see https://github.com/rabbitmq/cla)
 - [ ] I have read the `CONTRIBUTING.md` document
-- [ ] I have signed the CA (see https://cla.pivotal.io/sign/rabbitmq)
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] All tests pass locally with my changes
 - [ ] If relevant, I have added necessary documentation to https://github.com/rabbitmq/rabbitmq-website
