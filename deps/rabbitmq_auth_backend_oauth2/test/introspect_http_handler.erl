@@ -18,6 +18,13 @@ init(Req, State) ->
                         {"scope", <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State};
+                <<"active-2">> -> 
+                    Body = rabbit_json:encode([
+                        {"active", true}, 
+                        {"aud", <<"rabbitmq">>},
+                        {"scope", <<"rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
+                    {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
+                        Body, Req), State};
                 <<"inactive">> -> 
                     Body = rabbit_json:encode([
                         {"active", false}, 

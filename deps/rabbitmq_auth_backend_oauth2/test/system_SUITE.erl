@@ -87,7 +87,10 @@ groups() ->
       ]},
       {with_introspection_endpoint, [], [
         test_successful_connection_with_valid_opaque_token,
-        test_unsuccessful_connection_with_invalid_opaque_token
+        test_unsuccessful_connection_with_invalid_opaque_token,
+        test_successful_opaque_token_refresh,
+        test_successful_opaque_token_refresh_with_more_restrictive_token,
+        test_unsuccessful_opaque_token_refresh_with_inactive_token
       ]}
     ].
 
@@ -303,7 +306,11 @@ init_per_testcase(multiple_resource_server_ids, Config) ->
     rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
     Config;
 
-init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token ->
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token orelse
+                                         Testcase =:= test_successful_opaque_token_refresh orelse 
+                                         Testcase =:= test_successful_opaque_token_refresh_with_more_restrictive_token orelse 
+                                         Testcase =:= test_unsuccessful_opaque_token_refresh_with_inactive_token ->
+    rabbit_ct_broker_helpers:add_vhost(Config, <<"vhost1">>),
     rabbit_ct_helpers:testcase_started(
         setup_introspection_configuration(Config), Testcase);
 
@@ -372,7 +379,10 @@ end_per_testcase(multiple_resource_server_ids, Config) ->
     rabbit_ct_helpers:testcase_started(Config, multiple_resource_server_ids),
     Config;
 
-end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token ->
+end_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_valid_opaque_token orelse
+                                        Testcase =:= test_successful_opaque_token_refresh orelse 
+                                        Testcase =:= test_successful_opaque_token_refresh_with_more_restrictive_token orelse 
+                                        Testcase =:= test_unsuccessful_opaque_token_refresh_with_inactive_token ->
     teardown_introspection_configuration(Config);
 
 end_per_testcase(Testcase, Config) ->
@@ -524,6 +534,47 @@ test_unsuccessful_connection_with_invalid_opaque_token(Config) ->
     {error, Error} = open_unmanaged_connection(Config, 0, <<"username">>, <<"inactive">>),
     ct:log("Error : ~p", [Error]).
 
+test_successful_opaque_token_refresh(Config) ->
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, <<"active">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, <<"active">>, <<"token refresh">>)),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch2, #'queue.declare'{exclusive = true}),
+
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_opaque_token_refresh_with_more_restrictive_token(Config) ->
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, <<"active">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+
+    ?assertEqual(ok, amqp_connection:update_secret(Conn, <<"active-2">>, <<"token refresh">>)),
+
+    {ok, Ch2} = amqp_connection:open_channel(Conn),
+
+    ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
+       amqp_channel:call(Ch2, #'queue.declare'{queue = <<"a.q">>, exclusive = true})),
+
+    catch close_connection(Conn).
+
+test_unsuccessful_opaque_token_refresh_with_inactive_token(Config) ->
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username">>, <<"active">>),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+
+    ?assertException(exit, {{nodedown,not_allowed},_}, 
+        amqp_connection:update_secret(Conn, <<"inactive">>, <<"token refresh">>)).
 
 mqtt(Config) ->
     Topic = <<"test/topic">>,
