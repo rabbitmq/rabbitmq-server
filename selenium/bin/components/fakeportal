@@ -32,6 +32,8 @@ init_fakeportal() {
   print "> CLIENT_ID: ${CLIENT_ID}"
   print "> CLIENT_SECRET: ${CLIENT_SECRET}"
   print "> RABBITMQ_URL: ${RABBITMQ_URL}"
+  print "> IDP_TOKEN_ENDPOINT: ${IDP_TOKEN_ENDPOINT}"
+  print "> IDP: ${IDP}"
 }
 start_fakeportal() {
   begin "Starting fakeportal ..."
@@ -48,11 +50,11 @@ start_fakeportal() {
     --env PORT=3000 \
     --env RABBITMQ_URL="${RABBITMQ_URL_FOR_FAKEPORTAL}" \
     --env PROXIED_RABBITMQ_URL="${RABBITMQ_URL}" \
-    --env UAA_URL="${UAA_URL_FOR_FAKEPORTAL}" \
+    --env IDP_TOKEN_ENDPOINT="${IDP_TOKEN_ENDPOINT}" \
     --env CLIENT_ID="${CLIENT_ID}" \
     --env CLIENT_SECRET="${CLIENT_SECRET}" \
-    --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_uaa_certificate.pem \
-    -v ${TEST_CONFIG_DIR}/uaa:/etc/uaa \
+    --env NODE_EXTRA_CA_CERTS=/etc/uaa/ca_${IDP}_certificate.pem \
+    -v ${TEST_CONFIG_DIR}/${IDP}:/etc/${IDP} \
     -v ${FAKEPORTAL_DIR}:/code/fakeportal \
     mocha-test:${mocha_test_tag} run fakeportal
 

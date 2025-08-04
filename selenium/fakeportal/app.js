@@ -28,7 +28,10 @@ app.get('/favicon.ico', (req, res) => res.status(204));
 
 
 app.listen(port);
-console.log('Express started on port ' + port);
+console.log('Express started on port ' + port + " using ") 
+console.log(" -  idp_token_endpoint: " + idp_token_endpoint)
+console.log(" -  rabbitmq_url: " + rabbitmq_url)
+console.log(" -  proxied_rabbitmq_url: " + proxied_rabbitmq_url)
 
 function default_if_blank(value, defaultValue) {
   if (typeof value === "undefined" || value === null || value == "") {
@@ -40,14 +43,14 @@ function default_if_blank(value, defaultValue) {
 
 function access_token(id, secret) {
   const req = new XMLHttpRequest();
-  const url = idp_token_endpoint; // uaa_url + '/oauth/token';
+  const url = idp_token_endpoint
   const params = 'client_id=' + id +
     '&client_secret=' + secret +
     '&grant_type=client_credentials' +
     '&token_format=jwt' +
     '&response_type=token';
 
-  console.debug("Sending " + url + " with params "+  params);
+  console.debug("Sending " + url + " with params " +  params);
 
   req.open('POST', url, false);
   req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
