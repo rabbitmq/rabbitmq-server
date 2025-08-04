@@ -7,7 +7,7 @@ const rabbitmq_url = process.env.RABBITMQ_URL;
 const proxied_rabbitmq_url = process.env.PROXIED_RABBITMQ_URL;
 const client_id = process.env.CLIENT_ID;
 const client_secret = process.env.CLIENT_SECRET;
-const uaa_url = process.env.UAA_URL;
+const idp_token_endpoint = process.env.IDP_TOKEN_ENDPOINT;
 const port = process.env.PORT || 3000;
 
 app.engine('.html', require('ejs').__express);
@@ -40,7 +40,7 @@ function default_if_blank(value, defaultValue) {
 
 function access_token(id, secret) {
   const req = new XMLHttpRequest();
-  const url = uaa_url + '/oauth/token';
+  const url = idp_token_endpoint; // uaa_url + '/oauth/token';
   const params = 'client_id=' + id +
     '&client_secret=' + secret +
     '&grant_type=client_credentials' +
