@@ -211,7 +211,7 @@ simple_sac_consumer_should_get_disconnected_on_coord_leader_network_partition(Co
     %% the coordinator leader node will be isolated
     ?assertNotEqual(L#node.name, CL),
 
-    log("Stream leader and coordinator leader are on ~p", [L#node.name]),
+    log("Coordinator leader on: ~0p~nStream leader on: ~0p", [CL, L#node.name]),
 
     {ok, So0, C0_00} = stream_test_utils:connect(Config, CL),
     {ok, So1, C1_00} = stream_test_utils:connect(Config, CF1),
