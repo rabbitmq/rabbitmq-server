@@ -154,7 +154,7 @@ direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
     #{service := Service, region := Region} = CredContext,
     % Build URI for signing
     Host = endpoint_host(Region, Service),
-    URI = "https://" ++ Host ++ Path,
+    URI = create_uri(Host, Path),
     % Sign headers directly (no gen_server call)
     SignedHeaders = sign_headers_with_context(CredContext, Method, URI, Headers, Body),
     % Make Gun request directly
@@ -604,22 +604,6 @@ perform_request_with_creds(State, Method, URI, Headers, Body, Options0) ->
 perform_request_creds_error(State) ->
     {{error, {credentials, State#state.error}}, State}.
 
-%% @doc Ensure that the timeout option is set and greater than 0 and less
-%%      than about 1/2 of the default gen_server:call timeout. This gives
-%%      enough time for a long connect and request phase to succeed.
-%% @end
--spec ensure_timeout(Options :: http_options()) -> http_options().
-ensure_timeout(Options) ->
-    case proplists:get_value(timeout, Options) of
-        undefined ->
-            Options ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
-        Value when is_integer(Value) andalso Value >= 0 andalso Value =< ?DEFAULT_HTTP_TIMEOUT ->
-            Options;
-        _ ->
-            Options1 = proplists:delete(timeout, Options),
-            Options1 ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}]
-    end.
-
 -spec sign_headers(
     State :: state(),
     Service :: string(),
@@ -775,7 +759,7 @@ create_gun_connection(Host, Port, Options) ->
             % Default: try HTTP/2, fallback to HTTP/1.1
             _ -> [http2, http]
         end,
-    ConnectTimeout = proplists:get_value(connect_timeout, Options, 5000),
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, infinity),
     Opts = #{
         transport =>
             if
@@ -797,6 +781,11 @@ create_gun_connection(Host, Port, Options) ->
         {error, Reason} ->
             error({gun_open_failed, Reason})
     end.
+
+create_uri(Host, Path) when is_list(Path) ->
+    "https://" ++ Host ++ Path;
+create_uri(Host, {Bucket, Key}) ->
+    "https://" ++ Bucket ++ "." ++ Host ++ "/" ++ Key.
 
 parse_uri(URI) ->
     case string:split(URI, "://", leading) of
@@ -894,6 +883,8 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
     Body :: body(),
     Options :: list()
 ) -> result().
+direct_gun_request(GunPid, Method, {_, Path}, Headers, Body, Options) ->
+    direct_gun_request(GunPid, Method, [$/|Path], Headers, Body, Options);
 direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
     HeadersBin = lists:map(
         fun({Key, Value}) ->
