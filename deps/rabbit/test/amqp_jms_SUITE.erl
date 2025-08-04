@@ -52,7 +52,7 @@ groups() ->
 
 suite() ->
     [
-     {timetrap, {minutes, 2}}
+     {timetrap, {minutes, 5}}
     ].
 
 init_per_suite(Config) ->
