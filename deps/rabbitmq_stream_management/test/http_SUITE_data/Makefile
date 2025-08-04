@@ -2,7 +2,8 @@ export PATH :=$(CURDIR):$(PATH)
 HOSTNAME := $(shell hostname)
 MVN_FLAGS += -Dstream.port=$(STREAM_PORT) \
              -Dstream.port.tls=$(STREAM_PORT_TLS) \
-             -Dmanagement.port=$(MANAGEMENT_PORT)
+             -Dmanagement.port=$(MANAGEMENT_PORT) \
+	     -Dmaven.wagon.http.retryHandler.count=5
 
 .PHONY: tests clean
 
