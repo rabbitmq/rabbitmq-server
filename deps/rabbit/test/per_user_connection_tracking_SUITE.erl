@@ -111,22 +111,44 @@ single_node_list_of_user(Config) ->
     ?assertEqual(0, count_connections_in(Config, Username)),
     ?assertEqual(0, count_connections_in(Config, Username2)),
 
+<<<<<<< HEAD
     [Conn1] = open_connections(Config, [0]),
     ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
     [#tracked_connection{username = Username}] = connections_in(Config, Username),
+=======
+    [Conn1] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
+>>>>>>> ed1cdb598 (per_user_connection_tracking_SUITE: Wait for the expected list of connections)
     close_connections([Conn1]),
     ?awaitMatch(0, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
 
     [Conn2] = open_connections(Config, [{0, Username2}]),
     ?awaitMatch(1, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username2}] = connections_in(Config, Username2),
+    ?awaitMatch(
+       [#tracked_connection{username = Username2}],
+       connections_in(Config, Username2),
+       ?AWAIT_TIMEOUT),
 
+<<<<<<< HEAD
     [Conn3] = open_connections(Config, [0]),
     ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
     [#tracked_connection{username = Username}] = connections_in(Config, Username),
+=======
+    [Conn3] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
+>>>>>>> ed1cdb598 (per_user_connection_tracking_SUITE: Wait for the expected list of connections)
 
     [Conn4] = open_connections(Config, [0]),
     kill_connections([Conn4]),
+<<<<<<< HEAD
     ?awaitMatch(1, count_connections_in(Config, Username), ?AWAIT_TIMEOUT),
     [#tracked_connection{username = Username}] = connections_in(Config, Username),
 
@@ -135,6 +157,21 @@ single_node_list_of_user(Config) ->
     [Username, Username] =
         lists:map(fun (#tracked_connection{username = U}) -> U end,
                   connections_in(Config, Username)),
+=======
+    ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
+
+    [Conn5] = open_connections(Config, [{0, Username1}]),
+    ?awaitMatch(2, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
+    ?awaitMatch(
+       [Username1, Username1],
+       lists:map(fun (#tracked_connection{username = U}) -> U end,
+                 connections_in(Config, Username1)),
+       ?AWAIT_TIMEOUT),
+>>>>>>> ed1cdb598 (per_user_connection_tracking_SUITE: Wait for the expected list of connections)
 
     close_connections([Conn2, Conn3, Conn5]),
     rabbit_ct_broker_helpers:delete_user(Config, Username2),
