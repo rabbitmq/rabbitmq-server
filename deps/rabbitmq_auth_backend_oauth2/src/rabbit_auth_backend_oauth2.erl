@@ -110,18 +110,21 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
+    ?LOG_DEBUG("Calling (update_state)"),
+    
     TokenResult = case oauth2_client:is_jwt_token(NewToken) of 
         true -> {ok, NewToken};
         false -> 
             case oauth2_client:introspect_token(NewToken) of
                 {ok, Tk1} -> 
-                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
+                    ?LOG_DEBUG("Successfully (update_state) introspected token : ~p", [Tk1]),
                     {ok, Tk1};
                 {error, Err1} -> 
                     ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),
                     {error, Err1}
             end
     end,
+    ?LOG_DEBUG("Calling (update_state) tokenResult: ~p", [TokenResult]),
     case TokenResult of 
         {ok, Token} ->
             case resolve_resource_server(Token) of
@@ -140,6 +143,8 @@ update_state(AuthUser, NewToken) ->
                                     CurToken(), DecodedToken) of
                                 ok ->
                                     Tags = tags_from(DecodedToken),
+                                    ?LOG_DEBUG("Updated credentials with new token: ~p and tags: ~p",
+                                        [DecodedToken, Tags]),
                                     {ok, AuthUser#auth_user{tags = Tags,
                                                             impl = fun() -> DecodedToken end}};
                                 {error, mismatch_username_after_token_refresh} ->
@@ -174,7 +179,7 @@ authenticate(_, AuthProps0) ->
         false -> 
             case oauth2_client:introspect_token(Token0) of
                 {ok, Tk1} -> 
-                    ?LOG_DEBUG("Successfully introspected token : ~p", [Tk1]),
+                    ?LOG_DEBUG("Successfully (authenticate) introspected token : ~p", [Tk1]),
                     {ok, Tk1};
                 {error, Err1} -> 
                     ?LOG_ERROR("Failed to introspected token due to ~p", [Err1]),

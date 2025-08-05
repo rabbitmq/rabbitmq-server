@@ -14,6 +14,8 @@ init(Req, State) ->
                 <<"active">> -> 
                     Body = rabbit_json:encode([
                         {"active", true}, 
+                        {"sub", <<"test_case">>},
+                        {"exp", os:system_time(seconds) + 30},
                         {"aud", <<"rabbitmq">>},
                         {"scope", <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
@@ -21,6 +23,8 @@ init(Req, State) ->
                 <<"active-2">> -> 
                     Body = rabbit_json:encode([
                         {"active", true}, 
+                        {"sub", <<"test_case">>},
+                        {"exp", os:system_time(seconds) + 30},
                         {"aud", <<"rabbitmq">>},
                         {"scope", <<"rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
@@ -28,6 +32,8 @@ init(Req, State) ->
                 <<"inactive">> -> 
                     Body = rabbit_json:encode([
                         {"active", false}, 
+                        {"sub", <<"test_case">>},
+                        {"exp", os:system_time(seconds) + 30},
                         {"scope", <<"rabbitmq.configure:*/* rabbitmq.write:*/* rabbitmq.read:*/*">>}]),
                     {ok, cowboy_req:reply(200, #{<<"content-type">> => <<"application/json">>}, 
                         Body, Req), State}
