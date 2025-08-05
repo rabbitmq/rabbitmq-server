@@ -110,8 +110,6 @@ check_topic_access(#auth_user{impl = DecodedTokenFun},
         end).
 
 update_state(AuthUser, NewToken) ->
-    ?LOG_DEBUG("Calling (update_state)"),
-    
     TokenResult = case oauth2_client:is_jwt_token(NewToken) of 
         true -> {ok, NewToken};
         false -> 
@@ -124,7 +122,6 @@ update_state(AuthUser, NewToken) ->
                     {error, Err1}
             end
     end,
-    ?LOG_DEBUG("Calling (update_state) tokenResult: ~p", [TokenResult]),
     case TokenResult of 
         {ok, Token} ->
             case resolve_resource_server(Token) of

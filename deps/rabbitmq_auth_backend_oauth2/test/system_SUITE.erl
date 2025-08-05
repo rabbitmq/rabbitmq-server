@@ -88,9 +88,9 @@ groups() ->
       {with_introspection_endpoint, [], [
         test_successful_connection_with_valid_opaque_token,
         test_unsuccessful_connection_with_invalid_opaque_token,
-        test_successful_opaque_token_refresh
-        %test_successful_opaque_token_refresh_with_more_restrictive_token,
-        %test_unsuccessful_opaque_token_refresh_with_inactive_token
+        test_successful_opaque_token_refresh,
+        test_successful_opaque_token_refresh_with_more_restrictive_token,
+        test_unsuccessful_opaque_token_refresh_with_inactive_token
       ]}
     ].
 
@@ -573,11 +573,12 @@ test_unsuccessful_opaque_token_refresh_with_inactive_token(Config) ->
     #'queue.declare_ok'{queue = _} =
         amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
 
-    Result = amqp_connection:update_secret(Conn, <<"inactive">>, <<"token refresh">>),
-    ct:log("Result: ~p", [Result]),
+    amqp_connection:update_secret(Conn, <<"inactive">>, <<"token refresh">>),
+    
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
+       amqp_connection:open_channel(Conn)),
 
-    ?assertException(exit, {{nodedown,not_allowed},_}, Result).
-
+    catch close_connection(Conn).   
     
 
 mqtt(Config) ->
@@ -1087,12 +1088,17 @@ test_failed_token_refresh_case1(Config) ->
     catch close_connection(Conn).
 
 refreshed_token_cannot_change_username(Config) ->
-    {_, Token} = generate_valid_token_with_sub(Config, <<"username">>),
-    Conn     = open_unmanaged_connection(Config, 0, <<"vhost4">>, <<"username">>, Token),
+    {_, Token} = generate_valid_token_with_sub(Config, <<"username3">>),
+    Conn     = open_unmanaged_connection(Config, 0, <<"vhost1">>, <<"username3">>, Token),
     {_, RefreshedToken} = generate_valid_token_with_sub(Config, <<"username2">>),
 
     %% the error is communicated asynchronously via a connection-level error
-    ?assertException(exit, {{nodedown,not_allowed},_}, amqp_connection:update_secret(Conn, RefreshedToken, <<"token refresh">>)).
+    amqp_connection:update_secret(Conn, RefreshedToken, <<"should fail token refresh">>),
+
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
+       amqp_connection:open_channel(Conn)),
+
+    catch close_connection(Conn).    
 
 
 test_failed_token_refresh_case2(Config) ->
