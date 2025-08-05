@@ -70,10 +70,10 @@
 -define(MANAGEMENT_NODE_ADDRESS, <<"/management">>).
 -define(UINT_OUTGOING_WINDOW, {uint, ?UINT_MAX}).
 %% "The next-outgoing-id MAY be initialized to an arbitrary value" [2.5.6]
--define(INITIAL_OUTGOING_TRANSFER_ID, ?UINT_MAX - 3).
+-define(INITIAL_OUTGOING_TRANSFER_ID, 0).
 %% "Note that, despite its name, the delivery-count is not a count but a
 %% sequence number initialized at an arbitrary point by the sender." [2.6.7]
--define(INITIAL_DELIVERY_COUNT, ?UINT_MAX - 4).
+-define(INITIAL_DELIVERY_COUNT, 0).
 -define(INITIAL_OUTGOING_DELIVERY_ID, 0).
 -define(UINT(N), {uint, N}).
 %% [3.4]
