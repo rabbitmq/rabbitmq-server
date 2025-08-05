@@ -179,8 +179,20 @@ init_per_group(Group, Config) ->
                         _         -> merge_app_env(AuthConfig, Conf)
                     end
        end] ++
+<<<<<<< HEAD
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
+=======
+          rabbit_ct_broker_helpers:setup_steps() ++
+          rabbit_ct_client_helpers:setup_steps()),
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
+>>>>>>> 5c1456b2d (auth_SUITE: Handle error returned by rabbit_ct_broker_helpers)
 
 end_per_group(G, Config)
   when G =:= v4;
