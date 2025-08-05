@@ -67,7 +67,43 @@ spring:
                 - profile               
               client-name: mgt_api_client_opaque
             token:
-              access-token-format: reference              
+              access-token-format: reference    
+          producer_opaque:
+            registration:
+              provider: spring
+              client-id: producer_opaque
+              client-secret: "{noop}producer_opaque"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+                - client_secret_post
+              scopes: 
+                - openid
+                - profile            
+                - rabbitmq.read:*/*
+                - rabbitmq.write:*/*
+                - rabbitmq.configure:*/*   
+              client-name: producer_opaque
+            token:
+              access-token-format: reference                            
+          producer:
+            registration:
+              provider: spring
+              client-id: producer
+              client-secret: "{noop}producer"
+              authorization-grant-types: 
+                - client_credentials
+              client-authentication-methods:
+                - client_secret_basic
+                - client_secret_post
+              scopes: 
+                - openid
+                - profile            
+                - rabbitmq.read:*/*
+                - rabbitmq.write:*/*
+                - rabbitmq.configure:*/*            
+              client-name: producer            
           rabbit_idp_user:
             registration:
               provider: spring

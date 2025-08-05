@@ -47,7 +47,6 @@ function access_token(id, secret) {
   const params = 'client_id=' + id +
     '&client_secret=' + secret +
     '&grant_type=client_credentials' +
-    '&token_format=jwt' +
     '&response_type=token';
 
   console.debug("Sending " + url + " with params " +  params);
