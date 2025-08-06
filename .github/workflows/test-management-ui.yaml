@@ -72,13 +72,13 @@ jobs:
         echo "Running selenium tests with "
         echo " - CONF_DIR_PREFIX: ${CONF_DIR_PREFIX}"
         echo " - IMAGE_TAG: ${IMAGE_TAG}"
-        echo " - RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"       
+        echo " - RABBITMQ_DOCKER_IMAGE: ${RABBITMQ_DOCKER_IMAGE}"
         echo "SELENIUM_ARTIFACTS=${CONF_DIR_PREFIX}" >> $GITHUB_ENV
-        ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui        
-        
+        ${SELENIUM_DIR}/run-suites.sh full-suite-management-ui
+
     - name: Upload Test Artifacts
       if: ${{ failure() && steps.tests.outcome == 'failure' }}
-      uses: actions/upload-artifact@v4.3.2
+      uses: actions/upload-artifact@v5.3.2
       with:
         name: test-artifacts-${{ matrix.browser }}-${{ matrix.erlang_version }}
         path: ${{ env.SELENIUM_ARTIFACTS }}/*
