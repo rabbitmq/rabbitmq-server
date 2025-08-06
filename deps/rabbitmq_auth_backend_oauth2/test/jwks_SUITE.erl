@@ -896,6 +896,7 @@ test_failed_connection_with_a_token_with_insufficient_resource_permission(Config
     ?assertExit({{shutdown, {server_initiated_close, 403, _}}, _},
        amqp_channel:call(Ch, #'queue.declare'{queue = <<"alt-prefix.eq.1">>,
             exclusive = true})),
+
     close_connection(Conn).
 
 test_failed_token_refresh_case1(Config) ->
@@ -941,7 +942,7 @@ test_failed_token_refresh_case2(Config) ->
     ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 530, _}}}, _},
        amqp_connection:open_channel(Conn)),
 
-    close_connection(Conn).
+    wait_for_connection_exit(Conn).
 
 cannot_change_username_on_refreshed_token(Config) ->
     Jwk =
@@ -984,3 +985,13 @@ rpc_get_env(Config, Par) ->
 rpc_get_env(Config, Par, Default) ->
     rpc(Config, 0, application, get_env,
         [rabbitmq_auth_backend_oauth2, Par, Default]).
+
+wait_for_connection_exit(Conn) ->
+    MRef = erlang:monitor(process, Conn),
+    receive
+        {'DOWN', MRef, _Type, _Conn, Reason} ->
+            ct:pal("Connection ~0p exited: ~p", [Conn, Reason]),
+            ok
+    after 30000 ->
+              ct:fail("Connection ~0p is still up after 30 seconds", [Conn])
+    end.
