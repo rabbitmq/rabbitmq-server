@@ -1428,20 +1428,20 @@ do_add_member(Q0, Node, Membership, Timeout)
     %% TODO parallel calls might crash this, or add a duplicate in quorum_nodes
     ServerId = {RaName, Node},
     Members = members(Q0),
-    QTypeState0 = #{nodes := _Nodes}= amqqueue:get_type_state(Q0),
+    QTypeState0 = #{nodes := Nodes} = amqqueue:get_type_state(Q0),
     NewRaUId = ra:new_uid(ra_lib:to_binary(RaName)),
-    %QTypeState = case Nodes of
-    %    L when is_list(L) ->
-    %        %% Queue is not aware of node to uid mapping, just add the new node
-    %        QTypeState0#{nodes := lists:usort([Node | Nodes])};
-    %    #{Node := _} ->
-    %        %% Queue is aware and uid for targeted node exists, do nothing
-    %        QTypeState0;
-    %    _ ->
-    %        %% Queue is aware but current node has no UId, regen uid
-    %        QTypeState0#{nodes := Nodes#{Node => NewRaUId}}
-    %end,
-    Q = amqqueue:set_type_state(Q0, QTypeState0),
+    QTypeState = case Nodes of
+        L when is_list(L) ->
+            %% Queue is not aware of node to uid mapping, just add the new node
+            QTypeState0#{nodes => lists:usort([Node | Nodes])};
+        #{Node := _} ->
+            %% Queue is aware and uid for targeted node exists, do nothing
+            QTypeState0;
+        _ ->
+            %% Queue is aware but current node has no UId, regen uid
+            QTypeState0#{nodes => Nodes#{Node => NewRaUId}}
+    end,
+    Q = amqqueue:set_type_state(Q0, QTypeState),
     MachineVersion = erpc_call(Node, rabbit_fifo, version, [], infinity),
     Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
     case ra:start_server(?RA_SYSTEM, Conf) of
@@ -1459,7 +1459,7 @@ do_add_member(Q0, Node, Membership, Timeout)
                                   Q2 = update_type_state(
                                          Q1, fun(#{nodes := NodesList} = Ts) when is_list(NodesList) ->
                                                      Ts#{nodes => lists:usort([Node | NodesList])};
-                                                (#{nodes := #{Node := _} = _NodesMap} = Ts) ->
+                                                (#{nodes := #{Node := _}} = Ts) ->
                                                      Ts;
                                                 (#{nodes := NodesMap} = Ts) when is_map(NodesMap) ->
                                                      Ts#{nodes => maps:put(Node, NewRaUId, NodesMap)}
@@ -2047,7 +2047,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
     [{ClusterName, _} | _] = Members = members(Q),
     {_, Node} = ServerId,
     UId = case amqqueue:get_type_state(Q) of
-        #{uids := #{Node := Id}} ->
+        #{nodes := #{Node := Id}} ->
             Id;
         _ ->
             %% Queue was declared on an older version of RabbitMQ
