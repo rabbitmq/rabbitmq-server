@@ -128,6 +128,7 @@ shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
 
     ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
     Msgs = receive_messages(Receiver, NumMsgs),
+    ct:pal("~b messages:~n~p", [length(Msgs), Msgs]),
     lists:map(
       fun(N) ->
               Msg = lists:nth(N, Msgs),
@@ -140,15 +141,27 @@ shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
              [<<"/">>, <<"shovel">>, ShovelName, none]),
     ExpectedQueueLen = 0,
     ?awaitMatch(
-       [ExpectedQueueLen],
-       rpc(Config, ?OLD, ?MODULE, queues_length, []),
+       [{_, ExpectedQueueLen}],
+       begin
+           Ret = rpc(Config, ?OLD, ?MODULE, queues_length, []),
+           ct:pal("Queues on old: ~p", [Ret]),
+           Ret
+       end,
        30000),
     ?awaitMatch(
-       [ExpectedQueueLen],
-       rpc(Config, ?NEW, ?MODULE, queues_length, []),
+       [{_, ExpectedQueueLen}],
+       begin
+           Ret = rpc(Config, ?NEW, ?MODULE, queues_length, []),
+           ct:pal("Queues on new: ~p", [Ret]),
+           Ret
+       end,
        30000),
-    ?assertEqual([ExpectedQueueLen], rpc(Config, ?OLD, ?MODULE, delete_queues, [])),
-    ?assertEqual([ExpectedQueueLen], rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
+    ?assertEqual(
+       [ExpectedQueueLen],
+       rpc(Config, ?OLD, ?MODULE, delete_queues, [])),
+    ?assertEqual(
+       [ExpectedQueueLen],
+       rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
 
 wait_for_credit(Sender) ->
     receive
@@ -183,8 +196,9 @@ flush(Prefix) ->
 
 queues_length() ->
     [begin
+         #{<<"name">> := Name} = amqqueue:to_printable(Q),
          [{messages, N}] = rabbit_amqqueue:info(Q, [messages]),
-         N
+         {Name, N}
      end || Q <- rabbit_amqqueue:list()].
 
 delete_queues() ->
