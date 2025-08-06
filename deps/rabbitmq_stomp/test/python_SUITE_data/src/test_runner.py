@@ -20,7 +20,7 @@ def run_unittests(modules):
             if name.startswith("Test") and issubclass(obj, unittest.TestCase):
                 suite.addTest(unittest.TestLoader().loadTestsFromTestCase(obj))
 
-    ts = unittest.TextTestRunner().run(unittest.TestSuite(suite))
+    ts = unittest.TextTestRunner(verbosity=10).run(unittest.TestSuite(suite))
     if ts.errors or ts.failures:
         sys.exit(1)
 
