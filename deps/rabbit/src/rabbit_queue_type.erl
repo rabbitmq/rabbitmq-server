@@ -203,8 +203,6 @@
 
 -callback policy_changed(amqqueue:amqqueue()) -> ok.
 
--callback is_stateful() -> boolean().
-
 %% intitialise and return a queue type specific session context
 -callback init(amqqueue:amqqueue()) ->
     {ok, queue_state()} | {error, Reason :: term()}.
@@ -216,7 +214,7 @@
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
                   queue_state()) ->
-    {ok, queue_state(), actions()} |
+    {ok, queue_state()} |
     {error, Type :: atom(), Format :: string(), FormatArgs :: [term()]}.
 
 -callback cancel(amqqueue:amqqueue(),
@@ -231,6 +229,8 @@
                        queue_state()) ->
     {ok, queue_state(), actions()} | {error, term()} | {eol, actions()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+
+-callback supports_stateful_delivery() -> boolean().
 
 -callback deliver([{amqqueue:amqqueue(), queue_state()}],
                   Message :: mc:state(),
@@ -577,8 +577,10 @@ handle_down(Pid, QName, Info, State0) ->
     {ok, state(), actions()} | {eol, actions()} | {error, term()} |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 handle_event(QRef, Evt, Ctxs) ->
-    %% events can arrive after a queue state has been cleared up
-    %% so need to be defensive here
+    %% We are defensive here and do not want to crash because
+    %% 1. Events can arrive after a queue state has been cleared up, and
+    %% 2. Direct Reply-to responder might send to a non-existing queue name
+    %%    by using correctly encoded channel/session pid but wrong key.
     case get_ctx(QRef, Ctxs, undefined) of
         #ctx{module = Mod,
              state = State0} = Ctx  ->
@@ -660,7 +662,7 @@ deliver0(Qs, Message0, Options, #?STATE{} = State0) ->
       fun (Elem, Acc) ->
               {Q, BKeys} = queue_binding_keys(Elem),
               Mod = amqqueue:get_type(Q),
-              QState = case Mod:is_stateful() of
+              QState = case Mod:supports_stateful_delivery() of
                            true ->
                                #ctx{state = S} = get_ctx(Q, State0),
                                S;
@@ -743,7 +745,8 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
 -spec dequeue(amqqueue:amqqueue(), boolean(),
               pid(), rabbit_types:ctag(), state()) ->
     {ok, non_neg_integer(), term(), state()}  |
-    {empty, state()} | rabbit_types:error(term()) |
+    {empty, state()} |
+    rabbit_types:error(term()) |
     {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),

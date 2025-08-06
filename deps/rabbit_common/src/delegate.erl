@@ -18,9 +18,8 @@
 %% consistent route, to prevent them being reordered. In fact all
 %% AMQP-ish things (such as queue declaration results and basic.get)
 %% must take the same route as well, to ensure that clients see causal
-%% ordering correctly. Therefore we have a rather generic mechanism
-%% here rather than just a message-reflector. That's also why we pick
-%% the delegate process to use based on a hash of the source pid.
+%% ordering correctly. Therefore we can't use erpc. That's also why we
+%% pick the delegate process to use based on a hash of the source pid.
 %%
 %% When a function is invoked using delegate:invoke/2,
 %% or delegate:invoke_no_result/2 on a group of pids, the pids are first split

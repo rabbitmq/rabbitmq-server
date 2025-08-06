@@ -1157,7 +1157,6 @@ pg_local_amqp_connection() ->
 pg_local_scope(Prefix) ->
     list_to_atom(io_lib:format("~s_~s", [Prefix, node()])).
 
-
 -spec update_cluster_tags() -> 'ok'.
 
 update_cluster_tags() ->

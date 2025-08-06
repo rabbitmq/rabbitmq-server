@@ -26,9 +26,9 @@
 
 %% Stateless rabbit_queue_type callbacks.
 -export([
-         is_stateful/0,
          declare/2,
          delete/4,
+         supports_stateful_delivery/0,
          deliver/3,
          is_enabled/0,
          is_compatible/3,
@@ -74,11 +74,6 @@
 
 -define(INFO_KEYS, [type, name, durable, auto_delete, arguments,
                     pid, owner_pid, state, messages]).
-
--spec is_stateful() ->
-    boolean().
-is_stateful() ->
-    false.
 
 -spec declare(amqqueue:amqqueue(), node()) ->
     {'new' | 'existing' | 'owner_died', amqqueue:amqqueue()} |
@@ -134,6 +129,9 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
         {error, timeout} = Err ->
             Err
     end.
+
+supports_stateful_delivery() ->
+    false.
 
 -spec deliver([{amqqueue:amqqueue(), stateless}],
               Msg :: mc:state(),
