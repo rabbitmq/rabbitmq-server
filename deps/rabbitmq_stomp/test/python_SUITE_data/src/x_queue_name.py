@@ -41,6 +41,8 @@ class TestUserGeneratedQueueName(base.BaseTest):
 
         self.conn.disconnect()
         connection.close()
+        while not connection.is_closed:
+            time.sleep(1)
 
     def test_topic_dest(self):
         queueName='my-user-generated-queue-name-topic'
@@ -69,6 +71,8 @@ class TestUserGeneratedQueueName(base.BaseTest):
 
         self.conn.disconnect()
         connection.close()
+        while not connection.is_closed:
+            time.sleep(1)
 
 
 if __name__ == '__main__':
