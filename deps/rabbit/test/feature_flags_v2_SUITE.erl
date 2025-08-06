@@ -203,7 +203,9 @@ stop_slave_node(Node) ->
             persistent_term:erase({?MODULE, Node}),
 
             ct:pal("- Stopping slave node `~ts`...", [Node]),
-            _ = peer:stop(NodePid)
+            Ret = catch peer:stop(NodePid),
+            ct:pal("  Ret = ~0p", [Ret]),
+            ok
     end.
 
 connect_nodes([FirstNode | OtherNodes] = Nodes) ->
