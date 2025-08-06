@@ -4042,9 +4042,10 @@ sac_register_consumer(VH, St, PartitionIndex, Name, Pid, ConnName, SubId) ->
              end).
 
 sac_unregister_consumer(VH, St, Name, Pid, SubId) ->
-    sac_call(fun() ->
-                     ?SAC_MOD:unregister_consumer(VH, St, Name, Pid, SubId)
-             end).
+    Call = fun() ->
+                   ?SAC_MOD:unregister_consumer(VH, St, Name, Pid, SubId)
+           end,
+    sac_call(retryable_sac_call(Call)).
 
 sac_call(Call) ->
     case Call() of
@@ -4057,6 +4058,19 @@ sac_call(Call) ->
                                     [Reason]),
                     throw({stop, {shutdown, stream_sac_coordinator_error}})
             end;
+        R ->
+            R
+    end.
+
+retryable_sac_call(Call) ->
+    fun() -> retry_sac_call(Call, 3) end.
+
+retry_sac_call(_Call, 0) ->
+    {error, coordinator_unavailable};
+retry_sac_call(Call, N) ->
+    case Call() of
+        {error, coordinator_unavailable} ->
+            retry_sac_call(Call, N - 1);
         R ->
             R
     end.
