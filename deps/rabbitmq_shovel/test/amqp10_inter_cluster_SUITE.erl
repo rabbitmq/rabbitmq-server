@@ -75,22 +75,23 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 old_to_new_on_old(Config) ->
-    ok = shovel(?OLD, ?NEW, ?OLD, Config).
+    ok = shovel(?FUNCTION_NAME, ?OLD, ?NEW, ?OLD, Config).
 
 old_to_new_on_new(Config) ->
-    ok = shovel(?OLD, ?NEW, ?NEW, Config).
+    ok = shovel(?FUNCTION_NAME, ?OLD, ?NEW, ?NEW, Config).
 
 new_to_old_on_old(Config) ->
-    ok = shovel(?NEW, ?OLD, ?OLD, Config).
+    ok = shovel(?FUNCTION_NAME, ?NEW, ?OLD, ?OLD, Config).
 
 new_to_old_on_new(Config) ->
-    ok = shovel(?NEW, ?OLD, ?NEW, Config).
+    ok = shovel(?FUNCTION_NAME, ?NEW, ?OLD, ?NEW, Config).
 
-shovel(SrcNode, DestNode, ShovelNode, Config) ->
+shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
     SrcUri = shovel_test_utils:make_uri(Config, SrcNode),
     DestUri = shovel_test_utils:make_uri(Config, DestNode),
-    SrcQ = <<"my source queue">>,
-    DestQ = <<"my destination queue">>,
+    ShovelName = atom_to_binary(Caller),
+    SrcQ = <<ShovelName/binary, " source">>,
+    DestQ = <<ShovelName/binary, " destination">>,
     Definition = [
                   {<<"src-uri">>,  SrcUri},
                   {<<"src-protocol">>, <<"amqp10">>},
@@ -99,7 +100,6 @@ shovel(SrcNode, DestNode, ShovelNode, Config) ->
                   {<<"dest-protocol">>, <<"amqp10">>},
                   {<<"dest-address">>, DestQ}
                  ],
-    ShovelName = <<"my shovel">>,
     ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, set,
              [<<"/">>, <<"shovel">>, ShovelName, Definition, none]),
     ok = shovel_test_utils:await_shovel(Config, ShovelNode, ShovelName),
