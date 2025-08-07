@@ -16,7 +16,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-  rabbitmq_aws_sup:start_link().
+    rabbitmq_aws_sup:start_link().
 
 stop(_State) ->
-  ok.
+    ok.
