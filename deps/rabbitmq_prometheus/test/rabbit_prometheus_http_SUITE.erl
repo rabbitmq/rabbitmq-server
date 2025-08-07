@@ -60,6 +60,7 @@ groups() ->
             build_info_product_test
         ]},
         {detailed_metrics, [], [
+                                     stream_pub_sub_metrics,
                                      detailed_metrics_no_families_enabled_by_default,
                                      queue_consumer_count_single_vhost_per_object_test,
                                      queue_consumer_count_all_vhosts_per_object_test,
@@ -72,7 +73,6 @@ groups() ->
                                      vhost_status_metric,
                                      exchange_bindings_metric,
                                      exchange_names_metric,
-                                     stream_pub_sub_metrics,
                                      detailed_raft_metrics_test
         ]},
        {special_chars, [], [core_metrics_special_chars]},
