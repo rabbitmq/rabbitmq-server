@@ -83,7 +83,18 @@ init_per_testcase(Testcase, Config) ->
       Config1,
       [fun merge_app_env/1] ++
       setup_steps() ++
+<<<<<<< HEAD
       rabbit_ct_client_helpers:setup_steps()).
+=======
+                    rabbit_ct_client_helpers:setup_steps()),
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
+>>>>>>> 0e36184a6 (cluster_SUITE: Handle error returned by rabbit_ct_broker_helpers)
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config,
