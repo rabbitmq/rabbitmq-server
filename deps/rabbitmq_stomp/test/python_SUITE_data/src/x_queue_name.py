@@ -11,6 +11,7 @@ import pika
 import base
 import time
 import os
+import test_util
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -29,6 +30,12 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 pika.ConnectionParameters( host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
+        test_util.rabbitmqctl(['list_queues'])
+        test_util.rabbitmqctl(['list_connections', 'peer_host', 'peer_port',
+                               'protocol'])
+        test_util.rabbitmqctl(['list_stomp_connections', 'peer_host',
+                               'peer_port', 'protocol'])
+
         # publish a message to the named queue
         channel.basic_publish(
                 exchange='',
@@ -39,7 +46,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
         self.assertTrue(self.listener.wait(30), "initial message not received")
         self.assertEqual(1, len(self.listener.messages))
 
-        self.conn.disconnect()
+        # self.conn.disconnect()
         connection.close()
         while not connection.is_closed:
             time.sleep(1)
@@ -59,6 +66,12 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 pika.ConnectionParameters( host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
+        test_util.rabbitmqctl(['list_queues'])
+        test_util.rabbitmqctl(['list_connections', 'peer_host', 'peer_port',
+                               'protocol'])
+        test_util.rabbitmqctl(['list_stomp_connections', 'peer_host',
+                               'peer_port', 'protocol'])
+
         # publish a message to the named queue
         channel.basic_publish(
                 exchange='',
@@ -69,7 +82,7 @@ class TestUserGeneratedQueueName(base.BaseTest):
         self.assertTrue(self.listener.wait(30), "initial message not received")
         self.assertEqual(1, len(self.listener.messages))
 
-        self.conn.disconnect()
+        # self.conn.disconnect()
         connection.close()
         while not connection.is_closed:
             time.sleep(1)
