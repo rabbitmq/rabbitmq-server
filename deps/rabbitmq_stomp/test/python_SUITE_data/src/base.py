@@ -126,7 +126,10 @@ class BaseTest(unittest.TestCase):
         if self.conn.is_connected():
             try:
                 self.conn.disconnect()
-            except:
+            except Exception as inst:
+                print(type(inst))
+                print(inst.args)
+                print(inst)
                 pass
         elapsed = time.time() - self._started_at
         print('{} ({}s)'.format(self.id(), round(elapsed, 2)))
