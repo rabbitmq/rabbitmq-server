@@ -266,10 +266,11 @@ count_in_mnesia() ->
     mnesia:table_info(?MNESIA_TABLE, size).
 
 count_in_khepri() ->
-    Path = khepri_exchange_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
-    case rabbit_khepri:count(Path) of
-        {ok, Count} -> Count;
-        _           -> 0
+    try
+        ets:info(?KHEPRI_PROJECTION, size)
+    catch
+        error:badarg ->
+            0
     end.
 
 %% -------------------------------------------------------------------
@@ -869,7 +870,12 @@ exists_in_mnesia(Name) ->
     ets:member(?MNESIA_TABLE, Name).
 
 exists_in_khepri(Name) ->
-    rabbit_khepri:exists(khepri_exchange_path(Name)).
+    try
+        ets:member(?KHEPRI_PROJECTION, Name)
+    catch
+        error:badarg ->
+            false
+    end.
 
 %% -------------------------------------------------------------------
 %% clear().
