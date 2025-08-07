@@ -57,18 +57,22 @@
 -type sc_error() :: {error, Reason :: atom()}.
 -type security_credentials() :: sc_ok() | sc_error().
 
--record(imdsv2token, { token :: security_token() | undefined,
-                       expiration :: non_neg_integer() | undefined}).
+-record(imdsv2token, {
+    token :: security_token() | undefined,
+    expiration :: non_neg_integer() | undefined
+}).
 
 -type imdsv2token() :: #imdsv2token{}.
 
--record(state, {access_key :: access_key() | undefined,
-                secret_access_key :: secret_access_key() | undefined,
-                expiration :: expiration() | undefined,
-                security_token :: security_token() | undefined,
-                region :: region() | undefined,
-                imdsv2_token:: imdsv2token() | undefined,
-                error :: atom() | string() | undefined}).
+-record(state, {
+    access_key :: access_key() | undefined,
+    secret_access_key :: secret_access_key() | undefined,
+    expiration :: expiration() | undefined,
+    security_token :: security_token() | undefined,
+    region :: region() | undefined,
+    imdsv2_token :: imdsv2token() | undefined,
+    error :: atom() | string() | undefined
+}).
 -type state() :: #state{}.
 
 -type scheme() :: atom().
@@ -79,17 +83,16 @@
 -type query_args() :: [tuple() | string()].
 -type fragment() :: string().
 
--type userinfo() :: {undefined | username(),
-                     undefined | password()}.
+-type userinfo() :: {undefined | username(), undefined | password()}.
 
--type authority() :: {undefined | userinfo(),
-                      host(),
-                      undefined | tcp_port()}.
--record(uri, {scheme :: undefined | scheme(),
-              authority :: authority(),
-              path :: undefined | path(),
-              query :: undefined | query_args(),
-              fragment :: undefined | fragment()}).
+-type authority() :: {undefined | userinfo(), host(), undefined | tcp_port()}.
+-record(uri, {
+    scheme :: undefined | scheme(),
+    authority :: authority(),
+    path :: undefined | path(),
+    query :: undefined | query_args(),
+    fragment :: undefined | fragment()
+}).
 
 -type method() :: head | get | put | post | trace | options | delete | patch.
 -type http_version() :: string().
@@ -104,35 +107,40 @@
 
 -type ssl_options() :: [ssl:tls_client_option()].
 
--type http_option() :: {timeout, timeout()} |
-                       {connect_timeout, timeout()} |
-                       {ssl, ssl_options()} |
-                       {essl, ssl_options()} |
-                       {autoredirect, boolean()} |
-                       {proxy_auth, {User :: string(), Password :: string()}} |
-                       {version, http_version()} |
-                       {relaxed, boolean()} |
-                       {url_encode, boolean()}.
+-type http_option() ::
+    {timeout, timeout()}
+    | {connect_timeout, timeout()}
+    | {ssl, ssl_options()}
+    | {essl, ssl_options()}
+    | {autoredirect, boolean()}
+    | {proxy_auth, {User :: string(), Password :: string()}}
+    | {version, http_version()}
+    | {relaxed, boolean()}
+    | {url_encode, boolean()}.
 -type http_options() :: [http_option()].
 
-
--record(request, {access_key :: access_key(),
-                  secret_access_key :: secret_access_key(),
-                  security_token :: security_token(),
-                  service :: string(),
-                  region = "us-east-1" :: string(),
-                  method = get :: method(),
-                  headers = [] :: headers(),
-                  uri :: string(),
-                  body = "" :: body()}).
+-record(request, {
+    access_key :: access_key(),
+    secret_access_key :: secret_access_key(),
+    security_token :: security_token(),
+    service :: string(),
+    region = "us-east-1" :: string(),
+    method = get :: method(),
+    headers = [] :: headers(),
+    uri :: string(),
+    body = "" :: body()
+}).
 -type request() :: #request{}.
 
--type httpc_result() :: {ok, {status_line(), headers(), body()}} |
-                        {ok, {status_code(), body()}} |
-                        {error, term()}.
+-type httpc_result() ::
+    {ok, {status_line(), headers(), body()}}
+    | {ok, {status_code(), body()}}
+    | {error, term()}.
 
 -type result_ok() :: {ok, {ResponseHeaders :: headers(), Response :: list()}}.
--type result_error() :: {'error', Message :: reason_phrase(), {ResponseHeaders :: headers(), Response :: list()} | undefined} |
-                        {'error', {credentials, Reason :: string()}} |
-                        {'error', string()}.
+-type result_error() ::
+    {'error', Message :: reason_phrase(),
+        {ResponseHeaders :: headers(), Response :: list()} | undefined}
+    | {'error', {credentials, Reason :: string()}}
+    | {'error', string()}.
 -type result() :: result_ok() | result_error().
