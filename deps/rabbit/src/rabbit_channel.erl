@@ -60,7 +60,7 @@
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, handle_post_hibernate/1,
          prioritise_call/4, prioritise_cast/3, prioritise_info/3,
-         format_message_queue/2]).
+         format_state/1, format_message_queue/2]).
 
 %% Internal
 -export([list_local/0, emit_info_local/3, deliver_reply_local/3]).
@@ -805,6 +805,17 @@ terminate(_Reason,
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+format_state(#ch{} = S) ->
+    format_state(application:get_env(rabbit, summarize_process_state_when_logged, false), S).
+
+format_state(false, #ch{} = S) ->
+    S;
+format_state(true, #ch{unacked_message_q = UAMQ} = S) ->
+    UAMQLen = ?QUEUE:len(UAMQ),
+    Msg0 = io_lib:format("unacked_message_q (~b elements) (truncated)", [UAMQLen]),
+    Msg1 = rabbit_data_coercion:to_utf8_binary(Msg0),
+    S#ch{unacked_message_q = Msg1}.
 
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
