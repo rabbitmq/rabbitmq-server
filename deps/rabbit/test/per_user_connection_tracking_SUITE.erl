@@ -115,28 +115,42 @@ single_node_list_of_user(Config) ->
 
     [Conn1] = open_connections(Config, [{0, Username1}]),
     ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
     close_connections([Conn1]),
     ?awaitMatch(0, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
 
     [Conn2] = open_connections(Config, [{0, Username2}]),
     ?awaitMatch(1, count_connections_in(Config, Username2), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username2}] = connections_in(Config, Username2),
+    ?awaitMatch(
+       [#tracked_connection{username = Username2}],
+       connections_in(Config, Username2),
+       ?AWAIT_TIMEOUT),
 
     [Conn3] = open_connections(Config, [{0, Username1}]),
     ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
 
     [Conn4] = open_connections(Config, [{0, Username1}]),
     kill_connections([Conn4]),
     ?awaitMatch(1, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
-    [#tracked_connection{username = Username1}] = connections_in(Config, Username1),
+    ?awaitMatch(
+       [#tracked_connection{username = Username1}],
+       connections_in(Config, Username1),
+       ?AWAIT_TIMEOUT),
 
     [Conn5] = open_connections(Config, [{0, Username1}]),
     ?awaitMatch(2, count_connections_in(Config, Username1), ?AWAIT_TIMEOUT),
-    [Username1, Username1] =
-        lists:map(fun (#tracked_connection{username = U}) -> U end,
-                  connections_in(Config, Username1)),
+    ?awaitMatch(
+       [Username1, Username1],
+       lists:map(fun (#tracked_connection{username = U}) -> U end,
+                 connections_in(Config, Username1)),
+       ?AWAIT_TIMEOUT),
 
     close_connections([Conn2, Conn3, Conn5]),
     rabbit_ct_broker_helpers:delete_user(Config, Username2),

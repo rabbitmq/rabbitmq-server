@@ -185,8 +185,13 @@ init_per_group(Group, Config) ->
        end] ++
           rabbit_ct_broker_helpers:setup_steps() ++
           rabbit_ct_client_helpers:setup_steps()),
-    util:enable_plugin(Config2, rabbitmq_mqtt),
-    Config2.
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
 
 end_per_group(G, Config)
   when G =:= v4;
@@ -1257,7 +1262,6 @@ vhost_connection_limit(Config) ->
     ok = rabbit_ct_broker_helpers:clear_vhost_limit(Config, 0, <<"/">>).
 
 count_connections_per_vhost(Config)  ->
-    NodeConfig = rabbit_ct_broker_helpers:get_node_config(Config, 0),
     rabbit_ct_broker_helpers:rpc(
       Config, 0,
       rabbit_connection_tracking, count_local_tracked_items_in_vhost,
@@ -1282,6 +1286,7 @@ user_connection_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_user_limits(Config, DefaultUser, #{max_connections => 1}),
     {ok, C1} = connect_anonymous(Config, <<"client1">>),
     {ok, _} = emqtt:connect(C1),
+    ?awaitMatch(1, count_connections_per_vhost(Config), 30000),
     {ok, C2} = connect_anonymous(Config, <<"client2">>),
     ExpectedError = expected_connection_limit_error(Config),
     unlink(C2),

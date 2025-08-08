@@ -85,8 +85,13 @@ init_per_testcase(Testcase, Config) ->
       [fun merge_app_env/1] ++
       setup_steps() ++
                     rabbit_ct_client_helpers:setup_steps()),
-    util:enable_plugin(Config2, rabbitmq_mqtt),
-    Config2.
+    case Config2 of
+        _ when is_list(Config2) ->
+            util:enable_plugin(Config2, rabbitmq_mqtt),
+            Config2;
+        {skip, _} ->
+            Config2
+    end.
 
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:run_steps(Config,

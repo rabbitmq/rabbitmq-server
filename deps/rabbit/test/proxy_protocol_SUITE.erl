@@ -10,6 +10,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
 -compile(export_all).
 
 -define(TIMEOUT, 5000).
@@ -65,8 +67,10 @@ proxy_protocol_v1(Config) ->
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
+    ct:pal("Connection name: ~s", [ConnectionName]),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
+    wait_for_connection_close(Config),
     ok.
 
 proxy_protocol_v1_tls(Config) ->
@@ -80,8 +84,10 @@ proxy_protocol_v1_tls(Config) ->
     {ok, _Packet} = ssl:recv(SslSocket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
+    ct:pal("Connection name: ~s", [ConnectionName]),
     match = re:run(ConnectionName, <<"^192.168.1.1:80 -> 192.168.1.2:81$">>, [{capture, none}]),
     gen_tcp:close(Socket),
+    wait_for_connection_close(Config),
     ok.
 
 proxy_protocol_v2_local(Config) ->
@@ -97,13 +103,22 @@ proxy_protocol_v2_local(Config) ->
     {ok, _Packet} = gen_tcp:recv(Socket, 0, ?TIMEOUT),
     ConnectionName = rabbit_ct_broker_helpers:rpc(Config, 0,
         ?MODULE, connection_name, []),
+    ct:pal("Connection name: ~s", [ConnectionName]),
     match = re:run(ConnectionName, <<"^127.0.0.1:\\d+ -> 127.0.0.1:\\d+$">>, [{capture, none}]),
     gen_tcp:close(Socket),
+    wait_for_connection_close(Config),
     ok.
 
 connection_name() ->
-    Pids = pg_local:get_members(rabbit_connections),
-    Pid = lists:nth(1, Pids),
+    ?awaitMatch([_], pg_local:get_members(rabbit_connections), 30000),
+    [Pid] = pg_local:get_members(rabbit_connections),
     {dictionary, Dict} = process_info(Pid, dictionary),
     {process_name, {rabbit_reader, ConnectionName}} = lists:keyfind(process_name, 1, Dict),
     ConnectionName.
+
+wait_for_connection_close(Config) ->
+    ?awaitMatch(
+       [],
+       rabbit_ct_broker_helpers:rpc(
+         Config, 0, pg_local, get_members, [rabbit_connnections]),
+       30000).

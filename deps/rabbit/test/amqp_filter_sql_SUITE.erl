@@ -26,6 +26,7 @@
          flush/1,
          wait_for_credit/1,
          wait_for_accepts/1,
+         send_message/2,
          send_messages/3,
          detach_link_sync/1,
          end_session_sync/1,
@@ -98,10 +99,10 @@ multiple_sections(Config) ->
     To = rabbitmq_amqp_address:exchange(<<"some exchange">>, <<"routing key">>),
     ReplyTo = rabbitmq_amqp_address:queue(<<"some queue">>),
 
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:new(<<"t1">>, <<"m1">>)),
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_headers(
              #{priority => 200},
@@ -125,7 +126,7 @@ multiple_sections(Config) ->
                    <<"k3">> => true,
                    <<"k4">> => <<"hey👋"/utf8>>},
                  amqp10_msg:new(<<"t2">>, <<"m2">>))))),
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
@@ -222,13 +223,13 @@ filter_few_messages_from_many(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
 
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
              amqp10_msg:new(<<"t1">>, <<"first msg">>))),
     ok = send_messages(Sender, 5000, false),
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
@@ -278,7 +279,7 @@ filter_few_messages_from_many(Config) ->
 
     %% We previously set drain=true for Receiver1
     ok = assert_credit_exhausted(Receiver1, ?LINE),
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_properties(
              #{group_id => <<"my group ID">>},
@@ -328,7 +329,7 @@ sql_and_bloom_filter(Config) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, Address),
     ok = wait_for_credit(Sender),
 
-    ok = amqp10_client:send_msg(
+    ok = send_message(
            Sender,
            amqp10_msg:set_message_annotations(
              #{<<"x-stream-filter-value">> => <<"v1">>},
