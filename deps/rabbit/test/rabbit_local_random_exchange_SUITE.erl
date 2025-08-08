@@ -23,6 +23,8 @@ groups() ->
                                routed_to_one_local_queue_test,
                                no_route,
                                enable_local_random_exchange_config_test
+                               no_route,
+                               enable_local_random_exchange_config_test
                               ]}
     ].
 
@@ -202,7 +204,7 @@ enable_local_random_exchange_config_test(Config) ->
     
     %% Disable the config flag
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbit, enable_local_random_exchange, false]),
+                                 [rabbit, local_random_exchange_enabled, false]),
     
     %% Try to create exchange - should fail
     ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
@@ -210,7 +212,7 @@ enable_local_random_exchange_config_test(Config) ->
     
     %% Re-enable the config flag
     rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                 [rabbit, enable_local_random_exchange, true]),
+                                 [rabbit, local_random_exchange_enabled, true]),
     
     %% Now exchange creation should succeed
     declare_exchange(Config, E),
