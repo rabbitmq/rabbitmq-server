@@ -37,6 +37,7 @@
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -include("rabbit_stream_metrics.hrl").
+-include_lib("rabbitmq_stream/src/rabbit_stream_utils.hrl").
 
 start(_Type, _Args) ->
     rabbit_stream_metrics:init(),
@@ -47,7 +48,7 @@ start(_Type, _Args) ->
     rabbit_stream_sup:start_link().
 
 tls_host() ->
-    case application:get_env(rabbitmq_stream, advertised_tls_host,
+    case application:get_env(rabbitmq_stream, ?K_AD_TLS_HOST,
                              undefined)
     of
         undefined ->
@@ -57,7 +58,7 @@ tls_host() ->
     end.
 
 host() ->
-    case application:get_env(rabbitmq_stream, advertised_host, undefined)
+    case application:get_env(rabbitmq_stream, ?K_AD_HOST, undefined)
     of
         undefined ->
             hostname_from_node();
@@ -78,7 +79,7 @@ hostname_from_node() ->
     end.
 
 port() ->
-    case application:get_env(rabbitmq_stream, advertised_port, undefined)
+    case application:get_env(rabbitmq_stream, ?K_AD_PORT, undefined)
     of
         undefined ->
             port_from_listener();
@@ -102,7 +103,7 @@ port_from_listener() ->
     end.
 
 tls_port() ->
-    case application:get_env(rabbitmq_stream, advertised_tls_port,
+    case application:get_env(rabbitmq_stream, ?K_AD_TLS_PORT,
                              undefined)
     of
         undefined ->

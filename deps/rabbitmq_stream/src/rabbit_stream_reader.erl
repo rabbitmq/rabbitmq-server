@@ -1470,32 +1470,17 @@ handle_frame_pre_auth(Transport,
                                                      VirtualHost,
                                                      {socket, S},
                                                      #{}),
-            AdvertisedHost =
-                case TransportLayer of
-                    tcp ->
-                        rabbit_stream:host();
-                    ssl ->
-                        rabbit_stream:tls_host()
-                end,
-            AdvertisedPort =
-                case TransportLayer of
-                    tcp ->
-                        rabbit_data_coercion:to_binary(
-                            rabbit_stream:port());
-                    ssl ->
-                        rabbit_data_coercion:to_binary(
-                            rabbit_stream:tls_port())
-                end,
 
-            ConnectionProperties =
-                #{<<"advertised_host">> => AdvertisedHost,
-                  <<"advertised_port">> => AdvertisedPort},
+            AdHost = advertised_host(TransportLayer),
+            AdPort = rabbit_data_coercion:to_binary(advertised_port(TransportLayer)),
+            ConnProps = #{<<"advertised_host">> => AdHost,
+                          <<"advertised_port">> => AdPort},
 
             rabbit_log:debug("sending open response ok ~ts", [VirtualHost]),
             Frame =
                 rabbit_stream_core:frame({response, CorrelationId,
                                           {open, ?RESPONSE_CODE_OK,
-                                           ConnectionProperties}}),
+                                           ConnProps}}),
 
             send(Transport, S, Frame),
             %% FIXME check if vhost is alive (see rabbit_reader:is_vhost_alive/2)
@@ -2334,13 +2319,10 @@ handle_frame_post_auth(Transport,
                      Nodes0),
     NodeEndpoints =
         lists:foldr(fun(Node, Acc) ->
-                       PortFunction =
-                           case TransportLayer of
-                               tcp -> port;
-                               ssl -> tls_port
-                           end,
-                       Host = rpc:call(Node, rabbit_stream, host, []),
-                       Port = rpc:call(Node, rabbit_stream, PortFunction, []),
+                       HostFun = advertised_host_fun(TransportLayer),
+                       PortFun = advertised_port_fun(TransportLayer),
+                       Host = rpc:call(Node, rabbit_stream, HostFun, []),
+                       Port = rpc:call(Node, rabbit_stream, PortFun, []),
                        case {is_binary(Host), is_integer(Port)} of
                            {true, true} -> Acc#{Node => {Host, Port}};
                            _ ->
@@ -4074,3 +4056,21 @@ retry_sac_call(Call, N) ->
         R ->
             R
     end.
+
+advertised_host(Transport) ->
+    F = advertised_host_fun(Transport),
+    rabbit_stream:F().
+
+advertised_port(Transport) ->
+    F = advertised_port_fun(Transport),
+    rabbit_stream:F().
+
+advertised_host_fun(tcp) ->
+    host;
+advertised_host_fun(ssl) ->
+    tls_host.
+
+advertised_port_fun(tcp) ->
+    port;
+advertised_port_fun(ssl) ->
+    tls_port.
