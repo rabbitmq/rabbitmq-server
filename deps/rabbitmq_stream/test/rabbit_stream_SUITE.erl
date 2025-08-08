@@ -23,12 +23,14 @@
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
 -include("rabbit_stream_metrics.hrl").
+-include_lib("rabbitmq_stream/src/rabbit_stream_utils.hrl").
 
 -compile(nowarn_export_all).
 -compile(export_all).
 
 -import(rabbit_stream_core, [frame/1]).
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(rabbit_ct_helpers, [await_condition/1]).
 
 -define(WAIT, 5000).
 
@@ -69,7 +71,9 @@ groups() ->
        test_consumer_with_too_long_reference_errors,
        subscribe_unsubscribe_should_create_events,
        test_stream_test_utils,
-       sac_subscription_with_partition_index_conflict_should_return_error
+       sac_subscription_with_partition_index_conflict_should_return_error,
+       test_metadata_with_advertised_hints,
+       test_connection_properties_with_advertised_hints
       ]},
      %% Run `test_global_counters` on its own so the global metrics are
      %% initialised to 0 for each testcase
@@ -215,6 +219,17 @@ end_per_testcase(store_offset_requires_read_access = TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(unauthorized_vhost_access_should_close_with_delay = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+end_per_testcase(TestCase, Config)
+  when TestCase =:= test_metadata_with_advertised_hints orelse
+       TestCase =:= test_connection_properties_with_advertised_hints ->
+    lists:foreach(fun(K) ->
+                          ok = rpc(Config, 0,
+                                   application,
+                                   set_env,
+                                   [rabbitmq_stream, K, undefined])
+                  end, [?K_AD_HOST, ?K_AD_PORT,
+                        ?K_AD_TLS_HOST, ?K_AD_TLS_PORT]),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 end_per_testcase(TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase).
@@ -409,71 +424,61 @@ test_super_stream_duplicate_partitions(Config) ->
     ok.
 
 test_metadata(Config) ->
-    Stream = atom_to_binary(?FUNCTION_NAME, utf8),
-    Transport = gen_tcp,
-    Port = get_stream_port(Config),
-    FirstNode = get_node_name(Config, 0),
-    NodeInMaintenance = get_node_name(Config, 1),
-    {ok, S} =
-        Transport:connect("localhost", Port,
-                          [{active, false}, {mode, binary}]),
-    C0 = rabbit_stream_core:init(0),
-    C1 = test_peer_properties(Transport, S, C0),
-    C2 = test_authenticate(Transport, S, C1),
-    C3 = test_create_stream(Transport, S, Stream, C2),
-    GetStreamNodes =
-        fun() ->
-           MetadataFrame = request({metadata, [Stream]}),
-           ok = Transport:send(S, MetadataFrame),
-           {CmdMetadata, _} = receive_commands(Transport, S, C3),
-           {response, 1,
-            {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
-               CmdMetadata,
-           [Leader | Replicas]
-        end,
-    rabbit_ct_helpers:await_condition(fun() ->
-                                         length(GetStreamNodes()) == 3
-                                      end),
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 NodeInMaintenance,
-                                 rabbit_maintenance,
-                                 drain,
-                                 []),
+    Transports = [gen_tcp, ssl],
+    FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+    lists:foreach(
+      fun(Transport) ->
+              TransportBin = atom_to_binary(Transport, utf8),
+              Stream = <<FunctionName/binary, <<"_">>/binary, TransportBin/binary>>,
+              Port = get_port(Transport, Config),
+              Opts = get_opts(Transport),
+              FirstNode = get_node_name(Config, 0),
+              NodeInMaintenance = get_node_name(Config, 1),
+              {ok, S} = Transport:connect("localhost", Port, Opts),
+              C0 = rabbit_stream_core:init(0),
+              C1 = test_peer_properties(Transport, S, C0),
+              C2 = test_authenticate(Transport, S, C1),
+              C3 = test_create_stream(Transport, S, Stream, C2),
+              GetStreamNodes =
+              fun() ->
+                      MetadataFrame = request({metadata, [Stream]}),
+                      ok = Transport:send(S, MetadataFrame),
+                      {CmdMetadata, _} = receive_commands(Transport, S, C3),
+                      {response, 1,
+                       {metadata, _Nodes, #{Stream := {Leader = {_H, _P}, Replicas}}}} =
+                      CmdMetadata,
+                      [Leader | Replicas]
+              end,
 
-    IsBeingDrained =
-        fun() ->
-           rabbit_ct_broker_helpers:rpc(Config,
-                                        FirstNode,
-                                        rabbit_maintenance,
-                                        is_being_drained_consistent_read,
-                                        [NodeInMaintenance])
-        end,
-    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() end),
+              await_condition(fun() -> length(GetStreamNodes()) == 3 end),
 
-    rabbit_ct_helpers:await_condition(fun() ->
-                                         length(GetStreamNodes()) == 2
-                                      end),
+              rpc(Config, NodeInMaintenance, rabbit_maintenance, drain, []),
 
-    rabbit_ct_broker_helpers:rpc(Config,
-                                 NodeInMaintenance,
-                                 rabbit_maintenance,
-                                 revive,
-                                 []),
+              IsBeingDrained =
+              fun() ->
+                      rpc(Config, FirstNode,
+                          rabbit_maintenance, is_being_drained_consistent_read,
+                          [NodeInMaintenance])
+              end,
+              await_condition(fun() -> IsBeingDrained() end),
 
-    rabbit_ct_helpers:await_condition(fun() -> IsBeingDrained() =:= false
-                                      end),
+              await_condition(fun() -> length(GetStreamNodes()) == 2 end),
 
-    rabbit_ct_helpers:await_condition(fun() ->
-                                         length(GetStreamNodes()) == 3
-                                      end),
+              rpc(Config, NodeInMaintenance, rabbit_maintenance, revive, []),
 
-    DeleteStreamFrame = request({delete_stream, Stream}),
-    ok = Transport:send(S, DeleteStreamFrame),
-    {CmdDelete, C4} = receive_commands(Transport, S, C3),
-    ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
-                 CmdDelete),
-    _C5 = test_close(Transport, S, C4),
-    closed = wait_for_socket_close(Transport, S, 10),
+              await_condition(fun() -> IsBeingDrained() =:= false end),
+
+              await_condition(fun() -> length(GetStreamNodes()) == 3 end),
+
+              DeleteStreamFrame = request({delete_stream, Stream}),
+              ok = Transport:send(S, DeleteStreamFrame),
+              {CmdDelete, C4} = receive_commands(Transport, S, C3),
+              ?assertMatch({response, 1, {delete_stream, ?RESPONSE_CODE_OK}},
+                           CmdDelete),
+              _C5 = test_close(Transport, S, C4),
+              closed = wait_for_socket_close(Transport, S, 10)
+      end, Transports),
+
     ok.
 
 test_gc_consumers(Config) ->
@@ -1100,6 +1105,94 @@ sac_subscription_with_partition_index_conflict_should_return_error(Config) ->
     {ok, _} = stream_test_utils:close(S, C5),
     ok.
 
+test_metadata_with_advertised_hints(Config) ->
+    Transports = [gen_tcp, ssl],
+    lists:foreach(
+      fun(Transport) ->
+              FunctionName = atom_to_binary(?FUNCTION_NAME, utf8),
+              TransportBin = atom_to_binary(Transport, utf8),
+              Stream = <<FunctionName/binary, <<"_">>/binary, TransportBin/binary>>,
+              Port = get_port(Transport, Config),
+              Opts = get_opts(Transport),
+              {ok, S} = Transport:connect("localhost", Port, Opts),
+              C0 = rabbit_stream_core:init(0),
+              C1 = test_peer_properties(Transport, S, C0),
+              C2 = test_authenticate(Transport, S, C1),
+              C3 = test_create_stream(Transport, S, Stream, C2),
+              GetStreamNodes =
+              fun(Conn0) ->
+                      MetadataFrame = request({metadata, [Stream]}),
+                      ok = Transport:send(S, MetadataFrame),
+                      {Cmd, Conn1} = receive_commands(Transport, S, Conn0),
+                      {response, 1,
+                       {metadata, _Nodes,
+                        #{Stream := {Node = {_H, _P}, _Replicas}}}} = Cmd,
+                      {Conn1, Node}
+              end,
+
+              {C4, N1} = GetStreamNodes(C3),
+              ?assertEqual({<<"localhost">>, Port}, N1),
+              AdHost = rand:bytes(20),
+              AdPort = rand:uniform(65535),
+              {KH, KP} = case Transport of
+                             gen_tcp ->
+                                 {?K_AD_HOST, ?K_AD_PORT};
+                             ssl ->
+                                 {?K_AD_TLS_HOST, ?K_AD_TLS_PORT}
+                         end,
+
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, AdHost]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, AdPort]),
+              {C5, N2} = GetStreamNodes(C4),
+              ?assertEqual({AdHost, AdPort}, N2),
+
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, undefined]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, undefined]),
+
+              _ = test_close(Transport, S, C5),
+              closed = wait_for_socket_close(Transport, S, 10)
+      end, Transports),
+    ok.
+
+test_connection_properties_with_advertised_hints(Config) ->
+    TestFun =
+        fun(Transport, ExpectedHost, ExpectedPort) ->
+                Port = get_port(Transport, Config),
+                Opts = get_opts(Transport),
+                {ok, S} = Transport:connect("localhost", Port, Opts),
+                C0 = rabbit_stream_core:init(0),
+                C1 = test_peer_properties(Transport, S, C0),
+                {CP, C2} = test_authenticate_with_conn_props(Transport, S, C1),
+                ExpectedPortBin = integer_to_binary(ExpectedPort),
+                ?assertMatch(#{<<"advertised_host">> := ExpectedHost,
+                               <<"advertised_port">> := ExpectedPortBin},
+                             CP),
+
+                _ = test_close(Transport, S, C2),
+                closed = wait_for_socket_close(Transport, S, 10)
+        end,
+
+    TestFun(gen_tcp, <<"localhost">>, get_port(gen_tcp, Config)),
+    TestFun(ssl, <<"localhost">>, get_port(ssl, Config)),
+
+    lists:foreach(
+      fun(Transport) ->
+              AdHost = rand:bytes(20),
+              AdPort = rand:uniform(65535),
+              {KH, KP} = case Transport of
+                             gen_tcp ->
+                                 {?K_AD_HOST, ?K_AD_PORT};
+                             ssl ->
+                                 {?K_AD_TLS_HOST, ?K_AD_TLS_PORT}
+                         end,
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, AdHost]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, AdPort]),
+              TestFun(Transport, AdHost, AdPort),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KH, undefined]),
+              rpc(Config, 0, application, set_env, [rabbitmq_stream, KP, undefined])
+      end, [gen_tcp, ssl]),
+    
+    ok.
 
 filtered_events(Config, EventType) ->
     Events = rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1318,6 +1411,11 @@ test_authenticate(Transport, S, C0) ->
     tune(Transport, S,
          test_plain_sasl_authenticate(Transport, S, sasl_handshake(Transport, S, C0), <<"guest">>)).
 
+test_authenticate_with_conn_props(Transport, S, C0) ->
+    tune_with_conn_props(
+      Transport, S,
+      test_plain_sasl_authenticate(Transport, S, sasl_handshake(Transport, S, C0), <<"guest">>)).
+
 test_authenticate(Transport, S, C0, Username) ->
     test_authenticate(Transport, S, C0, Username, Username).
 
@@ -1370,6 +1468,10 @@ sasl_authenticate(Transport, S, C1, AuthMethod, AuthBody) ->
 tune(Transport, S, C2) ->
     {{response, _, {open, ?RESPONSE_CODE_OK, _}}, C3} = do_tune(Transport, S, C2),
     C3.
+
+tune_with_conn_props(Transport, S, C2) ->
+    {{response, _, {open, ?RESPONSE_CODE_OK, CP}}, C3} = do_tune(Transport, S, C2),
+    {CP, C3}.
 
 do_tune(Transport, S, C2) ->
     {Tune, C3} = receive_commands(Transport, S, C2),

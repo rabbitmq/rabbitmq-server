@@ -14,3 +14,7 @@
 %%
 
 -define(IS_INVALID_REF(Ref), is_binary(Ref) andalso byte_size(Ref) > 255).
+-define(K_AD_HOST, advertised_host).
+-define(K_AD_PORT, advertised_port).
+-define(K_AD_TLS_HOST, advertised_tls_host).
+-define(K_AD_TLS_PORT, advertised_tls_port).
