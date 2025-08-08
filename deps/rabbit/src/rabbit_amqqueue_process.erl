@@ -24,7 +24,7 @@
 -export([start_link/2]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2,
          handle_info/2, handle_pre_hibernate/1, prioritise_call/4,
-         prioritise_cast/3, prioritise_info/3, format_message_queue/2]).
+         prioritise_cast/3, prioritise_info/3, format_state/1, format_message_queue/2]).
 -export([format/1]).
 -export([is_policy_applicable/2]).
 
@@ -298,7 +298,7 @@ init_with_backing_queue_state(Q, BQ, BQS,
     notify_decorators(startup, State3),
     State3.
 
-terminate(shutdown = R,      State = #q{backing_queue = BQ, q = Q0}) ->
+terminate(shutdown = R, State = #q{backing_queue = BQ, q = Q0}) ->
     rabbit_core_metrics:queue_deleted(qname(State)),
     terminate_shutdown(
     fun (BQS) ->
@@ -1746,6 +1746,9 @@ handle_pre_hibernate(State = #q{backing_queue = BQ,
                                            #q.stats_timer),
     {hibernate, stop_rate_timer(State1)}.
 
+format_state(#q{}=S) ->
+    maybe_format_backing_queue_state(S).
+
 format_message_queue(Opt, MQ) -> rabbit_misc:format_message_queue(Opt, MQ).
 
 %% TODO: this can be removed after 3.13
@@ -1787,3 +1790,13 @@ queue_created_infos(State) ->
     %% On the events API, we use long names for queue types
     Keys = ?CREATION_EVENT_KEYS -- [type],
     infos(Keys, State) ++ [{type, rabbit_classic_queue}].
+
+maybe_format_backing_queue_state(S = #q{backing_queue = BQ,
+                                        backing_queue_state = BQS0}) ->
+    case erlang:function_exported(BQ, format_state, 1) of
+        true ->
+            BQS1 = BQ:format_state(BQS0),
+            S#q{backing_queue_state = BQS1};
+        _ ->
+            S#q{backing_queue_state = backing_queue_state_truncated}
+    end.
