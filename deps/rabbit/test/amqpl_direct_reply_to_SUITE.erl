@@ -338,10 +338,12 @@ rpc(RequesterNode, ResponderNode, Config) ->
 
     %% Let's assume the RPC server sends multiple replies for a single request.
     %% (This is a bit unusual but should work.)
+    %% Setting the reply address in CC should work.
     amqp_channel:cast(
       ResponderCh,
-      #'basic.publish'{routing_key = ReplyTo},
-      #amqp_msg{props = #'P_basic'{correlation_id = CorrelationId},
+      #'basic.publish'{routing_key = <<"nowhere">>},
+      #amqp_msg{props = #'P_basic'{headers = [{<<"CC">>, array, [{longstr, ReplyTo}]}],
+                                   correlation_id = CorrelationId},
                 payload = <<"reply 2">>}),
 
     %% Receive the frst reply.
