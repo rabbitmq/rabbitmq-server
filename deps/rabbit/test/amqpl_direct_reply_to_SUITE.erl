@@ -372,6 +372,9 @@ rpc(RequesterNode, ResponderNode, Config) ->
       #'basic.publish'{routing_key = ReplyTo},
       #amqp_msg{props = #'P_basic'{correlation_id = CorrelationId},
                 payload = <<"reply 3">>}),
+    %% We expect to receive a publisher confirm.
+    receive #'basic.ack'{} -> ok
+    end,
 
     receive {#'basic.deliver'{consumer_tag = CTag},
              #amqp_msg{payload = P3,
