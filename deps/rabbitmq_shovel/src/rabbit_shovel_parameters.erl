@@ -73,7 +73,7 @@ notify_clear(VHost, <<"shovel">>, Name, _Username) ->
 %%----------------------------------------------------------------------------
 
 is_internal(Def) ->
-    pget(<<"internal">>, Def, false).
+    pget(internal, Def, pget(<<"internal">>, Def, false)).
 
 internal_owner(Def) ->
     case pget(<<"internal_owner">>, Def, undefined) of
