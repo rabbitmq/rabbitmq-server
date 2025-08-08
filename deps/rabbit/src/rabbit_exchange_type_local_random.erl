@@ -58,7 +58,8 @@ info(_X) -> [].
 info(_X, _) -> [].
 serialise_events() -> false.
 validate(_X) ->
-    case rabbit_feature_flags:is_enabled(?MODULE) of
+    case rabbit_feature_flags:is_enabled(?MODULE) andalso
+         rabbit_misc:get_env(rabbit, enable_local_random_exchange, true) of
         true ->
             case application:get_env(rabbit, local_random_exchange_enabled, true) of
                 true ->
