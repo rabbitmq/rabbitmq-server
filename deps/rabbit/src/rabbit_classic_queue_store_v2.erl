@@ -46,7 +46,7 @@
 
 -export([init/1, terminate/1, info/1,
          write/4, sync/1, read/3, read_many/2, check_msg_on_disk/3,
-         remove/2, delete_segments/2]).
+         remove/2, delete_segments/2, format_state/1]).
 
 -define(SEGMENT_EXTENSION, ".qs").
 
@@ -572,3 +572,8 @@ check_crc32() ->
 segment_file(Segment, #qs{dir = Dir}) ->
     N = integer_to_binary(Segment),
     <<Dir/binary, N/binary, ?SEGMENT_EXTENSION>>.
+
+format_state(#qs{write_buffer = WriteBuffer,
+                 cache = Cache} = S) ->
+    S#qs{write_buffer = maps:keys(WriteBuffer),
+         cache = maps:keys(Cache)}.

@@ -30,6 +30,10 @@
 %% Shared with rabbit_classic_queue_store_v2.
 -export([queue_dir/2]).
 
+%% Used to format the state and summarize large amounts of data in
+%% the state.
+-export([format_state/1]).
+
 %% Internal. Used by tests.
 -export([segment_file/2]).
 
@@ -1285,3 +1289,15 @@ write_file_and_ensure_dir(Name, IOData) ->
             end;
          Err -> Err
     end.
+
+format_state(#qi{write_buffer = WriteBuffer,
+                 cache = Cache,
+                 confirms = Confirms} = S) ->
+    ConfirmsSize = sets:size(Confirms),
+    S#qi{write_buffer = maps:keys(WriteBuffer),
+         cache = maps:keys(Cache),
+         confirms = format_state_element(confirms, ConfirmsSize)}.
+
+format_state_element(Element, Size) when is_atom(Element), is_integer(Size) ->
+    rabbit_data_coercion:to_utf8_binary(
+        io_lib:format("~tp (~b elements) (truncated)", [Element, Size])).
