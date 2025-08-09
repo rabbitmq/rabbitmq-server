@@ -9,7 +9,7 @@
   <url>https://www.rabbitmq.com</url>
   <properties>
     <junit.jupiter.version>5.13.4</junit.jupiter.version>
-    <assertj.version>3.27.3</assertj.version>
+    <assertj.version>3.27.4</assertj.version>
     <qpid-jms-client.version>2.7.0</qpid-jms-client.version>
     <amqp-client.version>[0.6.0-SNAPSHOT,)</amqp-client.version>
     <logback.version>1.5.18</logback.version>
