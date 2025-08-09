@@ -12,16 +12,22 @@ describe('Once user logs in with its own token', function () {
   let homePage
   let fakePortal
   let captureScreen
+  let username
+  let password
+
   this.timeout(17000)
 
   before(async function () {
     driver = buildDriver()
+    username = process.env.MGT_CLIENT_ID_FOR_IDP_INITIATED || 'rabbit_idp_user'
+    password = process.env.MGT_CLIENT_SECRET_FOR_IDP_INITIATED || 'rabbit_idp_user'
+    
     fakePortal = new FakePortalPage(driver)
     homePage = new SSOHomePage(driver)
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
-    await fakePortal.goToHome()
+    await fakePortal.goToHome(username, password)
     if (!await fakePortal.isLoaded()) {
       throw new Error('Failed to load fakePortal')
     }

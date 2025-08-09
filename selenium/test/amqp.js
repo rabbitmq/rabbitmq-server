@@ -41,6 +41,7 @@ function getConnectionOptions() {
 }
 module.exports = {  
   getAmqpConnectionOptions: () => { return connectionOptions },
+  setAmqpConnectionOptions: (options) => { connectionOptions = options },
   getAmqpUrl: () => {
     return connectionOptions.scheme + '://' +
         connectionOptions.username + ":" + connectionOptions.password + "@" +

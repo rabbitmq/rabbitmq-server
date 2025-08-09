@@ -10,14 +10,19 @@ describe('When a logged in user', function () {
   let overview
   let fakePortal
   let captureScreen
+  let username
+  let password
 
   before(async function () {
     driver = buildDriver()
+    username = process.env.MGT_CLIENT_ID_FOR_IDP_INITIATED || 'rabbit_idp_user'
+    password = process.env.MGT_CLIENT_SECRET_FOR_IDP_INITIATED || 'rabbit_idp_user'
+    
     fakePortal = new FakePortalPage(driver)
     overview = new OverviewPage(driver)
     captureScreen = captureScreensFor(driver, __filename)
 
-    await fakePortal.goToHome()
+    await fakePortal.goToHome(username, password)
     if (!await fakePortal.isLoaded()) {
       throw new Error('Failed to load fakePortal')
     }

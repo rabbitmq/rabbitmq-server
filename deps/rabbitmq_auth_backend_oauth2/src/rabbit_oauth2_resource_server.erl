@@ -8,6 +8,7 @@
 -module(rabbit_oauth2_resource_server).
 
 -include("oauth2.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
     resolve_resource_server_from_audience/1,
@@ -166,11 +167,16 @@ find_audience(Audience, ResourceIdList) when is_binary(Audience) ->
     AudList = binary:split(Audience, <<" ">>, [global, trim_all]),
     find_audience(AudList, ResourceIdList);
 find_audience(AudList, ResourceIdList) when is_list(AudList) ->
-    case intersection(AudList, ResourceIdList) of
+    case intersection(normalize_to_binary_list(AudList), ResourceIdList) of
         [One] -> {ok, One};
         [_One|_Tail] -> {error, aud_matched_many_resource_servers_only_one_allowed};
         [] -> {error, no_matching_aud_found}
     end.
+
+-spec normalize_to_binary_list(binary() | string() | [binary()]) -> [binary()].
+normalize_to_binary_list([H | _] = List) when is_binary(H) -> List;
+normalize_to_binary_list(Input) when is_list(Input) ->
+    [unicode:characters_to_binary(Part) || Part <- string:tokens(Input, " ")].
 
 -spec translate_error_if_any(
     {ok, resource_server()} |
