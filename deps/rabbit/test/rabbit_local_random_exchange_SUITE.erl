@@ -21,7 +21,8 @@ groups() ->
     [
      {non_parallel_tests, [], [
                                routed_to_one_local_queue_test,
-                               no_route
+                               no_route,
+                               enable_local_random_exchange_config_test
                               ]}
     ].
 
@@ -195,6 +196,30 @@ make_exchange_name(Config, Suffix) ->
 make_queue_name(Config, Node) ->
     B = rabbit_ct_helpers:get_config(Config, test_resource_name),
     erlang:list_to_binary("q-" ++ B ++ "-" ++ integer_to_list(Node)).
+
+enable_local_random_exchange_config_test(Config) ->
+    E = make_exchange_name(Config, "config-test"),
+    
+    %% Disable the config flag
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, enable_local_random_exchange, false]),
+    
+    %% Try to create exchange - should fail
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                declare_exchange(Config, E)),
+    
+    %% Re-enable the config flag
+    rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                 [rabbit, enable_local_random_exchange, true]),
+    
+    %% Now exchange creation should succeed
+    declare_exchange(Config, E),
+    
+    %% Clean up
+    run_on_node(Config, 0,
+                fun(Chan) ->
+                        amqp_channel:call(Chan, #'exchange.delete'{exchange = E})
+                end).
 
 flush(T) ->
     receive X ->
