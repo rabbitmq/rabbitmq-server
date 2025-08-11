@@ -2606,7 +2606,10 @@ fun(Conf) ->
     end
 end}.
 
-
+%% Enable or disable local random exchange
+{mapping, "exchange_types.local_random.enabled", "rabbit.local_random_exchange_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
 
 %%
 %% Backing queue version
