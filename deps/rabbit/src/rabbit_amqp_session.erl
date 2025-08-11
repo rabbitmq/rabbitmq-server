@@ -34,7 +34,7 @@
 
 -rabbit_deprecated_feature(
    {amqp_filter_set_bug,
-    #{deprecation_phase => denied_by_default,
+    #{deprecation_phase => permitted_by_default,
       doc_url => "https://docs.oasis-open.org/amqp/core/v1.0/os/amqp-core-messaging-v1.0-os.html#type-filter-set"
      }}).
 
