@@ -1000,12 +1000,12 @@ query_supported_feature_flags() ->
       AllFeatureFlags :: feature_flags().
 %% @private
 
-prepare_queried_feature_flags([{App, _Module, Attributes} | Rest],
+prepare_queried_feature_flags([{App, Module, Attributes} | Rest],
                               AllFeatureFlags) ->
     ?LOG_DEBUG(
       "Feature flags: application `~ts` has ~b feature flags (including "
-      "deprecated features)",
-      [App, length(Attributes)],
+      "deprecated features) in module `~ts`",
+      [App, length(Attributes), Module],
       #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     AllFeatureFlags1 = lists:foldl(
                          fun({FeatureName, FeatureProps}, AllFF) ->
