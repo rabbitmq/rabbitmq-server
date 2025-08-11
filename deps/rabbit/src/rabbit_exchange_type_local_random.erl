@@ -60,11 +60,19 @@ serialise_events() -> false.
 validate(_X) ->
     case rabbit_feature_flags:is_enabled(?MODULE) of
         true ->
-            ok;
+            case application:get_env(rabbit, local_random_exchange_enabled, true) of
+                true ->
+                    ok;
+                false ->
+                    rabbit_misc:protocol_error(
+                      precondition_failed,
+                      "x-local-random exchange is disabled by configuration", [],
+                      'exchange.declare')
+            end;
         false ->
-            rabbit_misc:amqp_error(
+            rabbit_misc:protocol_error(
               precondition_failed,
-              "x-local-random exchange feature not available", [],
+              "x-local-random exchange feature flag is disabled", [],
               'exchange.declare')
     end.
 
