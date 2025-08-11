@@ -14,6 +14,7 @@
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
 -export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
 -export([is_enabled/1, is_enabled_on_node/2]).
+-export([which_plugin/1]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -285,6 +286,56 @@ is_loadable(App) ->
 running_plugins() ->
     ActivePlugins = active(),
     {ok, [{App, Vsn} || {App, _ , Vsn} <- rabbit_misc:which_applications(), lists:member(App, ActivePlugins)]}.
+
+-spec which_plugin(Module) -> Ret when
+      Module :: module(),
+      Ret :: {ok, PluginName} | {error, Reason},
+      PluginName :: atom(),
+      Reason :: no_provider.
+%% @doc Returns the name of the plugin that provides the given module.
+%%
+%% If no plugin provides the module, `{error, no_provider}' is returned.
+%%
+%% The returned plugin might not be enabled, thus using the given module might
+%% not work until the plugin is enabled.
+%%
+%% @returns An `{ok, PluginName}' tuple with the name of the plugin providing
+%% the module, or `{error, no_provider}'.
+
+which_plugin(Module) ->
+    Plugins = list(),
+    which_plugin(Plugins, Module).
+
+which_plugin([#plugin{name = Name} | Rest], Module) ->
+    %% Get the list of modules belonging to this plugin.
+    ModulesKey = case application:get_key(Name, modules) of
+                     {ok, _} = Ret ->
+                         Ret;
+                     undefined ->
+                         %% The plugin application might not be loaded. Load
+                         %% it temporarily and try again.
+                         case application:load(Name) of
+                             ok ->
+                                 Ret = application:get_key(Name, modules),
+                                 _ = application:unload(Name),
+                                 Ret;
+                             {error, _Reason} ->
+                                 undefined
+                         end
+                 end,
+    case ModulesKey of
+        {ok, Modules} ->
+            case lists:member(Module, Modules) of
+                true ->
+                    {ok, Name};
+                false ->
+                    which_plugin(Rest, Module)
+            end;
+        undefined ->
+            which_plugin(Rest, Module)
+    end;
+which_plugin([], _Module) ->
+    {error, no_provider}.
 
 %%----------------------------------------------------------------------------
 
