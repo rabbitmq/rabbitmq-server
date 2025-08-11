@@ -8,7 +8,7 @@
 -module(rabbit_plugins).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3, running_plugins/0]).
+-export([setup/0, active/0, read_enabled/1, list/0, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
@@ -130,7 +130,7 @@ setup() ->
 -spec active() -> [plugin_name()].
 
 active() ->
-    InstalledPlugins = plugin_names(list(plugins_dir())),
+    InstalledPlugins = plugin_names(list()),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -156,6 +156,13 @@ is_enabled_on_node(Name, Node) ->
         error:{erpc, _} -> false;
         _Class:_Reason:_Stacktrace -> false
     end.
+
+-spec list() -> [#plugin{}].
+%% @doc Get the list of plugins from the configured plugin path.
+
+list() ->
+    PluginsPath = plugins_dir(),
+    list(PluginsPath).
 
 %% @doc Get the list of plugins which are ready to be enabled.
 
@@ -228,7 +235,7 @@ strictly_plugins(Plugins, AllPlugins) ->
 -spec strictly_plugins([plugin_name()]) -> [plugin_name()].
 
 strictly_plugins(Plugins) ->
-    AllPlugins = list(plugins_dir()),
+    AllPlugins = list(),
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
@@ -283,7 +290,7 @@ running_plugins() ->
 
 prepare_plugins(Enabled) ->
     ExpandDir = plugins_expand_dir(),
-    AllPlugins = list(plugins_dir()),
+    AllPlugins = list(),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
