@@ -234,6 +234,37 @@ default_permissions.write = .*",
         {default_user_tags,[administrator]},
         {default_permissions,[<<".*">>,<<".*">>,<<".*">>]}]}],
   []},
+
+{default_user_generated_password_case1,
+ "default_user = guest
+  # contains a generated value with a colon, which Cuttlefish versions before 3.5.0
+  # were parsed as tagged values even though the user intent was different
+  default_pass = 'a%%b12:12323'",
+ [{rabbit, [
+     {default_user, <<"guest">>},
+     {default_pass, <<"a%%b12:12323">>}
+   ]}],
+ []},
+
+{default_user_generated_password_case2,
+ "default_user = guest
+  default_pass = 'K9#mL2vX@8nQ4wR7$pE6'",
+ [{rabbit, [
+     {default_user, <<"guest">>},
+     {default_pass, <<"K9#mL2vX@8nQ4wR7$pE6">>}
+   ]}],
+ []},
+
+{default_user_encrypted_password,
+ "default_user = guest
+  # contains a tagged value
+  default_pass = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+ [{rabbit, [
+      {default_user, <<"guest">>},
+      {default_pass, {encrypted, <<"GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR">>}}
+    ]}],
+ []},
+
  {anonymous_login_user,
   "anonymous_login_user = none",
   [{rabbit,
@@ -572,6 +603,22 @@ tcp_listen_options.exit_on_close = false",
              {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
              {password,<<"t0p$3kRe7">>}]}]}],
   []},
+
+ {ssl_options_encrypted_password,
+  "listeners.ssl.1 = 5671
+   ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
+   ssl_options.certfile   = test/config_schema_SUITE_data/certs/cert.pem
+   ssl_options.keyfile    = test/config_schema_SUITE_data/certs/key.pem
+   ssl_options.password   = encrypted:GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR",
+  [{rabbit,
+       [{ssl_listeners,[5671]},
+        {ssl_options,
+            [{cacertfile,"test/config_schema_SUITE_data/certs/cacert.pem"},
+             {certfile,"test/config_schema_SUITE_data/certs/cert.pem"},
+             {keyfile,"test/config_schema_SUITE_data/certs/key.pem"},
+             {password, {encrypted, <<"GhC4J5lh2DUkbdyKO0aMI8aYJ54mwe4eEWzou4yRFAHMF82IbD6cRiYAiBa8UIzR">>}}]}]}],
+  []},
+
  {ssl_options_tls_ver_old,
   "listeners.ssl.1 = 5671
    ssl_options.cacertfile = test/config_schema_SUITE_data/certs/cacert.pem
