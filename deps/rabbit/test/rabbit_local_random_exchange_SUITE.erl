@@ -23,8 +23,6 @@ groups() ->
                                routed_to_one_local_queue_test,
                                no_route,
                                enable_local_random_exchange_config_test
-                               no_route,
-                               enable_local_random_exchange_config_test
                               ]}
     ].
 
