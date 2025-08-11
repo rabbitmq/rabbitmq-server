@@ -22,7 +22,7 @@ groups() ->
      {non_parallel_tests, [], [
                                routed_to_one_local_queue_test,
                                no_route,
-                               enable_local_random_exchange_config_test
+                               disable_local_random_exchange_config_test
                               ]}
     ].
 
@@ -197,7 +197,7 @@ make_queue_name(Config, Node) ->
     B = rabbit_ct_helpers:get_config(Config, test_resource_name),
     erlang:list_to_binary("q-" ++ B ++ "-" ++ integer_to_list(Node)).
 
-enable_local_random_exchange_config_test(Config) ->
+disable_local_random_exchange_config_test(Config) ->
     E = make_exchange_name(Config, "config-test"),
     
     %% Disable the config flag
