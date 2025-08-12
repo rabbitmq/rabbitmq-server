@@ -155,8 +155,11 @@ direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
     % Build URI for signing
     Host = endpoint_host(Region, Service),
     URI = create_uri(Host, Path),
+    BodyHash = proplists:get_value(payload_hash, Options),
     % Sign headers directly (no gen_server call)
-    SignedHeaders = sign_headers_with_context(CredContext, Method, URI, Headers, Body),
+    SignedHeaders = sign_headers_with_context(
+      CredContext, Method, URI, Headers, Body, BodyHash
+    ),
     % Make Gun request directly
     direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
 
@@ -852,9 +855,10 @@ create_direct_connection(State, Service, Options) ->
     Method :: method(),
     URI :: string(),
     Headers :: headers(),
-    Body :: body()
+    Body :: body(),
+    BodyHash :: iodata()
 ) -> headers().
-sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
+sign_headers_with_context(CredContext, Method, URI, Headers, Body, BodyHash) ->
     #{
         access_key := AccessKey,
         secret_access_key := SecretKey,
@@ -862,17 +866,20 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
         region := Region,
         service := Service
     } = CredContext,
-    rabbitmq_aws_sign:headers(#request{
-        access_key = AccessKey,
-        secret_access_key = SecretKey,
-        security_token = SecurityToken,
-        region = Region,
-        service = Service,
-        method = Method,
-        uri = URI,
-        headers = Headers,
-        body = Body
-    }).
+    rabbitmq_aws_sign:headers(
+        #request{
+            access_key = AccessKey,
+            secret_access_key = SecretKey,
+            security_token = SecurityToken,
+            region = Region,
+            service = Service,
+            method = Method,
+            uri = URI,
+            headers = Headers,
+            body = Body
+        },
+        BodyHash
+    ).
 
 %% Direct Gun request (extracted from existing gun_request function)
 -spec direct_gun_request(

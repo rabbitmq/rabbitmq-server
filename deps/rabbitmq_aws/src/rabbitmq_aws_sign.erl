@@ -8,7 +8,7 @@
 -module(rabbitmq_aws_sign).
 
 %% API
--export([headers/1, request_hash/5]).
+-export([headers/1, headers/2, request_hash/5]).
 
 %% Export all for unit tests
 -ifdef(TEST).
@@ -24,8 +24,12 @@
 %% @doc Create the signed request headers
 %% end
 headers(Request) ->
+    headers(Request, undefined).
+
+headers(Request, undefined) ->
+    headers(Request, sha256(Request#request.body));
+headers(Request, PayloadHash) ->
     RequestTimestamp = local_time(),
-    PayloadHash = sha256(Request#request.body),
     URI = rabbitmq_aws_urilib:parse(Request#request.uri),
     {_, Host, _} = URI#uri.authority,
     BodyLength = iolist_size(Request#request.body),
