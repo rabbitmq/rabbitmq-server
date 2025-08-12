@@ -10,6 +10,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+-export([ensure_auth_backends_are_enabled/0]).
 -export([check_user_pass_login/2, check_user_login/2, check_user_login/3, check_user_loopback/2,
          check_vhost_access/4, check_resource_access/4, check_topic_access/4,
          check_user_id/2]).
@@ -17,6 +18,141 @@
 -export([permission_cache_can_expire/1, update_state/2, expiry_timestamp/1]).
 
 %%----------------------------------------------------------------------------
+
+-spec ensure_auth_backends_are_enabled() -> Ret when
+      Ret :: ok | {error, Reason},
+      Reason :: string().
+
+ensure_auth_backends_are_enabled() ->
+    {ok, AuthBackends} = application:get_env(rabbit, auth_backends),
+    ValidAuthBackends = filter_valid_auth_backend_configuration(
+                          AuthBackends, []),
+    case ValidAuthBackends of
+        AuthBackends ->
+            ok;
+        [_ | _] ->
+            %% Some auth backend modules were filtered out because their
+            %% corresponding plugin is either unavailable or disabled. We
+            %% update the application environment variable so that
+            %% authentication and authorization do not try to use them.
+            ?LOG_WARNING(
+               "Some configured backends were dropped because their "
+               "corresponding plugins are disabled. Please look at the "
+               "info messages above to learn which plugin(s) should be "
+               "enabled. Here is the list of auth backends kept after "
+               "filering:~n~p", [ValidAuthBackends]),
+            ok = application:set_env(rabbit, auth_backends, ValidAuthBackends),
+            ok;
+        [] ->
+            %% None of the auth backend modules are usable. Log an error and
+            %% abort the boot of RabbitMQ.
+            ?LOG_ERROR(
+               "None of the configured auth backends are usable because "
+               "their corresponding plugins were not enabled. Please look "
+               "at the info messages above to learn which plugin(s) should "
+               "be enabled."),
+            {error,
+             "Authentication/authorization backends require plugins to be "
+             "enabled; see logs for details"}
+    end.
+
+filter_valid_auth_backend_configuration(
+  [Mod | Rest], ValidAuthBackends)
+  when is_atom(Mod) ->
+    case is_auth_backend_module_enabled(Mod) of
+        true ->
+            ValidAuthBackends1 = [Mod | ValidAuthBackends],
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends1);
+        false ->
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends)
+    end;
+filter_valid_auth_backend_configuration(
+  [{ModN, ModZ} = Mod | Rest], ValidAuthBackends)
+  when is_atom(ModN) andalso is_atom(ModZ) ->
+    %% Both auth backend modules must be usable to keep the entire pair.
+    IsModNEnabled = is_auth_backend_module_enabled(ModN),
+    IsModZEnabled = is_auth_backend_module_enabled(ModZ),
+    case IsModNEnabled andalso IsModZEnabled of
+        true ->
+            ValidAuthBackends1 = [Mod | ValidAuthBackends],
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends1);
+        false ->
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends)
+    end;
+filter_valid_auth_backend_configuration(
+  [{ModN, ModZs} | Rest], ValidAuthBackends)
+  when is_atom(ModN) andalso is_list(ModZs) ->
+    %% The authentication backend module and at least on of the authorization
+    %% backend module must be usable to keep the entire pair.
+    %%
+    %% The list of authorization backend modules may be shorter than the
+    %% configured one after the filtering.
+    IsModNEnabled = is_auth_backend_module_enabled(ModN),
+    EnabledModZs = lists:filter(fun is_auth_backend_module_enabled/1, ModZs),
+    case IsModNEnabled andalso EnabledModZs =/= [] of
+        true ->
+            Mod1 = {ModN, EnabledModZs},
+            ValidAuthBackends1 = [Mod1 | ValidAuthBackends],
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends1);
+        false ->
+            filter_valid_auth_backend_configuration(Rest, ValidAuthBackends)
+    end;
+filter_valid_auth_backend_configuration([], ValidAuthBackends) ->
+    lists:reverse(ValidAuthBackends).
+
+is_auth_backend_module_enabled(Mod) when is_atom(Mod) ->
+    %% We check if the module is provided by the core of RabbitMQ or a plugin,
+    %% and if that plugin is enabled.
+    {ok, Modules} = application:get_key(rabbit, modules),
+    case lists:member(Mod, Modules) of
+        true ->
+            true;
+        false ->
+            %% The module is not provided by RabbitMQ core. Let's query
+            %% plugins then.
+            case rabbit_plugins:which_plugin(Mod) of
+                {ok, PluginName} ->
+                    %% FIXME: The definition of an "enabled plugin" in
+                    %% `rabbit_plugins' varies from funtion to function.
+                    %% Sometimes, it means the "rabbitmq-plugin enable
+                    %% <plugin>" was executed, sometimes it means the plugin
+                    %% is running.
+                    %%
+                    %% This function is a boot step and is executed before
+                    %% plugin are started. Therefore, we can't rely on
+                    %% `rabbit_plugins:is_enabled/1' because it uses the
+                    %% latter definition of "the plugin is running, regardless
+                    %% of if it is enabled or not".
+                    %%
+                    %% Therefore, we use `rabbit_plugins:enabled_plugins/0'
+                    %% which lists explicitly enabled plugins. Unfortunately,
+                    %% it won't include the implicitly enabled plugins (i.e,
+                    %% plugins that are dependencies of explicitly enabled
+                    %% plugins).
+                    EnabledPlugins = rabbit_plugins:enabled_plugins(),
+                    case lists:member(PluginName, EnabledPlugins) of
+                        true ->
+                            true;
+                        false ->
+                            ?LOG_INFO(
+                               "The `~ts` auth backend module is configured. "
+                               "However, the `~ts` plugin must be enabled in "
+                               "order to use this auth backend. Until then "
+                               "it will be skipped during "
+                               "authentication/authorization",
+                               [Mod, PluginName]),
+                            false
+                    end;
+                {error, no_provider} ->
+                    ?LOG_INFO(
+                       "The `~ts` auth backend module is configured. "
+                       "However, no plugins available provide this "
+                       "module. Until then it will be skipped during "
+                       "authentication/authorization",
+                       [Mod]),
+                    false
+            end
+    end.
 
 -spec check_user_pass_login
         (rabbit_types:username(), rabbit_types:password()) ->

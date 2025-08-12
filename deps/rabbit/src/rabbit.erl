@@ -52,6 +52,14 @@
                     {requires,    pre_boot},
                     {enables,     external_infrastructure}]}).
 
+-rabbit_boot_step({auth_backend_plugins_check,
+                   [{description, "check configured auth plugins are enabled"},
+                    {mfa,         {rabbit_access_control,
+                                   ensure_auth_backends_are_enabled,
+                                   []}},
+                    {requires,    pre_boot},
+                    {enables,     external_infrastructure}]}).
+
 %% rabbit_alarm currently starts memory and disk space monitors
 -rabbit_boot_step({rabbit_alarm,
                    [{description, "alarm handler"},
