@@ -15,6 +15,9 @@
 
 -compile([export_all, nowarn_export_all]).
 
+-import(rabbit_ct_helpers, [eventually/1]).
+-import(rabbit_ct_broker_helpers, [rpc/4]).
+
 all() ->
     [
         {group, default_config},
@@ -809,6 +812,7 @@ stream_pub_sub_metrics(Config) ->
                  lists:sort(maps:to_list(MaxOffsetLag))),
     dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
     dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
+    eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list_by_type, [stream]))),
     ok.
 
 core_metrics_special_chars(Config) ->
