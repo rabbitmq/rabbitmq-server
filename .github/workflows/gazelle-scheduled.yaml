@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 10
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ matrix.target_branch }}
     - name: Configure Erlang

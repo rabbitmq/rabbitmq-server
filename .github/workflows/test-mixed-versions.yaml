@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         path: primary-umbrella
     - name: CHECK FOR ARCHIVE ON S3
@@ -63,7 +63,7 @@ jobs:
         echo "version=${VERSION}" | tee -a $GITHUB_OUTPUT
     - name: CHECKOUT REPOSITORY (MIXED VERSION)
       if: env.exists != 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: v${{ steps.check.outputs.version }}
         path: secondary-umbrella
@@ -122,7 +122,7 @@ jobs:
       repo_cache_key: ${{ steps.repo-cache-key.outputs.value }}
     steps:
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: SETUP ERLANG/ELIXIR
       uses: erlef/setup-beam@v1
       with:

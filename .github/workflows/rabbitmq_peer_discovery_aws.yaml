@@ -27,7 +27,7 @@ jobs:
         fi
     - name: CHECKOUT REPOSITORY
       if: steps.authorized.outputs.authorized == 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - uses: docker/metadata-action@v5
       if: steps.authorized.outputs.authorized == 'true'
       id: metadata

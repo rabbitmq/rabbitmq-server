@@ -41,7 +41,7 @@ jobs:
         key: ${{ inputs.repo_cache_key }}
         path: /home/runner/repo-cache/
     - name: CHECKOUT REPOSITORY
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     - name: CONFIGURE OTP & ELIXIR
       uses: erlef/setup-beam@v1.17
       with:
