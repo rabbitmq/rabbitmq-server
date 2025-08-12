@@ -13,8 +13,15 @@ on:
 env:
   DEV_WORKFLOW_REPOSITORY: "rabbitmq/server-packages"
 jobs:
+  test_mixed_versions:
+    name: Test mixed clusters before release
+    uses: ./.github/workflows/test-mixed.yaml
+    with:
+      previous_version: 'tags/v3.13.7'
+
   trigger_alpha_build:
     runs-on: ubuntu-latest
+    needs: test_mixed_versions
     steps:
       - name: Compute prerelease identifier from commit SHA
         run: echo "PRERELEASE_IDENTIFIER=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
