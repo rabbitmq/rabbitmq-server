@@ -695,20 +695,6 @@ remove_plugins(Plugins) ->
               IsAPlugin =
               lists:member(Plugin, ActualPlugins) orelse
               lists:member(Name, PluginDeps),
-              if
-                  IsOTPApp ->
-                      ?LOG_DEBUG(
-                        "Plugins discovery: "
-                        "ignoring ~ts, Erlang/OTP application",
-                        [Name]);
-                  not IsAPlugin ->
-                      ?LOG_DEBUG(
-                        "Plugins discovery: "
-                        "ignoring ~ts, not a RabbitMQ plugin",
-                        [Name]);
-                  true ->
-                      ok
-              end,
               not (IsOTPApp orelse not IsAPlugin)
       end, Plugins).
 
