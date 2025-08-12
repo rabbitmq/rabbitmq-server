@@ -1773,6 +1773,11 @@ link_target_queue_deleted(QType, Config) ->
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
     ok = wait_for_accepted(DTag1),
 
+    %% Load test module on the broker: we reference an anonymous function
+    %% from it during the configuration of meck.
+    [_ | _] = rabbit_ct_broker_helpers:rpc(
+                Config, ?MODULE, module_info, []),
+
     %% Mock delivery to the target queue to do nothing.
     rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
     Mod = rabbit_queue_type,
@@ -1832,6 +1837,11 @@ target_queues_deleted_accepted(Config) ->
     DTag1 = <<1>>,
     ok = amqp10_client:send_msg(Sender, amqp10_msg:new(DTag1, <<"m1">>, false)),
     ok = wait_for_accepted(DTag1),
+
+    %% Load test module on the broker: we reference an anonymous function
+    %% from it during the configuration of meck.
+    [_ | _] = rabbit_ct_broker_helpers:rpc(
+                Config, ?MODULE, module_info, []),
 
     %% Mock to deliver only to q1.
     rabbit_ct_broker_helpers:setup_meck(Config, [?MODULE]),
@@ -3979,7 +3989,7 @@ list_connections(Config) ->
     end,
 
     {ok, StdOut0} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "protocol"]),
-    Protocols0 = re:split(StdOut0, <<"\n">>, [trim]),
+    Protocols0 = re:split(string:trim(StdOut0), <<"\n">>, [trim]),
     %% Remove any whitespaces.
     Protocols1 = [binary:replace(Subject, <<" ">>, <<>>, [global]) || Subject <- Protocols0],
     Protocols = lists:sort(Protocols1),
@@ -3993,7 +4003,7 @@ list_connections(Config) ->
 
     %% CLI should list AMQP 1.0 container-id
     {ok, StdOut1} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["list_connections", "--silent", "container_id"]),
-    ContainerIds0 = re:split(StdOut1, <<"\n">>, [trim]),
+    ContainerIds0 = re:split(string:trim(StdOut1), <<"\n">>, [trim]),
     ContainerIds = lists:sort(ContainerIds0),
     ?assertEqual([<<>>, ContainerId0, ContainerId2],
                  ContainerIds),
@@ -4630,6 +4640,11 @@ idle_time_out_on_server(Config) ->
         after 30000 -> ct:fail({missing_event, ?LINE})
         end,
 
+        %% Load test module on the broker: we reference an anonymous function
+        %% from it during the configuration of meck.
+        [_ | _] = rabbit_ct_broker_helpers:rpc(
+                    Config, ?MODULE, module_info, []),
+
         %% Mock the server socket to not have received any bytes.
         rabbit_ct_broker_helpers:setup_meck(Config),
         ok = rpc(Config, meck, new, [Mod, [no_link, passthrough]]),
@@ -4653,7 +4668,7 @@ idle_time_out_on_server(Config) ->
                   ct:fail({missing_event, ?LINE})
         end
     after
-        ?assert(rpc(Config, meck, validate, [Mod])),
+        _ = rpc(Config, meck, validate, [Mod]),
         ok = rpc(Config, meck, unload, [Mod]),
         ok = rpc(Config, application, set_env, [App, Par, DefaultVal])
     end.

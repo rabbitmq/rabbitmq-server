@@ -9,6 +9,9 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
+
 -compile([export_all, nowarn_export_all]).
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
@@ -72,22 +75,23 @@ end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 old_to_new_on_old(Config) ->
-    ok = shovel(?OLD, ?NEW, ?OLD, Config).
+    ok = shovel(?FUNCTION_NAME, ?OLD, ?NEW, ?OLD, Config).
 
 old_to_new_on_new(Config) ->
-    ok = shovel(?OLD, ?NEW, ?NEW, Config).
+    ok = shovel(?FUNCTION_NAME, ?OLD, ?NEW, ?NEW, Config).
 
 new_to_old_on_old(Config) ->
-    ok = shovel(?NEW, ?OLD, ?OLD, Config).
+    ok = shovel(?FUNCTION_NAME, ?NEW, ?OLD, ?OLD, Config).
 
 new_to_old_on_new(Config) ->
-    ok = shovel(?NEW, ?OLD, ?NEW, Config).
+    ok = shovel(?FUNCTION_NAME, ?NEW, ?OLD, ?NEW, Config).
 
-shovel(SrcNode, DestNode, ShovelNode, Config) ->
+shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
     SrcUri = shovel_test_utils:make_uri(Config, SrcNode),
     DestUri = shovel_test_utils:make_uri(Config, DestNode),
-    SrcQ = <<"my source queue">>,
-    DestQ = <<"my destination queue">>,
+    ShovelName = atom_to_binary(Caller),
+    SrcQ = <<ShovelName/binary, " source">>,
+    DestQ = <<ShovelName/binary, " destination">>,
     Definition = [
                   {<<"src-uri">>,  SrcUri},
                   {<<"src-protocol">>, <<"amqp10">>},
@@ -96,7 +100,6 @@ shovel(SrcNode, DestNode, ShovelNode, Config) ->
                   {<<"dest-protocol">>, <<"amqp10">>},
                   {<<"dest-address">>, DestQ}
                  ],
-    ShovelName = <<"my shovel">>,
     ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, set,
              [<<"/">>, <<"shovel">>, ShovelName, Definition, none]),
     ok = shovel_test_utils:await_shovel(Config, ShovelNode, ShovelName),
@@ -125,6 +128,7 @@ shovel(SrcNode, DestNode, ShovelNode, Config) ->
 
     ok = amqp10_client:flow_link_credit(Receiver, NumMsgs, never),
     Msgs = receive_messages(Receiver, NumMsgs),
+    ct:pal("~b messages:~n~p", [length(Msgs), Msgs]),
     lists:map(
       fun(N) ->
               Msg = lists:nth(N, Msgs),
@@ -136,8 +140,28 @@ shovel(SrcNode, DestNode, ShovelNode, Config) ->
     ok = rpc(Config, ShovelNode, rabbit_runtime_parameters, clear,
              [<<"/">>, <<"shovel">>, ShovelName, none]),
     ExpectedQueueLen = 0,
-    ?assertEqual([ExpectedQueueLen], rpc(Config, ?OLD, ?MODULE, delete_queues, [])),
-    ?assertEqual([ExpectedQueueLen], rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
+    ?awaitMatch(
+       [{_, ExpectedQueueLen}],
+       begin
+           Ret = rpc(Config, ?OLD, ?MODULE, queues_length, []),
+           ct:pal("Queues on old: ~p", [Ret]),
+           Ret
+       end,
+       30000),
+    ?awaitMatch(
+       [{_, ExpectedQueueLen}],
+       begin
+           Ret = rpc(Config, ?NEW, ?MODULE, queues_length, []),
+           ct:pal("Queues on new: ~p", [Ret]),
+           Ret
+       end,
+       30000),
+    ?assertEqual(
+       [ExpectedQueueLen],
+       rpc(Config, ?OLD, ?MODULE, delete_queues, [])),
+    ?assertEqual(
+       [ExpectedQueueLen],
+       rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
 
 wait_for_credit(Sender) ->
     receive
@@ -169,6 +193,13 @@ flush(Prefix) ->
     after 1 ->
               ok
     end.
+
+queues_length() ->
+    [begin
+         #{<<"name">> := Name} = amqqueue:to_printable(Q),
+         [{messages, N}] = rabbit_amqqueue:info(Q, [messages]),
+         {Name, N}
+     end || Q <- rabbit_amqqueue:list()].
 
 delete_queues() ->
     [begin

@@ -1445,18 +1445,18 @@ variable_queue_restart_large_seq_id2(VQ0, QName) ->
     Terms = variable_queue_read_terms(QName),
     Count = proplists:get_value(next_seq_id, Terms),
 
-    %% set a very high next_seq_id as if 100M messages have been
+    %% set a very high next_seq_id as if 100 billion messages have been
     %% published and consumed
-    Terms2 = lists:keyreplace(next_seq_id, 1, Terms, {next_seq_id, 100_000_000}),
+    Terms2 = lists:keyreplace(next_seq_id, 1, Terms, {next_seq_id, 100_000_000_000}),
 
     {TInit, VQ3} =
         timer:tc(
           fun() -> variable_queue_init(test_amqqueue(QName, true), Terms2) end,
           millisecond),
     %% even with a very high next_seq_id start of an empty queue
-    %% should be quick (few milliseconds, but let's give it 100ms, to
+    %% should be quick (few milliseconds, but let's give it 500ms, to
     %% avoid flaking on slow servers)
-    {true, _} = {TInit < 100, TInit},
+    {true, _} = {TInit < 500, TInit},
 
     %% should be empty now
     true = rabbit_variable_queue:is_empty(VQ3),

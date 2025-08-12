@@ -871,16 +871,16 @@ dest_resource_alarm(AckMode, Config) ->
 %%----------------------------------------------------------------------------
 
 with_ch(Config, Fun) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Fun(Ch),
-    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     cleanup(Config),
     ok.
 
 with_newch(Config, Fun) ->
-     Ch = rabbit_ct_client_helpers:open_channel(Config, 0),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     Fun(Ch),
-    rabbit_ct_client_helpers:close_channel(Ch),
+    rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch),
     ok.
 
 publish(Ch, X, Key, Payload) when is_binary(Payload) ->

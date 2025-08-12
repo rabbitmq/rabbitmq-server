@@ -242,8 +242,13 @@ end_per_testcase(Testcase, Config) ->
 end_per_testcase0(Testcase, Config) ->
     rabbit_ct_client_helpers:close_channels_and_connection(Config, 0),
     %% Assert that every testcase cleaned up their MQTT sessions.
+    _ = rpc(Config, ?MODULE, delete_queues, []),
     eventually(?_assertEqual([], rpc(Config, rabbit_amqqueue, list, []))),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+delete_queues() ->
+    [catch rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
+     || Q <- rabbit_amqqueue:list()].
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -395,7 +400,7 @@ publish_to_all_queue_types_qos1(Config) ->
     publish_to_all_queue_types(Config, qos1).
 
 publish_to_all_queue_types(Config, QoS) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
 
     CQ = <<"classic-queue">>,
     QQ = <<"quorum-queue">>,
@@ -447,7 +452,8 @@ publish_to_all_queue_types(Config, QoS) ->
     delete_queue(Ch, [CQ, QQ, SQ]),
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
-                all_connection_pids(Config), 10_000, 1000).
+                all_connection_pids(Config), 10_000, 1000),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 publish_to_all_non_deprecated_queue_types_qos0(Config) ->
     publish_to_all_non_deprecated_queue_types(Config, qos0).
@@ -456,7 +462,7 @@ publish_to_all_non_deprecated_queue_types_qos1(Config) ->
     publish_to_all_non_deprecated_queue_types(Config, qos1).
 
 publish_to_all_non_deprecated_queue_types(Config, QoS) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
 
     CQ = <<"classic-queue">>,
     QQ = <<"quorum-queue">>,
@@ -506,7 +512,8 @@ publish_to_all_non_deprecated_queue_types(Config, QoS) ->
     delete_queue(Ch, [CQ, QQ, SQ]),
     ok = emqtt:disconnect(C),
     ?awaitMatch([],
-                all_connection_pids(Config), 10_000, 1000).
+                all_connection_pids(Config), 10_000, 1000),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 %% This test case does not require multiple nodes
 %% but it is grouped together with flow test cases for other queue types
@@ -538,7 +545,7 @@ flow(Config, {App, Par, Val}, QueueType)
     Result = rpc_all(Config, application, set_env, [App, Par, Val]),
     ?assert(lists:all(fun(R) -> R =:= ok end, Result)),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     QueueName = Topic = atom_to_binary(?FUNCTION_NAME),
     declare_queue(Ch, QueueName, [{<<"x-queue-type">>, longstr, QueueType}]),
     bind(Ch, QueueName, Topic),
@@ -566,7 +573,8 @@ flow(Config, {App, Par, Val}, QueueType)
     ?awaitMatch([],
                 all_connection_pids(Config), 10_000, 1000),
     ?assertEqual(Result,
-                 rpc_all(Config, application, set_env, [App, Par, DefaultVal])).
+                 rpc_all(Config, application, set_env, [App, Par, DefaultVal])),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 events(Config) ->
     ok = rabbit_ct_broker_helpers:add_code_path_to_all_nodes(Config, event_recorder),
@@ -810,9 +818,10 @@ queue_down_qos1(Config) ->
            ok = rabbit_ct_broker_helpers:start_node(Config, 1)
     end,
 
-    Ch0 = rabbit_ct_client_helpers:open_channel(Config, 0),
+    {Conn, Ch0} = rabbit_ct_client_helpers:open_connection_and_channel(Config, 0),
     delete_queue(Ch0, CQ),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch0).
 
 %% Consuming classic queue on a different node goes down.
 consuming_classic_queue_down(Config) ->
@@ -851,7 +860,7 @@ consuming_classic_queue_down(Config) ->
     ok.
 
 delete_create_queue(Config) ->
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     CQ1 = <<"classic-queue-1-delete-create">>,
     CQ2 = <<"classic-queue-2-delete-create">>,
     QQ = <<"quorum-queue-delete-create">>,
@@ -911,7 +920,8 @@ delete_create_queue(Config) ->
                1000, 10),
 
     delete_queue(Ch, [CQ1, CQ2, QQ]),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 session_expiry(Config) ->
     App = rabbitmq_mqtt,
@@ -1107,7 +1117,7 @@ large_message_amqp_to_mqtt(Config) ->
     C = connect(ClientId, Config),
     {ok, _, [1]} = emqtt:subscribe(C, {Topic, qos1}),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     Payload0 = binary:copy(<<"x">>, 8_000_000),
     Payload = <<Payload0/binary, "y">>,
     amqp_channel:call(Ch,
@@ -1115,20 +1125,22 @@ large_message_amqp_to_mqtt(Config) ->
                                        routing_key = Topic},
                       #amqp_msg{payload = Payload}),
     ok = expect_publishes(C, Topic, [Payload]),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 amqp_to_mqtt_qos0(Config) ->
     Topic = ClientId = Payload = atom_to_binary(?FUNCTION_NAME),
     C = connect(ClientId, Config),
     {ok, _, [0]} = emqtt:subscribe(C, {Topic, qos0}),
 
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     amqp_channel:call(Ch,
                       #'basic.publish'{exchange = <<"amq.topic">>,
                                        routing_key = Topic},
                       #amqp_msg{payload = Payload}),
     ok = expect_publishes(C, Topic, [Payload]),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 %% Packet identifier is a non zero two byte integer.
 %% Test that the server wraps around the packet identifier.
@@ -1609,7 +1621,7 @@ rabbit_status_connection_count(Config) ->
 trace(Config) ->
     Server = atom_to_binary(get_node_config(Config, 0, nodename)),
     Topic = Payload = TraceQ = atom_to_binary(?FUNCTION_NAME),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     declare_queue(Ch, TraceQ, []),
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue       = TraceQ,
@@ -1664,11 +1676,12 @@ trace(Config) ->
                  amqp_channel:call(Ch, #'basic.get'{queue = TraceQ})),
 
     delete_queue(Ch, TraceQ),
-    [ok = emqtt:disconnect(C) || C <- [Pub, Sub]].
+    [ok = emqtt:disconnect(C) || C <- [Pub, Sub]],
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 trace_large_message(Config) ->
     TraceQ = <<"trace-queue">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     declare_queue(Ch, TraceQ, []),
     #'queue.bind_ok'{} = amqp_channel:call(
                            Ch, #'queue.bind'{queue = TraceQ,
@@ -1693,7 +1706,8 @@ trace_large_message(Config) ->
 
     {ok, _} = rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, ["trace_off"]),
     delete_queue(Ch, TraceQ),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 max_packet_size_unauthenticated(Config) ->
     ClientId = ?FUNCTION_NAME,
@@ -1784,7 +1798,7 @@ default_queue_type(Config) ->
 incoming_message_interceptors(Config) ->
     Key = ?FUNCTION_NAME,
     ok = rpc(Config, persistent_term, put, [Key, [{set_header_timestamp, false}]]),
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     Payload = ClientId = Topic = atom_to_binary(?FUNCTION_NAME),
     CQName = <<"my classic queue">>,
     Stream = <<"my stream">>,
@@ -1832,7 +1846,8 @@ incoming_message_interceptors(Config) ->
     delete_queue(Ch, Stream),
     delete_queue(Ch, CQName),
     true = rpc(Config, persistent_term, erase, [Key]),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 %% This test makes sure that a retained message that got written in 3.12 or earlier
 %% can be consumed in 3.13 or later.
@@ -1872,7 +1887,7 @@ bind_exchange_to_exchange(Config) ->
     SourceX = <<"amq.topic">>,
     DestinationX = <<"destination">>,
     Q = <<"q">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DestinationX,
                                                                          durable = true,
                                                                          auto_delete = true}),
@@ -1890,13 +1905,14 @@ bind_exchange_to_exchange(Config) ->
     eventually(?_assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                              amqp_channel:call(Ch, #'basic.get'{queue = Q}))),
     #'queue.delete_ok'{message_count = 0} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 bind_exchange_to_exchange_single_message(Config) ->
     SourceX = <<"amq.topic">>,
     DestinationX = <<"destination">>,
     Q = <<"q">>,
-    Ch = rabbit_ct_client_helpers:open_channel(Config),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DestinationX,
                                                                          durable = true,
                                                                          auto_delete = true}),
@@ -1923,7 +1939,8 @@ bind_exchange_to_exchange_single_message(Config) ->
     timer:sleep(10),
     ?assertEqual(#'queue.delete_ok'{message_count = 0},
                  amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
-    ok = emqtt:disconnect(C).
+    ok = emqtt:disconnect(C),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
 
 notify_consumer_qos0_queue_deleted(Config) ->
     Topic = atom_to_binary(?FUNCTION_NAME),

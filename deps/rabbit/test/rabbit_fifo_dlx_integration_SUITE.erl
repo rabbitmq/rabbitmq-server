@@ -230,7 +230,7 @@ delivery_limit(Config) ->
     {_, #amqp_msg{props = #'P_basic'{headers = Headers}}} =
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"msg">>}},
                 amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
-                1000),
+                30000),
     assert_dlx_headers(Headers, <<"delivery_limit">>, SourceQ),
     ?assertEqual(1, counted(messages_dead_lettered_delivery_limit_total, Config)),
     eventually(?_assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config))).

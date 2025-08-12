@@ -660,7 +660,7 @@ child_id_format(Config) ->
             %%
             %% After that, the supervisors run on the new code.
             Config2 = rabbit_ct_broker_helpers:cluster_nodes(
-                        Config1, [OldNodeA, NewNodeB, NewNodeD]),
+                        Config1, OldNodeA, [NewNodeB, NewNodeD]),
             ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeA),
             ok = rabbit_ct_broker_helpers:reset_node(Config1, OldNodeA),
             ok = rabbit_ct_broker_helpers:stop_broker(Config2, OldNodeC),

@@ -63,6 +63,7 @@ groups() ->
             build_info_product_test
         ]},
         {detailed_metrics, [], [
+                                     stream_pub_sub_metrics,
                                      detailed_metrics_no_families_enabled_by_default,
                                      queue_consumer_count_single_vhost_per_object_test,
                                      queue_consumer_count_all_vhosts_per_object_test,
@@ -74,8 +75,7 @@ groups() ->
                                      queue_consumer_count_and_queue_metrics_mutually_exclusive_test,
                                      vhost_status_metric,
                                      exchange_bindings_metric,
-                                     exchange_names_metric,
-                                     stream_pub_sub_metrics
+                                     exchange_names_metric
         ]},
        {special_chars, [], [core_metrics_special_chars]},
        {authentication, [], [basic_auth]}
@@ -476,7 +476,7 @@ identity_info_test(Config) ->
 
 specific_erlang_metrics_present_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
-    ?assertEqual(match, re:run(Body, "^erlang_vm_dist_node_queue_size_bytes{", [{capture, none}, multiline])).
+    ?assertEqual(match, re:run(Body, "^erlang_vm_dirty_io_schedulers ", [{capture, none}, multiline])).
 
 global_metrics_present_test(Config) ->
     {_Headers, Body} = http_get_with_pal(Config, [], 200),
@@ -782,6 +782,10 @@ exchange_names_metric(Config) ->
     ok.
 
 stream_pub_sub_metrics(Config) ->
+    {_, Body0} = http_get_with_pal(Config, "/metrics", [], 200),
+    Metrics = parse_response(Body0),
+    ct:pal("Initial metrics: ~p", [Metrics]),
+
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
     MsgPerBatch1 = 2,
     {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),

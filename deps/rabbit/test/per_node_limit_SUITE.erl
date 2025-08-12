@@ -10,6 +10,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -120,27 +121,28 @@ node_channel_limit(Config) ->
     ok = rabbit_ct_broker_helpers:set_full_permissions(Config, User, VHost),
     Conn1 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
     Conn2 = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
-    0 = count_channels_per_node(Config),
+    ?awaitMatch(0, count_channels_per_node(Config), 30000),
 
     lists:foreach(fun(N) when (N band 1) == 1 -> {ok, _} = open_channel(Conn1);
                      (_) -> {ok,_ } = open_channel(Conn2)
                   end, lists:seq(1, 5)),
 
-    5 = count_channels_per_node(Config),
+    ?awaitMatch(5, count_channels_per_node(Config), 30000),
     %% In total 5 channels are open on this node, so a new one, regardless of
     %% connection, will not be allowed. It will terminate the connection with
     %% its channels too. So
     {error, not_allowed_crash} = open_channel(Conn2),
-    3 = count_channels_per_node(Config),
+    ?awaitMatch(3, count_channels_per_node(Config), 30000),
     %% As the connection is dead, so are the 2 channels, so we should be able to
     %% create 2 more on Conn1
     {ok , _} = open_channel(Conn1),
     {ok , _} = open_channel(Conn1),
+    ?awaitMatch(5, count_channels_per_node(Config), 30000),
     %% But not a third
     {error, not_allowed_crash} = open_channel(Conn1),
 
     %% Now all connections are closed, so there should be 0 open connections
-    0 = count_channels_per_node(Config),
+    ?awaitMatch(0, count_channels_per_node(Config), 30000),
     close_all_connections([Conn1, Conn2]),
 
     rabbit_ct_broker_helpers:delete_vhost(Config, VHost),

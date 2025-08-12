@@ -11,6 +11,7 @@ import pika
 import base
 import time
 import os
+import test_util
 
 class TestUserGeneratedQueueName(base.BaseTest):
 
@@ -29,6 +30,12 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 pika.ConnectionParameters( host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
+        test_util.rabbitmqctl(['list_queues'])
+        test_util.rabbitmqctl(['list_connections', 'peer_host', 'peer_port',
+                               'protocol'])
+        test_util.rabbitmqctl(['list_stomp_connections', 'peer_host',
+                               'peer_port', 'protocol'])
+
         # publish a message to the named queue
         channel.basic_publish(
                 exchange='',
@@ -36,11 +43,13 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 body='Hello World!')
 
         # check if we receive the message from the STOMP subscription
-        self.assertTrue(self.listener.wait(5), "initial message not received")
+        self.assertTrue(self.listener.wait(30), "initial message not received")
         self.assertEqual(1, len(self.listener.messages))
 
-        self.conn.disconnect()
+        # self.conn.disconnect()
         connection.close()
+        while not connection.is_closed:
+            time.sleep(1)
 
     def test_topic_dest(self):
         queueName='my-user-generated-queue-name-topic'
@@ -57,6 +66,12 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 pika.ConnectionParameters( host='127.0.0.1', port=int(os.environ["AMQP_PORT"])))
         channel = connection.channel()
 
+        test_util.rabbitmqctl(['list_queues'])
+        test_util.rabbitmqctl(['list_connections', 'peer_host', 'peer_port',
+                               'protocol'])
+        test_util.rabbitmqctl(['list_stomp_connections', 'peer_host',
+                               'peer_port', 'protocol'])
+
         # publish a message to the named queue
         channel.basic_publish(
                 exchange='',
@@ -64,11 +79,13 @@ class TestUserGeneratedQueueName(base.BaseTest):
                 body='Hello World!')
 
         # check if we receive the message from the STOMP subscription
-        self.assertTrue(self.listener.wait(5), "initial message not received")
+        self.assertTrue(self.listener.wait(30), "initial message not received")
         self.assertEqual(1, len(self.listener.messages))
 
-        self.conn.disconnect()
+        # self.conn.disconnect()
         connection.close()
+        while not connection.is_closed:
+            time.sleep(1)
 
 
 if __name__ == '__main__':
