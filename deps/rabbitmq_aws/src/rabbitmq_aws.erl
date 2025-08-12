@@ -46,7 +46,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 %% Types for new concurrent API
--type connection_handle() :: {gun:conn_ref(), credential_context()}.
+-type connection_handle() :: {pid(), credential_context()}.
 -type credential_context() :: #{
     access_key => access_key(),
     secret_access_key => secret_access_key(),
@@ -876,7 +876,7 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body) ->
 
 %% Direct Gun request (extracted from existing gun_request function)
 -spec direct_gun_request(
-    GunPid :: gun:conn_ref(),
+    GunPid :: pid(),
     Method :: method(),
     Path :: path(),
     Headers :: headers(),
