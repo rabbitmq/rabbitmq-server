@@ -694,6 +694,7 @@ remove_plugins(Plugins) ->
               IsAPlugin =
               lists:member(Plugin, ActualPlugins) orelse
               lists:member(Name, PluginDeps),
+<<<<<<< HEAD
               if
                   IsOTPApp ->
                       rabbit_log:debug(
@@ -708,6 +709,8 @@ remove_plugins(Plugins) ->
                   true ->
                       ok
               end,
+=======
+>>>>>>> 30d78a490 (Do not log every transient dependency when listing plugins)
               not (IsOTPApp orelse not IsAPlugin)
       end, Plugins).
 
