@@ -719,7 +719,7 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
             current => Current#{queue_states => QState}}},
           handle_queue_actions(Actions, State);
         none when Credit =:= 0 andalso
-                  CCredit > 0 ->
+                  CCredit >= 0 ->
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, DeliveryCount, MaxLinkCredit, false, QState0),
             State = State0#{source => Src#{credit => MaxLinkCredit,
                                            at_least_one_credit_req_in_flight => true,
