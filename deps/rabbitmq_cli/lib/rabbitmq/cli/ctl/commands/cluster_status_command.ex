@@ -275,7 +275,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ClusterStatusCommand do
       cluster_tags: result |> Keyword.get(:cluster_tags, []),
       disk_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:disc, []),
       ram_nodes: result |> Keyword.get(:nodes, []) |> Keyword.get(:ram, []),
-      running_nodes: result |> Keyword.get(:running_nodes, []) |> Enum.map(&to_string/1),
+      running_nodes: result |> Keyword.get(:running_nodes, []),
       alarms: Keyword.get(result, :alarms) |> Keyword.values() |> Enum.concat() |> Enum.uniq(),
       maintenance_status: Keyword.get(result, :maintenance_status, []) |> Enum.into(%{}),
       partitions: Keyword.get(result, :partitions, []) |> Enum.into(%{}),
