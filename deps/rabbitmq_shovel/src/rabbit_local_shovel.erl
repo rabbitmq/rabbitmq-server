@@ -176,9 +176,7 @@ init_source(State = #{source := #{queue := QName0,
                                            remaining => Remaining,
                                            remaining_unacked => Remaining,
                                            delivery_count => ?INITIAL_DELIVERY_COUNT,
-                                           queue_delivery_count => ?INITIAL_DELIVERY_COUNT,
                                            credit => MaxLinkCredit,
-                                           queue_credit => MaxLinkCredit,
                                            at_least_one_credit_req_in_flight => true,
                                            stashed_credit_req => none}},
             handle_queue_actions(Actions, State2);
@@ -647,18 +645,12 @@ confirm_to_inbound(ConfirmFun, Seq,
     ConfirmFun(InTag, State).
 
 sent_delivery(#{source := #{delivery_count := DeliveryCount0,
-                            credit := Credit0,
-                            queue_delivery_count := QDeliveryCount0,
-                            queue_credit := QCredit0} = Src
+                            credit := Credit0} = Src
                } = State0, NumMsgs) ->
     DeliveryCount = serial_number:add(DeliveryCount0, NumMsgs),
     Credit = max(0, Credit0 - NumMsgs),
-    QDeliveryCount = serial_number:add(QDeliveryCount0, NumMsgs),
-    QCredit = max(0, QCredit0 - NumMsgs),
     State0#{source => Src#{credit => Credit,
-                           delivery_count => DeliveryCount,
-                           queue_credit => QCredit,
-                           queue_delivery_count => QDeliveryCount
+                           delivery_count => DeliveryCount
                           }}.
 
 maybe_grant_or_stash_credit(#{source := #{queue := QName0,
@@ -709,7 +701,7 @@ grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
 %% Drain is ignored because local shovels do not use it.
 handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Drain},
                     #{source := #{credit := CCredit,
-                                  queue_delivery_count := QDeliveryCount,
+                                  delivery_count := QDeliveryCount,
                                   stashed_credit_req := StashedCreditReq,
                                   queue := QName0,
                                   current := Current = #{queue_states := QState0,
@@ -723,7 +715,7 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
           QName = rabbit_misc:r(VHost, queue, QName0),
           {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, StashedDeliveryCount,
             MaxLinkCredit, false, QState0),
-          State = State0#{source => Src#{queue_credit => MaxLinkCredit,
+          State = State0#{source => Src#{credit => MaxLinkCredit,
             at_least_one_credit_req_in_flight => true,
             stashed_credit_req => none,
             current => Current#{queue_states => QState}}},
@@ -733,7 +725,7 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
             MaxLinkCredit = max_link_credit(),
             QName = rabbit_misc:r(VHost, queue, QName0),
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, DeliveryCount, MaxLinkCredit, false, QState0),
-            State = State0#{source => Src#{queue_credit => MaxLinkCredit,
+            State = State0#{source => Src#{credit => MaxLinkCredit,
                                            at_least_one_credit_req_in_flight => true,
                                            current => Current#{queue_states => QState}}},
             handle_queue_actions(Actions, State);
@@ -743,6 +735,6 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
             %% in case credit requests got applied out of order in quorum queues).
             %% This should be fine given that we asserted earlier that our delivery-count is
             %% in sync with the delivery-count of the sending queue.
-            State0#{source => Src#{queue_credit => Credit,
+            State0#{source => Src#{credit => Credit,
                                    at_least_one_credit_req_in_flight => false}}
     end.
