@@ -4,3 +4,6 @@
 
 [Bb]in/
 [Oo]bj/
+
+src/rabbit_amqp_sql_lexer.erl
+src/rabbit_amqp_sql_parser.erl
