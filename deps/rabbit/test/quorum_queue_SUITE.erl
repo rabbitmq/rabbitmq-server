@@ -4939,17 +4939,18 @@ restart_after_queue_reincarnation(Config) ->
     %% Restart S3
     ?assertEqual(ok, rabbit_control_helper:command(start_app, S3)),
 
-    timer:sleep(1000),
-
-    %% Now all three nodes should have the new state.
+    ?awaitMatch(true, begin
+                          %% Now all three nodes should have the new state.
+                          % They are either leader or follower.
+                          Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
+                          lists:all(
+                            fun(NodeStatus) ->
+                                    NodeRaftState = proplists:get_value(<<"Raft State">>, NodeStatus),
+                                    lists:member(NodeRaftState, [leader, follower])
+                            end, Status2)
+                      end, ?DEFAULT_AWAIT),
     Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
-    % They are either leader or follower.
-    ?assert(
-       lists:all(
-         fun(NodeStatus) ->
-                 NodeRaftState = proplists:get_value(<<"Raft State">>, NodeStatus),
-                 lists:member(NodeRaftState, [leader, follower])
-         end, Status2)),
+
     % Remove "Node Name" and "Raft State" from the status.
     Status3 = [NE1, NE2, NE3]= [
         begin
