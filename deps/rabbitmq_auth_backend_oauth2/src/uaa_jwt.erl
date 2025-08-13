@@ -146,7 +146,10 @@ get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
                 pem_file -> uaa_jwt_jwk:from_pem_file(Value);
                 map      -> uaa_jwt_jwk:make_jwk(Value);
                 _        -> {error, unknown_signing_key_type}
-            end
+            end;
+        SK -> 
+            ?LOG_DEBUG("Opaque token Signing key ~p found", [KeyId]),
+            {ok, SK#signing_key.key}
     end.
 
 verify_signing_key(Type, Value) ->
@@ -189,3 +192,4 @@ sub(DecodedToken) ->
 -spec sub(map(), any()) -> binary() | undefined.
 sub(DecodedToken, Default) ->
     maps:get(<<"sub">>, DecodedToken, Default).
+

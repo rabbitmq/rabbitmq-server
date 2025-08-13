@@ -1,7 +1,9 @@
 const assert = require('assert')
 const { log, tokenFor, openIdConfiguration } = require('../utils')
 const { reset, expectUser, expectVhost, expectResource, allow, verifyAll } = require('../mock_http_backend')
-const { open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
+const { getAmqpConnectionOptions: getAmqpOptions, 
+        setAmqpConnectionOptions: setAmqpOptions, 
+        open: openAmqp, once: onceAmqp, on: onAmqp, close: closeAmqp } = require('../amqp')
 
 var receivedAmqpMessageCount = 0
 var untilConnectionEstablished = new Promise((resolve, reject) => {
@@ -31,6 +33,7 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
   let password = process.env.RABBITMQ_AMQP_PASSWORD
   let usemtls = process.env.AMQP_USE_MTLS
   let amqp;
+  let amqpSettings = getAmqpOptions()
 
   before(function () {    
     if (backends.includes("http") && (username.includes("http") || usemtls)) {
@@ -48,11 +51,17 @@ describe('Having AMQP 1.0 protocol enabled and the following auth_backends: ' + 
       let oauthProviderUrl = process.env.OAUTH_PROVIDER_URL
       let oauthClientId = process.env.OAUTH_CLIENT_ID
       let oauthClientSecret = process.env.OAUTH_CLIENT_SECRET
+      let scopes = process.env.OAUTH_SCOPES
       log("oauthProviderUrl  : " + oauthProviderUrl)
+      log("oauthClientId  : " + oauthClientId)
+      log("oauthClientSecret  : " + oauthClientSecret)
+      log("oauthScope  : " + scopes)
       let openIdConfig = openIdConfiguration(oauthProviderUrl)
       log("Obtained token_endpoint : " + openIdConfig.token_endpoint)
-      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint)
+      password = tokenFor(oauthClientId, oauthClientSecret, openIdConfig.token_endpoint, scopes)
       log("Obtained access token : " + password)
+      amqpSettings.password = password
+      setAmqpOptions(amqpSettings)
     }
   })
 
