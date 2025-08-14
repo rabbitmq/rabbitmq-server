@@ -21,9 +21,11 @@
 -import(amqp_utils,
         [connection_config/1,
          flush/1,
-         wait_for_credit/1]).
+         wait_for_credit/1,
+         end_session_sync/1
+        ]).
 
--define(TIMEOUT, 30_000).
+-define(TIMEOUT, 9000).
 
 all() ->
     [
@@ -206,24 +208,30 @@ target_exchange_absent(Config) ->
     XName = <<"🎈"/utf8>>,
     TargetAddr = rabbitmq_amqp_address:exchange(XName),
 
-    OpnConf = connection_config(Config),
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    {ok, _Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
-    receive
-        {amqp10_event,
-         {session, Session,
-          {ended,
-           #'v1_0.error'{
-              condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
-              description = {utf8, <<"no exchange '", XName:(byte_size(XName))/binary,
-                                     "' in vhost '/'">>}}}}} -> ok
-    after ?TIMEOUT ->
-              Reason = {missing_event, ?LINE},
-              flush(Reason),
-              ct:fail(Reason)
+    %% RabbitMQ should refuse the link.
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
+    receive {amqp10_event, {link, Sender, {attached, #'v1_0.attach'{target = Target}}}} ->
+                ?assertNotMatch(#'v1_0.target'{}, Target)
+    after 9000 -> ct:fail({missing_event, ?LINE})
     end,
+    receive {amqp10_event, {link, Sender, {detached, #'v1_0.detach'{closed = Closed,
+                                                                    error = Error}}}} ->
+                ?assert(Closed),
+                ?assertEqual(
+                   #'v1_0.error'{
+                      condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
+                      description = {utf8, <<"no exchange '", XName:(byte_size(XName))/binary,
+                                             "' in vhost '/'">>}},
+                   Error)
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = end_session_sync(Session),
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target and source address
@@ -269,11 +277,11 @@ target_queue_absent(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    {ok, _Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddr),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Sender,
+          {detached,
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
               description = {utf8, <<"no queue '", QName:(byte_size(QName))/binary,
@@ -283,6 +291,7 @@ target_queue_absent(Config) ->
               flush(Reason),
               ct:fail(Reason)
     end,
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 target address 'null' and 'to'
@@ -563,17 +572,18 @@ target_bad_address0(TargetAddress, Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    {ok, _Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddress),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"sender">>, TargetAddress),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Sender,
+          {detached,
            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
     after ?TIMEOUT ->
               Reason = {missing_event, ?LINE, TargetAddress},
               flush(Reason),
               ct:fail(Reason)
     end,
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 %% Test v2 source address
@@ -587,11 +597,11 @@ source_queue_absent(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    {ok, _Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SourceAddr),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"receiver">>, SourceAddr),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Receiver,
+          {detached,
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_NOT_FOUND,
               description = {utf8, <<"no queue '", QName:(byte_size(QName))/binary,
@@ -601,6 +611,7 @@ source_queue_absent(Config) ->
               flush(Reason),
               ct:fail(Reason)
     end,
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 source_bad_address(Config) ->
@@ -623,17 +634,18 @@ source_bad_address0(SourceAddress, Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
 
-    {ok, _Receiver} = amqp10_client:attach_receiver_link(Session, <<"sender">>, SourceAddress),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"sender">>, SourceAddress),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Receiver,
+          {detached,
            #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD}}}} -> ok
     after ?TIMEOUT ->
               Reason = {missing_event, ?LINE},
               flush(Reason),
               ct:fail(Reason)
     end,
+    ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection).
 
 init(Config) ->

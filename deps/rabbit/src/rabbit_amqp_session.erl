@@ -967,7 +967,7 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
     {Reply, State} =
     case IncomingLinks of
         #{Handle := Link0} ->
-            case incoming_link_transfer(Performative, Paylaod, Link0, State1) of
+            try incoming_link_transfer(Performative, Paylaod, Link0, State1) of
                 {ok, Reply0, Link, State2} ->
                     {Reply0, State2#state{incoming_links = IncomingLinks#{Handle := Link}}};
                 {error, Reply0} ->
@@ -975,6 +975,9 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
                     %% with appropriate error information supplied in the error field of the
                     %% detach frame. The link endpoint MUST then be destroyed." [2.6.5]
                     {Reply0, State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
+            catch {link_error, Error} ->
+                      Detach = detach(Handle, Link0, Error),
+                      {[Detach], State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
             end;
         _ ->
             incoming_mgmt_link_transfer(Performative, Paylaod, State1)
@@ -1110,16 +1113,44 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
             reply_frames(Reply, State)
     end;
 
-handle_frame(#'v1_0.attach'{handle = ?UINT(Handle)} = Attach,
-             #state{cfg = #cfg{max_handle = MaxHandle}} = State) ->
+handle_frame(#'v1_0.attach'{handle = ?UINT(HandleInt)},
+             #state{cfg = #cfg{max_handle = MaxHandle}})
+  when HandleInt > MaxHandle ->
+    protocol_error(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                   "link handle value (~b) exceeds maximum link handle value (~b)",
+                   [HandleInt, MaxHandle]);
+handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
+                            handle = Handle,
+                            role = Role,
+                            source = Source,
+                            target = Target} = Attach,
+             State) ->
     ok = validate_attach(Attach),
-    case Handle > MaxHandle of
-        true ->
-            protocol_error(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
-                           "link handle value (~b) exceeds maximum link handle value (~b)",
-                           [Handle, MaxHandle]);
-        false ->
-            handle_attach(Attach, State)
+    try handle_attach(Attach, State)
+    catch {link_error, Error} ->
+              %% Figure 2.33
+              ?LOG_WARNING("refusing link '~ts': ~tp", [NameBin, Error]),
+              AttachReply = case Role of
+                                ?AMQP_ROLE_SENDER ->
+                                    #'v1_0.attach'{
+                                       name = Name,
+                                       handle = Handle,
+                                       role = ?AMQP_ROLE_RECEIVER,
+                                       source = Source,
+                                       target = null};
+                                ?AMQP_ROLE_RECEIVER ->
+                                    #'v1_0.attach'{
+                                       name = Name,
+                                       handle = Handle,
+                                       role = ?AMQP_ROLE_SENDER,
+                                       source = null,
+                                       target = Target,
+                                       initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT)}
+                            end,
+              Detach = #'v1_0.detach'{handle = Handle,
+                                      closed = true,
+                                      error = Error},
+              {ok, [AttachReply, Detach], State}
     end;
 
 handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
@@ -1369,9 +1400,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             rabbit_global_counters:publisher_created(?PROTOCOL),
             reply_frames([Reply, Flow], State);
         {error, Reason} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                           "Attach rejected: ~tp",
-                           [Reason])
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                       "Attach refused: ~tp",
+                       [Reason])
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
@@ -1403,7 +1434,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     case ensure_source(Source0, LinkNameBin, Vhost, User, ContainerId,
                        ReaderPid, PermCache0, TopicPermCache0) of
         {error, Reason} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach rejected: ~tp", [Reason]);
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
         {ok, QName = #resource{name = QNameBin}, Source, PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
@@ -1412,7 +1443,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                            try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                            catch exit:#amqp_error{name = resource_locked} ->
                                      %% An exclusive queue can only be consumed from by its declaring connection.
-                                     protocol_error(
+                                     link_error(
                                        ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
                                        "cannot obtain exclusive access to locked ~s",
                                        [rabbit_misc:rs(QName)])
@@ -1529,6 +1560,13 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                       [rabbit_misc:rs(QName), Reason])
             end
     end.
+
+-spec link_error(term(), io:format(), [term()]) ->
+    no_return().
+link_error(Condition, Msg, Args) ->
+    Description = unicode:characters_to_binary(lists:flatten(io_lib:format(Msg, Args))),
+    throw({link_error, #'v1_0.error'{condition = Condition,
+                                     description = {utf8, Description}}}).
 
 send_pending(#state{remote_incoming_window = RemoteIncomingWindow,
                     outgoing_pending = Buf0
@@ -2871,7 +2909,8 @@ check_exchange(XNameBin, User, Vhost, PermCache0) ->
                        end,
             {ok, Exchange, PermCache};
         {error, not_found} ->
-            exit_not_found(XName)
+            link_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                       "no ~ts", [rabbit_misc:rs(XName)])
     end.
 
 address_v1_permitted() ->
@@ -3429,14 +3468,17 @@ exit_if_absent(Kind, Vhost, Name) when is_list(Name) ->
 exit_if_absent(Kind, Vhost, Name) when is_binary(Name) ->
     exit_if_absent(rabbit_misc:r(Vhost, Kind, Name)).
 
-exit_if_absent(ResourceName = #resource{kind = Kind}) ->
+exit_if_absent(Resource = #resource{kind = Kind}) ->
     Mod = case Kind of
               exchange -> rabbit_exchange;
               queue -> rabbit_amqqueue
           end,
-    case Mod:exists(ResourceName) of
-        true -> ok;
-        false -> exit_not_found(ResourceName)
+    case Mod:exists(Resource) of
+        true ->
+            ok;
+        false ->
+            link_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                       "no ~ts", [rabbit_misc:rs(Resource)])
     end.
 
 generate_queue_name_v1() ->
@@ -3482,7 +3524,7 @@ declare_queue(QNameBin,
         {existing, _Q} ->
             ok;
         {error, queue_limit_exceeded, Reason, ReasonArgs} ->
-            protocol_error(
+            link_error(
               ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
               Reason,
               ReasonArgs);
@@ -3685,9 +3727,9 @@ maybe_detach_mgmt_link(
 
 check_internal_exchange(#exchange{internal = true,
                                   name = XName}) ->
-    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                   "forbidden to publish to internal ~ts",
-                   [rabbit_misc:rs(XName)]);
+    link_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+               "forbidden to publish to internal ~ts",
+               [rabbit_misc:rs(XName)]);
 check_internal_exchange(_) ->
     ok.
 
@@ -3840,12 +3882,6 @@ exit_not_implemented(Format) ->
 -spec exit_not_implemented(io:format(), [term()]) -> no_return().
 exit_not_implemented(Format, Args) ->
     protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, Format, Args).
-
--spec exit_not_found(rabbit_types:r(exchange | queue)) -> no_return().
-exit_not_found(Resource) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
-                   "no ~ts",
-                   [rabbit_misc:rs(Resource)]).
 
 -spec error_not_found(rabbit_types:r(exchange | queue)) -> #'v1_0.error'{}.
 error_not_found(Resource) ->
