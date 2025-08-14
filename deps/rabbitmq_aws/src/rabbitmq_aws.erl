@@ -158,7 +158,7 @@ direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
     BodyHash = proplists:get_value(payload_hash, Options),
     % Sign headers directly (no gen_server call)
     SignedHeaders = sign_headers_with_context(
-      CredContext, Method, URI, Headers, Body, BodyHash
+        CredContext, Method, URI, Headers, Body, BodyHash
     ),
     % Make Gun request directly
     direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
@@ -891,7 +891,7 @@ sign_headers_with_context(CredContext, Method, URI, Headers, Body, BodyHash) ->
     Options :: list()
 ) -> result().
 direct_gun_request(GunPid, Method, {_, Path}, Headers, Body, Options) ->
-    direct_gun_request(GunPid, Method, [$/|Path], Headers, Body, Options);
+    direct_gun_request(GunPid, Method, [$/ | Path], Headers, Body, Options);
 direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
     HeadersBin = lists:map(
         fun({Key, Value}) ->
