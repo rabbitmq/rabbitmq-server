@@ -27,6 +27,7 @@
         [web_amqp/1,
          flush/1,
          wait_for_credit/1,
+         end_session_sync/1,
          close_connection_sync/1]).
 
 all() ->
@@ -411,16 +412,17 @@ v1_attach_target_internal_exchange(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     Address = <<"/exchange/", XName/binary, "/some-routing-key">>,
-    {ok, _} = amqp10_client:attach_sender_link(
-                Session, <<"test-sender">>, Address),
+    {ok, Sender} = amqp10_client:attach_sender_link(
+                     Session, <<"test-sender">>, Address),
     ExpectedErr = error_unauthorized(
                     <<"forbidden to publish to internal exchange 'test exchange' in vhost '/'">>),
-    receive {amqp10_event, {session, Session, {ended, ExpectedErr}}} -> ok
-    after ?TIMEOUT -> flush(missing_ended),
-                  ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
+    receive {amqp10_event, {link, Sender, {detached, ExpectedErr}}} -> ok
+    after ?TIMEOUT -> flush(missing_event),
+                      ct:fail("did not receive AMQP_ERROR_UNAUTHORIZED_ACCESS")
     end,
 
-    ok = amqp10_client:close_connection(Connection),
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = XName}),
     ok = rabbit_ct_client_helpers:close_channel(Ch).
 
@@ -622,24 +624,23 @@ target_per_message_internal_exchange(Config) ->
     To = rabbitmq_amqp_address:exchange(XName),
 
     ok = set_permissions(Config, XName, XName, <<>>),
-    {Conn1, Session1, LinkPair1} = init_pair(Config),
-    ok = rabbitmq_amqp_client:declare_exchange(LinkPair1, XName, XProps),
-    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session1, <<"sender">>, TargetAddress),
+    {_, Session, LinkPair} = Init = init_pair(Config),
+    ok = rabbitmq_amqp_client:declare_exchange(LinkPair, XName, XProps),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, TargetAddress),
     ok = wait_for_credit(Sender),
 
     Tag = <<"tag">>,
     Msg = amqp10_msg:set_properties(#{to => To}, amqp10_msg:new(Tag, <<"msg">>, true)),
     ok = amqp10_client:send_msg(Sender, Msg),
     ExpectedErr = error_unauthorized(
-                    <<"forbidden to publish to internal exchange '", XName/binary, "' in vhost 'test vhost'">>),
-    receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
+                    <<"forbidden to publish to internal exchange '",
+                      XName/binary, "' in vhost 'test vhost'">>),
+    receive {amqp10_event, {link, Sender, {detached, ExpectedErr}}} -> ok
     after ?TIMEOUT -> flush(missing_event),
-                  ct:fail({missing_event, ?LINE})
+                      ct:fail({missing_event, ?LINE})
     end,
-    ok = close_connection_sync(Conn1),
 
-    Init = {_, _, LinkPair2} = init_pair(Config),
-    ok = rabbitmq_amqp_client:delete_exchange(LinkPair2, XName),
+    ok = rabbitmq_amqp_client:delete_exchange(LinkPair, XName),
     ok = cleanup_pair(Init).
 
 target_per_message_topic(Config) ->
@@ -822,14 +823,14 @@ v1_vhost_queue_limit(Config) ->
     {ok, C1} = amqp10_client:open_connection(OpnConf1),
     {ok, Session1} = amqp10_client:begin_session_sync(C1),
     TargetAddress = <<"/queue/", QName/binary>>,
-    {ok, _Sender1} = amqp10_client:attach_sender_link(
-                       Session1, <<"test-sender-1">>, TargetAddress),
+    {ok, Sender1} = amqp10_client:attach_sender_link(
+                      Session1, <<"test-sender-1">>, TargetAddress),
     ExpectedErr = amqp_error(
                     ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
                     <<"cannot declare queue 'q1': queue limit in vhost 'test vhost' (0) is reached">>),
-    receive {amqp10_event, {session, Session1, {ended, ExpectedErr}}} -> ok
-    after ?TIMEOUT -> flush(missing_ended),
-                  ct:fail("did not receive expected error")
+    receive {amqp10_event, {link, Sender1, {detached, ExpectedErr}}} -> ok
+    after ?TIMEOUT -> flush(missing_event),
+                      ct:fail("did not receive expected error")
     end,
 
     OpnConf2 = connection_config(Config, <<"/">>),

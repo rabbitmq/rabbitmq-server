@@ -35,7 +35,10 @@ groups() ->
        redelivery,
        released,
        routing,
-       invalid_routes,
+       attach_sender_to_missing_exchange,
+       attach_sender_to_invalid_address,
+       attach_receiver_from_missing_queue,
+       attach_receiver_from_invalid_address,
        auth_failure,
        access_failure_not_allowed,
        access_failure_send,
@@ -176,7 +179,16 @@ routing(Config) ->
                                        }),
     run(?FUNCTION_NAME, Config).
 
-invalid_routes(Config) ->
+attach_sender_to_missing_exchange(Config) ->
+    run(?FUNCTION_NAME, Config).
+
+attach_sender_to_invalid_address(Config) ->
+    run(?FUNCTION_NAME, Config).
+
+attach_receiver_from_missing_queue(Config) ->
+    run(?FUNCTION_NAME, Config).
+
+attach_receiver_from_invalid_address(Config) ->
     run(?FUNCTION_NAME, Config).
 
 auth_failure(Config) ->

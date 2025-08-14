@@ -127,7 +127,7 @@
 -record(link,
         {name :: link_name(),
          ref :: link_ref(),
-         state = detached :: detached | attach_sent | attached | detach_sent,
+         state = detached :: detached | attach_sent | attached | attach_refused | detach_sent,
          notify :: pid(),
          output_handle :: output_handle(),
          input_handle :: input_handle() | undefined,
@@ -325,9 +325,11 @@ mapped(cast, #'v1_0.end'{} = End, State) ->
     ok = notify_session_ended(End, State),
     {stop, normal, State};
 mapped(cast, #'v1_0.attach'{name = {utf8, Name},
-                            initial_delivery_count = IDC,
                             handle = {uint, InHandle},
                             role = PeerRoleBool,
+                            source = Source,
+                            target = Target,
+                            initial_delivery_count = IDC,
                             max_message_size = MaybeMaxMessageSize} = Attach,
        #state{links = Links, link_index = LinkIndex,
               link_handle_index = LHI} = State0) ->
@@ -339,20 +341,28 @@ mapped(cast, #'v1_0.attach'{name = {utf8, Name},
     #{OutHandle := Link0} = Links,
     ok = notify_link_attached(Link0, Attach, State0),
 
-    {DeliveryCount, MaxMessageSize} =
+    {LinkState, DeliveryCount, MaxMessageSize} =
     case Link0 of
         #link{role = sender = OurRole,
               delivery_count = DC} ->
+            LS = case Target of
+                     #'v1_0.target'{} -> attached;
+                     _ -> attach_refused
+                 end,
             MSS = case MaybeMaxMessageSize of
                       {ulong, S} when S > 0 -> S;
                       _ -> undefined
                   end,
-            {DC, MSS};
+            {LS, DC, MSS};
         #link{role = receiver = OurRole,
               max_message_size = MSS} ->
-            {unpack(IDC), MSS}
+            LS = case Source of
+                     #'v1_0.source'{} -> attached;
+                     _ -> attach_refused
+                 end,
+            {LS, unpack(IDC), MSS}
     end,
-    Link = Link0#link{state = attached,
+    Link = Link0#link{state = LinkState,
                       input_handle = InHandle,
                       delivery_count = DeliveryCount,
                       max_message_size = MaxMessageSize},
@@ -496,43 +506,31 @@ mapped({call, From},
     {keep_state_and_data, {reply, From, {error, remote_incoming_window_exceeded}}};
 mapped({call, From = {Pid, _}},
        {transfer, #'v1_0.transfer'{handle = {uint, OutHandle},
-                                   delivery_tag = {binary, DeliveryTag},
-                                   settled = false} = Transfer0, Sections},
-       #state{outgoing_delivery_id = DeliveryId, links = Links,
-              outgoing_unsettled = Unsettled} = State) ->
+                                   delivery_tag = DeliveryTag,
+                                   settled = Settled} = Transfer0, Sections},
+       #state{outgoing_delivery_id = DeliveryId,
+              links = Links,
+              outgoing_unsettled = Unsettled0} = State0) ->
     case Links of
+        #{OutHandle := #link{state = attach_refused}} ->
+            {keep_state_and_data, {reply, From, {error, attach_refused}}};
         #{OutHandle := #link{input_handle = undefined}} ->
             {keep_state_and_data, {reply, From, {error, half_attached}}};
         #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
             {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
-        #{OutHandle := Link = #link{max_message_size = MaxMessageSize,
-                                    footer_opt = FooterOpt}} ->
+        #{OutHandle := #link{max_message_size = MaxMessageSize,
+                             footer_opt = FooterOpt} = Link} ->
             Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
-            case send_transfer(Transfer, Sections, FooterOpt, MaxMessageSize, State) of
+            case send_transfer(Transfer, Sections, FooterOpt, MaxMessageSize, State0) of
                 {ok, NumFrames} ->
-                    State1 = State#state{outgoing_unsettled = Unsettled#{DeliveryId => {DeliveryTag, Pid}}},
-                    {keep_state, book_transfer_send(NumFrames, Link, State1), {reply, From, ok}};
-                Error ->
-                    {keep_state_and_data, {reply, From, Error}}
-            end;
-        _ ->
-            {keep_state_and_data, {reply, From, {error, link_not_found}}}
-
-    end;
-mapped({call, From},
-       {transfer, #'v1_0.transfer'{handle = {uint, OutHandle}} = Transfer0,
-        Sections}, #state{outgoing_delivery_id = DeliveryId,
-                       links = Links} = State) ->
-    case Links of
-        #{OutHandle := #link{input_handle = undefined}} ->
-            {keep_state_and_data, {reply, From, {error, half_attached}}};
-        #{OutHandle := #link{link_credit = LC}} when LC =< 0 ->
-            {keep_state_and_data, {reply, From, {error, insufficient_credit}}};
-        #{OutHandle := Link = #link{max_message_size = MaxMessageSize,
-                                    footer_opt = FooterOpt}} ->
-            Transfer = Transfer0#'v1_0.transfer'{delivery_id = uint(DeliveryId)},
-            case send_transfer(Transfer, Sections, FooterOpt, MaxMessageSize, State) of
-                {ok, NumFrames} ->
+                    State = case Settled of
+                                true ->
+                                    State0;
+                                false ->
+                                    {binary, Tag} = DeliveryTag,
+                                    Unsettled = Unsettled0#{DeliveryId => {Tag, Pid}},
+                                    State0#state{outgoing_unsettled = Unsettled}
+                            end,
                     {keep_state, book_transfer_send(NumFrames, Link, State), {reply, From, ok}};
                 Error ->
                     {keep_state_and_data, {reply, From, Error}}
@@ -688,21 +686,28 @@ send_flow_link(OutHandle,
                    never -> never;
                    _ -> {RenewWhenBelow, Credit}
                end,
-    #{OutHandle := #link{output_handle = H,
+    #{OutHandle := #link{state = LinkState,
+                         output_handle = H,
                          role = receiver,
                          delivery_count = DeliveryCount,
                          available = Available} = Link} = Links,
-    Flow1 = Flow0#'v1_0.flow'{
-                    handle = uint(H),
-                    %% "In the event that the receiving link endpoint has not yet seen the
-                    %% initial attach frame from the sender this field MUST NOT be set." [2.7.4]
-                    delivery_count = maybe_uint(DeliveryCount),
-                    available = uint(Available)},
-    Flow = set_flow_session_fields(Flow1, State),
-    ok = send(Flow, State),
-    State#state{links = Links#{OutHandle =>
-                               Link#link{link_credit = Credit,
-                                         auto_flow = AutoFlow}}}.
+    case LinkState of
+        attach_refused ->
+            %% We will receive the DETACH frame shortly.
+            State;
+        _ ->
+            Flow1 = Flow0#'v1_0.flow'{
+                            handle = uint(H),
+                            %% "In the event that the receiving link endpoint has not yet seen the
+                            %% initial attach frame from the sender this field MUST NOT be set." [2.7.4]
+                            delivery_count = maybe_uint(DeliveryCount),
+                            available = uint(Available)},
+            Flow = set_flow_session_fields(Flow1, State),
+            ok = send(Flow, State),
+            State#state{links = Links#{OutHandle =>
+                                       Link#link{link_credit = Credit,
+                                                 auto_flow = AutoFlow}}}
+    end.
 
 send_flow_session(State) ->
     Flow = set_flow_session_fields(#'v1_0.flow'{}, State),

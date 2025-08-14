@@ -118,24 +118,25 @@ module Test =
          Guid("f275ea5e-0c57-4ad7-b11a-b20c563d3b71") :> obj
         ]
 
-    let testOutcome uri (attach: Attach) (cond: string) =
+    let testOutcome (uri:string) (attach:Attach) (expectedCond:string) =
         use ac = connectAnon uri
-        let trySet (mre: AutoResetEvent) =
-            try mre.Set() |> ignore with _ -> ()
+        let mutable errorName : string = null
+        use attachedEv = new AutoResetEvent(false)
+        use closedEv   = new AutoResetEvent(false)
+        let onAttached = new OnAttached (fun _ _ -> attachedEv.Set() |> ignore)
+        let receiver = new ReceiverLink(ac.Session, "test-receiver", attach, onAttached)
+        receiver.add_Closed(
+            new ClosedCallback (fun _ err ->
+                if not (isNull err) then errorName <- string err.Condition
+                closedEv.Set() |> ignore))
 
-        use mre = new System.Threading.AutoResetEvent(false)
-        let mutable errorName = null
-        ac.Session.add_Closed (
-            new ClosedCallback (fun o err -> errorName <- string err.Condition; trySet mre))
-
-        let attached = new OnAttached (
-                        fun l attach -> errorName <- null; trySet mre)
-
-        let receiver = ReceiverLink(ac.Session, "test-receiver", attach, attached)
-        mre.WaitOne(1000) |> ignore
-        if cond = null then
+        if not (attachedEv.WaitOne(9000)) then failwith "Expected broker to reply with attach frame"
+        if isNull expectedCond then
+            if closedEv.WaitOne(5) then failwith "Unexpected link refusal"
             receiver.Close()
-        assertEqual cond errorName
+        else
+            if not (closedEv.WaitOne(9000)) then failwith "Expected link refusal, but link didn't close."
+            assertEqual expectedCond errorName
 
     let no_routes_is_released uri =
         // tests that a message sent to an exchange that resolves no routes for the
@@ -416,33 +417,121 @@ module Test =
             assertTrue (m' <> null)
             assertEqual (m.Body :?> int) (m'.Body :?> int)
 
-    let invalidRoutes uri =
+    // Test attaching a sender to a non-existent exchange
+    // Expect: Link refused with amqp:not-found error
+    let attachSenderToMissingExchange uri =
+        use ac = connectAnon uri
+        use attachEvent = new System.Threading.AutoResetEvent(false)
+        use detachEvent = new System.Threading.AutoResetEvent(false)
+        let mutable linkError : Error = null
 
-        for addr, cond in
-            ["/exchanges/missing", "amqp:not-found"
-             "/fruit/orange", "amqp:invalid-field"] do
-            use ac = connectAnon uri
-            let trySet (mre: AutoResetEvent) =
-                try mre.Set() |> ignore with _ -> ()
+        let attached = new OnAttached (fun link attach ->
+            if attach.Target = null then
+                attachEvent.Set() |> ignore
+            else
+                failwith "Expected null target in attach response"
+        )
 
-            let mutable errorName = null
-            use mre = new System.Threading.AutoResetEvent(false)
-            ac.Session.add_Closed (
-                new ClosedCallback (fun _ err -> errorName <- err.Condition; trySet mre))
+        let sender = new SenderLink(ac.Session, "test-sender",
+                                    Target(Address = "/exchanges/missing"), attached)
 
-            let attached = new OnAttached (fun _ _ -> trySet mre)
+        sender.add_Closed(new ClosedCallback(fun _ err ->
+            linkError <- err
+            detachEvent.Set() |> ignore))
 
-            let sender = new SenderLink(ac.Session, "test-sender",
-                                        Target(Address = addr), attached);
-            mre.WaitOne() |> ignore
+        assertTrue (attachEvent.WaitOne(9000))
+        assertTrue (detachEvent.WaitOne(9000))
 
-            try
-                let receiver = ReceiverLink(ac.Session, "test-receiver", addr)
-                receiver.Close()
-            with
-            | :? Amqp.AmqpException as ae ->
-                assertEqual (Symbol cond) (ae.Error.Condition)
-            | _ -> failwith "invalid expection thrown"
+        assertNotNull linkError
+        assertEqual (Symbol "amqp:not-found") linkError.Condition
+        assertTrue (not ac.Session.IsClosed)
+
+    // Test attaching a sender to an invalid address format
+    // Expect: Link refused with amqp:invalid-field error
+    let attachSenderToInvalidAddress uri =
+        use ac = connectAnon uri
+        use attachEvent = new System.Threading.AutoResetEvent(false)
+        use detachEvent = new System.Threading.AutoResetEvent(false)
+        let mutable linkError : Error = null
+
+        let attached = new OnAttached (fun link attach ->
+            if attach.Target = null then
+                attachEvent.Set() |> ignore
+            else
+                failwith "Expected null target in attach response"
+        )
+
+        let sender = new SenderLink(ac.Session, "test-sender",
+                                    Target(Address = "/fruit/orange"), attached)
+
+        sender.add_Closed(new ClosedCallback(fun _ err ->
+            linkError <- err
+            detachEvent.Set() |> ignore))
+
+        assertTrue (attachEvent.WaitOne(9000))
+        assertTrue (detachEvent.WaitOne(9000))
+
+        assertNotNull linkError
+        assertEqual (Symbol "amqp:invalid-field") linkError.Condition
+        assertTrue (not ac.Session.IsClosed)
+
+    // Test attaching a receiver to a non-existent queue
+    // Expect: Link refused with amqp:not-found error
+    let attachReceiverFromMissingQueue uri =
+        use ac = connectAnon uri
+        use attachEvent = new System.Threading.AutoResetEvent(false)
+        use detachEvent = new System.Threading.AutoResetEvent(false)
+        let mutable linkError : Error = null
+
+        let attached = new OnAttached (fun link attach ->
+            if attach.Source = null then
+                attachEvent.Set() |> ignore
+            else
+                failwith "Expected null source in attach response"
+        )
+
+        let receiver = new ReceiverLink(ac.Session, "test-receiver",
+                                        Source(Address = "/queues/missing"), attached)
+
+        receiver.add_Closed(new ClosedCallback(fun _ err ->
+            linkError <- err
+            detachEvent.Set() |> ignore))
+
+        assertTrue (attachEvent.WaitOne(9000))
+        assertTrue (detachEvent.WaitOne(9000))
+
+        assertNotNull linkError
+        assertEqual (Symbol "amqp:not-found") linkError.Condition
+        assertTrue (not ac.Session.IsClosed)
+
+    // Test attaching a receiver from an invalid address format
+    // Expect: Link refused with amqp:invalid-field error
+    let attachReceiverFromInvalidAddress uri =
+        use ac = connectAnon uri
+        use attachEvent = new System.Threading.AutoResetEvent(false)
+        use detachEvent = new System.Threading.AutoResetEvent(false)
+        let mutable linkError : Error = null
+
+        let attached = new OnAttached (fun link attach ->
+            if attach.Source = null then
+                attachEvent.Set() |> ignore
+            else
+                failwith "Expected null source in attach response"
+        )
+
+        let receiver = new ReceiverLink(ac.Session, "test-receiver",
+                                        Source(Address = "/fruit/orange"), attached)
+
+        receiver.add_Closed(new ClosedCallback(fun _ err ->
+            linkError <- err
+            detachEvent.Set() |> ignore))
+
+        assertTrue (attachEvent.WaitOne(9000))
+        assertTrue (detachEvent.WaitOne(9000))
+
+        assertNotNull linkError
+        assertEqual (Symbol "amqp:invalid-field") linkError.Condition
+        assertTrue (not ac.Session.IsClosed)
 
     let authFailure uri =
         try
@@ -538,8 +627,17 @@ let main argv =
     | [AsLower "routing"; uri] ->
         routing uri
         0
-    | [AsLower "invalid_routes"; uri] ->
-        invalidRoutes uri
+    | [AsLower "attach_sender_to_missing_exchange"; uri] ->
+        attachSenderToMissingExchange uri
+        0
+    | [AsLower "attach_sender_to_invalid_address"; uri] ->
+        attachSenderToInvalidAddress uri
+        0
+    | [AsLower "attach_receiver_from_missing_queue"; uri] ->
+        attachReceiverFromMissingQueue uri
+        0
+    | [AsLower "attach_receiver_from_invalid_address"; uri] ->
+        attachReceiverFromInvalidAddress uri
         0
     | [AsLower "streams"; uri] ->
         streams uri
