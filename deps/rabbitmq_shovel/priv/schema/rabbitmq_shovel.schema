@@ -1,8 +1,5 @@
 %% ----------------------------------------------------------------------------
-%% RabbitMQ Shovel plugin
-%%
-%% See https://github.com/rabbitmq/rabbitmq-shovel/blob/stable/README.md
-%% for details
+%% RabbitMQ Shovel settings
 %% ----------------------------------------------------------------------------
 
 
