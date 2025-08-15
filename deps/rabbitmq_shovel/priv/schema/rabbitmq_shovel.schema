@@ -1,5 +1,5 @@
 %% ----------------------------------------------------------------------------
-%% RabbitMQ Shovel plugin
+%% RabbitMQ Shovel settings
 %% ----------------------------------------------------------------------------
 
 {mapping, "shovel.operating_mode", "rabbitmq_shovel.operating_mode", [
