@@ -788,6 +788,9 @@ get_stable_feature_flags(#{feature_flags := FeatureFlags}) ->
 %%   `{rabbit, [{forced_feature_flags_on_init, [rabbitmq_4.0.0, khepri_db]}]}'.</li>
 %% </ol>
 %%
+%% There's also a way to enable specific flags and skip others:
+%% `{rabbit, [{forced_feature_flags_on_init, {rel, ListToEnable, ListToSkip}}]}'.
+%%
 %% The environment variable has precedence over the configuration parameter.
 %%
 %% @private
