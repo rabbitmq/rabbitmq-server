@@ -52,7 +52,7 @@
 %% sequence number initialized at an arbitrary point by the sender."
 %% See rabbit_amqp_session.erl
 -define(INITIAL_DELIVERY_COUNT, 16#ff_ff_ff_ff - 4).
--define(DEFAULT_MAX_LINK_CREDIT, 170).
+-define(DEFAULT_MAX_LINK_CREDIT, 1000).
 
 -record(pending_ack, {
                       delivery_tag,
@@ -677,7 +677,7 @@ maybe_grant_credit(#{source := #{queue_r := QName,
     handle_queue_actions(Actions, State).
 
 max_link_credit() ->
-    application:get_env(rabbit, max_link_credit, ?DEFAULT_MAX_LINK_CREDIT).
+    application:get_env(rabbitmq_shovel, max_local_shovel_credit, ?DEFAULT_MAX_LINK_CREDIT).
 
 grant_link_credit(Credit, MaxLinkCredit, NumUnconfirmed) ->
     Credit =< MaxLinkCredit div 2 andalso
