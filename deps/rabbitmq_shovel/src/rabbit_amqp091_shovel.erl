@@ -294,11 +294,10 @@ close_dest(_) ->
 confirm_to_inbound(ConfirmFun, Seq, Multiple,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
-    State = ConfirmFun(InTag, Multiple, State0),
     {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    rabbit_shovel_behaviour:decr_remaining(Removed,
-                                           State#{dest =>
-                                                  Dst#{unacked => Unacked1}}).
+    State = ConfirmFun(InTag, Multiple, State0#{dest =>
+                                                    Dst#{unacked => Unacked1}}),
+    rabbit_shovel_behaviour:decr_remaining(Removed, State).
 
 publish(_Tag, _Method, _Msg, State = #{source := #{remaining_unacked := 0}}) ->
     %% We are in on-confirm mode, and are autodelete. We have
