@@ -64,7 +64,9 @@ init_per_group(G, Config)
 init_per_group(Group, Config0) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config0, "", "-"),
     Config = rabbit_ct_helpers:set_config(
-                Config0, {rmq_nodename_suffix, Suffix}),
+               Config0, [{rmq_nodename_suffix, Suffix},
+                         {start_rmq_with_plugins_disabled, true}
+                        ]),
     Mod = list_to_atom("rabbit_mqtt_retained_msg_store_" ++ atom_to_list(Group)),
     Env = [{rabbitmq_mqtt, [{retained_message_store, Mod}]},
            {rabbit, [
@@ -73,11 +75,13 @@ init_per_group(Group, Config0) ->
                      {default_vhost, "/"},
                      {default_permissions, [".*", ".*", ".*"]}
                     ]}],
-    rabbit_ct_helpers:run_setup_steps(
-      Config,
-      [fun(Conf) -> rabbit_ct_helpers:merge_app_env(Conf, Env) end] ++
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config1 = rabbit_ct_helpers:run_setup_steps(
+                Config,
+                [fun(Conf) -> rabbit_ct_helpers:merge_app_env(Conf, Env) end] ++
+                    rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    util:enable_plugin(Config1, rabbitmq_mqtt),
+    Config1.
 
 end_per_group(G, Config)
   when G =:= v4;
@@ -173,6 +177,7 @@ recover(Config) ->
                                                  {qos, 1}]),
     ok = emqtt:disconnect(C1),
     ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_mqtt),
     C2 = connect(ClientId, Config),
     {ok, _, _} = emqtt:subscribe(C2, Topic, qos1),
     ok = expect_publishes(C2, Topic, [Payload]),
@@ -193,6 +198,7 @@ recover_with_message_expiry_interval(Config) ->
     ok = emqtt:disconnect(C1),
     %% Takes around 9 seconds on Linux.
     ok = rabbit_ct_broker_helpers:restart_node(Config, 0),
+    rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_mqtt),
     C2 = connect(ClientId, Config),
 
     %% Retained message for topic/3 should have expired during node restart.
