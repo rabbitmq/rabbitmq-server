@@ -48,6 +48,7 @@ groups() ->
        test_update_secret,
        cannot_update_username_after_authenticated,
        cannot_use_another_authmechanism_when_updating_secret,
+       update_secret_should_close_connection_if_wrong_secret,
        unauthenticated_client_rejected_tcp_connected,
        timeout_tcp_connected,
        unauthenticated_client_rejected_peer_properties_exchanged,
@@ -292,20 +293,28 @@ test_update_secret(Config) ->
 
 cannot_update_username_after_authenticated(Config) ->
     {S, C0} = connect_and_authenticate(gen_tcp, Config),
-    C1 = expect_unsuccessful_authentication(
-      try_authenticate(gen_tcp, S, C0, <<"PLAIN">>, <<"other">>, <<"other">>),
-        ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME),
-    _C2 = test_close(gen_tcp, S, C1),
+    _C1 = expect_unsuccessful_authentication(
+            try_authenticate(gen_tcp, S, C0, <<"PLAIN">>, <<"other">>, <<"other">>),
+            ?RESPONSE_SASL_CANNOT_CHANGE_USERNAME),
     closed = wait_for_socket_close(gen_tcp, S, 10),
     ok.
 
 cannot_use_another_authmechanism_when_updating_secret(Config) ->
     {S, C0} = connect_and_authenticate(gen_tcp, Config),
-    C1 = expect_unsuccessful_authentication(
-      try_authenticate(gen_tcp, S, C0, <<"EXTERNAL">>, <<"guest">>, <<"new_password">>),
-        ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
-    _C2 = test_close(gen_tcp, S, C1),
+    _C1 = expect_unsuccessful_authentication(
+            try_authenticate(gen_tcp, S, C0, <<"EXTERNAL">>, <<"guest">>, <<"new_password">>),
+            ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM),
     closed = wait_for_socket_close(gen_tcp, S, 10),
+    ok.
+
+update_secret_should_close_connection_if_wrong_secret(Config) ->
+    Transport = gen_tcp,
+    {S, C0} = connect_and_authenticate(Transport, Config),
+    Pwd = rand:bytes(20),
+    _C1 = expect_unsuccessful_authentication(
+            try_authenticate(Transport, S, C0, <<"PLAIN">>, <<"guest">>, Pwd),
+            ?RESPONSE_AUTHENTICATION_FAILURE),
+    closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
 test_stream_tls(Config) ->
