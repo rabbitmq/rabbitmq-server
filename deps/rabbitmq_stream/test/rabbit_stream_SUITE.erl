@@ -49,6 +49,7 @@ groups() ->
        cannot_update_username_after_authenticated,
        cannot_use_another_authmechanism_when_updating_secret,
        update_secret_should_close_connection_if_wrong_secret,
+       update_secret_should_close_connection_if_unauthorized_vhost,
        unauthenticated_client_rejected_tcp_connected,
        timeout_tcp_connected,
        unauthenticated_client_rejected_peer_properties_exchanged,
@@ -166,6 +167,12 @@ init_per_testcase(cannot_update_username_after_authenticated = TestCase, Config)
   ok = rabbit_ct_broker_helpers:add_user(Config, <<"other">>),
   rabbit_ct_helpers:testcase_started(Config, TestCase);
 
+init_per_testcase(update_secret_should_close_connection_if_unauthorized_vhost = TestCase,
+                  Config) ->
+  ok = rabbit_ct_broker_helpers:add_user(Config, <<"other">>),
+  ok = rabbit_ct_broker_helpers:set_full_permissions(Config, <<"other">>, <<"/">>),
+  rabbit_ct_helpers:testcase_started(Config, TestCase);
+
 init_per_testcase(close_connection_on_consumer_update_timeout = TestCase, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config,
                                       0,
@@ -198,6 +205,11 @@ end_per_testcase(test_update_secret = TestCase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 
 end_per_testcase(cannot_update_username_after_authenticated = TestCase, Config) ->
+    ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
+    rabbit_ct_helpers:testcase_finished(Config, TestCase);
+
+end_per_testcase(update_secret_should_close_connection_if_unauthorized_vhost = TestCase,
+                 Config) ->
     ok = rabbit_ct_broker_helpers:delete_user(Config, <<"other">>),
     rabbit_ct_helpers:testcase_finished(Config, TestCase);
 
@@ -286,7 +298,7 @@ test_update_secret(Config) ->
     {S, C0} = connect_and_authenticate(Transport, Config),
     rabbit_ct_broker_helpers:change_password(Config, <<"guest">>, <<"password">>),
     C1 = expect_successful_authentication(
-      try_authenticate(Transport, S, C0, <<"PLAIN">>, <<"guest">>, <<"password">>)),
+           try_authenticate(Transport, S, C0, <<"PLAIN">>, <<"guest">>, <<"password">>)),
     _C2 = test_close(Transport, S, C1),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
@@ -315,6 +327,22 @@ update_secret_should_close_connection_if_wrong_secret(Config) ->
             try_authenticate(Transport, S, C0, <<"PLAIN">>, <<"guest">>, Pwd),
             ?RESPONSE_AUTHENTICATION_FAILURE),
     closed = wait_for_socket_close(Transport, S, 10),
+    ok.
+
+update_secret_should_close_connection_if_unauthorized_vhost(Config) ->
+    T = gen_tcp,
+    Port = get_port(T, Config),
+    Opts = get_opts(T),
+    {ok, S} = T:connect("localhost", Port, Opts),
+    C0 = rabbit_stream_core:init(0),
+    C1 = test_peer_properties(T, S, C0),
+    Username = <<"other">>,
+    C2 = test_authenticate(T, S, C1, Username),
+    ok = rabbit_ct_broker_helpers:clear_permissions(Config, Username, <<"/">>),
+    _C3 = expect_unsuccessful_authentication(
+            try_authenticate(gen_tcp, S, C2, <<"PLAIN">>, Username, Username),
+            ?RESPONSE_VHOST_ACCESS_FAILURE),
+    closed = wait_for_socket_close(T, S, 10),
     ok.
 
 test_stream_tls(Config) ->

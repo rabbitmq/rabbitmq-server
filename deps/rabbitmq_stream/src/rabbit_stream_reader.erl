@@ -1505,7 +1505,6 @@ handle_frame_pre_auth(Transport,
                   send(Transport, S, F),
                   Connection#stream_connection{connection_step = failure}
         end,
-
     {Connection1, State};
 handle_frame_pre_auth(_Transport, Connection, State, heartbeat) ->
     rabbit_log:debug("Received heartbeat frame pre auth"),
@@ -1614,21 +1613,8 @@ handle_frame_post_auth(Transport,
                             Challenge}};
                       {ok, NewUser = #user{username = NewUsername}} ->
                           case NewUsername of
-                            Username ->
-                                  rabbit_core_metrics:auth_attempt_succeeded(Host,
-                                                                             Username,
-                                                                             stream),
-                                  notify_auth_result(Username,
-                                                     user_authentication_success,
-                                                     [],
-                                                     C1,
-                                                     S1),
-                                  rabbit_log:debug("Successfully updated secret for username '~ts'", [Username]),
-                                  {C1#stream_connection{user = NewUser,
-                                                        authentication_state = done,
-                                                        connection_step = authenticated},
-                                   {sasl_authenticate, ?RESPONSE_CODE_OK,
-                                    <<>>}};
+                              Username ->
+                                  complete_secret_update(NewUser, C1, S1);
                               _ ->
                                   rabbit_core_metrics:auth_attempt_failed(Host,
                                                                           Username,
@@ -2779,6 +2765,32 @@ handle_frame_post_auth(Transport,
     send(Transport, S, Frame),
     increase_protocol_counter(?UNKNOWN_FRAME),
     {Connection#stream_connection{connection_step = close_sent}, State}.
+
+complete_secret_update(NewUser = #user{username = Username},
+                       #stream_connection{host = Host,
+                                          socket = S,
+                                          virtual_host = VH} = C1, S1) ->
+    notify_auth_result(Username, user_authentication_success, [], C1, S1),
+    rabbit_core_metrics:auth_attempt_succeeded(Host, Username, stream),
+    rabbit_log_connection:debug("Stream connection has successfully checked updated secret (token) for username '~ts'",
+                                [Username]),
+    try
+        rabbit_log_connection:debug("Stream connection: will verify virtual host access after secret (token) update"),
+        rabbit_access_control:check_vhost_access(NewUser, VH, {socket, S}, #{}),
+        rabbit_log_connection:debug("Stream connection: successfully re-verified virtual host access"),
+
+        {C1#stream_connection{user = NewUser,
+                              authentication_state = done,
+                              connection_step = authenticated},
+         {sasl_authenticate, ?RESPONSE_CODE_OK,
+          <<>>}}
+    catch exit:#amqp_error{explanation = Explanation} ->
+        rabbit_log_connection:warning("Stream connection no longer has the permissions to access its target virtual host ('~ts') after a secret (token) update: ~ts",
+                                      [VH, Explanation]),
+              silent_close_delay(),
+              {C1#stream_connection{connection_step = failure},
+               {sasl_authenticate, ?RESPONSE_VHOST_ACCESS_FAILURE, <<>>}}
+    end.
 
 process_client_command_versions(C, []) ->
     C;
