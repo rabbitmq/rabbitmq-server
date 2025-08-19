@@ -694,6 +694,12 @@ open(info, {OK, S, Data},
             {next_state, close_sent,
              StatemData#statem_data{connection = Connection1,
                                     connection_state = State1}};
+        failure ->
+            _ = demonitor_all_streams(Connection),
+            rabbit_log_connection:info("Force closing stream connection ~tp because of "
+                                       "transition to invalid state",
+                                       [self()]),
+            {stop, {shutdown, <<"Invalid state">>}};
         _ ->
             State2 =
                 case Blocked of
@@ -1583,6 +1589,7 @@ handle_frame_post_auth(Transport,
                                                                   stream),
                           auth_fail(NewUsername, Msg, Args, C1, S1),
                           rabbit_log_connection:warning(Msg, Args),
+                          silent_close_delay(),
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate,
                             ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
@@ -1628,6 +1635,7 @@ handle_frame_post_auth(Transport,
                                                                           stream),
                                   rabbit_log_connection:warning("Not allowed to change username '~ts'. Only password",
                                                                 [Username]),
+                                  silent_close_delay(),
                                   {C1#stream_connection{connection_step =
                                                             failure},
                                    {sasl_authenticate,
@@ -1649,6 +1657,7 @@ handle_frame_post_auth(Transport,
         {OtherMechanism, _} ->
               rabbit_log_connection:warning("User '~ts' cannot change initial auth mechanism '~ts' for '~ts'",
                                               [Username, NewMechanism, OtherMechanism]),
+              silent_close_delay(),
               CmdBody =
                 {sasl_authenticate, ?RESPONSE_SASL_CANNOT_CHANGE_MECHANISM, <<>>},
               Frame = rabbit_stream_core:frame({response, CorrelationId, CmdBody}),
