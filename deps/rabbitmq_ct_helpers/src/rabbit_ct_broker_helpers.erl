@@ -1128,6 +1128,13 @@ configure_metadata_store(Config) ->
                       {rabbit,
                        [{forced_feature_flags_on_init,
                          {rel, [khepri_db], []}}]});
+                {rel, ListToEnable, ListToSkip} ->
+                    Rel1 = {rel, [khepri_db | ListToEnable], ListToSkip},
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1, {rabbit, [
+                        {forced_feature_flags_on_init, Rel1}
+                      ]}
+                    );
                 _ ->
                     rabbit_ct_helpers:merge_app_env(
                       Config1,
@@ -1144,6 +1151,13 @@ configure_metadata_store(Config) ->
                       {rabbit,
                        [{forced_feature_flags_on_init,
                          {rel, [], [khepri_db]}}]});
+                {rel, ListToEnable, ListToSkip} ->
+                    Rel1 = {rel, ListToEnable, [khepri_db | ListToSkip]},
+                    rabbit_ct_helpers:merge_app_env(
+                      Config1, {rabbit, [
+                             {forced_feature_flags_on_init, Rel1}
+                      ]}
+                    );
                 _ ->
                     rabbit_ct_helpers:merge_app_env(
                       Config1,
