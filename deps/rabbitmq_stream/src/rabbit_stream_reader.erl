@@ -699,7 +699,7 @@ open(info, {OK, S, Data},
                                     connection_state = State1}};
         failure ->
             _ = demonitor_all_streams(Connection),
-            ?LOG_INFO("Forcing stream connection ~tp closing because of "
+            ?LOG_INFO("Force closing stream connection ~tp because of "
                       "transition to invalid state",
                       [self()]),
             {stop, {shutdown, <<"Invalid state">>}};
