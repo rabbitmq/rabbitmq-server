@@ -2780,7 +2780,7 @@ complete_secret_update(NewUser = #user{username = Username},
     try
         ?LOG_DEBUG("Stream connection: will verify virtual host access after secret (token) update"),
         rabbit_access_control:check_vhost_access(NewUser, VH, {socket, S}, #{}),
-        ?LOG_DEBUG("Checked vhost access"),
+        ?LOG_DEBUG("Stream connection: successfully re-verified virtual host access"),
 
         {C1#stream_connection{user = NewUser,
                               authentication_state = done,
