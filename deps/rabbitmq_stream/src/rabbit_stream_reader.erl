@@ -2794,10 +2794,10 @@ complete_secret_update(NewUser = #user{username = Username},
                                           virtual_host = VH} = C1, S1) ->
     notify_auth_result(Username, user_authentication_success, [], C1, S1),
     rabbit_core_metrics:auth_attempt_succeeded(Host, Username, stream),
-    ?LOG_DEBUG("Successfully checked updated secret for username '~ts'",
+    ?LOG_DEBUG("Stream connection has successfully checked updated secret for username '~ts'",
                [Username]),
     try
-        ?LOG_DEBUG("Checking vhost access after secret update"),
+        ?LOG_DEBUG("Checking virtual host access after secret update"),
         rabbit_access_control:check_vhost_access(NewUser, VH, {socket, S}, #{}),
         ?LOG_DEBUG("Checked vhost access"),
 
@@ -2807,7 +2807,7 @@ complete_secret_update(NewUser = #user{username = Username},
          {sasl_authenticate, ?RESPONSE_CODE_OK,
           <<>>}}
     catch exit:#amqp_error{explanation = Explanation} ->
-              ?LOG_WARNING("Access to vhost failed after secret update: ~ts",
+              ?LOG_WARNING("Stream client can no longer access virtual host after a secret update: ~ts",
                            [Explanation]),
               silent_close_delay(),
               {C1#stream_connection{connection_step = failure},
