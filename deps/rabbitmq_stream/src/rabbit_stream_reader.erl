@@ -696,9 +696,9 @@ open(info, {OK, S, Data},
                                     connection_state = State1}};
         failure ->
             _ = demonitor_all_streams(Connection),
-            ?LOG_INFO("Force closing stream connection ~tp because of "
-                      "transition to invalid state",
-                      [self()]),
+            rabbit_log_connection:info("Force closing stream connection ~tp because of "
+                                       "transition to invalid state",
+                                       [self()]),
             {stop, {shutdown, <<"Invalid state">>}};
         _ ->
             State2 =
@@ -1587,12 +1587,8 @@ handle_frame_post_auth(Transport,
                                                                   NewUsername,
                                                                   stream),
                           auth_fail(NewUsername, Msg, Args, C1, S1),
-<<<<<<< HEAD
                           rabbit_log_connection:warning(Msg, Args),
-=======
-                          ?LOG_WARNING(Msg, Args),
                           silent_close_delay(),
->>>>>>> 02449bd5d (Close stream connection if secret update fails)
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate,
                             ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
@@ -1617,26 +1613,8 @@ handle_frame_post_auth(Transport,
                             Challenge}};
                       {ok, NewUser = #user{username = NewUsername}} ->
                           case NewUsername of
-<<<<<<< HEAD
-                            Username ->
-                                  rabbit_core_metrics:auth_attempt_succeeded(Host,
-                                                                             Username,
-                                                                             stream),
-                                  notify_auth_result(Username,
-                                                     user_authentication_success,
-                                                     [],
-                                                     C1,
-                                                     S1),
-                                  rabbit_log:debug("Successfully updated secret for username '~ts'", [Username]),
-                                  {C1#stream_connection{user = NewUser,
-                                                        authentication_state = done,
-                                                        connection_step = authenticated},
-                                   {sasl_authenticate, ?RESPONSE_CODE_OK,
-                                    <<>>}};
-=======
                               Username ->
                                   complete_secret_update(NewUser, C1, S1);
->>>>>>> ba8745ab4 (Close stream connection if vhost not authorized after secret update)
                               _ ->
                                   rabbit_core_metrics:auth_attempt_failed(Host,
                                                                           Username,
@@ -2794,12 +2772,12 @@ complete_secret_update(NewUser = #user{username = Username},
                                           virtual_host = VH} = C1, S1) ->
     notify_auth_result(Username, user_authentication_success, [], C1, S1),
     rabbit_core_metrics:auth_attempt_succeeded(Host, Username, stream),
-    ?LOG_DEBUG("Stream connection has successfully checked updated secret (token) for username '~ts'",
-               [Username]),
+    rabbit_log_connection:debug("Stream connection has successfully checked updated secret (token) for username '~ts'",
+                                [Username]),
     try
-        ?LOG_DEBUG("Stream connection: will verify virtual host access after secret (token) update"),
+        rabbit_log_connection:debug("Stream connection: will verify virtual host access after secret (token) update"),
         rabbit_access_control:check_vhost_access(NewUser, VH, {socket, S}, #{}),
-        ?LOG_DEBUG("Stream connection: successfully re-verified virtual host access"),
+        rabbit_log_connection:debug("Stream connection: successfully re-verified virtual host access"),
 
         {C1#stream_connection{user = NewUser,
                               authentication_state = done,
@@ -2807,8 +2785,8 @@ complete_secret_update(NewUser = #user{username = Username},
          {sasl_authenticate, ?RESPONSE_CODE_OK,
           <<>>}}
     catch exit:#amqp_error{explanation = Explanation} ->
-              ?LOG_WARNING("Stream connection no longer has the permissions to access its target virtual host ('~ts') after a secret (token) update: ~ts",
-                           [VH, Explanation]),
+        rabbit_log_connection:warning("Stream connection no longer has the permissions to access its target virtual host ('~ts') after a secret (token) update: ~ts",
+                                      [VH, Explanation]),
               silent_close_delay(),
               {C1#stream_connection{connection_step = failure},
                {sasl_authenticate, ?RESPONSE_VHOST_ACCESS_FAILURE, <<>>}}
