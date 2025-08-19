@@ -2807,8 +2807,8 @@ complete_secret_update(NewUser = #user{username = Username},
          {sasl_authenticate, ?RESPONSE_CODE_OK,
           <<>>}}
     catch exit:#amqp_error{explanation = Explanation} ->
-              ?LOG_WARNING("Stream connection no longer has the permissions to access its target virtual host after a secret (token) update: ~ts",
-                           [Explanation]),
+              ?LOG_WARNING("Stream connection no longer has the permissions to access its target virtual host ('~ts') after a secret (token) update: ~ts",
+                           [VH, Explanation]),
               silent_close_delay(),
               {C1#stream_connection{connection_step = failure},
                {sasl_authenticate, ?RESPONSE_VHOST_ACCESS_FAILURE, <<>>}}
