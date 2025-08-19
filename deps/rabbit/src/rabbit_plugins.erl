@@ -8,12 +8,13 @@
 -module(rabbit_plugins).
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
--export([setup/0, active/0, read_enabled/1, list/1, list/2, dependencies/3, running_plugins/0]).
+-export([setup/0, active/0, read_enabled/1, list/0, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
 -export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
--export([is_enabled/1, is_enabled_on_node/2]).
+-export([is_enabled/1, is_enabled_on_node/2, enabled_plugins/0]).
+-export([which_plugin/1]).
 
 % Export for testing purpose.
 -export([is_version_supported/2, validate_plugins/2]).
@@ -130,7 +131,7 @@ setup() ->
 -spec active() -> [plugin_name()].
 
 active() ->
-    InstalledPlugins = plugin_names(list(plugins_dir())),
+    InstalledPlugins = plugin_names(list()),
     [App || {App, _, _} <- rabbit_misc:which_applications(),
             lists:member(App, InstalledPlugins)].
 
@@ -156,6 +157,13 @@ is_enabled_on_node(Name, Node) ->
         error:{erpc, _} -> false;
         _Class:_Reason:_Stacktrace -> false
     end.
+
+-spec list() -> [#plugin{}].
+%% @doc Get the list of plugins from the configured plugin path.
+
+list() ->
+    PluginsPath = plugins_dir(),
+    list(PluginsPath).
 
 %% @doc Get the list of plugins which are ready to be enabled.
 
@@ -228,7 +236,7 @@ strictly_plugins(Plugins, AllPlugins) ->
 -spec strictly_plugins([plugin_name()]) -> [plugin_name()].
 
 strictly_plugins(Plugins) ->
-    AllPlugins = list(plugins_dir()),
+    AllPlugins = list(),
     lists:filter(
       fun(Name) ->
               is_strictly_plugin(lists:keyfind(Name, #plugin.name, AllPlugins))
@@ -279,11 +287,61 @@ running_plugins() ->
     ActivePlugins = active(),
     {ok, [{App, Vsn} || {App, _ , Vsn} <- rabbit_misc:which_applications(), lists:member(App, ActivePlugins)]}.
 
+-spec which_plugin(Module) -> Ret when
+      Module :: module(),
+      Ret :: {ok, PluginName} | {error, Reason},
+      PluginName :: atom(),
+      Reason :: no_provider.
+%% @doc Returns the name of the plugin that provides the given module.
+%%
+%% If no plugin provides the module, `{error, no_provider}' is returned.
+%%
+%% The returned plugin might not be enabled, thus using the given module might
+%% not work until the plugin is enabled.
+%%
+%% @returns An `{ok, PluginName}' tuple with the name of the plugin providing
+%% the module, or `{error, no_provider}'.
+
+which_plugin(Module) ->
+    Plugins = list(),
+    which_plugin(Plugins, Module).
+
+which_plugin([#plugin{name = Name} | Rest], Module) ->
+    %% Get the list of modules belonging to this plugin.
+    ModulesKey = case application:get_key(Name, modules) of
+                     {ok, _} = Ret ->
+                         Ret;
+                     undefined ->
+                         %% The plugin application might not be loaded. Load
+                         %% it temporarily and try again.
+                         case application:load(Name) of
+                             ok ->
+                                 Ret = application:get_key(Name, modules),
+                                 _ = application:unload(Name),
+                                 Ret;
+                             {error, _Reason} ->
+                                 undefined
+                         end
+                 end,
+    case ModulesKey of
+        {ok, Modules} ->
+            case lists:member(Module, Modules) of
+                true ->
+                    {ok, Name};
+                false ->
+                    which_plugin(Rest, Module)
+            end;
+        undefined ->
+            which_plugin(Rest, Module)
+    end;
+which_plugin([], _Module) ->
+    {error, no_provider}.
+
 %%----------------------------------------------------------------------------
 
 prepare_plugins(Enabled) ->
     ExpandDir = plugins_expand_dir(),
-    AllPlugins = list(plugins_dir()),
+    AllPlugins = list(),
     Wanted = dependencies(false, Enabled, AllPlugins),
     WantedPlugins = lookup_plugins(Wanted, AllPlugins),
     {ValidPlugins, Problems} = validate_plugins(WantedPlugins),
@@ -695,20 +753,6 @@ remove_plugins(Plugins) ->
               IsAPlugin =
               lists:member(Plugin, ActualPlugins) orelse
               lists:member(Name, PluginDeps),
-              if
-                  IsOTPApp ->
-                      ?LOG_DEBUG(
-                        "Plugins discovery: "
-                        "ignoring ~ts, Erlang/OTP application",
-                        [Name]);
-                  not IsAPlugin ->
-                      ?LOG_DEBUG(
-                        "Plugins discovery: "
-                        "ignoring ~ts, not a RabbitMQ plugin",
-                        [Name]);
-                  true ->
-                      ok
-              end,
               not (IsOTPApp orelse not IsAPlugin)
       end, Plugins).
 

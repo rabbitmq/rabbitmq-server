@@ -363,7 +363,7 @@ RMQ_ERLC_OPTS += -DTRACE_SUPERVISOR2=true
 endif
 
 # https://www.erlang.org/doc/apps/parsetools/leex.html#file/2
-export ERL_COMPILER_OPTIONS := deterministic
+YRL_ERLC_OPTS ?= +deterministic
 
 # --------------------------------------------------------------------
 # Documentation.
