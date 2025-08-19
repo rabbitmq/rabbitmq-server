@@ -20,6 +20,10 @@
 -type publisher_reference() :: binary().
 -type subscription_id() :: byte().
 -type internal_id() :: integer().
+-type connection_step() :: tcp_connected | peer_properties_exchanged |
+                           authenticating | authenticated | tuning |
+                           tuned | opened | failure |
+                           closing | close_sent | closing_done.
 
 -record(publisher,
         {publisher_id :: publisher_id(),
@@ -75,8 +79,7 @@
          credits :: atomics:atomics_ref(),
          user :: undefined | #user{},
          virtual_host :: undefined | binary(),
-         connection_step ::
-             atom(), % tcp_connected, peer_properties_exchanged, authenticating, authenticated, tuning, tuned, opened, failure, closing, closing_done
+         connection_step :: connection_step(),
          frame_max :: integer(),
          heartbeat :: undefined | integer(),
          heartbeater :: any(),
