@@ -696,9 +696,9 @@ open(info, {OK, S, Data},
                                     connection_state = State1}};
         failure ->
             _ = demonitor_all_streams(Connection),
-            ?LOG_INFO("Force closing stream connection ~tp because of "
-                      "transition to invalid state",
-                      [self()]),
+            rabbit_log_connection:info("Force closing stream connection ~tp because of "
+                                       "transition to invalid state",
+                                       [self()]),
             {stop, {shutdown, <<"Invalid state">>}};
         _ ->
             State2 =
@@ -1588,12 +1588,8 @@ handle_frame_post_auth(Transport,
                                                                   NewUsername,
                                                                   stream),
                           auth_fail(NewUsername, Msg, Args, C1, S1),
-<<<<<<< HEAD
                           rabbit_log_connection:warning(Msg, Args),
-=======
-                          ?LOG_WARNING(Msg, Args),
                           silent_close_delay(),
->>>>>>> 02449bd5d (Close stream connection if secret update fails)
                           {C1#stream_connection{connection_step = failure},
                            {sasl_authenticate,
                             ?RESPONSE_AUTHENTICATION_FAILURE, <<>>}};
