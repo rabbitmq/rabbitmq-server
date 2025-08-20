@@ -507,9 +507,9 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
         concurrent_for_all(vhosts,             ActingUser, Map, fun add_vhost/2),
         validate_limits(Map),
         concurrent_for_all(permissions,        ActingUser, Map, fun add_permission/2),
-        concurrent_for_all(topic_permissions,  ActingUser, Map, fun add_topic_permission/2),
 
         concurrent_for_all(exchanges,          ActingUser, Map, fun add_exchange/2),
+        concurrent_for_all(topic_permissions,  ActingUser, Map, fun add_topic_permission/2),
 
         sequential_for_all(global_parameters,  ActingUser, Map, fun add_global_parameter/2),
         %% importing policies concurrently can be unsafe as queues will be getting
