@@ -409,8 +409,12 @@ create_or_get_in_mnesia(#exchange{name = XName} = X) ->
       end).
 
 create_or_get_in_khepri(#exchange{name = XName} = X) ->
-    Path = khepri_exchange_path(XName),
-    case rabbit_khepri:create(Path, X) of
+    Path0 = khepri_exchange_path(XName),
+    Path1 = khepri_path:combine_with_conditions(
+              Path0, [#if_any{conditions =
+                              [#if_node_exists{exists = false},
+                               #if_has_payload{has_payload = false}]}]),
+    case rabbit_khepri:put(Path1, X) of
         ok ->
             {new, X};
         {error, {khepri, mismatching_node, #{node_props := #{data := ExistingX}}}} ->
