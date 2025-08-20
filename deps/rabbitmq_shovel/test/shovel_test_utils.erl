@@ -13,13 +13,28 @@
          shovels_from_status/0, shovels_from_status/1,
          get_shovel_status/2, get_shovel_status/3,
          restart_shovel/2,
-         await/1, await/2, clear_param/2, clear_param/3, make_uri/2]).
+         await/1, await/2, await_amqp10_event/3, await_credit/1,
+         clear_param/2, clear_param/3, make_uri/2,
+         make_uri/3, make_uri/5,
+         await_shovel1/4, await_no_shovel/2]).
 
 make_uri(Config, Node) ->
     Hostname = ?config(rmq_hostname, Config),
     Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
     list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~b",
                                                [Hostname, Port]))).
+
+make_uri(Config, Node, VHost) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
+    list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~b/~ts",
+                                               [Hostname, Port, VHost]))).
+
+make_uri(Config, Node, User, Password, VHost) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, Node, tcp_port_amqp),
+    list_to_binary(lists:flatten(io_lib:format("amqp://~ts:~ts@~ts:~b/~ts",
+                                               [User, Password, Hostname, Port, VHost]))).
 
 set_param(Config, Name, Value) ->
     set_param_nowait(Config, 0, 0, Name, Value),
@@ -53,12 +68,50 @@ await_shovel(Config, Node, Name, ExpectedState) ->
     rabbit_ct_broker_helpers:rpc(Config, Node,
       ?MODULE, await_shovel1, [Config, Name, ExpectedState]).
 
-await_shovel1(_Config, Name, ExpectedState) ->
+await_shovel1(Config, Name, ExpectedState) ->
+    await_shovel1(Config, Name, ExpectedState, 30_000).
+
+await_shovel1(_Config, Name, ExpectedState, Timeout) ->
     Ret = await(fun() ->
                   Status = shovels_from_status(ExpectedState),
                   lists:member(Name, Status)
-          end, 30_000),
+          end, Timeout),
     Ret.
+
+await_no_shovel(Config, Name) ->
+    try
+        rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, await_shovel1,
+                                     [Config, Name, running, 10_000]),
+        throw(unexpected_success)
+    catch
+        _:{exception, {await_timeout, false}, _} ->
+            ok
+    end.
+
+flush(Prefix) ->
+  receive
+    Msg ->
+      ct:log("~p flushed: ~p~n", [Prefix, Msg]),
+      flush(Prefix)
+  after 1 ->
+    ok
+  end.
+
+await_credit(Sender) ->
+  receive
+    {amqp10_event, {link, Sender, credited}} ->
+      ok
+  after 5_000 ->
+      flush("await_credit timed out"),
+      ct:fail(credited_timeout)
+  end.
+
+await_amqp10_event(On, Ref, Evt) ->
+    receive
+        {amqp10_event, {On, Ref, Evt}} -> ok
+    after 5_000 ->
+        exit({amqp10_event_timeout, On, Ref, Evt})
+    end.
 
 shovels_from_status() ->
     shovels_from_status(running).

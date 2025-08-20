@@ -7,11 +7,10 @@
 
 -module(rabbit_amqp091_shovel).
 
--define(APP, rabbitmq_shovel).
-
 -behaviour(rabbit_shovel_behaviour).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit/include/mc.hrl").
 -include("rabbit_shovel.hrl").
 -include_lib("kernel/include/logger.hrl").
 
@@ -34,7 +33,7 @@
          ack/3,
          nack/3,
          status/1,
-         forward/4
+         forward/3
         ]).
 
 %% Function references should not be stored on the metadata store.
@@ -57,7 +56,7 @@ parse(_Name, {source, Source}) ->
     CArgs = proplists:get_value(consumer_args, Source, []),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Source),
-      resource_decl => decl_fun({source, Source}),
+      resource_decl => rabbit_shovel_util:decl_fun(?MODULE, {source, Source}),
       queue => Queue,
       delete_after => proplists:get_value(delete_after, Source, never),
       prefetch_count => Prefetch,
@@ -73,7 +72,7 @@ parse(Name, {destination, Dest}) ->
     PropsFun2 = add_timestamp_header_fun(ATH, PropsFun1),
     #{module => ?MODULE,
       uris => proplists:get_value(uris, Dest),
-      resource_decl  => decl_fun({destination, Dest}),
+      resource_decl  => rabbit_shovel_util:decl_fun(?MODULE, {destination, Dest}),
       props_fun => PropsFun2,
       fields_fun => PubFieldsFun,
       add_forward_headers => AFH,
@@ -170,8 +169,8 @@ forward_pending(State) ->
     case pop_pending(State) of
         empty ->
             State;
-        {{Tag, Props, Payload}, S} ->
-            S2 = do_forward(Tag, Props, Payload, S),
+        {{Tag, Mc}, S} ->
+            S2 = do_forward(Tag, Mc, S),
             S3 = control_throttle(S2),
             case is_blocked(S3) of
                 true ->
@@ -184,80 +183,37 @@ forward_pending(State) ->
             end
     end.
 
-forward(IncomingTag, Props, Payload, State) ->
+forward(IncomingTag, Mc, State) ->
     case is_blocked(State) of
         true ->
             %% We are blocked by client-side flow-control and/or
             %% `connection.blocked` message from the destination
             %% broker. Simply cache the forward.
-            PendingEntry = {IncomingTag, Props, Payload},
+            PendingEntry = {IncomingTag, Mc},
             add_pending(PendingEntry, State);
         false ->
-            State1 = do_forward(IncomingTag, Props, Payload, State),
+            State1 = do_forward(IncomingTag, Mc, State),
             control_throttle(State1)
     end.
 
-do_forward(IncomingTag, Props, Payload,
+do_forward(IncomingTag, Mc0,
            State0 = #{dest := #{props_fun := {M, F, Args},
                                 current := {_, _, DstUri},
                                 fields_fun := {Mf, Ff, Argsf}}}) ->
     SrcUri = rabbit_shovel_behaviour:source_uri(State0),
     % do publish
-    Exchange = maps:get(exchange, Props, undefined),
-    RoutingKey = maps:get(routing_key, Props, undefined),
+    Exchange = mc:exchange(Mc0),
+    RoutingKey = case mc:routing_keys(Mc0) of
+                     [RK | _] -> RK;
+                     Any -> Any
+                 end,
     Method = #'basic.publish'{exchange = Exchange, routing_key = RoutingKey},
     Method1 = apply(Mf, Ff, Argsf ++ [SrcUri, DstUri, Method]),
-    Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, props_from_map(Props)]),
+    Mc = mc:convert(mc_amqpl, Mc0),
+    {Props, Payload} = rabbit_basic_common:from_content(mc:protocol_state(Mc)),
+    Msg1 = #amqp_msg{props = apply(M, F, Args ++ [SrcUri, DstUri, Props]),
                      payload = Payload},
     publish(IncomingTag, Method1, Msg1, State0).
-
-props_from_map(Map) ->
-    #'P_basic'{content_type = maps:get(content_type, Map, undefined),
-               content_encoding = maps:get(content_encoding, Map, undefined),
-               headers = maps:get(headers, Map, undefined),
-               delivery_mode = maps:get(delivery_mode, Map, undefined),
-               priority = maps:get(priority, Map, undefined),
-               correlation_id = maps:get(correlation_id, Map, undefined),
-               reply_to = maps:get(reply_to, Map, undefined),
-               expiration = maps:get(expiration, Map, undefined),
-               message_id = maps:get(message_id, Map, undefined),
-               timestamp = maps:get(timestamp, Map, undefined),
-               type = maps:get(type, Map, undefined),
-               user_id = maps:get(user_id, Map, undefined),
-               app_id = maps:get(app_id, Map, undefined),
-               cluster_id = maps:get(cluster_id, Map, undefined)}.
-
-map_from_props(#'P_basic'{content_type = Content_type,
-                          content_encoding = Content_encoding,
-                          headers = Headers,
-                          delivery_mode = Delivery_mode,
-                          priority = Priority,
-                          correlation_id = Correlation_id,
-                          reply_to = Reply_to,
-                          expiration = Expiration,
-                          message_id = Message_id,
-                          timestamp = Timestamp,
-                          type = Type,
-                          user_id = User_id,
-                          app_id = App_id,
-                          cluster_id = Cluster_id}) ->
-    lists:foldl(fun({_K, undefined}, Acc) -> Acc;
-                   ({K, V}, Acc) -> Acc#{K => V}
-                end, #{}, [{content_type, Content_type},
-                           {content_encoding, Content_encoding},
-                           {headers, Headers},
-                           {delivery_mode, Delivery_mode},
-                           {priority, Priority},
-                           {correlation_id, Correlation_id},
-                           {reply_to, Reply_to},
-                           {expiration, Expiration},
-                           {message_id, Message_id},
-                           {timestamp, Timestamp},
-                           {type, Type},
-                           {user_id, User_id},
-                           {app_id, App_id},
-                           {cluster_id, Cluster_id}
-                          ]).
 
 handle_source(#'basic.consume_ok'{}, State) ->
     State;
@@ -265,10 +221,12 @@ handle_source({#'basic.deliver'{delivery_tag = Tag,
                                 exchange = Exchange,
                                 routing_key = RoutingKey},
               #amqp_msg{props = Props0, payload = Payload}}, State) ->
-    Props = (map_from_props(Props0))#{exchange => Exchange,
-                                      routing_key => RoutingKey},
+    Content = rabbit_basic_common:build_content(Props0, Payload),
+    Msg0 = mc:init(mc_amqpl, Content, #{}),
+    Msg1 = mc:set_annotation(?ANN_ROUTING_KEYS, [RoutingKey], Msg0),
+    Msg = mc:set_annotation(?ANN_EXCHANGE, Exchange, Msg1),
     % forward to destination
-    rabbit_shovel_behaviour:forward(Tag, Props, Payload, State);
+    rabbit_shovel_behaviour:forward(Tag, Msg, State);
 
 handle_source({'EXIT', Conn, Reason},
               #{source := #{current := {Conn, _, _}}}) ->
@@ -336,11 +294,10 @@ close_dest(_) ->
 confirm_to_inbound(ConfirmFun, Seq, Multiple,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
     #{Seq := InTag} = Unacked,
-    State = ConfirmFun(InTag, Multiple, State0),
     {Unacked1, Removed} = remove_delivery_tags(Seq, Multiple, Unacked, 0),
-    rabbit_shovel_behaviour:decr_remaining(Removed,
-                                           State#{dest =>
-                                                  Dst#{unacked => Unacked1}}).
+    State = ConfirmFun(InTag, Multiple, State0#{dest =>
+                                                    Dst#{unacked => Unacked1}}),
+    rabbit_shovel_behaviour:decr_remaining(Removed, State).
 
 publish(_Tag, _Method, _Msg, State = #{source := #{remaining_unacked := 0}}) ->
     %% We are in on-confirm mode, and are autodelete. We have
@@ -583,47 +540,6 @@ add_timestamp_header_fun(false, PubProps) -> PubProps.
 props_fun_timestamp_header({M, F, Args}, SrcUri, DestUri, Props) ->
     rabbit_shovel_util:add_timestamp_header(
       apply(M, F, Args ++ [SrcUri, DestUri, Props])).
-
-parse_declaration({[], Acc}) ->
-    Acc;
-parse_declaration({[{Method, Props} | Rest], Acc}) when is_list(Props) ->
-    FieldNames = try rabbit_framing_amqp_0_9_1:method_fieldnames(Method)
-                 catch exit:Reason -> fail(Reason)
-                 end,
-    case proplists:get_keys(Props) -- FieldNames of
-        []            -> ok;
-        UnknownFields -> fail({unknown_fields, Method, UnknownFields})
-    end,
-    {Res, _Idx} = lists:foldl(
-                    fun (K, {R, Idx}) ->
-                            NewR = case proplists:get_value(K, Props) of
-                                       undefined -> R;
-                                       V         -> setelement(Idx, R, V)
-                                   end,
-                            {NewR, Idx + 1}
-                    end, {rabbit_framing_amqp_0_9_1:method_record(Method), 2},
-                    FieldNames),
-    parse_declaration({Rest, [Res | Acc]});
-parse_declaration({[{Method, Props} | _Rest], _Acc}) ->
-    fail({expected_method_field_list, Method, Props});
-parse_declaration({[Method | Rest], Acc}) ->
-    parse_declaration({[{Method, []} | Rest], Acc}).
-
-decl_fun({source, Endpoint}) ->
-    case parse_declaration({proplists:get_value(declarations, Endpoint, []), []}) of
-        [] ->
-            case proplists:get_value(predeclared, application:get_env(?APP, topology, []), false) of
-                true -> case proplists:get_value(queue, Endpoint) of
-                            <<>> -> fail({invalid_parameter_value, declarations, {require_non_empty}});
-                            Queue -> {?MODULE, check_fun, [Queue]}
-                        end;
-                false -> {?MODULE, decl_fun, []}
-            end;
-        Decl -> {?MODULE, decl_fun, [Decl]}
-    end;
-decl_fun({destination, Endpoint}) ->
-    Decl = parse_declaration({proplists:get_value(declarations, Endpoint, []), []}),
-    {?MODULE, decl_fun, [Decl]}.
 
 decl_fun(Decl, _Conn, Ch) ->
     [begin

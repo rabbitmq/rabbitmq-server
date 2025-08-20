@@ -8,6 +8,7 @@
 -module(amqp10_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
@@ -119,21 +120,29 @@ amqp10_destination(Config, AckMode) ->
     receive
         {amqp10_msg, Receiver, InMsg} ->
             [<<42>>] = amqp10_msg:body(InMsg),
-            #{content_type := ?UNSHOVELLED,
-              content_encoding := ?UNSHOVELLED,
-              correlation_id := ?UNSHOVELLED,
-              user_id := <<"guest">>,
-              message_id := ?UNSHOVELLED,
-              reply_to := ?UNSHOVELLED
-              %% timestamp gets overwritten
-              % creation_time := Timestamp
-             } = amqp10_msg:properties(InMsg),
-            #{<<"routing_key">> := ?TO_SHOVEL,
-              <<"type">> := ?UNSHOVELLED,
-              <<"header1">> := 1,
-              <<"header2">> := <<"h2">>
-             } = amqp10_msg:application_properties(InMsg),
-            #{durable := true} = amqp10_msg:headers(InMsg),
+            Ts = Timestamp * 1000,
+            ?assertMatch(
+               #{content_type := ?UNSHOVELLED,
+                 content_encoding := ?UNSHOVELLED,
+                 correlation_id := ?UNSHOVELLED,
+                 user_id := <<"guest">>,
+                 message_id := ?UNSHOVELLED,
+                 reply_to := ?UNSHOVELLED,
+                 %% Message timestamp is no longer overwritten
+                 creation_time := Ts},
+               amqp10_msg:properties(InMsg)),
+            ?assertMatch(
+               #{<<"header1">> := 1,
+                 <<"header2">> := <<"h2">>},
+               amqp10_msg:application_properties(InMsg)),
+            ?assertMatch(
+               #{<<"x-basic-type">> := ?UNSHOVELLED,
+                 <<"x-opt-shovel-type">> := <<"static">>,
+                 <<"x-opt-shovel-name">> := <<"test_shovel">>,
+                 <<"x-opt-shovelled-by">> := _,
+                 <<"x-opt-shovelled-timestamp">> := _},
+               amqp10_msg:message_annotations(InMsg)),
+            ?assertMatch(#{durable := true}, amqp10_msg:headers(InMsg)),
             ok
     after ?TIMEOUT ->
               throw(timeout_waiting_for_deliver1)

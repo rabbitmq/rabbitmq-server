@@ -1,8 +1,11 @@
 %% ----------------------------------------------------------------------------
-%% RabbitMQ Shovel settings
+%% RabbitMQ Shovel plugin
 %% ----------------------------------------------------------------------------
-
 
 {mapping, "shovel.topology.predeclared", "rabbitmq_shovel.topology.predeclared", [
      [{datatype, {enum, [true, false]}}]
+]}.
+
+{mapping, "shovel.local.max_credit", "rabbitmq_shovel.max_local_shovel_credit", [
+    {datatype, integer}
 ]}.

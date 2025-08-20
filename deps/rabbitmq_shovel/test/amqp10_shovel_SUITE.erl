@@ -62,8 +62,8 @@ end_per_testcase(_TestCase, _Config) ->
 amqp_encoded_data_list(_Config) ->
     meck:new(rabbit_shovel_behaviour, [passthrough]),
     meck:expect(rabbit_shovel_behaviour, forward,
-                fun (_, _, Pay, S) ->
-                        ?assert(erlang:is_binary(Pay)),
+                fun (_, Msg, S) ->
+                        ?assert(mc:is(Msg)),
                         S
                 end),
     %% fake some shovel state
@@ -83,8 +83,8 @@ amqp_encoded_data_list(_Config) ->
 amqp_encoded_amqp_value(_Config) ->
     meck:new(rabbit_shovel_behaviour, [passthrough]),
     meck:expect(rabbit_shovel_behaviour, forward,
-                fun (_, _, Pay, S) ->
-                        ?assert(erlang:is_binary(Pay)),
+                fun (_, Msg, S) ->
+                        ?assert(mc:is(Msg)),
                         S
                 end),
     %% fake some shovel state

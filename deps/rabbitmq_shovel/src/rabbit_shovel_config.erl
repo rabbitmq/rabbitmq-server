@@ -13,7 +13,8 @@
 -include("rabbit_shovel.hrl").
 
 resolve_module(amqp091) -> rabbit_amqp091_shovel;
-resolve_module(amqp10) -> rabbit_amqp10_shovel.
+resolve_module(amqp10) -> rabbit_amqp10_shovel;
+resolve_module(local) -> rabbit_local_shovel.
 
 is_legacy(Config) ->
     not proplists:is_defined(source, Config).

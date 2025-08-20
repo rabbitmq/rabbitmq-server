@@ -42,17 +42,27 @@ dispatcher_add(function(sammy) {
             //remove fields not required by the selected protocol
             if (this.params['src-protocol'] == 'amqp10') {
                 remove_params_with(this, 'amqp091-src');
+                remove_params_with(this, 'local-src');
+            } else if (this.params['src-protocol'] == 'amqp091') {
+                remove_params_with(this, 'amqp10-src');
+                remove_params_with(this, 'local-src');
             } else {
                 remove_params_with(this, 'amqp10-src');
+                remove_params_with(this, 'amqp091-src');
             }
             if (this.params['dest-protocol'] == 'amqp10') {
                 remove_params_with(this, 'amqp091-dest');
+                remove_params_with(this, 'local-dest');
+            } else if (this.params['dest-protocol'] == 'amqp091'){
+                remove_params_with(this, 'amqp10-dest');
+                remove_params_with(this, 'local-dest');
             } else {
+                remove_params_with(this, 'amqp091-dest');
                 remove_params_with(this, 'amqp10-dest');
             }
 
             var trimProtoPrefix = function (x) {
-                if(x.startsWith('amqp10-') || x.startsWith('amqp091-')) {
+                if(x.startsWith('amqp10-') || x.startsWith('amqp091-') || x.startsWith('local-')) {
                     return x.substr(x.indexOf('-') + 1, x.length);
                 }
                 return x;

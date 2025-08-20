@@ -265,23 +265,29 @@ body_bin(#amqp10_msg{body = #'v1_0.amqp_value'{} = Body}) ->
 %% A disposition will be notified to the sender by a message of the
 %% following stucture:
 %% {amqp10_disposition, {accepted | rejected, DeliveryTag}}
--spec new(delivery_tag(), amqp10_body() | binary(), boolean()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary() | [amqp10_client_types:amqp10_msg_record()], boolean()) -> amqp10_msg().
 new(DeliveryTag, Bin, Settled) when is_binary(Bin) ->
     Body = [#'v1_0.data'{content = Bin}],
     new(DeliveryTag, Body, Settled);
 new(DeliveryTag, Body, Settled) -> % TODO: constrain to amqp types
-    #amqp10_msg{
-       transfer = #'v1_0.transfer'{
-                     delivery_tag = {binary, DeliveryTag},
-                     settled = Settled,
-                     message_format = {uint, ?MESSAGE_FORMAT}},
-       %% This lib is safe by default.
-       header = #'v1_0.header'{durable = true},
-       body = Body}.
+    Transfer = #'v1_0.transfer'{
+                  delivery_tag = {binary, DeliveryTag},
+                  settled = Settled,
+                  message_format = {uint, ?MESSAGE_FORMAT}},
+    case is_amqp10_body(Body) orelse (not is_list(Body)) of
+        true ->
+            #amqp10_msg{
+               transfer = Transfer,
+               %% This lib is safe by default.
+               header = #'v1_0.header'{durable = true},
+               body = Body};
+        false ->
+            from_amqp_records([Transfer | Body])
+    end.
 
 %% @doc Create a new settled amqp10 message using the specified delivery tag
 %% and body.
--spec new(delivery_tag(), amqp10_body() | binary()) -> amqp10_msg().
+-spec new(delivery_tag(), amqp10_body() | binary() | [amqp10_client_types:amqp10_msg_record()]) -> amqp10_msg().
 new(DeliveryTag, Body) ->
     new(DeliveryTag, Body, false).
 
@@ -462,3 +468,19 @@ uint(B) -> {uint, B}.
 
 has_value(undefined) -> false;
 has_value(_) -> true.
+
+is_amqp10_body(#'v1_0.amqp_value'{}) ->
+    true;
+is_amqp10_body(List) when is_list(List) ->
+    lists:all(fun(#'v1_0.data'{}) ->
+                      true;
+                 (_) ->
+                      false
+              end, List) orelse
+        lists:all(fun(#'v1_0.amqp_sequence'{}) ->
+                          true;
+                     (_) ->
+                          false
+                  end, List);
+is_amqp10_body(_) ->
+    false.
