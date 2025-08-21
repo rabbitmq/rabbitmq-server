@@ -603,7 +603,7 @@ function fmt_object_state(obj) {
     }
     else if (obj.state == 'timeout') {
         colour = 'yellow';
-        explanation = 'The queue did not respond to it\'s status request ';
+        explanation = 'The queue leader did not respond to its status request ';
     }
 
     return fmt_state(colour, text, explanation);
