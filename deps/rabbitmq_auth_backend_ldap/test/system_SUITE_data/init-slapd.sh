@@ -1,13 +1,18 @@
 #!/bin/sh
 # vim:sw=4:et:
 
-set -ex
+set -eux
 
 readonly slapd_data_dir="$1"
 readonly tcp_port="$2"
+readonly tls_port="$3"
+readonly cacertfile="$4"
+readonly server_certfile="$5"
+readonly server_keyfile="$6"
 
 readonly pidfile="$slapd_data_dir/slapd.pid"
-readonly uri="ldap://localhost:$tcp_port"
+readonly tcp_uri="ldap://localhost:$tcp_port"
+readonly tls_uri="ldaps://localhost:$tls_port"
 
 readonly binddn="cn=config"
 readonly passwd=secret
@@ -68,6 +73,10 @@ loglevel        7
 database        config
 rootdn          "$binddn"
 rootpw          $passwd
+
+TLSCACertificateFile  $cacertfile
+TLSCertificateFile    $server_certfile
+TLSCertificateKeyFile $server_keyfile
 EOF
 
 cat "$conf_file"
@@ -79,7 +88,7 @@ mkdir -p "$conf_dir"
 "$slapd" \
     -f "$conf_file" \
     -F "$conf_dir" \
-    -h "$uri"
+    -h "$tcp_uri $tls_uri"
 
 readonly auth="-x -D $binddn -w $passwd"
 
@@ -87,7 +96,7 @@ readonly auth="-x -D $binddn -w $passwd"
 # shellcheck disable=SC2034
 for seconds in 1 2 3 4 5 6 7 8 9 10; do
     # shellcheck disable=SC2086
-    ldapsearch $auth -H "$uri" -LLL -b cn=config dn && break;
+    ldapsearch $auth -H "$tcp_uri" -LLL -b cn=config dn && break;
     sleep 1
 done
 
@@ -106,22 +115,22 @@ mkdir -p "$example_data_dir"
 # shellcheck disable=SC2086
 sed -E -e "s,^olcDbDirectory:.*,olcDbDirectory: $example_data_dir," \
     < "$example_ldif_dir/global.ldif" | \
-    ldapadd $auth -H "$uri"
+    ldapadd $auth -H "$tcp_uri"
 
 # We remove the module path from the example LDIF as it was already
 # configured.
 # shellcheck disable=SC2086
 sed -E -e "s,^olcModulePath:.*,olcModulePath: $modulepath," \
     < "$example_ldif_dir/memberof_init.ldif" | \
-    ldapadd $auth -H "$uri"
+    ldapadd $auth -H "$tcp_uri"
 
 # shellcheck disable=SC2086
-ldapmodify $auth -H "$uri" -f "$example_ldif_dir/refint_1.ldif"
+ldapmodify $auth -H "$tcp_uri" -f "$example_ldif_dir/refint_1.ldif"
 
 # shellcheck disable=SC2086
-ldapadd $auth -H "$uri" -f "$example_ldif_dir/refint_2.ldif"
+ldapadd $auth -H "$tcp_uri" -f "$example_ldif_dir/refint_2.ldif"
 
 # shellcheck disable=SC2086
-ldapsearch $auth -H "$uri" -LLL -b cn=config dn
+ldapsearch $auth -H "$tcp_uri" -LLL -b cn=config dn
 
 echo SLAPD_PID="$(cat "$pidfile")"
