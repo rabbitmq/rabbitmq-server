@@ -11,6 +11,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
+
+-import(rabbit_mgmt_test_util, [http_put/4]).
 
 -define(ALICE_NAME, "Alice").
 -define(BOB_NAME, "Bob").
@@ -109,7 +112,8 @@ groups() ->
         topic_authorisation_publishing_ldap_only,
         topic_authorisation_consumption,
         match_bidirectional,
-        match_bidirectional_gh_100
+        match_bidirectional_gh_100,
+        validate_ldap_configuration_via_api
     ],
     [
       {non_parallel_tests, [], Tests
@@ -206,6 +210,10 @@ end_internal(Config) ->
     ok = control_action(Config, delete_user, [?BOB_NAME]),
     ok = control_action(Config, delete_user, [?PETER_NAME]).
 
+
+init_per_testcase(validate_ldap_configuration_via_api = Testcase, Config) ->
+    _ = application:start(inets),
+    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config)
     when Testcase == ldap_and_internal;
          Testcase == internal_followed_ldap_and_internal ->
@@ -229,6 +237,9 @@ init_per_testcase(Testcase, Config)
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
+end_per_testcase(validate_ldap_configuration_via_api = Testcase, Config) ->
+    _ = application:stop(inets),
+    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config)
     when Testcase == ldap_and_internal;
          Testcase == internal_followed_ldap_and_internal ->
@@ -269,6 +280,14 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testsuite cases
 %% -------------------------------------------------------------------
+
+validate_ldap_configuration_via_api(Config) ->
+    LdapPort = ?config(ldap_port, Config),
+    http_put(Config, io_lib:format("/ldap/validate/bind/~ts", [<<?ALICE_NAME>>]),
+        #{
+            'servers' => [<<"localhost">>],
+            'port' => LdapPort
+        }, ?OK).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
