@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(rabbit_ldap_seed).
+-module(rabbit_ct_ldap_seed).
 
 -include_lib("stdlib/include/assert.hrl").
 
