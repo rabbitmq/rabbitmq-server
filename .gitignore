@@ -39,6 +39,7 @@ elvis
 !/deps/rabbitmq_auth_backend_http/
 !/deps/rabbitmq_auth_backend_internal_loopback/
 !/deps/rabbitmq_auth_backend_ldap/
+!/deps/rabbitmq_auth_backend_ldap_management/
 !/deps/rabbitmq_auth_backend_oauth2/
 !/deps/rabbitmq_auth_mechanism_ssl/
 !/deps/rabbitmq_aws/
