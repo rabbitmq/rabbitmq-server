@@ -80,6 +80,7 @@ RABBITMQ_BUILTIN = \
 	rabbitmq_auth_backend_http \
 	rabbitmq_auth_backend_internal_loopback \
 	rabbitmq_auth_backend_ldap \
+	rabbitmq_auth_backend_ldap_management \
 	rabbitmq_auth_backend_oauth2 \
 	rabbitmq_auth_mechanism_ssl \
 	rabbitmq_aws \
