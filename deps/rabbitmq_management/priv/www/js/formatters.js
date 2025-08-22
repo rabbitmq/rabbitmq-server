@@ -601,6 +601,10 @@ function fmt_object_state(obj) {
         explanation = 'The queue does not have sufficient online members to ' +
             'make progress'
     }
+    else if (obj.state == 'timeout') {
+        colour = 'yellow';
+        explanation = 'The queue leader did not respond to its status request ';
+    }
 
     return fmt_state(colour, text, explanation);
 }
