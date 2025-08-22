@@ -285,9 +285,9 @@ validate_ldap_configuration_via_api(Config) ->
     LdapPort = ?config(ldap_port, Config),
     http_put(Config, io_lib:format("/ldap/validate/bind/~ts", [<<?ALICE_NAME>>]),
         #{
-            'servers' => [<<"localhost">>],
+            'servers' => ["localhost"],
             'port' => LdapPort
-        }, ?OK).
+        }, ?NO_CONTENT).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
