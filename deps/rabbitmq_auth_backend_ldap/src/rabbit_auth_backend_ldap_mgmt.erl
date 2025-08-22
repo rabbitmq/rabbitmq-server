@@ -22,7 +22,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
-dispatcher() -> [{"/ldap/validate/bind/:name", ?MODULE, []}].
+dispatcher() -> [{"/ldap/validate/simple-bind", ?MODULE, []}].
 
 web_ui() -> [].
 
@@ -45,12 +45,12 @@ is_authorized(ReqData, Context) ->
 
 accept_content(ReqData0, Context) ->
     F = fun (_Values, BodyMap, ReqData1) ->
-        _Name = name(ReqData1),
         Port = rabbit_mgmt_util:parse_int(maps:get(port, BodyMap, 389)),
         _UseSsl = rabbit_mgmt_util:parse_bool(maps:get(use_ssl, BodyMap, false)),
         _UseStartTls = rabbit_mgmt_util:parse_bool(maps:get(use_starttls, BodyMap, false)),
         Servers = maps:get(servers, BodyMap, []),
-        _Password = maps:get(password, BodyMap, <<"">>),
+        UserDN = maps:get(user_dn, BodyMap, <<"">>),
+        Password = maps:get(password, BodyMap, <<"">>),
         Options = [
             {port, Port},
             {timeout, 5000},
@@ -58,9 +58,21 @@ accept_content(ReqData0, Context) ->
         ],
         ?LOG_DEBUG("eldap:open Servers: ~tp Options: ~tp", [Servers, Options]),
         case eldap:open(Servers, Options) of
-            {ok, H} ->
-                eldap:close(H),
-                {true, ReqData1, Context};
+            {ok, LDAP} ->
+                ?LOG_DEBUG("eldap:simple_bind UserDN: ~tp Password: ~tp", [UserDN, Password]),
+                Result = case eldap:simple_bind(LDAP, UserDN, Password) of
+                    ok ->
+                        {true, ReqData1, Context};
+                    {error, invalidCredentials} ->
+                        rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                    {error, unwillingToPerform} ->
+                        rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                    {error, E} ->
+                        Reason = unicode_format(E),
+                        rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+                end,
+                eldap:close(LDAP),
+                Result;
             {error, E} ->
                 Reason = unicode_format(E),
                 rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
@@ -69,12 +81,6 @@ accept_content(ReqData0, Context) ->
     rabbit_mgmt_util:with_decode([], ReqData0, Context, F).
 
 %%--------------------------------------------------------------------
-
-name(ReqData) ->
-    case rabbit_mgmt_util:id(name, ReqData) of
-        [Value] -> Value;
-        Value   -> Value
-    end.
 
 unicode_format(Arg) ->
     rabbit_data_coercion:to_utf8_binary(io_lib:format("~tp", [Arg])).

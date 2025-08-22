@@ -282,12 +282,35 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 validate_ldap_configuration_via_api(Config) ->
+    %% {user_dn_pattern, "cn=${username},ou=People,dc=rabbitmq,dc=com"},
+    UserDNFmt = "cn=~ts,ou=People,dc=rabbitmq,dc=com",
+    AliceUserDN = rabbit_data_coercion:to_utf8_binary(io_lib:format(UserDNFmt, [?ALICE_NAME])),
+    InvalidUserDN = rabbit_data_coercion:to_utf8_binary(io_lib:format(UserDNFmt, ["NOBODY"])),
+    Password = rabbit_data_coercion:to_utf8_binary("password"),
+
     LdapPort = ?config(ldap_port, Config),
-    http_put(Config, io_lib:format("/ldap/validate/bind/~ts", [<<?ALICE_NAME>>]),
+    %% NB: bad resource name
+    http_put(Config, "/ldap/validate/bad-bind-name",
         #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
             'servers' => ["localhost"],
             'port' => LdapPort
-        }, ?NO_CONTENT).
+        }, ?METHOD_NOT_ALLOWED),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapPort
+        }, ?NO_CONTENT),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => InvalidUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapPort
+        }, ?NOT_AUTHORISED).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
