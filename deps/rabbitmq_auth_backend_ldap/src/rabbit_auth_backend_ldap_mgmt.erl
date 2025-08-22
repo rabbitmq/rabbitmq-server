@@ -19,7 +19,6 @@
          accept_content/2]).
 
 
--include_lib("kernel/include/logger.hrl").
 -include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 dispatcher() -> [{"/ldap/validate/simple-bind", ?MODULE, []}].
@@ -46,29 +45,33 @@ is_authorized(ReqData, Context) ->
 accept_content(ReqData0, Context) ->
     F = fun (_Values, BodyMap, ReqData1) ->
         Port = rabbit_mgmt_util:parse_int(maps:get(port, BodyMap, 389)),
-        _UseSsl = rabbit_mgmt_util:parse_bool(maps:get(use_ssl, BodyMap, false)),
-        _UseStartTls = rabbit_mgmt_util:parse_bool(maps:get(use_starttls, BodyMap, false)),
+        UseSsl = rabbit_mgmt_util:parse_bool(maps:get(use_ssl, BodyMap, false)),
+        UseStartTls = rabbit_mgmt_util:parse_bool(maps:get(use_starttls, BodyMap, false)),
         Servers = maps:get(servers, BodyMap, []),
         UserDN = maps:get(user_dn, BodyMap, <<"">>),
         Password = maps:get(password, BodyMap, <<"">>),
-        Options = [
+        Options0 = [
             {port, Port},
-            {timeout, 5000},
-            {ssl, false}
+            {timeout, 5000}
         ],
-        ?LOG_DEBUG("eldap:open Servers: ~tp Options: ~tp", [Servers, Options]),
-        case eldap:open(Servers, Options) of
+        {ok, Options1} = maybe_add_ssl_options(Options0, UseSsl, BodyMap),
+        case eldap:open(Servers, Options1) of
             {ok, LDAP} ->
-                ?LOG_DEBUG("eldap:simple_bind UserDN: ~tp Password: ~tp", [UserDN, Password]),
-                Result = case eldap:simple_bind(LDAP, UserDN, Password) of
+                Result = case maybe_starttls(LDAP, UseStartTls, BodyMap) of
                     ok ->
-                        {true, ReqData1, Context};
-                    {error, invalidCredentials} ->
-                        rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
-                    {error, unwillingToPerform} ->
-                        rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
-                    {error, E} ->
-                        Reason = unicode_format(E),
+                        case eldap:simple_bind(LDAP, UserDN, Password) of
+                            ok ->
+                                {true, ReqData1, Context};
+                            {error, invalidCredentials} ->
+                                rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                            {error, unwillingToPerform} ->
+                                rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                            {error, E} ->
+                                Reason = unicode_format(E),
+                                rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+                        end;
+                    Error ->
+                        Reason = unicode_format(Error),
                         rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
                 end,
                 eldap:close(LDAP),
@@ -84,3 +87,43 @@ accept_content(ReqData0, Context) ->
 
 unicode_format(Arg) ->
     rabbit_data_coercion:to_utf8_binary(io_lib:format("~tp", [Arg])).
+
+maybe_starttls(_LDAP, false, _BodyMap) ->
+    ok;
+maybe_starttls(LDAP, true, BodyMap) ->
+    {ok, TlsOptions} = tls_options(BodyMap),
+    eldap:start_tls(LDAP, TlsOptions, 5000).
+
+maybe_add_ssl_options(Options0, false, _BodyMap) ->
+    {ok, Options0};
+maybe_add_ssl_options(Options0, true, BodyMap) ->
+    case maps:is_key(ssl_options, BodyMap) of
+        false ->
+            {ok, Options0};
+        true ->
+            Options1 = [{ssl, true} | Options0],
+            {ok, TlsOptions} = tls_options(BodyMap),
+            Options2 = [{sslopts, TlsOptions} | Options1],
+            {ok, Options2}
+    end.
+
+tls_options(BodyMap) ->
+    case maps:get(ssl_options, BodyMap, undefined) of
+        undefined ->
+            {ok, []};
+        SslOptionsMap ->
+            %% NB: for some reason the "cacertfile" key isn't turned into an atom
+            TlsOpts0 = case maps:get(<<"cacertfile">>, SslOptionsMap, undefined) of
+                undefined ->
+                    [];
+                CaCertfile ->
+                    [{cacertfile, CaCertfile}]
+            end,
+            TlsOpts1 = case maps:get(<<"server_name_indication">>, SslOptionsMap, disable) of
+                disable ->
+                    TlsOpts0;
+                SniValue ->
+                    [{server_name_indication, SniValue} | TlsOpts0]
+            end,
+            {ok, TlsOpts1}
+    end.

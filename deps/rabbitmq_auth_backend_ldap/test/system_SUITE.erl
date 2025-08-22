@@ -162,10 +162,23 @@ end_per_group(_, Config) ->
 init_slapd(Config) ->
     DataDir = ?config(data_dir, Config),
     PrivDir = ?config(priv_dir, Config),
+    CertsDir = ?config(rmq_certsdir, Config),
+    CaCertfile = filename:join([CertsDir, "testca", "cacert.pem"]),
+    ServerCertfile = filename:join([CertsDir, "server", "cert.pem"]),
+    ServerKeyfile = filename:join([CertsDir, "server", "key.pem"]),
     TcpPort = 25389,
+    TlsPort = 25689,
     SlapdDir = filename:join([PrivDir, "openldap"]),
     InitSlapd = filename:join([DataDir, "init-slapd.sh"]),
-    Cmd = [InitSlapd, SlapdDir, {"~b", [TcpPort]}],
+    Cmd = [
+        InitSlapd,
+        SlapdDir,
+        {"~b", [TcpPort]},
+        {"~b", [TlsPort]},
+        CaCertfile,
+        ServerCertfile,
+        ServerKeyfile
+    ],
     case rabbit_ct_helpers:exec(Cmd) of
         {ok, Stdout} ->
             {match, [SlapdPid]} = re:run(
@@ -178,7 +191,8 @@ init_slapd(Config) ->
                    [SlapdPid, TcpPort]),
             rabbit_ct_helpers:set_config(Config,
                                          [{slapd_pid, SlapdPid},
-                                          {ldap_port, TcpPort}]);
+                                          {ldap_port, TcpPort},
+                                          {ldap_tls_port, TlsPort}]);
         _ ->
             _ = rabbit_ct_helpers:exec(["pkill", "-INT", "slapd"]),
             {skip, "Failed to initialize slapd(8)"}
@@ -282,6 +296,9 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 validate_ldap_configuration_via_api(Config) ->
+    CertsDir = ?config(rmq_certsdir, Config),
+    CaCertfile = filename:join([CertsDir, "testca", "cacert.pem"]),
+
     %% {user_dn_pattern, "cn=${username},ou=People,dc=rabbitmq,dc=com"},
     UserDNFmt = "cn=~ts,ou=People,dc=rabbitmq,dc=com",
     AliceUserDN = rabbit_data_coercion:to_utf8_binary(io_lib:format(UserDNFmt, [?ALICE_NAME])),
@@ -289,6 +306,8 @@ validate_ldap_configuration_via_api(Config) ->
     Password = rabbit_data_coercion:to_utf8_binary("password"),
 
     LdapPort = ?config(ldap_port, Config),
+    LdapTlsPort = ?config(ldap_tls_port, Config),
+
     %% NB: bad resource name
     http_put(Config, "/ldap/validate/bad-bind-name",
         #{
@@ -310,7 +329,31 @@ validate_ldap_configuration_via_api(Config) ->
             'password' => Password,
             'servers' => ["localhost"],
             'port' => LdapPort
-        }, ?NOT_AUTHORISED).
+        }, ?NOT_AUTHORISED),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapTlsPort,
+            'use_ssl' => true,
+            'ssl_options' => #{
+                'cacertfile' => CaCertfile
+            }
+        }, ?NO_CONTENT),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapPort,
+            'use_ssl' => false,
+            'use_starttls' => true,
+            'ssl_options' => #{
+                'server_name_indication' => "localhost",
+                'cacertfile' => CaCertfile
+            }
+        }, ?NO_CONTENT).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
