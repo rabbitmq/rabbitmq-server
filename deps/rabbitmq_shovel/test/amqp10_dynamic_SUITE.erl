@@ -28,7 +28,13 @@ groups() ->
           autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
           simple_amqp10_src,
+<<<<<<< HEAD
           amqp091_to_amqp10_with_dead_lettering
+=======
+          amqp091_to_amqp10_with_dead_lettering,
+          amqp10_to_amqp091_application_properties,
+          test_amqp10_delete_after_queue_length
+>>>>>>> b6d831b11 (Shovel amqp1.0: fix delete after validation)
         ]},
       {with_map_config, [], [
           simple,
@@ -300,6 +306,25 @@ autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             expect_count(Session, Dest, <<"hello">>, ExpDest),
             expect_count(Session, Src, <<"hello">>, ExpSrc)
     end.
+
+test_amqp10_delete_after_queue_length(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Uri = shovel_test_utils:make_uri(Config, 0),
+    Error = rabbit_ct_broker_helpers:rpc(
+              Config, 0,
+              rabbit_runtime_parameters, set,
+              [<<"/">>, <<"shovel">>, <<"test">>, [{<<"src-uri">>,  Uri},
+                                                   {<<"dest-uri">>, [Uri]},
+                                                   {<<"src-protocol">>, <<"amqp10">>},
+                                                   {<<"src-address">>, Src},
+                                                   {<<"src-delete-after">>, <<"queue-length">>},
+                                                   {<<"dest-protocol">>, <<"amqp10">>},
+                                                   {<<"dest-address">>, Dest}],
+               none]),
+    ?assertMatch({error_string, _}, Error),
+    {_, Msg} = Error,
+    ?assertMatch(match, re:run(Msg, "Validation failed.*", [{capture, none}])).
 
 %%----------------------------------------------------------------------------
 
