@@ -233,23 +233,12 @@ validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
      "~tp", [Name, Term]}.
 
-<<<<<<< HEAD
-=======
 validate_amqp10_delete_after(_Name, <<"never">>)          -> ok;
 validate_amqp10_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_amqp10_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0 or \"never\", actually was "
      "~tp", [Name, Term]}.
 
-validate_internal_owner(Name, Term0) ->
-    Term = rabbit_data_coercion:to_proplist(Term0),
-
-    rabbit_parameter_validation:proplist(Name, [{<<"name">>, fun rabbit_parameter_validation:binary/2},
-                                                {<<"kind">>, rabbit_parameter_validation:enum(
-                                                              ['exchange', 'queue'])},
-                                                {<<"virtual_host">>, fun rabbit_parameter_validation:binary/2}], Term).
-
->>>>>>> b6d831b11 (Shovel amqp1.0: fix delete after validation)
 validate_queue_args(Name, Term0) ->
     Term = rabbit_data_coercion:to_proplist(Term0),
 

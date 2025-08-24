@@ -28,13 +28,8 @@ groups() ->
           autodelete_amqp091_dest_on_publish,
           simple_amqp10_dest,
           simple_amqp10_src,
-<<<<<<< HEAD
-          amqp091_to_amqp10_with_dead_lettering
-=======
           amqp091_to_amqp10_with_dead_lettering,
-          amqp10_to_amqp091_application_properties,
           test_amqp10_delete_after_queue_length
->>>>>>> b6d831b11 (Shovel amqp1.0: fix delete after validation)
         ]},
       {with_map_config, [], [
           simple,
