@@ -183,7 +183,7 @@ amqp10_src_validation(_Def, User) ->
      {<<"src-uri">>, validate_uri_fun(User), mandatory},
      {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
      {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
-     {<<"src-delete-after">>, fun validate_delete_after/2, optional}
+     {<<"src-delete-after">>, fun validate_amqp10_delete_after/2, optional}
     ].
 
 amqp091_src_validation(_Def, User) ->
@@ -300,6 +300,12 @@ validate_delete_after(_Name, <<"queue-length">>)   -> ok;
 validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
 validate_delete_after(Name,  Term) ->
     {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
+     "~tp", [Name, Term]}.
+
+validate_amqp10_delete_after(_Name, <<"never">>)          -> ok;
+validate_amqp10_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
+validate_amqp10_delete_after(Name,  Term) ->
+    {error, "~ts should be a number greater than or equal to 0 or \"never\", actually was "
      "~tp", [Name, Term]}.
 
 validate_internal_owner(Name, Term0) ->
