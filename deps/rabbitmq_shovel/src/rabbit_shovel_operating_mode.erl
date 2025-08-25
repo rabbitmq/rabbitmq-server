@@ -10,9 +10,7 @@
 -include("rabbit_shovel.hrl").
 
 -export([
-  operating_mode/0,
-  is_standard/0,
-  is_alternative/0
+  operating_mode/0
 ]).
 
 -type operating_mode() :: 'standard' | atom().
@@ -24,11 +22,3 @@
 -spec operating_mode() -> operating_mode().
 operating_mode() ->
     application:get_env(?SHOVEL_APP, operating_mode, standard).
-
--spec is_standard() -> boolean().
-is_standard() ->
-    operating_mode() =:= standard.
-
--spec is_alternative() -> boolean().
-is_alternative() ->
-    operating_mode() =/= standard.
