@@ -394,7 +394,20 @@ validate_ldap_configuration_via_api(Config) ->
                 'verify' => "verify_peer",
                 'cacert_pem_data' => [CaCertfileContent, CaCertfileContent]
             }
-        }, ?BAD_REQUEST).
+        }, ?BAD_REQUEST),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapTlsPort,
+            'use_ssl' => true,
+            'ssl_options' => #{
+                'verify' => "verify_peer",
+                'cacertfile' => CaCertfile,
+                'ssl_hostname_verification' => "wildcard"
+            }
+        }, ?NO_CONTENT).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,

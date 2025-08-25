@@ -186,5 +186,12 @@ tls_options(BodyMap) ->
                     Versions = lists:filtermap(F1, VersionStrs),
                     [{versions, Versions} | TlsOpts5]
             end,
-            {ok, TlsOpts6}
+            TlsOpts7 = case maps:get(<<"ssl_hostname_verification">>, SslOptionsMap, undefined) of
+                undefined ->
+                    TlsOpts6;
+                "wildcard" ->
+                    [{customize_hostname_check, [{match_fun, public_key:pkix_verify_hostname_match_fun(https)}]} | TlsOpts6]
+                end,
+            ?LOG_DEBUG("@@@@ TlsOpts7 ~tp", [TlsOpts7]),
+            {ok, TlsOpts7}
     end.
