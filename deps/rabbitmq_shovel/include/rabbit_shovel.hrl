@@ -5,6 +5,8 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
+-define(SHOVEL_APP, rabbitmq_shovel).
+
 -record(endpoint,
         {uris,
          resource_declaration

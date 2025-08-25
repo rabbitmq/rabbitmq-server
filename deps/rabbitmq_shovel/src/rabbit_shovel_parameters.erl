@@ -39,10 +39,22 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
+    OpMode = rabbit_shovel_operating_mode:operating_mode(),
+    case OpMode of
+        standard ->
+            rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE);
+        _Other ->
+            ?LOG_DEBUG("Shovel: skipping runtime parameter registration, operating mode: ~ts", [OpMode])
+    end.
 
 unregister() ->
-    rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
+    OpMode = rabbit_shovel_operating_mode:operating_mode(),
+    case OpMode of
+        standard ->
+            rabbit_registry:unregister(runtime_parameter, <<"shovel">>);
+        _Other ->
+            ?LOG_DEBUG("Shovel: skipping runtime parameter deregistration, operating mode: ~ts", [OpMode])
+    end.
 
 validate(_VHost, <<"shovel">>, Name, Def0, User) ->
     Def = rabbit_data_coercion:to_proplist(Def0),
@@ -65,10 +77,22 @@ pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
                        end.
 
 notify(VHost, <<"shovel">>, Name, Definition, _Username) ->
-    rabbit_shovel_dyn_worker_sup_sup:adjust({VHost, Name}, Definition).
+    OpMode = rabbit_shovel_operating_mode:operating_mode(),
+    case OpMode of
+        standard ->
+            rabbit_shovel_dyn_worker_sup_sup:adjust({VHost, Name}, Definition);
+        _Other ->
+            ?LOG_DEBUG("Shovel: ignoring a runtime parameter update, operating mode: ~ts", [OpMode])
+    end.
 
 notify_clear(VHost, <<"shovel">>, Name, _Username) ->
-    rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
+    OpMode = rabbit_shovel_operating_mode:operating_mode(),
+    case OpMode of
+        standard ->
+            rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name});
+        _Other ->
+            ?LOG_DEBUG("Shovel: ignoring a cleared runtime parameter, operating mode: ~ts", [OpMode])
+    end.
 
 %%----------------------------------------------------------------------------
 

@@ -2,6 +2,10 @@
 %% RabbitMQ Shovel plugin
 %% ----------------------------------------------------------------------------
 
+{mapping, "shovel.operating_mode", "rabbitmq_shovel.operating_mode", [
+     [{datatype, {enum, [standard, alternative, library]}}]
+]}.
+
 {mapping, "shovel.topology.predeclared", "rabbitmq_shovel.topology.predeclared", [
      [{datatype, {enum, [true, false]}}]
 ]}.
