@@ -8,6 +8,9 @@
 -module(rabbit_shovel_sup).
 -behaviour(supervisor).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("logging.hrl").
+
 -export([start_link/0, init/1]).
 
 -import(rabbit_shovel_config, []).
@@ -22,6 +25,7 @@ start_link() ->
 
 init([Configurations]) ->
     OpMode = rabbit_shovel_operating_mode:operating_mode(),
+    ?LOG_DEBUG("Shovel: operating mode set to ~ts", [OpMode]),
     StaticShovelSpecs = make_child_specs(OpMode, Configurations),
     Len = dict:size(Configurations),
     ChildSpecs = [
