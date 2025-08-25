@@ -117,16 +117,24 @@ tls_options(BodyMap) ->
         undefined ->
             {ok, []};
         SslOptionsMap ->
-            %% NB: for some reason the "cacertfile" key isn't turned into an atom
-            TlsOpts0 = case maps:get(<<"cacertfile">>, SslOptionsMap, undefined) of
-                undefined ->
-                    [];
-                CaCertfile ->
-                    [{cacertfile, CaCertfile}]
+            CaCertfile = maps:get(<<"cacertfile">>, SslOptionsMap, undefined),
+            CaCertPemData = maps:get(<<"cacert_pem_data">>, SslOptionsMap, undefined),
+            TlsOpts0 = case {CaCertfile, CaCertPemData} of
+                {undefined, undefined} ->
+                    [{cacerts, public_key:cacerts_get()}];
+                _ ->
+                    []
             end,
-            TlsOpts1 = case maps:get(<<"cacert_pem_data">>, SslOptionsMap, undefined) of
+            %% NB: for some reason the "cacertfile" key isn't turned into an atom
+            TlsOpts1 = case CaCertfile of
                 undefined ->
                     TlsOpts0;
+                CaCertfile ->
+                    [{cacertfile, CaCertfile} | TlsOpts0]
+            end,
+            TlsOpts2 = case CaCertPemData of
+                undefined ->
+                    TlsOpts1;
                 CaCertPems when is_list(CaCertPems) ->
                     F0 = fun (P) ->
                         case public_key:pem_decode(P) of
@@ -138,34 +146,34 @@ tls_options(BodyMap) ->
                         end
                     end,
                     CaCertsDerEncoded = lists:filtermap(F0, CaCertPems),
-                    [{cacerts, CaCertsDerEncoded} | TlsOpts0];
+                    [{cacerts, CaCertsDerEncoded} | TlsOpts1];
                 _ ->
-                    TlsOpts0
+                    TlsOpts1
             end,
-            TlsOpts2 = case maps:get(<<"verify">>, SslOptionsMap, undefined) of
+            TlsOpts3 = case maps:get(<<"verify">>, SslOptionsMap, undefined) of
                 undefined ->
-                    TlsOpts1;
+                    TlsOpts2;
                 Verify ->
                     VerifyStr = unicode:characters_to_list(Verify),
-                    [{verify, list_to_existing_atom(VerifyStr)} | TlsOpts1]
+                    [{verify, list_to_existing_atom(VerifyStr)} | TlsOpts2]
             end,
-            TlsOpts3 = case maps:get(<<"server_name_indication">>, SslOptionsMap, disable) of
+            TlsOpts4 = case maps:get(<<"server_name_indication">>, SslOptionsMap, disable) of
                 disable ->
-                    TlsOpts2;
+                    TlsOpts3;
                 SniValue ->
                     SniStr = unicode:characters_to_list(SniValue),
-                    [{server_name_indication, SniStr} | TlsOpts2]
+                    [{server_name_indication, SniStr} | TlsOpts3]
             end,
-            TlsOpts4 = case maps:get(<<"depth">>, SslOptionsMap, undefined) of
-                undefined ->
-                    TlsOpts3;
-                DepthValue ->
-                    Depth = rabbit_data_coercion:to_integer(DepthValue),
-                    [{depth, Depth} | TlsOpts3]
-            end,
-            TlsOpts5 = case maps:get(<<"versions">>, SslOptionsMap, undefined) of
+            TlsOpts5 = case maps:get(<<"depth">>, SslOptionsMap, undefined) of
                 undefined ->
                     TlsOpts4;
+                DepthValue ->
+                    Depth = rabbit_data_coercion:to_integer(DepthValue),
+                    [{depth, Depth} | TlsOpts4]
+            end,
+            TlsOpts6 = case maps:get(<<"versions">>, SslOptionsMap, undefined) of
+                undefined ->
+                    TlsOpts5;
                 VersionStrs when is_list(VersionStrs) ->
                     F1 = fun (VStr) ->
                         try
@@ -176,7 +184,7 @@ tls_options(BodyMap) ->
                         end
                     end,
                     Versions = lists:filtermap(F1, VersionStrs),
-                    [{versions, Versions} | TlsOpts4]
+                    [{versions, Versions} | TlsOpts5]
             end,
-            {ok, TlsOpts5}
+            {ok, TlsOpts6}
     end.
