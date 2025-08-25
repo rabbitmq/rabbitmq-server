@@ -26,7 +26,14 @@ start_link() ->
             {ok, Pid0}                       -> Pid0;
             {error, {already_started, Pid0}} -> Pid0
           end,
-    Shovels = rabbit_runtime_parameters:list_component(<<"shovel">>),
+    IsStandard = rabbit_shovel_operating_mode:is_standard(),
+    Shovels = case IsStandard of
+        false ->
+            %% when operating in a non-standard mode, do not start any shovels
+            [];
+        true ->
+            rabbit_runtime_parameters:list_component(<<"shovel">>)
+    end,
     [start_child({pget(vhost, Shovel), pget(name, Shovel)},
                  pget(value, Shovel)) || Shovel <- Shovels],
     {ok, Pid}.

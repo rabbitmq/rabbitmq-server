@@ -39,10 +39,20 @@
                     {enables, recovery}]}).
 
 register() ->
-    rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE).
+    case rabbit_shovel_operating_mode:is_standard() of
+        true ->
+            rabbit_registry:register(runtime_parameter, <<"shovel">>, ?MODULE);
+        false ->
+            ?LOG_DEBUG("Shovel: skipping runtime parameter registration, operating mode: ~ts", [rabbit_shovel_operating_mode:operating_mode()])
+    end.
 
 unregister() ->
-    rabbit_registry:unregister(runtime_parameter, <<"shovel">>).
+    case rabbit_shovel_operating_mode:is_standard() of
+        true ->
+            rabbit_registry:unregister(runtime_parameter, <<"shovel">>);
+        false ->
+            ?LOG_DEBUG("Shovel: skipping runtime parameter deregistration, operating mode: ~ts", [rabbit_shovel_operating_mode:operating_mode()])
+    end.
 
 validate(_VHost, <<"shovel">>, Name, Def0, User) ->
     Def = rabbit_data_coercion:to_proplist(Def0),
@@ -65,10 +75,20 @@ pget2(K1, K2, Defs) -> case {pget(K1, Defs), pget(K2, Defs)} of
                        end.
 
 notify(VHost, <<"shovel">>, Name, Definition, _Username) ->
-    rabbit_shovel_dyn_worker_sup_sup:adjust({VHost, Name}, Definition).
+    case rabbit_shovel_operating_mode:is_standard() of
+        true ->
+            rabbit_shovel_dyn_worker_sup_sup:adjust({VHost, Name}, Definition);
+        false ->
+            ?LOG_DEBUG("Shovel: ignoring a runtime parameter update, operating mode: ~ts", [rabbit_shovel_operating_mode:operating_mode()])
+    end.
 
 notify_clear(VHost, <<"shovel">>, Name, _Username) ->
-    rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}).
+    case rabbit_shovel_operating_mode:is_standard() of
+        true ->
+            rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name});
+        false ->
+            ?LOG_DEBUG("Shovel: ignoring a cleared runtime parameter, operating mode: ~ts", [rabbit_shovel_operating_mode:operating_mode()])
+    end.
 
 %%----------------------------------------------------------------------------
 

@@ -21,6 +21,8 @@ start_link() ->
     end.
 
 init([Configurations]) ->
+    IsStandard = rabbit_shovel_operating_mode:is_standard(),
+    StaticShovelSpecs = make_child_specs(IsStandard, Configurations),
     Len = dict:size(Configurations),
     ChildSpecs = [
         #{
@@ -39,11 +41,15 @@ init([Configurations]) ->
             type => supervisor,
             modules => [rabbit_shovel_dyn_worker_sup_sup]
         }
-        | make_child_specs(Configurations)
+        | StaticShovelSpecs
     ],
-    {ok, {#{strategy => one_for_one, intensity => 2 * Len, period => 2}, ChildSpecs}}.
+    Opts = #{strategy => one_for_one, intensity => 2 * Len, period => 2},
+    {ok, {Opts, ChildSpecs}}.
 
-make_child_specs(Configurations) ->
+make_child_specs(false = _StandardOperatingMode, _Configurations) ->
+    %% when operating in a non-standard mode, do not start any shovels
+    [];
+make_child_specs(true, Configurations) ->
     dict:fold(
       fun (ShovelName, ShovelConfig, Acc) ->
             [
