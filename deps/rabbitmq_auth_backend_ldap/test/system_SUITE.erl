@@ -346,6 +346,18 @@ validate_ldap_configuration_via_api(Config) ->
             'user_dn' => AliceUserDN,
             'password' => Password,
             'servers' => ["localhost"],
+            'port' => LdapTlsPort,
+            'use_ssl' => true,
+            'ssl_options' => #{
+                'server_name_indication' => "localhost",
+                'cacertfile' => CaCertfile
+            }
+        }, ?NO_CONTENT),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
             'port' => LdapPort,
             'use_ssl' => false,
             'use_starttls' => true,
@@ -353,7 +365,36 @@ validate_ldap_configuration_via_api(Config) ->
                 'server_name_indication' => "localhost",
                 'cacertfile' => CaCertfile
             }
-        }, ?NO_CONTENT).
+        }, ?NO_CONTENT),
+    {ok, CaCertfileContent} = file:read_file(CaCertfile),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapTlsPort,
+            'use_ssl' => true,
+            'ssl_options' => #{
+                'versions' => ["tlsv1.2", "tlsv1.3"],
+                'depth' => 8,
+                'verify' => "verify_peer",
+                'cacert_pem_data' => [CaCertfileContent, CaCertfileContent]
+            }
+        }, ?NO_CONTENT),
+    http_put(Config, "/ldap/validate/simple-bind",
+        #{
+            'user_dn' => AliceUserDN,
+            'password' => Password,
+            'servers' => ["localhost"],
+            'port' => LdapTlsPort,
+            'use_ssl' => true,
+            'ssl_options' => #{
+                'versions' => ["tlsfoobar", "tlsv1.3"],
+                'depth' => 8,
+                'verify' => "verify_peer",
+                'cacert_pem_data' => [CaCertfileContent, CaCertfileContent]
+            }
+        }, ?BAD_REQUEST).
 
 purge_connection(Config) ->
     {ok, _} = rabbit_ct_broker_helpers:rpc(Config, 0,

@@ -19,6 +19,7 @@
          accept_content/2]).
 
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbitmq_web_dispatch/include/rabbitmq_web_dispatch_records.hrl").
 
 dispatcher() -> [{"/ldap/validate/simple-bind", ?MODULE, []}].
@@ -54,31 +55,35 @@ accept_content(ReqData0, Context) ->
             {port, Port},
             {timeout, 5000}
         ],
-        {ok, Options1} = maybe_add_ssl_options(Options0, UseSsl, BodyMap),
-        case eldap:open(Servers, Options1) of
-            {ok, LDAP} ->
-                Result = case maybe_starttls(LDAP, UseStartTls, BodyMap) of
-                    ok ->
-                        case eldap:simple_bind(LDAP, UserDN, Password) of
-                            ok ->
-                                {true, ReqData1, Context};
-                            {error, invalidCredentials} ->
-                                rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
-                            {error, unwillingToPerform} ->
-                                rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
-                            {error, E} ->
-                                Reason = unicode_format(E),
-                                rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
-                        end;
-                    Error ->
-                        Reason = unicode_format(Error),
-                        rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
-                end,
-                eldap:close(LDAP),
-                Result;
-            {error, E} ->
-                Reason = unicode_format(E),
-                rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+        try
+            {ok, Options1} = maybe_add_ssl_options(Options0, UseSsl, BodyMap),
+            case eldap:open(Servers, Options1) of
+                {ok, LDAP} ->
+                    Result = case maybe_starttls(LDAP, UseStartTls, BodyMap) of
+                        ok ->
+                            case eldap:simple_bind(LDAP, UserDN, Password) of
+                                ok ->
+                                    {true, ReqData1, Context};
+                                {error, invalidCredentials} ->
+                                    rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                                {error, unwillingToPerform} ->
+                                    rabbit_mgmt_util:not_authorised("invalid credentials", ReqData1, Context);
+                                {error, E} ->
+                                    Reason = unicode_format(E),
+                                    rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+                            end;
+                        Error ->
+                            Reason = unicode_format(Error),
+                            rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+                    end,
+                    eldap:close(LDAP),
+                    Result;
+                {error, E} ->
+                    Reason = unicode_format(E),
+                    rabbit_mgmt_util:bad_request(Reason, ReqData1, Context)
+            end
+        catch throw:{bad_request, ErrMsg} ->
+            rabbit_mgmt_util:bad_request(ErrMsg, ReqData1, Context)
         end
     end,
     rabbit_mgmt_util:with_decode([], ReqData0, Context, F).
@@ -119,11 +124,59 @@ tls_options(BodyMap) ->
                 CaCertfile ->
                     [{cacertfile, CaCertfile}]
             end,
-            TlsOpts1 = case maps:get(<<"server_name_indication">>, SslOptionsMap, disable) of
-                disable ->
+            TlsOpts1 = case maps:get(<<"cacert_pem_data">>, SslOptionsMap, undefined) of
+                undefined ->
                     TlsOpts0;
-                SniValue ->
-                    [{server_name_indication, SniValue} | TlsOpts0]
+                CaCertPems when is_list(CaCertPems) ->
+                    F0 = fun (P) ->
+                        case public_key:pem_decode(P) of
+                            [{'Certificate', CaCertDerEncoded, not_encrypted}] ->
+                                {true, CaCertDerEncoded};
+                            _Unexpected ->
+                                throw({bad_request, "unexpected cacert_pem_data passed to "
+                                                    "/ldap/validate/simple-bind ssl_options.cacerts"})
+                        end
+                    end,
+                    CaCertsDerEncoded = lists:filtermap(F0, CaCertPems),
+                    [{cacerts, CaCertsDerEncoded} | TlsOpts0];
+                _ ->
+                    TlsOpts0
             end,
-            {ok, TlsOpts1}
+            TlsOpts2 = case maps:get(<<"verify">>, SslOptionsMap, undefined) of
+                undefined ->
+                    TlsOpts1;
+                Verify ->
+                    VerifyStr = unicode:characters_to_list(Verify),
+                    [{verify, list_to_existing_atom(VerifyStr)} | TlsOpts1]
+            end,
+            TlsOpts3 = case maps:get(<<"server_name_indication">>, SslOptionsMap, disable) of
+                disable ->
+                    TlsOpts2;
+                SniValue ->
+                    SniStr = unicode:characters_to_list(SniValue),
+                    [{server_name_indication, SniStr} | TlsOpts2]
+            end,
+            TlsOpts4 = case maps:get(<<"depth">>, SslOptionsMap, undefined) of
+                undefined ->
+                    TlsOpts3;
+                DepthValue ->
+                    Depth = rabbit_data_coercion:to_integer(DepthValue),
+                    [{depth, Depth} | TlsOpts3]
+            end,
+            TlsOpts5 = case maps:get(<<"versions">>, SslOptionsMap, undefined) of
+                undefined ->
+                    TlsOpts4;
+                VersionStrs when is_list(VersionStrs) ->
+                    F1 = fun (VStr) ->
+                        try
+                            {true, list_to_existing_atom(VStr)}
+                        catch error:badarg ->
+                            throw({bad_request, "invalid TLS version passed to "
+                                                "/ldap/validate/simple-bind ssl_options.versions"})
+                        end
+                    end,
+                    Versions = lists:filtermap(F1, VersionStrs),
+                    [{versions, Versions} | TlsOpts4]
+            end,
+            {ok, TlsOpts5}
     end.
