@@ -21,4 +21,4 @@
 
 -spec operating_mode() -> operating_mode().
 operating_mode() ->
-    application:get_env(?SHOVEL_APP, operating_mode, standard).
+    rabbit_data_coercion:to_atom(application:get_env(?SHOVEL_APP, operating_mode, standard)).
