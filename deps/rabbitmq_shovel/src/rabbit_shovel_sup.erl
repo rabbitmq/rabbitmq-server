@@ -26,9 +26,18 @@ start_link() ->
 init([Configurations]) ->
     OpMode = rabbit_shovel_operating_mode:operating_mode(),
     ?LOG_DEBUG("Shovel: operating mode set to ~ts", [OpMode]),
-    StaticShovelSpecs = make_child_specs(OpMode, Configurations),
+
     Len = dict:size(Configurations),
-    ChildSpecs = [
+    SupTreeSpecs = supervisor_tree_child_specs(OpMode),
+    StaticShovelSpecs = static_shovel_child_specs(OpMode, Configurations),
+
+    ChildSpecs = SupTreeSpecs ++ StaticShovelSpecs,
+    Opts = #{strategy => one_for_one, intensity => 2 * Len, period => 2},
+    {ok, {Opts, ChildSpecs}}.
+
+
+supervisor_tree_child_specs(standard) ->
+    [
         #{
             id => rabbit_shovel_status,
             start => {rabbit_shovel_status, start_link, []},
@@ -45,13 +54,12 @@ init([Configurations]) ->
             type => supervisor,
             modules => [rabbit_shovel_dyn_worker_sup_sup]
         }
-        | StaticShovelSpecs
-    ],
-    Opts = #{strategy => one_for_one, intensity => 2 * Len, period => 2},
-    {ok, {Opts, ChildSpecs}}.
+    ];
+supervisor_tree_child_specs(_NonStandardOpMode) ->
+    [].
 
 
-make_child_specs(standard, Configurations) ->
+static_shovel_child_specs(standard, Configurations) ->
     dict:fold(
       fun (ShovelName, ShovelConfig, Acc) ->
             [
@@ -66,7 +74,7 @@ make_child_specs(standard, Configurations) ->
                 | Acc
             ]
         end, [], Configurations);
-make_child_specs(_NonStandardOpMode, _Configurations) ->
+static_shovel_child_specs(_NonStandardOpMode, _Configurations) ->
     %% when operating in a non-standard mode, do not start any shovels
     [].
 
