@@ -76,7 +76,8 @@ groups() ->
                   local_to_local_quorum_credit_flow_no_ack,
                   local_to_local_stream_credit_flow_on_confirm,
                   local_to_local_stream_credit_flow_on_publish,
-                  local_to_local_stream_credit_flow_no_ack
+                  local_to_local_stream_credit_flow_no_ack,
+                  local_to_local_simple_uri
                  ]}
     ].
 
@@ -1029,6 +1030,21 @@ local_to_local_stream_credit_flow(Config, AckMode) ->
               amqp10_client:detach_link(Receiver)
       end).
 
+local_to_local_simple_uri(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    AltVHost = ?config(alt_vhost, Config),
+    Uri = <<"amqp://">>,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, ?PARAM, [{<<"src-uri">>,  Uri},
+                                            {<<"dest-uri">>, [Uri]},
+                                            {<<"src-protocol">>, <<"local">>},
+                                            {<<"src-queue">>, Src},
+                                            {<<"dest-protocol">>, <<"local">>},
+                                            {<<"dest-queue">>, Dest}],
+            none]),
+    shovel_test_utils:await_shovel(Config, ?PARAM).
 
 %%----------------------------------------------------------------------------
 with_session(Config, Fun) ->

@@ -546,7 +546,13 @@ get_user_vhost_from_amqp_param(Uri) ->
             #amqp_params_direct{username = U,
                                 password = P,
                                 virtual_host = V} ->
-                {U, P, V};
+                case {U, P} of
+                    {none, none} ->
+                        %% Default user for uris like amqp://
+                        {<<"guest">>, <<"guest">>, V};
+                    _ ->
+                        {U, P, V}
+                end;
             #amqp_params_network{username = U,
                                  password = P,
                                  virtual_host = V} ->
