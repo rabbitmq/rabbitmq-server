@@ -240,6 +240,7 @@ split_status(Status) when is_atom(Status) -> [{status, Status}].
 
 split_name({VHost, Name})           -> [{name,  Name},
                                         {vhost, VHost}];
+split_name(Name) when is_binary(Name) -> [{name, Name}];
 split_name(Name) when is_atom(Name) -> [{name, Name}].
 
 ensure_timer(State0) ->
