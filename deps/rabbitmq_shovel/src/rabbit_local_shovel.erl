@@ -317,6 +317,17 @@ handle_dest({{'DOWN', #resource{name = Queue,
                                 virtual_host = VHost}}, _, _, _, _}  ,
             #{dest := #{queue := Queue, current := #{vhost := VHost}}}) ->
     {stop, {outbound_link_or_channel_closure, dest_queue_down}};
+handle_dest({{'DOWN', #resource{kind = queue,
+                                virtual_host = VHost} = QName}, _MRef, process, QPid, Reason},
+            #{dest := Dest = #{current := Current = #{vhost := VHost,
+                                                      queue_states := QStates0}}} = State0) ->
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
+        {ok, QState1, Actions} ->
+            State1 = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
+            handle_dest_queue_actions(Actions, State1);
+        {eol, QState1, _QRef} ->
+            State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
+    end;
 handle_dest(_Msg, State) ->
     State.
 
@@ -324,7 +335,7 @@ ack(DeliveryTag, Multiple, State) ->
     maybe_grant_credit(settle(complete, DeliveryTag, Multiple, State)).
 
 nack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(discard, DeliveryTag, Multiple, State)).
+    maybe_grant_credit(settle(requeue, DeliveryTag, Multiple, State)).
 
 forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                                unacked := Unacked} = Dest,
@@ -349,9 +360,13 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                        case AckMode of
                            no_ack ->
                                rabbit_shovel_behaviour:decr_remaining(1, State2);
-                           on_confirm ->
+                           on_confirm when length(Queues) > 0 ->
                                Correlation = maps:get(correlation, Options),
                                State2#{dest => Dst1#{unacked => Unacked#{Correlation => Tag}}};
+                           on_confirm ->
+                               %% Drop the messages as 0.9.1, no destination available
+                               State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
+                               rabbit_shovel_behaviour:decr_remaining(1, State3);
                            on_publish ->
                                State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
                                rabbit_shovel_behaviour:decr_remaining(1, State3)
@@ -641,11 +656,15 @@ confirm_to_inbound(ConfirmFun, SeqNos, State)
                 end, State, SeqNos);
 confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
-    #{Seq := InTag} = Unacked,
-    Unacked1 = maps:remove(Seq, Unacked),
-    State = rabbit_shovel_behaviour:decr_remaining(
-              1, State0#{dest => Dst#{unacked => Unacked1}}),
-    ConfirmFun(InTag, State).
+    case Unacked of
+        #{Seq := InTag} ->
+            Unacked1 = maps:remove(Seq, Unacked),
+            State = rabbit_shovel_behaviour:decr_remaining(
+                      1, State0#{dest => Dst#{unacked => Unacked1}}),
+            ConfirmFun(InTag, State);
+        _ ->
+            State0
+    end.
 
 sent_delivery(#{source := #{delivery_count := DeliveryCount0,
                             credit := Credit0} = Src
