@@ -27,7 +27,8 @@ groups() ->
     [
      {tests, [], [
                   local_to_local_dest_down,
-                  local_to_local_multiple_dest_down
+                  local_to_local_multiple_dest_down,
+                  local_to_local_no_destination
                  ]}
     ].
 
@@ -40,7 +41,7 @@ init_per_suite(Config0) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config0, [
         {rmq_nodename_suffix, ?MODULE},
-        {rmq_nodes_count, 2},
+        {rmq_nodes_count, 3},
         {rmq_nodes_clustered, true},
         {ignored_crashes, [
           "server_initiated_close,404",
@@ -105,13 +106,13 @@ local_to_local_dest_down(Config) ->
                                           ]),
               ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
               publish_many(Sess, Src, Dest, <<"tag1">>, 10),
-              ?awaitMatch([[<<"local_to_local_dest_down_dest">>, <<>>, <<>>, <<>>],
-                           [<<"local_to_local_dest_down_src">>, <<"10">>, _, _]],
+              ?awaitMatch([[<<"local_to_local_dest_down_dest">>, 0, 0, 0],
+                           [<<"local_to_local_dest_down_src">>, 10, _, _]],
                           list_queue_messages(Config),
                           30000),
               ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-              ?awaitMatch([[<<"local_to_local_dest_down_dest">>, <<"10">>, <<"10">>, <<"0">>],
-                           [<<"local_to_local_dest_down_src">>, <<"0">>, <<"0">>, <<"0">>]],
+              ?awaitMatch([[<<"local_to_local_dest_down_dest">>, 10, 10, 0],
+                           [<<"local_to_local_dest_down_src">>, 0, 0, 0]],
                           list_queue_messages(Config),
                           30000),
               expect_many(Sess, Dest, 10)
@@ -132,30 +133,57 @@ local_to_local_multiple_dest_down(Config) ->
                                            {<<"src-queue">>, Src},
                                            {<<"dest-protocol">>, <<"local">>},
                                            {<<"dest-exchange">>, <<"amq.fanout">>},
-                                           {<<"dest-exchange-key">>, Dest}
+                                           {<<"dest-exchange-key">>, <<"">>}
                                           ]),
               ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
               publish_many(Sess, Src, Dest, <<"tag1">>, 10),
-              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, <<>>, <<>>, <<>>],
-                           [<<"local_to_local_multiple_dest_down_dest2">>, <<>>, <<>>, <<>>],
-                           [<<"local_to_local_multiple_dest_down_src">>, <<"10">>, _, _]],
+              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, 0, 0, 0],
+                           [<<"local_to_local_multiple_dest_down_dest2">>, 0, 0, 0],
+                           [<<"local_to_local_multiple_dest_down_src">>, 10, _, _]],
                           list_queue_messages(Config),
                           30000),
               ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, <<"10">>, <<"10">>, <<"0">>],
-                           [<<"local_to_local_multiple_dest_down_dest2">>, <<"10">>, <<"10">>, <<"0">>],
-                           [<<"local_to_local_multiple_dest_down_src">>, <<"0">>, <<"0">>, <<"0">>]],
+              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, N, N, 0],
+                           [<<"local_to_local_multiple_dest_down_dest2">>, M, M, 0],
+                           [<<"local_to_local_multiple_dest_down_src">>, 0, 0, 0]]
+                          when ((N >= 10) and (M >= 10)),
                           list_queue_messages(Config),
                           30000),
               expect_many(Sess, Dest, 10)
       end).
 
+local_to_local_no_destination(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    declare_queue(Config, 0, <<"/">>, Src),
+    with_session(
+      Config,
+      fun (Sess) ->
+              shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-exchange">>, <<"amq.fanout">>},
+                                           {<<"dest-exchange-key">>, Dest}
+                                          ]),
+              publish_many(Sess, Src, Dest, <<"tag1">>, 10),
+              ?awaitMatch([[<<"local_to_local_no_destination_src">>, 0, 0, 0]],
+                          list_queue_messages(Config),
+                          30000)
+      end).
+
 %%----------------------------------------------------------------------------
 list_queue_messages(Config) ->
-    lists:sort(
-      rabbit_ct_broker_helpers:rabbitmqctl_list(
-        Config, 0,
-        ["list_queues", "name", "messages", "messages_ready", "messages_unacknowledged", "--no-table-headers"])).
+    [[N, to_int(M), to_int(MR), to_int(MU)]
+     || [N, M, MR, MU] <- lists:sort(
+                            rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0,
+                              ["list_queues", "name", "messages", "messages_ready", "messages_unacknowledged", "--no-table-headers"]))].
+
+to_int(<<>>) ->
+    0;
+to_int(Int) ->
+    binary_to_integer(Int).
 
 with_session(Config, Fun) ->
     with_session(Config, <<"/">>, Fun).

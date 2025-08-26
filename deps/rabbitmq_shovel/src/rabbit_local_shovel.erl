@@ -360,9 +360,13 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                        case AckMode of
                            no_ack ->
                                rabbit_shovel_behaviour:decr_remaining(1, State2);
-                           on_confirm ->
+                           on_confirm when length(Queues) > 0 ->
                                Correlation = maps:get(correlation, Options),
                                State2#{dest => Dst1#{unacked => Unacked#{Correlation => Tag}}};
+                           on_confirm ->
+                               %% Drop the messages as 0.9.1, no destination available
+                               State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
+                               rabbit_shovel_behaviour:decr_remaining(1, State3);
                            on_publish ->
                                State3 = rabbit_shovel_behaviour:ack(Tag, false, State2),
                                rabbit_shovel_behaviour:decr_remaining(1, State3)
