@@ -90,6 +90,8 @@
 -export([remote_sup_child/2]).
 -export([for_each_while_ok/2, fold_while_ok/3]).
 
+-export([ensure_os_mon/0]).
+
 %% Horrible macro to use in guards
 -define(IS_BENIGN_EXIT(R),
         R =:= noproc; R =:= noconnection; R =:= nodedown; R =:= normal;
@@ -1615,3 +1617,11 @@ fold_while_ok(Fun, Acc0, [Elem | Rest]) ->
     end;
 fold_while_ok(_Fun, Acc, []) ->
     {ok, Acc}.
+
+ensure_os_mon() ->
+    ensure_os_mon(os:type()).
+
+ensure_os_mon({win32, _}) ->
+    ok = application:ensure_started(os_mon);
+ensure_os_mon(_) ->
+    ok.

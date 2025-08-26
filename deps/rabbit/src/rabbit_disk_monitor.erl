@@ -139,6 +139,10 @@ init([Limit]) ->
                {unix, _} ->
                    start_portprogram();
                {win32, _OSname} ->
+                   %% Note: os_mon is not automatically started as it is only
+                   %% used on win32 for the time being. Rather than start it
+                   %% on all systems, we start it here.
+                   ok = rabbit_misc:ensure_os_mon(),
                    not_used
            end,
     State3 = State2#state{port=Port, os=OS},

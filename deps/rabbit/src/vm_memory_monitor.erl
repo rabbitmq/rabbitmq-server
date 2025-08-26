@@ -275,6 +275,12 @@ init_state_by_os(State0 = #state{os_type = {unix, linux}, os_pid = OsPid}) ->
     PageSize = get_linux_pagesize(),
     ProcFile = io_lib:format("/proc/~ts/statm", [OsPid]),
     State0#state{page_size = PageSize, proc_file = ProcFile};
+init_state_by_os(State = #state{os_type = {win32, _}}) ->
+    %% Note: os_mon is not automatically started as it is only
+    %% used on win32 for the time being. Rather than start it
+    %% on all systems, we start it here.
+    ok = rabbit_misc:ensure_os_mon(),
+    State;
 init_state_by_os(State) ->
     State.
 
