@@ -15,6 +15,7 @@
 
 -import(rabbit_misc, [pget/2]).
 
+-include_lib("kernel/include/logger.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel_mgmt.hrl").
@@ -30,8 +31,9 @@ filter_vhost_user(List, _ReqData, #context{user = User = #user{tags = Tags}}) ->
                      end].
 
 status(ReqData, Context) ->
+    Statuses = lists:append([status(Node) || Node <- [node() | nodes()]]),
     filter_vhost_user(
-        lists:append([status(Node) || Node <- [node() | nodes()]]),
+        Statuses,
         ReqData, Context).
 
 status(Node) ->
