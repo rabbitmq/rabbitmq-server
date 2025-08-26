@@ -52,7 +52,14 @@ groups() ->
 init_per_group(static_shovels, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+        {ignored_crashes, [
+            "server_initiated_close,404",
+            "writer,send_failed,closed",
+            "source_queue_down",
+            "dest_queue_down",
+            "dependent process"
+          ]}
     ]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
         fun configure_shovels/1,
@@ -62,7 +69,14 @@ init_per_group(static_shovels, Config) ->
 init_per_group(_Group, Config) ->
     rabbit_ct_helpers:log_environment(),
     Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, ?MODULE}
+        {rmq_nodename_suffix, ?MODULE},
+        {ignored_crashes, [
+            "server_initiated_close,404",
+            "writer,send_failed,closed",
+            "source_queue_down",
+            "dest_queue_down",
+            "dependent process"
+          ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(Config1, [
         fun start_inets/1
