@@ -76,6 +76,11 @@ drain() ->
     }),
 
     TransferCandidates = primary_replica_transfer_candidate_nodes(),
+
+    %% Transfer metadata store before queues as each queue needs to perform
+    %% a metadata update after an election
+    transfer_leadership_of_metadata_store(TransferCandidates),
+
     %% Note: only QQ leadership is transferred because it is a reasonably quick thing to do a lot of queues
     %% in the cluster, unlike with CMQs.
     transfer_leadership_of_quorum_queues(TransferCandidates),
@@ -85,8 +90,6 @@ drain() ->
         undefined -> ok;
         _Pid -> transfer_leadership_of_stream_coordinator(TransferCandidates)
     end,
-
-    transfer_leadership_of_metadata_store(TransferCandidates),
 
     %% allow plugins to react
     rabbit_event:notify(maintenance_draining, #{
