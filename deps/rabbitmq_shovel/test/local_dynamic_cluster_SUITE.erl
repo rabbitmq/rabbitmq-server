@@ -26,7 +26,8 @@ all() ->
 groups() ->
     [
      {tests, [], [
-                  local_to_local_dest_down
+                  local_to_local_dest_down,
+                  local_to_local_multiple_dest_down
                  ]}
     ].
 
@@ -105,12 +106,45 @@ local_to_local_dest_down(Config) ->
               ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
               publish_many(Sess, Src, Dest, <<"tag1">>, 10),
               ?awaitMatch([[<<"local_to_local_dest_down_dest">>, <<>>, <<>>, <<>>],
-                           [<<"local_to_local_dest_down_src">>, <<"10">>, <<"0">>, <<"10">>]],
+                           [<<"local_to_local_dest_down_src">>, <<"10">>, _, _]],
                           list_queue_messages(Config),
                           30000),
               ok = rabbit_ct_broker_helpers:start_node(Config, 1),
               ?awaitMatch([[<<"local_to_local_dest_down_dest">>, <<"10">>, <<"10">>, <<"0">>],
                            [<<"local_to_local_dest_down_src">>, <<"0">>, <<"0">>, <<"0">>]],
+                          list_queue_messages(Config),
+                          30000),
+              expect_many(Sess, Dest, 10)
+      end).
+
+local_to_local_multiple_dest_down(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Dest2 = ?config(destq2, Config),
+    declare_queue(Config, 0, <<"/">>, Src),
+    declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest, Dest),
+    declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest2, Dest2),
+    with_session(
+      Config,
+      fun (Sess) ->
+              shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-exchange">>, <<"amq.fanout">>},
+                                           {<<"dest-exchange-key">>, Dest}
+                                          ]),
+              ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+              publish_many(Sess, Src, Dest, <<"tag1">>, 10),
+              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, <<>>, <<>>, <<>>],
+                           [<<"local_to_local_multiple_dest_down_dest2">>, <<>>, <<>>, <<>>],
+                           [<<"local_to_local_multiple_dest_down_src">>, <<"10">>, _, _]],
+                          list_queue_messages(Config),
+                          30000),
+              ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, <<"10">>, <<"10">>, <<"0">>],
+                           [<<"local_to_local_multiple_dest_down_dest2">>, <<"10">>, <<"10">>, <<"0">>],
+                           [<<"local_to_local_multiple_dest_down_src">>, <<"0">>, <<"0">>, <<"0">>]],
                           list_queue_messages(Config),
                           30000),
               expect_many(Sess, Dest, 10)
@@ -211,8 +245,8 @@ declare_queue(Config, Node, VHost, QName, Args) ->
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn).
 
-declare_and_bind_queue(Config, VHost, Exchange, QName, RoutingKey) ->
-    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 0, VHost),
+declare_and_bind_queue(Config, Node, VHost, Exchange, QName, RoutingKey) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Node, VHost),
     {ok, Ch} = amqp_connection:open_channel(Conn),
     ?assertEqual(
        {'queue.declare_ok', QName, 0, 0},

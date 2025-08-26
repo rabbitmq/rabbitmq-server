@@ -325,7 +325,7 @@ handle_dest({{'DOWN', #resource{kind = queue,
         {ok, QState1, Actions} ->
             State1 = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
             handle_dest_queue_actions(Actions, State1);
-        {eol, QState1, QRef} ->
+        {eol, QState1, _QRef} ->
             State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
     end;
 handle_dest(_Msg, State) ->
@@ -652,11 +652,15 @@ confirm_to_inbound(ConfirmFun, SeqNos, State)
                 end, State, SeqNos);
 confirm_to_inbound(ConfirmFun, Seq,
                    State0 = #{dest := #{unacked := Unacked} = Dst}) ->
-    #{Seq := InTag} = Unacked,
-    Unacked1 = maps:remove(Seq, Unacked),
-    State = rabbit_shovel_behaviour:decr_remaining(
-              1, State0#{dest => Dst#{unacked => Unacked1}}),
-    ConfirmFun(InTag, State).
+    case Unacked of
+        #{Seq := InTag} ->
+            Unacked1 = maps:remove(Seq, Unacked),
+            State = rabbit_shovel_behaviour:decr_remaining(
+                      1, State0#{dest => Dst#{unacked => Unacked1}}),
+            ConfirmFun(InTag, State);
+        _ ->
+            State0
+    end.
 
 sent_delivery(#{source := #{delivery_count := DeliveryCount0,
                             credit := Credit0} = Src
