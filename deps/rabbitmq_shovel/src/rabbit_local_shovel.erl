@@ -317,6 +317,17 @@ handle_dest({{'DOWN', #resource{name = Queue,
                                 virtual_host = VHost}}, _, _, _, _}  ,
             #{dest := #{queue := Queue, current := #{vhost := VHost}}}) ->
     {stop, {outbound_link_or_channel_closure, dest_queue_down}};
+handle_dest({{'DOWN', #resource{kind = queue,
+                                virtual_host = VHost} = QName}, _MRef, process, QPid, Reason},
+            #{dest := Dest = #{current := Current = #{vhost := VHost,
+                                                      queue_states := QStates0}}} = State0) ->
+    case rabbit_queue_type:handle_down(QPid, QName, Reason, QStates0) of
+        {ok, QState1, Actions} ->
+            State1 = State0#{dest => Dest#{current => Current#{queue_states => QState1}}},
+            handle_dest_queue_actions(Actions, State1);
+        {eol, QState1, QRef} ->
+            State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
+    end;
 handle_dest(_Msg, State) ->
     State.
 
@@ -324,7 +335,7 @@ ack(DeliveryTag, Multiple, State) ->
     maybe_grant_credit(settle(complete, DeliveryTag, Multiple, State)).
 
 nack(DeliveryTag, Multiple, State) ->
-    maybe_grant_credit(settle(discard, DeliveryTag, Multiple, State)).
+    maybe_grant_credit(settle(requeue, DeliveryTag, Multiple, State)).
 
 forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current,
                                unacked := Unacked} = Dest,
