@@ -8,6 +8,10 @@
 -module(rabbit_shovel_status).
 -behaviour(gen_server).
 
+-import(rabbit_shovel_util, [
+    dynamic_shovel_supervisor_mod/0
+]).
+
 -export([start_link/0]).
 
 -export([report/3,
@@ -186,7 +190,8 @@ handle_cast({remove, Name}, State) ->
 
 handle_info(check, State) ->
     try
-        rabbit_shovel_dyn_worker_sup_sup:cleanup_specs()
+        Mod = dynamic_shovel_supervisor_mod(),
+        Mod:cleanup_specs()
     catch
         C:E ->
             ?LOG_WARNING("Recurring shovel spec clean up failed with ~p:~p", [C, E])

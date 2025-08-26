@@ -15,6 +15,10 @@
          gen_unique_name/2,
          decl_fun/2]).
 
+-export([
+    dynamic_shovel_supervisor_mod/0
+]).
+
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
@@ -22,6 +26,10 @@
 -define(APP, rabbitmq_shovel).
 -define(ROUTING_HEADER, <<"x-shovelled">>).
 -define(TIMESTAMP_HEADER, <<"x-shovelled-timestamp">>).
+
+-spec dynamic_shovel_supervisor_mod() -> module().
+dynamic_shovel_supervisor_mod() ->
+    rabbit_shovel_dyn_worker_sup_sup.
 
 update_headers(Prefix, Suffix, SrcURI, DestURI,
                Props = #'P_basic'{headers = Headers}) ->
@@ -92,9 +100,10 @@ restart_shovel(VHost, Name) ->
         not_found ->
             {error, not_found};
         _Obj ->
+            Mod = dynamic_shovel_supervisor_mod(),
             ?LOG_INFO("Shovel '~ts' in virtual host '~ts' will be restarted", [Name, VHost]),
-            ok = rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
-            {ok, _} = rabbit_shovel_dyn_worker_sup_sup:start_link(),
+            ok = Mod:stop_child({VHost, Name}),
+            {ok, _} = Mod:start_link(),
             ok
     end.
 
