@@ -967,7 +967,7 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
     {Reply, State} =
     case IncomingLinks of
         #{Handle := Link0} ->
-            case incoming_link_transfer(Performative, Paylaod, Link0, State1) of
+            try incoming_link_transfer(Performative, Paylaod, Link0, State1) of
                 {ok, Reply0, Link, State2} ->
                     {Reply0, State2#state{incoming_links = IncomingLinks#{Handle := Link}}};
                 {error, Reply0} ->
@@ -975,6 +975,9 @@ handle_frame({Performative = #'v1_0.transfer'{handle = ?UINT(Handle)}, Paylaod},
                     %% with appropriate error information supplied in the error field of the
                     %% detach frame. The link endpoint MUST then be destroyed." [2.6.5]
                     {Reply0, State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
+            catch {link_error, Error} ->
+                      Detach = detach(Handle, Link0, Error),
+                      {[Detach], State1#state{incoming_links = maps:remove(Handle, IncomingLinks)}}
             end;
         _ ->
             incoming_mgmt_link_transfer(Performative, Paylaod, State1)
@@ -1110,16 +1113,46 @@ handle_frame(#'v1_0.disposition'{role = ?AMQP_ROLE_RECEIVER,
             reply_frames(Reply, State)
     end;
 
-handle_frame(#'v1_0.attach'{handle = ?UINT(Handle)} = Attach,
-             #state{cfg = #cfg{max_handle = MaxHandle}} = State) ->
-    ok = validate_attach(Attach),
-    case Handle > MaxHandle of
-        true ->
-            protocol_error(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
-                           "link handle value (~b) exceeds maximum link handle value (~b)",
-                           [Handle, MaxHandle]);
-        false ->
-            handle_attach(Attach, State)
+handle_frame(#'v1_0.attach'{handle = ?UINT(Handle)},
+             #state{cfg = #cfg{max_handle = MaxHandle}})
+  when Handle > MaxHandle ->
+    protocol_error(?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+                   "link handle value (~b) exceeds maximum link handle value (~b)",
+                   [Handle, MaxHandle]);
+handle_frame(#'v1_0.attach'{name = {utf8, NameBin} = Name,
+                            handle = Handle,
+                            role = Role,
+                            source = Source,
+                            target = Target} = Attach,
+             State) ->
+    try
+        ok = validate_attach(Attach),
+        handle_attach(Attach, State)
+    catch
+        {link_error, Error} ->
+            %% Figure 2.33
+            ?LOG_WARNING("refusing link '~ts': ~tp", [NameBin, Error]),
+            AttachReply = case Role of
+                              ?AMQP_ROLE_SENDER ->
+                                  #'v1_0.attach'{
+                                     name = Name,
+                                     handle = Handle,
+                                     role = ?AMQP_ROLE_RECEIVER,
+                                     source = Source,
+                                     target = null};
+                              ?AMQP_ROLE_RECEIVER ->
+                                  #'v1_0.attach'{
+                                     name = Name,
+                                     handle = Handle,
+                                     role = ?AMQP_ROLE_SENDER,
+                                     source = null,
+                                     target = Target,
+                                     initial_delivery_count = ?UINT(?INITIAL_DELIVERY_COUNT)}
+                          end,
+            Detach = #'v1_0.detach'{handle = Handle,
+                                    closed = true,
+                                    error = Error},
+            {ok, [AttachReply, Detach], State}
     end;
 
 handle_frame(Detach = #'v1_0.detach'{handle = ?UINT(HandleInt)},
@@ -1226,9 +1259,9 @@ handle_attach(#'v1_0.attach'{
                                 Pair#management_link_pair{incoming_half = HandleInt},
                                 Pairs0);
                 #{LinkName := Other} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                                   "received invalid attach ~p for management link pair ~p",
-                                   [Attach, Other]);
+                    link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                               "received invalid attach ~p for management link pair ~p",
+                               [Attach, Other]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1283,9 +1316,9 @@ handle_attach(#'v1_0.attach'{
                                 Pair#management_link_pair{outgoing_half = HandleInt},
                                 Pairs0);
                 #{LinkName := Other} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
-                                   "received invalid attach ~p for management link pair ~p",
-                                   [Attach, Other]);
+                    link_error(?V_1_0_AMQP_ERROR_PRECONDITION_FAILED,
+                               "received invalid attach ~p for management link pair ~p",
+                               [Attach, Other]);
                 _ ->
                     maps:put(LinkName,
                              #management_link_pair{client_terminus_address = ClientTerminusAddress,
@@ -1369,9 +1402,9 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_SENDER,
             rabbit_global_counters:publisher_created(?PROTOCOL),
             reply_frames([Reply, Flow], State);
         {error, Reason} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                           "Attach rejected: ~tp",
-                           [Reason])
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+                       "Attach refused: ~tp",
+                       [Reason])
     end;
 
 handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
@@ -1403,7 +1436,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
     case ensure_source(Source0, LinkNameBin, Vhost, User, ContainerId,
                        ReaderPid, PermCache0, TopicPermCache0) of
         {error, Reason} ->
-            protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach rejected: ~tp", [Reason]);
+            link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
         {ok, QName = #resource{name = QNameBin}, Source, PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
@@ -1412,7 +1445,7 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                            try rabbit_amqqueue:check_exclusive_access(Q, ReaderPid)
                            catch exit:#amqp_error{name = resource_locked} ->
                                      %% An exclusive queue can only be consumed from by its declaring connection.
-                                     protocol_error(
+                                     link_error(
                                        ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
                                        "cannot obtain exclusive access to locked ~s",
                                        [rabbit_misc:rs(QName)])
@@ -1515,20 +1548,25 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                    rabbit_global_counters:consumer_created(?PROTOCOL),
                                    {ok, [A], State1};
                                {error, _Type, Reason, Args} ->
-                                   protocol_error(
-                                     ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                     Reason, Args)
+                                   link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                                              Reason, Args)
                            end
                    end) of
                 {ok, Reply, State} ->
                     reply_frames(Reply, State);
                 {error, Reason} ->
-                    protocol_error(
-                      ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                      "Could not operate on ~s: ~tp",
-                      [rabbit_misc:rs(QName), Reason])
+                    link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                               "Could not operate on ~ts: ~tp",
+                               [rabbit_misc:rs(QName), Reason])
             end
     end.
+
+-spec link_error(term(), io:format(), [term()]) ->
+    no_return().
+link_error(Condition, Msg, Args) ->
+    Description = unicode:characters_to_binary(lists:flatten(io_lib:format(Msg, Args))),
+    throw({link_error, #'v1_0.error'{condition = Condition,
+                                     description = {utf8, Description}}}).
 
 send_pending(#state{remote_incoming_window = RemoteIncomingWindow,
                     outgoing_pending = Buf0
@@ -2493,10 +2531,10 @@ incoming_link_transfer(
                              multi_transfer_msg = undefined},
                     {ok, Reply, Link, State};
                 {error, Reason} ->
-                    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                                   "Failed to deliver message to queues, "
-                                   "delivery_tag=~p, delivery_id=~p, reason=~p",
-                                   [DeliveryTag, DeliveryId, Reason])
+                    link_error(
+                      ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                      "failed to deliver message (delivery-tag=~p, delivery-id=~p): ~tp",
+                      [DeliveryTag, DeliveryId, Reason])
             end;
         {error, {anonymous_terminus, false}, #'v1_0.error'{} = Err} ->
             Disposition = case Settled of
@@ -2721,7 +2759,7 @@ ensure_source(Source = #'v1_0.source'{address = Address,
             try cow_uri:urldecode(QNameBinQuoted) of
                 QNameBin ->
                     QName = queue_resource(Vhost, QNameBin),
-                    ok = exit_if_absent(QName),
+                    ok = error_if_absent(QName),
                     {ok, QName, Source, PermCache, TopicPermCache}
             catch error:_ ->
                       {error, {bad_address, Address}}
@@ -2870,7 +2908,8 @@ check_exchange(XNameBin, User, Vhost, PermCache0) ->
                        end,
             {ok, Exchange, PermCache};
         {error, not_found} ->
-            exit_not_found(XName)
+            link_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                       "no ~ts", [rabbit_misc:rs(XName)])
     end.
 
 address_v1_permitted() ->
@@ -2897,7 +2936,7 @@ ensure_target_v2({utf8, String}, Vhost) ->
         {ok, _XNameBin, _RKey, undefined} = Ok ->
             Ok;
         {ok, _XNameBin, _RKey, QNameBin} = Ok ->
-            ok = exit_if_absent(queue, Vhost, QNameBin),
+            ok = error_if_absent(queue, Vhost, QNameBin),
             Ok;
         {error, bad_address} ->
             {error, {bad_address_string, String}}
@@ -3325,8 +3364,8 @@ validate_multi_transfer_delivery_id(undefined, _FirstDeliveryId) ->
 validate_multi_transfer_delivery_id(OtherId, FirstDeliveryId) ->
     %% "It is an error if the delivery-id on a continuation transfer
     %% differs from the delivery-id on the first transfer of a delivery."
-    protocol_error(
-      ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+    link_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
       "delivery-id of continuation transfer (~p) differs from delivery-id on first transfer (~p)",
       [OtherId, FirstDeliveryId]).
 
@@ -3338,8 +3377,8 @@ validate_multi_transfer_settled(undefined, Settled)
     ok;
 validate_multi_transfer_settled(Other, First)
   when is_boolean(First) ->
-    protocol_error(
-      ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+    link_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
       "field 'settled' of continuation transfer (~p) differs from "
       "(interpreted) field 'settled' on first transfer (~p)",
       [Other, First]).
@@ -3355,8 +3394,8 @@ validate_transfer_snd_settle_mode(settled, true) ->
     %% then this field MUST be true on at least one transfer frame for a delivery" [2.7.5]
     ok;
 validate_transfer_snd_settle_mode(SndSettleMode, Settled) ->
-    protocol_error(
-      ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+    link_error(
+      ?V_1_0_AMQP_ERROR_INVALID_FIELD,
       "sender settle mode is '~s' but transfer settled flag is interpreted as being '~s'",
       [SndSettleMode, Settled]).
 
@@ -3397,7 +3436,7 @@ validate_message_size(Msg, MaxMsgSize) ->
     {undefined | rabbit_misc:resource_name(),
      permission_cache()}.
 ensure_terminus(Type, {exchange, {XNameList, _RoutingKey}}, Vhost, User, Durability, PermCache) ->
-    ok = exit_if_absent(exchange, Vhost, XNameList),
+    ok = error_if_absent(exchange, Vhost, XNameList),
     case Type of
         target -> {undefined, PermCache};
         source -> declare_queue_v1(generate_queue_name_v1(), Vhost, User, Durability, PermCache)
@@ -3420,22 +3459,25 @@ ensure_terminus(_, {amqqueue, QNameList}, Vhost, _, _, PermCache) ->
     %% standardised queues. The client MAY declare a queue starting with "amq."
     %% if the passive option is set, or the queue already exists."
     QNameBin = unicode:characters_to_binary(QNameList),
-    ok = exit_if_absent(queue, Vhost, QNameBin),
+    ok = error_if_absent(queue, Vhost, QNameBin),
     {QNameBin, PermCache}.
 
-exit_if_absent(Kind, Vhost, Name) when is_list(Name) ->
-    exit_if_absent(Kind, Vhost, unicode:characters_to_binary(Name));
-exit_if_absent(Kind, Vhost, Name) when is_binary(Name) ->
-    exit_if_absent(rabbit_misc:r(Vhost, Kind, Name)).
+error_if_absent(Kind, Vhost, Name) when is_list(Name) ->
+    error_if_absent(Kind, Vhost, unicode:characters_to_binary(Name));
+error_if_absent(Kind, Vhost, Name) when is_binary(Name) ->
+    error_if_absent(rabbit_misc:r(Vhost, Kind, Name)).
 
-exit_if_absent(ResourceName = #resource{kind = Kind}) ->
+error_if_absent(Resource = #resource{kind = Kind}) ->
     Mod = case Kind of
               exchange -> rabbit_exchange;
               queue -> rabbit_amqqueue
           end,
-    case Mod:exists(ResourceName) of
-        true -> ok;
-        false -> exit_not_found(ResourceName)
+    case Mod:exists(Resource) of
+        true ->
+            ok;
+        false ->
+            link_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
+                       "no ~ts", [rabbit_misc:rs(Resource)])
     end.
 
 generate_queue_name_v1() ->
@@ -3481,14 +3523,13 @@ declare_queue(QNameBin,
         {existing, _Q} ->
             ok;
         {error, queue_limit_exceeded, Reason, ReasonArgs} ->
-            protocol_error(
-              ?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
-              Reason,
-              ReasonArgs);
+            link_error(?V_1_0_AMQP_ERROR_RESOURCE_LIMIT_EXCEEDED,
+                       Reason,
+                       ReasonArgs);
         Other ->
-            protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
-                           "Failed to declare ~s: ~p",
-                           [rabbit_misc:rs(QName), Other])
+            link_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
+                       "Failed to declare ~s: ~p",
+                       [rabbit_misc:rs(QName), Other])
     end,
     {ok, PermCache}.
 
@@ -3684,9 +3725,9 @@ maybe_detach_mgmt_link(
 
 check_internal_exchange(#exchange{internal = true,
                                   name = XName}) ->
-    protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
-                   "forbidden to publish to internal ~ts",
-                   [rabbit_misc:rs(XName)]);
+    link_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
+               "forbidden to publish to internal ~ts",
+               [rabbit_misc:rs(XName)]);
 check_internal_exchange(_) ->
     ok.
 
@@ -3794,7 +3835,7 @@ check_user_id(Mc, User) ->
         ok ->
             ok;
         {refused, Reason, Args} ->
-            protocol_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Reason, Args)
+            link_error(?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS, Reason, Args)
     end.
 
 maps_update_with(Key, Fun, Init, Map) ->
@@ -3822,15 +3863,15 @@ check_paired({map, Properties}) ->
         true ->
             ok;
         false ->
-            exit_property_paired_not_set()
+            error_property_paired_not_set()
     end;
 check_paired(_) ->
-    exit_property_paired_not_set().
+    error_property_paired_not_set().
 
--spec exit_property_paired_not_set() -> no_return().
-exit_property_paired_not_set() ->
-    protocol_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
-                   "Link property 'paired' is not set to boolean value 'true'", []).
+-spec error_property_paired_not_set() -> no_return().
+error_property_paired_not_set() ->
+    link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD,
+               "Link property 'paired' is not set to boolean value 'true'", []).
 
 -spec exit_not_implemented(io:format()) -> no_return().
 exit_not_implemented(Format) ->
@@ -3838,13 +3879,7 @@ exit_not_implemented(Format) ->
 
 -spec exit_not_implemented(io:format(), [term()]) -> no_return().
 exit_not_implemented(Format, Args) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, Format, Args).
-
--spec exit_not_found(rabbit_types:r(exchange | queue)) -> no_return().
-exit_not_found(Resource) ->
-    protocol_error(?V_1_0_AMQP_ERROR_NOT_FOUND,
-                   "no ~ts",
-                   [rabbit_misc:rs(Resource)]).
+    link_error(?V_1_0_AMQP_ERROR_NOT_IMPLEMENTED, Format, Args).
 
 -spec error_not_found(rabbit_types:r(exchange | queue)) -> #'v1_0.error'{}.
 error_not_found(Resource) ->

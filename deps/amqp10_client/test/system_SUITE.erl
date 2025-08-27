@@ -52,6 +52,7 @@ groups() ->
       ]},
      {mock, [], [
                  insufficient_credit,
+                 attach_refused,
                  incoming_heartbeat,
                  multi_transfer_without_delivery_id
                 ]}
@@ -772,11 +773,13 @@ insufficient_credit(Config) ->
                                              outgoing_window = {uint, 1000}}
                                              ]}
                 end,
-    AttachStep = fun({0 = Ch, #'v1_0.attach'{role = false,
-                                             name = Name}, <<>>}) ->
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false,
+                                             target = Target}, <<>>}) ->
                          {Ch, [#'v1_0.attach'{name = Name,
                                               handle = {uint, 99},
-                                              role = true}]}
+                                              role = true,
+                                              target = Target}]}
                  end,
     Steps = [fun mock_server:recv_amqp_header_step/1,
              fun mock_server:send_amqp_header_step/1,
@@ -798,6 +801,52 @@ insufficient_credit(Config) ->
     ok = amqp10_client:end_session(Session),
     ok = amqp10_client:close_connection(Connection),
     ok.
+
+attach_refused(Config) ->
+    Hostname = ?config(mock_host, Config),
+    Port = ?config(mock_port, Config),
+    OpenStep = fun({0 = Ch, #'v1_0.open'{}, _Pay}) ->
+                       {Ch, [#'v1_0.open'{container_id = {utf8, <<"mock">>}}]}
+               end,
+    BeginStep = fun({0 = Ch, #'v1_0.begin'{}, _Pay}) ->
+                        {Ch, [#'v1_0.begin'{remote_channel = {ushort, Ch},
+                                            next_outgoing_id = {uint, 1},
+                                            incoming_window = {uint, 1000},
+                                            outgoing_window = {uint, 1000}}
+                             ]}
+                end,
+    AttachStep = fun({0 = Ch, #'v1_0.attach'{name = Name,
+                                             role = false}, <<>>}) ->
+                         %% We test only the 1st stage of link refusal:
+                         %% Server replies with its local terminus set to null.
+                         %% We omit the 2nd stage (the detach frame).
+                         {Ch, [#'v1_0.attach'{name = Name,
+                                              handle = {uint, 99},
+                                              role = true,
+                                              target = undefined}]}
+                 end,
+    Steps = [fun mock_server:recv_amqp_header_step/1,
+             fun mock_server:send_amqp_header_step/1,
+             mock_server:amqp_step(OpenStep),
+             mock_server:amqp_step(BeginStep),
+             mock_server:amqp_step(AttachStep)],
+
+    ok = mock_server:set_steps(?config(mock_server, Config), Steps),
+
+    Cfg = #{address => Hostname, port => Port, sasl => none, notify => self()},
+    {ok, Connection} = amqp10_client:open_connection(Cfg),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, <<"mock1-sender">>,
+                                                    <<"test">>),
+    await_link(Sender, attached, attached_timeout),
+    Msg = amqp10_msg:new(<<"mock-tag">>, <<"banana">>, true),
+    %% We expect that the lib prevents the app from sending messages
+    %% in this intermediate link refusal state.
+    ?assertEqual({error, attach_refused},
+                 amqp10_client:send_msg(Sender, Msg)),
+
+    ok = amqp10_client:end_session(Session),
+    ok = amqp10_client:close_connection(Connection).
 
 multi_transfer_without_delivery_id(Config) ->
     Hostname = ?config(mock_host, Config),

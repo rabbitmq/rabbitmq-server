@@ -65,7 +65,7 @@ groups() ->
        quorum_queue_rejects,
        receiver_settle_mode_first,
        publishing_to_non_existing_queue_should_settle_with_released,
-       open_link_to_non_existing_destination_should_end_session,
+       attach_link_to_non_existing_destination,
        roundtrip_with_drain_classic_queue,
        roundtrip_with_drain_quorum_queue,
        roundtrip_with_drain_stream,
@@ -994,46 +994,46 @@ durable_field(Config, QueueType, QName)
 invalid_transfer_settled_flag(Config) ->
     OpnConf = connection_config(Config),
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session1} = amqp10_client:begin_session(Connection),
-    {ok, Session2} = amqp10_client:begin_session(Connection),
+    {ok, Session} = amqp10_client:begin_session(Connection),
     TargetAddr = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
     {ok, SenderSettled} = amqp10_client:attach_sender_link_sync(
-                            Session1, <<"link 1">>, TargetAddr, settled),
+                            Session, <<"link 1">>, TargetAddr, settled),
     {ok, SenderUnsettled} = amqp10_client:attach_sender_link_sync(
-                              Session2, <<"link 2">>, TargetAddr, unsettled),
+                              Session, <<"link 2">>, TargetAddr, unsettled),
     ok = wait_for_credit(SenderSettled),
     ok = wait_for_credit(SenderUnsettled),
 
     ok = amqp10_client:send_msg(SenderSettled, amqp10_msg:new(<<"tag1">>, <<"m1">>, false)),
     receive
         {amqp10_event,
-         {session, Session1,
-          {ended,
+         {link, SenderSettled,
+          {detached,
            #'v1_0.error'{
-              condition = ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+              condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
               description = {utf8, Description1}}}}} ->
             ?assertEqual(
                <<"sender settle mode is 'settled' but transfer settled flag is interpreted as being 'false'">>,
                Description1)
-    after 30000 -> flush(missing_ended),
+    after 9000 -> flush(missing_event),
                   ct:fail({missing_event, ?LINE})
     end,
 
     ok = amqp10_client:send_msg(SenderUnsettled, amqp10_msg:new(<<"tag2">>, <<"m2">>, true)),
     receive
         {amqp10_event,
-         {session, Session2,
-          {ended,
+         {link, SenderUnsettled,
+          {detached,
            #'v1_0.error'{
-              condition = ?V_1_0_CONNECTION_ERROR_FRAMING_ERROR,
+              condition = ?V_1_0_AMQP_ERROR_INVALID_FIELD,
               description = {utf8, Description2}}}}} ->
             ?assertEqual(
                <<"sender settle mode is 'unsettled' but transfer settled flag is interpreted as being 'true'">>,
                Description2)
-    after 30000 -> flush(missing_ended),
+    after 9000 -> flush(missing_event),
                   ct:fail({missing_event, ?LINE})
     end,
 
+    ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
 quorum_queue_rejects(Config) ->
@@ -1188,23 +1188,27 @@ publishing_to_non_existing_queue_should_settle_with_released(Config) ->
     ok = close_connection_sync(Connection),
     ok = flush("post sender close").
 
-open_link_to_non_existing_destination_should_end_session(Config) ->
+attach_link_to_non_existing_destination(Config) ->
     OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
     Name = atom_to_binary(?FUNCTION_NAME),
     Addresses = [rabbitmq_amqp_address:exchange(Name, <<"bar">>),
                  rabbitmq_amqp_address:queue(Name)],
-    SenderLinkName = <<"test-sender">>,
     [begin
-         {ok, Connection} = amqp10_client:open_connection(OpnConf),
-         {ok, Session} = amqp10_client:begin_session_sync(Connection),
-         ct:pal("Address ~s", [Address]),
-         {ok, _} = amqp10_client:attach_sender_link(
-                     Session, SenderLinkName, Address),
-         wait_for_session_end(Session),
-         ok = close_connection_sync(Connection),
-         flush("post sender close")
+         ct:pal("Address ~ts", [Address]),
+         {ok, Sender} = amqp10_client:attach_sender_link(
+                          Session, Name, Address),
+         receive {amqp10_event, {link, Sender, {detached, Error}}} ->
+                     ?assertMatch(
+                        #'v1_0.error'{condition = ?V_1_0_AMQP_ERROR_NOT_FOUND},
+                        Error)
+         after 9000 -> ct:fail({missing_event, ?LINE})
+         end,
+         flush("sender detached")
      end || Address <- Addresses],
-    ok.
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Connection).
 
 roundtrip_with_drain_classic_queue(Config) ->
     QName  = atom_to_binary(?FUNCTION_NAME),
@@ -4660,15 +4664,16 @@ user_id(Config) ->
     ok = amqp10_client:send_msg(Sender, Msg2),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Sender,
+          {detached,
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_UNAUTHORIZED_ACCESS,
               description = {utf8, <<"user_id property set to 'fake user' but authenticated user was 'guest'">>}}}}} -> ok
-    after 30000 -> flush(missing_ended),
+    after 9000 -> flush(missing_detached),
                   ct:fail("did not receive expected error")
     end,
 
+    ok = end_session_sync(Session),
     ok = close_connection_sync(Connection).
 
 message_ttl(Config) ->
@@ -4863,7 +4868,7 @@ credential_expires(Config) ->
     ?assert(rpc(Config, meck, validate, [Mod])),
     ok = rpc(Config, meck, unload, [Mod]).
 
-%% Attaching to an exclusive source queue should fail.
+%% Attaching to an exclusive source queue on a non-declaring connection should fail.
 attach_to_exclusive_queue(Config) ->
     QName = <<"my queue">>,
     {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
@@ -4875,18 +4880,19 @@ attach_to_exclusive_queue(Config) ->
     {ok, Connection} = amqp10_client:open_connection(OpnConf),
     {ok, Session} = amqp10_client:begin_session_sync(Connection),
     Address = rabbitmq_amqp_address:queue(QName),
-    {ok, _Receiver} = amqp10_client:attach_receiver_link(Session, <<"test-receiver">>, Address),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, <<"test-receiver">>, Address),
     receive
         {amqp10_event,
-         {session, Session,
-          {ended,
+         {link, Receiver,
+          {detached,
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_RESOURCE_LOCKED,
               description = {utf8, <<"cannot obtain exclusive access to locked "
                                      "queue 'my queue' in vhost '/'">>}}}}} -> ok
-    after 30000 -> ct:fail({missing_event, ?LINE})
+    after 9000 -> ct:fail({missing_event, ?LINE})
     end,
 
+    ok = end_session_sync(Session),
     ok = close_connection_sync(Connection),
     #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = QName}),
     ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
@@ -6772,8 +6778,7 @@ attach_to_down_quorum_queue(Config) ->
     %% Create quorum queue with single replica on node 2.
     {_, _, LinkPair2} = Init2 = init(2, Config),
     {ok, _} = rabbitmq_amqp_client:declare_queue(
-                LinkPair2,
-                QName,
+                LinkPair2, QName,
                 #{arguments => #{<<"x-queue-type">> => {utf8, <<"quorum">>},
                                  <<"x-quorum-initial-group-size">> => {ulong, 1}
                                 }}),
@@ -6782,16 +6787,14 @@ attach_to_down_quorum_queue(Config) ->
     %% Make quorum queue unavailable.
     ok = rabbit_ct_broker_helpers:stop_broker(Config, 2),
 
-    OpnConf = connection_config(0, Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session0} = amqp10_client:begin_session_sync(Connection),
+    {_, Session, LinkPair0} = Init0 = init(0, Config),
     flush(attaching_receiver),
-    {ok, _Receiver} = amqp10_client:attach_receiver_link(
-                        Session0, <<"receiver">>, Address),
+    {ok, Receiver} = amqp10_client:attach_receiver_link(
+                       Session, <<"receiver">>, Address),
     receive
         {amqp10_event,
-         {session, Session0,
-          {ended,
+         {link, Receiver,
+          {detached,
            #'v1_0.error'{
               condition = ?V_1_0_AMQP_ERROR_INTERNAL_ERROR,
               description = {utf8, Desc}}}}} ->
@@ -6803,12 +6806,8 @@ attach_to_down_quorum_queue(Config) ->
     end,
 
     ok = rabbit_ct_broker_helpers:start_broker(Config, 2),
-
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(
-                       Session, <<"my link pair">>),
-    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair, QName),
-    ok = close({Connection, Session, LinkPair}).
+    {ok, _} = rabbitmq_amqp_client:delete_queue(LinkPair0, QName),
+    ok = close(Init0).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% internal
