@@ -49,7 +49,7 @@ resource_exists(ReqData, Context) ->
                             case get_shovel_node(VHost, Name, ReqData, Context) of
                                 undefined ->
                                     ?LOG_ERROR("Shovel with the name '~ts' was not found on virtual host '~ts'. "
-                                                     "It may be failing to connect and report its status.",
+                                               "It may be failing to connect and report its status.",
                                         [Name, VHost]),
                                     case cowboy_req:method(ReqData) of
                                         <<"DELETE">> ->

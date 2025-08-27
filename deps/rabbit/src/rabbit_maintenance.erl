@@ -190,16 +190,16 @@ close_all_client_connections() ->
 -spec transfer_leadership_of_quorum_queues([node()]) -> ok.
 transfer_leadership_of_quorum_queues([]) ->
     ?LOG_WARNING("Skipping leadership transfer of quorum queues: no candidate "
-		 "(online, not under maintenance) nodes to transfer to!");
+                 "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_quorum_queues(_TransferCandidates) ->
     %% we only transfer leadership for QQs that have local leaders
     Queues = rabbit_amqqueue:list_local_leaders(),
     ?LOG_INFO("Will transfer leadership of ~b quorum queues with current leader on this node",
-	      [length(Queues)]),
+              [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
         ?LOG_DEBUG("Will trigger a leader election for local quorum queue ~ts",
-		   [rabbit_misc:rs(Name)]),
+                   [rabbit_misc:rs(Name)]),
         %% we trigger an election and exclude this node from the list of candidates
         %% by simply shutting its local QQ replica (Ra server)
         RaLeader = amqqueue:get_pid(Q),
@@ -228,7 +228,7 @@ transfer_leadership_of_metadata_store(TransferCandidates) ->
 -spec transfer_leadership_of_stream_coordinator([node()]) -> ok.
 transfer_leadership_of_stream_coordinator([]) ->
     ?LOG_WARNING("Skipping leadership transfer of stream coordinator: no candidate "
-		 "(online, not under maintenance) nodes to transfer to!");
+                 "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership_of_stream_coordinator(TransferCandidates) ->
     % try to transfer to the node with the lowest uptime; the assumption is that
     % nodes are usually restarted in a rolling fashion, in a consistent order;
@@ -248,11 +248,11 @@ transfer_leadership_of_stream_coordinator(TransferCandidates) ->
 stop_local_quorum_queue_followers() ->
     Queues = rabbit_amqqueue:list_local_followers(),
     ?LOG_INFO("Will stop local follower replicas of ~b quorum queues on this node",
-	      [length(Queues)]),
+              [length(Queues)]),
     [begin
         Name = amqqueue:get_name(Q),
         ?LOG_DEBUG("Will stop a local follower replica of quorum queue ~ts",
-		   [rabbit_misc:rs(Name)]),
+                   [rabbit_misc:rs(Name)]),
         %% shut down Ra nodes so that they are not considered for leader election
         {RegisteredName, _LeaderNode} = amqqueue:get_pid(Q),
         RaNode = {RegisteredName, node()},
@@ -296,13 +296,13 @@ revive_local_quorum_queue_replicas() ->
     %% empty binary as the vhost name.
     {Recovered, Failed} = rabbit_quorum_queue:recover(<<>>, Queues),
     ?LOG_DEBUG("Successfully revived ~b quorum queue replicas",
-	       [length(Recovered)]),
+               [length(Recovered)]),
     case length(Failed) of
         0 ->
             ok;
         NumFailed ->
             ?LOG_ERROR("Failed to revive ~b quorum queue replicas",
-		       [NumFailed])
+                       [NumFailed])
     end,
 
     ?LOG_INFO("Restart of local quorum queue replicas is complete"),

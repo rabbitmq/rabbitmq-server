@@ -178,7 +178,7 @@ handle_info(check_internal_exchange, State = #state{internal_exchange = IntXName
     case check_internal_exchange(IntXNameBin, State) of
         upstream_not_found ->
             ?LOG_WARNING("Federation link could not find upstream exchange '~ts' and will restart",
-                                          [IntXNameBin]),
+                         [IntXNameBin]),
             {stop, {shutdown, restart}, State};
         _ ->
             TRef = erlang:send_after(Interval, self(), check_internal_exchange),
@@ -468,7 +468,7 @@ go(S0 = {not_started, {Upstream, UParams, DownXName}}) ->
                                  internal_exchange_interval = Interval}),
                         Bindings),
               ?LOG_INFO("Federation link for ~ts (upstream: ~ts) will perform internal exchange checks "
-                                         "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
+                        "every ~b seconds", [rabbit_misc:rs(DownXName), UName, round(Interval / 1000)]),
               TRef = erlang:send_after(Interval, self(), check_internal_exchange),
               {noreply, State#state{internal_exchange_timer = TRef}}
       end, Upstream, UParams, DownXName, S0).
