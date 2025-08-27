@@ -17,6 +17,7 @@
 -include_lib("kernel/include/logger.hrl").
 -include_lib("logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include("rabbit_shovel.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 start_link() ->
@@ -29,7 +30,7 @@ start_link() ->
     OpMode = rabbit_shovel_operating_mode:operating_mode(),
     Shovels = case OpMode of
         standard ->
-            rabbit_runtime_parameters:list_component(<<"shovel">>);
+            rabbit_runtime_parameters:list_component(?SHOVEL_COMPONENT);
         _Other ->
             %% when operating in a non-standard mode, do not start any shovels
             []
@@ -117,7 +118,7 @@ cleanup_specs() ->
                   [id({proplists:get_value(vhost, S),
                        proplists:get_value(name, S)})
                    || S <- rabbit_runtime_parameters:list_component(
-                             <<"shovel">>)]),
+                            ?SHOVEL_COMPONENT)]),
     %% Delete any supervisor children that do not have their respective runtime parameters in the database.
     lists:foreach(
       fun

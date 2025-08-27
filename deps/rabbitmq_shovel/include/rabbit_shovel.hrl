@@ -25,7 +25,7 @@
         }).
 
 -define(SHOVEL_USER, <<"rmq-shovel">>).
-
+-define(SHOVEL_COMPONENT, <<"shovel">>).
 -define(DEFAULT_PREFETCH, 1000).
 -define(DEFAULT_ACK_MODE, on_confirm).
 -define(DEFAULT_RECONNECT_DELAY, 5).
