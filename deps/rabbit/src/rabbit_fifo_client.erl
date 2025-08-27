@@ -147,13 +147,13 @@ enqueue(QName, Correlation, Msg,
             {reject_publish, State0};
         {error, {shutdown, delete}} ->
             ?LOG_DEBUG("~ts: QQ ~ts tried to register enqueuer during delete shutdown",
-                             [?MODULE, rabbit_misc:rs(QName)]),
+                       [?MODULE, rabbit_misc:rs(QName)]),
             {reject_publish, State0};
         {timeout, _} ->
             {reject_publish, State0};
         Err ->
             ?LOG_DEBUG("~ts: QQ ~ts error when registering enqueuer ~p",
-                             [?MODULE, rabbit_misc:rs(QName), Err]),
+                       [?MODULE, rabbit_misc:rs(QName), Err]),
             exit(Err)
     end;
 enqueue(_QName, _Correlation, _Msg,

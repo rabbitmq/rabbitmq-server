@@ -516,7 +516,7 @@ handle_info({bump_credit, Msg}, State) ->
 %% @private
 handle_info(timed_out_flushing_channel, State) ->
     ?LOG_WARNING("Channel (~tp) closing: timed out flushing while "
-              "connection closing", [self()]),
+                 "connection closing", [self()]),
     {stop, timed_out_flushing_channel, State};
 %% @private
 handle_info({'DOWN', _, process, ReturnHandler, shutdown},
@@ -525,7 +525,7 @@ handle_info({'DOWN', _, process, ReturnHandler, shutdown},
 handle_info({'DOWN', _, process, ReturnHandler, Reason},
             State = #state{return_handler = {ReturnHandler, _Ref}}) ->
     ?LOG_WARNING("Channel (~tp): Unregistering return handler ~tp because it died. "
-              "Reason: ~tp", [self(), ReturnHandler, Reason]),
+                 "Reason: ~tp", [self(), ReturnHandler, Reason]),
     {noreply, State#state{return_handler = none}};
 %% @private
 handle_info({'DOWN', _, process, ConfirmHandler, shutdown},
@@ -534,7 +534,7 @@ handle_info({'DOWN', _, process, ConfirmHandler, shutdown},
 handle_info({'DOWN', _, process, ConfirmHandler, Reason},
             State = #state{confirm_handler = {ConfirmHandler, _Ref}}) ->
     ?LOG_WARNING("Channel (~tp): Unregistering confirm handler ~tp because it died. "
-              "Reason: ~tp", [self(), ConfirmHandler, Reason]),
+                 "Reason: ~tp", [self(), ConfirmHandler, Reason]),
     {noreply, State#state{confirm_handler = none}};
 %% @private
 handle_info({'DOWN', _, process, FlowHandler, shutdown},
@@ -543,7 +543,7 @@ handle_info({'DOWN', _, process, FlowHandler, shutdown},
 handle_info({'DOWN', _, process, FlowHandler, Reason},
             State = #state{flow_handler = {FlowHandler, _Ref}}) ->
     ?LOG_WARNING("Channel (~tp): Unregistering flow handler ~tp because it died. "
-              "Reason: ~tp", [self(), FlowHandler, Reason]),
+                 "Reason: ~tp", [self(), FlowHandler, Reason]),
     {noreply, State#state{flow_handler = none}};
 handle_info({'DOWN', _, process, QPid, _Reason}, State) ->
     rabbit_amqqueue_common:notify_sent_queue_down(QPid),

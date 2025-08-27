@@ -207,12 +207,12 @@ handle_cast({register_blocked_handler, HandlerPid}, State) ->
 handle_info({'DOWN', _, process, BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, _Ref}}) ->
     ?LOG_WARNING("Connection (~tp): Unregistering connection.{blocked,unblocked} handler ~tp because it died. "
-              "Reason: ~tp", [self(), BlockHandler, Reason]),
+                 "Reason: ~tp", [self(), BlockHandler, Reason]),
     {noreply, State#state{block_handler = none}};
 handle_info({'EXIT', BlockHandler, Reason},
             State = #state{block_handler = {BlockHandler, Ref}}) ->
     ?LOG_WARNING("Connection (~tp): Unregistering connection.{blocked,unblocked} handler ~tp because it died. "
-              "Reason: ~tp", [self(), BlockHandler, Reason]),
+                 "Reason: ~tp", [self(), BlockHandler, Reason]),
     erlang:demonitor(Ref, [flush]),
     {noreply, State#state{block_handler = none}};
 %% propagate the exit to the module that will stop with a sensible reason logged
