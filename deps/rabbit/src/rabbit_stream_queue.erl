@@ -174,12 +174,12 @@ create_stream(Q0) ->
                                replica_nodes => Followers}),
     Q1 = amqqueue:set_type_state(Q0, Conf),
     case rabbit_amqqueue:internal_declare(Q1, false) of
-        {created, Q} ->
-            case rabbit_stream_coordinator:new_stream(Q, Leader) of
+        {created, Q2} ->
+            case rabbit_stream_coordinator:new_stream(Q2, Leader) of
                 {ok, {ok, LeaderPid}, _} ->
                     %% update record with leader pid
-                    case set_leader_pid(LeaderPid, amqqueue:get_name(Q)) of
-                        ok ->
+                    case set_leader_pid(LeaderPid, QName) of
+                        {ok, Q} ->
                             rabbit_event:notify(queue_created,
                                                 [{name, QName},
                                                  {durable, true},
@@ -196,7 +196,7 @@ create_stream(Q0) ->
                              [rabbit_misc:rs(QName), node()]}
                     end;
                 Error ->
-                    _ = rabbit_amqqueue:internal_delete(Q, ActingUser),
+                    _ = rabbit_amqqueue:internal_delete(Q2, ActingUser),
                     {protocol_error, internal_error, "Cannot declare ~ts on node '~ts': ~255p",
                      [rabbit_misc:rs(QName), node(), Error]}
             end;
@@ -1346,11 +1346,6 @@ resend_all(#stream_client{leader = LeaderPid,
      end || {Seq, {_Corr, Msg}} <- Msgs],
     State.
 
--spec set_leader_pid(Pid, QName) -> Ret when
-      Pid :: pid(),
-      QName :: rabbit_amqqueue:name(),
-      Ret :: ok | {error, timeout}.
-
 set_leader_pid(Pid, QName) ->
     %% TODO this should probably be a single khepri transaction for better performance.
     Fun = fun (Q) ->
@@ -1359,10 +1354,16 @@ set_leader_pid(Pid, QName) ->
     case rabbit_amqqueue:update(QName, Fun) of
         not_found ->
             %% This can happen during recovery
-            {ok, Q} = rabbit_amqqueue:lookup_durable_queue(QName),
-            rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Fun(Q));
-        _ ->
-            ok
+            {ok, Q1} = rabbit_amqqueue:lookup_durable_queue(QName),
+            Q = Fun(Q1),
+            case rabbit_amqqueue:ensure_rabbit_queue_record_is_initialized(Q) of
+                ok ->
+                    {ok, Q};
+                Err ->
+                    Err
+            end;
+        Q ->
+            {ok, Q}
     end.
 
 close_log(undefined) -> ok;
