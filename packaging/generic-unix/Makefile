@@ -38,7 +38,7 @@ dist:
 	@elixir --version
 	@echo '--------------------------------------------------'
 	@echo
-	xzcat $(SOURCE_DIST_FILE) | tar -xf -
+	tar --touch --xz --extract --file $(SOURCE_DIST_FILE)
 
 # web-manpages are not used by generic-unix but by `make release` in the
 # Umbrella. Those manpages are copied to www.rabbitmq.com
