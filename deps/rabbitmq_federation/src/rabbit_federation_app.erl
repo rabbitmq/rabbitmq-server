@@ -7,6 +7,8 @@
 
 -module(rabbit_federation_app).
 
+-include_lib("rabbitmq_federation/include/logging.hrl").
+
 -behaviour(application).
 -export([start/2, stop/1]).
 

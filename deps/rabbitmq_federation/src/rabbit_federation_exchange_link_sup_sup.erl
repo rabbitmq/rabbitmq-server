@@ -11,6 +11,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbitmq_federation/include/logging.hrl").
 -define(SUPERVISOR, ?MODULE).
 
 %% Supervises the upstream links for all exchanges (but not queues). We need

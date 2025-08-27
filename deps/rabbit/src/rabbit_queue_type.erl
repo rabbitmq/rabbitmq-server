@@ -294,7 +294,7 @@ discover(Other) when is_atom(Other) ->
     discover(rabbit_data_coercion:to_binary(Other));
 discover(Other) when is_binary(Other) ->
     T = rabbit_registry:binary_to_type(Other),
-    rabbit_log:debug("Queue type discovery: will look up a module for type '~tp'", [T]),
+    ?LOG_DEBUG("Queue type discovery: will look up a module for type '~tp'", [T]),
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),
     Mod.
 

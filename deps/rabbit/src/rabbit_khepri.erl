@@ -683,23 +683,23 @@ dir() ->
 %% @private
 
 transfer_leadership([]) ->
-    rabbit_log:warning("Skipping leadership transfer of metadata store: no candidate "
-                       "(online, not under maintenance) nodes to transfer to!");
+    ?LOG_WARNING("Skipping leadership transfer of metadata store: no candidate "
+		 "(online, not under maintenance) nodes to transfer to!");
 transfer_leadership(TransferCandidates) ->
     case get_feature_state() of
         enabled ->
             transfer_leadership0(TransferCandidates);
         _ ->
-            rabbit_log:info("Skipping leadership transfer of metadata store: Khepri is not enabled")
+            ?LOG_INFO("Skipping leadership transfer of metadata store: Khepri is not enabled")
     end.
 
 -spec transfer_leadership0([node()]) ->
     {ok, in_progress | undefined | node()} | {error, any()}.
 transfer_leadership0([]) ->
-    rabbit_log:warning("Khepri clustering: failed to transfer leadership, no more candidates available", []),
+    ?LOG_WARNING("Khepri clustering: failed to transfer leadership, no more candidates available", []),
     {error, not_migrated};
 transfer_leadership0([Destination | TransferCandidates]) ->
-    rabbit_log:info("Khepri clustering: transferring leadership to node ~p", [Destination]),
+    ?LOG_INFO("Khepri clustering: transferring leadership to node ~p", [Destination]),
     case ra_leaderboard:lookup_leader(?STORE_ID) of
         {Name, Node} = Id when Node == node() ->
             Timeout = khepri_app:get_default_timeout(),
@@ -707,27 +707,27 @@ transfer_leadership0([Destination | TransferCandidates]) ->
                 ok ->
                     case ra:members(Id, Timeout) of
                         {_, _, {_, NewNode}} ->
-                            rabbit_log:info("Khepri clustering: successfully transferred leadership to node ~p", [Destination]),
+                            ?LOG_INFO("Khepri clustering: successfully transferred leadership to node ~p", [Destination]),
                             {ok, NewNode};
                         {timeout, _} ->
-                            rabbit_log:warning("Khepri clustering: maybe failed to transfer leadership to node ~p, members query has timed out", [Destination]),
+                            ?LOG_WARNING("Khepri clustering: maybe failed to transfer leadership to node ~p, members query has timed out", [Destination]),
                             {error, not_migrated}
                     end;
                 already_leader ->
-                    rabbit_log:info("Khepri clustering: successfully transferred leadership to node ~p, already the leader", [Destination]),
+                    ?LOG_INFO("Khepri clustering: successfully transferred leadership to node ~p, already the leader", [Destination]),
                     {ok, Destination};
                 {error, Reason} ->
-                    rabbit_log:warning("Khepri clustering: failed to transfer leadership to node ~p with the following error ~p", [Destination, Reason]),
+                    ?LOG_WARNING("Khepri clustering: failed to transfer leadership to node ~p with the following error ~p", [Destination, Reason]),
                     transfer_leadership0(TransferCandidates);
                 {timeout, _} ->
-                    rabbit_log:warning("Khepri clustering: failed to transfer leadership to node ~p with a timeout", [Destination]),
+                    ?LOG_WARNING("Khepri clustering: failed to transfer leadership to node ~p with a timeout", [Destination]),
                     transfer_leadership0(TransferCandidates)
             end;
         {_, Node} ->
-            rabbit_log:info("Khepri clustering: skipping leadership transfer, leader is already in node ~p", [Node]),
+            ?LOG_INFO("Khepri clustering: skipping leadership transfer, leader is already in node ~p", [Node]),
             {ok, Node};
         undefined ->
-            rabbit_log:info("Khepri clustering: skipping leadership transfer, leader not elected", []),
+            ?LOG_INFO("Khepri clustering: skipping leadership transfer, leader not elected", []),
             {ok, undefined}
     end.
 

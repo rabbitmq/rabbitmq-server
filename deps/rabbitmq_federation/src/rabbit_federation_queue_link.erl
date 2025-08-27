@@ -11,6 +11,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_federation.hrl").
 -include_lib("kernel/include/logger.hrl").
+-include_lib("rabbitmq_federation/include/logging.hrl").
 
 -behaviour(gen_server2).
 

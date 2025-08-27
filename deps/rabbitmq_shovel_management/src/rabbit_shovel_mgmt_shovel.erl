@@ -178,9 +178,8 @@ try_delete(Node, VHost, Name, Username) ->
         {error, not_found} ->
             ?LOG_ERROR("Could not find shovel data for shovel '~s' in vhost: '~s'", [Name, VHost]),
             false
-<<<<<<< HEAD
     catch _:Reason ->
             ?LOG_ERROR("Failed to delete shovel '~s' on vhost '~s', reason: ~p",
-                             [Name, VHost, Reason]),
+		       [Name, VHost, Reason]),
             false
     end.
