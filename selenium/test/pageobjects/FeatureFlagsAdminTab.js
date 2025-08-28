@@ -26,19 +26,22 @@ module.exports = class FeatureFlagsAdminTab extends AdminTab {
     }
   }
 
-  async enable(name) {        
+  async enable(name, isExperimental = false) {        
     let state = await this.getState(name)
     if (!await state.isSelected()) {
       await this.driver.findElement(this.getParentCheckboxLocator(name)).click()
-      await delay(1000)
-      const dialog = await this.driver.wait(
-        until.elementLocated(By.css('dialog#ff-exp-dialog[open]')),
-        10000 // 10 seconds timeout
-      );
-
-      await dialog.findElement(ACCEPT_ENABLE_EXPERIMENTAL_FEATURE_FLAG).click()
-      await dialog.findElement(CONFIRM_ENABLE_EXPERIMENTAL_FEATURE_FLAG).click()      
-      return delay(1000)
+      if (isExperimental) {
+        await delay(1000)
+        const dialog = await this.driver.wait(
+          until.elementLocated(By.css('dialog#ff-exp-dialog[open]')),
+          10000 // 10 seconds timeout
+        )
+        await dialog.findElement(ACCEPT_ENABLE_EXPERIMENTAL_FEATURE_FLAG).click()
+        await dialog.findElement(CONFIRM_ENABLE_EXPERIMENTAL_FEATURE_FLAG).click()      
+        return delay(1000)
+      }else {
+        return Promise.resolve()  
+      }
     }else {
       return Promise.resolve()
     }
