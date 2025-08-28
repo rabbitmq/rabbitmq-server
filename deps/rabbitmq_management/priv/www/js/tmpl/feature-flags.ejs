@@ -20,7 +20,7 @@
       </p>
       <button id="ff-enable-all-button" onclick='enable_all_stable_feature_flags(this);'>Enable all stable feature flags</button>
   </div>
-<div class="section">
+<div class="section" id="feature-flags">
   <h2>Feature Flags</h2>
   <div class="hider">
 <%= filter_ui(nonreq_feature_flags) %>
@@ -301,7 +301,7 @@ function enable_feature_flag(checkbox, feature_flag) {
            </svg>
            <% } %>
          </td>
-         <td class="c ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
+         <td id="ff-td-<%= feature_flag.name %>" class="c ff-stability-<%= feature_flag.stability %> ff-state-<%= feature_flag.state %>">
            <input id="ff-checkbox-<%= feature_flag.name %>" type="checkbox" class="toggle"
                   <% if (feature_flag.state == 'enabled') { %>
                   checked disabled
@@ -349,7 +349,7 @@ function enable_feature_flag(checkbox, feature_flag) {
     Therefore, upgrades to a later version of RabbitMQ with this feature flag
     enabled are supported.
     </p>
-    <p>
+    <p id="ff-exp-ack-supported">
     <input id="ff-exp-ack-supported-checkbox" type="checkbox"/>
     <label for="ff-exp-ack-supported-checkbox">I understand that this feature is experimental and should be tested first.</label>
     </p>

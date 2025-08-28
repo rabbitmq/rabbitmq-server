@@ -9,3 +9,4 @@ mgt/queuesAndStreams.sh
 mgt/limits.sh
 mgt/amqp10-connections.sh
 mgt/mqtt-connections.sh
+mgt/feature-flags.sh
