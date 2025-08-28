@@ -42,7 +42,9 @@ describe('Feature flags in Admin tab', function () {
     let ffTable = await ffTab.getAll()
     assert(findTableRow(ffTable, function(row) {
         return row[0] === 'khepri_db'
-    }))  
+    }))
+    let state = await ffTab.getState('khepri_db')
+    assert(await state.isSelected())  
   })
 
 
