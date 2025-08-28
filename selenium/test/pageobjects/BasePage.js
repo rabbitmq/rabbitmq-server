@@ -33,7 +33,14 @@ module.exports = class BasePage {
     this.polling = parseInt(process.env.SELENIUM_POLLING) || 500 // how frequent selenium searches for an element
     this.interactionDelay = parseInt(process.env.SELENIUM_INTERACTION_DELAY) || 0 // slow down interactions (when rabbit is behind a http proxy)
   }
-
+  async ensureSectionIsVisible(section) {
+    let classes = await this.driver.findElement(section).getAttribute("class")
+    if (classes.search('section-visible') < 0) {
+      return this.click(section)
+    } else {
+      return Promise.resolve(true)
+    }
+  }
   async goTo(path) {
     return driver.get(d.baseUrl + path)  
   }
