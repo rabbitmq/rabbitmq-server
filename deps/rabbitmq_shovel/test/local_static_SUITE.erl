@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(local_SUITE).
+-module(local_static_SUITE).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("common_test/include/ct.hrl").

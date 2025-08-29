@@ -15,6 +15,7 @@
 -compile([export_all, nowarn_export_all]).
 
 -import(rabbit_ct_broker_helpers, [rpc/5]).
+-import(shovel_test_utils, [await_credit/1]).
 
 all() ->
     [
@@ -116,7 +117,7 @@ shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
     {ok, Receiver} = amqp10_client:attach_receiver_link(
                        DestSess, <<"my receiver">>, <<"/amq/queue/", DestQ/binary>>, settled),
 
-    ok = wait_for_credit(Sender),
+    ok = await_credit(Sender),
     NumMsgs = 20,
     lists:map(
       fun(N) ->
@@ -162,15 +163,6 @@ shovel(Caller, SrcNode, DestNode, ShovelNode, Config) ->
     ?assertEqual(
        [ExpectedQueueLen],
        rpc(Config, ?NEW, ?MODULE, delete_queues, [])).
-
-wait_for_credit(Sender) ->
-    receive
-        {amqp10_event, {link, Sender, credited}} ->
-            ok
-    after 5000 ->
-              flush(?FUNCTION_NAME),
-              ct:fail(credited_timeout)
-    end.
 
 receive_messages(Receiver, N) ->
     receive_messages0(Receiver, N, []).

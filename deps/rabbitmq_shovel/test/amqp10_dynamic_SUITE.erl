@@ -11,6 +11,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
+-import(shovel_test_utils, [await_credit/1]).
+
 all() ->
     [
       {group, non_parallel_tests},
@@ -397,6 +399,7 @@ publish_expect(Session, Source, Dest, Tag, Payload) ->
     {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
                                                     unsettled, unsettled_state),
     ok = await_amqp10_event(link, Sender, attached),
+    await_credit(Sender),
     publish(Sender, Tag, Payload),
     amqp10_client:detach_link(Sender),
     expect_one(Session, Dest).

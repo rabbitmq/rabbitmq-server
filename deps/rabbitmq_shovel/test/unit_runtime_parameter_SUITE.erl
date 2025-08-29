@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
--module(parameters_SUITE).
+-module(unit_runtime_parameter_SUITE).
 
 -compile(export_all).
 
