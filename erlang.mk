@@ -17,11 +17,7 @@
 ERLANG_MK_FILENAME := $(realpath $(lastword $(MAKEFILE_LIST)))
 export ERLANG_MK_FILENAME
 
-<<<<<<< HEAD
-ERLANG_MK_VERSION = e13b4c7
-=======
 ERLANG_MK_VERSION = 7cef74a
->>>>>>> 36674f112 (Bump erlang.mk with 'gmake erlang-mk')
 ERLANG_MK_WITHOUT = 
 
 # Make 3.81 and 3.82 are deprecated.
@@ -562,6 +558,14 @@ endif
 export ERL_LIBS
 
 export NO_AUTOPATCH
+
+# Elixir.
+
+# Elixir is automatically enabled in all cases except when
+# an Erlang project uses an Elixir dependency. In that case
+# $(ELIXIR) must be set explicitly.
+ELIXIR ?= $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),dep,$(if $(EX_FILES),system,disable))
+export ELIXIR
 
 # Verbosity.
 
@@ -1801,12 +1805,6 @@ endif
 # Copyright (c) 2024, Loïc Hoguin <essen@ninenines.eu>
 # This file is part of erlang.mk and subject to the terms of the ISC License.
 
-# Elixir is automatically enabled in all cases except when
-# an Erlang project uses an Elixir dependency. In that case
-# $(ELIXIR) must be set explicitly.
-ELIXIR ?= $(if $(filter elixir,$(BUILD_DEPS) $(DEPS)),dep,$(if $(EX_FILES),system,disable))
-export ELIXIR
-
 ifeq ($(ELIXIR),system)
 # We expect 'elixir' to be on the path.
 ELIXIR_BIN ?= $(shell readlink -f `which elixir`)
@@ -1988,6 +1986,7 @@ endef
 define compile_ex.erl
 	{ok, _} = application:ensure_all_started(elixir),
 	{ok, _} = application:ensure_all_started(mix),
+	$(foreach dep,$(LOCAL_DEPS),_ = application:load($(dep)),)
 	ModCode = list_to_atom("Elixir.Code"),
 	ModCode:put_compiler_option(ignore_module_conflict, true),
 	ModComp = list_to_atom("Elixir.Kernel.ParallelCompiler"),
