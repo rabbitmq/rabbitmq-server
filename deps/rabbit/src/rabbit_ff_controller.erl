@@ -698,7 +698,7 @@ enable_task(FeatureNames) ->
 enable_default_task() ->
     case get_forced_feature_flag_names() of
         {ok, undefined} ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
               "Feature flags: starting an unclustered node for the first "
               "time: all stable feature flags will be enabled by default",
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
@@ -706,14 +706,14 @@ enable_default_task() ->
             StableFeatureNames = get_stable_feature_flags(Inventory),
             enable_many(Inventory, StableFeatureNames);
         {ok, []} ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
               "Feature flags: starting an unclustered node for the first "
               "time: all feature flags are forcibly left disabled from "
               "the $RABBITMQ_FEATURE_FLAGS environment variable",
               #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
             ok;
         {ok, FeatureNames} when is_list(FeatureNames) ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
                "Feature flags: starting an unclustered node for the first "
                "time: only the following feature flags specified in the "
                "$RABBITMQ_FEATURE_FLAGS environment variable will be enabled: "
@@ -723,7 +723,7 @@ enable_default_task() ->
             {ok, Inventory} = collect_inventory_on_nodes([node()]),
             enable_many(Inventory, FeatureNames);
         {ok, {rel, Plus, Minus}} ->
-            ?LOG_INFO(
+            ?LOG_DEBUG(
               "Feature flags: starting an unclustered node for the first "
               "time: all stable feature flags will be enabled, after "
               "applying changes from $RABBITMQ_FEATURE_FLAGS: adding ~0tp, "
@@ -750,7 +750,7 @@ enable_default_task() ->
                     {error, unsupported}
             end;
         {error, syntax_error_in_envvar} = Error ->
-            ?LOG_ERROR(
+            ?LOG_DEBUG(
                "Feature flags: invalid mix of `feature_flag` and "
                "`+/-feature_flag` in $RABBITMQ_FEATURE_FLAGS",
                #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
