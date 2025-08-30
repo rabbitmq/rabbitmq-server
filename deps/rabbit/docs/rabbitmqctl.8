@@ -1323,7 +1323,7 @@ each queue of the virtual host named
 .sp
 .Dl rabbitmqctl list_queues -p my-vhost messages consumers
 .\" ------------------------------------------------------------------
-.It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar milliseconds Oc Oo Ar queueinfoitem ... Oc Op Fl -no-table-headers
+.It Cm list_unresponsive_queues Oo Fl -local Oc Oo Fl -queue-timeout Ar seconds Oc Oo Ar queueinfoitem ... Oc Op Fl -no-table-headers
 .Pp
 Tests queue leader replicas to respond within the given timeout. Lists those that did not respond in time.
 .Pp
