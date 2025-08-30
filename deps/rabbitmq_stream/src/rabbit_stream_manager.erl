@@ -21,6 +21,7 @@
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% API
 -export([create/4,
@@ -59,26 +60,26 @@ delete(VirtualHost, Reference, Username) ->
     #resource{virtual_host = VirtualHost,
               kind = queue,
               name = Reference},
-    rabbit_log:debug("Trying to delete stream ~tp", [Reference]),
+    ?LOG_DEBUG("Trying to delete stream ~tp", [Reference]),
     case rabbit_amqqueue:lookup(Name) of
         {ok, Q} ->
-            rabbit_log:debug("Found queue record ~tp, checking if it is a stream",
+            ?LOG_DEBUG("Found queue record ~tp, checking if it is a stream",
                              [Reference]),
             case is_stream_queue(Q) of
                 true ->
-                    rabbit_log:debug("Queue record ~tp is a stream, trying to delete it",
+                    ?LOG_DEBUG("Queue record ~tp is a stream, trying to delete it",
                                      [Reference]),
                     {ok, _} =
                     rabbit_stream_queue:delete(Q, false, false, Username),
-                    rabbit_log:debug("Stream ~tp deleted", [Reference]),
+                    ?LOG_DEBUG("Stream ~tp deleted", [Reference]),
                     {ok, deleted};
                 _ ->
-                    rabbit_log:debug("Queue record ~tp is NOT a stream, returning error",
+                    ?LOG_DEBUG("Queue record ~tp is NOT a stream, returning error",
                                      [Reference]),
                     {error, reference_not_found}
             end;
         {error, not_found} ->
-            rabbit_log:debug("Stream ~tp not found, cannot delete it",
+            ?LOG_DEBUG("Stream ~tp not found, cannot delete it",
                              [Reference]),
             {error, reference_not_found}
     end.
@@ -169,7 +170,7 @@ delete_super_stream(VirtualHost, SuperStream, Username) ->
                 ok ->
                     ok;
                 {error, Error} ->
-                    rabbit_log:warning("Error while deleting super stream exchange ~tp, "
+                    ?LOG_WARNING("Error while deleting super stream exchange ~tp, "
                                        "~tp",
                                        [SuperStream, Error]),
                     ok
@@ -179,7 +180,7 @@ delete_super_stream(VirtualHost, SuperStream, Username) ->
                      {ok, deleted} ->
                          ok;
                      {error, Err} ->
-                         rabbit_log:warning("Error while delete partition ~tp of super stream "
+                         ?LOG_WARNING("Error while delete partition ~tp of super stream "
                                             "~tp, ~tp",
                                             [Stream, SuperStream, Err]),
                          ok
@@ -300,7 +301,7 @@ topology(VirtualHost, Stream) ->
                                  replica_nodes => []},
                                Members)};
                 Err ->
-                    rabbit_log:info("Error locating ~tp stream members: ~tp",
+                    ?LOG_INFO("Error locating ~tp stream members: ~tp",
                                     [StreamName, Err]),
                     {error, stream_not_available}
             end;
@@ -331,7 +332,7 @@ route(RoutingKey, VirtualHost, SuperStream) ->
         end
     catch
         exit:Error ->
-            rabbit_log:warning("Error while looking up exchange ~tp, ~tp",
+            ?LOG_WARNING("Error while looking up exchange ~tp, ~tp",
                                [rabbit_misc:rs(ExchangeName), Error]),
             {error, stream_not_found}
     end.
@@ -345,7 +346,7 @@ partitions(VirtualHost, SuperStream) ->
     {ok, integer()} | {error, stream_not_found}.
 partition_index(VirtualHost, SuperStream, Stream) ->
     ExchangeName = rabbit_misc:r(VirtualHost, exchange, SuperStream),
-    rabbit_log:debug("Looking for partition index of stream ~tp in "
+    ?LOG_DEBUG("Looking for partition index of stream ~tp in "
                      "super stream ~tp (virtual host ~tp)",
                      [Stream, SuperStream, VirtualHost]),
     try
@@ -357,7 +358,7 @@ partition_index(VirtualHost, SuperStream, Stream) ->
                 is_resource_stream_queue(D), Q == Stream],
         OrderedBindings =
         rabbit_stream_utils:sort_partitions(UnorderedBindings),
-        rabbit_log:debug("Bindings: ~tp", [OrderedBindings]),
+        ?LOG_DEBUG("Bindings: ~tp", [OrderedBindings]),
         case OrderedBindings of
             [] ->
                 {error, stream_not_found};
@@ -391,7 +392,7 @@ partition_index(VirtualHost, SuperStream, Stream) ->
         end
     catch
         exit:Error ->
-            rabbit_log:error("Error while looking up exchange ~tp, ~tp",
+            ?LOG_ERROR("Error while looking up exchange ~tp, ~tp",
                              [ExchangeName, Error]),
             {error, stream_not_found}
     end.
@@ -513,12 +514,12 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
                         {existing, _} ->
                             {error, reference_already_exists};
                         {error, Err} ->
-                            rabbit_log:warning("Error while creating ~tp stream, ~tp",
+                            ?LOG_WARNING("Error while creating ~tp stream, ~tp",
                                                [Reference, Err]),
                             {error, internal_error};
                         {error,
                          queue_limit_exceeded, Reason, ReasonArg} ->
-                            rabbit_log:warning("Cannot declare stream ~tp because, "
+                            ?LOG_WARNING("Cannot declare stream ~tp because, "
                                                ++ Reason,
                                                [Reference] ++ ReasonArg),
                             {error, validation_failed};
@@ -526,19 +527,19 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
                          precondition_failed,
                          Msg,
                          Args} ->
-                            rabbit_log:warning("Error while creating ~tp stream, "
+                            ?LOG_WARNING("Error while creating ~tp stream, "
                                                ++ Msg,
                                                [Reference] ++ Args),
                             {error, validation_failed}
                     end
                 catch
                     exit:Error ->
-                        rabbit_log:error("Error while creating ~tp stream, ~tp",
+                        ?LOG_ERROR("Error while creating ~tp stream, ~tp",
                                          [Reference, Error]),
                         {error, internal_error}
                 end;
             {error, {absent, _, Reason}} ->
-                rabbit_log:error("Error while creating ~tp stream, ~tp",
+                ?LOG_ERROR("Error while creating ~tp stream, ~tp",
                                  [Reference, Reason]),
                 {error, internal_error}
         end
@@ -547,12 +548,12 @@ do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username) ->
             case ExitError of
                 % likely a problem of inequivalent args on an existing stream
                 {amqp_error, precondition_failed, M, _} ->
-                    rabbit_log:info("Error while creating ~tp stream, "
+                    ?LOG_INFO("Error while creating ~tp stream, "
                                     ++ M,
                                     [Reference]),
                     {error, validation_failed};
                 E ->
-                    rabbit_log:warning("Error while creating ~tp stream, ~tp",
+                    ?LOG_WARNING("Error while creating ~tp stream, ~tp",
                                        [Reference, E]),
                     {error, validation_failed}
             end
@@ -580,7 +581,7 @@ super_stream_partitions(VirtualHost, SuperStream) ->
                      [], OrderedBindings)}
     catch
         exit:Error ->
-            rabbit_log:error("Error while looking up exchange ~tp, ~tp",
+            ?LOG_ERROR("Error while looking up exchange ~tp, ~tp",
                              [ExchangeName, Error]),
             {error, stream_not_found}
     end.
@@ -709,7 +710,7 @@ declare_super_stream_exchange(VirtualHost, Name, Username) ->
                     catch
                         exit:ExitError ->
                             % likely to be a problem of inequivalent args on an existing stream
-                            rabbit_log:error("Error while creating ~tp super stream exchange: "
+                            ?LOG_ERROR("Error while creating ~tp super stream exchange: "
                                              "~tp",
                                              [Name, ExitError]),
                             {error, validation_failed}

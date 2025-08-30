@@ -7,6 +7,9 @@
 
 -module(rabbit_epmd_monitor).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -84,19 +87,19 @@ check_epmd(State = #state{mod  = Mod,
     {ok, State#state{port = Port1}}.
 
 handle_port_please(init, noport, Me, Port) ->
-    rabbit_log:info("epmd does not know us, re-registering as ~ts", [Me]),
+    ?LOG_INFO("epmd does not know us, re-registering as ~ts", [Me]),
     {ok, Port};
 handle_port_please(check, noport, Me, Port) ->
-    rabbit_log:warning("epmd does not know us, re-registering ~ts at port ~b", [Me, Port]),
+    ?LOG_WARNING("epmd does not know us, re-registering ~ts at port ~b", [Me, Port]),
     {ok, Port};
 handle_port_please(_, closed, _Me, Port) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: closed"),
+    ?LOG_ERROR("epmd monitor failed to retrieve our port from epmd: closed"),
     {ok, Port};
 handle_port_please(init, {port, NewPort, _Version}, _Me, _Port) ->
-    rabbit_log:info("epmd monitor knows us, inter-node communication (distribution) port: ~tp", [NewPort]),
+    ?LOG_INFO("epmd monitor knows us, inter-node communication (distribution) port: ~tp", [NewPort]),
     {ok, NewPort};
 handle_port_please(check, {port, NewPort, _Version}, _Me, _Port) ->
     {ok, NewPort};
 handle_port_please(_, {error, Error}, _Me, Port) ->
-    rabbit_log:error("epmd monitor failed to retrieve our port from epmd: ~tp", [Error]),
+    ?LOG_ERROR("epmd monitor failed to retrieve our port from epmd: ~tp", [Error]),
     {ok, Port}.

@@ -41,6 +41,7 @@
 %%  * rabbit_event
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([parse_set/5, set/5, set_any/5, clear/4, clear_any/4, list/0, list/1,
          list_component/1, list/2, list_formatted/1, list_formatted/3,
@@ -104,7 +105,7 @@ parse_set_global(Name, String, ActingUser) ->
 
 set_global(Name, Term, ActingUser)  ->
     NameAsAtom = rabbit_data_coercion:to_atom(Name),
-    rabbit_log:debug("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
+    ?LOG_DEBUG("Setting global parameter '~ts' to ~tp", [NameAsAtom, Term]),
     _ = rabbit_db_rtparams:set(NameAsAtom, Term),
     event_notify(parameter_set, none, global, [{name,  NameAsAtom},
                                                {value, Term},
@@ -125,7 +126,7 @@ set_any(VHost, Component, Name, Term, User) ->
     end.
 
 set_any0(VHost, Component, Name, Term, User) ->
-    rabbit_log:debug("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
+    ?LOG_DEBUG("Asked to set or update runtime parameter '~ts' in vhost '~ts' "
                      "for component '~ts', value: ~tp",
                      [Name, VHost, Component, Term]),
     case lookup_component(Component) of
@@ -168,7 +169,7 @@ is_within_limit(Component) ->
        false ->
             ErrorMsg = "Limit reached: component ~ts is limited to ~tp",
             ErrorArgs = [Component, Limit],
-            rabbit_log:error(ErrorMsg, ErrorArgs),
+            ?LOG_ERROR(ErrorMsg, ErrorArgs),
             {errors, [{"component ~ts is limited to ~tp", [Component, Limit]}]}
     end.
 

@@ -36,7 +36,8 @@
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
 
--define(INFO(Text, Args), rabbit_log_shovel:info(Text, Args)).
+-include_lib("kernel/include/logger.hrl").
+
 -define(LINK_CREDIT_TIMEOUT, 20_000).
 
 -type state() :: rabbit_shovel_behaviour:state().
@@ -194,7 +195,7 @@ handle_source({amqp10_event, {connection, Conn, opened}},
 handle_source({amqp10_event, {connection, Conn, {closed, Why}}},
               #{source := #{current := #{conn := Conn}},
                 name := Name}) ->
-    ?INFO("Shovel ~ts source connection closed. Reason: ~tp", [Name, Why]),
+    ?LOG_INFO("Shovel ~ts source connection closed. Reason: ~tp", [Name, Why]),
     {stop, {inbound_conn_closed, Why}};
 handle_source({amqp10_event, {session, Sess, begun}},
               State = #{source := #{current := #{session := Sess}}}) ->
@@ -231,7 +232,7 @@ handle_dest({amqp10_disposition, {Result, Tag}},
             {#{Tag := IncomingTag}, rejected} ->
                 {1, rabbit_shovel_behaviour:nack(IncomingTag, false, State1)};
             _ -> % not found - this should ideally not happen
-                rabbit_log_shovel:warning("Shovel ~ts amqp10 destination disposition tag not found: ~tp",
+                ?LOG_WARNING("Shovel ~ts amqp10 destination disposition tag not found: ~tp",
                                           [Name, Tag]),
                 {0, State1}
         end,
@@ -242,7 +243,7 @@ handle_dest({amqp10_event, {connection, Conn, opened}},
 handle_dest({amqp10_event, {connection, Conn, {closed, Why}}},
             #{name := Name,
               dest := #{current := #{conn := Conn}}}) ->
-    ?INFO("Shovel ~ts destination connection closed. Reason: ~tp", [Name, Why]),
+    ?LOG_INFO("Shovel ~ts destination connection closed. Reason: ~tp", [Name, Why]),
     {stop, {outbound_conn_died, Why}};
 handle_dest({amqp10_event, {session, Sess, begun}},
             State = #{dest := #{current := #{session := Sess}}}) ->

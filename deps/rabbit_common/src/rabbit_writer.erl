@@ -27,6 +27,7 @@
 %% When a socket write fails, writer will exit.
 
 -include("rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 -export([start/6, start_link/6, start/7, start_link/7, start/8, start_link/8]).
 
 -export([init/1,
@@ -264,10 +265,10 @@ handle_message(emit_stats, State = #wstate{reader = ReaderPid}) ->
 handle_message(ok, State) ->
     State;
 handle_message({_Ref, ok} = Msg, State) ->
-    rabbit_log:warning("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
+    ?LOG_WARNING("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
     State;
 handle_message({ok, _Ref} = Msg, State) ->
-    rabbit_log:warning("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
+    ?LOG_WARNING("AMQP 0-9-1 channel writer has received a message it does not support: ~p", [Msg]),
     State;
 handle_message(Message, _State) ->
     exit({writer, message_not_understood, Message}).

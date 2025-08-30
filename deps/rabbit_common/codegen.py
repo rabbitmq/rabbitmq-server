@@ -311,6 +311,7 @@ def genErl(spec):
         module = "rabbit_framing_amqp_0_8"
     print("-module(%s)." % module)
     print("""-include("rabbit_framing.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([version/0]).
 -export([lookup_method_name/1]).
@@ -534,7 +535,7 @@ shortstr_size(S) ->
 
     for (c,v,cls) in spec.constants: genLookupException(c,v,cls)
     print("lookup_amqp_exception(Code) ->")
-    print("  rabbit_log:warning(\"Unknown AMQP error code '~p'~n\", [Code]),")
+    print("  ?LOG_WARNING(\"Unknown AMQP error code '~p'~n\", [Code]),")
     print("  {true, ?INTERNAL_ERROR, <<\"INTERNAL_ERROR\">>}.")
 
     for(c,v,cls) in spec.constants: genAmqpException(c,v,cls)

@@ -13,6 +13,7 @@
 
 -include("include/rabbit_khepri.hrl").
 -include("vhost.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([create_or_get/3,
          merge_metadata/2,
@@ -102,7 +103,7 @@ create_or_get_in_mnesia_tx(VHostName, VHost) ->
 
 create_or_get_in_khepri(VHostName, VHost) ->
     Path = khepri_vhost_path(VHostName),
-    rabbit_log:debug("Inserting a virtual host record ~tp", [VHost]),
+    ?LOG_DEBUG("Inserting a virtual host record ~tp", [VHost]),
     case rabbit_khepri:create(Path, VHost) of
         ok ->
             {new, VHost};
@@ -137,7 +138,7 @@ merge_metadata(VHostName, Metadata)
   when is_binary(VHostName) andalso is_map(Metadata) ->
     case do_merge_metadata(VHostName, Metadata) of
         {ok, VHost} when ?is_vhost(VHost) ->
-            rabbit_log:debug("Updated a virtual host record ~tp", [VHost]),
+            ?LOG_DEBUG("Updated a virtual host record ~tp", [VHost]),
             {ok, VHost};
         {error, _} = Error ->
             Error
@@ -169,7 +170,7 @@ merge_metadata_in_khepri(VHostName, Metadata) ->
     case Ret1 of
         {ok, #{data := VHost0, payload_version := DVersion}} ->
             VHost = vhost:merge_metadata(VHost0, Metadata),
-            rabbit_log:debug("Updating a virtual host record ~p", [VHost]),
+            ?LOG_DEBUG("Updating a virtual host record ~p", [VHost]),
             Path1 = khepri_path:combine_with_conditions(
                       Path, [#if_payload_version{version = DVersion}]),
             Ret2 = rabbit_khepri:put(Path1, VHost),
@@ -240,7 +241,7 @@ enable_protection_from_deletion(VHostName) ->
     MetadataPatch = #{
         protected_from_deletion => true
     },
-    rabbit_log:info("Enabling deletion protection for virtual host '~ts'", [VHostName]),
+    ?LOG_INFO("Enabling deletion protection for virtual host '~ts'", [VHostName]),
     merge_metadata(VHostName, MetadataPatch).
 
 -spec disable_protection_from_deletion(VHostName) -> Ret when
@@ -253,7 +254,7 @@ disable_protection_from_deletion(VHostName) ->
     MetadataPatch = #{
         protected_from_deletion => false
     },
-    rabbit_log:info("Disabling deletion protection for virtual host '~ts'", [VHostName]),
+    ?LOG_INFO("Disabling deletion protection for virtual host '~ts'", [VHostName]),
     merge_metadata(VHostName, MetadataPatch).
 
 %% -------------------------------------------------------------------

@@ -16,6 +16,7 @@
 
 -include("oauth2.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_data_coercion, [
     to_map/1]).
@@ -44,7 +45,7 @@ add_signing_key(KeyId, Type, Value) ->
 -spec update_jwks_signing_keys(oauth_provider()) -> ok | {error, term()}.
 update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
         ssl_options = SslOptions}) ->
-    rabbit_log:debug("Downloading signing keys from ~tp (TLS options: ~p)",
+    ?LOG_DEBUG("Downloading signing keys from ~tp (TLS options: ~p)",
         [JwksUrl, format_ssl_options(SslOptions)]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
         {ok, {_, _, JwksBody}} ->
@@ -52,13 +53,13 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
                 jose:decode(erlang:iolist_to_binary(JwksBody)), []),
             Keys = maps:from_list(lists:map(fun(Key) ->
                 {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-            rabbit_log:debug("Downloaded ~p signing keys", [maps:size(Keys)]),
+            ?LOG_DEBUG("Downloaded ~p signing keys", [maps:size(Keys)]),
             case replace_signing_keys(Keys, Id) of
               {error, _} = Err -> Err;
               _ -> ok
             end;
         {error, _} = Err ->
-            rabbit_log:error("Failed to download signing keys: ~tp", [Err]),
+            ?LOG_ERROR("Failed to download signing keys: ~tp", [Err]),
             Err
     end.
 
@@ -66,7 +67,7 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
         -> {boolean(), map()} | {error, term()}.
 decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
     OAuthProviderId = InternalOAuthProvider#internal_oauth_provider.id,
-    rabbit_log:debug("Decoding token for resource_server: ~p using oauth_provider_id: ~p",
+    ?LOG_DEBUG("Decoding token for resource_server: ~p using oauth_provider_id: ~p",
         [ResourceServer#resource_server.id,
         format_oauth_provider_id(OAuthProviderId)]),
     Result = case uaa_jwt_jwt:get_key_id(Token) of
@@ -81,7 +82,7 @@ decode_and_verify(Token, ResourceServer, InternalOAuthProvider) ->
             case get_jwk(KeyId, InternalOAuthProvider) of
                 {ok, JWK} ->
                     Algorithms = InternalOAuthProvider#internal_oauth_provider.algorithms,
-                    rabbit_log:debug("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
+                    ?LOG_DEBUG("Verifying signature using signing_key_id : '~tp' and algorithms: ~p",
                         [KeyId, Algorithms]),
                     uaa_jwt_jwt:decode_and_verify(Algorithms, JWK, Token);
                 {error, _} = Err3 ->
@@ -118,7 +119,7 @@ get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
         undefined ->
             case AllowUpdateJwks of
                 true ->
-                    rabbit_log:debug("Signing key '~tp' not found. Downloading it... ", [KeyId]),
+                    ?LOG_DEBUG("Signing key '~tp' not found. Downloading it... ", [KeyId]),
                     case get_oauth_provider(OAuthProviderId, [jwks_uri]) of
                         {ok, OAuthProvider} ->
                             case update_jwks_signing_keys(OAuthProvider) of
@@ -130,15 +131,15 @@ get_jwk(KeyId, InternalOAuthProvider, AllowUpdateJwks) ->
                                     Err
                             end;
                         {error, _} = Error ->
-                            rabbit_log:debug("Unable to download signing keys due to ~p", [Error]),
+                            ?LOG_DEBUG("Unable to download signing keys due to ~p", [Error]),
                             Error
                     end;
                 false            ->
-                    rabbit_log:debug("Signing key '~tp' not found. Downloading is not allowed", [KeyId]),
+                    ?LOG_DEBUG("Signing key '~tp' not found. Downloading is not allowed", [KeyId]),
                     {error, key_not_found}
             end;
         {Type, Value} ->
-            rabbit_log:debug("Signing key ~p found", [KeyId]),
+            ?LOG_DEBUG("Signing key ~p found", [KeyId]),
             case Type of
                 json     -> uaa_jwt_jwk:make_jwk(Value);
                 pem      -> uaa_jwt_jwk:from_pem(Value);

@@ -141,10 +141,10 @@ get(Scheme, Host, Port, Path, Args) ->
 %%
 get(Scheme, Host, Port, Path, Args, Headers, HttpOpts) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("GET ~ts", [URL], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("GET ~ts", [URL], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(get, {URL, Headers}, HttpOpts1, []),
-  ?LOG_DEBUG("Response: ~tp", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("Response: ~tp", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   parse_response(Response).
 
 
@@ -179,10 +179,10 @@ post(Scheme, Host, Port, Path, Args, Body) ->
 %%
 post(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("POST ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("POST ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(post, {URL, Headers, ?CONTENT_JSON, Body}, HttpOpts1, []),
-  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   parse_response(Response).
 
 
@@ -208,10 +208,10 @@ post(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("PUT ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("PUT ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts = ensure_timeout(),
   Response = httpc:request(put, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts, []),
-  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   parse_response(Response).
 
 
@@ -262,10 +262,10 @@ put(Scheme, Host, Port, Path, Args, Headers, Body) ->
   Body :: string() | binary() | tuple().
 put(Scheme, Host, Port, Path, Args, Headers, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("PUT ~ts [~tp] [~tp]", [URL, Headers, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("PUT ~ts [~tp] [~tp]", [URL, Headers, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(put, {URL, Headers, ?CONTENT_URLENCODED, Body}, HttpOpts1, []),
-  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   parse_response(Response).
 
 %% @public
@@ -304,10 +304,10 @@ delete(Scheme, Host, Port, PathSegments, Args, HttpOpts, Body) when is_list(Path
   delete(Scheme, Host, Port, Path, Args, HttpOpts, Body);
 delete(Scheme, Host, Port, Path, Args, HttpOpts, Body) ->
   URL = build_uri(Scheme, Host, Port, Path, Args),
-  ?LOG_DEBUG("DELETE ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("DELETE ~ts [~tp]", [URL, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   HttpOpts1 = ensure_timeout(HttpOpts),
   Response = httpc:request(delete, {URL, [], ?CONTENT_URLENCODED, Body}, HttpOpts1, []),
-  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("Response: [~tp]", [Response], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   parse_response(Response).
 
 
@@ -323,7 +323,7 @@ maybe_configure_proxy() ->
       0 ->
           ?LOG_DEBUG(
              "HTTP client proxy is not configured",
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           ok;
       _ ->
           HttpProxy       = ?CONFIG_MODULE:get(http_proxy,  ?CONFIG_MAPPING, Map),
@@ -332,7 +332,7 @@ maybe_configure_proxy() ->
           ?LOG_DEBUG(
              "Configured HTTP proxy: ~tp, HTTPS proxy: ~tp, exclusions: ~tp",
              [HttpProxy, HttpsProxy, ProxyExclusions],
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           _ = maybe_set_proxy(proxy, HttpProxy, ProxyExclusions),
           _ = maybe_set_proxy(https_proxy, HttpsProxy, ProxyExclusions),
           ok
@@ -368,7 +368,7 @@ maybe_set_proxy(Option, ProxyUrl, ProxyExclusions) ->
       ?LOG_DEBUG(
         "Configuring HTTP client's ~ts setting: ~tp, exclusions: ~tp",
         [Option, {Host, Port}, ProxyExclusions],
-        #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+        #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
       httpc:set_option(Option, {{Host, Port}, ProxyExclusions})
   end.
 
@@ -415,7 +415,7 @@ decode_body(?CONTENT_JSON, Body) ->
                "HTTP client could not decode a JSON payload "
                "(JSON parser returned an error): ~tp.",
                [Err],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             []
     end.
 
@@ -428,7 +428,7 @@ decode_body(?CONTENT_JSON, Body) ->
 -spec parse_response({ok, integer(), string()} | {error, any()}) -> {ok, term()} | {error, any()}.
 
 parse_response({error, Reason}) ->
-  ?LOG_DEBUG("HTTP error ~tp", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("HTTP error ~tp", [Reason], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   {error, lists:flatten(io_lib:format("~tp", [Reason]))};
 parse_response({ok, {{_,200,_}, Headers, Body}}) ->
   {ok, decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body)};
@@ -436,7 +436,7 @@ parse_response({ok,{{_,201,_}, Headers, Body}}) ->
   {ok, decode_body(proplists:get_value("content-type", Headers, ?CONTENT_JSON), Body)};
 parse_response({ok,{{_,204,_}, _, _}}) -> {ok, []};
 parse_response({ok,{{_Vsn,Code,_Reason},_,Body}}) ->
-  ?LOG_DEBUG("HTTP Response (~tp) ~ts", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+  ?LOG_DEBUG("HTTP Response (~tp) ~ts", [Code, Body], #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   {error, integer_to_list(Code)}.
 
 %% @private

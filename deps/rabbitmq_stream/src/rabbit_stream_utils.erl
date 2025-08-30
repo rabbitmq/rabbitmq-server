@@ -40,6 +40,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 enforce_correct_name(Name) ->
     % from rabbit_channel
@@ -155,7 +156,7 @@ auth_mechanisms(Sock) ->
 auth_mechanism_to_module(TypeBin, Sock) ->
     case rabbit_registry:binary_to_type(TypeBin) of
         {error, not_found} ->
-            rabbit_log:warning("Unknown authentication mechanism '~tp'",
+            ?LOG_WARNING("Unknown authentication mechanism '~tp'",
                                [TypeBin]),
             {error, not_found};
         T ->
@@ -166,7 +167,7 @@ auth_mechanism_to_module(TypeBin, Sock) ->
                 {true, {ok, Module}} ->
                     {ok, Module};
                 _ ->
-                    rabbit_log:warning("Invalid authentication mechanism '~tp'",
+                    ?LOG_WARNING("Invalid authentication mechanism '~tp'",
                                        [T]),
                     {error, invalid}
             end

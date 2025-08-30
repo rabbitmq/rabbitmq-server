@@ -14,6 +14,7 @@
 -include("vhost.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("amqp10_common/include/amqp10_types.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          init/0,
@@ -293,7 +294,7 @@ discover(Other) when is_atom(Other) ->
     discover(rabbit_data_coercion:to_binary(Other));
 discover(Other) when is_binary(Other) ->
     T = rabbit_registry:binary_to_type(Other),
-    rabbit_log:debug("Queue type discovery: will look up a module for type '~tp'", [T]),
+    ?LOG_DEBUG("Queue type discovery: will look up a module for type '~tp'", [T]),
     {ok, Mod} = rabbit_registry:lookup_module(queue, T),
     Mod.
 
@@ -561,7 +562,7 @@ recover(VHost, Qs) ->
                end, ByType0, Qs),
     maps:fold(fun (Mod, Queues, {R0, F0}) ->
                       {Taken, {R, F}} =  timer:tc(Mod, recover, [VHost, Queues]),
-                      rabbit_log:info("Recovering ~b queues of type ~ts took ~bms",
+                      ?LOG_INFO("Recovering ~b queues of type ~ts took ~bms",
                                       [length(Queues), Mod, Taken div 1000]),
                       {R0 ++ R, F0 ++ F}
               end, {[], []}, ByType).

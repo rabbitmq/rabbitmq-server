@@ -9,6 +9,7 @@
 
 -include("rabbitmq_web_dispatch_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([is_authorized/3, is_authorized/7, is_authorized_admin/3,
          is_authorized_admin/5, vhost/1, vhost_from_headers/1]).
@@ -39,7 +40,7 @@ is_authorized_admin(ReqData, Context, Username, Password, AuthConfig) ->
     case is_basic_auth_disabled(AuthConfig) of
         true ->
             Msg = "HTTP access denied: basic auth disabled",
-            rabbit_log:warning(Msg),
+            ?LOG_WARNING(Msg),
             not_authorised(Msg, ReqData, Context);
         false ->
             is_authorized(ReqData, Context, Username, Password,
@@ -91,7 +92,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
             case is_basic_auth_disabled(AuthConfig) of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    rabbit_log:warning(Msg),
+                    ?LOG_WARNING(Msg),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     is_authorized(ReqData, Context,
@@ -107,7 +108,7 @@ is_authorized1(ReqData, Context, ErrorMsg, Fun, AuthConfig) ->
             case is_basic_auth_disabled(AuthConfig) of
                 true ->
                     Msg = "HTTP access denied: basic auth disabled",
-                    rabbit_log:warning(Msg),
+                    ?LOG_WARNING(Msg),
                     not_authorised(Msg, ReqData, Context);
                 false ->
                     {{false, AuthConfig#auth_settings.auth_realm}, ReqData, Context}
@@ -129,7 +130,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig) -
 
 is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, ReplyWhenFailed) ->
     ErrFun = fun (ResolvedUserName, Msg) ->
-                     rabbit_log:warning("HTTP access denied: user '~ts' - ~ts",
+                     ?LOG_WARNING("HTTP access denied: user '~ts' - ~ts",
                                         [ResolvedUserName, Msg]),
                      case ReplyWhenFailed of
                        true -> not_authorised(Msg, ReqData, Context);
@@ -171,7 +172,7 @@ is_authorized(ReqData, Context, Username, Password, ErrorMsg, Fun, AuthConfig, R
             end;
         {refused, _Username, Msg, Args} ->
             rabbit_core_metrics:auth_attempt_failed(IP, Username, http),
-            rabbit_log:warning("HTTP access denied: ~ts",
+            ?LOG_WARNING("HTTP access denied: ~ts",
                                [rabbit_misc:format(Msg, Args)]),
             case ReplyWhenFailed of
               true -> not_authenticated(<<"Not_Authorized">>, ReqData, Context, AuthConfig);
@@ -359,7 +360,7 @@ list_login_vhosts(User, AuthzData) ->
 
 % rabbitmq/rabbitmq-auth-backend-http#100
 log_access_control_result(NotOK) ->
-    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
+    ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
 
 is_basic_auth_disabled(#auth_settings{basic_auth_enabled = Enabled}) ->
     not Enabled.

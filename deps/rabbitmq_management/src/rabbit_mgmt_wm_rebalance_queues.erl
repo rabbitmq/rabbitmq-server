@@ -14,6 +14,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -43,7 +44,7 @@ resource_exists(Req, State) ->
 
 accept_content(Req, {_Mode, #context{user = #user{username = Username}}}=State) ->
     try
-        rabbit_log:info("User '~ts' has initiated a queue rebalance", [Username]),
+        ?LOG_INFO("User '~ts' has initiated a queue rebalance", [Username]),
         spawn(fun() ->
             rabbit_amqqueue:rebalance(all, <<".*">>, <<".*">>)
         end),

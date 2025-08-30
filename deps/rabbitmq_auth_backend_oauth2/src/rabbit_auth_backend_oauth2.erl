@@ -9,6 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("oauth2.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -63,7 +64,7 @@ description() ->
 user_login_authentication(Username, AuthProps) ->
     case authenticate(Username, AuthProps) of
 	{refused, Msg, Args} = AuthResult ->
-	    rabbit_log:debug(Msg, Args),
+	    ?LOG_DEBUG(Msg, Args),
 	    AuthResult;
 	_ = AuthResult ->
 	    AuthResult
@@ -179,7 +180,7 @@ with_decoded_token(DecodedToken, Fun) ->
     case validate_token_expiry(DecodedToken) of
         ok               -> Fun(DecodedToken);
         {error, Msg} = Err ->
-            rabbit_log:error(Msg),
+            ?LOG_ERROR(Msg),
             Err
     end.
 
@@ -418,7 +419,7 @@ username_from(PreferredUsernameClaims, DecodedToken) ->
       [ _One ] -> _One;
       [ _One | _ ] -> _One
     end,
-    rabbit_log:debug("Computing username from client's JWT token: ~ts -> ~ts ",
+    ?LOG_DEBUG("Computing username from client's JWT token: ~ts -> ~ts ",
       [lists:flatten(io_lib:format("~p",[ResolvedUsernameClaims])), Username]),
     Username.
 

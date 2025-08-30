@@ -1300,7 +1300,7 @@ log_and_return_line(Context, Metadata) ->
                   32,
                   "abcdefghijklmnopqrstuvwxyz"
                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
-    logger:warning(RandomMsg, Metadata),
+    ?LOG_WARNING(RandomMsg, Metadata),
 
     rabbit_logger_std_h:filesync(rmq_1_file_1),
     MainFile = main_log_file_in_context(Context),

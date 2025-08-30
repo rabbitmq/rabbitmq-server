@@ -95,7 +95,7 @@ as_atom(Value) ->
   ?LOG_ERROR(
      "Unexpected data type for atom value: ~tp",
      [Value],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Value.
 
 
@@ -116,7 +116,7 @@ as_integer(Value) ->
   ?LOG_ERROR(
      "Unexpected data type for integer value: ~tp",
      [Value],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Value.
 
 
@@ -140,7 +140,7 @@ as_string(Value) ->
   ?LOG_ERROR(
      "Unexpected data type for list value: ~tp",
      [Value],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Value.
 
 
@@ -321,14 +321,14 @@ as_proplist(List) when is_list(List) ->
             ?LOG_ERROR(
                "Unexpected data type for proplist value: ~tp. JSON parser returned an error: ~tp!",
                [Value, Error],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             []
     end;
 as_proplist(Value) ->
     ?LOG_ERROR(
        "Unexpected data type for proplist value: ~tp.",
        [Value],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     [].
 
 %%--------------------------------------------------------------------
@@ -352,7 +352,7 @@ as_map(List) when is_list(List) ->
             ?LOG_ERROR(
                "Unexpected data type for map value: ~tp. JSON parser returned an error: ~tp!",
                [Value, Error],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             []
     end;
 as_map(Map) when is_map(Map) ->
@@ -361,7 +361,7 @@ as_map(Value) ->
     ?LOG_ERROR(
        "Unexpected data type for map value: ~tp.",
        [Value],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     [].
 
 -spec stringify_error({ok, term()} | {error, term()}) -> {ok, term()} | {error, string()}.
@@ -387,7 +387,7 @@ maybe_backend_configured(BackendConfigKey,
             ?LOG_DEBUG(
                "Peer discovery: translated cluster formation configuration: ~tp",
                [ClusterFormation],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             case proplists:get_value(BackendConfigKey, ClusterFormation) of
                 undefined ->
                     BackendUndefinedFun();
@@ -395,7 +395,7 @@ maybe_backend_configured(BackendConfigKey,
                     ?LOG_DEBUG(
                        "Peer discovery: cluster formation backend configuration: ~tp",
                        [Proplist],
-                       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
                     ConfiguredFun(Proplist)
             end
     end.
@@ -428,5 +428,5 @@ as_list(Value) ->
   ?LOG_ERROR(
      "Unexpected data type for list value: ~tp",
      [Value],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Value.

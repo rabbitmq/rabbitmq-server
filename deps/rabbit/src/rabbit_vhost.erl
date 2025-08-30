@@ -9,6 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("vhost.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([recover/0, recover/1, read_config/1]).
 -export([add/2, add/3, add/4, delete/2, delete_ignoring_protection/2, exists/1, assert/1,
@@ -40,7 +41,7 @@ recover() ->
     {Time, _} = timer:tc(fun() ->
                                  rabbit_binding:recover()
                          end),
-    rabbit_log:debug("rabbit_binding:recover/0 completed in ~fs", [Time/1000000]),
+    ?LOG_DEBUG("rabbit_binding:recover/0 completed in ~fs", [Time/1000000]),
 
     %% rabbit_vhost_sup_sup will start the actual recovery.
     %% So recovery will be run every time a vhost supervisor is restarted.
@@ -51,7 +52,7 @@ recover() ->
 
 recover(VHost) ->
     VHostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Making sure data directory '~ts' for vhost '~ts' exists",
+    ?LOG_INFO("Making sure data directory '~ts' for vhost '~ts' exists",
                     [VHostDir, VHost]),
     VHostStubFile = filename:join(VHostDir, ".vhost"),
     ok = rabbit_file:ensure_dir(VHostStubFile),
@@ -65,25 +66,25 @@ recover(VHost) ->
     %% we need to add the default type to the metadata
     case rabbit_db_vhost:get(VHost) of
         undefined ->
-            rabbit_log:warning("Cannot check metadata for vhost '~ts' during recovery, record not found.",
+            ?LOG_WARNING("Cannot check metadata for vhost '~ts' during recovery, record not found.",
                 [VHost]);
         VHostRecord ->
             Metadata = vhost:get_metadata(VHostRecord),
             case maps:is_key(default_queue_type, Metadata) of
                 true ->
-                    rabbit_log:debug("Default queue type for vhost '~ts' is ~p.",
+                    ?LOG_DEBUG("Default queue type for vhost '~ts' is ~p.",
                         [VHost, maps:get(default_queue_type, Metadata)]),
                     ok;
                 false ->
                     DefaultType = rabbit_queue_type:default_alias(),
-                    rabbit_log:info("Setting missing default queue type to '~p' for vhost '~ts'.",
+                    ?LOG_INFO("Setting missing default queue type to '~p' for vhost '~ts'.",
                         [DefaultType, VHost]),
                     case rabbit_db_vhost:merge_metadata(VHost, #{default_queue_type => DefaultType}) of
                         {ok, _UpdatedVHostRecord} ->
                             ok;
                         {error, Reason} ->
                             % Log the error but continue recovery
-                            rabbit_log:warning("Failed to set the default queue type for vhost '~ts': ~p",
+                            ?LOG_WARNING("Failed to set the default queue type for vhost '~ts': ~p",
                                 [VHost, Reason])
                     end
             end
@@ -95,7 +96,7 @@ recover(VHost) ->
     {Time, ok} = timer:tc(fun() ->
                                   rabbit_binding:recover(rabbit_exchange:recover(VHost), QNames)
                           end),
-    rabbit_log:debug("rabbit_binding:recover/2 for vhost ~ts completed in ~fs", [VHost, Time/1000000]),
+    ?LOG_DEBUG("rabbit_binding:recover/2 for vhost ~ts completed in ~fs", [VHost, Time/1000000]),
 
     ok = rabbit_amqqueue:start(Recovered),
     ok.
@@ -124,7 +125,7 @@ ensure_config_file(VHost) ->
                 _ ->
                     ?LEGACY_INDEX_SEGMENT_ENTRY_COUNT
             end,
-            rabbit_log:info("Setting segment_entry_count for vhost '~ts' with ~b queues to '~b'",
+            ?LOG_INFO("Setting segment_entry_count for vhost '~ts' with ~b queues to '~b'",
                             [VHost, length(QueueDirs), SegmentEntryCount]),
             file:write_file(Path, io_lib:format(
                 "%% This file is auto-generated! Edit at your own risk!~n"
@@ -206,7 +207,7 @@ do_add(Name, Metadata0, ActingUser) ->
     case Metadata of
         #{default_queue_type := DQT} ->
             %% check that the queue type is known
-            rabbit_log:debug("Default queue type of virtual host '~ts' is ~tp",
+            ?LOG_DEBUG("Default queue type of virtual host '~ts' is ~tp",
                              [Name, DQT]),
             try rabbit_queue_type:discover(DQT) of
                 QueueType when is_atom(QueueType) ->
@@ -225,9 +226,9 @@ do_add(Name, Metadata0, ActingUser) ->
 
     case Description of
         undefined ->
-            rabbit_log:info("Adding vhost '~ts' without a description", [Name]);
+            ?LOG_INFO("Adding vhost '~ts' without a description", [Name]);
         Description ->
-            rabbit_log:info("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
+            ?LOG_INFO("Adding vhost '~ts' (description: '~ts', tags: ~tp)",
                             [Name, Description, Tags])
     end,
     DefaultLimits = rabbit_db_vhost_defaults:list_limits(Name),
@@ -235,7 +236,7 @@ do_add(Name, Metadata0, ActingUser) ->
     {NewOrNot, VHost} = rabbit_db_vhost:create_or_get(Name, DefaultLimits, Metadata),
     case NewOrNot of
         new ->
-            rabbit_log:debug("Inserted a virtual host record ~tp", [VHost]);
+            ?LOG_DEBUG("Inserted a virtual host record ~tp", [VHost]);
         existing ->
             ok
     end,
@@ -280,7 +281,7 @@ declare_default_exchanges(VHostName, ActingUser) ->
     rabbit_misc:for_each_while_ok(
       fun({ExchangeName, Type, Internal}) ->
               Resource = rabbit_misc:r(VHostName, exchange, ExchangeName),
-              rabbit_log:debug("Will declare an exchange ~tp", [Resource]),
+              ?LOG_DEBUG("Will declare an exchange ~tp", [Resource]),
               case rabbit_exchange:declare(
                      Resource, Type, true, false, Internal, [],
                      ActingUser) of
@@ -342,7 +343,7 @@ delete(Name, ActingUser) ->
             case vhost:is_protected_from_deletion(VHost) of
                 true ->
                     Msg = "Refusing to delete virtual host '~ts' because it is protected from deletion",
-                    rabbit_log:debug(Msg, [Name]),
+                    ?LOG_DEBUG(Msg, [Name]),
                     {error, protected_from_deletion};
                 false ->
                     delete_ignoring_protection(Name, ActingUser)
@@ -356,25 +357,25 @@ delete_ignoring_protection(Name, ActingUser) ->
     %% process, which in turn results in further database actions and
     %% eventually the termination of that process. Exchange deletion causes
     %% notifications which must be sent outside the TX
-    rabbit_log:info("Deleting vhost '~ts'", [Name]),
+    ?LOG_INFO("Deleting vhost '~ts'", [Name]),
     %% TODO: This code does a lot of "list resources, walk through the list to
     %% delete each resource". This feature should be provided by each called
     %% modules, like `rabbit_amqqueue:delete_all_for_vhost(VHost)'. These new
     %% calls would be responsible for the atomicity, not this code.
     %% Clear the permissions first to prohibit new incoming connections when deleting a vhost
-    rabbit_log:info("Clearing permissions in vhost '~ts' because it's being deleted", [Name]),
+    ?LOG_INFO("Clearing permissions in vhost '~ts' because it's being deleted", [Name]),
     ok = rabbit_auth_backend_internal:clear_all_permissions_for_vhost(Name, ActingUser),
-    rabbit_log:info("Deleting queues in vhost '~ts' because it's being deleted", [Name]),
+    ?LOG_INFO("Deleting queues in vhost '~ts' because it's being deleted", [Name]),
     QDelFun = fun (Q) -> rabbit_amqqueue:delete(Q, false, false, ActingUser) end,
     [begin
          QName = amqqueue:get_name(Q),
          assert_benign(rabbit_amqqueue:with(QName, QDelFun), ActingUser)
      end || Q <- rabbit_amqqueue:list(Name)],
-    rabbit_log:info("Deleting exchanges in vhost '~ts' because it's being deleted", [Name]),
+    ?LOG_INFO("Deleting exchanges in vhost '~ts' because it's being deleted", [Name]),
     ok = rabbit_exchange:delete_all(Name, ActingUser),
-    rabbit_log:info("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [Name]),
+    ?LOG_INFO("Clearing policies and runtime parameters in vhost '~ts' because it's being deleted", [Name]),
     _ = rabbit_runtime_parameters:clear_vhost(Name, ActingUser),
-    rabbit_log:debug("Removing vhost '~ts' from the metadata storage because it's being deleted", [Name]),
+    ?LOG_DEBUG("Removing vhost '~ts' from the metadata storage because it's being deleted", [Name]),
     Ret = case rabbit_db_vhost:delete(Name) of
              true ->
                  ok = rabbit_event:notify(
@@ -407,7 +408,7 @@ put_vhost(Name, Description, Tags0, DefaultQueueType, Trace, Username) ->
       Other       -> Other
     end,
     ParsedTags = parse_tags(Tags),
-    rabbit_log:debug("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
+    ?LOG_DEBUG("Parsed virtual host tags ~tp to ~tp", [Tags, ParsedTags]),
     Result = case exists(Name) of
                  true  ->
                      update(Name, Description, ParsedTags, DefaultQueueType, Username);
@@ -451,7 +452,7 @@ is_over_vhost_limit(Name, Limit) when is_integer(Limit) ->
             ErrorMsg = rabbit_misc:format("cannot create vhost '~ts': "
                                           "vhost limit of ~tp is reached",
                                           [Name, Limit]),
-            rabbit_log:error(ErrorMsg),
+            ?LOG_ERROR(ErrorMsg),
             exit({vhost_limit_exceeded, ErrorMsg})
     end.
 
@@ -510,7 +511,7 @@ vhost_cluster_state(VHost) ->
     Nodes).
 
 vhost_down(VHost) ->
-    rabbit_log:info("Virtual host '~ts' is stopping", [VHost]),
+    ?LOG_INFO("Virtual host '~ts' is stopping", [VHost]),
     ok = rabbit_event:notify(vhost_down,
                              [{name, VHost},
                               {node, node()},
@@ -518,16 +519,16 @@ vhost_down(VHost) ->
 
 delete_storage(VHost) ->
     VhostDir = msg_store_dir_path(VHost),
-    rabbit_log:info("Deleting message store directory for vhost '~ts' at '~ts'", [VHost, VhostDir]),
+    ?LOG_INFO("Deleting message store directory for vhost '~ts' at '~ts'", [VHost, VhostDir]),
     %% Message store should be closed when vhost supervisor is closed.
     case rabbit_file:recursive_delete([VhostDir]) of
         ok                   -> ok;
         {error, {_, enoent}} ->
             %% a concurrent delete did the job for us
-            rabbit_log:warning("Tried to delete storage directories for vhost '~ts', it failed with an ENOENT", [VHost]),
+            ?LOG_WARNING("Tried to delete storage directories for vhost '~ts', it failed with an ENOENT", [VHost]),
             ok;
         Other                ->
-            rabbit_log:warning("Tried to delete storage directories for vhost '~ts': ~tp", [VHost, Other]),
+            ?LOG_WARNING("Tried to delete storage directories for vhost '~ts': ~tp", [VHost, Other]),
             Other
     end.
 
@@ -642,7 +643,7 @@ update_tags(VHostName, Tags, ActingUser) ->
                       end,
         VHost = rabbit_db_vhost:set_tags(VHostName, Tags),
         ConvertedTags = vhost:get_tags(VHost),
-        rabbit_log:info("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
+        ?LOG_INFO("Successfully set tags for virtual host '~ts' to ~tp", [VHostName, ConvertedTags]),
         rabbit_event:notify_if(are_different(CurrentTags, ConvertedTags),
                                vhost_tags_set, [{name, VHostName},
                                                 {tags, ConvertedTags},
@@ -650,13 +651,13 @@ update_tags(VHostName, Tags, ActingUser) ->
         VHost
     catch
         throw:{error, {no_such_vhost, _}} = Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~ts': the virtual host does not exist", [VHostName]),
+            ?LOG_WARNING("Failed to set tags for virtual host '~ts': the virtual host does not exist", [VHostName]),
             throw(Error);
         throw:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
+            ?LOG_WARNING("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             throw(Error);
         exit:Error ->
-            rabbit_log:warning("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
+            ?LOG_WARNING("Failed to set tags for virtual host '~ts': ~tp", [VHostName, Error]),
             exit(Error)
     end.
 
@@ -718,7 +719,7 @@ i(metadata, VHost) ->
             M#{default_queue_type => DQT}
     end;
 i(Item, VHost)     ->
-  rabbit_log:error("Don't know how to compute a virtual host info item '~ts' for virtual host '~tp'", [Item, VHost]),
+  ?LOG_ERROR("Don't know how to compute a virtual host info item '~ts' for virtual host '~tp'", [Item, VHost]),
   throw({bad_argument, Item}).
 
 -spec info(vhost:vhost() | vhost:name()) -> rabbit_types:infos().

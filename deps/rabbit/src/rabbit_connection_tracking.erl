@@ -41,6 +41,7 @@
          count_local_tracked_items_of_user/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2]).
 
@@ -77,11 +78,11 @@ handle_cast({connection_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register connection ~tp for tracking, "
                           "its table is not ready yet or the connection terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [ConnId]),
+                    ?LOG_WARNING(Msg, [ConnId]),
                     ok;
                 error:Err ->
                     Msg = "Could not register connection ~tp for tracking: ~tp",
-                    rabbit_log_connection:warning(Msg, [ConnId, Err]),
+                    ?LOG_WARNING(Msg, [ConnId, Err]),
                     ok
             end;
         _OtherNode ->
@@ -106,7 +107,7 @@ handle_cast({vhost_deleted, Details}) ->
     %% Schedule vhost entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_vhost_entry, [VHost]),
-    rabbit_log_connection:info("Closing all connections in vhost '~ts' because it's being deleted", [VHost]),
+    ?LOG_INFO("Closing all connections in vhost '~ts' because it's being deleted", [VHost]),
     shutdown_tracked_items(
         list(VHost),
         rabbit_misc:format("vhost '~ts' is deleted", [VHost]));
@@ -116,9 +117,9 @@ handle_cast({vhost_deleted, Details}) ->
 handle_cast({vhost_down, Details}) ->
     VHost = pget(name, Details),
     Node = pget(node, Details),
-    rabbit_log_connection:info("Closing all connections in vhost '~ts' on node '~ts'"
-                               " because the vhost is stopping",
-                               [VHost, Node]),
+    ?LOG_INFO("Closing all connections in vhost '~ts' on node '~ts'"
+              " because the vhost is stopping",
+              [VHost, Node]),
     shutdown_tracked_items(
         list_on_node(Node, VHost),
         rabbit_misc:format("vhost '~ts' is down", [VHost]));
@@ -127,7 +128,7 @@ handle_cast({user_deleted, Details}) ->
     %% Schedule user entry deletion, allowing time for connections to close
     _ = timer:apply_after(?TRACKING_EXECUTION_TIMEOUT, ?MODULE,
             delete_tracked_connection_user_entry, [Username]),
-    rabbit_log_connection:info("Closing all connections for user '~ts' because the user is being deleted", [Username]),
+    ?LOG_INFO("Closing all connections for user '~ts' because the user is being deleted", [Username]),
     shutdown_tracked_items(
         list_of_user(Username),
         rabbit_misc:format("user '~ts' is deleted", [Username])).
@@ -189,18 +190,18 @@ ensure_tracked_tables_for_this_node() ->
 ensure_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE, [named_table, public, {write_concurrency, true},
                                         {keypos, #tracked_connection.id}]),
-    rabbit_log:info("Setting up a table for connection tracking on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE]).
+    ?LOG_INFO("Setting up a table for connection tracking on this node: ~tp",
+              [?TRACKED_CONNECTION_TABLE]).
 
 ensure_per_vhost_tracked_connections_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for per-vhost connection counting on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
+    ?LOG_INFO("Setting up a table for per-vhost connection counting on this node: ~tp",
+              [?TRACKED_CONNECTION_TABLE_PER_VHOST]),
     ets:new(?TRACKED_CONNECTION_TABLE_PER_VHOST, [named_table, public, {write_concurrency, true}]).
 
 ensure_per_user_tracked_connections_table_for_this_node() ->
     _ = ets:new(?TRACKED_CONNECTION_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]),
-    rabbit_log:info("Setting up a table for per-user connection counting on this node: ~tp",
-                    [?TRACKED_CONNECTION_TABLE_PER_USER]).
+    ?LOG_INFO("Setting up a table for per-user connection counting on this node: ~tp",
+              [?TRACKED_CONNECTION_TABLE_PER_USER]).
 
 -spec tracked_connection_table_name_for(node()) -> atom().
 
@@ -420,7 +421,7 @@ close_connection(#tracked_connection{pid = Pid, type = network}, Message) ->
             ok;
           _:Err ->
             %% ignore, don't terminate
-            rabbit_log:warning("Could not close connection ~tp: ~tp", [Pid, Err]),
+            ?LOG_WARNING("Could not close connection ~tp: ~tp", [Pid, Err]),
             ok
     end;
 close_connection(#tracked_connection{pid = Pid, type = direct}, Message) ->

@@ -268,6 +268,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -382,7 +383,7 @@ stop(VHost) ->
     ok = rabbit_classic_queue_index_v2:stop(VHost).
 
 start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefined ->
-    rabbit_log:info("Starting message stores for vhost '~ts'", [VHost]),
+    ?LOG_INFO("Starting message stores for vhost '~ts'", [VHost]),
     do_start_msg_store(VHost, ?TRANSIENT_MSG_STORE, undefined, ?EMPTY_START_FUN_STATE),
     do_start_msg_store(VHost, ?PERSISTENT_MSG_STORE, Refs, StartFunState),
     ok.
@@ -390,13 +391,13 @@ start_msg_store(VHost, Refs, StartFunState) when is_list(Refs); Refs == undefine
 do_start_msg_store(VHost, Type, Refs, StartFunState) ->
     case rabbit_vhost_msg_store:start(VHost, Type, Refs, StartFunState) of
         {ok, _} ->
-            rabbit_log:info("Started message store of type ~ts for vhost '~ts'", [abbreviated_type(Type), VHost]);
+            ?LOG_INFO("Started message store of type ~ts for vhost '~ts'", [abbreviated_type(Type), VHost]);
         {error, {no_such_vhost, VHost}} = Err ->
-            rabbit_log:error("Failed to start message store of type ~ts for vhost '~ts': the vhost no longer exists!",
+            ?LOG_ERROR("Failed to start message store of type ~ts for vhost '~ts': the vhost no longer exists!",
                              [Type, VHost]),
             exit(Err);
         {error, Error} ->
-            rabbit_log:error("Failed to start message store of type ~ts for vhost '~ts': ~tp",
+            ?LOG_ERROR("Failed to start message store of type ~ts for vhost '~ts': ~tp",
                              [Type, VHost, Error]),
             exit({error, Error})
     end.
@@ -891,7 +892,7 @@ convert_from_v1_to_v2_loop(QueueName, V1Index0, V2Index0, V2Store0,
     %% Log some progress to keep the user aware of what's going on, as moving
     %% embedded messages can take quite some time.
     #resource{virtual_host = VHost, name = Name} = QueueName,
-    rabbit_log:info("Queue ~ts in vhost ~ts converted ~b messages from v1 to v2",
+    ?LOG_INFO("Queue ~ts in vhost ~ts converted ~b messages from v1 to v2",
                     [Name, VHost, length(Messages)]),
     convert_from_v1_to_v2_loop(QueueName, V1Index, V2Index, V2Store, Counters, UpSeqId, HiSeqId, SkipFun).
 

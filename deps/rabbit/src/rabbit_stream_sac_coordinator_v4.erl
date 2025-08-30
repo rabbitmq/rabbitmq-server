@@ -17,6 +17,7 @@
 -module(rabbit_stream_sac_coordinator_v4).
 
 -include("rabbit_stream_sac_coordinator_v4.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -opaque command() ::
     #command_register_consumer{} | #command_unregister_consumer{} |
@@ -124,7 +125,7 @@ process_command(Cmd) ->
         {ok, Res, _} ->
             Res;
         {error, _} = Err ->
-            rabbit_log:warning("SAC coordinator command ~tp returned error ~tp",
+            ?LOG_WARNING("SAC coordinator command ~tp returned error ~tp",
                                [Cmd, Err]),
             Err
     end.
@@ -251,7 +252,7 @@ apply(#command_activate_consumer{vhost = VirtualHost,
     {G, Eff} =
         case lookup_group(VirtualHost, Stream, ConsumerName, StreamGroups0) of
             undefined ->
-                rabbit_log:warning("Trying to activate consumer in group ~tp, but "
+                ?LOG_WARNING("Trying to activate consumer in group ~tp, but "
                                    "the group does not longer exist",
                                    [{VirtualHost, Stream, ConsumerName}]),
                 {undefined, []};

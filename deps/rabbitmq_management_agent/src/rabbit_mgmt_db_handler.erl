@@ -8,6 +8,7 @@
 -module(rabbit_mgmt_db_handler).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% Make sure our database is hooked in *before* listening on the network or
 %% recovering queues (i.e. so there can't be any events fired before it starts).
@@ -46,7 +47,7 @@ handle_force_fine_statistics() ->
         undefined ->
             ok;
         X ->
-            rabbit_log:warning(
+            ?LOG_WARNING(
               "force_fine_statistics set to ~tp; ignored.~n"
               "Replaced by {rates_mode, none} in the rabbitmq_management "
               "application.", [X])
@@ -58,7 +59,7 @@ ensure_statistics_enabled() ->
     ForceStats = rates_mode() =/= none,
     handle_force_fine_statistics(),
     {ok, StatsLevel} = application:get_env(rabbit, collect_statistics),
-    rabbit_log:info("Management plugin: using rates mode '~tp'", [rates_mode()]),
+    ?LOG_INFO("Management plugin: using rates mode '~tp'", [rates_mode()]),
     case {ForceStats, StatsLevel} of
         {true,  fine} ->
             ok;
@@ -105,7 +106,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 ensure_statistics_disabled() ->
     %% Reset the default values, see Makefile
-    _ = rabbit_log:info("Management plugin: to stop collect_statistics."),
+    _ = ?LOG_INFO("Management plugin: to stop collect_statistics."),
     application:set_env(rabbit, collect_statistics, none),
     application:set_env(rabbit, collect_statistics_interval, 5000),
     ok = rabbit:force_event_refresh(erlang:make_ref()).

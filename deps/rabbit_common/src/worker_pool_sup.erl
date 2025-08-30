@@ -7,6 +7,9 @@
 
 -module(worker_pool_sup).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(supervisor).
 
 -export([start_link/0, start_link/1, start_link/2]).
@@ -29,11 +32,11 @@ start_link() ->
     start_link(Size).
 
 start_link(PoolSize) ->
-    rabbit_log:info("Will use ~tp processes for default worker pool", [PoolSize]),
+    ?LOG_INFO("Will use ~tp processes for default worker pool", [PoolSize]),
     start_link(PoolSize, worker_pool:default_pool()).
 
 start_link(PoolSize, PoolName) ->
-    rabbit_log:info("Starting worker pool '~tp' with ~tp processes in it", [PoolName, PoolSize]),
+    ?LOG_INFO("Starting worker pool '~tp' with ~tp processes in it", [PoolName, PoolSize]),
     SupName = list_to_atom(atom_to_list(PoolName) ++ "_sup"),
     supervisor:start_link({local, SupName}, ?MODULE, [PoolSize, PoolName]).
 

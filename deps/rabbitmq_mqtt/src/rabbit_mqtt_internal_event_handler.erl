@@ -7,6 +7,9 @@
 
 -module(rabbit_mqtt_internal_event_handler).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_event).
 
 -export([init/1, handle_event/2, handle_call/2, handle_info/2]).
@@ -28,7 +31,7 @@ handle_event({event, vhost_deleted, Info, _, _}, ?STATE) ->
     {ok, ?STATE};
 handle_event({event, maintenance_connections_closed, _Info, _, _}, ?STATE) ->
     {ok, NConnections} = rabbit_mqtt:close_local_client_connections(maintenance),
-    rabbit_log:warning("Closed ~b local (Web) MQTT client connections", [NConnections]),
+    ?LOG_WARNING("Closed ~b local (Web) MQTT client connections", [NConnections]),
     {ok, ?STATE};
 handle_event(_Event, ?STATE) ->
     {ok, ?STATE}.

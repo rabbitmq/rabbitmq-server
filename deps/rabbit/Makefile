@@ -3,7 +3,6 @@ PROJECT_DESCRIPTION = RabbitMQ
 PROJECT_MOD = rabbit
 PROJECT_REGISTERED = rabbit_amqqueue_sup \
 		     rabbit_direct_client_sup \
-		     rabbit_log \
 		     rabbit_node_monitor \
 		     rabbit_router
 

@@ -3,6 +3,7 @@
 -include("amqp_client_internal.hrl").
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([maybe_enhance_ssl_options/1,
          verify_fun/3]).
@@ -51,7 +52,7 @@ maybe_add_verify1(Options) ->
             % NB: user has explicitly set 'verify'
             Options;
         _ ->
-            ?LOG_WARN("Connection (~tp): certificate chain verification is not enabled for this TLS connection. "
+            ?LOG_WARNING("Connection (~tp): certificate chain verification is not enabled for this TLS connection. "
                     "Please see https://rabbitmq.com/ssl.html for more information.", [self()]),
             Options
     end.

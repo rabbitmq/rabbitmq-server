@@ -20,6 +20,7 @@
 
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -ifdef(TEST).
 -export([pre_khepri_definitions/0]).
@@ -46,7 +47,7 @@ create() ->
 
 create(TableName, TableDefinition) ->
     TableDefinition1 = proplists:delete(match, TableDefinition),
-    rabbit_log:debug("Will create a schema database table '~ts'", [TableName]),
+    ?LOG_DEBUG("Will create a schema database table '~ts'", [TableName]),
     case mnesia:create_table(TableName, TableDefinition1) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -78,7 +79,7 @@ ensure_secondary_index(Table, Field) ->
 -spec ensure_table_copy(mnesia_table(), node(), mnesia_storage_type()) ->
     ok | {error, any()}.
 ensure_table_copy(TableName, Node, StorageType) ->
-    rabbit_log:debug("Will add a local schema database copy for table '~ts'", [TableName]),
+    ?LOG_DEBUG("Will add a local schema database copy for table '~ts'", [TableName]),
     case mnesia:add_table_copy(TableName, Node, StorageType) of
         {atomic, ok}                              -> ok;
         {aborted,{already_exists, TableName}}     -> ok;
@@ -140,7 +141,7 @@ wait1(TableNames, Timeout, Retries, Silent) ->
         true ->
             ok;
         false ->
-            rabbit_log:info("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
+            ?LOG_INFO("Waiting for Mnesia tables for ~tp ms, ~tp retries left",
                             [Timeout, Retries - 1])
     end,
     Result = case mnesia:wait_for_tables(TableNames, Timeout) of
@@ -159,7 +160,7 @@ wait1(TableNames, Timeout, Retries, Silent) ->
                 true ->
                     ok;
                 false ->
-                    rabbit_log:info("Successfully synced tables from a peer"),
+                    ?LOG_INFO("Successfully synced tables from a peer"),
                     ok
             end;
         {1, {error, _} = Error} ->
@@ -169,7 +170,7 @@ wait1(TableNames, Timeout, Retries, Silent) ->
                 true ->
                     ok;
                 false ->
-                    rabbit_log:warning("Error while waiting for Mnesia tables: ~tp", [Error])
+                    ?LOG_WARNING("Error while waiting for Mnesia tables: ~tp", [Error])
             end,
             wait1(TableNames, Timeout, Retries - 1, Silent)
     end.

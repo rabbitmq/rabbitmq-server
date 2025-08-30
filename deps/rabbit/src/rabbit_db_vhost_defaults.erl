@@ -7,6 +7,9 @@
 
 -module(rabbit_db_vhost_defaults).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([apply/2]).
 -export([list_limits/1, list_operator_policies/1, list_users/1]).
 
@@ -36,20 +39,20 @@ apply(VHost, ActingUser) ->
             ok;
         L  ->
             ok = rabbit_vhost_limit:set(VHost, L, ActingUser),
-            rabbit_log:info("Applied default limits to vhost '~tp': ~tp", [VHost, L])
+            ?LOG_INFO("Applied default limits to vhost '~tp': ~tp", [VHost, L])
     end,
     lists:foreach(
         fun(P) ->
             ok = rabbit_policy:set_op(VHost, P#seeding_policy.name, P#seeding_policy.queue_pattern, P#seeding_policy.definition,
                                       undefined, undefined, ActingUser),
-            rabbit_log:info("Applied default operator policy to vhost '~tp': ~tp", [VHost, P])
+            ?LOG_INFO("Applied default operator policy to vhost '~tp': ~tp", [VHost, P])
         end,
         list_operator_policies(VHost)
     ),
     lists:foreach(
         fun(U) ->
             ok = add_user(VHost, U, ActingUser),
-            rabbit_log:info("Added default user to vhost '~tp': ~tp", [VHost, maps:remove(password, U)])
+            ?LOG_INFO("Added default user to vhost '~tp': ~tp", [VHost, maps:remove(password, U)])
         end,
         list_users(VHost)
     ),

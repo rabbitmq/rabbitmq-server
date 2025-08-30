@@ -9,6 +9,7 @@
 -module(amqp_direct_connection).
 
 -include("amqp_client_internal.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(amqp_gen_connection).
 

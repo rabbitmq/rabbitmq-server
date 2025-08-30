@@ -8,6 +8,7 @@
 -module(rabbit_trust_store_file_provider).
 
 -include_lib("kernel/include/file.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_trust_store_certificate_provider).
 
@@ -38,7 +39,7 @@ list_certs(Config, _) ->
 load_cert({FileName, _, _}, _, Config) ->
     Path = directory_path(Config),
     Cert = extract_cert(Path, FileName),
-    rabbit_log:info(
+    ?LOG_INFO(
       "trust store: loading certificate '~ts'", [FileName]),
     {ok, Cert}.
 

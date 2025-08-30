@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("khepri/include/khepri.hrl").
 -include("rabbit_jms_topic_exchange.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          setup_schema/0,
@@ -39,7 +40,7 @@ setup_schema() ->
 
 setup_schema_in_mnesia() ->
     TableName = ?JMS_TOPIC_TABLE,
-    rabbit_log:info(
+    ?LOG_INFO(
       "Creating table ~ts for JMS topic exchange",
       [TableName]),
     _ = try
@@ -79,7 +80,7 @@ setup_schema_in_mnesia() ->
                     Error
             end
         catch throw:Reason  ->
-                  rabbit_log:error(
+                  ?LOG_ERROR(
                     "Failed to create JMS topic exchange table: ~tp",
                     [Reason])
         end,

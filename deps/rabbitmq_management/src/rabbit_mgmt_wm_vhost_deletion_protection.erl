@@ -17,6 +17,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -dialyzer({nowarn_function, accept_content/2}).
 
@@ -45,13 +46,13 @@ accept_content(ReqData, Context) ->
         {error, {no_such_vhost, _}} ->
             Msg = "Cannot enable deletion protection of virtual host '~ts' because it does not exist",
             Reason = iolist_to_binary(io_lib:format(Msg, [Name])),
-            rabbit_log:error(Msg, [Name]),
+            ?LOG_ERROR(Msg, [Name]),
             rabbit_mgmt_util:not_found(
                 Reason, ReqData, Context);
         {error, E} ->
             Msg = "Cannot enable deletion protection of virtual host '~ts': ~tp",
             Reason = iolist_to_binary(io_lib:format(Msg, [Name, E])),
-            rabbit_log:error(Msg, [Name]),
+            ?LOG_ERROR(Msg, [Name]),
             rabbit_mgmt_util:internal_server_error(
                 Reason, ReqData, Context)
     end.
@@ -64,13 +65,13 @@ delete_resource(ReqData, Context) ->
         {error, {no_such_vhost, _}} ->
             Msg = "Cannot disable deletion protection of virtual host '~ts' because it does not exist",
             Reason = iolist_to_binary(io_lib:format(Msg, [Name])),
-            rabbit_log:error(Msg, [Name]),
+            ?LOG_ERROR(Msg, [Name]),
             rabbit_mgmt_util:not_found(
                 Reason, ReqData, Context);
         {error, E} ->
             Msg = "Cannot disable deletion protection of virtual host '~ts': ~tp",
             Reason = iolist_to_binary(io_lib:format(Msg, [Name, E])),
-            rabbit_log:error(Msg, [Name]),
+            ?LOG_ERROR(Msg, [Name]),
             rabbit_mgmt_util:internal_server_error(
                 Reason, ReqData, Context)
     end.

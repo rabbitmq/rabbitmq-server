@@ -32,6 +32,7 @@
 -endif.
 
 -include("rabbitmq_aws.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -spec credentials() -> security_credentials().
 %% @doc Return the credentials from environment variables, configuration or the
@@ -642,14 +643,14 @@ parse_body_response({error, _}) ->
 parse_body_response({ok, {{_, 200, _}, _, Body}}) ->
     {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
         get_instruction_on_instance_metadata_error(
             "Unauthorized instance metadata service request."
         )
     ),
     {error, undefined};
 parse_body_response({ok, {{_, 403, _}, _, _}}) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
         get_instruction_on_instance_metadata_error(
             "The request is not allowed or the instance metadata service is turned off."
         )
@@ -676,7 +677,7 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
-    rabbit_log:debug("Querying instance metadata service: ~tp", [URL]),
+    ?LOG_DEBUG("Querying instance metadata service: ~tp", [URL]),
     httpc:request(
         get,
         {URL, instance_metadata_request_headers()},
@@ -740,7 +741,7 @@ region_from_availability_zone(Value) ->
 %% @end
 load_imdsv2_token() ->
     TokenUrl = imdsv2_token_url(),
-    rabbit_log:info("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
+    ?LOG_INFO("Attempting to obtain EC2 IMDSv2 token from ~tp ...", [TokenUrl]),
     case
         httpc:request(
             put,
@@ -750,15 +751,15 @@ load_imdsv2_token() ->
         )
     of
         {ok, {{_, 200, _}, _, Value}} ->
-            rabbit_log:debug("Successfully obtained EC2 IMDSv2 token."),
+            ?LOG_DEBUG("Successfully obtained EC2 IMDSv2 token."),
             Value;
         {error, {{_, 400, _}, _, _}} ->
-            rabbit_log:warning(
+            ?LOG_WARNING(
                 "Failed to obtain EC2 IMDSv2 token: Missing or Invalid Parameters – The PUT request is not valid."
             ),
             undefined;
         Other ->
-            rabbit_log:warning(
+            ?LOG_WARNING(
                 get_instruction_on_instance_metadata_error(
                     "Failed to obtain EC2 IMDSv2 token: ~tp. "
                     "Falling back to EC2 IMDSv1 for now. It is recommended to use EC2 IMDSv2."
@@ -777,7 +778,7 @@ instance_metadata_request_headers() ->
             [];
         %% undefined or {ok, true}
         _ ->
-            rabbit_log:debug("EC2 Instance Metadata Service v2 (IMDSv2) is preferred."),
+            ?LOG_DEBUG("EC2 Instance Metadata Service v2 (IMDSv2) is preferred."),
             maybe_imdsv2_token_headers()
     end.
 

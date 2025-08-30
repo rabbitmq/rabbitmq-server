@@ -7,6 +7,9 @@
 
 -module(rabbit_web_dispatch_registry).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -91,7 +94,7 @@ handle_call({remove, Name}, _From,
             undefined) ->
     case listener_by_name(Name) of
         {error, not_found} ->
-            rabbit_log:warning("HTTP listener registry could not find context ~tp",
+            ?LOG_WARNING("HTTP listener registry could not find context ~tp",
                                [Name]),
             {reply, ok, undefined};
         {ok, Listener} ->
@@ -116,7 +119,7 @@ handle_call(list_all, _From, undefined) ->
     {reply, list(), undefined};
 
 handle_call(Req, _From, State) ->
-    rabbit_log:error("Unexpected call to ~tp: ~tp", [?MODULE, Req]),
+    ?LOG_ERROR("Unexpected call to ~tp: ~tp", [?MODULE, Req]),
     {stop, unknown_request, State}.
 
 handle_cast(_, State) ->

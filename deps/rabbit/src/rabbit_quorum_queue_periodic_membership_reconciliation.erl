@@ -19,6 +19,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -define(SERVER, ?MODULE).
 -define(DEFAULT_INTERVAL, 60_000*60).
 -define(DEFAULT_TRIGGER_INTERVAL, 10_000).
@@ -91,8 +93,8 @@ handle_cast({membership_reconciliation_trigger, _Reason}, #state{enabled = false
     {noreply, State, hibernate};
 handle_cast({membership_reconciliation_trigger, Reason}, #state{timer_ref = OldRef,
                                trigger_interval = Time} = State) ->
-    rabbit_log:debug("Quorum Queue membership reconciliation triggered: ~p",
-                     [Reason]),
+    ?LOG_DEBUG("Quorum Queue membership reconciliation triggered: ~p",
+	       [Reason]),
     _ = erlang:cancel_timer(OldRef),
     Ref = erlang:send_after(Time, self(), ?EVAL_MSG),
     {noreply, State#state{timer_ref = Ref}};
@@ -158,7 +160,7 @@ reconciliate_quorum_members(ExpectedNodes, Running, [Q | LocalLeaders],
             end
         else
             {timeout, Reason} ->
-                rabbit_log:debug("Find leader timeout: ~p", [Reason]),
+                ?LOG_DEBUG("Find leader timeout: ~p", [Reason]),
                 ok;
             _ ->
                 noop
@@ -184,15 +186,15 @@ maybe_add_member(Q, Running, MemberNodes, TargetSize) ->
             QName = amqqueue:get_name(Q),
             case rabbit_quorum_queue:add_member(Q, Node) of
                 ok ->
-                    rabbit_log:debug(
-                      "Added node ~ts as a member to ~ts as "
-                      "the queues target group size(#~w) is not met and "
-                      "there are enough new nodes(#~w) in the cluster",
-                      [Node, rabbit_misc:rs(QName), TargetSize, length(New)]);
+                    ?LOG_DEBUG(
+		       "Added node ~ts as a member to ~ts as "
+		       "the queues target group size(#~w) is not met and "
+		       "there are enough new nodes(#~w) in the cluster",
+		       [Node, rabbit_misc:rs(QName), TargetSize, length(New)]);
                 {error, Err} ->
-                    rabbit_log:warning(
-                      "~ts: failed to add member (replica) on node ~w, error: ~w",
-                      [rabbit_misc:rs(QName), Node, Err])
+                    ?LOG_WARNING(
+		       "~ts: failed to add member (replica) on node ~w, error: ~w",
+		       [rabbit_misc:rs(QName), Node, Err])
             end,
             ok;
         false ->
@@ -235,14 +237,14 @@ remove_members(Q, [Node | Nodes]) ->
     case rabbit_quorum_queue:delete_member(Q, Node) of
         ok ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:debug("~ts: Successfully removed member (replica) on node ~w",
-                               [rabbit_misc:rs(QName), Node]),
+            ?LOG_DEBUG("~ts: Successfully removed member (replica) on node ~w",
+		       [rabbit_misc:rs(QName), Node]),
             ok;
         {error, Err} ->
             QName = amqqueue:get_name(Q),
-            rabbit_log:warning("~ts: failed to remove member (replica) on node "
-                               "~w, error: ~w",
-                               [rabbit_misc:rs(QName), Node, Err])
+            ?LOG_WARNING("~ts: failed to remove member (replica) on node "
+			 "~w, error: ~w",
+			 [rabbit_misc:rs(QName), Node, Err])
     end,
     remove_members(Q, Nodes).
 

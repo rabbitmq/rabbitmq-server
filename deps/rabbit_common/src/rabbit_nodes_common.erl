@@ -14,6 +14,7 @@
 -define(ERROR_LOGGER_HANDLER, rabbit_error_logger_handler).
 
 -include_lib("kernel/include/inet.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%
 %% API
@@ -51,7 +52,7 @@ names(Hostname) ->
 names(Hostname, 0) ->
   epmd_names(Hostname);
 names(Hostname, RetriesLeft) ->
-  rabbit_log:debug("Getting epmd names for hostname '~ts', ~b retries left",
+  ?LOG_DEBUG("Getting epmd names for hostname '~ts', ~b retries left",
     [Hostname, RetriesLeft]),
   case catch epmd_names(Hostname) of
     {ok, R } -> {ok, R};
@@ -131,7 +132,7 @@ port_shutdown_loop(Port) ->
         {Port, closed}             -> ok;
         {Port, {data, _}}          -> port_shutdown_loop(Port);
         {'EXIT', Port, Reason}     ->
-            rabbit_log:error("Failed to start a one-off Erlang VM to keep epmd alive: ~tp", [Reason])
+            ?LOG_ERROR("Failed to start a one-off Erlang VM to keep epmd alive: ~tp", [Reason])
     after 15000 ->
         %% ensure the port is closed
         Port ! {self(), close},

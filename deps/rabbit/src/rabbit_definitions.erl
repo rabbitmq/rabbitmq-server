@@ -30,6 +30,7 @@
 %%  * rabbit_definitions_hashing
 -module(rabbit_definitions).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([boot/0]).
 %% automatic import on boot
@@ -177,7 +178,7 @@ validate_definitions(Body) when is_binary(Body) ->
 
 -spec import_raw(Body :: binary() | iolist()) -> ok | {error, term()}.
 import_raw(Body) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
+    ?LOG_INFO("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER)
@@ -185,7 +186,7 @@ import_raw(Body) ->
 
 -spec import_raw(Body :: binary() | iolist(), VHost :: vhost:name()) -> ok | {error, term()}.
 import_raw(Body, VHost) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
+    ?LOG_INFO("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
     case decode([], Body) of
         {error, E}   -> {error, E};
         {ok, _, Map} -> apply_defs(Map, ?INTERNAL_USER, fun() -> ok end, VHost)
@@ -195,7 +196,7 @@ import_raw(Body, VHost) ->
 import_parsed(Body0) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0));
 import_parsed(Body0) when is_map(Body0) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
+    ?LOG_INFO("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER).
 
@@ -203,7 +204,7 @@ import_parsed(Body0) when is_map(Body0) ->
 import_parsed(Body0, VHost) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0), VHost);
 import_parsed(Body0, VHost) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
+    ?LOG_INFO("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
     Body = atomise_map_keys(Body0),
     apply_defs(Body, ?INTERNAL_USER, fun() -> ok end, VHost).
 
@@ -212,7 +213,7 @@ import_parsed(Body0, VHost) ->
 import_parsed_with_hashing(Body0) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0));
 import_parsed_with_hashing(Body0) when is_map(Body0) ->
-    rabbit_log:info("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
+    ?LOG_INFO("Asked to import definitions. Acting user: ~ts", [?INTERNAL_USER]),
     case should_skip_if_unchanged() of
         false ->
             import_parsed(Body0);
@@ -222,10 +223,10 @@ import_parsed_with_hashing(Body0) when is_map(Body0) ->
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
                 PreviousHash ->
-                    rabbit_log:info("Submitted definition content hash matches the stored one: ~ts", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
+                    ?LOG_INFO("Submitted definition content hash matches the stored one: ~ts", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
                     ok;
                 Other        ->
-                    rabbit_log:debug("Submitted definition content hash: ~ts, stored one: ~ts", [
+                    ?LOG_DEBUG("Submitted definition content hash: ~ts, stored one: ~ts", [
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
@@ -239,7 +240,7 @@ import_parsed_with_hashing(Body0) when is_map(Body0) ->
 import_parsed_with_hashing(Body0, VHost) when is_list(Body0) ->
     import_parsed(maps:from_list(Body0), VHost);
 import_parsed_with_hashing(Body0, VHost) ->
-    rabbit_log:info("Asked to import definitions for virtual host '~ts'. Acting user: ~ts", [?INTERNAL_USER, VHost]),
+    ?LOG_INFO("Asked to import definitions for virtual host '~ts'. Acting user: ~ts", [?INTERNAL_USER, VHost]),
 
     case should_skip_if_unchanged() of
         false ->
@@ -250,10 +251,10 @@ import_parsed_with_hashing(Body0, VHost) ->
             Algo         = rabbit_definitions_hashing:hashing_algorithm(),
             case rabbit_definitions_hashing:hash(Algo, Body) of
                 PreviousHash ->
-                    rabbit_log:info("Submitted definition content hash matches the stored one: ~ts", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
+                    ?LOG_INFO("Submitted definition content hash matches the stored one: ~ts", [binary:part(rabbit_misc:hexify(PreviousHash), 0, 12)]),
                     ok;
                 Other        ->
-                    rabbit_log:debug("Submitted definition content hash: ~ts, stored one: ~ts", [
+                    ?LOG_DEBUG("Submitted definition content hash: ~ts, stored one: ~ts", [
                         binary:part(rabbit_misc:hexify(PreviousHash), 0, 10),
                         binary:part(rabbit_misc:hexify(Other), 0, 10)
                     ]),
@@ -340,14 +341,14 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
         undefined  -> ok;
         {ok, none} -> ok;
         {ok, Path} ->
-            rabbit_log:debug("~ts.~ts is set to '~ts', will discover definition file(s) to import", [App, Key, Path]),
+            ?LOG_DEBUG("~ts.~ts is set to '~ts', will discover definition file(s) to import", [App, Key, Path]),
             IsDir = filelib:is_dir(Path),
             Mod = rabbit_definitions_import_local_filesystem,
-            rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
+            ?LOG_DEBUG("Will use module ~ts to import definitions", [Mod]),
 
             case should_skip_if_unchanged() of
                 false ->
-                    rabbit_log:debug("Will re-import definitions even if they have not changed"),
+                    ?LOG_DEBUG("Will re-import definitions even if they have not changed"),
                     Mod:load(IsDir, Path);
                 true ->
                     maybe_load_definitions_from_local_filesystem_if_unchanged(Mod, IsDir, Path)
@@ -356,16 +357,16 @@ maybe_load_definitions_from_local_filesystem(App, Key) ->
 
 maybe_load_definitions_from_local_filesystem_if_unchanged(Mod, IsDir, Path) ->
     Algo = rabbit_definitions_hashing:hashing_algorithm(),
-    rabbit_log:debug("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
+    ?LOG_DEBUG("Will import definitions only if definition file/directory has changed, hashing algo: ~ts", [Algo]),
     CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-    rabbit_log:debug("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+    ?LOG_DEBUG("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
     case Mod:load_with_hashing(IsDir, Path, CurrentHash, Algo) of
         {error, Err} ->
             {error, Err};
         CurrentHash ->
-            rabbit_log:info("Hash value of imported definitions matches current contents");
+            ?LOG_INFO("Hash value of imported definitions matches current contents");
         UpdatedHash ->
-            rabbit_log:debug("Hash value of imported definitions has changed to ~ts", [binary:part(rabbit_misc:hexify(UpdatedHash), 0, 12)]),
+            ?LOG_DEBUG("Hash value of imported definitions has changed to ~ts", [binary:part(rabbit_misc:hexify(UpdatedHash), 0, 12)]),
             rabbit_definitions_hashing:store_global_hash(UpdatedHash)
     end.
 
@@ -387,20 +388,20 @@ maybe_load_definitions_from_pluggable_source(App, Key) ->
 maybe_load_definitions_from_pluggable_source_if_unchanged(Mod, Proplist) ->
     case should_skip_if_unchanged() of
         false ->
-            rabbit_log:debug("Will use module ~ts to import definitions", [Mod]),
+            ?LOG_DEBUG("Will use module ~ts to import definitions", [Mod]),
             Mod:load(Proplist);
         true ->
-            rabbit_log:debug("Will use module ~ts to import definitions (if definition file/directory/source has changed)", [Mod]),
+            ?LOG_DEBUG("Will use module ~ts to import definitions (if definition file/directory/source has changed)", [Mod]),
             CurrentHash = rabbit_definitions_hashing:stored_global_hash(),
-            rabbit_log:debug("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+            ?LOG_DEBUG("Previously stored hash value of imported definitions: ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
             Algo = rabbit_definitions_hashing:hashing_algorithm(),
             case Mod:load_with_hashing(Proplist, CurrentHash, Algo) of
                 {error, Err} ->
                     {error, Err};
                 CurrentHash ->
-                    rabbit_log:info("Hash value of imported definitions matches current contents");
+                    ?LOG_INFO("Hash value of imported definitions matches current contents");
                 UpdatedHash ->
-                    rabbit_log:debug("Hash value of imported definitions has changed to ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
+                    ?LOG_DEBUG("Hash value of imported definitions has changed to ~ts...", [binary:part(rabbit_misc:hexify(CurrentHash), 0, 12)]),
                     rabbit_definitions_hashing:store_global_hash(UpdatedHash)
             end
     end.
@@ -467,7 +468,7 @@ should_skip_if_unchanged() ->
     OptedIn andalso ReachedTargetClusterSize.
 
 log_an_error_about_orphaned_objects() ->
-    rabbit_log:error("Definitions import: some queues, exchanges or bindings in the definition file "
+    ?LOG_ERROR("Definitions import: some queues, exchanges or bindings in the definition file "
         "are missing the virtual host field. Such files are produced when definitions of "
         "a single virtual host are exported. They cannot be used to import definitions at boot time").
 
@@ -524,7 +525,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
             end,
 
             fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
+                ?LOG_INFO("There are fewer than target cluster size (~b) nodes online,"
                                 " skipping queue and binding import from definitions",
                                 [rabbit_nodes:target_cluster_size_hint()])
             end
@@ -544,7 +545,7 @@ apply_defs(Map, ActingUser, SuccessFun) when is_function(SuccessFun) ->
                 VHost :: vhost:name()) -> 'ok' | {error, term()}.
 
 apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_binary(VHost) ->
-    rabbit_log:info("Asked to import definitions for a virtual host. Virtual host: ~tp, acting user: ~tp",
+    ?LOG_INFO("Asked to import definitions for a virtual host. Virtual host: ~tp, acting user: ~tp",
                     [VHost, ActingUser]),
     try
         validate_limits(Map, VHost),
@@ -562,7 +563,7 @@ apply_defs(Map, ActingUser, SuccessFun, VHost) when is_function(SuccessFun); is_
             end,
 
             fun() ->
-                rabbit_log:info("There are fewer than target cluster size (~b) nodes online,"
+                ?LOG_INFO("There are fewer than target cluster size (~b) nodes online,"
                                 " skipping queue and binding import from definitions",
                                 [rabbit_nodes:target_cluster_size_hint()])
             end
@@ -589,7 +590,7 @@ sequential_for_all0(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing sequentially ~tp ~ts...", [N, human_readable_category_name(Category)])
+                N -> ?LOG_INFO("Importing sequentially ~tp ~ts...", [N, human_readable_category_name(Category)])
             end,
             [begin
                  %% keys are expected to be atoms
@@ -626,7 +627,7 @@ concurrent_for_all0(Category, ActingUser, Definitions, Fun) ->
         List      ->
             case length(List) of
                 0 -> ok;
-                N -> rabbit_log:info("Importing concurrently ~tp ~ts...", [N, human_readable_category_name(Category)])
+                N -> ?LOG_INFO("Importing concurrently ~tp ~ts...", [N, human_readable_category_name(Category)])
             end,
             WorkPoolFun = fun(M) ->
                                   Fun(atomize_keys(M), ActingUser)
@@ -664,7 +665,7 @@ do_concurrent_for_all(List, WorkPoolFun) ->
                        WorkPoolFun(M)
                    catch {error, E}     -> gatherer:in(Gatherer, {error, E});
                          _:E:Stacktrace ->
-                             rabbit_log:debug("Definition import: a work pool operation has thrown an exception ~st, stacktrace: ~p",
+                             ?LOG_DEBUG("Definition import: a work pool operation has thrown an exception ~st, stacktrace: ~p",
                                               [E, Stacktrace]),
                              gatherer:in(Gatherer, {error, E})
                    end,
@@ -706,7 +707,7 @@ format({no_such_vhost, VHost}) ->
 format({vhost_limit_exceeded, ErrMsg}) ->
     rabbit_data_coercion:to_binary(ErrMsg);
 format({shutdown, _} = Error) ->
-    rabbit_log:debug("Metadata store is unavailable: ~p", [Error]),
+    ?LOG_DEBUG("Metadata store is unavailable: ~p", [Error]),
     rabbit_data_coercion:to_binary(
       rabbit_misc:format("Metadata store is unavailable. Please try again.", []));
 format(E) ->
@@ -825,11 +826,11 @@ add_queue(VHost, Queue, ActingUser) ->
 add_queue_int(_Queue, R = #resource{kind = queue,
                                     name = <<"amq.", _/binary>>}, ActingUser) ->
     Name = R#resource.name,
-    rabbit_log:warning("Skipping import of a queue whose name begins with 'amq.', "
+    ?LOG_WARNING("Skipping import of a queue whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
 add_queue_int(_Queue, R = #resource{kind = queue, virtual_host = undefined}, ActingUser) ->
     Name = R#resource.name,
-    rabbit_log:warning("Skipping import of a queue with an unset virtual host field, "
+    ?LOG_WARNING("Skipping import of a queue with an unset virtual host field, "
     "name: ~ts, acting user: ~ts", [Name, ActingUser]);
 add_queue_int(Queue, Name = #resource{virtual_host = VHostName}, ActingUser) ->
     case rabbit_amqqueue:exists(Name) of
@@ -862,11 +863,11 @@ add_exchange(VHost, Exchange, ActingUser) ->
     add_exchange_int(Exchange, rv(VHost, exchange, Exchange), ActingUser).
 
 add_exchange_int(_Exchange, #resource{kind = exchange, name = <<"">>}, ActingUser) ->
-    rabbit_log:warning("Not importing the default exchange, acting user: ~ts", [ActingUser]);
+    ?LOG_WARNING("Not importing the default exchange, acting user: ~ts", [ActingUser]);
 add_exchange_int(_Exchange, R = #resource{kind = exchange,
                                           name = <<"amq.", _/binary>>}, ActingUser) ->
     Name = R#resource.name,
-    rabbit_log:warning("Skipping import of an exchange whose name begins with 'amq.', "
+    ?LOG_WARNING("Skipping import of an exchange whose name begins with 'amq.', "
                        "name: ~ts, acting user: ~ts", [Name, ActingUser]);
 add_exchange_int(Exchange, Name, ActingUser) ->
     case rabbit_exchange:exists(Name) of
@@ -934,7 +935,7 @@ validate_limits(All) ->
         undefined -> ok;
         Queues0 ->
             {ok, VHostMap} = filter_out_existing_queues(Queues0),
-            _ = rabbit_log:debug("Definition import. Virtual host map for validation: ~p", [VHostMap]),
+            _ = ?LOG_DEBUG("Definition import. Virtual host map for validation: ~p", [VHostMap]),
             maps:fold(fun validate_vhost_limit/3, ok, VHostMap)
     end.
 

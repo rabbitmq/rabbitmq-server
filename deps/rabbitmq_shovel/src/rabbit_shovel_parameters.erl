@@ -12,6 +12,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include("rabbit_shovel.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([validate/5, notify/5, notify_clear/4]).
 -export([register/0, unregister/0, parse/3]).
@@ -215,7 +216,7 @@ validate_params_user(#amqp_params_direct{virtual_host = VHost},
     VHostAccess = case catch rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
                       ok -> ok;
                       NotOK ->
-                          rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]),
+                          ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]),
                           NotOK
                   end,
     case rabbit_vhost:exists(VHost) andalso VHostAccess of

@@ -14,6 +14,8 @@
 -import(rabbit_misc, [pget/2]).
 -import(rabbit_data_coercion, [to_map/1, to_list/1]).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("logging.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -define(SUPERVISOR, ?MODULE).
 
@@ -37,10 +39,10 @@ adjust(Name, Def) ->
     start_child(Name, Def).
 
 start_child({VHost, ShovelName} = Name, Def) ->
-    rabbit_log_shovel:debug("Asked to start a dynamic Shovel named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
+    ?LOG_DEBUG("Asked to start a dynamic Shovel named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
     LockId = rabbit_shovel_locks:lock(Name),
     cleanup_specs(),
-    rabbit_log_shovel:debug("Starting a mirrored supervisor named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
+    ?LOG_DEBUG("Starting a mirrored supervisor named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
     case child_exists(Name)
         orelse mirrored_supervisor:start_child(
            ?SUPERVISOR,
@@ -68,7 +70,7 @@ child_exists(Name) ->
               mirrored_supervisor:which_children(?SUPERVISOR)).
 
 stop_child({VHost, ShovelName} = Name) ->
-    rabbit_log_shovel:debug("Asked to stop a dynamic Shovel named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
+    ?LOG_DEBUG("Asked to stop a dynamic Shovel named '~ts' in virtual host '~ts'", [ShovelName, VHost]),
     LockId = rabbit_shovel_locks:lock(Name),
     case get({shovel_worker_autodelete, Name}) of
         true -> ok; %% [1]
@@ -136,6 +138,7 @@ cleanup_specs() ->
 %%----------------------------------------------------------------------------
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_SHOVEL}),
     {ok, {{one_for_one, 3, 10}, []}}.
 
 id({VHost, ShovelName} = Name)

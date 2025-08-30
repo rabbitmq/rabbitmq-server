@@ -6,6 +6,9 @@
 %%
 
 -module(rabbit_peer_discovery_classic_config).
+
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(rabbit_peer_discovery_backend).
 
 -export([list_nodes/0, supports_registration/0, register/0, unregister/0,
@@ -42,7 +45,7 @@ check_duplicates(Nodes) ->
         true ->
             ok;
         false ->
-            rabbit_log:warning("Classic peer discovery backend: list of "
+            ?LOG_WARNING("Classic peer discovery backend: list of "
                                "nodes contains duplicates ~0tp",
                                [Nodes])
     end.
@@ -52,7 +55,7 @@ check_local_node(Nodes) ->
         true ->
             ok;
         false ->
-            rabbit_log:warning("Classic peer discovery backend: list of "
+            ?LOG_WARNING("Classic peer discovery backend: list of "
                                "nodes does not contain the local node ~0tp",
                                [Nodes])
     end.
@@ -65,7 +68,7 @@ lock(Nodes) ->
   Node = node(),
   case lists:member(Node, Nodes) of
     false when Nodes =/= [] ->
-      rabbit_log:warning("Local node ~ts is not part of configured nodes ~tp. "
+      ?LOG_WARNING("Local node ~ts is not part of configured nodes ~tp. "
                       "This might lead to incorrect cluster formation.", [Node, Nodes]);
     _ -> ok
   end,

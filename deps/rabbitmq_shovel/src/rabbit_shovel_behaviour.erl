@@ -34,6 +34,8 @@
          incr_forwarded/1
         ]).
 
+-include_lib("kernel/include/logger.hrl").
+
 -type tag() :: non_neg_integer().
 -type uri() :: string() | binary().
 -type ack_mode() :: 'no_ack' | 'on_confirm' | 'on_publish'.
@@ -189,7 +191,7 @@ decr_remaining(N, State = #{source := #{remaining := M} = Src,
     case M > N of
         true  -> State#{source => Src#{remaining => M - N}};
         false ->
-            rabbit_log_shovel:info("shutting down Shovel '~ts', no messages left to transfer", [Name]),
-            rabbit_log_shovel:debug("shutting down Shovel '~ts', no messages left to transfer. Shovel state: ~tp", [Name, State]),
+            ?LOG_INFO("shutting down Shovel '~ts', no messages left to transfer", [Name]),
+            ?LOG_DEBUG("shutting down Shovel '~ts', no messages left to transfer. Shovel state: ~tp", [Name, State]),
             exit({shutdown, autodelete})
     end.

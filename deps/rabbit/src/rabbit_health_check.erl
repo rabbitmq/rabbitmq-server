@@ -6,6 +6,9 @@
 %%
 -module(rabbit_health_check).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 %% External API
 -export([node/1, node/2]).
 
@@ -28,7 +31,7 @@ node(Node, Timeout) ->
 -spec local() -> ok | {error_string, string()}.
 
 local() ->
-    rabbit_log:warning("rabbitmqctl node_health_check and its HTTP API counterpart are DEPRECATED. "
+    ?LOG_WARNING("rabbitmqctl node_health_check and its HTTP API counterpart are DEPRECATED. "
                        "See https://www.rabbitmq.com/docs/monitoring#health-checks for replacement options."),
     run_checks([list_channels, list_queues, alarms, rabbit_node_monitor]).
 

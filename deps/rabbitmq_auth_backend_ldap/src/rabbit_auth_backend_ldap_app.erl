@@ -10,6 +10,9 @@
 -behaviour(application).
 -export([start/2, stop/1]).
 
+-include_lib("kernel/include/logger.hrl").
+-include("logging.hrl").
+
 %% Dummy supervisor - see Ulf Wiger's comment at
 %% http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
 -behaviour(supervisor).
@@ -28,7 +31,7 @@ start(_Type, _StartArgs) ->
     {ok, Backends} = application:get_env(rabbit, auth_backends),
     case configured(rabbit_auth_backend_ldap, Backends) of
         true  -> ok;
-        false -> rabbit_log_ldap:warning(
+        false -> ?LOG_WARNING(
                    "LDAP plugin loaded, but rabbit_auth_backend_ldap is not "
                    "in the list of auth_backends. LDAP auth will not work.")
     end,
@@ -53,4 +56,6 @@ configured(M,  [_    |T]) -> configured(M, T).
 
 %%----------------------------------------------------------------------------
 
-init([]) -> {ok, {{one_for_one, 3, 10}, []}}.
+init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_LDAP}),
+    {ok, {{one_for_one, 3, 10}, []}}.

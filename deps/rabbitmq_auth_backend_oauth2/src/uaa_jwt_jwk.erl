@@ -9,6 +9,7 @@
 -export([make_jwk/1, from_pem/1, from_pem_file/1]).
 
 -include_lib("jose/include/jose_jwk.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -spec make_jwk(binary() | map()) -> {ok, #{binary() => binary()}} | {error, term()}.
 make_jwk(Json) when is_binary(Json); is_list(Json) ->
@@ -43,7 +44,7 @@ from_pem(Pem) ->
     case jose_jwk:from_pem(Pem) of
         #jose_jwk{} = Jwk -> {ok, Jwk};
         Other             ->
-            error_logger:warning_msg("Error parsing jwk from pem: ", [Other]),
+            ?LOG_WARNING("Error parsing jwk from pem: ", [Other]),
             {error, invalid_pem_string}
     end.
 
@@ -55,7 +56,7 @@ from_pem_file(FileName) ->
             case jose_jwk:from_pem_file(FileName) of
                 #jose_jwk{} = Jwk -> {ok, Jwk};
                 Other             ->
-                    error_logger:warning_msg("Error parsing jwk from pem file: ", [Other]),
+                    ?LOG_WARNING("Error parsing jwk from pem file: ", [Other]),
                     {error, invalid_pem_file}
             end
     end.

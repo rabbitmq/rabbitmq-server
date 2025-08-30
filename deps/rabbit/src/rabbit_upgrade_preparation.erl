@@ -7,6 +7,9 @@
 
 -module(rabbit_upgrade_preparation).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([await_online_quorum_plus_one/1,
          list_with_minimum_quorum_for_cli/0]).
 
@@ -66,12 +69,12 @@ do_await_safe_online_quorum(IterationsLeft) ->
                 0 ->
                     case length(EndangeredQueues) of
                         0 -> ok;
-                        N -> rabbit_log:info("Waiting for ~p queues and streams to have quorum+1 replicas online. "
+                        N -> ?LOG_INFO("Waiting for ~p queues and streams to have quorum+1 replicas online. "
                                              "You can list them with `rabbitmq-diagnostics check_if_node_is_quorum_critical`", [N])
                     end,
                     case endangered_critical_components() of
                         [] -> ok;
-                        _ -> rabbit_log:info("Waiting for the following critical components to have quorum+1 replicas online: ~p.",
+                        _ -> ?LOG_INFO("Waiting for the following critical components to have quorum+1 replicas online: ~p.",
                                              [endangered_critical_components()])
                     end;
                 _ ->

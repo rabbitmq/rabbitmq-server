@@ -223,6 +223,7 @@
 }).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%----------------------------------------------------------------------------
 
@@ -556,7 +557,7 @@ start(VHost, DurableQueueNames) ->
     ToDelete = [filename:join([rabbit_vhost:msg_store_dir_path(VHost), "queues", Dir])
                 || Dir <- lists:subtract(all_queue_directory_names(VHost),
                                          sets:to_list(DurableDirectories))],
-    rabbit_log:debug("Deleting unknown files/folders: ~p", [ToDelete]),
+    ?LOG_DEBUG("Deleting unknown files/folders: ~p", [ToDelete]),
     _ = rabbit_file:recursive_delete(ToDelete),
 
     rabbit_recovery_terms:clear(VHost),
@@ -1182,7 +1183,7 @@ load_segment(KeepAcked, #segment { path = Path }) ->
                  %% was missing above). We also log some information.
                  case SegBin of
                      <<0:Size/unit:8>> ->
-                         rabbit_log:warning("Deleting invalid v1 segment file ~ts (file only contains NUL bytes)",
+                         ?LOG_WARNING("Deleting invalid v1 segment file ~ts (file only contains NUL bytes)",
                                             [Path]),
                          _ = rabbit_file:delete(Path),
                          Empty;

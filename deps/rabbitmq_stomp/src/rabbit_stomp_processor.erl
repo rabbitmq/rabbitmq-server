@@ -22,6 +22,7 @@
 -include("rabbit_stomp_frame.hrl").
 -include("rabbit_stomp.hrl").
 -include("rabbit_stomp_headers.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -record(proc_state, {session_id, channel, connection, subscriptions,
                 version, start_heartbeat_fun, pending_receipts,
@@ -610,23 +611,23 @@ do_login(Username, Passwd, VirtualHost, Heartbeat, AdapterInfo, Version,
                                 connection = Connection,
                                 version    = Version});
         {error, {auth_failure, _}} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': authentication failed", [Username]),
+            ?LOG_WARNING("STOMP login failed for user '~ts': authentication failed", [Username]),
             error("Bad CONNECT", "Access refused for user '" ++
                   binary_to_list(Username) ++ "'", [], State);
         {error, not_allowed} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
+            ?LOG_WARNING("STOMP login failed for user '~ts': "
                                "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, access_refused} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
+            ?LOG_WARNING("STOMP login failed for user '~ts': "
                                "virtual host access not allowed", [Username]),
             error("Bad CONNECT", "Virtual host '" ++
                                  binary_to_list(VirtualHost) ++
                                  "' access denied", State);
         {error, not_loopback} ->
-            rabbit_log:warning("STOMP login failed for user '~ts': "
+            ?LOG_WARNING("STOMP login failed for user '~ts': "
                                "this user's access is restricted to localhost", [Username]),
             error("Bad CONNECT", "non-loopback access denied", State)
     end.
@@ -898,7 +899,7 @@ close_connection(State = #proc_state{connection = Connection}) ->
     catch amqp_connection:close(Connection),
     State#proc_state{channel = none, connection = none, subscriptions = none};
 close_connection(undefined) ->
-    rabbit_log:debug("~ts:close_connection: undefined state", [?MODULE]),
+    ?LOG_DEBUG("~ts:close_connection: undefined state", [?MODULE]),
     #proc_state{channel = none, connection = none, subscriptions = none}.
 
 %%----------------------------------------------------------------------------
@@ -1194,7 +1195,7 @@ priv_error(Message, Format, Args, ServerPrivateDetail, State) ->
                State).
 
 log_error(Message, Detail, ServerPrivateDetail) ->
-    rabbit_log:error("STOMP error frame sent:~n"
+    ?LOG_ERROR("STOMP error frame sent:~n"
                      "Message: ~tp~n"
                      "Detail: ~tp~n"
                      "Server private detail: ~tp",

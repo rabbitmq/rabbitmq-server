@@ -15,6 +15,7 @@
 -endif.
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(TCP_CONTEXT, rabbitmq_management_tcp).
 -define(TLS_CONTEXT, rabbitmq_management_tls).
@@ -37,7 +38,7 @@ start(_Type, _StartArgs) ->
         true ->
             start();
         false ->
-            rabbit_log:warning("Metrics collection disabled in management agent, "
+            ?LOG_WARNING("Metrics collection disabled in management agent, "
                                "management only interface started", []),
             start()
     end.
@@ -87,7 +88,7 @@ get_listeners_config() ->
              get_tcp_listener()];
         {true,  true, true}  ->
             %% what is happening?
-            rabbit_log:warning("Management plugin: TCP, TLS and a legacy (management.listener.*) listener are all configured. "
+            ?LOG_WARNING("Management plugin: TCP, TLS and a legacy (management.listener.*) listener are all configured. "
                                "Only two listeners at a time are supported. "
                                "Ignoring the legacy listener"),
             [get_tcp_listener(),
@@ -185,9 +186,9 @@ do_ensure_port(Port, Listener) ->
     {ok, rabbit_misc:plmerge([{port, Port}], Listener)}.
 
 log_startup(tcp, Listener) ->
-    rabbit_log:info("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
+    ?LOG_INFO("Management plugin: HTTP (non-TLS) listener started on port ~w", [port(Listener)]);
 log_startup(tls, Listener) ->
-    rabbit_log:info("Management plugin: HTTPS listener started on port ~w", [port(Listener)]).
+    ?LOG_INFO("Management plugin: HTTPS listener started on port ~w", [port(Listener)]).
 
 
 port(Listener) ->

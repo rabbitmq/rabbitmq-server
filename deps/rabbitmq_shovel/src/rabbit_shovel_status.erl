@@ -25,6 +25,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-include_lib("kernel/include/logger.hrl").
+-include("logging.hrl").
+
 -define(SERVER, ?MODULE).
 -define(ETS_NAME, ?MODULE).
 -define(CHECK_FREQUENCY, 60000).
@@ -113,6 +116,7 @@ get_status_table() ->
     gen_server:call(?SERVER, get_status_table).
 
 init([]) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_SHOVEL}),
     ?ETS_NAME = ets:new(?ETS_NAME,
                         [named_table, {keypos, #entry.name}, private]),
     {ok, ensure_timer(#state{})}.
@@ -185,7 +189,7 @@ handle_info(check, State) ->
         rabbit_shovel_dyn_worker_sup_sup:cleanup_specs()
     catch
         C:E ->
-            rabbit_log_shovel:warning("Recurring shovel spec clean up failed with ~p:~p", [C, E])
+            ?LOG_WARNING("Recurring shovel spec clean up failed with ~p:~p", [C, E])
     end,
     {noreply, ensure_timer(State)};
 handle_info(_Info, State) ->

@@ -58,10 +58,10 @@ defmodule LogTailStreamCommandTest do
     time_before = System.system_time(:second)
 
     stream = @command.run([], Map.merge(context[:opts], %{duration: 15}))
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message")])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message1")])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message2")])
-    :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Message3")])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist("Message")])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist("Message1")])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist("Message2")])
+    :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist("Message3")])
 
     # This may take a long time and fail with an ExUnit timeout
     data = Enum.join(stream)
@@ -99,7 +99,7 @@ defmodule LogTailStreamCommandTest do
         :ok
 
       false ->
-        :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist("Ping")])
+        :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist("Ping")])
         :timer.sleep(100)
         ensure_file(log, attempts - 1)
     end

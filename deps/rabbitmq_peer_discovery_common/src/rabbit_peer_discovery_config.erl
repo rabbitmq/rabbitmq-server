@@ -28,7 +28,7 @@ get(Key, Mapping, Config) ->
             ?LOG_ERROR(
                "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             throw({badkey, Key});
         true  ->
             get_with_entry_meta(Key, maps:get(Key, Mapping), Config)
@@ -44,7 +44,7 @@ get_integer(Key, Mapping, Config) ->
             ?LOG_ERROR(
                "Key ~ts is not found in peer discovery config mapping ~tp!",
                [Key, Mapping],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             throw({badkey, Key});
         true  ->
             get_integer_with_entry_meta(Key, maps:get(Key, Mapping), Config)

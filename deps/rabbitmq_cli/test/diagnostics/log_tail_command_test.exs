@@ -61,7 +61,7 @@ defmodule LogTailCommandTest do
         :lists.seq(1, 50),
         fn n ->
           message = "Getting log tail #{n}"
-          :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
+          :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(message)])
           message
         end
       )
@@ -84,7 +84,7 @@ defmodule LogTailCommandTest do
       :lists.seq(1, 50),
       fn n ->
         message = "More lines #{n}"
-        :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
+        :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(message)])
         message
       end
     )
@@ -102,7 +102,7 @@ defmodule LogTailCommandTest do
       :lists.seq(1, 100),
       fn n ->
         message = "More lines #{n}"
-        :rpc.call(get_rabbit_hostname(), :rabbit_log, :error, [to_charlist(message)])
+        :rpc.call(get_rabbit_hostname(), :logger, :error, [to_charlist(message)])
         message
       end
     )

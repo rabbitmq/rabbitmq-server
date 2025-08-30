@@ -7,6 +7,7 @@
 
 -module(rabbit_auth_backend_cache).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_authn_backend).
 -behaviour(rabbit_authz_backend).
@@ -68,13 +69,13 @@ expiry_timestamp(_) -> never.
 
 clear_cache_cluster_wide() ->
     Nodes = rabbit_nodes:list_running(),
-    rabbit_log:warning("Clearing auth_backend_cache in all nodes : ~p", [Nodes]),
+    ?LOG_WARNING("Clearing auth_backend_cache in all nodes : ~p", [Nodes]),
     rabbit_misc:append_rpc_all_nodes(Nodes, ?MODULE, clear_cache, []).
 
 clear_cache() ->
     {ok, AuthCache} = application:get_env(rabbitmq_auth_backend_cache,
                                           cache_module),
-    rabbit_log:warning("Clearing auth_backend_cache"),
+    ?LOG_WARNING("Clearing auth_backend_cache"),
     AuthCache:clear().
 
 with_cache(BackendType, {F, A}, Fun) ->

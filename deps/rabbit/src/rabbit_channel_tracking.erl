@@ -34,6 +34,9 @@
 -export([count_local_tracked_items_of_user/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 
 -import(rabbit_misc, [pget/2]).
 
@@ -65,11 +68,11 @@ handle_cast({channel_created, Details}) ->
                 error:{no_exists, _} ->
                     Msg = "Could not register channel ~tp for tracking, "
                           "its table is not ready yet or the channel terminated prematurely",
-                    rabbit_log_connection:warning(Msg, [TrackedChId]),
+                    ?LOG_WARNING(Msg, [TrackedChId], #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     ok;
                 error:Err ->
                     Msg = "Could not register channel ~tp for tracking: ~tp",
-                    rabbit_log_connection:warning(Msg, [TrackedChId, Err]),
+                    ?LOG_WARNING(Msg, [TrackedChId, Err], #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     ok
             end;
         _OtherNode ->
@@ -88,9 +91,10 @@ handle_cast({connection_closed, ConnDetails}) ->
                 [] ->
                     ok;
                 TrackedChs ->
-                    rabbit_log_channel:debug(
+                    ?LOG_DEBUG(
                       "Closing ~b channel(s) because connection '~ts' has been closed",
-                      [length(TrackedChs), pget(name, ConnDetails)]),
+                      [length(TrackedChs), pget(name, ConnDetails)],
+                      #{domain => ?RMQLOG_DOMAIN_CHAN}),
                     %% Shutting down channels will take care of unregistering the
                     %% corresponding tracking.
                     shutdown_tracked_items(TrackedChs, undefined),
@@ -214,14 +218,14 @@ ensure_tracked_tables_for_this_node() ->
 
 %% Create tables
 ensure_tracked_channels_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
-                    [?TRACKED_CHANNEL_TABLE]),
+    ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
+              [?TRACKED_CHANNEL_TABLE]),
     ets:new(?TRACKED_CHANNEL_TABLE, [named_table, public, {write_concurrency, true},
                                      {keypos, #tracked_channel.pid}]).
 
 ensure_per_user_tracked_channels_table_for_this_node() ->
-    rabbit_log:info("Setting up a table for channel tracking on this node: ~tp",
-                    [?TRACKED_CHANNEL_TABLE_PER_USER]),
+    ?LOG_INFO("Setting up a table for channel tracking on this node: ~tp",
+              [?TRACKED_CHANNEL_TABLE_PER_USER]),
     ets:new(?TRACKED_CHANNEL_TABLE_PER_USER, [named_table, public, {write_concurrency, true}]).
 
 get_tracked_channels_by_connection_pid(ConnPid) ->

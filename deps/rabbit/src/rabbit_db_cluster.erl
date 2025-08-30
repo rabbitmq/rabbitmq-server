@@ -223,7 +223,7 @@ join(RemoteNode, NodeType)
                     %% as RemoteNode thinks this node is already in the cluster.
                     %% Attempt to leave the RemoteNode cluster, the discovery cluster,
                     %% and simply retry the operation.
-                    rabbit_log:info("Mnesia: node ~tp thinks it's clustered "
+                    ?LOG_INFO("Mnesia: node ~tp thinks it's clustered "
                                     "with node ~tp, but ~tp disagrees. ~tp will ask "
                                     "to leave the cluster and try again.",
                                     [RemoteNode, node(), node(), node()]),

@@ -13,6 +13,7 @@
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %%--------------------------------------------------------------------
 
@@ -70,8 +71,8 @@ close_user_connection(#tracked_connection{name = Name, pid = Pid, username = Use
 close_user_connection(#tracked_connection{pid = undefined}, _Username, _ReqData) ->
     ok;
 close_user_connection(UnexpectedConn, Username, _ReqData) ->
-    rabbit_log:debug("~tp Username: ~tp", [?MODULE, Username]),
-    rabbit_log:debug("~tp unexpected connection: ~tp", [?MODULE, UnexpectedConn]),
+    ?LOG_DEBUG("~tp Username: ~tp", [?MODULE, Username]),
+    ?LOG_DEBUG("~tp unexpected connection: ~tp", [?MODULE, UnexpectedConn]),
     ok.
 
 force_close_connection(ReqData, Conn, Pid) ->

@@ -21,6 +21,8 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit/include/amqqueue.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 %% Stateless rabbit_queue_type callbacks.
 -export([
@@ -195,8 +197,8 @@ recover(_VHost, Queues) ->
     {[], Queues}.
 
 log_delete(QName, ConPid) ->
-    rabbit_log_queue:debug("Deleting ~s of type ~s because its declaring connection ~tp was closed",
-                           [rabbit_misc:rs(QName), ?MODULE, ConPid]).
+    ?LOG_DEBUG("Deleting ~s of type ~s because its declaring connection ~tp was closed",
+               [rabbit_misc:rs(QName), ?MODULE, ConPid], #{domain => ?RMQLOG_DOMAIN_QUEUE}).
 
 -spec purge(amqqueue:amqqueue()) ->
     {ok, non_neg_integer()}.

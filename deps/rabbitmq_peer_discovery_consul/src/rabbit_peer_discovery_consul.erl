@@ -43,7 +43,7 @@
 init() ->
     ?LOG_DEBUG(
        "Peer discovery Consul: initialising...",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     ok = application:ensure_started(inets),
     %% we cannot start this plugin yet since it depends on the rabbit app,
     %% which is in the process of being started by the time this function is called
@@ -63,7 +63,7 @@ list_nodes() ->
                       "Cannot discover any nodes because Consul cluster "
                       "details are not configured!",
                       [?MODULE],
-                      #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+                      #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
                    {ok, {[], disc}}
            end,
     Fun2 = fun(Proplist) ->
@@ -112,7 +112,7 @@ register() ->
     {ok, Body} ->
       ?LOG_DEBUG(
          "Consul registration body: ~ts", [Body],
-         #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+         #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
       Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, register]),
       Headers = maybe_add_acl([]),
       HttpOpts = http_options(M),
@@ -137,7 +137,7 @@ unregister() ->
   ID = service_id(),
   ?LOG_DEBUG(
      "Unregistering with Consul using service ID '~ts'", [ID],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Path = rabbit_peer_discovery_httpc:build_path([v1, agent, service, deregister, ID]),
   Headers = maybe_add_acl([]),
   HttpOpts = http_options(M),
@@ -153,13 +153,13 @@ unregister() ->
           ?LOG_INFO(
              "Consul's response to the unregistration attempt: ~tp",
              [Response],
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           ok;
     Error   ->
           ?LOG_INFO(
              "Failed to unregister service with ID '~ts` with Consul: ~tp",
              [ID, Error],
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           Error
   end.
 
@@ -190,7 +190,7 @@ internal_lock() ->
     M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
     ?LOG_DEBUG(
        "Effective Consul peer discovery configuration: ~tp", [M],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     Node = node(),
     case create_session(Node, get_config_key(consul_svc_ttl, M)) of
         {ok, SessionId} ->
@@ -209,7 +209,7 @@ internal_unlock({SessionId, TRef}) ->
     _ = timer:cancel(TRef),
     ?LOG_DEBUG(
        "Stopped session renewal",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     case release_lock(SessionId) of
         {ok, true} ->
             ok;
@@ -355,7 +355,7 @@ registration_body({error, Reason}) ->
   ?LOG_ERROR(
      "Error serializing the request body: ~tp",
      [Reason],
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   {error, Reason}.
 
 
@@ -403,7 +403,7 @@ registration_body_maybe_add_check(Payload, undefined) ->
             ?LOG_WARNING(
                "Can't use Consul's service deregistration feature without "
                "using TTL. The parameter  will be ignored",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             Payload;
 
         _ -> Payload
@@ -477,7 +477,7 @@ validate_addr_parameters(false, true) ->
        "The parameter CONSUL_SVC_ADDR_NODENAME"
        " can be used only if CONSUL_SVC_ADDR_AUTO is true."
        " CONSUL_SVC_ADDR_NODENAME value will be ignored.",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     false;
 validate_addr_parameters(_, _) ->
     true.
@@ -565,7 +565,7 @@ send_health_check_pass() ->
   M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
   ?LOG_DEBUG(
      "Running Consul health check",
-     #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+     #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
   Path = rabbit_peer_discovery_httpc:build_path([v1, agent, check, pass, Service]),
   Headers = maybe_add_acl([]),
   HttpOpts = http_options(M),
@@ -582,14 +582,14 @@ send_health_check_pass() ->
           %% Too Many Requests, see https://www.consul.io/docs/agent/checks.html
           ?LOG_WARNING(
              "Consul responded to a health check with 429 Too Many Requests",
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           ok;
     %% starting with Consul 1.11, see https://github.com/hashicorp/consul/pull/11950
     {error, "404"} ->
       ?LOG_WARNING(
          "Consul responded to a health check with a 404 status, will "
          "wait and try re-registering",
-         #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+         #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
       maybe_re_register(wait_for_list_nodes()),
       ok;
     %% prior to Consul 1.11, see https://github.com/hashicorp/consul/pull/11950
@@ -597,14 +597,14 @@ send_health_check_pass() ->
           ?LOG_WARNING(
              "Consul responded to a health check with a 500 status, will "
              "wait and try re-registering",
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
           maybe_re_register(wait_for_list_nodes()),
           ok;
     {error, Reason} ->
           ?LOG_ERROR(
              "Error running Consul health check: ~tp",
              [Reason],
-             #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+             #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
       ok
   end.
 
@@ -613,7 +613,7 @@ maybe_re_register({error, Reason}) ->
        "Internal error in Consul while updating health check. "
        "Cannot obtain list of nodes registered in Consul either: ~tp",
        [Reason],
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC});
 maybe_re_register({ok, {Members, _NodeType}}) ->
     maybe_re_register(Members);
 maybe_re_register(Members) ->
@@ -621,12 +621,12 @@ maybe_re_register(Members) ->
         true ->
             ?LOG_ERROR(
                "Internal error in Consul while updating health check",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS});
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC});
         false ->
             ?LOG_ERROR(
                "Internal error in Consul while updating health check, "
                "node is not registered. Re-registering",
-               #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
             register()
     end.
 
@@ -726,7 +726,7 @@ start_session_ttl_updater(SessionId) ->
     Interval = get_config_key(consul_svc_ttl, M),
     ?LOG_DEBUG(
        "Starting session renewal",
-       #{domain => ?RMQLOG_DOMAIN_PEER_DIS}),
+       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
     {ok, TRef} = timer:apply_interval(Interval * 500, ?MODULE,
                                       session_ttl_update_callback, [SessionId]),
     TRef.

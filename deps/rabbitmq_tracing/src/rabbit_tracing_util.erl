@@ -7,6 +7,9 @@
 
 -module(rabbit_tracing_util).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -export([coerce_env_value/2]).
 -export([apply_on_node/5]).
 
@@ -24,7 +27,7 @@ apply_on_node(ReqData, Context, Mod, Fun, Args) ->
                 {badrpc, _} = Error ->
                     Msg = io_lib:format("Node ~tp could not be contacted: ~tp",
                                         [Node, Error]),
-                    rabbit_log:warning(Msg, []),
+                    ?LOG_WARNING(Msg, []),
                     rabbit_mgmt_util:bad_request(list_to_binary(Msg), ReqData, Context);
                 Any ->
                     Any
