@@ -189,7 +189,7 @@ $(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	$${gen_verbose} $${RSYNC} $(2) ./ $$@/
 	$${verbose} echo "$(PROJECT_DESCRIPTION) $(PROJECT_VERSION)" > $$@/git-revisions.txt
 	$${verbose} echo "$(PROJECT) $$$$(git rev-parse HEAD) $$$$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)" >> $$@/git-revisions.txt
-	$${verbose} echo "$$$$(TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > $$@.git-times.txt
+	$${verbose} echo "$$$$(TZ=UTC git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')" > $$@.git-times.txt
 	$${verbose} cat packaging/common/LICENSE.head > $$@/LICENSE
 	$${verbose} mkdir -p $$@/deps/licensing
 	$${verbose} set -e; for dep in $$$$(cat $(ERLANG_MK_RECURSIVE_DEPS_LIST) | LC_COLLATE=C sort); do \
@@ -216,8 +216,7 @@ $(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 		 echo "$$$$(basename "$$$$dep") $$$$(git rev-parse HEAD) $$$$(git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)") \
 		 >> "$$@/git-revisions.txt"; \
 		! test -d $$$$dep/.git || (cd $$$$dep; \
-		 echo "$$$$(env TZ= git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") \
-		 >> "$$@.git-times.txt"; \
+		 echo "$$$$(TZ=UTC git --no-pager log -n 1 --format='%cd' --date='format-local:%Y%m%d%H%M.%S')") >> "$$@.git-times.txt"; \
 	done
 	$${verbose} cat packaging/common/LICENSE.tail >> $$@/LICENSE
 	$${verbose} find $$@/deps/licensing -name 'LICENSE-*' -exec cp '{}' $$@ \;
@@ -231,7 +230,7 @@ $(1): $(ERLANG_MK_RECURSIVE_DEPS_LIST)
 	done
 	$${verbose} echo "PLUGINS := $(PLUGINS)" > $$@/plugins.mk
 	$${verbose} sort -r < "$$@.git-times.txt" | head -n 1 > "$$@.git-time.txt"
-	$${verbose} find $$@ -print0 | xargs -0 touch -t "$$$$(cat $$@.git-time.txt)"
+	$${verbose} find $$@ -print0 | (TZ=UTC xargs -0 touch -t "$$$$(cat $$@.git-time.txt)")
 	$${verbose} rm "$$@.git-times.txt" "$$@.git-time.txt"
 
 $(1).manifest: $(1)
