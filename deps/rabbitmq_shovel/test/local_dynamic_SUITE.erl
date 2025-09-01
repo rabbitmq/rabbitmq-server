@@ -97,9 +97,17 @@ init_per_suite(Config0) ->
           "dest_queue_down"
         ]}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
+                                                rabbit_ct_broker_helpers:setup_steps() ++
+                                                    rabbit_ct_client_helpers:setup_steps()),
+    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config2, nodename),
+    case rabbit_ct_broker_helpers:enable_feature_flag(
+           Config2, [Node], 'rabbitmq_4.0.0') of
+        ok ->
+            Config2;
+        _ ->
+            {skip, "This suite requires rabbitmq_4.0.0 feature flag"}
+    end.
 
 end_per_suite(Config) ->
     application:stop(amqp10_client),
@@ -108,9 +116,6 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
-    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(
-           Config, [Node], 'rabbitmq_4.0.0'),
     Config.
 
 end_per_group(_, Config) ->
@@ -1033,7 +1038,6 @@ local_to_local_stream_credit_flow(Config, AckMode) ->
 local_to_local_simple_uri(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    AltVHost = ?config(alt_vhost, Config),
     Uri = <<"amqp://">>,
     ok = rabbit_ct_broker_helpers:rpc(
            Config, 0, rabbit_runtime_parameters, set,
