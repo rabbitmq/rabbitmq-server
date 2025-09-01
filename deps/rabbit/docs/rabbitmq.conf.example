@@ -12,8 +12,8 @@
 ##
 ## See https://www.rabbitmq.com/docs/documentation for the rest of RabbitMQ documentation.
 ##
-## In case you have questions, please use rabbitmq/rabbitmq-server Discussions and the RabbitMQ community Discord server
-## for questions.
+## In case you have questions, please use rabbitmq/rabbitmq-server Discussions and
+## the RabbitMQ community Discord server http://rabbitmq.com/discord for questions.
 
 # ======================================
 # Core broker section
