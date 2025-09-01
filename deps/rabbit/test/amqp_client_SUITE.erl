@@ -1227,7 +1227,7 @@ roundtrip_with_drain(Config, QueueType, QName)
     Address = rabbitmq_amqp_address:queue(QName),
     {Connection, Session, LinkPair} = init(Config),
     QProps = #{arguments => #{<<"x-queue-type">> => {utf8, QueueType}}},
-    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
+    {ok, #{leader := _}} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, QProps),
     {ok, Sender} = amqp10_client:attach_sender_link(
                      Session, <<"test-sender">>, Address),
     wait_for_credit(Sender),
