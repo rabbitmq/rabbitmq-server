@@ -81,7 +81,7 @@ defmodule RabbitMQ.CLI.Ctl.Commands.ListUnresponsiveQueuesCommand do
   def banner(_, %{vhost: vhost}), do: "Listing unresponsive queues for vhost #{vhost} ..."
 
   def usage() do
-    "list_unresponsive_queues [--local] [--queue-timeout <milliseconds>] [<column> ...] [--no-table-headers]"
+    "list_unresponsive_queues [--local] [--queue-timeout <seconds>] [<column> ...] [--no-table-headers]"
   end
 
   def usage_additional() do
