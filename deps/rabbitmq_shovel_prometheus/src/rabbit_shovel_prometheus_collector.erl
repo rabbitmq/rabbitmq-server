@@ -6,6 +6,9 @@
 %%
 -module(rabbit_shovel_prometheus_collector).
 
+-include_lib("kernel/include/logger.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
+
 -behaviour(prometheus_collector).
 
 -export([start/0, stop/0]).
@@ -29,10 +32,15 @@ deregister_cleanup(_) -> ok.
 
 collect_mf(_Registry, Callback) ->
     Status = rabbit_shovel_status:status(500),
-    {StaticStatusGroups, DynamicStatusGroups} = lists:foldl(fun({_,static,{S, _}, _, _}, {SMap, DMap}) ->
-                                                                    {maps:update_with(S, fun(C) -> C + 1 end, 1, SMap), DMap};
-                                                               ({_,dynamic,{S, _}, _, _}, {SMap, DMap}) ->
-                                                                    {SMap, maps:update_with(S, fun(C) -> C + 1 end, 1, DMap)}
+    %% Shovel status can be an atom or a tuple of {string(), proplists:proplist()}
+    {StaticStatusGroups, DynamicStatusGroups} = lists:foldl(fun({_, static, S, _, _}, {SMap, DMap}) when is_atom(S) ->
+                                                                       {maps:update_with(S, fun(C) -> C + 1 end, 1, SMap), DMap};
+                                                                   ({_, static, {S, _}, _, _}, {SMap, DMap}) ->
+                                                                       {maps:update_with(S, fun(C) -> C + 1 end, 1, SMap), DMap};
+                                                                   ({_, dynamic, S, _, _}, {SMap, DMap}) when is_atom(S) ->
+                                                                       {SMap, maps:update_with(S, fun(C) -> C + 1 end, 1, DMap)};
+                                                                   ({_, dynamic, {S, _}, _, _}, {SMap, DMap}) ->
+                                                                        {SMap, maps:update_with(S, fun(C) -> C + 1 end, 1, DMap)}
                                                             end, {#{}, #{}}, Status),
 
     Metrics = [{rabbitmq_shovel_dynamic, gauge, "Number of dynamic shovels",
@@ -47,5 +55,5 @@ add_metric_family({Name, Type, Help, Metrics}, Callback) ->
     Callback(create_mf(Name, Help, Type, Metrics)).
 
 %%====================================================================
-%% Private Parts
+%% Implementation
 %%====================================================================
