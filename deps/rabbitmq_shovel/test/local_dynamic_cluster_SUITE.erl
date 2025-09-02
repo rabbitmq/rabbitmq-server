@@ -50,15 +50,9 @@ init_per_suite(Config0) ->
           "dest_queue_down"
         ]}
       ]),
-    Config2 = rabbit_ct_helpers:run_setup_steps(Config1,
-                                                rabbit_ct_broker_helpers:setup_steps() ++
-                                                    rabbit_ct_client_helpers:setup_steps()),
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config2, 'rabbitmq_4.0.0') of
-        ok ->
-            Config2;
-        _ ->
-            {skip, "This suite requires rabbitmq_4.0.0 feature flag"}
-    end.
+    rabbit_ct_helpers:run_setup_steps(Config1,
+      rabbit_ct_broker_helpers:setup_steps() ++
+          rabbit_ct_client_helpers:setup_steps()).
 
 end_per_suite(Config) ->
     application:stop(amqp10_client),
@@ -67,7 +61,12 @@ end_per_suite(Config) ->
       rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
-    Config.
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
+        ok ->
+            Config;
+        _ ->
+            {skip, "This suite requires rabbitmq_4.0.0 feature flag"}
+    end.
 
 end_per_group(_, Config) ->
     Config.
