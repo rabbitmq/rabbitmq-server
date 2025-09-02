@@ -27,7 +27,8 @@ groups() ->
     [
      {tests, [], [
                   local_to_local_dest_down,
-                  local_to_local_multiple_dest_down,
+                  local_to_local_multiple_all_dest_down,
+                  local_to_local_multiple_some_dest_down,
                   local_to_local_no_destination
                  ]}
     ].
@@ -120,7 +121,7 @@ local_to_local_dest_down(Config) ->
               expect_many(Sess, Dest, 10)
       end).
 
-local_to_local_multiple_dest_down(Config) ->
+local_to_local_multiple_all_dest_down(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     Dest2 = ?config(destq2, Config),
@@ -139,16 +140,57 @@ local_to_local_multiple_dest_down(Config) ->
                                           ]),
               ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
               publish_many(Sess, Src, Dest, <<"tag1">>, 10),
-              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, 0, 0, 0],
-                           [<<"local_to_local_multiple_dest_down_dest2">>, 0, 0, 0],
-                           [<<"local_to_local_multiple_dest_down_src">>, 10, _, _]],
+              ?awaitMatch([[<<"local_to_local_multiple_all_dest_down_dest">>, 0, 0, 0],
+                           [<<"local_to_local_multiple_all_dest_down_dest2">>, 0, 0, 0],
+                           [<<"local_to_local_multiple_all_dest_down_src">>, 10, _, _]],
                           list_queue_messages(Config),
                           30000),
               ok = rabbit_ct_broker_helpers:start_node(Config, 1),
-              ?awaitMatch([[<<"local_to_local_multiple_dest_down_dest">>, N, N, 0],
-                           [<<"local_to_local_multiple_dest_down_dest2">>, M, M, 0],
-                           [<<"local_to_local_multiple_dest_down_src">>, 0, 0, 0]]
-                          when ((N >= 10) and (M >= 10)),
+              ?awaitMatch([[<<"local_to_local_multiple_all_dest_down_dest">>, 10, 10, 0],
+                           [<<"local_to_local_multiple_all_dest_down_dest2">>, 10, 10, 0],
+                           [<<"local_to_local_multiple_all_dest_down_src">>, 0, 0, 0]],
+                          list_queue_messages(Config),
+                          30000),
+              expect_many(Sess, Dest, 10)
+      end).
+
+local_to_local_multiple_some_dest_down(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Dest2 = ?config(destq2, Config),
+    declare_queue(Config, 0, <<"/">>, Src),
+    %% Declare each destination queue in a different node. Just one of
+    %% them will be down, but this still means the message can't be confirmed
+    %% and should be requeued.
+    declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest, Dest),
+    declare_and_bind_queue(Config, 2, <<"/">>, <<"amq.fanout">>, Dest2, Dest2),
+    with_session(
+      Config,
+      fun (Sess) ->
+              shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-exchange">>, <<"amq.fanout">>},
+                                           {<<"dest-exchange-key">>, <<"">>}
+                                          ]),
+              ok = rabbit_ct_broker_helpers:stop_node(Config, 1),
+              publish_many(Sess, Src, Dest, <<"tag1">>, 10),
+              %% Messages won't be confirmed to source until all destination
+              %% queues are able to confirm them, until them we keep retrying
+              %% This generates multiple duplicates, but that's how publishing
+              %% works.
+              ?awaitMatch([[<<"local_to_local_multiple_some_dest_down_dest">>, 0, 0, 0],
+                           [<<"local_to_local_multiple_some_dest_down_dest2">>, M, M, 0],
+                           [<<"local_to_local_multiple_some_dest_down_src">>, 10, _, _]]
+                          when (M > 10),
+                          list_queue_messages(Config),
+                          30000),
+              ok = rabbit_ct_broker_helpers:start_node(Config, 1),
+              ?awaitMatch([[<<"local_to_local_multiple_some_dest_down_dest">>, N, N, 0],
+                           [<<"local_to_local_multiple_some_dest_down_dest2">>, M, M, 0],
+                           [<<"local_to_local_multiple_some_dest_down_src">>, 0, 0, 0]]
+                          when ((N == 10) and (M >= 10)),
                           list_queue_messages(Config),
                           30000),
               expect_many(Sess, Dest, 10)

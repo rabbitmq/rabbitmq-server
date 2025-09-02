@@ -128,7 +128,7 @@ connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
               State#{dest => Dest#{current => #{queue_states => QState,
                                                 delivery_id => 1,
                                                 vhost => VHost},
-                                   unconfirmed => rabbit_confirms:init(),
+                                   unconfirmed => rabbit_shovel_confirms:init(),
                                    rejected => [],
                                    rejected_count => 0,
                                    confirmed => [],
@@ -136,7 +136,7 @@ connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
           _ ->
               State#{dest => Dest#{current => #{queue_states => QState,
                                                 vhost => VHost},
-                                   unconfirmed => rabbit_confirms:init(),
+                                   unconfirmed => rabbit_shovel_confirms:init(),
                                    confirmed => [],
                                    confirmed_count => 0,
                                    rejected => [],
@@ -361,8 +361,8 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
                 {#{}, State0}
         end,
     Msg = set_annotations(Msg0, Dest),
-    QNames = route(Msg, Dest),
-    Queues = rabbit_amqqueue:lookup_many(QNames),
+    RoutedQNames = route(Msg, Dest),
+    Queues = rabbit_amqqueue:lookup_many(RoutedQNames),
     case rabbit_queue_type:deliver(Queues, Msg, Options, QState) of
         {ok, QState1, Actions} ->
             State1 = State#{dest => Dest1#{current => Current1#{queue_states => QState1}}},
@@ -374,12 +374,15 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
                            on_publish ->
                                rabbit_shovel_behaviour:decr_remaining(
                                  1,
-                                 record_confirms([{Tag, none}], State2));
+                                 record_confirms([{Tag, Tag}], State2));
                            _ ->
                                rabbit_shovel_behaviour:decr_remaining(1, State2)
                        end),
             MsgSeqNo = maps:get(correlation, Options, undefined),
-            State4 = process_routing_confirm(MsgSeqNo, QNames, State3),
+            QNames = lists:map(fun({QName, _}) -> QName;
+                                  (QName) -> QName
+                               end, RoutedQNames),
+            State4 = process_routing_confirm(MsgSeqNo, Tag, QNames, State3),
             send_confirms_and_nacks(handle_dest_queue_actions(Actions, State4));
         {error, Reason} ->
             exit({shutdown, Reason})
@@ -470,7 +473,7 @@ handle_dest_queue_actions(Actions, State) ->
               {U, Rej} =
               lists:foldr(
                 fun(SeqNo, {U1, Acc}) ->
-                        case rabbit_confirms:reject(SeqNo, U1) of
+                        case rabbit_shovel_confirms:reject(SeqNo, U1) of
                             {ok, MX, U2} ->
                                 {U2, [MX | Acc]};
                             {error, not_found} ->
@@ -736,15 +739,14 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
                                    at_least_one_credit_req_in_flight => false}}
     end.
 
-process_routing_confirm(undefined, _, State) ->
+process_routing_confirm(undefined, _, _, State) ->
     State;
-process_routing_confirm(MsgSeqNo, [], State)
+process_routing_confirm(MsgSeqNo, Tag, [], State)
   when is_integer(MsgSeqNo) ->
-    record_confirms([{MsgSeqNo, none}], State);
-process_routing_confirm(MsgSeqNo, QRefs, #{dest := Dst = #{unconfirmed := Unconfirmed}} = State) when is_integer(MsgSeqNo) ->
-    XName = rabbit_misc:r(<<"/">>, exchange, <<>>),
+    record_confirms([{MsgSeqNo, Tag}], State);
+process_routing_confirm(MsgSeqNo, Tag, QRefs, #{dest := Dst = #{unconfirmed := Unconfirmed}} = State) when is_integer(MsgSeqNo) ->
     State#{dest => Dst#{unconfirmed =>
-                            rabbit_confirms:insert(MsgSeqNo, QRefs, XName, Unconfirmed)}}.
+                            rabbit_shovel_confirms:insert(MsgSeqNo, QRefs, Tag, Unconfirmed)}}.
 
 record_confirms([], State) ->
     State;
@@ -765,7 +767,7 @@ record_rejects(MXs, State = #{dest := Dst = #{rejected := R,
                                rejected_count => RC + Num}}).
 
 confirm(MsgSeqNos, QRef, State = #{dest := Dst = #{unconfirmed := UC}}) ->
-    {ConfirmMXs, UC1} = rabbit_confirms:confirm(MsgSeqNos, QRef, UC),
+    {ConfirmMXs, UC1} = rabbit_shovel_confirms:confirm(MsgSeqNos, QRef, UC),
     record_confirms(ConfirmMXs, State#{dest => Dst#{unconfirmed => UC1}}).
 
 send_nacks([], _, State) ->
@@ -789,9 +791,9 @@ send_confirms(Cs, Rs, State) ->
 coalesce_and_send(MsgSeqNos, NegativeMsgSeqNos, MkMsgFun,
                   State = #{dest := #{unconfirmed := UC}}) ->
     SMsgSeqNos = lists:usort(MsgSeqNos),
-    UnconfirmedCutoff = case rabbit_confirms:is_empty(UC) of
+    UnconfirmedCutoff = case rabbit_shovel_confirms:is_empty(UC) of
                             true  -> lists:last(SMsgSeqNos) + 1;
-                            false -> rabbit_confirms:smallest(UC)
+                            false -> rabbit_shovel_confirms:smallest(UC)
                         end,
     Cutoff = lists:min([UnconfirmedCutoff | NegativeMsgSeqNos]),
     {Ms, Ss} = lists:splitwith(fun(X) -> X < Cutoff end, SMsgSeqNos),
@@ -810,15 +812,15 @@ send_confirms_and_nacks(State = #{dest := #{confirmed := [],
 send_confirms_and_nacks(State = #{dest := Dst = #{confirmed := C,
                                                   rejected := R}}) ->
     Confirms = lists:append(C),
-    ConfirmMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Confirms],
+    ConfirmTags = [Tag || {_, Tag} <- Confirms],
     Rejects = lists:append(R),
-    RejectMsgSeqNos = [MsgSeqNo || {MsgSeqNo, _} <- Rejects],
+    RejectTags = [Tag || {_, Tag} <- Rejects],
     State1 = #{dest := Dst2}
-        = send_confirms(ConfirmMsgSeqNos,
-                        RejectMsgSeqNos,
+        = send_confirms(ConfirmTags,
+                        RejectTags,
                         State#{dest => Dst#{confirmed => [],
                                             confirmed_count => 0}}),
-    send_nacks(RejectMsgSeqNos,
-               ConfirmMsgSeqNos,
+    send_nacks(RejectTags,
+               ConfirmTags,
                State1#{dest => Dst2#{rejected => [],
                                      rejected_count => 0}}).
