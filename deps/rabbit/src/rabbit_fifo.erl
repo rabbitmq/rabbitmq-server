@@ -912,7 +912,8 @@ overview(#?STATE{consumers = Cons,
                  in_memory_message_bytes => 0, %% backwards compat
                  num_in_memory_ready_messages => 0, %% backwards compat
                  release_cursor_enqueue_counter => EnqCount,
-                 smallest_raft_index => smallest_raft_index(State)
+                 smallest_raft_index => smallest_raft_index(State),
+                 smallest_raft_index_overview => smallest_raft_index_overview(State)
                  },
     DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -2825,6 +2826,13 @@ smallest_raft_index(#?STATE{messages = Messages,
     SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
     SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
     min(min(SmallestDlxRaIdx, SmallestMsgsRaIdx), SmallestRaIdx).
+
+smallest_raft_index_overview(#?STATE{messages = Messages,
+                                     ra_indexes = Indexes,
+                                     dlx = DlxState}) ->
+    #{message => rabbit_fifo_q:get_lowest_index(Messages),
+      checked_out => rabbit_fifo_index:smallest(Indexes),
+      dlx => rabbit_fifo_dlx:smallest_raft_index(DlxState)}.
 
 make_requeue(ConsumerKey, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
