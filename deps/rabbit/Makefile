@@ -332,13 +332,6 @@ endef
 
 $(foreach set,1 2 3 4,$(eval $(call parallel_ct_set_target,$(set))))
 
-# @todo Generate ct.test.spec from Makefile variables instead of hardcoded for ct-master
-
-parallel-ct: test-build
-	$(verbose) mkdir -p $(CT_LOGS_DIR)
-	$(eval ERL := erl -noinput -boot no_dot_erlang)
-	$(call erlang,$(call ct_master.erl,ct.test.spec),-sname parallel_ct_$(PROJECT)@localhost -hidden -kernel net_ticktime 5)
-
 # --------------------------------------------------------------------
 # Compilation.
 # --------------------------------------------------------------------
