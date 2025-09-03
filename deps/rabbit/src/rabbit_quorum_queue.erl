@@ -753,7 +753,10 @@ system_recover(quorum_queues) ->
     end.
 
 maybe_apply_policies(Q, #{config := CurrentConfig}) ->
-    NewPolicyConfig = gather_policy_config(Q, false),
+    %% delivery_limit can't be updated from a policy and thus has to be
+    %% excluded from the comparison
+    NewPolicyConfig = maps:without([delivery_limit],
+                                   gather_policy_config(Q, false)),
 
     RelevantKeys = maps:keys(NewPolicyConfig),
     CurrentPolicyConfig = maps:with(RelevantKeys, CurrentConfig),
@@ -761,7 +764,8 @@ maybe_apply_policies(Q, #{config := CurrentConfig}) ->
     ShouldUpdate = NewPolicyConfig =/= CurrentPolicyConfig,
     case ShouldUpdate of
         true ->
-            ?LOG_DEBUG("Re-applying policies to ~ts", [rabbit_misc:rs(amqqueue:get_name(Q))]),
+            ?LOG_DEBUG("Re-applying policies for ~ts",
+                       [rabbit_misc:rs(amqqueue:get_name(Q))]),
             policy_changed(Q),
             ok;
         false -> ok
