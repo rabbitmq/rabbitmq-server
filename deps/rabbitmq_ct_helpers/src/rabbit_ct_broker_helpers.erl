@@ -1104,8 +1104,8 @@ configured_metadata_store(Config) ->
             mnesia;
         _ ->
             case os:getenv("RABBITMQ_METADATA_STORE") of
-                "khepri" -> khepri;
-                _        -> mnesia
+                "mnesia" -> mnesia;
+                _ -> khepri
             end
     end.
 
