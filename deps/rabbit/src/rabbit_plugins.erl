@@ -7,6 +7,7 @@
 
 -module(rabbit_plugins).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 -export([setup/0, active/0, read_enabled/1, list/0, list/1, list/2, dependencies/3, running_plugins/0]).
 -export([ensure/1]).
 -export([validate_plugins/1, format_invalid_plugins/1]).
@@ -60,13 +61,13 @@ ensure1(FileJustChanged0) ->
                 {[], []} ->
                     ok;
                 {[], _} ->
-                    rabbit_log:info("Plugins changed; disabled ~tp",
+                    ?LOG_INFO("Plugins changed; disabled ~tp",
                                     [Stop]);
                 {_, []} ->
-                    rabbit_log:info("Plugins changed; enabled ~tp",
+                    ?LOG_INFO("Plugins changed; enabled ~tp",
                                     [Start]);
                 {_, _} ->
-                    rabbit_log:info("Plugins changed; enabled ~tp, disabled ~tp",
+                    ?LOG_INFO("Plugins changed; enabled ~tp, disabled ~tp",
                                     [Start, Stop])
             end,
             {ok, Start, Stop};
@@ -357,7 +358,7 @@ maybe_warn_about_invalid_plugins([]) ->
     ok;
 maybe_warn_about_invalid_plugins(InvalidPlugins) ->
     %% TODO: error message formatting
-    rabbit_log:warning(format_invalid_plugins(InvalidPlugins)).
+    ?LOG_WARNING(format_invalid_plugins(InvalidPlugins)).
 
 
 format_invalid_plugins(InvalidPlugins) ->
@@ -413,7 +414,7 @@ validate_plugins(Plugins, BrokerVersion) ->
                       true  ->
                           case BrokerVersion of
                               "0.0.0" ->
-                                  rabbit_log:warning(
+                                  ?LOG_WARNING(
                                     "Running development version of the broker."
                                     " Requirement ~tp for plugin ~tp is ignored.",
                                     [BrokerVersionReqs, Name]);
@@ -444,7 +445,7 @@ check_plugins_versions(PluginName, AllPlugins, RequiredVersions) ->
                         true  ->
                             case Version of
                                 "" ->
-                                    rabbit_log:warning(
+                                    ?LOG_WARNING(
                                         "~tp plugin version is not defined."
                                         " Requirement ~tp for plugin ~tp is ignored",
                                         [Name, Versions, PluginName]);
@@ -512,7 +513,7 @@ prepare_dir_plugin(PluginAppDescPath) ->
                 {module, _} ->
                     ok;
                 {error, badfile} ->
-                    rabbit_log:error("Failed to enable plugin \"~ts\": "
+                    ?LOG_ERROR("Failed to enable plugin \"~ts\": "
                                      "it may have been built with an "
                                      "incompatible (more recent?) "
                                      "version of Erlang", [Plugin]),
@@ -545,11 +546,11 @@ prepare_plugin(#plugin{type = ez, name = Name, location = Location}, ExpandDir) 
                 [PluginAppDescPath|_] ->
                     prepare_dir_plugin(PluginAppDescPath);
                 _ ->
-                    rabbit_log:error("Plugin archive '~ts' doesn't contain an .app file", [Location]),
+                    ?LOG_ERROR("Plugin archive '~ts' doesn't contain an .app file", [Location]),
                     throw({app_file_missing, Name, Location})
             end;
         {error, Reason} ->
-            rabbit_log:error("Could not unzip plugin archive '~ts': ~tp", [Location, Reason]),
+            ?LOG_ERROR("Could not unzip plugin archive '~ts': ~tp", [Location, Reason]),
             throw({failed_to_unzip_plugin, Name, Location, Reason})
     end;
 prepare_plugin(#plugin{type = dir, location = Location, name = Name},
@@ -558,7 +559,7 @@ prepare_plugin(#plugin{type = dir, location = Location, name = Name},
         [PluginAppDescPath|_] ->
             prepare_dir_plugin(PluginAppDescPath);
         _ ->
-            rabbit_log:error("Plugin directory '~ts' doesn't contain an .app file", [Location]),
+            ?LOG_ERROR("Plugin directory '~ts' doesn't contain an .app file", [Location]),
             throw({app_file_missing, Name, Location})
     end.
 

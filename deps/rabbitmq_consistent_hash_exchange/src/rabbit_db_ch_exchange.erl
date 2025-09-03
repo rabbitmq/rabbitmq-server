@@ -9,6 +9,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("khepri/include/khepri.hrl").
 -include("rabbitmq_consistent_hash_exchange.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([
          setup_schema/0,
@@ -56,7 +57,7 @@ create_in_mnesia_tx(X) ->
     case mnesia:read(?HASH_RING_STATE_TABLE, X) of
         [_] -> ok;
         []  ->
-            rabbit_log:debug("Consistent hashing exchange: will initialise hashing ring schema database record"),
+            ?LOG_DEBUG("Consistent hashing exchange: will initialise hashing ring schema database record"),
             mnesia:write_lock_table(?HASH_RING_STATE_TABLE),
             ok = mnesia:write(?HASH_RING_STATE_TABLE, #chx_hash_ring{
                                                          exchange = X,
@@ -184,7 +185,7 @@ delete_bindings_in_mnesia(Bindings, DeleteFun) ->
       end).
 
 delete_binding_in_mnesia(#binding{source = S, destination = D, key = RK}, DeleteFun) ->
-    rabbit_log:debug("Consistent hashing exchange: removing binding "
+    ?LOG_DEBUG("Consistent hashing exchange: removing binding "
                      "from exchange ~ts to destination ~ts with routing key '~ts'",
                      [rabbit_misc:rs(S), rabbit_misc:rs(D), RK]),
     case mnesia:read(?HASH_RING_STATE_TABLE, S) of

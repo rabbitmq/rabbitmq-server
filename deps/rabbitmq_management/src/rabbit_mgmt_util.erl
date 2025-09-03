@@ -58,6 +58,7 @@
 -include("rabbit_mgmt.hrl").
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -define(FRAMING, rabbit_framing_amqp_0_9_1).
 -define(DEFAULT_PAGE_SIZE, 100).
@@ -154,7 +155,7 @@ get_bool_env(Application, Par, Default) ->
         true -> true;
         false -> false;
         Other ->
-            rabbit_log:warning("Invalid configuration for application ~tp: ~tp set to ~tp",
+            ?LOG_WARNING("Invalid configuration for application ~tp: ~tp set to ~tp",
                                [Application, Par, Other]),
             Default
     end.
@@ -384,7 +385,7 @@ augment_resources0(Resources, DefaultSort, BasicColumns, Pagination, ReqData,
                 [SortFun, PageFun];
             {true, extended, _} ->
                 Path = cowboy_req:path(ReqData),
-                rabbit_log:debug("HTTP API: ~s slow query mode requested - extended sort on ~0p",
+                ?LOG_DEBUG("HTTP API: ~s slow query mode requested - extended sort on ~0p",
                                  [Path, Sort]),
                 % pagination with extended sort columns - SLOW!
                 [AugFun, SortFun, PageFun];
@@ -684,7 +685,7 @@ internal_server_error(Reason, ReqData, Context) ->
     internal_server_error(internal_server_error, Reason, ReqData, Context).
 
 internal_server_error(Error, Reason, ReqData, Context) ->
-    rabbit_log:error("~ts~n~ts", [Error, Reason]),
+    ?LOG_ERROR("~ts~n~ts", [Error, Reason]),
     halt_response(500, Error, Reason, ReqData, Context).
 
 invalid_pagination(Type,Reason, ReqData, Context) ->
@@ -692,7 +693,7 @@ invalid_pagination(Type,Reason, ReqData, Context) ->
 
 redirect_to_home(ReqData, Reason, Context) ->
     Home = cowboy_req:uri(ReqData, #{path => rabbit_mgmt_util:get_path_prefix() ++ "/", qs => Reason}),
-    rabbit_log:info("redirect_to_home ~ts ~ts", [Reason, iolist_to_binary(Home)]),
+    ?LOG_INFO("redirect_to_home ~ts ~ts", [Reason, iolist_to_binary(Home)]),
     ReqData1 = cowboy_req:reply(302,
         #{<<"Location">> => iolist_to_binary(Home) },
         <<>>, ReqData),
@@ -756,7 +757,7 @@ do_read_complete_body_with_limit(Req0, Acc, BodySizeLimit) ->
 with_decode(Keys, ReqData, Context, Fun) ->
     case read_complete_body(ReqData) of
         {error, http_body_limit_exceeded, LimitApplied, BytesRead} ->
-            rabbit_log:warning("HTTP API: request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
+            ?LOG_WARNING("HTTP API: request exceeded maximum allowed payload size (limit: ~tp bytes, payload size: ~tp bytes)", [LimitApplied, BytesRead]),
             bad_request("Exceeded HTTP request body size limit", ReqData, Context);
         {ok, Body, ReqData1} ->
             with_decode(Keys, Body, ReqData1, Context, Fun)
@@ -835,23 +836,23 @@ direct_request(MethodName, Transformers, Extra, ErrorMsg, ReqData,
                                          VHost, User]) of
                   {badrpc, nodedown} ->
                       Msg = io_lib:format("Node ~tp could not be contacted", [Node]),
-                      rabbit_log:warning(ErrorMsg, [Msg]),
+                      ?LOG_WARNING(ErrorMsg, [Msg]),
                       bad_request(list_to_binary(Msg), ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_found, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      ?LOG_WARNING(ErrorMsg, [Explanation]),
                       not_found(Explanation, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = access_refused, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      ?LOG_WARNING(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{name = not_allowed, explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      ?LOG_WARNING(ErrorMsg, [Explanation]),
                       not_authorised(<<"Access refused.">>, ReqData1, Context);
                   {badrpc, {'EXIT', #amqp_error{explanation = Explanation}}} ->
-                      rabbit_log:warning(ErrorMsg, [Explanation]),
+                      ?LOG_WARNING(ErrorMsg, [Explanation]),
                       bad_request(list_to_binary(Explanation), ReqData1, Context);
                   {badrpc, Reason} ->
                       Msg = io_lib:format("~tp", [Reason]),
-                      rabbit_log:warning(ErrorMsg, [Msg]),
+                      ?LOG_WARNING(ErrorMsg, [Msg]),
                       bad_request(
                         list_to_binary(
                           io_lib:format("Request to node ~ts failed with ~tp",
@@ -1081,7 +1082,7 @@ list_login_vhosts(User, AuthzData) ->
 
 % rabbitmq/rabbitmq-auth-backend-http#100
 log_access_control_result(NotOK) ->
-    rabbit_log:debug("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
+    ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]).
 
 %% base64:decode throws lots of weird errors. Catch and convert to one
 %% that will cause a bad_request.

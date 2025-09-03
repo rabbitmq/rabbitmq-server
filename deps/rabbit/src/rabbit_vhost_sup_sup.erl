@@ -8,6 +8,7 @@
 -module(rabbit_vhost_sup_sup).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(supervisor).
 
@@ -79,18 +80,18 @@ delete_on_all_nodes(VHost) ->
 stop_and_delete_vhost(VHost) ->
     StopResult = case lookup_vhost_sup_record(VHost) of
         not_found ->
-            rabbit_log:warning("Supervisor for vhost '~ts' not found during deletion procedure",
+            ?LOG_WARNING("Supervisor for vhost '~ts' not found during deletion procedure",
                             [VHost]),
             ok;
         #vhost_sup{wrapper_pid = WrapperPid,
                    vhost_sup_pid = VHostSupPid} ->
             case is_process_alive(WrapperPid) of
                 false ->
-                    rabbit_log:info("Supervisor ~tp for vhost '~ts' already stopped",
+                    ?LOG_INFO("Supervisor ~tp for vhost '~ts' already stopped",
                                     [VHostSupPid, VHost]),
                     ok;
                 true  ->
-                    rabbit_log:info("Stopping vhost supervisor ~tp"
+                    ?LOG_INFO("Stopping vhost supervisor ~tp"
                                     " for vhost '~ts'",
                                     [VHostSupPid, VHost]),
                     case supervisor:terminate_child(?MODULE, WrapperPid) of
@@ -112,7 +113,7 @@ stop_and_delete_vhost(VHost, Node) ->
     case rabbit_misc:rpc_call(Node, rabbit_vhost_sup_sup, stop_and_delete_vhost, [VHost]) of
         ok -> ok;
         {badrpc, RpcErr} ->
-            rabbit_log:error("Failed to stop and delete a vhost ~tp"
+            ?LOG_ERROR("Failed to stop and delete a vhost ~tp"
                              " on node ~tp."
                              " Reason: ~tp",
                              [VHost, Node, RpcErr]),
@@ -124,7 +125,7 @@ init_vhost(VHost) ->
     case start_vhost(VHost) of
         {ok, _} -> ok;
         {error, {already_started, _}} ->
-            rabbit_log:warning(
+            ?LOG_WARNING(
                 "Attempting to start an already started vhost '~ts'.",
                 [VHost]),
             ok;
@@ -133,13 +134,13 @@ init_vhost(VHost) ->
         {error, Reason} ->
             case vhost_restart_strategy() of
                 permanent ->
-                    rabbit_log:error(
+                    ?LOG_ERROR(
                         "Unable to initialize vhost data store for vhost '~ts'."
                         " Reason: ~tp",
                         [VHost, Reason]),
                     throw({error, Reason});
                 transient ->
-                    rabbit_log:warning(
+                    ?LOG_WARNING(
                         "Unable to initialize vhost data store for vhost '~ts'."
                         " The vhost will be stopped for this node. "
                         " Reason: ~tp",

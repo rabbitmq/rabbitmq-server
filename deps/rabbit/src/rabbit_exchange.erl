@@ -7,6 +7,7 @@
 
 -module(rabbit_exchange).
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([recover/1, policy_changed/2, callback/4, declare/7,
          assert_equivalence/6, assert_args_equivalence/2, check_type/1, exists/1,
@@ -139,7 +140,7 @@ declare(XName, Type, Durable, AutoDelete, Internal, Args, Username) ->
                     Err
             end;
         _ ->
-            rabbit_log:warning("ignoring exchange.declare for exchange ~tp,
+            ?LOG_WARNING("ignoring exchange.declare for exchange ~tp,
                                 exchange.delete in progress~n.", [XName]),
             {ok, X}
     end.
@@ -554,7 +555,7 @@ peek_serial(XName) ->
     rabbit_db_exchange:peek_serial(XName).
 
 invalid_module(T) ->
-    rabbit_log:warning("Could not find exchange type ~ts.", [T]),
+    ?LOG_WARNING("Could not find exchange type ~ts.", [T]),
     put({xtype_to_module, T}, rabbit_exchange_type_invalid),
     rabbit_exchange_type_invalid.
 

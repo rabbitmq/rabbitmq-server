@@ -9,6 +9,7 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(rabbit_backing_queue).
 
@@ -66,7 +67,7 @@ enable() ->
     {ok, RealBQ} = application:get_env(rabbit, backing_queue_module),
     case RealBQ of
         ?MODULE -> ok;
-        _       -> rabbit_log:info("Priority queues enabled, real BQ is ~ts",
+        _       -> ?LOG_INFO("Priority queues enabled, real BQ is ~ts",
                                    [RealBQ]),
                    application:set_env(
                      rabbitmq_priority_queue, backing_queue_module, RealBQ),

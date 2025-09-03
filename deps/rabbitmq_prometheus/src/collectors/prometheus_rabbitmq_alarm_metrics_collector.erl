@@ -11,6 +11,7 @@
 -import(prometheus_model_helpers, [create_mf/4, untyped_metric/1]).
 
 -include_lib("prometheus/include/prometheus.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -behaviour(prometheus_collector).
 
@@ -60,7 +61,7 @@ collect_mf(_Registry, Callback) ->
         ok
     catch
         exit:{timeout, _} ->
-            rabbit_log:error("alarm_metrics_collector failed to emit metrics: "
+            ?LOG_ERROR("alarm_metrics_collector failed to emit metrics: "
                              "rabbitm_alarm:get_local_alarms timed out"),
             %% We are not going to render any alarm metrics here.
             %% Breaks continuity but at least doesn't crash the

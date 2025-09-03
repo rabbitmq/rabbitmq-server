@@ -7,6 +7,9 @@
 
 -module(rabbit_tracking).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 %% Common behaviour and processing functions for tracking components
 %%
 %% See in use:
@@ -45,12 +48,12 @@ count_on_all_nodes(Mod, Fun, Args, ContextMsg) ->
 sum_rpc_multicall_result([{ok, Int}|ResL], [_N|Nodes], ContextMsg, Acc) when is_integer(Int) ->
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc + Int);
 sum_rpc_multicall_result([{ok, BadValue}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
       "Failed to fetch number of ~ts on node ~tp:~n not an integer ~tp",
       [ContextMsg, BadNode, BadValue]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);
 sum_rpc_multicall_result([{Class, Reason}|ResL], [BadNode|Nodes], ContextMsg, Acc) ->
-    rabbit_log:error(
+    ?LOG_ERROR(
       "Failed to fetch number of ~ts on node ~tp:~n~tp:~tp",
       [ContextMsg, BadNode, Class, Reason]),
     sum_rpc_multicall_result(ResL, Nodes, ContextMsg, Acc);

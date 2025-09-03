@@ -8,17 +8,18 @@
 -module(rabbit_federation_pg).
 
 -include("rabbit_federation.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([start_scope/0, stop_scope/0]).
 
 start_scope() ->
-  rabbit_log_federation:debug("Starting pg scope ~ts", [?FEDERATION_PG_SCOPE]),
+  ?LOG_DEBUG("Starting pg scope ~ts", [?FEDERATION_PG_SCOPE]),
   _ = pg:start_link(?FEDERATION_PG_SCOPE).
 
 stop_scope() ->
   case whereis(?FEDERATION_PG_SCOPE) of
       Pid when is_pid(Pid) ->
-          rabbit_log_federation:debug("Stopping pg scope ~ts", [?FEDERATION_PG_SCOPE]),
+          ?LOG_DEBUG("Stopping pg scope ~ts", [?FEDERATION_PG_SCOPE]),
           exit(Pid, normal);
       _ ->
           ok

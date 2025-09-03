@@ -7,6 +7,9 @@
 
 -module(rabbit_mgmt_external_stats).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 -behaviour(gen_server).
 
 -export([start_link/0]).
@@ -154,7 +157,7 @@ get_disk_free() -> ?SAFE_CALL(rabbit_disk_monitor:get_disk_free(),
 
 log_fd_warning_once(Fmt, Args, #state{fd_warning_logged = undefined}=State) ->
     % no warning has been logged, so log it and make a note of when
-    ok = rabbit_log:warning(Fmt, Args),
+    ok = ?LOG_WARNING(Fmt, Args),
     State#state{fd_warning_logged = true};
 log_fd_warning_once(_Fmt, _Args, #state{fd_warning_logged = true}=State) ->
     State.
@@ -163,7 +166,7 @@ log_fd_error(Fmt, Args, #state{error_logged_time = undefined}=State) ->
     % rabbitmq/rabbitmq-management#90
     % no errors have been logged, so log it and make a note of when
     Now = erlang:monotonic_time(second),
-    ok = rabbit_log:error(Fmt, Args),
+    ok = ?LOG_ERROR(Fmt, Args),
     State#state{error_logged_time = Now};
 log_fd_error(Fmt, Args, #state{error_logged_time = Time}=State) ->
     Now = erlang:monotonic_time(second),
@@ -172,7 +175,7 @@ log_fd_error(Fmt, Args, #state{error_logged_time = Time}=State) ->
             % rabbitmq/rabbitmq-management#90
             % it has been longer than 10 minutes,
             % re-log the error
-            ok = rabbit_log:error(Fmt, Args),
+            ok = ?LOG_ERROR(Fmt, Args),
             State#state{error_logged_time = Now};
         _ ->
             % 10 minutes have not yet passed

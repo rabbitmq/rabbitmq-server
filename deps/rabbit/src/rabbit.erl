@@ -1163,7 +1163,7 @@ pg_local_scope(Prefix) ->
 update_cluster_tags() ->
     Tags = application:get_env(rabbit, cluster_tags, []),
     ?LOG_DEBUG("Seeding cluster tags from application environment key...",
-                       #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
     rabbit_runtime_parameters:set_global(cluster_tags, Tags, <<"internal_user">>).
 
 
@@ -1696,7 +1696,7 @@ maybe_warn_low_fd_limit() ->
         L when L > 1024 ->
             ok;
         L ->
-            rabbit_log:warning("Available file handles: ~tp. "
+            ?LOG_WARNING("Available file handles: ~tp. "
                 "Please consider increasing system limits", [L])
     end.
 
@@ -1724,7 +1724,7 @@ persist_static_configuration() ->
                             MoreCreditAfter =< InitialCredit ->
                          {InitialCredit, MoreCreditAfter};
                      Other ->
-                       rabbit_log:error("Refusing to boot due to an invalid value of 'rabbit.credit_flow_default_credit'"),
+                       ?LOG_ERROR("Refusing to boot due to an invalid value of 'rabbit.credit_flow_default_credit'"),
                        throw({error, {invalid_credit_flow_default_credit_value, Other}})
                end,
     ok = persistent_term:put(credit_flow_default_credit, CreditFlowDefaultCredit),

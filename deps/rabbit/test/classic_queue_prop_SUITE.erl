@@ -12,13 +12,14 @@
 
 %% Set to true to get an awful lot of debug logs.
 -if(false).
--define(DEBUG(X,Y), logger:debug("~0p: " ++ X, [?FUNCTION_NAME|Y])).
+-define(DEBUG(X,Y), ?LOG_DEBUG("~0p: " ++ X, [?FUNCTION_NAME|Y])).
 -else.
 -define(DEBUG(X,Y), _ = X, _ = Y, ok).
 -endif.
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("proper/include/proper.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -record(cq, {
     amq = undefined :: amqqueue:amqqueue(),
@@ -202,7 +203,7 @@ on_output_fun() ->
     fun (".", _) -> ok; % don't print the '.'s on new lines
         ("!", _) -> ok;
         ("~n", _) -> ok; % don't print empty lines; CT adds many to logs already
-        ("~w~n", A) -> logger:error("~tp~n", [A]); % make sure this gets sent to the terminal, it's important
+        ("~w~n", A) -> ?LOG_ERROR("~tp~n", [A]); % make sure this gets sent to the terminal, it's important
         (F, A) -> io:format(F, A)
     end.
 
@@ -220,7 +221,7 @@ prop_common(InitialState) ->
         ?TRAPEXIT(begin
             {History, State, Result} = run_commands(?MODULE, Commands),
             cmd_teardown_queue(State),
-            ?WHENFAIL(logger:error("History: ~tp~nState: ~tp~nResult: ~tp",
+            ?WHENFAIL(?LOG_ERROR("History: ~tp~nState: ~tp~nResult: ~tp",
                                    [History, State, Result]),
                       aggregate(command_names(Commands), Result =:= ok))
         end)

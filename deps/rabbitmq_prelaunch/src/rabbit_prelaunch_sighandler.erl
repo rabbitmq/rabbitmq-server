@@ -1,4 +1,7 @@
 -module(rabbit_prelaunch_sighandler).
+
+-include_lib("kernel/include/logger.hrl").
+
 -behaviour(gen_event).
 
 -export([setup/0,
@@ -69,12 +72,12 @@ handle_event(Signal, State) ->
         %% which should stop RabbitMQ.
         %
         %#{Signal := stop} ->
-        %    logger:info(
+        %    ?LOG_INFO(
         %      "~ts received - shutting down",
         %      [string:uppercase(atom_to_list(Signal))]),
         %    ok = init:stop();
         _ ->
-            logger:info(
+            ?LOG_INFO(
               "~ts received - unhandled signal",
               [string:uppercase(atom_to_list(Signal))])
     end,

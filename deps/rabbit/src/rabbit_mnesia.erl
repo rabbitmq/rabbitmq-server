@@ -8,6 +8,7 @@
 -module(rabbit_mnesia).
 
 -include_lib("rabbit_common/include/logging.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -export([%% Main interface
          init/0,
@@ -123,7 +124,7 @@ init() ->
             NodeType = node_type(),
             case is_node_type_permitted(NodeType) of
                 false ->
-                    rabbit_log:info(
+                    ?LOG_INFO(
                       "RAM nodes are deprecated and not permitted. This "
                       "node will be converted to a disc node."),
                     init_db_and_upgrade(cluster_nodes(all), disc,
@@ -175,7 +176,7 @@ can_join_cluster(DiscoveryNode) ->
             %% do we think so ourselves?
             case are_we_clustered_with(DiscoveryNode) of
                 true ->
-                    rabbit_log:info("Asked to join a cluster but already a member of it: ~tp", [ClusterNodes]),
+                    ?LOG_INFO("Asked to join a cluster but already a member of it: ~tp", [ClusterNodes]),
                     {ok, already_member};
                 false ->
                     Msg = format_inconsistent_cluster_message(DiscoveryNode, node()),
@@ -195,7 +196,7 @@ join_cluster(ClusterNodes, NodeType) when is_list(ClusterNodes) ->
                     false -> disc;
                     true  -> NodeType
                 end,
-    rabbit_log:info("Clustering with ~tp as ~tp node",
+    ?LOG_INFO("Clustering with ~tp as ~tp node",
                     [ClusterNodes, NodeType1]),
     ok = init_db_with_mnesia(ClusterNodes, NodeType1,
                              true, true, _Retry = true),
@@ -230,7 +231,7 @@ reset() ->
 
 force_reset() ->
     ensure_mnesia_not_running(),
-    rabbit_log:info("Resetting Rabbit forcefully", []),
+    ?LOG_INFO("Resetting Rabbit forcefully", []),
     wipe().
 
 reset_gracefully() ->
@@ -300,7 +301,7 @@ forget_cluster_node(Node, RemoveWhenOffline) ->
         {true,  false} -> remove_node_offline_node(Node);
         {true,   true} -> e(online_node_offline_flag);
         {false, false} -> e(offline_node_no_offline_flag);
-        {false,  true} -> rabbit_log:info(
+        {false,  true} -> ?LOG_INFO(
                             "Removing node ~tp from cluster", [Node]),
                           case remove_node_if_mnesia_running(Node) of
                               ok               -> ok;
@@ -550,7 +551,7 @@ init_db(ClusterNodes, NodeType, CheckOtherNodes) ->
     ensure_node_type_is_permitted(NodeType),
 
     NodeIsVirgin = is_virgin_node(),
-    rabbit_log:debug("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
+    ?LOG_DEBUG("Does data directory looks like that of a blank (uninitialised) node? ~tp", [NodeIsVirgin]),
     Nodes = change_extra_db_nodes(ClusterNodes, CheckOtherNodes),
     %% Note that we use `system_info' here and not the cluster status
     %% since when we start rabbit for the first time the cluster
@@ -744,7 +745,7 @@ remote_node_info(Node) ->
 
 on_node_up(Node) ->
     case running_disc_nodes() of
-        [Node] -> rabbit_log:info("cluster contains disc nodes again~n");
+        [Node] -> ?LOG_INFO("cluster contains disc nodes again~n");
         _      -> ok
     end.
 
@@ -752,7 +753,7 @@ on_node_up(Node) ->
 
 on_node_down(_Node) ->
     case running_disc_nodes() of
-        [] -> rabbit_log:info("only running disc node went down~n");
+        [] -> ?LOG_INFO("only running disc node went down~n");
         _  -> ok
     end.
 
@@ -891,17 +892,17 @@ create_schema() ->
     false = rabbit_khepri:is_enabled(),
 
     stop_mnesia(),
-    rabbit_log:debug("Will bootstrap a schema database..."),
+    ?LOG_DEBUG("Will bootstrap a schema database..."),
     rabbit_misc:ensure_ok(mnesia:create_schema([node()]), cannot_create_schema),
-    rabbit_log:debug("Bootstraped a schema database successfully"),
+    ?LOG_DEBUG("Bootstraped a schema database successfully"),
     start_mnesia(),
 
-    rabbit_log:debug("Will create schema database tables"),
+    ?LOG_DEBUG("Will create schema database tables"),
     ok = rabbit_table:create(),
-    rabbit_log:debug("Created schema database tables successfully"),
-    rabbit_log:debug("Will check schema database integrity..."),
+    ?LOG_DEBUG("Created schema database tables successfully"),
+    ?LOG_DEBUG("Will check schema database integrity..."),
     ensure_schema_integrity(),
-    rabbit_log:debug("Schema database schema integrity check passed"),
+    ?LOG_DEBUG("Schema database schema integrity check passed"),
     ok.
 
 remove_node_if_mnesia_running(Node) ->
@@ -945,7 +946,7 @@ leave_cluster(Node) ->
     end.
 
 wait_for(Condition) ->
-    rabbit_log:info("Waiting for ~tp...", [Condition]),
+    ?LOG_INFO("Waiting for ~tp...", [Condition]),
     timer:sleep(1000).
 
 start_mnesia(CheckConsistency) ->
@@ -1067,10 +1068,10 @@ mnesia_and_msg_store_files() ->
              rabbit_feature_flags:enabled_feature_flags_list_file(),
              rabbit_khepri:dir()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
-            rabbit_log:debug("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
+            ?LOG_DEBUG("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
             List = List0 -- IgnoredFiles,
-            rabbit_log:debug("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
+            ?LOG_DEBUG("Files and directories found in node's data directory sans ignored ones: ~ts", [string:join(lists:usort(List), ", ")]),
             List
     end.
 

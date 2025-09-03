@@ -10,6 +10,7 @@
 -behaviour(gen_server).
 
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -import(rabbit_misc, [pget/2, pget/3, table_lookup/2]).
 
@@ -75,7 +76,7 @@ init(Args0) ->
                 {ok, F} ->
                     rabbit_tracing_traces:announce(VHost, Name, self()),
                     Format = list_to_atom(binary_to_list(pget(format, Args))),
-                    rabbit_log:info("Tracer opened log file ~tp with "
+                    ?LOG_INFO("Tracer opened log file ~tp with "
                                     "format ~tp", [Filename, Format]),
                     {ok, #state{conn = Conn, ch = Ch, vhost = VHost, queue = Q,
                                 file = F, filename = Filename,
@@ -119,7 +120,7 @@ terminate(shutdown, State = #state{conn = Conn, ch = Ch,
     catch amqp_channel:close(Ch),
     catch amqp_connection:close(Conn),
     catch prim_file:close(F),
-    rabbit_log:info("Tracer closed log file ~tp", [Filename]),
+    ?LOG_INFO("Tracer closed log file ~tp", [Filename]),
     ok;
 
 terminate(_Reason, _State) ->

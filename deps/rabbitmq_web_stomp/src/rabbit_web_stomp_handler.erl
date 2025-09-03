@@ -13,6 +13,7 @@
 -include_lib("rabbitmq_stomp/include/rabbit_stomp.hrl").
 -include_lib("rabbitmq_stomp/include/rabbit_stomp_frame.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("rabbit_common/include/logging.hrl").
 
 %% Websocket.
 -export([
@@ -68,6 +69,7 @@ takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) 
 
 %% Websocket.
 init(Req0, Opts) ->
+    logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     {PeerAddr, _PeerPort} = maps:get(peer, Req0),
     {_, KeepaliveSup} = lists:keyfind(keepalive_sup, 1, Opts),
     SockInfo = maps:get(proxy_header, Req0, undefined),
@@ -105,7 +107,7 @@ websocket_init(State) ->
 
 -spec close_connection(pid(), string()) -> 'ok'.
 close_connection(Pid, Reason) ->
-    rabbit_log_connection:info("Web STOMP: will terminate connection process ~tp, reason: ~ts",
+    ?LOG_INFO("Web STOMP: will terminate connection process ~tp, reason: ~ts",
                                [Pid, Reason]),
     sys:terminate(Pid, Reason),
     ok.
@@ -242,7 +244,7 @@ websocket_info(emit_stats, State) ->
     {ok, emit_stats(State)};
 
 websocket_info(Msg, State) ->
-    rabbit_log_connection:info("Web STOMP: unexpected message ~tp",
+    ?LOG_INFO("Web STOMP: unexpected message ~tp",
                     [Msg]),
     {ok, State}.
 
@@ -274,7 +276,7 @@ handle_data(Data, State0) ->
             {[{active, false}], State1};
         {error, Error0} ->
             Error1 = rabbit_misc:format("~tp", [Error0]),
-            rabbit_log_connection:error("STOMP detected framing error '~ts'", [Error1]),
+            ?LOG_ERROR("STOMP detected framing error '~ts'", [Error1]),
             stop(State0, 1007, Error1);
         Other ->
             Other

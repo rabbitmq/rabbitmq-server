@@ -25,6 +25,7 @@
 
 -include("mc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 % -include_lib("rabbit_common/include/rabbit_framing.hrl").
 
 -behaviour(gen_server).
@@ -135,7 +136,7 @@ terminate(_Reason, State) ->
     cancel_timer(State).
 
 handle_call(Request, From, State) ->
-    rabbit_log:info("~ts received unhandled call from ~tp: ~tp", [?MODULE, From, Request]),
+    ?LOG_INFO("~ts received unhandled call from ~tp: ~tp", [?MODULE, From, Request]),
     {noreply, State}.
 
 handle_cast({dlx_event, _LeaderPid, lookup_topology},
@@ -169,7 +170,7 @@ handle_cast(settle_timeout, State0) ->
     State = State0#state{timer = undefined},
     redeliver_and_ack(State);
 handle_cast(Request, State) ->
-    rabbit_log:info("~ts received unhandled cast ~tp", [?MODULE, Request]),
+    ?LOG_INFO("~ts received unhandled cast ~tp", [?MODULE, Request]),
     {noreply, State}.
 
 redeliver_and_ack(State0) ->
@@ -183,7 +184,7 @@ handle_info({'DOWN', Ref, process, _, _},
                    queue_ref = QRef}) ->
     %% Source quorum queue is down. Therefore, terminate ourself.
     %% The new leader will re-create another dlx_worker.
-    rabbit_log:debug("~ts terminating itself because leader of ~ts is down...",
+    ?LOG_DEBUG("~ts terminating itself because leader of ~ts is down...",
                      [?MODULE, rabbit_misc:rs(QRef)]),
     supervisor:terminate_child(rabbit_fifo_dlx_sup, self());
 handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
@@ -197,7 +198,7 @@ handle_info({{'DOWN', QName}, _MRef, process, QPid, Reason},
             remove_queue(QRef, State0#state{queue_type_state = QTypeState})
     end;
 handle_info(Info, State) ->
-    rabbit_log:info("~ts received unhandled info ~tp", [?MODULE, Info]),
+    ?LOG_INFO("~ts received unhandled info ~tp", [?MODULE, Info]),
     {noreply, State}.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -219,7 +220,7 @@ remove_queue(QRef, #state{pendings = Pendings0,
                           queue_type_state = QTypeState}}.
 
 wait_for_queue_deleted(QRef, 0) ->
-    rabbit_log:debug("Received deletion event for ~ts but queue still exists in ETS table.",
+    ?LOG_DEBUG("Received deletion event for ~ts but queue still exists in ETS table.",
                      [rabbit_misc:rs(QRef)]);
 wait_for_queue_deleted(QRef, N) ->
     case rabbit_amqqueue:exists(QRef) of
@@ -289,7 +290,7 @@ rejected(SeqNo, Qs, Pendings)
                              end,
                              Pendings);
         false ->
-            rabbit_log:debug("Ignoring rejection for unknown sequence number ~b "
+            ?LOG_DEBUG("Ignoring rejection for unknown sequence number ~b "
                              "from target dead letter queues ~tp",
                              [SeqNo, Qs]),
             Pendings
@@ -386,7 +387,7 @@ deliver_to_queues(Msg, Options, Qs, #state{queue_type_state = QTypeState0,
                 %% we won't rely on rabbit_fifo_client to re-deliver on behalf of us
                 %% (and therefore preventing messages to get stuck in our 'unsettled' state).
                 QNames = queue_names(Qs),
-                rabbit_log:debug("Failed to deliver message with seq_no ~b to "
+                ?LOG_DEBUG("Failed to deliver message with seq_no ~b to "
                                  "queues ~tp: ~tp",
                                  [SeqNo, QNames, Reason]),
                 {State0#state{pendings = rejected(SeqNo, QNames, Pendings)}, []}
@@ -419,7 +420,7 @@ handle_settled0(QRef, MsgSeq, #state{pendings = Pendings,
                                  settled = [QRef | Settled]},
             State#state{pendings = maps:update(MsgSeq, Pend, Pendings)};
         error ->
-            rabbit_log:debug("Ignoring publisher confirm for unknown sequence number ~b "
+            ?LOG_DEBUG("Ignoring publisher confirm for unknown sequence number ~b "
                              "from target dead letter ~ts",
                              [MsgSeq, rabbit_misc:rs(QRef)]),
             State
@@ -634,7 +635,7 @@ log_missing_dlx_once(#state{exchange_ref = SameDlx,
 log_missing_dlx_once(#state{exchange_ref = DlxResource,
                             queue_ref = QueueResource,
                             logged = Logged} = State) ->
-    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~ts because "
+    ?LOG_WARNING("Cannot forward any dead-letter messages from source quorum ~ts because "
                        "its configured dead-letter-exchange ~ts does not exist. "
                        "Either create the configured dead-letter-exchange or re-configure "
                        "the dead-letter-exchange policy for the source quorum queue to prevent "
@@ -651,7 +652,7 @@ log_no_route_once(#state{queue_ref = QueueResource,
                          exchange_ref = DlxResource,
                          routing_key = RoutingKey,
                          logged = Logged} = State) ->
-    rabbit_log:warning("Cannot forward any dead-letter messages from source quorum ~ts "
+    ?LOG_WARNING("Cannot forward any dead-letter messages from source quorum ~ts "
                        "with configured dead-letter-exchange ~ts and configured "
                        "dead-letter-routing-key '~ts'. This can happen either if the dead-letter "
                        "routing topology is misconfigured (for example no queue bound to "
@@ -672,7 +673,7 @@ log_cycle_once(Queues, _, #state{logged = Logged} = State)
 log_cycle_once(Queues, RoutingKeys, #state{exchange_ref = DlxResource,
                                            queue_ref = QueueResource,
                                            logged = Logged} = State) ->
-    rabbit_log:warning("Dead-letter queues cycle detected for source quorum ~ts "
+    ?LOG_WARNING("Dead-letter queues cycle detected for source quorum ~ts "
                        "with dead-letter exchange ~ts and routing keys ~tp: ~tp "
                        "This message will not be logged again.",
                        [rabbit_misc:rs(QueueResource), rabbit_misc:rs(DlxResource),

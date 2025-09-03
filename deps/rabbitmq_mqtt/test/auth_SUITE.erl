@@ -461,7 +461,7 @@ end_per_testcase(T, Config) when T == queue_bind_permission;
                                  T == loopback_user_connects_from_remote_host ->
     %% So let's wait before logs are surely flushed
     Marker = "MQTT_AUTH_SUITE_MARKER",
-    rpc(Config, 0, rabbit_log, error, [Marker]),
+    rpc(Config, 0, logger, error, [Marker]),
     wait_log(Config, [{[Marker], fun () -> stop end}]),
 
     %% Preserve file contents in case some investigation is needed, before truncating.

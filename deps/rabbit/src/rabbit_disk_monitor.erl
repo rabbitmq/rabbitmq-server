@@ -7,6 +7,9 @@
 
 -module(rabbit_disk_monitor).
 
+-include_lib("kernel/include/logger.hrl").
+
+
 %% Disk monitoring server. Monitors free disk space
 %% periodically and sets alarms when it is below a certain
 %% watermark (configurable either as an absolute value or
@@ -145,7 +148,7 @@ init([Limit]) ->
     {ok, State4}.
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
-    rabbit_log:info("Cannot set disk free limit: "
+    ?LOG_INFO("Cannot set disk free limit: "
                     "disabled disk free space monitoring", []),
     {reply, ok, State};
 
@@ -163,22 +166,22 @@ handle_call({set_max_check_interval, MaxInterval}, _From, State) ->
 
 handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = true}) ->
     _ = start_timer(set_disk_limits(State, State#state.limit)),
-    rabbit_log:info("Free disk space monitor was already enabled"),
+    ?LOG_INFO("Free disk space monitor was already enabled"),
     {reply, ok, State#state{enabled = true}};
 
 handle_call({set_enabled, _Enabled = true}, _From, State = #state{enabled = false}) ->
   _ = start_timer(set_disk_limits(State, State#state.limit)),
-  rabbit_log:info("Free disk space monitor was manually enabled"),
+  ?LOG_INFO("Free disk space monitor was manually enabled"),
   {reply, ok, State#state{enabled = true}};
 
 handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = true}) ->
     _ = erlang:cancel_timer(State#state.timer),
-    rabbit_log:info("Free disk space monitor was manually disabled"),
+    ?LOG_INFO("Free disk space monitor was manually disabled"),
     {reply, ok, State#state{enabled = false}};
 
 handle_call({set_enabled, _Enabled = false}, _From, State = #state{enabled = false}) ->
   _ = erlang:cancel_timer(State#state.timer),
-  rabbit_log:info("Free disk space monitor was already disabled"),
+  ?LOG_INFO("Free disk space monitor was already disabled"),
   {reply, ok, State#state{enabled = false}};
 
 handle_call(_Request, _From, State) ->
@@ -194,7 +197,7 @@ handle_info(update, State) ->
     {noreply, start_timer(internal_update(State))};
 
 handle_info(Info, State) ->
-    rabbit_log:debug("~tp unhandled msg: ~tp", [?MODULE, Info]),
+    ?LOG_DEBUG("~tp unhandled msg: ~tp", [?MODULE, Info]),
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -271,7 +274,7 @@ set_max_check_interval(MaxInterval, State) ->
 set_disk_limits(State, Limit0) ->
     Limit = interpret_limit(Limit0),
     State1 = State#state { limit = Limit },
-    rabbit_log:info("Disk free limit set to ~bMB",
+    ?LOG_INFO("Disk free limit set to ~bMB",
                     [trunc(Limit / 1000000)]),
     ets:insert(?ETS_NAME, {disk_free_limit, Limit}),
     internal_update(State1).
@@ -309,7 +312,7 @@ get_disk_free(Dir, {win32, _}, not_used) ->
     % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
     case win32_get_drive_letter(Dir) of
         error ->
-            rabbit_log:warning("Expected the mnesia directory absolute "
+            ?LOG_WARNING("Expected the mnesia directory absolute "
                                "path to start with a drive letter like "
                                "'C:'. The path is: '~tp'", [Dir]),
             {ok, Free} = win32_get_disk_free_dir(Dir),
@@ -340,7 +343,7 @@ get_disk_free(Dir, {win32, _}, not_used) ->
                     %% could not compute the result
                     'NaN';
                   _:Reason:_ ->
-                    rabbit_log:warning("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
+                    ?LOG_WARNING("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
                     %% could not compute the result
                     'NaN'
              end
@@ -405,13 +408,13 @@ interpret_limit(Absolute) ->
     case rabbit_resource_monitor_misc:parse_information_unit(Absolute) of
         {ok, ParsedAbsolute} -> ParsedAbsolute;
         {error, parse_error} ->
-            rabbit_log:error("Unable to parse disk_free_limit value ~tp",
+            ?LOG_ERROR("Unable to parse disk_free_limit value ~tp",
                              [Absolute]),
             ?DEFAULT_DISK_FREE_LIMIT
     end.
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
-    rabbit_log:info(
+    ?LOG_INFO(
       "Free disk space is ~ts. Free bytes: ~b. Limit: ~b",
       [StateStr, CurrentFree, Limit]).
 
@@ -432,7 +435,7 @@ interval(#state{limit        = Limit,
     trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).
 
 enable(#state{retries = 0} = State) ->
-    rabbit_log:error("Free disk space monitor failed to start!"),
+    ?LOG_ERROR("Free disk space monitor failed to start!"),
     State;
 enable(#state{dir = Dir, os = OS, port = Port} = State) ->
     enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
@@ -440,7 +443,7 @@ enable(#state{dir = Dir, os = OS, port = Port} = State) ->
 enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
     enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
 enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = State) ->
-    rabbit_log:warning("Free disk space monitor encountered an error "
+    ?LOG_WARNING("Free disk space monitor encountered an error "
                        "(e.g. failed to parse output from OS tools). "
                        "Retries left: ~b Error:~n~tp",
                        [Retries, Error]),
@@ -448,11 +451,11 @@ enable_handle_disk_free(Error, #state{interval = Interval, retries = Retries} = 
     State#state{enabled = false}.
 
 enable_handle_total_memory(TotalMemory, DiskFree, #state{limit = Limit} = State) when is_integer(TotalMemory) ->
-    rabbit_log:info("Enabling free disk space monitoring "
+    ?LOG_INFO("Enabling free disk space monitoring "
                     "(disk free space: ~b, total memory: ~b)", [DiskFree, TotalMemory]),
     start_timer(set_disk_limits(State, Limit));
 enable_handle_total_memory(Error, _DiskFree, #state{interval = Interval, retries = Retries} = State) ->
-    rabbit_log:warning("Free disk space monitor encountered an error "
+    ?LOG_WARNING("Free disk space monitor encountered an error "
                        "retrieving total memory. "
                        "Retries left: ~b Error:~n~tp",
                        [Retries, Error]),
@@ -472,6 +475,6 @@ run_os_cmd(Cmd) ->
             CmdResult
     after 5000 ->
         exit(CmdPid, kill),
-        rabbit_log:error("Command timed out: '~ts'", [Cmd]),
+        ?LOG_ERROR("Command timed out: '~ts'", [Cmd]),
         {error, timeout}
     end.

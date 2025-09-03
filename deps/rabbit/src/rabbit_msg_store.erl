@@ -25,6 +25,7 @@
 %%----------------------------------------------------------------------------
 
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("kernel/include/logger.hrl").
 
 -type(msg() :: any()).
 
@@ -792,11 +793,11 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                       true -> "clean";
                       false -> "unclean"
                   end,
-    rabbit_log:debug("Rebuilding message location index after ~ts shutdown...",
+    ?LOG_DEBUG("Rebuilding message location index after ~ts shutdown...",
                      [Cleanliness]),
     {CurOffset, State1 = #msstate { current_file = CurFile }} =
         build_index(CleanShutdown, StartupFunState, State),
-    rabbit_log:debug("Finished rebuilding index", []),
+    ?LOG_DEBUG("Finished rebuilding index", []),
     %% Open the most recent file.
     {ok, CurHdl} = writer_recover(Dir, CurFile, CurOffset),
     {ok, State1 #msstate { current_file_handle = CurHdl,
@@ -971,7 +972,7 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
         {shutdown, _} -> {"", []};
         _ -> {" with reason ~0p", [Reason]}
     end,
-    rabbit_log:info("Stopping message store for directory '~ts'" ++ ExtraLog, [Dir|ExtraLogArgs]),
+    ?LOG_INFO("Stopping message store for directory '~ts'" ++ ExtraLog, [Dir|ExtraLogArgs]),
     %% stop the gc first, otherwise it could be working and we pull
     %% out the ets tables from under it.
     ok = rabbit_msg_store_gc:stop(GCPid),
@@ -984,7 +985,7 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
     case store_file_summary(FileSummaryEts, Dir) of
         ok           -> ok;
         {error, FSErr} ->
-            rabbit_log:error("Unable to store file summary"
+            ?LOG_ERROR("Unable to store file summary"
                              " for vhost message store for directory ~tp~n"
                              "Error: ~tp",
                              [Dir, FSErr])
@@ -994,10 +995,10 @@ terminate(Reason, State = #msstate { index_ets           = IndexEts,
     index_terminate(IndexEts, Dir),
     case store_recovery_terms([{client_refs, maps:keys(Clients)}], Dir) of
         ok           ->
-            rabbit_log:info("Message store for directory '~ts' is stopped", [Dir]),
+            ?LOG_INFO("Message store for directory '~ts' is stopped", [Dir]),
             ok;
         {error, RTErr} ->
-            rabbit_log:error("Unable to save message store recovery terms"
+            ?LOG_ERROR("Unable to save message store recovery terms"
                              " for directory ~tp~nError: ~tp",
                              [Dir, RTErr])
     end,
@@ -1702,7 +1703,7 @@ index_terminate(IndexEts, Dir) ->
                       [{extended_info, [object_count]}]) of
         ok           -> ok;
         {error, Err} ->
-            rabbit_log:error("Unable to save message store index"
+            ?LOG_ERROR("Unable to save message store index"
                              " for directory ~tp.~nError: ~tp",
                              [Dir, Err])
     end,
@@ -1715,11 +1716,11 @@ index_terminate(IndexEts, Dir) ->
 recover_index_and_client_refs(_Recover, undefined, Dir, _Name) ->
     {false, index_new(Dir), []};
 recover_index_and_client_refs(false, _ClientRefs, Dir, Name) ->
-    rabbit_log:warning("Message store ~tp: rebuilding indices from scratch", [Name]),
+    ?LOG_WARNING("Message store ~tp: rebuilding indices from scratch", [Name]),
     {false, index_new(Dir), []};
 recover_index_and_client_refs(true, ClientRefs, Dir, Name) ->
     Fresh = fun (ErrorMsg, ErrorArgs) ->
-                    rabbit_log:warning("Message store ~tp : " ++ ErrorMsg ++ "~n"
+                    ?LOG_WARNING("Message store ~tp : " ++ ErrorMsg ++ "~n"
                                        "rebuilding indices from scratch",
                                        [Name | ErrorArgs]),
                     {false, index_new(Dir), []}
@@ -1812,9 +1813,9 @@ build_index(true, _StartupFunState,
     {FileSize, State#msstate{ current_file = File }};
 build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
             State = #msstate { dir = Dir }) ->
-    rabbit_log:debug("Rebuilding message refcount...", []),
+    ?LOG_DEBUG("Rebuilding message refcount...", []),
     ok = count_msg_refs(MsgRefDeltaGen, MsgRefDeltaGenInit, State),
-    rabbit_log:debug("Done rebuilding message refcount", []),
+    ?LOG_DEBUG("Done rebuilding message refcount", []),
     {ok, Pid} = gatherer:start_link(),
     case [filename_to_num(FileName) ||
              FileName <- list_sorted_filenames(Dir, ?FILE_EXTENSION)] of
@@ -1828,7 +1829,7 @@ build_index(false, {MsgRefDeltaGen, MsgRefDeltaGenInit},
 build_index_worker(Gatherer, #msstate { index_ets = IndexEts, dir = Dir },
                    File, Files) ->
     Path = form_filename(Dir, filenum_to_name(File)),
-    rabbit_log:debug("Rebuilding message location index from ~ts (~B file(s) remaining)",
+    ?LOG_DEBUG("Rebuilding message location index from ~ts (~B file(s) remaining)",
                      [Path, length(Files)]),
     %% The scan function already dealt with duplicate messages
     %% within the file, and only returns valid messages (we do
@@ -2000,7 +2001,7 @@ delete_file_if_empty(File, State = #msstate {
 compact_file(File, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
     case ets:lookup(FileSummaryEts, File) of
         [] ->
-            rabbit_log:debug("File ~tp has already been deleted; no need to compact",
+            ?LOG_DEBUG("File ~tp has already been deleted; no need to compact",
                              [File]),
             ok;
         [#file_summary{file_size = FileSize}] ->
@@ -2045,7 +2046,7 @@ compact_file(File, FileSize,
     %% after truncation. This is a debug message so it doesn't hurt to
     %% put out more details around what's happening.
     Reclaimed = FileSize - TruncateSize,
-    rabbit_log:debug("Compacted segment file number ~tp; ~tp bytes can now be reclaimed",
+    ?LOG_DEBUG("Compacted segment file number ~tp; ~tp bytes can now be reclaimed",
                      [File, Reclaimed]),
     %% Tell the message store to update its state.
     gen_server2:cast(Server, {compacted_file, File}),
@@ -2146,7 +2147,7 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
             case ets:select(FileHandlesEts, [{{{'_', File}, '$1'},
                     [{'=<', '$1', ThresholdTimestamp}], ['$$']}], 1) of
                 {[_|_], _Cont} ->
-                    rabbit_log:debug("Asked to truncate file ~p but it has active readers. Deferring.",
+                    ?LOG_DEBUG("Asked to truncate file ~p but it has active readers. Deferring.",
                                      [File]),
                     defer;
                 _ ->
@@ -2157,7 +2158,7 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
                     ok = file:close(Fd),
                     true = ets:update_element(FileSummaryEts, File,
                                               {#file_summary.file_size, Size}),
-                    rabbit_log:debug("Truncated file number ~tp; new size ~tp bytes", [File, Size]),
+                    ?LOG_DEBUG("Truncated file number ~tp; new size ~tp bytes", [File, Size]),
                     ok
             end
     end.
@@ -2169,7 +2170,7 @@ delete_file(File, #gc_state { file_summary_ets = FileSummaryEts,
                               dir              = Dir }) ->
     case ets:match_object(FileHandlesEts, {{'_', File}, '_'}, 1) of
         {[_|_], _Cont} ->
-            rabbit_log:debug("Asked to delete file ~p but it has active readers. Deferring.",
+            ?LOG_DEBUG("Asked to delete file ~p but it has active readers. Deferring.",
                              [File]),
             defer;
         _ ->
@@ -2177,7 +2178,7 @@ delete_file(File, #gc_state { file_summary_ets = FileSummaryEts,
                             file_size = FileSize }] = ets:lookup(FileSummaryEts, File),
             ok = file:delete(form_filename(Dir, filenum_to_name(File))),
             true = ets:delete(FileSummaryEts, File),
-            rabbit_log:debug("Deleted empty file number ~tp; reclaimed ~tp bytes", [File, FileSize]),
+            ?LOG_DEBUG("Deleted empty file number ~tp; reclaimed ~tp bytes", [File, FileSize]),
             ok
     end.
 
