@@ -52,9 +52,40 @@
 upgrade(Req, Env, Handler, HandlerState) ->
     upgrade(Req, Env, Handler, HandlerState, #{}).
 
+%% We create a proxy socket for HTTP/2 even if no proxy was used,
+%% and add a special field 'http_version' to indicate this is HTTP/2.
+upgrade(Req=#{version := 'HTTP/2', pid := Parent, peer := Peer, sock := Sock},
+        Env, Handler, HandlerState, Opts) ->
+    %% Cowboy doesn't expose the socket when HTTP/2 is used.
+    %% We take it directly from the connection's state.
+    %%
+    %% @todo Ideally we would not need the real socket for
+    %%       normal operations. But we currently need it for
+    %%       the heartbeat processes to do their job. In the
+    %%       future we should not rely on those processes
+    %%       and instead do the heartbeating directly in the
+    %%       Websocket handler.
+    RealSocket = element(4,element(1,sys:get_state(Parent))),
+    ProxyInfo = case Req of
+        #{proxy_header := ProxyHeader} ->
+            ProxyHeader#{http_version => 'HTTP/2'};
+        _ ->
+            {SrcAddr, SrcPort} = Peer,
+            {DestAddr, DestPort} = Sock,
+            #{
+                http_version => 'HTTP/2',
+                src_address => SrcAddr,
+                src_port => SrcPort,
+                dest_address => DestAddr,
+                dest_port => DestPort
+            }
+    end,
+    ProxySocket = {rabbit_proxy_socket, RealSocket, ProxyInfo},
+    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState#state{socket = ProxySocket}, Opts);
 upgrade(Req, Env, Handler, HandlerState, Opts) ->
     cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
 
+%% This is only called for HTTP/1.1.
 takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
     Sock = case HandlerState#state.socket of
                undefined ->
@@ -95,7 +126,7 @@ init(Req0, Opts) ->
         socket             = SockInfo,
         peername           = PeerAddr,
         auth_hd            = cowboy_req:header(<<"authorization">>, Req)
-    }, WsOpts}.
+    }, WsOpts#{data_delivery => relay}}.
 
 websocket_init(State) ->
     process_flag(trap_exit, true),
@@ -218,8 +249,23 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
     Self = self(),
     SendFun = fun () -> Self ! {send, <<$\n>>}, ok end,
     ReceiveFun = fun() -> Self ! client_timeout end,
-    Heartbeat = rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
-                                       SendFun, ReceiveTimeout, ReceiveFun),
+    Heartbeat = case Sock of
+        {rabbit_proxy_socket, RealSocket, #{http_version := 'HTTP/2'}} ->
+            %% HTTP/2 Websocket may have multiple Websocket sessions
+            %% on a single connection (this can happen for example
+            %% when refreshing a page). As a result we need to attach
+            %% the heartbeat processes to the session. We do this via
+            %% a link for now. @todo In the future we will have a
+            %% mechanism in Cowboy to attach them to the stream.
+            {ok, Sender} = rabbit_heartbeat:start_heartbeat_sender(RealSocket,
+                SendTimeout, SendFun, {heartbeat_sender, unknown}),
+            {ok, Receiver} = rabbit_heartbeat:start_heartbeat_receiver(RealSocket,
+                ReceiveTimeout, ReceiveFun, {heartbeat_receiver, unknown}),
+            {Sender, Receiver};
+        _ ->
+            rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
+                                   SendFun, ReceiveTimeout, ReceiveFun)
+    end,
     {ok, State#state{heartbeat = Heartbeat}};
 websocket_info(client_timeout, State) ->
     stop(State);
@@ -248,10 +294,17 @@ websocket_info(Msg, State) ->
                     [Msg]),
     {ok, State}.
 
-terminate(_Reason, _Req, #state{proc_state = undefined}) ->
-    ok;
-terminate(_Reason, _Req, #state{proc_state = ProcState}) ->
+terminate(_Reason, _Req, State = #state{proc_state = undefined}) ->
+    terminate_heartbeaters(State);
+terminate(_Reason, _Req, State = #state{proc_state = ProcState}) ->
     _ = rabbit_stomp_processor:flush_and_die(ProcState),
+    terminate_heartbeaters(State).
+
+terminate_heartbeaters(#state{heartbeat = {none, none}}) ->
+    ok;
+terminate_heartbeaters(#state{heartbeat = {SPid, RPid}}) ->
+    sys:terminate(SPid, shutdown),
+    sys:terminate(RPid, shutdown),
     ok.
 
 %%----------------------------------------------------------------------------
