@@ -322,7 +322,7 @@ cannot_use_another_authmechanism_when_updating_secret(Config) ->
 update_secret_should_close_connection_if_wrong_secret(Config) ->
     Transport = gen_tcp,
     {S, C0} = connect_and_authenticate(Transport, Config),
-    Pwd = rand:bytes(20),
+    Pwd = rand_bin(),
     _C1 = expect_unsuccessful_authentication(
             try_authenticate(Transport, S, C0, <<"PLAIN">>, <<"guest">>, Pwd),
             ?RESPONSE_AUTHENTICATION_FAILURE),
@@ -1214,7 +1214,7 @@ test_connection_properties_with_advertised_hints(Config) ->
 
     lists:foreach(
       fun(Transport) ->
-              AdHost = rand:bytes(20),
+              AdHost = rand_bin(),
               AdPort = rand:uniform(65535),
               {KH, KP} = case Transport of
                              gen_tcp ->
@@ -1770,3 +1770,6 @@ request(Cmd) ->
 
 request(CorrId, Cmd) ->
     rabbit_stream_core:frame({request, CorrId, Cmd}).
+
+rand_bin() ->
+    base64:encode(rand:bytes(20)).
