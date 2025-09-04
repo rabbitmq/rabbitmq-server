@@ -1578,7 +1578,7 @@ handle_frame_post_auth(Transport,
                        S1,
                        {request, CorrelationId,
                         {sasl_authenticate, NewMechanism, NewSaslBin}}) ->
-    ?LOG_DEBUG("Open frame received sasl_authenticate for username '~ts'", [Username]),
+    ?LOG_DEBUG("Received sasl_authenticate for username '~ts'", [Username]),
 
     {Connection1, State1} =
       case Auth_Mechanism of
