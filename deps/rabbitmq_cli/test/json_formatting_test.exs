@@ -38,6 +38,21 @@ defmodule JSONFormattingTest do
     assert Map.has_key?(doc, "os")
     assert Map.has_key?(doc, "pid")
     assert Map.has_key?(doc, "rabbitmq_version")
+    assert Map.has_key?(doc, "active_plugins")
+    assert Map.has_key?(doc, "config_files")
+    assert Map.has_key?(doc, "log_files")
+
+    active_plugins = doc["active_plugins"]
+    assert is_list(active_plugins)
+    assert Enum.all?(active_plugins, &is_binary/1)
+
+    config_files = doc["config_files"]
+    assert is_list(config_files)
+    assert Enum.all?(config_files, &is_binary/1)
+
+    log_files = doc["log_files"]
+    assert is_list(log_files)
+    assert Enum.all?(log_files, &is_binary/1)
 
     assert doc["alarms"] == []
   end
@@ -55,10 +70,35 @@ defmodule JSONFormattingTest do
 
     {:ok, doc} = JSON.decode(output)
 
+    assert Map.has_key?(doc, "running_nodes")
+    running_nodes = doc["running_nodes"]
+    assert is_list(running_nodes)
+    assert Enum.all?(running_nodes, &is_binary/1)
+
     assert Enum.member?(doc["disk_nodes"], node)
     assert Map.has_key?(doc["listeners"], node)
     assert Map.has_key?(doc["versions"], node)
+    assert Map.has_key?(doc["versions"], node)
     assert doc["alarms"] == []
     assert doc["partitions"] == %{}
+  end
+
+  test "JSON output of environment" do
+    set_scope(:ctl)
+
+    node = to_string(get_rabbit_hostname())
+    command = ["environment", "-n", node, "--formatter=json"]
+
+    output =
+      capture_io(:stdio, fn ->
+        error_check(command, exit_ok())
+      end)
+
+    {:ok, doc} = JSON.decode(output)
+    assert Map.has_key?(doc, "rabbit")
+    rabbit = doc["rabbit"]
+    assert Map.has_key?(rabbit, "data_dir")
+    data_dir = rabbit["data_dir"]
+    assert is_binary(data_dir)
   end
 end
