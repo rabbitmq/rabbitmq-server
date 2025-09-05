@@ -429,7 +429,7 @@
 ##
 ## * https://www.rabbitmq.com/docs/streams
 ## * https://www.rabbitmq.com/docs/stream
-## * https://www.rabbitmq.com/blog/2021/07/23/connecting-to-streams
+## * https://www.rabbitmq.com/docs/stream-connections
 ##
 
 ## RabbitMQ Stream Protocol plain TCP listeners and their ports.
