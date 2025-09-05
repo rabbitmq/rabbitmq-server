@@ -20,7 +20,7 @@ compute_key_and_suffix(Pid) ->
     PidParts0 = #{node := Node} = pid_recomposition:decompose(Pid),
     %% Note: we hash the entire node name. This is sufficient for our needs of shortening node name
     %% in the TTB-encoded pid, and helps avoid doing the node name split for every single cluster member
-    %% in rabbit_nodes:all_running_with_hashes/0.
+    %% in rabbit_channel:nodes_with_hashes/0.
     %%
     %% We also use a synthetic node prefix because the hash alone will be sufficient to
     NodeHash = erlang:phash2(Node),

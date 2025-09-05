@@ -300,7 +300,7 @@ send_command(Pid, Msg) ->
 
 -spec deliver_reply(binary(), mc:state()) -> 'ok'.
 deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message) ->
-    Nodes = rabbit_nodes:all_running_with_hashes(),
+    Nodes = nodes_with_hashes(),
     case rabbit_direct_reply_to:decode_reply_to(EncodedBin, Nodes) of
         {ok, Pid, Key} ->
             delegate:invoke_no_result(
@@ -323,7 +323,7 @@ deliver_reply_local(Pid, Key, Message) ->
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
     exists;
 declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>) ->
-    Nodes = rabbit_nodes:all_running_with_hashes(),
+    Nodes = nodes_with_hashes(),
     case rabbit_direct_reply_to:decode_reply_to(EncodedBin, Nodes) of
         {ok, Pid, Key} ->
             Msg = {declare_fast_reply_to, Key},
@@ -335,6 +335,9 @@ declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>) ->
     end;
 declare_fast_reply_to(_) ->
     not_found.
+
+nodes_with_hashes() ->
+    #{erlang:phash2(Node) => Node || Node <- rabbit_nodes:list_members()}.
 
 -spec list() -> [pid()].
 
