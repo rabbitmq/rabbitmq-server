@@ -93,6 +93,11 @@ defmodule RabbitMQ.CLI.Formatters.Json do
 
   defp convert_erlang_strings([]),  do: []
 
+  defp convert_erlang_strings([b | _rest]=data) when is_binary(b) do
+    # Assume this is a list of strings already converted
+    data
+  end
+
   defp convert_erlang_strings(data) when is_list(data) do
     try do
       case :unicode.characters_to_binary(data, :utf8) do
