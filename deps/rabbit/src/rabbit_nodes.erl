@@ -28,7 +28,7 @@
          await_running_count/2, is_single_node_cluster/0,
          boot/0]).
 -export([persistent_cluster_id/0, seed_internal_cluster_id/0, seed_user_provided_cluster_name/0]).
--export([all/0, all_running_with_hashes/0, target_cluster_size_hint/0, reached_target_cluster_size/0,
+-export([all/0, target_cluster_size_hint/0, reached_target_cluster_size/0,
          if_reached_target_cluster_size/2]).
 -export([lock_id/1, lock_retries/0]).
 -export([me_in_nodes/1, nodes_incl_me/1, nodes_excl_me/1]).
@@ -613,10 +613,6 @@ await_running_count_with_retries(TargetCount, Retries) ->
             timer:sleep(?SAMPLING_INTERVAL),
             await_running_count_with_retries(TargetCount, Retries - 1)
     end.
-
--spec all_running_with_hashes() -> #{non_neg_integer() => node()}.
-all_running_with_hashes() ->
-    maps:from_list([{erlang:phash2(Node), Node} || Node <- list_running()]).
 
 -spec target_cluster_size_hint() -> non_neg_integer().
 target_cluster_size_hint() ->
