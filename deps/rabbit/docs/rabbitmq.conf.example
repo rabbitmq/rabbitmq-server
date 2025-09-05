@@ -15,15 +15,14 @@
 ## In case you have questions, please use rabbitmq/rabbitmq-server Discussions and
 ## the RabbitMQ community Discord server http://rabbitmq.com/discord for questions.
 
-# ======================================
-# Core broker section
-# ======================================
+#
+# Core Broker
+#
 
-
-## Networking
-## ====================
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/networking.
+## Networking
+
+## Relevant doc guide: https://www.rabbitmq.com/docs/networking.
 ##
 ## By default, RabbitMQ will listen on all interfaces, using
 ## the standard (reserved) AMQP 0-9-1 and 1.0 port.
@@ -81,10 +80,8 @@
 
 ##
 ## Security, Access Control
-## ==============
 ##
-
-## Related doc guide: https://www.rabbitmq.com/docs/access-control.
+## Relevant doc guide: https://www.rabbitmq.com/docs/access-control.
 
 ## The default "guest" user is only permitted to access the server
 ## via a loopback interface (e.g. localhost).
@@ -96,9 +93,10 @@
 ## guest user from anywhere on the network.
 # loopback_users.guest = false
 
-## TLS configuration.
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/ssl.
+## TLS Configuration
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/ssl.
 ##
 # listeners.ssl.1                  = 5671
 # 
@@ -110,11 +108,17 @@
 #
 #
 ## ssl_options.password supports encrypted values,
-## see https://www.rabbitmq.com/docs/configure#configuration-encryption
-## and 'rabbitmqctl help encrypt_conf_value'
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/configure#configuration-encryption
+##
 # ssl_options.password = encrypted:kDnCy25dRvI8xs4nrJ6hp34ffL0ODKAzHrT6R8eOqR3TKL8lbI12M15wkA1SGmmL
 #
 #
+##
+## Cipher Suite Ordering
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/ssl#cipher-suite-order
+##
 # ssl_options.honor_cipher_order   = true
 # ssl_options.honor_ecc_order      = true
 #
@@ -124,7 +128,9 @@
 # ssl_options.secure_renegotiate   = true
 #
 ## Limits what TLS versions the server enables for client TLS
-## connections. See https://www.rabbitmq.com/docs/ssl#tls-versions for details.
+## connections.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/ssl#tls-versions
 ##
 ## Cutting edge TLS version which requires recent client runtime
 ## versions and has no cipher suite in common with earlier TLS versions.
@@ -139,8 +145,13 @@
 ## from connecting.
 ## If TLSv1.3 is enabled and cipher suites are overridden, TLSv1.3-specific
 ## cipher suites must also be explicitly enabled.
-## See https://www.rabbitmq.com/docs/ssl#cipher-suites and https://wiki.openssl.org/index.php/TLS1.3#Ciphersuites
-## for details.
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/ssl#cipher-suites
+## * https://www.rabbitmq.com/docs/ssl#tls1.3
+## * https://wiki.openssl.org/index.php/TLS1.3#Ciphersuites
+##
 #
 ## The example below uses TLSv1.3 cipher suites only
 #
@@ -197,7 +208,7 @@
 ##
 ## NB: These settings require certain plugins to be enabled.
 ##
-## Related doc guides:
+## Relevant doc guides:
 ##
 ##  * https://www.rabbitmq.com/docs/plugins
 ##  * https://www.rabbitmq.com/docs/access-control
@@ -235,7 +246,7 @@
 ## 'AMQPLAIN', and 'EXTERNAL' Additional mechanisms can be added via
 ## plugins.
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/authentication.
+## Relevant doc guide: https://www.rabbitmq.com/docs/authentication.
 ##
 # auth_mechanisms.1 = PLAIN
 # auth_mechanisms.2 = AMQPLAIN
@@ -243,7 +254,7 @@
 
 ## The rabbitmq-auth-mechanism-ssl plugin makes it possible to
 ## authenticate a user based on the client's x509 (TLS) certificate.
-## Related doc guide: https://www.rabbitmq.com/docs/authentication.
+## Relevant doc guide: https://www.rabbitmq.com/docs/authentication.
 ##
 ## To use auth-mechanism-ssl, the EXTERNAL mechanism should
 ## be enabled:
@@ -275,7 +286,6 @@
 
 ##
 ## Loading Definitions
-## ====================
 ##
 ## Relevant documentation: https://www.rabbitmq.com/docs/definitions#import-on-boot
 ##
@@ -302,7 +312,6 @@
 
 ##
 ## Default User / VHost
-## ====================
 ##
 
 ## On first start RabbitMQ will create a vhost and a user. These
@@ -325,8 +334,8 @@
 
 ## Tags for default user
 ##
-## For more details about tags, see the documentation for the
-## Management Plugin at https://www.rabbitmq.com/docs/management.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/management
 ##
 # default_user_tags.administrator = true
 
@@ -336,7 +345,6 @@
 
 ##
 ## Additional network and protocol related configuration
-## =====================================================
 ##
 
 ## Set the server AMQP 0-9-1 heartbeat timeout in seconds.
@@ -347,7 +355,7 @@
 ## Values lower than 6 seconds are very likely to produce
 ## false positives and are not recommended.
 ##
-## Related doc guides:
+## Relevant doc guides:
 ##
 ## * https://www.rabbitmq.com/docs/heartbeats
 ## * https://www.rabbitmq.com/docs/networking
@@ -370,10 +378,10 @@
 
 ## Customising TCP Listener (Socket) Configuration.
 ##
-## Related doc guides:
+## Relevant doc guides:
 ##
 ## * https://www.rabbitmq.com/docs/networking
-## * https://www.erlang.org/doc/man/inet.html#setopts-2
+## * https://www.erlang.org/doc/apps/kernel/inet.html#setopts-2
 ##
 
 # tcp_listen_options.backlog = 128
@@ -415,10 +423,70 @@
 # classic_queue.default_version = 2
 
 ##
-## Resource Limits & Flow Control
-## ==============================
+## Stream Protocol
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/memory.
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/streams
+## * https://www.rabbitmq.com/docs/stream
+## * https://www.rabbitmq.com/blog/2021/07/23/connecting-to-streams
+##
+
+## RabbitMQ Stream Protocol plain TCP listeners and their ports.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/stream#tcp-listeners
+##
+# stream.listeners.tcp.default = 5552
+
+## RabbitMQ Stream Protocol TLS listeners and their ports.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/stream#tls
+##
+# stream.listeners.ssl.default = 5553
+
+## Number of Erlang processes that will accept RabbitMQ Stream Protocol client connections,
+## one setting for for the TCP and one for the TLS listeners.
+# stream.num_acceptors.tcp = 10
+# stream.num_acceptors.ssl = 1
+
+## Set the server RabbitMQ Stream Protocol heartbeat timeout in seconds.
+## This is an equivalent of the `heartbeat` setting for AMQP 0-9-1 and AMQP 1.0
+## client connections but for RabbitMQ Stream Protocol.
+##
+## Values lower than 6 seconds are very likely to produce
+## false positives and are not recommended.
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/stream
+## * https://www.rabbitmq.com/docs/heartbeats
+## * https://www.rabbitmq.com/docs/networking
+# stream.heartbeat = 30
+
+## Port range used for stream replication connections.
+## The number of connections, and therefore the necessary port range,
+## depend on the number of streams and their replicas (members).
+##
+# stream.replication.port_range.min = 5000
+# stream.replication.port_range.max 10000
+
+## Advertised hostname and port for stream clients. Use when RabbitMQ
+## is behind a load balancer or in a container environment.
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/stream#advertised-host-port
+## * https://www.rabbitmq.com/blog/2021/07/23/connecting-to-streams
+##
+# stream.advertised_host = localhost
+# stream.advertised_port = 5552
+# stream.advertised_tls_host = localhost
+# stream.advertised_tls_port = 5553
+
+##
+## Resource Limits & Flow Control
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/memory.
 
 ## Memory-based Flow Control threshold.
 ##
@@ -454,8 +522,9 @@
 # total_memory_available_override_value = 2GB
 
 ## Set disk free limit (in bytes). Once free disk space reaches this
-## lower bound, a disk alarm will be set - see the documentation
-## listed above for more details.
+## lower bound, a disk alarm will be set.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/memory
 ##
 ## Absolute watermark will be ignored if relative is defined!
 # disk_free_limit.absolute = 50000
@@ -473,7 +542,6 @@
 
 ##
 ## Clustering
-## =====================
 ##
 
 ## By default cluster name is set to the name of the first
@@ -569,7 +637,6 @@
 
 ##
 ## Statistics Collection
-## =====================
 ##
 
 ## Statistics collection interval (in milliseconds). Increasing
@@ -580,12 +647,12 @@
 ## Fine vs. coarse statistics
 #
 # This value is no longer meant to be configured directly.
-#
-# See https://www.rabbitmq.com/docs/management#fine-stats.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/management#fine-stats
+##
 
 ##
 ## Raft settings
-## =====================
 ##
 ## These set the defaults that quorum queues, streams, Khepri, and other Raft-based features use.
 ##
@@ -596,7 +663,6 @@
 
 ##
 ## Misc and Advanced Options
-## =====================
 ##
 ## NB: Change these only if you understand what you are doing!
 ##
@@ -623,17 +689,17 @@
 ## Timeout used when waiting for Mnesia tables in a cluster to
 ## become available.
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/clustering#restarting
+## Relevant doc guide: https://www.rabbitmq.com/docs/clustering#restarting
 # mnesia_table_loading_retry_timeout = 30000
 
 ## Retries when waiting for Mnesia tables in the cluster startup. Note that
 ## this setting is not applied to Mnesia upgrades or node deletions.
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/clustering#restarting
+## Relevant doc guide: https://www.rabbitmq.com/docs/clustering#restarting
 # mnesia_table_loading_retry_limit = 10
 
 ## Size in bytes below which to embed messages in the queue index.
-## Related doc guide: https://www.rabbitmq.com/docs/persistence-conf
+## Relevant doc guide: https://www.rabbitmq.com/docs/persistence-conf
 ##
 # queue_index_embed_msgs_below = 4096
 
@@ -666,7 +732,8 @@
 ## proxy protocol header to the broker at connection time.
 ## This setting applies only to AMQP clients, other protocols
 ## like MQTT or STOMP have their own setting to enable proxy protocol.
-## See the plugins documentation for more information.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/networking#proxy-protocol
 ##
 # proxy_protocol = false
 
@@ -688,41 +755,30 @@
 ##
 # consumer_timeout = 900000
 
-## ----------------------------------------------------------------------------
-## Advanced Erlang Networking/Clustering Options.
-##
-## Related doc guide: https://www.rabbitmq.com/docs/clustering
-## ----------------------------------------------------------------------------
+#
+# Advanced Erlang Networking/Clustering Options
+#
 
-# ======================================
-# Kernel section
-# ======================================
+#
+# Kernel
+#
 
 ## Timeout used to detect peer unavailability, including CLI tools.
-## Related doc guide: https://www.rabbitmq.com/docs/nettick.
+## Relevant doc guide: https://www.rabbitmq.com/docs/nettick.
 ##
 # net_ticktime = 60
 
 ## Inter-node communication port range.
 ## The parameters inet_dist_listen_min and inet_dist_listen_max
 ## can be configured in the classic config format only.
-## Related doc guide: https://www.rabbitmq.com/docs/networking#epmd-inet-dist-port-range.
+## Relevant doc guide: https://www.rabbitmq.com/docs/networking#epmd-inet-dist-port-range.
 
 
-## ----------------------------------------------------------------------------
-## RabbitMQ Management Plugin
-##
-## Related doc guide: https://www.rabbitmq.com/docs/management.
-## ----------------------------------------------------------------------------
+#
+# Management
+#
 
-# =======================================
-# Management section
-# =======================================
-
-## Preload schema definitions from the following JSON file.
-## Related doc guide: https://www.rabbitmq.com/docs/management#load-definitions.
-##
-# management.load_definitions = /path/to/exported/definitions.json
+## Relevant doc guide: https://www.rabbitmq.com/docs/management
 
 ## Log all requests to the management HTTP API to a file.
 ##
@@ -732,8 +788,7 @@
 ## The default is 20 MiB.
 # management.http.max_body_size = 500000
 
-## HTTP listener and embedded Web server settings.
-# ## See https://www.rabbitmq.com/docs/management for details.
+## HTTP listener and embedded HTTP server (Cowboy) settings
 #
 # management.tcp.port = 15672
 # management.tcp.ip   = 0.0.0.0
@@ -745,8 +800,12 @@
 # management.tcp.request_timeout    = 120
 # management.tcp.compress           = true
 
-## HTTPS listener settings.
-## See https://www.rabbitmq.com/docs/management and https://www.rabbitmq.com/docs/ssl for details.
+## HTTPS listener settings
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/management
+## * https://www.rabbitmq.com/docs/ssl
 ##
 # management.ssl.port       = 15671
 # management.ssl.cacertfile = /path/to/ca_certificate.pem
@@ -779,14 +838,15 @@
 ## URL path prefix for HTTP API and management UI
 # management.path_prefix = /a-prefix
 
-## One of 'basic', 'detailed' or 'none'. See
-## https://www.rabbitmq.com/docs/management#fine-stats for more details.
+## One of 'basic', 'detailed' or 'none'.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/management#fine-stats
 # management.rates_mode = basic
 
 ## Configure how long aggregated data (such as message rates and queue
-## lengths) is retained. Please read the plugin's documentation in
-## https://www.rabbitmq.com/docs/management#configuration for more
-## details.
+## lengths) is retained.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/management#configuration
 ## Your can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
 # management.sample_retention_policies.global.minute    = 5
 # management.sample_retention_policies.global.hour  = 60
@@ -797,26 +857,24 @@
 
 # management.sample_retention_policies.detailed.10 = 5
 
-## ----------------------------------------------------------------------------
-## RabbitMQ Shovel Plugin
+#
+# Shovel
+#
+
+## Relevant doc guides:
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/shovel
-## ----------------------------------------------------------------------------
+## * https://www.rabbitmq.com/docs/shovel
+## * https://www.rabbitmq.com/docs/shovel-dynamic
+## * https://www.rabbitmq.com/docs/shovel-static
 
-## See advanced.config.example for a Shovel plugin example
+## Static shovel configuration examples can be found in advanced.config.example.
 
 
-## ----------------------------------------------------------------------------
-## RabbitMQ STOMP Plugin
-##
-## Related doc guide: https://www.rabbitmq.com/docs/stomp
-## ----------------------------------------------------------------------------
+#
+# STOMP
+#
 
-# =======================================
-# STOMP section
-# =======================================
-
-## See https://www.rabbitmq.com/docs/stomp for details.
+## Relevant doc guide: https://www.rabbitmq.com/docs/stomp
 
 ## TCP listeners.
 ##
@@ -840,7 +898,11 @@
 # stomp.proxy_protocol = false
 
 ## TLS listeners
-## See https://www.rabbitmq.com/docs/stomp and https://www.rabbitmq.com/docs/ssl for details.
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/stomp
+## * https://www.rabbitmq.com/docs/ssl
 # stomp.listeners.ssl.default = 61614
 #
 # ssl_options.cacertfile = path/to/cacert.pem
@@ -850,8 +912,8 @@
 # ssl_options.fail_if_no_peer_cert = true
 
 
-## Number of Erlang processes that will accept connections for the TCP
-## and TLS listeners.
+## Number of Erlang processes that will accept AMQP 0-9-1 and AMQP 1.0 client connections,
+## one setting for for the TCP and one for the TLS listeners.
 ##
 # stomp.num_acceptors.tcp = 10
 # stomp.num_acceptors.ssl = 1
@@ -886,20 +948,14 @@
 ## proxy protocol header to the broker at connection time.
 ## This setting applies only to STOMP clients, other protocols
 ## like MQTT or AMQP have their own setting to enable proxy protocol.
-## See the plugins or broker documentation for more information.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/stomp#proxy-protocol
 ##
 # stomp.proxy_protocol = false
 
-## ----------------------------------------------------------------------------
-## RabbitMQ MQTT Adapter
-##
-## See https://github.com/rabbitmq/rabbitmq-mqtt/blob/stable/README.md
-## for details
-## ----------------------------------------------------------------------------
-
-# =======================================
-# MQTT section
-# =======================================
+#
+# MQTT Adapter
+#
 
 ## TCP listener settings.
 ##
@@ -918,8 +974,13 @@
 # mqtt.tcp_listen_options.exit_on_close = true
 # mqtt.tcp_listen_options.send_timeout  = 120000
 
-## TLS listener settings
-## ## See https://www.rabbitmq.com/docs/mqtt and https://www.rabbitmq.com/docs/ssl for details.
+## TLS Listener Settings
+##
+## Relevant doc guides:
+##
+## * https://www.rabbitmq.com/docs/mqtt
+## * https://www.rabbitmq.com/docs/ssl
+##
 #
 # mqtt.listeners.ssl.default = 8883
 #
@@ -941,9 +1002,10 @@
 ## Once enabled, clients cannot directly connect to the broker
 ## anymore. They must connect through a load balancer that sends the
 ## proxy protocol header to the broker at connection time.
-## This setting applies only to STOMP clients, other protocols
+## This setting applies only to MQTT clients, other protocols
 ## like STOMP or AMQP have their own setting to enable proxy protocol.
-## See the plugins or broker documentation for more information.
+##
+## Relevant doc guide: https://www.rabbitmq.com/docs/mqtt#proxy-protocol
 ##
 # mqtt.proxy_protocol = false
 
@@ -990,7 +1052,7 @@
 
 ## Logging settings.
 ##
-## See https://www.rabbitmq.com/docs/logging for details.
+## Relevant doc guide: https://www.rabbitmq.com/docs/logging
 ##
 
 ## Log directory, taken from the RABBITMQ_LOG_BASE env variable by default.
@@ -1044,8 +1106,9 @@
 ## compress the archived logs
 # log.file.rotation.compress = true
 
-
-## Date-based log rotation
+##
+## Logging: date-based log rotation
+##
 
 ## Note that `log.file.rotation.date` cannot be combined with `log.file.rotation.size`,
 ## the two options are mutually exclusive.
@@ -1060,21 +1123,9 @@
 # log.file.rotation.compress = true
 
 
-## ----------------------------------------------------------------------------
-## RabbitMQ LDAP Plugin
-##
-## Related doc guide: https://www.rabbitmq.com/docs/ldap.
-##
-## ----------------------------------------------------------------------------
-
-# =======================================
-# LDAP section
-# =======================================
-
-##
-## Connecting to the LDAP server(s)
-## ================================
-##
+#
+# LDAP
+#
 
 ## Specify servers to bind to. You *must* set this in order for the plugin
 ## to work properly.
@@ -1147,8 +1198,7 @@
 
 
 ##
-## Authentication
-## ==============
+## LDAP: Authentication Queries
 ##
 
 ## Pattern to convert the username given through AMQP to a DN before
@@ -1185,19 +1235,18 @@
 
 ## If user_dn and password defined - other options is ignored.
 
-# -----------------------------
-# Too complex section of LDAP
-# -----------------------------
+##
+## LDAP: Limitations
+##
 
 ##
-## Authorisation
-## =============
+## LDAP: Authorisation Queries
 ##
 
 ## The LDAP plugin can perform a variety of queries against your
 ## LDAP server to determine questions of authorisation.
 ##
-## Related doc guide: https://www.rabbitmq.com/docs/ldap#authorisation.
+## Relevant doc guide: https://www.rabbitmq.com/docs/ldap#authorisation.
 
 ## Following configuration should be defined in advanced.config file
 ## DO NOT UNCOMMENT THESE LINES!
