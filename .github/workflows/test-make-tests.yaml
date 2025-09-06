@@ -28,6 +28,7 @@ jobs:
           - parallel-ct-set-2
           - parallel-ct-set-3
           - parallel-ct-set-4
+          - parallel-ct-set-5
           - ct-amqp_client
           - ct-clustering_management
           - eunit ct-dead_lettering

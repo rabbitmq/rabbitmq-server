@@ -54,6 +54,7 @@
          consume/3,
          cancel/3,
          handle_event/3,
+         supports_stateful_delivery/0,
          deliver/3,
          settle/5,
          credit_v1/5,
@@ -62,8 +63,7 @@
          info/2,
          state_info/1,
          capabilities/0,
-         notify_decorators/1,
-         is_stateful/0
+         notify_decorators/1
          ]).
 
 -export([delete_crashed/1,
@@ -471,6 +471,8 @@ settlement_action(_Type, _QRef, [], Acc) ->
 settlement_action(Type, QRef, MsgSeqs, Acc) ->
     [{Type, QRef, MsgSeqs} | Acc].
 
+supports_stateful_delivery() -> true.
+
 -spec deliver([{amqqueue:amqqueue(), state()}],
               Delivery :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
@@ -683,8 +685,6 @@ capabilities() ->
 notify_decorators(Q) when ?is_amqqueue(Q) ->
     QPid = amqqueue:get_pid(Q),
     delegate:invoke_no_result(QPid, {gen_server2, cast, [notify_decorators]}).
-
-is_stateful() -> true.
 
 reject_seq_no(SeqNo, U0) ->
     reject_seq_no(SeqNo, U0, []).

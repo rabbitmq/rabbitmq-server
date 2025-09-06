@@ -18,6 +18,7 @@
          wait_for_accepts/1,
          send_message/2,
          send_messages/3, send_messages/4,
+         receive_messages/2,
          detach_link_sync/1,
          end_session_sync/1,
          wait_for_session_end/1,
@@ -117,6 +118,19 @@ send_messages(Sender, Left, Settled, BodySuffix) ->
     Msg = amqp10_msg:new(Bin, Body, Settled),
     ok = send_message(Sender, Msg),
     send_messages(Sender, Left - 1, Settled, BodySuffix).
+
+receive_messages(Receiver, Num) ->
+    receive_messages0(Receiver, Num, []).
+
+receive_messages0(_Receiver, 0, Acc) ->
+    lists:reverse(Acc);
+receive_messages0(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            receive_messages0(Receiver, N - 1, [Msg | Acc])
+    after 20_000  ->
+              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
+    end.
 
 detach_link_sync(Link) ->
     ok = amqp10_client:detach_link(Link),

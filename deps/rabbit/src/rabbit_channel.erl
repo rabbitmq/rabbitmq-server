@@ -129,6 +129,11 @@
                       msg_id
                     }).
 
+-record(direct_reply, {
+          consumer_tag :: rabbit_types:ctag(),
+          queue :: rabbit_misc:resource_name()
+         }).
+
 -record(ch, {cfg :: #conf{},
              %% limiter state, see rabbit_limiter
              limiter,
@@ -159,8 +164,7 @@
              %% a list of tags for published messages that were
              %% rejected but are yet to be sent to the client
              rejected,
-             %% used by "one shot RPC" (amq.
-             reply_consumer :: none | {rabbit_types:ctag(), binary(), binary()},
+             direct_reply :: none | #direct_reply{},
              %% see rabbitmq-server#114
              delivery_flow :: flow | noflow,
              interceptor_state,
@@ -297,47 +301,13 @@ shutdown(Pid) ->
 send_command(Pid, Msg) ->
     gen_server2:cast(Pid,  {command, Msg}).
 
-
--spec deliver_reply(binary(), mc:state()) -> 'ok'.
-deliver_reply(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>, Message) ->
-    Nodes = nodes_with_hashes(),
-    case rabbit_direct_reply_to:decode_reply_to(EncodedBin, Nodes) of
-        {ok, Pid, Key} ->
-            delegate:invoke_no_result(
-              Pid, {?MODULE, deliver_reply_local, [Key, Message]});
-        {error, _} ->
-            ok
-    end.
-
-%% We want to ensure people can't use this mechanism to send a message
-%% to an arbitrary process and kill it!
-
--spec deliver_reply_local(pid(), binary(), mc:state()) -> 'ok'.
-
+%% Delete this function when feature flag rabbitmq_4.2.0 becomes required.
+-spec deliver_reply_local(pid(), binary(), mc:state()) -> ok.
 deliver_reply_local(Pid, Key, Message) ->
     case pg_local:in_group(rabbit_channels, Pid) of
         true  -> gen_server2:cast(Pid, {deliver_reply, Key, Message});
         false -> ok
     end.
-
-declare_fast_reply_to(<<"amq.rabbitmq.reply-to">>) ->
-    exists;
-declare_fast_reply_to(<<"amq.rabbitmq.reply-to.", EncodedBin/binary>>) ->
-    Nodes = nodes_with_hashes(),
-    case rabbit_direct_reply_to:decode_reply_to(EncodedBin, Nodes) of
-        {ok, Pid, Key} ->
-            Msg = {declare_fast_reply_to, Key},
-            rabbit_misc:with_exit_handler(
-              rabbit_misc:const(not_found),
-              fun() -> gen_server2:call(Pid, Msg, infinity) end);
-        {error, _} ->
-            not_found
-    end;
-declare_fast_reply_to(_) ->
-    not_found.
-
-nodes_with_hashes() ->
-    #{erlang:phash2(Node) => Node || Node <- rabbit_nodes:list_members()}.
 
 -spec list() -> [pid()].
 
@@ -530,7 +500,7 @@ init([Channel, ReaderPid, WriterPid, ConnPid, ConnName, Protocol, User, VHost,
                 unconfirmed             = rabbit_confirms:init(),
                 rejected                = [],
                 confirmed               = [],
-                reply_consumer          = none,
+                direct_reply            = none,
                 delivery_flow           = Flow,
                 interceptor_state       = undefined,
                 queue_states            = rabbit_queue_type:init()
@@ -587,6 +557,29 @@ handle_call({{info, Items}, Deadline}, _From, State) ->
             reply({error, Error}, State)
     end;
 
+handle_call({has_state, #resource{virtual_host = Vhost,
+                                  name = Name}, rabbit_volatile_queue},
+            _From,
+            #ch{cfg = #conf{virtual_host = Vhost},
+                direct_reply = #direct_reply{queue = Name}} = State) ->
+    reply(true, State);
+handle_call({has_state, _QName, _QType}, _From, State) ->
+    reply(false, State);
+%% Delete below clause when feature flag rabbitmq_4.2.0 becomes required.
+handle_call({declare_fast_reply_to, Key}, _From, State = #ch{direct_reply = Reply}) ->
+    Result = case Reply of
+                 none ->
+                     not_found;
+                 #direct_reply{queue = QNameBin} ->
+                     case rabbit_volatile_queue:key_from_name(QNameBin) of
+                         {ok, Key} ->
+                             exists;
+                         _ ->
+                             not_found
+                     end
+             end,
+    reply(Result, State);
+
 handle_call(refresh_config, _From,
             State = #ch{cfg = #conf{virtual_host = VHost} = Cfg}) ->
     reply(ok, State#ch{cfg = Cfg#conf{trace_state = rabbit_trace:init(VHost)}});
@@ -594,13 +587,6 @@ handle_call(refresh_config, _From,
 handle_call(refresh_interceptors, _From, State) ->
     IState = rabbit_channel_interceptor:init(State),
     reply(ok, State#ch{interceptor_state = IState});
-
-handle_call({declare_fast_reply_to, Key}, _From,
-            State = #ch{reply_consumer = Consumer}) ->
-    reply(case Consumer of
-              {_, _, Key} -> exists;
-              _           -> not_found
-          end, State);
 
 handle_call(list_queue_states, _From, State = #ch{queue_states = QueueStates}) ->
     %% For testing of cleanup only
@@ -665,29 +651,31 @@ handle_cast({command, Msg}, State) ->
     ok = send(Msg, State),
     noreply(State);
 
-handle_cast({deliver_reply, _K, _Del},
-            State = #ch{cfg = #conf{state = closing}}) ->
-    noreply(State);
-handle_cast({deliver_reply, _K, _Msg}, State = #ch{reply_consumer = none}) ->
-    noreply(State);
+%% Delete below clause when feature flag rabbitmq_4.2.0 becomes required.
 handle_cast({deliver_reply, Key, Mc},
-            State = #ch{cfg = #conf{writer_pid = WriterPid,
-                                    msg_interceptor_ctx = MsgIcptCtx},
-                        next_tag = DeliveryTag,
-                        reply_consumer = {ConsumerTag, _Suffix, Key}}) ->
-    ExchName = mc:exchange(Mc),
-    [RoutingKey | _] = mc:routing_keys(Mc),
-    Content = outgoing_content(Mc, MsgIcptCtx),
-    ok = rabbit_writer:send_command(
-           WriterPid,
-           #'basic.deliver'{consumer_tag = ConsumerTag,
-                            delivery_tag = DeliveryTag,
-                            redelivered = false,
-                            exchange = ExchName,
-                            routing_key = RoutingKey},
-           Content),
+            #ch{cfg = #conf{state = ChanState,
+                            writer_pid = WriterPid,
+                            msg_interceptor_ctx = MsgIcptCtx},
+                next_tag = DeliveryTag,
+                direct_reply = #direct_reply{consumer_tag = Ctag,
+                                             queue = QNameBin}} = State)
+  when ChanState =/= closing ->
+    case rabbit_volatile_queue:key_from_name(QNameBin) of
+        {ok, Key} ->
+            ExchName = mc:exchange(Mc),
+            [RoutingKey | _] = mc:routing_keys(Mc),
+            Deliver = #'basic.deliver'{consumer_tag = Ctag,
+                                       delivery_tag = DeliveryTag,
+                                       redelivered = false,
+                                       exchange = ExchName,
+                                       routing_key = RoutingKey},
+            Content = outgoing_content(Mc, MsgIcptCtx),
+            ok = rabbit_writer:send_command(WriterPid, Deliver, Content);
+        _ ->
+            ok
+    end,
     noreply(State);
-handle_cast({deliver_reply, _K1, _}, State=#ch{reply_consumer = {_, _, _K2}}) ->
+handle_cast({deliver_reply, _, _}, State) ->
     noreply(State);
 
 % Note: https://www.pivotaltracker.com/story/show/166962656
@@ -1084,20 +1072,19 @@ strip_cr_lf(NameBin) ->
   binary:replace(NameBin, [<<"\n">>, <<"\r">>], <<"">>, [global]).
 
 
-maybe_set_fast_reply_to(
-  C = #content{properties = P = #'P_basic'{reply_to =
-                                               <<"amq.rabbitmq.reply-to">>}},
-  #ch{reply_consumer = ReplyConsumer}) ->
-    case ReplyConsumer of
-        none         -> rabbit_misc:protocol_error(
-                          precondition_failed,
-                          "fast reply consumer does not exist", []);
-        {_, Suf, _K} -> Rep = <<"amq.rabbitmq.reply-to.", Suf/binary>>,
-                        rabbit_binary_generator:clear_encoded_content(
-                          C#content{properties = P#'P_basic'{reply_to = Rep}})
+override_reply_to(
+  C0 = #content{properties = P = #'P_basic'{reply_to = <<"amq.rabbitmq.reply-to">>}},
+  #ch{direct_reply = Reply}) ->
+    case Reply of
+        #direct_reply{queue = QNameBin} ->
+            C = C0#content{properties = P#'P_basic'{reply_to = QNameBin}},
+            rabbit_binary_generator:clear_encoded_content(C);
+        none ->
+            rabbit_misc:protocol_error(precondition_failed,
+                                       "fast reply consumer does not exist", [])
     end;
-maybe_set_fast_reply_to(C, _State) ->
-    C.
+override_reply_to(Content, _) ->
+    Content.
 
 record_rejects([], State) ->
     State;
@@ -1198,9 +1185,8 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
     check_internal_exchange(Exchange),
     %% We decode the content's properties here because we're almost
     %% certain to want to look at delivery-mode and priority.
-    DecodedContent = #content {properties = Props} =
-        maybe_set_fast_reply_to(
-          rabbit_binary_parser:ensure_content_decoded(Content), State1),
+    DecContent0 = rabbit_binary_parser:ensure_content_decoded(Content),
+    DecContent = #content{properties = Props} = override_reply_to(DecContent0, State1),
     check_expiration_header(Props),
     DoConfirm = Tx =/= none orelse ConfirmEnabled,
     {DeliveryOptions, State} =
@@ -1217,7 +1203,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
 
     case mc_amqpl:message(ExchangeName,
                           RoutingKey,
-                          DecodedContent) of
+                          DecContent) of
         {error, Reason}  ->
             rabbit_misc:precondition_failed("invalid message: ~tp", [Reason]);
         {ok, Message0} ->
@@ -1225,7 +1211,6 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             check_user_id_header(Message0, User),
             Message = rabbit_msg_interceptor:intercept_incoming(Message0, MsgIcptCtx),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-            [deliver_reply(RK, Message) || {virtual_reply_queue, RK} <- QNames],
             Queues = rabbit_amqqueue:lookup_many(QNames),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
@@ -1301,30 +1286,46 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
                                consumer_tag = CTag0,
                                no_ack       = NoAck,
                                nowait       = NoWait},
-              _, State = #ch{reply_consumer   = ReplyConsumer,
-                             cfg = #conf{max_consumers = MaxConsumers},
+              _, State = #ch{direct_reply = DirectReply0,
+                             cfg = #conf{virtual_host = Vhost,
+                                         user = #user{username = Username},
+                                         max_consumers = MaxConsumers},
+                             queue_states = QStates0,
                              consumer_mapping = ConsumerMapping}) ->
     CurrentConsumers = maps:size(ConsumerMapping),
     case maps:find(CTag0, ConsumerMapping) of
         error when CurrentConsumers >= MaxConsumers ->  % false when MaxConsumers is 'infinity'
             rabbit_misc:protocol_error(
-              not_allowed, "reached maximum (~B) of consumers per channel", [MaxConsumers]);
+              not_allowed,
+              "reached maximum (~B) of consumers per channel", [MaxConsumers]);
         error ->
-            case {ReplyConsumer, NoAck} of
+            case {DirectReply0, NoAck} of
                 {none, true} ->
                     CTag = case CTag0 of
-                               <<>>  -> rabbit_guid:binary(
-                                          rabbit_guid:gen_secure(), "amq.ctag");
-                               Other -> Other
+                               <<>> ->
+                                   rabbit_guid:binary(rabbit_guid:gen_secure(), "amq.ctag");
+                               Other ->
+                                   Other
                            end,
-                    %% Precalculate both suffix and key
-                    {Key, Suffix} = rabbit_direct_reply_to:compute_key_and_suffix(self()),
-                    Consumer = {CTag, Suffix, Key},
-                    State1 = State#ch{reply_consumer = Consumer},
+                    QNameBin = rabbit_volatile_queue:new_name(),
+                    QName = rabbit_misc:queue_resource(Vhost, QNameBin),
+                    Q = rabbit_volatile_queue:new(QName),
+                    Spec = #{no_ack => true,
+                             channel_pid => self(),
+                             mode => {simple_prefetch, 0},
+                             consumer_tag => CTag,
+                             ok_msg => undefined,
+                             acting_user => Username},
+                    {ok, QStates} = rabbit_queue_type:consume(Q, Spec, QStates0),
+                    State1 = State#ch{direct_reply = #direct_reply{consumer_tag = CTag,
+                                                                   queue = QNameBin},
+                                      queue_states = QStates},
                     case NoWait of
-                        true  -> {noreply, State1};
-                        false -> Rep = #'basic.consume_ok'{consumer_tag = CTag},
-                                 {reply, Rep, State1}
+                        true ->
+                            {noreply, State1};
+                        false ->
+                            Rep = #'basic.consume_ok'{consumer_tag = CTag},
+                            {reply, Rep, State1}
                     end;
                 {_, false} ->
                     rabbit_misc:protocol_error(
@@ -1341,17 +1342,25 @@ handle_method(#'basic.consume'{queue        = <<"amq.rabbitmq.reply-to">>,
     end;
 
 handle_method(#'basic.cancel'{consumer_tag = ConsumerTag, nowait = NoWait},
-              _, State = #ch{reply_consumer = {ConsumerTag, _, _}}) ->
-    State1 = State#ch{reply_consumer = none},
+              _, State = #ch{cfg = #conf{virtual_host = Vhost},
+                             direct_reply = #direct_reply{consumer_tag = ConsumerTag,
+                                                          queue = QNameBin},
+                             queue_states = QStates}) ->
+    QName = rabbit_misc:queue_resource(Vhost, QNameBin),
+    QStates1 = rabbit_queue_type:remove(QName, QStates),
+    State1 = State#ch{direct_reply = none,
+                      queue_states = QStates1},
     case NoWait of
-        true  -> {noreply, State1};
-        false -> Rep = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
-                 {reply, Rep, State1}
+        true  ->
+            {noreply, State1};
+        false ->
+            Rep = #'basic.cancel_ok'{consumer_tag = ConsumerTag},
+            {reply, Rep, State1}
     end;
 
 handle_method(#'basic.consume'{queue        = QueueNameBin,
                                consumer_tag = ConsumerTag,
-                               no_local     = _, % FIXME: implement
+                               no_local     = _Unsupported,
                                no_ack       = NoAck,
                                exclusive    = ExclusiveConsume,
                                nowait       = NoWait,
@@ -1873,21 +1882,30 @@ record_sent(Type, QueueType, Tag, AckRequired,
                         next_tag          = DeliveryTag
                        }) ->
     rabbit_global_counters:messages_delivered(amqp091, QueueType, 1),
-    ?INCR_STATS(queue_stats, QName, 1,
-                case {Type, AckRequired} of
-                    {get, true} ->
-                        rabbit_global_counters:messages_delivered_get_manual_ack(amqp091, QueueType, 1),
-                        get;
-                    {get, false} ->
-                        rabbit_global_counters:messages_delivered_get_auto_ack(amqp091, QueueType, 1),
-                        get_no_ack;
-                    {deliver, true} ->
-                        rabbit_global_counters:messages_delivered_consume_manual_ack(amqp091, QueueType, 1),
-                        deliver;
-                    {deliver, false} ->
-                        rabbit_global_counters:messages_delivered_consume_auto_ack(amqp091, QueueType, 1),
-                        deliver_no_ack
-                end, State),
+    Measure = case {Type, AckRequired} of
+                  {get, true} ->
+                      rabbit_global_counters:messages_delivered_get_manual_ack(
+                        amqp091, QueueType, 1),
+                      get;
+                  {get, false} ->
+                      rabbit_global_counters:messages_delivered_get_auto_ack(
+                        amqp091, QueueType, 1),
+                      get_no_ack;
+                  {deliver, true} ->
+                      rabbit_global_counters:messages_delivered_consume_manual_ack(
+                        amqp091, QueueType, 1),
+                      deliver;
+                  {deliver, false} ->
+                      rabbit_global_counters:messages_delivered_consume_auto_ack(
+                        amqp091, QueueType, 1),
+                      deliver_no_ack
+              end,
+    case rabbit_volatile_queue:is(QName#resource.name) of
+        true ->
+            ok;
+        false ->
+            ?INCR_STATS(queue_stats, QName, 1, Measure, State)
+    end,
     case Redelivered of
         true ->
             rabbit_global_counters:messages_redelivered(amqp091, QueueType, 1),
@@ -2074,9 +2092,16 @@ deliver_to_queues(XName,
             case rabbit_event:stats_level(State, #ch.stats_timer) of
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
-                    lists:foreach(fun(QName) ->
-                                          ?INCR_STATS(queue_exchange_stats, {QName, XName}, 1, publish)
-                                  end, QueueNames);
+                    lists:foreach(
+                      fun(#resource{name = QNameBin} = QName) ->
+                              case rabbit_volatile_queue:is(QNameBin) of
+                                  true ->
+                                      ok;
+                                  false ->
+                                      ?INCR_STATS(queue_exchange_stats,
+                                                  {QName, XName}, 1, publish)
+                              end
+                      end, QueueNames);
                 _ ->
                     ok
             end,
@@ -2379,14 +2404,17 @@ handle_method(#'queue.bind'{queue       = QueueNameBin,
       RoutingKey, Arguments, VHostPath, ConnPid, AuthzContext, User);
 %% Note that all declares to these are effectively passive. If it
 %% exists it by definition has one consumer.
-handle_method(#'queue.declare'{queue   = <<"amq.rabbitmq.reply-to",
-                                           _/binary>> = QueueNameBin},
+handle_method(#'queue.declare'{queue = <<"amq.rabbitmq.reply-to",
+                                         _/binary>> = QueueNameBin0},
               _ConnPid, _AuthzContext, _CollectorPid, VHost, _User) ->
-    StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
-    QueueName = rabbit_misc:r(VHost, queue, StrippedQueueNameBin),
-    case declare_fast_reply_to(StrippedQueueNameBin) of
-        exists    -> {ok, QueueName, 0, 1};
-        not_found -> rabbit_amqqueue:not_found(QueueName)
+    QueueNameBin = strip_cr_lf(QueueNameBin0),
+    QueueName = rabbit_misc:queue_resource(VHost, QueueNameBin),
+    Q = rabbit_volatile_queue:new(QueueName),
+    case rabbit_queue_type:declare(Q, node()) of
+        {existing, _} ->
+            {ok, QueueName, 0, 1};
+        {absent, _, _} ->
+            rabbit_amqqueue:not_found(QueueName)
     end;
 handle_method(#'queue.declare'{queue       = QueueNameBin,
                                passive     = false,
@@ -2489,7 +2517,7 @@ handle_method(#'queue.declare'{queue   = QueueNameBin,
                                passive = true},
               ConnPid, _AuthzContext, _CollectorPid, VHostPath, _User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
-    QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
+    QueueName = rabbit_misc:queue_resource(VHostPath, StrippedQueueNameBin),
     Fun = fun (Q0) ->
               QStat = maybe_stat(NoWait, Q0),
               {QStat, Q0}
@@ -2600,7 +2628,7 @@ handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
     check_not_default_exchange(ExchangeName),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
 
-handle_deliver(CTag, Ack, Msgs, State) when is_list(Msgs) ->
+handle_deliver(CTag, Ack, Msgs, State) ->
     lists:foldl(fun(Msg, S) ->
                         handle_deliver0(CTag, Ack, Msg, S)
                 end, State, Msgs).

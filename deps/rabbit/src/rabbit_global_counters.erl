@@ -132,20 +132,19 @@
 boot_step() ->
     [begin
          %% Protocol counters
-         Protocol = #{protocol => Proto},
-         init(Protocol),
+         Labels = #{protocol => Proto},
+         init(Labels),
          rabbit_msg_size_metrics:init(Proto),
 
          %% Protocol & Queue Type counters
-         init(Protocol#{queue_type => rabbit_classic_queue}),
-         init(Protocol#{queue_type => rabbit_quorum_queue}),
-         init(Protocol#{queue_type => rabbit_stream_queue})
+         init(Labels#{queue_type => rabbit_classic_queue}),
+         init(Labels#{queue_type => rabbit_quorum_queue}),
+         init(Labels#{queue_type => rabbit_stream_queue}),
+         init(Labels#{queue_type => rabbit_volatile_queue})
      end || Proto <- [amqp091, amqp10]],
 
-    %% Dead Letter counters
-    %%
-    %% Streams never dead letter.
-    %%
+    init(#{queue_type => rabbit_volatile_queue, dead_letter_strategy => disabled},
+         [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER]),
     %% Source classic queue dead letters.
     init(#{queue_type => rabbit_classic_queue, dead_letter_strategy => disabled},
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
@@ -155,7 +154,6 @@ boot_step() ->
          [?MESSAGES_DEAD_LETTERED_MAXLEN_COUNTER,
           ?MESSAGES_DEAD_LETTERED_EXPIRED_COUNTER,
           ?MESSAGES_DEAD_LETTERED_REJECTED_COUNTER]),
-    %%
     %% Source quorum queue dead letters.
     %% Only quorum queues can dead letter due to delivery-limit exceeded.
     %% Only quorum queues support dead letter strategy at-least-once.

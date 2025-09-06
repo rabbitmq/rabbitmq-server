@@ -92,8 +92,8 @@
 -type max_message_size() :: undefined | non_neg_integer().
 -type footer_opt() :: crc32 | adler32.
 
--type attach_args() :: #{name => binary(),
-                         role => attach_role(),
+-type attach_args() :: #{name := binary(),
+                         role := attach_role(),
                          snd_settle_mode => snd_settle_mode(),
                          rcv_settle_mode => rcv_settle_mode(),
                          filter => filter(),
@@ -739,13 +739,19 @@ build_frames(Channel, Trf, Payload, MaxPayloadSize, Acc) ->
 
 make_source(#{role := {sender, _}}) ->
     #'v1_0.source'{};
-make_source(#{role := {receiver, Source, _Pid},
-              filter := Filter}) ->
+make_source(#{role := {receiver, Source, _Pid}} = AttachArgs) ->
     Durable = translate_terminus_durability(maps:get(durable, Source, none)),
+    ExpiryPolicy = case Source of
+                       #{expiry_policy := Policy} when is_binary(Policy) ->
+                           {symbol, Policy};
+                       _ ->
+                           undefined
+                   end,
     Dynamic = maps:get(dynamic, Source, false),
-    TranslatedFilter = translate_filters(Filter),
+    TranslatedFilter = translate_filters(maps:get(filter, AttachArgs, #{})),
     #'v1_0.source'{address = make_address(Source),
                    durable = {uint, Durable},
+                   expiry_policy = ExpiryPolicy,
                    dynamic = Dynamic,
                    filter = TranslatedFilter,
                    capabilities = make_capabilities(Source)}.

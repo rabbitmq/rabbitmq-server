@@ -182,9 +182,9 @@ smoke(Config) ->
     ?assertEqual(#{
                    messages_acknowledged_total => 3,
                    messages_delivered_consume_auto_ack_total => 0,
-                   messages_delivered_consume_manual_ack_total => 0,
+                   messages_delivered_consume_manual_ack_total => 2,
                    messages_delivered_get_auto_ack_total => 0,
-                   messages_delivered_get_manual_ack_total => 0,
+                   messages_delivered_get_manual_ack_total => 2,
                    messages_delivered_total => 4,
                    messages_get_empty_total => 2,
                    messages_redelivered_total => 1

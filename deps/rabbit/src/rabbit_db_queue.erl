@@ -490,25 +490,38 @@ get_many_in_khepri(Names) ->
 
 get_many_in_ets(Table, [{Name, RouteInfos}])
   when is_map(RouteInfos) ->
-    case ets:lookup(Table, Name) of
+    case ets_lookup(Table, Name) of
         [] -> [];
         [Q] -> [{Q, RouteInfos}]
     end;
 get_many_in_ets(Table, [Name]) ->
-    ets:lookup(Table, Name);
+    ets_lookup(Table, Name);
 get_many_in_ets(Table, Names) when is_list(Names) ->
     lists:filtermap(fun({Name, RouteInfos})
                           when is_map(RouteInfos) ->
-                            case ets:lookup(Table, Name) of
+                            case ets_lookup(Table, Name) of
                                 [] -> false;
                                 [Q] -> {true, {Q, RouteInfos}}
                             end;
                        (Name) ->
-                            case ets:lookup(Table, Name) of
+                            case ets_lookup(Table, Name) of
                                 [] -> false;
                                 [Q] -> {true, Q}
                             end
                     end, Names).
+
+ets_lookup(Table, QName = #resource{name = QNameBin}) ->
+    case rabbit_volatile_queue:is(QNameBin) of
+        true ->
+            %% This queue record is not stored in the database.
+            %% We create it on the fly.
+            case rabbit_volatile_queue:new(QName) of
+                error -> [];
+                Q -> [Q]
+            end;
+        false ->
+            ets:lookup(Table, QName)
+    end.
 
 %% -------------------------------------------------------------------
 %% get().
@@ -517,11 +530,19 @@ get_many_in_ets(Table, Names) when is_list(Names) ->
 -spec get(QName) -> Ret when
       QName :: rabbit_amqqueue:name(),
       Ret :: {ok, Queue :: amqqueue:amqqueue()} | {error, not_found}.
-get(Name) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_in_mnesia(Name) end,
-        khepri => fun() -> get_in_khepri(Name) end
-       }).
+get(#resource{name = NameBin} = Name) ->
+    case rabbit_volatile_queue:is(NameBin) of
+        true ->
+            case rabbit_volatile_queue:new(Name) of
+                error -> {error, not_found};
+                Q -> {ok, Q}
+            end;
+        false ->
+            rabbit_khepri:handle_fallback(
+              #{mnesia => fun() -> get_in_mnesia(Name) end,
+                khepri => fun() -> get_in_khepri(Name) end
+               })
+    end.
 
 get_in_mnesia(Name) ->
     rabbit_mnesia:dirty_read({?MNESIA_TABLE, Name}).
@@ -776,11 +797,16 @@ update_durable_in_khepri(UpdateFun, FilterFun) ->
 %%
 %% @private
 
-exists(QName) ->
-    rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> exists_in_mnesia(QName) end,
-        khepri => fun() -> exists_in_khepri(QName) end
-       }).
+exists(#resource{name = NameBin} = Name) ->
+    case rabbit_volatile_queue:is(NameBin) of
+        true ->
+            rabbit_volatile_queue:exists(Name);
+        false ->
+            rabbit_khepri:handle_fallback(
+              #{mnesia => fun() -> exists_in_mnesia(Name) end,
+                khepri => fun() -> exists_in_khepri(Name) end
+               })
+    end.
 
 exists_in_mnesia(QName) ->
     ets:member(?MNESIA_TABLE, QName).

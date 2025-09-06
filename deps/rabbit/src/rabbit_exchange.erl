@@ -30,8 +30,7 @@
 -type route_opts() :: #{return_binding_keys => boolean()}.
 -type route_infos() :: #{binding_keys => #{rabbit_types:binding_key() => true}}.
 -type route_return() :: list(rabbit_amqqueue:name() |
-                             {rabbit_amqqueue:name(), route_infos()} |
-                             {virtual_reply_queue, binary()}).
+                             {rabbit_amqqueue:name(), route_infos()}).
 
 %%----------------------------------------------------------------------------
 
@@ -373,7 +372,7 @@ info_all(VHostPath, Items, Ref, AggregatorPid) ->
       AggregatorPid, Ref, fun(X) -> info(X, Items) end, list(VHostPath)).
 
 -spec route(rabbit_types:exchange(), mc:state()) ->
-    [rabbit_amqqueue:name() | {virtual_reply_queue, binary()}].
+    [rabbit_amqqueue:name()].
 route(Exchange, Message) ->
     route(Exchange, Message, #{}).
 
@@ -384,15 +383,7 @@ route(#exchange{name = #resource{name = ?DEFAULT_EXCHANGE_NAME,
       Message, _Opts) ->
     RKs0 = mc:routing_keys(Message),
     RKs = lists:usort(RKs0),
-    [begin
-         case virtual_reply_queue(RK) of
-             false ->
-                 rabbit_misc:r(VHost, queue, RK);
-             true ->
-                 {virtual_reply_queue, RK}
-         end
-     end
-     || RK <- RKs];
+    [rabbit_misc:r(VHost, queue, RK) || RK <- RKs];
 route(X = #exchange{name = XName,
                     decorators = Decorators},
       Message, Opts) ->
@@ -406,9 +397,6 @@ route(X = #exchange{name = XName,
         _ ->
             maps:keys(QNamesToBKeys)
     end.
-
-virtual_reply_queue(<<"amq.rabbitmq.reply-to.", _/binary>>) -> true;
-virtual_reply_queue(_)                                      -> false.
 
 route1(_, _, _, {[], _, QNames}) ->
     QNames;

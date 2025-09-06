@@ -31,7 +31,7 @@
 -type match_result() :: [rabbit_types:binding_destination() |
                          {rabbit_amqqueue:name(), rabbit_types:binding_key()}].
 
--define(COMPILED_TOPIC_SPLIT_PATTERN, dot_binary_pattern).
+-define(COMPILED_TOPIC_SPLIT_PATTERN, cp_dot).
 
 %% -------------------------------------------------------------------
 %% set().

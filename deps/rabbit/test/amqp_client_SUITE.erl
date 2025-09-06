@@ -37,6 +37,7 @@
          wait_for_credit/1,
          wait_for_accepts/1,
          send_messages/3, send_messages/4,
+         receive_messages/2,
          detach_link_sync/1,
          end_session_sync/1,
          wait_for_session_end/1,
@@ -3428,8 +3429,7 @@ max_message_size_server_to_client(Config) ->
                    role => {receiver, #{address => Address,
                                         durable => configuration}, self()},
                    snd_settle_mode => unsettled,
-                   rcv_settle_mode => first,
-                   filter => #{}},
+                   rcv_settle_mode => first},
     {ok, Receiver} = amqp10_client:attach_link(Session, AttachArgs),
     {ok, Msg} = amqp10_client:get_msg(Receiver),
     ?assertEqual([PayloadSmallEnough], amqp10_msg:body(Msg)),
@@ -5009,8 +5009,7 @@ dynamic_source_rpc(Config) ->
     AttachArgs = #{name => <<"rpc-client-receiver🥕"/utf8>>,
                    role => {receiver, Source, self()},
                    snd_settle_mode => unsettled,
-                   rcv_settle_mode => first,
-                   filter => #{}},
+                   rcv_settle_mode => first},
     {ok, ReceiverClient} = amqp10_client:attach_link(SessionClient, AttachArgs),
     RespAddr = receive {amqp10_event, {link, ReceiverClient, {attached, Attach}}} ->
                            #'v1_0.attach'{
@@ -5081,8 +5080,7 @@ dynamic_terminus_delete(Config) ->
                  durable => none},
     RcvAttachArgs = #{role => {receiver, Terminus, self()},
                       snd_settle_mode => unsettled,
-                      rcv_settle_mode => first,
-                      filter => #{}},
+                      rcv_settle_mode => first},
     SndAttachArgs = #{role => {sender, Terminus},
                       snd_settle_mode => mixed,
                       rcv_settle_mode => first},
@@ -5768,7 +5766,6 @@ footer_checksum(FooterOpt, Config) ->
                                             durable => configuration}, self()},
                        snd_settle_mode => settled,
                        rcv_settle_mode => first,
-                       filter => #{},
                        footer_opt => FooterOpt},
     SndAttachArgs = #{name => <<"my sender">>,
                       role => {sender, #{address => Addr,
@@ -6872,19 +6869,6 @@ drain_queue(Session, Address, N) ->
     flush("after drain"),
     ok = amqp10_client:detach_link(Receiver),
     {ok, Msgs}.
-
-receive_messages(Receiver, N) ->
-    receive_messages0(Receiver, N, []).
-
-receive_messages0(_Receiver, 0, Acc) ->
-    lists:reverse(Acc);
-receive_messages0(Receiver, N, Acc) ->
-    receive
-        {amqp10_msg, Receiver, Msg} ->
-            receive_messages0(Receiver, N - 1, [Msg | Acc])
-    after 30000  ->
-              ct:fail({timeout, {num_received, length(Acc)}, {num_missing, N}})
-    end.
 
 count_received_messages(Receiver) ->
     count_received_messages0(Receiver, 0).

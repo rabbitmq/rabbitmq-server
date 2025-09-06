@@ -51,8 +51,8 @@ prop_decode_reply_to(_) ->
 
             PidParts   = #{node => Node, id => 0, serial => 0, creation => 0},
             IxParts    = PidParts#{node := rabbit_nodes_common:make("banana", Ix)},
-            IxPartsEnc = base64:encode(pid_recomposition:to_binary(IxParts)),
-            IxBin      = <<IxPartsEnc/binary, ".", Key/binary>>,
+            IxPartsEnc = base64:encode(rabbit_pid_codec:recompose_to_binary(IxParts)),
+            QNameBin = <<"amq.rabbitmq.reply-to.", IxPartsEnc/binary, ".", Key/binary>>,
 
             NodeMap   = maps:from_list(NodeList),
             NoNodeMap = maps:from_list(NoNodeList),
@@ -60,10 +60,12 @@ prop_decode_reply_to(_) ->
             %% There is non-zero chance Random is a valid encoded Pid.
             NonB64 = <<0, Random/binary>>, 
 
-            {ok, pid_recomposition:recompose(PidParts), Key} =:=
-                rabbit_direct_reply_to:decode_reply_to(IxBin, NodeMap)
-            andalso {error, target_node_not_found} =:=
-                rabbit_direct_reply_to:decode_reply_to(IxBin, NoNodeMap)
-            andalso {error, unrecognized_format} =:=
-                rabbit_direct_reply_to:decode_reply_to(NonB64, NodeMap)
+            {ok, rabbit_pid_codec:recompose(PidParts)} =:=
+                rabbit_volatile_queue:pid_from_name(QNameBin, NodeMap)
+            andalso {ok, Key} =:=
+                rabbit_volatile_queue:key_from_name(QNameBin)
+            andalso error =:=
+                rabbit_volatile_queue:pid_from_name(QNameBin, NoNodeMap)
+            andalso error =:=
+                rabbit_volatile_queue:pid_from_name(NonB64, NodeMap)
         end).

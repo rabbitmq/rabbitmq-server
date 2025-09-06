@@ -228,7 +228,14 @@ convert_from(mc_amqp, Sections, Env) ->
                      %% drop it, what else can we do?
                      undefined
              end,
-
+    ReplyTo = case unwrap_shortstr(ReplyTo0) of
+                  <<"/queues/", Queue/binary>> ->
+                      try cow_uri:urldecode(Queue)
+                      catch error:_ -> undefined
+                      end;
+                  Other ->
+                      Other
+              end,
     BP = #'P_basic'{message_id = MsgId091,
                     delivery_mode = DelMode,
                     expiration = Expiration,
@@ -237,7 +244,7 @@ convert_from(mc_amqp, Sections, Env) ->
                                   [] -> undefined;
                                   AllHeaders -> AllHeaders
                               end,
-                    reply_to = unwrap_shortstr(ReplyTo0),
+                    reply_to = ReplyTo,
                     type = Type,
                     app_id = unwrap_shortstr(GroupId),
                     priority = Priority,
@@ -349,7 +356,7 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                delivery_mode = DelMode,
                headers = Headers0,
                user_id = UserId,
-               reply_to = ReplyTo,
+               reply_to = ReplyTo0,
                type = Type,
                priority = Priority,
                app_id = AppId,
@@ -382,6 +389,13 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                        ttl = wrap(uint, Ttl),
                        %% TODO: check Priority is a ubyte?
                        priority = wrap(ubyte, Priority)},
+    ReplyTo = case ReplyTo0 of
+                  undefined ->
+                      undefined;
+                  _ ->
+                      Queue = uri_string:quote(ReplyTo0),
+                      {utf8, <<"/queues/", Queue/binary>>}
+              end,
     CorrId = case mc_util:urn_string_to_uuid(CorrId0) of
                  {ok, CorrUUID} ->
                      {uuid, CorrUUID};
@@ -389,18 +403,18 @@ convert_to(mc_amqp, #content{payload_fragments_rev = PFR} = Content, Env) ->
                      wrap(utf8, CorrId0)
              end,
     MsgId = case mc_util:urn_string_to_uuid(MsgId0) of
-                 {ok, MsgUUID} ->
-                     {uuid, MsgUUID};
-                 _ ->
-                     wrap(utf8, MsgId0)
-             end,
+                {ok, MsgUUID} ->
+                    {uuid, MsgUUID};
+                _ ->
+                    wrap(utf8, MsgId0)
+            end,
     P = case amqp10_section_header(?AMQP10_PROPERTIES_HEADER, Headers) of
             undefined ->
                 #'v1_0.properties'{message_id = MsgId,
                                    user_id = wrap(binary, UserId),
                                    to = undefined,
                                    % subject = wrap(utf8, RKey),
-                                   reply_to = wrap(utf8, ReplyTo),
+                                   reply_to = ReplyTo,
                                    correlation_id = CorrId,
                                    content_type = wrap(symbol, ContentType),
                                    content_encoding = wrap(symbol, ContentEncoding),

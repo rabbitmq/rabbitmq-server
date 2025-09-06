@@ -137,13 +137,14 @@ local_destination(Config, AckMode) ->
 
     receive
         {amqp10_msg, Receiver, InMsg} ->
+            ReplyTo = <<"/queues/", ?UNSHOVELLED/binary>>,
             [<<42>>] = amqp10_msg:body(InMsg),
             #{content_type := ?UNSHOVELLED,
               content_encoding := ?UNSHOVELLED,
               correlation_id := ?UNSHOVELLED,
               user_id := <<"guest">>,
               message_id := ?UNSHOVELLED,
-              reply_to := ?UNSHOVELLED
+              reply_to := ReplyTo
              } = amqp10_msg:properties(InMsg),
             #{<<"header1">> := 1,
               <<"header2">> := <<"h2">>
