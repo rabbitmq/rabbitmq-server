@@ -95,7 +95,7 @@ init(Req0, Opts) ->
         socket             = SockInfo,
         peername           = PeerAddr,
         auth_hd            = cowboy_req:header(<<"authorization">>, Req)
-    }, WsOpts}.
+    }, WsOpts#{data_delivery => relay}}.
 
 websocket_init(State) ->
     process_flag(trap_exit, true),

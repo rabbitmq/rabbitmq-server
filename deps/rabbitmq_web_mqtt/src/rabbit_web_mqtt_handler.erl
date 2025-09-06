@@ -84,7 +84,7 @@ init(Req, Opts) ->
                                    stats_timer = rabbit_event:init_stats_timer()},
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
                     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-                    {?MODULE, Req1, State, WsOpts}
+                    {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
             end
     end.
 
