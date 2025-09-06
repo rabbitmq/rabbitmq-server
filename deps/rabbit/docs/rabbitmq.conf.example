@@ -1124,6 +1124,91 @@
 
 
 #
+# OAuth 2
+#
+
+## Relevant doc guide: https://www.rabbitmq.com/docs/oauth2
+
+## Enable OAuth 2 as an authentication backend
+##
+# auth_backends.1 = oauth2
+
+## OAuth 2 resource server identifier. This value must match the 'aud' field
+## in JWT tokens presented by clients.
+##
+# auth_oauth2.resource_server_id = rabbitmq
+
+## OAuth 2 provider issuer URL. RabbitMQ will use this to discover
+## IDP endpoints, such as JWKS URI for downloading signing keys
+##
+# auth_oauth2.issuer = https://my-oauth2-provider.com/realm/rabbitmq
+
+## JWKS endpoint URL. Optional if issuer is configured.
+## This URL MUST use HTTPS, by design.
+##
+# auth_oauth2.jwks_uri = https://my-oauth2-provider.com/jwks.json
+
+## Configure which JWT claims should be used for extracting the username.
+##
+# auth_oauth2.preferred_username_claims.1 = user_name
+# auth_oauth2.preferred_username_claims.2 = preferred_username
+
+## Configure additional fields to look for scopes in the token
+##
+# auth_oauth2.additional_scopes_key = extra_scope
+
+## Custom scope prefix instead of resource_server_id
+##
+# auth_oauth2.scope_prefix = api://
+
+## Map custom scopes to RabbitMQ scopes
+##
+# auth_oauth2.scope_aliases.admin = rabbitmq.tag:administrator
+# auth_oauth2.scope_aliases.developer = rabbitmq.tag:management rabbitmq.read:*/* rabbitmq.write:*/* rabbitmq.configure:*/*
+
+## Disable audience validation (not recommended)
+##
+# auth_oauth2.verify_aud = false
+
+## Enable OAuth 2 in the management UI
+##
+# management.oauth_enabled = true
+
+## Controls OAuth client ID for the management UI
+##
+# management.oauth_client_id = rabbitmq-management
+
+## Allows disable Basic HTTP Authentication. Opt-in to use JWT tokens exclusively.
+##
+# management.oauth_disable_basic_auth = true
+
+## The scopes RabbitMq should claim during the management UI authorization flow.
+## Defaults to "openid profile"
+##
+# management.oauth_scopes = openid profile rabbitmq.tag:management
+
+## TLS settings for connecting to OAuth 2 endpoints.
+##
+
+## A trusted CA (and intermediary) certificate bundle to use
+# auth_oauth2.https.cacertfile = /path/to/ca_certificate.pem
+
+## Whether peer certificate chain verification is enabled.
+# auth_oauth2.https.peer_verification = verify_peer
+
+## Use in environments where certificates use wildcard hostnames (e.g. "*.eng.megacorp.local")
+# auth_oauth2.https.hostname_verification = wildcard
+
+## Controls the start of the authentication flow.
+##
+## Defaults to "sp_initiated", which does not require clients to provide
+## a token. This is the most standard flow.
+##
+## "idp_initiated" means that the flow will be initiated by an SSO service
+## of sorts and clients must provide a token.
+# management.oauth_initiated_logon_type = sp_initiated
+
+#
 # LDAP
 #
 
