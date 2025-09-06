@@ -107,7 +107,7 @@
 %% used to determine the user's identity, a.k.a username.
 %% RabbitMQ appends `sub` and `client_id` claims.
 %% e.g. RabbitMQ first looks for username claim. If it is not present, it looks for user_name
-%% and so forth. If it cannot find any, it defauls to unknown.
+%% and so forth. If it cannot find any, it defaults to unknown.
 %% {preferred_username_claims, [<<"username">>, <<"user_name">>, <<"email">> ]},
 
 {mapping,
@@ -163,7 +163,7 @@
  "rabbitmq_auth_backend_oauth2.token_endpoint",
  [{datatype, string}, {validators, ["uri", "https_uri"]}]}.
 
-%% DEPRECATES auth_oauth2.jwks_url
+%% Deprecates and replaces auth_oauth2.jwks_url
 {mapping,
  "auth_oauth2.jwks_uri",
  "rabbitmq_auth_backend_oauth2.jwks_uri",
@@ -271,8 +271,8 @@
  end}.
 
 
-%% This setting is only required when there are +1 auth_oauth2.oauth_providers
-%% If this setting is omitted, its default to the first oauth_provider
+%% This setting is only required when there are multiple `auth_oauth2.oauth_providers`.
+%% If this setting is omitted, its default to the first oauth_provider on the list.
 
 {mapping,
   "auth_oauth2.default_oauth_provider",
