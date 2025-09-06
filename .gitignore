@@ -131,3 +131,9 @@ callgraph.dot*
 
 # @todo Should be moved to rabbitmq_stomp directly.
 deps/rabbitmq_stomp/test/python_SUITE_data/src/deps
+
+# These ignores are v4.1.x-specific.
+#  
+# Files from newer series that we want to ignore
+# during branch switching (during backporting)
+deps/rabbit/src/rabbit_amqp_sql_*
