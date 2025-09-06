@@ -1194,7 +1194,7 @@
 # auth_oauth2.https.cacertfile = /path/to/ca_certificate.pem
 
 ## Whether peer certificate chain verification is enabled.
-# auth_oauth2.https.peer_verification = verify_peer
+# auth_oauth2.https.verify = verify_peer
 
 ## Use in environments where certificates use wildcard hostnames (e.g. "*.eng.megacorp.local")
 # auth_oauth2.https.hostname_verification = wildcard
