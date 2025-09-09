@@ -1249,7 +1249,10 @@ get_replica_tail(Node, Conf) ->
             {error, nodedown};
         {error, _} = Err ->
             Err;
+        #{epoch_offsets := Offsets} ->
+            {ok, select_highest_offset(Offsets)};
         {_Range, Offsets} ->
+            %% Backwards compatibility clause
             {ok, select_highest_offset(Offsets)}
     end.
 
