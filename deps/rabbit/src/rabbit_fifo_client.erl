@@ -976,13 +976,14 @@ send_command(Server, Correlation, Command, Priority,
              #state{pending = Pending,
                     next_seq = Seq,
                     cfg = #cfg{soft_limit = SftLmt}} = State) ->
-    ok = case rabbit_fifo:is_return(Command) of
-             true ->
-                 %% returns are sent to the aux machine for pre-evaluation
-                 ra:cast_aux_command(Server, {Command, Seq, self()});
-             _ ->
-                 ra:pipeline_command(Server, Command, Seq, Priority)
-         end,
+    % ok = case rabbit_fifo:is_return(Command) of
+    %          true ->
+    %              %% returns are sent to the aux machine for pre-evaluation
+    %              ra:cast_aux_command(Server, {Command, Seq, self()});
+    %          _ ->
+    %              ra:pipeline_command(Server, Command, Seq, Priority)
+    %      end,
+    ok = ra:pipeline_command(Server, Command, Seq, Priority),
     State#state{pending = Pending#{Seq => {Correlation, Command}},
                 next_seq = Seq + 1,
                 slow = map_size(Pending) >= SftLmt}.

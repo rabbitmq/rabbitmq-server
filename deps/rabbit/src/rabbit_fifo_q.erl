@@ -8,6 +8,7 @@
          get/1,
          len/1,
          from_lqueue/1,
+         indexes/1,
          get_lowest_index/1,
          overview/1
         ]).
@@ -80,6 +81,13 @@ from_lqueue(LQ) ->
     lqueue:fold(fun (Item, Acc) ->
                         in(no, Item, Acc)
                 end, new(), LQ).
+
+indexes(#?MODULE{hi = {Hi1, Hi2},
+                 no = {No1, No2}}) ->
+    A = lists:map(fun (?MSG(I, _)) -> I end, Hi1),
+    B = lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, A, Hi2),
+    C = lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, B, No1),
+    lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, C, No2).
 
 -spec get_lowest_index(state()) -> undefined | ra:index().
 get_lowest_index(#?MODULE{len = 0}) ->
