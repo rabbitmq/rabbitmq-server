@@ -2785,6 +2785,9 @@ fun(Conf) ->
     end
 end}.
 
+{mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
+    [{datatype, {enum, [true, false]}}]}.
+
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}
 ]}.

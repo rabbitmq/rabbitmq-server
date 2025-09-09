@@ -2812,11 +2812,14 @@ init_reader(ConnectionTransport,
             Properties,
             OffsetSpec) ->
     CounterSpec = {{?MODULE, QueueResource, SubscriptionId, self()}, []},
-    Options = maps:merge(#{transport => ConnectionTransport,
-                           chunk_selector => get_chunk_selector(Properties)},
-                         rabbit_stream_utils:filter_spec(Properties)),
-    {ok, Segment} =
-        osiris:init_reader(LocalMemberPid, OffsetSpec, CounterSpec, Options),
+    Options0 = #{transport => ConnectionTransport,
+                 chunk_selector => get_chunk_selector(Properties),
+                 read_ahead => rabbit_stream_queue:read_ahead_on()},
+
+    Options1 = maps:merge(Options0,
+                          rabbit_stream_utils:filter_spec(Properties)),
+    {ok, Segment} = osiris:init_reader(LocalMemberPid, OffsetSpec,
+                                       CounterSpec, Options1),
     ?LOG_DEBUG("Next offset for subscription ~tp is ~tp",
                      [SubscriptionId, osiris_log:next_offset(Segment)]),
     Segment.
