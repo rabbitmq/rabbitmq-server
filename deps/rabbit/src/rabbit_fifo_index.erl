@@ -13,6 +13,7 @@
          delete/2,
          size/1,
          smallest/1,
+         indexes/1,
          map/2,
          to_list/1
         ]).
@@ -89,6 +90,10 @@ size(#?MODULE{data = Data}) ->
 -spec smallest(state()) -> undefined | non_neg_integer().
 smallest(#?MODULE{smallest = Smallest}) ->
     Smallest.
+
+-spec indexes(state()) -> [ra:index()].
+indexes(#?MODULE{data = Data}) ->
+    maps:keys(Data).
 
 -spec map(fun(), state()) -> state().
 map(F, #?MODULE{data = Data} = State) ->
