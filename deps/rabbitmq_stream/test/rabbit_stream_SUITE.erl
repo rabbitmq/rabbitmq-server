@@ -19,6 +19,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -include_lib("rabbitmq_stream_common/include/rabbit_stream.hrl").
 
@@ -1773,3 +1774,9 @@ request(CorrId, Cmd) ->
 
 rand_bin() ->
     base64:encode(rand:bytes(20)).
+
+generate_log(MsgSize, MsgsPerChunk, NumMessages, Directory) ->
+    Body = binary:copy(<<"a">>, MsgSize),
+    Data = #'v1_0.data'{content = Body},
+    Bin = amqp10_framing:encode_bin(Data),
+    osiris_log:generate_log(Bin, MsgsPerChunk, NumMessages, Directory).
