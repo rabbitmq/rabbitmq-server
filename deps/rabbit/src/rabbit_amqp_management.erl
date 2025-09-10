@@ -87,8 +87,14 @@ handle_http_req(<<"GET">>,
            QName,
            fun(Q) ->
                    {ok, NumMsgs, NumConsumers} = rabbit_amqqueue:stat(Q),
-                   RespPayload = encode_queue(Q, NumMsgs, NumConsumers),
-                   {ok, {<<"200">>, RespPayload, PermCaches}}
+                   case rabbit_volatile_queue:is(QNameBin) andalso
+                        not rabbit_volatile_queue:exists(QName) of
+                       true ->
+                           {error, not_found};
+                       false ->
+                           RespPayload = encode_queue(Q, NumMsgs, NumConsumers),
+                           {ok, {<<"200">>, RespPayload, PermCaches}}
+                   end
            end) of
         {ok, Result} ->
             Result;

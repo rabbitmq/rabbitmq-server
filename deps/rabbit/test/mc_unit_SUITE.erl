@@ -335,7 +335,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
                delivery_mode = 2,
                priority = 98,
                correlation_id = <<"corr">> ,
-               reply_to = <<"reply-to">>,
+               reply_to = <<"reply/to">>,
                expiration = <<"1">>,
                message_id = <<"msg-id">>,
                timestamp = 99,
@@ -407,7 +407,7 @@ amqpl_amqp_bin_amqpl(_Config) ->
                  Hdr10),
     ?assertMatch(#'v1_0.properties'{content_encoding = {symbol, <<"gzip">>},
                                     content_type = {symbol, <<"text/plain">>},
-                                    reply_to = {utf8, <<"reply-to">>},
+                                    reply_to = {utf8, <<"/queues/reply%2Fto">>},
                                     creation_time = {timestamp, 99000},
                                     user_id = {binary, <<"banana">>},
                                     group_id = {utf8, <<"rmq">>}
@@ -451,6 +451,9 @@ amqpl_amqp_bin_amqpl(_Config) ->
     RoutingHeaders2 = mc:routing_headers(MsgL2, []),
     ?assertEqual(RoutingHeaders,
                  maps:remove(<<"timestamp_in_ms">>, RoutingHeaders2)),
+
+    #content{properties = #'P_basic'{reply_to = ReplyTo}} = mc:protocol_state(MsgL2),
+    ?assertEqual(<<"reply/to">>, ReplyTo),
 
     ok = persistent_term:put(message_interceptors, []).
 
