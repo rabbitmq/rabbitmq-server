@@ -23,6 +23,7 @@
          consume/3,
          cancel/3,
          handle_event/3,
+         supports_stateful_delivery/0,
          deliver/3,
          settle/5,
          credit_v1/5,
@@ -39,8 +40,7 @@
          stat/1,
          format/2,
          capabilities/0,
-         notify_decorators/1,
-         is_stateful/0]).
+         notify_decorators/1]).
 
 -export([list_with_minimum_quorum/0]).
 
@@ -535,6 +535,8 @@ credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
         _ ->
             {State, []}
     end.
+
+supports_stateful_delivery() -> true.
 
 deliver(QSs, Msg, Options) ->
     lists:foldl(
@@ -1430,8 +1432,6 @@ list_with_minimum_quorum() ->
                          RunningMembers = maps:filter(fun(_, {State, _}) -> State =/= undefined end, Members),
                          map_size(RunningMembers) =< map_size(Members) div 2 + 1
                  end, rabbit_amqqueue:list_local_stream_queues()).
-
-is_stateful() -> true.
 
 get_nodes(Q) when ?is_amqqueue(Q) ->
     #{nodes := Nodes} = amqqueue:get_type_state(Q),

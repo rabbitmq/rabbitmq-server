@@ -121,13 +121,14 @@ amqp10_destination(Config, AckMode) ->
         {amqp10_msg, Receiver, InMsg} ->
             [<<42>>] = amqp10_msg:body(InMsg),
             Ts = Timestamp * 1000,
+            ReplyTo = <<"/queues/", ?UNSHOVELLED/binary>>,
             ?assertMatch(
                #{content_type := ?UNSHOVELLED,
                  content_encoding := ?UNSHOVELLED,
                  correlation_id := ?UNSHOVELLED,
                  user_id := <<"guest">>,
                  message_id := ?UNSHOVELLED,
-                 reply_to := ?UNSHOVELLED,
+                 reply_to := ReplyTo,
                  %% Message timestamp is no longer overwritten
                  creation_time := Ts},
                amqp10_msg:properties(InMsg)),

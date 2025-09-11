@@ -29,7 +29,8 @@
 -export([settle/5, dequeue/5, consume/3, cancel/3]).
 -export([credit_v1/5, credit/6]).
 -export([purge/1]).
--export([deliver/3]).
+-export([supports_stateful_delivery/0,
+         deliver/3]).
 -export([dead_letter_publish/5]).
 -export([cluster_state/1, status/2]).
 -export([update_consumer_handler/8, update_consumer/9]).
@@ -70,8 +71,7 @@
 
 -export([is_enabled/0,
          is_compatible/3,
-         declare/2,
-         is_stateful/0]).
+         declare/2]).
 -export([validate_policy/1, merge_policy_value/3]).
 
 -export([force_shrink_member_to_current_member/2,
@@ -1109,6 +1109,8 @@ emit_consumer_deleted(ChPid, ConsumerTag, QName, ActingUser) ->
             {queue, QName},
             {user_who_performed_action, ActingUser}]).
 
+supports_stateful_delivery() -> true.
+
 deliver0(QName, undefined, Msg, QState0) ->
     case rabbit_fifo_client:enqueue(QName, Msg, QState0) of
         {ok, _, _} = Res -> Res;
@@ -1123,10 +1125,10 @@ deliver(QSs, Msg0, Options) ->
     Correlation = maps:get(correlation, Options, undefined),
     Msg = mc:prepare(store, Msg0),
     lists:foldl(
-      fun({Q, stateless}, {Qs, Actions}) ->
+      fun({Q, stateless}, Acc) ->
               QRef = amqqueue:get_pid(Q),
               ok = rabbit_fifo_client:untracked_enqueue([QRef], Msg),
-              {Qs, Actions};
+              Acc;
          ({Q, S0}, {Qs, Actions}) ->
               QName = amqqueue:get_name(Q),
               case deliver0(QName, Correlation, Msg, S0) of
@@ -2082,8 +2084,6 @@ notify_decorators(QName, F, A) ->
         {error, not_found} ->
             ok
     end.
-
-is_stateful() -> true.
 
 force_shrink_member_to_current_member(VHost, Name) ->
     Node = node(),
