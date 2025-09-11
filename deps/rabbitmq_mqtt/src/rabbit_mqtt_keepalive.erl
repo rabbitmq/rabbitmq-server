@@ -41,14 +41,6 @@ handle({init, IntervalSecs, Sock}, _State) ->
                         socket = Sock,
                         recv_oct = RecvOct,
                         received = true}};
-        %% Virtual sockets (such as Websocket/WebTransport)
-        %% do not support getstat.
-        {error, enotsup} ->
-            {ok, #state{interval_secs = IntervalSecs,
-                        timer = undefined,
-                        socket = Sock,
-                        recv_oct = 0,
-                        received = true}};
         {error, _} = Err ->
             Err
     end;

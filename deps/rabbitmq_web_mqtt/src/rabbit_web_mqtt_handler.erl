@@ -56,25 +56,35 @@
 upgrade(Req, Env, Handler, HandlerState) ->
     upgrade(Req, Env, Handler, HandlerState, #{}).
 
-%% We simulate PROXY headers when HTTP/2 is used to have src/dest.
-upgrade(Req=#{version := 'HTTP/2', peer := Peer, sock := Sock, cert := Cert},
+%% We create a proxy socket for HTTP/2 even if no proxy was used,
+%% and add a special field 'http_version' to indicate this is HTTP/2.
+upgrade(Req=#{version := 'HTTP/2', pid := Parent, peer := Peer, sock := Sock},
         Env, Handler, HandlerState, Opts) ->
-    logger:error("~p ~p ~p ~p ~p", [Req, Env, Handler, HandlerState, Opts]),
+    %% Cowboy doesn't expose the socket when HTTP/2 is used.
+    %% We take it directly from the connection's state.
+    %%
+    %% @todo Ideally we would not need the real socket for
+    %%       normal operations. But we currently need it for
+    %%       the heartbeat processes to do their job. In the
+    %%       future we should not rely on those processes
+    %%       and instead do the heartbeating directly in the
+    %%       Websocket handler.
+    RealSocket = element(4,element(1,sys:get_state(Parent))),
     {SrcAddr, SrcPort} = Peer,
     {DestAddr, DestPort} = Sock,
-    SocketInfo = #{
+    ProxyInfo = #{
+        http_version => 'HTTP/2',
         src_address => SrcAddr,
         src_port => SrcPort,
         dest_address => DestAddr,
-        dest_port => DestPort,
-        cert => Cert
+        dest_port => DestPort
     },
-    VirtualSocket = {rabbit_virtual_socket, SocketInfo},
-    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState#state{socket = VirtualSocket}, Opts);
+    ProxySocket = {rabbit_proxy_socket, RealSocket, ProxyInfo},
+    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState#state{socket = ProxySocket}, Opts);
 upgrade(Req, Env, Handler, HandlerState, Opts) ->
     cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
 
-%% @todo This is only called for HTTP/1.1.
+%% This is only called for HTTP/1.1.
 takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
     Sock = case HandlerState#state.socket of
                undefined ->
