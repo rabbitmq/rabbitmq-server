@@ -4,13 +4,40 @@
 
 -include("rabbitmq_aws.hrl").
 
+%% Test helper functions
+setup() ->
+    application:ensure_all_started(rabbitmq_aws),
+    ok.
+
+teardown(_) ->
+    application:stop(rabbitmq_aws),
+    ok.
+
+% Helper to populate test credentials
+set_test_credentials(AccessKey, SecretKey) ->
+    set_test_credentials(AccessKey, SecretKey, undefined, undefined).
+
+set_test_credentials(AccessKey, SecretKey, SecurityToken, Expiration) ->
+    Creds = #aws_credentials{
+        access_key = AccessKey,
+        secret_key = SecretKey,
+        security_token = SecurityToken,
+        expiration = Expiration
+    },
+    ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}).
+
+set_test_region(Region) ->
+    ets:insert(?AWS_CONFIG_TABLE, {region, Region}).
+
 init_test_() ->
     {foreach,
         fun() ->
             os:putenv("AWS_DEFAULT_REGION", "us-west-3"),
-            meck:new(rabbitmq_aws_config, [passthrough])
+            meck:new(rabbitmq_aws_config, [passthrough]),
+            setup()
         end,
         fun(_) ->
+            teardown(ok),
             os:unsetenv("AWS_DEFAULT_REGION"),
             meck:unload(rabbitmq_aws_config)
         end,
@@ -18,44 +45,25 @@ init_test_() ->
             {"ok", fun() ->
                 os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
                 os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-west-3"),
-                rabbitmq_aws:refresh_credentials(),
-                {ok, State} = gen_server:call(Pid, get_state),
-                ok = gen_server:stop(Pid),
+                ?assertEqual(ok, rabbitmq_aws:refresh_credentials()),
+                % Verify credentials were actually stored
+                ?assertEqual(true, rabbitmq_aws:has_credentials()),
+                {ok, AccessKey, SecretKey, SecurityToken, Region} = rabbitmq_aws:get_credentials(),
+                ?assertEqual("Sésame", AccessKey),
+                ?assertEqual("ouvre-toi", SecretKey),
+                ?assertEqual(undefined, SecurityToken),
+                ?assertEqual("us-west-3", Region),
                 os:unsetenv("AWS_ACCESS_KEY_ID"),
-                os:unsetenv("AWS_SECRET_ACCESS_KEY"),
-                Expectation =
-                    {state, "Sésame", "ouvre-toi", undefined, undefined, "us-west-3", undefined,
-                        undefined},
-                ?assertEqual(Expectation, State)
+                os:unsetenv("AWS_SECRET_ACCESS_KEY")
             end},
             {"error", fun() ->
                 meck:expect(rabbitmq_aws_config, credentials, fun() -> {error, test_result} end),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-west-3"),
-                rabbitmq_aws:refresh_credentials(),
-                {ok, State} = gen_server:call(Pid, get_state),
-                ok = gen_server:stop(Pid),
-                Expectation =
-                    {state, undefined, undefined, undefined, undefined, "us-west-3", undefined,
-                        test_result},
-                ?assertEqual(Expectation, State),
+                ?assertEqual(error, rabbitmq_aws:refresh_credentials()),
+                % Verify no credentials were stored
+                ?assertEqual(false, rabbitmq_aws:has_credentials()),
                 meck:validate(rabbitmq_aws_config)
             end}
         ]}.
-
-terminate_test() ->
-    ?assertEqual(
-        ok,
-        rabbitmq_aws:terminate(
-            foo,
-            {state, undefined, undefined, undefined, undefined, "us-west-3", undefined, test_result}
-        )
-    ).
-
-code_change_test() ->
-    ?assertEqual({ok, {state, denial}}, rabbitmq_aws:code_change(foo, bar, {state, denial})).
 
 endpoint_test_() ->
     [
@@ -66,7 +74,7 @@ endpoint_test_() ->
             Host = "localhost:32767",
             Expectation = "https://localhost:32767/",
             ?assertEqual(
-                Expectation, rabbitmq_aws:endpoint(#state{region = Region}, Host, Service, Path)
+                Expectation, rabbitmq_aws:endpoint(Region, Host, Service, Path)
             )
         end},
         {"unspecified", fun() ->
@@ -76,7 +84,7 @@ endpoint_test_() ->
             Host = undefined,
             Expectation = "https://dynamodb.us-east-3.amazonaws.com/",
             ?assertEqual(
-                Expectation, rabbitmq_aws:endpoint(#state{region = Region}, Host, Service, Path)
+                Expectation, rabbitmq_aws:endpoint(Region, Host, Service, Path)
             )
         end}
     ].
@@ -160,163 +168,6 @@ format_response_test_() ->
         end}
     ].
 
-gen_server_call_test_() ->
-    {
-        foreach,
-        fun() ->
-            % We explicitely set a few defaults, in case the caller has
-            % something in ~/.aws.
-            os:putenv("AWS_DEFAULT_REGION", "us-west-3"),
-            os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
-            os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
-            meck:new(gun, []),
-            [gun]
-        end,
-        fun(Mods) ->
-            meck:unload(Mods),
-            os:unsetenv("AWS_DEFAULT_REGION"),
-            os:unsetenv("AWS_ACCESS_KEY_ID"),
-            os:unsetenv("AWS_SECRET_ACCESS_KEY")
-        end,
-        [
-            {
-                "request",
-                fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-east-1"
-                    },
-                    Service = "ec2",
-                    Method = get,
-                    Headers = [],
-                    Path = "/?Action=DescribeTags&Version=2015-10-01",
-                    Body = "",
-                    Options = [],
-                    Host = undefined,
-                    meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
-                    meck:expect(gun, close, fun(_) -> ok end),
-                    meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
-                    meck:expect(
-                        gun,
-                        get,
-                        fun(_Pid, _Path, _Headers) -> nofin end
-                    ),
-                    %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
-                    %% end),
-                    meck:expect(
-                        gun,
-                        await,
-                        fun(_Pid, _, _) ->
-                            {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}
-                        end
-                    ),
-                    meck:expect(
-                        gun,
-                        await_body,
-                        fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end
-                    ),
-
-                    %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
-                    %% end),
-                    Expectation =
-                        {reply,
-                            {ok,
-                                {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
-                            State},
-                    Result = rabbitmq_aws:handle_call(
-                        {request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State
-                    ),
-                    ?assertEqual(Expectation, Result),
-                    meck:validate(gun)
-                end
-            },
-            {
-                "get_state",
-                fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-east-1"
-                    },
-                    ?assertEqual(
-                        {reply, {ok, State}, State},
-                        rabbitmq_aws:handle_call(get_state, eunit, State)
-                    )
-                end
-            },
-            {
-                "refresh_credentials",
-                fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-east-1"
-                    },
-                    State2 = #state{
-                        access_key = "AKIDEXAMPLE2",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY2",
-                        region = "us-east-1",
-                        security_token =
-                            "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L2",
-                        expiration = calendar:local_time()
-                    },
-                    meck:new(rabbitmq_aws_config, [passthrough]),
-                    meck:expect(
-                        rabbitmq_aws_config,
-                        credentials,
-                        fun() ->
-                            {ok, State2#state.access_key, State2#state.secret_access_key,
-                                State2#state.expiration, State2#state.security_token}
-                        end
-                    ),
-                    ?assertEqual(
-                        {reply, ok, State2},
-                        rabbitmq_aws:handle_call(refresh_credentials, eunit, State)
-                    ),
-                    meck:validate(rabbitmq_aws_config),
-                    meck:unload(rabbitmq_aws_config)
-                end
-            },
-            {
-                "set_credentials",
-                fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-west-3"
-                    },
-                    ?assertEqual(
-                        {reply, ok, State},
-                        rabbitmq_aws:handle_call(
-                            {set_credentials, State#state.access_key,
-                                State#state.secret_access_key},
-                            eunit,
-                            #state{region = "us-west-3"}
-                        )
-                    )
-                end
-            },
-            {
-                "set_region",
-                fun() ->
-                    State = #state{
-                        access_key = "Sésame",
-                        secret_access_key = "ouvre-toi",
-                        region = "us-east-5"
-                    },
-                    ?assertEqual(
-                        {reply, ok, State},
-                        rabbitmq_aws:handle_call({set_region, "us-east-5"}, eunit, #state{
-                            access_key = "Sésame",
-                            secret_access_key = "ouvre-toi"
-                        })
-                    )
-                end
-            }
-        ]
-    }.
-
 get_content_type_test_() ->
     [
         {"from headers caps", fun() ->
@@ -332,14 +183,21 @@ get_content_type_test_() ->
     ].
 
 has_credentials_test_() ->
-    [
-        {"true", fun() ->
-            ?assertEqual(true, rabbitmq_aws:has_credentials(#state{access_key = "TESTVALUE1"}))
-        end},
-        {"false", fun() ->
-            ?assertEqual(false, rabbitmq_aws:has_credentials(#state{error = "ERROR"}))
-        end}
-    ].
+    {
+        foreach,
+        fun setup/0,
+        fun teardown/1,
+        [
+            {"true", fun() ->
+                set_test_credentials("TESTVALUE1", "SECRET"),
+                ?assertEqual(true, rabbitmq_aws:has_credentials())
+            end},
+            {"false", fun() ->
+                % No credentials set
+                ?assertEqual(false, rabbitmq_aws:has_credentials())
+            end}
+        ]
+    }.
 
 local_time_test_() ->
     {
@@ -406,33 +264,30 @@ perform_request_test_() ->
     {
         foreach,
         fun() ->
+            setup(),
             meck:new(gun, []),
-            meck:new(rabbitmq_aws_config, []),
-            [gun, rabbitmq_aws_config]
+            [gun]
         end,
-        fun meck:unload/1,
+        fun(Mods) ->
+            teardown(ok),
+            meck:unload(Mods)
+        end,
         [
             {
-                "has_credentials true",
+                "Successfull run",
                 fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-east-1"
-                    },
+                    set_test_credentials("AKIDEXAMPLE", "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"),
+                    set_test_region("us-east-1"),
                     Service = "ec2",
                     Method = get,
                     Headers = [],
                     Path = "/?Action=DescribeTags&Version=2015-10-01",
                     Body = "",
                     Options = [],
-                    Host = undefined,
-                    ExpectURI =
-                        "https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
+
                     meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
                     meck:expect(gun, close, fun(_) -> ok end),
                     meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
-
                     meck:expect(
                         gun,
                         get,
@@ -451,70 +306,11 @@ perform_request_test_() ->
                         fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end
                     ),
 
-                    Expectation = {
+                    Expectation =
                         {ok, {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
-                        State
-                    },
-                    Result = rabbitmq_aws:perform_request(
-                        State, Service, Method, Headers, Path, Body, Options, Host
-                    ),
+                    Result = rabbitmq_aws:request(Service, Method, Path, Body, Headers, Options),
                     ?assertEqual(Expectation, Result),
                     meck:validate(gun)
-                end
-            },
-            {
-                "has_credentials false",
-                fun() ->
-                    State = #state{region = "us-east-1"},
-                    Service = "ec2",
-                    Method = get,
-                    Headers = [],
-                    Path = "/?Action=DescribeTags&Version=2015-10-01",
-                    Body = "",
-                    Options = [],
-                    Host = undefined,
-                    Expectation = {{error, {credentials, State#state.error}}, State},
-                    Result = rabbitmq_aws:perform_request(
-                        State, Service, Method, Headers, Path, Body, Options, Host
-                    ),
-                    ?assertEqual(Expectation, Result)
-                end
-            },
-            {
-                "has expired credentials",
-                fun() ->
-                    State = #state{
-                        access_key = "AKIDEXAMPLE",
-                        secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                        region = "us-east-1",
-                        security_token =
-                            "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
-                        expiration = {{1973, 1, 1}, {10, 20, 30}}
-                    },
-                    Service = "ec2",
-                    Method = get,
-                    Headers = [],
-                    Path = "/?Action=DescribeTags&Version=2015-10-01",
-                    Body = "",
-                    Options = [],
-                    Host = undefined,
-                    meck:expect(rabbitmq_aws_config, credentials, fun() -> {error, unit_test} end),
-                    Expectation = {{error, {credentials, "Credentials expired!"}}, State#state{
-                        error = "Credentials expired!"
-                    }},
-                    Result = rabbitmq_aws:perform_request(
-                        State, Service, Method, Headers, Path, Body, Options, Host
-                    ),
-                    ?assertEqual(Expectation, Result),
-                    meck:validate(rabbitmq_aws_config)
-                end
-            },
-            {
-                "creds_error",
-                fun() ->
-                    State = #state{error = unit_test},
-                    Expectation = {{error, {credentials, State#state.error}}, State},
-                    ?assertEqual(Expectation, rabbitmq_aws:perform_request_creds_error(State))
                 end
             }
         ]
@@ -532,13 +328,11 @@ sign_headers_test_() ->
             {"with security token", fun() ->
                 Value = {{2016, 5, 1}, {12, 0, 0}},
                 meck:expect(calendar, local_time_to_universal_time_dst, fun(_) -> [Value] end),
-                State = #state{
-                    access_key = "AKIDEXAMPLE",
-                    secret_access_key = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
-                    security_token =
-                        "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
-                    region = "us-east-1"
-                },
+                AccessKey = "AKIDEXAMPLE",
+                SecretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+                SecurityToken =
+                    "AQoEXAMPLEH4aoAH0gNCAPyJxz4BlCFFxWNE1OPTgk5TthT+FvwqnKwRcOIfrRh3c/L",
+                Region = "us-east-1",
                 Service = "ec2",
                 Method = get,
                 Headers = [],
@@ -557,7 +351,17 @@ sign_headers_test_() ->
                 ],
                 ?assertEqual(
                     Expectation,
-                    rabbitmq_aws:sign_headers(State, Service, Method, URI, Headers, Body)
+                    rabbitmq_aws:sign_headers(
+                        AccessKey,
+                        SecretKey,
+                        SecurityToken,
+                        Region,
+                        Service,
+                        Method,
+                        URI,
+                        Headers,
+                        Body
+                    )
                 ),
                 meck:validate(calendar)
             end}
@@ -568,19 +372,22 @@ api_get_request_test_() ->
     {
         foreach,
         fun() ->
+            setup(),
             meck:new(gun, []),
             meck:new(rabbitmq_aws_config, []),
             [gun, rabbitmq_aws_config]
         end,
-        fun meck:unload/1,
+        fun(Mods) ->
+            teardown(ok),
+            meck:unload(Mods)
+        end,
         [
             {"AWS service API request succeeded", fun() ->
-                State = #state{
-                    access_key = "ExpiredKey",
-                    secret_access_key = "ExpiredAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
+                set_test_credentials("ExpiredKey", "ExpiredAccessKey", undefined, {
+                    {3016, 4, 1}, {12, 0, 0}
+                }),
+                set_test_region("us-east-1"),
+
                 meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
                 meck:expect(gun, close, fun(_) -> ok end),
                 meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
@@ -602,29 +409,24 @@ api_get_request_test_() ->
                     fun(_Pid, _, _) -> {ok, <<"{\"data\": \"value\"}">>} end
                 ),
 
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
-                rabbitmq_aws:set_credentials(State),
                 Result = rabbitmq_aws:api_get_request("AWS", "API"),
-                ok = gen_server:stop(Pid),
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
                 meck:validate(gun)
             end},
             {"AWS service API request failed - credentials", fun() ->
+                set_test_region("us-east-1"),
+                % No credentials set - should fail
                 meck:expect(rabbitmq_aws_config, credentials, 0, {error, undefined}),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
+
                 Result = rabbitmq_aws:api_get_request("AWS", "API"),
-                ok = gen_server:stop(Pid),
                 ?assertEqual({error, credentials}, Result)
             end},
             {"AWS service API request failed - API error with persistent failure", fun() ->
-                State = #state{
-                    access_key = "ExpiredKey",
-                    secret_access_key = "ExpiredAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
+                set_test_credentials("ExpiredKey", "ExpiredAccessKey", undefined, {
+                    {3016, 4, 1}, {12, 0, 0}
+                }),
+                set_test_region("us-east-1"),
+
                 meck:expect(gun, open, fun(_, _, _) -> {ok, spawn(fun() -> ok end)} end),
                 meck:expect(gun, close, fun(_) -> ok end),
                 meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
@@ -639,21 +441,16 @@ api_get_request_test_() ->
                     fun(_Pid, _, _) -> {error, "network error"} end
                 ),
 
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
-                rabbitmq_aws:set_credentials(State),
                 Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
-                ok = gen_server:stop(Pid),
                 ?assertEqual({error, "AWS service is unavailable"}, Result),
                 meck:validate(gun)
             end},
             {"AWS service API request succeeded after a transient error", fun() ->
-                State = #state{
-                    access_key = "ExpiredKey",
-                    secret_access_key = "ExpiredAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
+                set_test_credentials("ExpiredKey", "ExpiredAccessKey", undefined, {
+                    {3016, 4, 1}, {12, 0, 0}
+                }),
+                set_test_region("us-east-1"),
+
                 meck:expect(gun, open, fun(_, _, _) -> {ok, spawn(fun() -> ok end)} end),
                 meck:expect(gun, close, fun(_) -> ok end),
                 meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
@@ -685,11 +482,7 @@ api_get_request_test_() ->
                         {ok, <<"{\"data\": \"value\"}">>}
                     ])
                 ),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
-                rabbitmq_aws:set_credentials(State),
                 Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
-                ok = gen_server:stop(Pid),
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
                 meck:validate(gun)
             end}
@@ -700,82 +493,85 @@ ensure_credentials_valid_test_() ->
     {
         foreach,
         fun() ->
+            setup(),
             meck:new(rabbitmq_aws_config, []),
             [rabbitmq_aws_config]
         end,
-        fun meck:unload/1,
+        fun(Mods) ->
+            teardown(ok),
+            meck:unload(Mods)
+        end,
         [
             {"expired credentials are refreshed", fun() ->
-                State = #state{
-                    access_key = "ExpiredKey",
-                    secret_access_key = "ExpiredAccessKey",
-                    region = "us-east-1",
-                    expiration = {{2016, 4, 1}, {12, 0, 0}}
-                },
-                State2 = #state{
-                    access_key = "NewKey",
-                    secret_access_key = "NewAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
+                % Set expired credentials in ETS
+                set_test_credentials("ExpiredKey", "ExpiredAccessKey", undefined, {
+                    {2016, 4, 1}, {12, 0, 0}
+                }),
+                set_test_region("us-east-1"),
 
+                % Mock config to return new credentials when refresh is called
                 meck:expect(
                     rabbitmq_aws_config,
                     credentials,
                     fun() ->
-                        {ok, State2#state.access_key, State2#state.secret_access_key,
-                            State2#state.expiration, State2#state.security_token}
+                        {ok, "NewKey", "NewAccessKey", {{3016, 4, 1}, {12, 0, 0}}, undefined}
                     end
                 ),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
-                rabbitmq_aws:set_credentials(State),
+
                 Result = rabbitmq_aws:ensure_credentials_valid(),
-                Credentials = gen_server:call(Pid, get_state),
-                ok = gen_server:stop(Pid),
+
+                % Check that credentials were refreshed in ETS
+                {ok, AccessKey, SecretKey, SecurityToken, Region} = rabbitmq_aws:get_credentials(),
+
                 ?assertEqual(ok, Result),
-                ?assertEqual(Credentials, {ok, State2}),
+                ?assertEqual("NewKey", AccessKey),
+                ?assertEqual("NewAccessKey", SecretKey),
+                ?assertEqual(undefined, SecurityToken),
+                ?assertEqual("us-east-1", Region),
                 meck:validate(rabbitmq_aws_config)
             end},
             {"valid credentials are returned", fun() ->
-                State = #state{
-                    access_key = "GoodKey",
-                    secret_access_key = "GoodAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
-                rabbitmq_aws:set_credentials(State),
+                % Set valid (non-expired) credentials in ETS
+                set_test_credentials("GoodKey", "GoodAccessKey", undefined, {
+                    {3016, 4, 1}, {12, 0, 0}
+                }),
+                set_test_region("us-east-1"),
+
                 Result = rabbitmq_aws:ensure_credentials_valid(),
-                Credentials = gen_server:call(Pid, get_state),
-                ok = gen_server:stop(Pid),
+
+                % Check that credentials remain unchanged in ETS
+                {ok, AccessKey, SecretKey, SecurityToken, Region} = rabbitmq_aws:get_credentials(),
+
                 ?assertEqual(ok, Result),
-                ?assertEqual(Credentials, {ok, State}),
+                ?assertEqual("GoodKey", AccessKey),
+                ?assertEqual("GoodAccessKey", SecretKey),
+                ?assertEqual(undefined, SecurityToken),
+                ?assertEqual("us-east-1", Region),
                 meck:validate(rabbitmq_aws_config)
             end},
             {"load credentials if missing", fun() ->
-                State = #state{
-                    access_key = "GoodKey",
-                    secret_access_key = "GoodAccessKey",
-                    region = "us-east-1",
-                    expiration = {{3016, 4, 1}, {12, 0, 0}}
-                },
+                % Don't set any credentials in ETS - should trigger refresh
+                set_test_region("us-east-1"),
+
+                % Mock config to return credentials when refresh is called
                 meck:expect(
                     rabbitmq_aws_config,
                     credentials,
                     fun() ->
-                        {ok, State#state.access_key, State#state.secret_access_key,
-                            State#state.expiration, State#state.security_token}
+                        {ok, "GoodKey", "GoodAccessKey", {{3016, 4, 1}, {12, 0, 0}}, undefined}
                     end
                 ),
-                {ok, Pid} = rabbitmq_aws:start_link(),
-                rabbitmq_aws:set_region("us-east-1"),
+
                 Result = rabbitmq_aws:ensure_credentials_valid(),
-                Credentials = gen_server:call(Pid, get_state),
-                ok = gen_server:stop(Pid),
+
+                % Check that credentials were loaded into ETS
+                {ok, AccessKey, SecretKey, SecurityToken, Region} = rabbitmq_aws:get_credentials(),
+
                 ?assertEqual(ok, Result),
-                ?assertEqual(Credentials, {ok, State}),
+                ?assertEqual("GoodKey", AccessKey),
+                ?assertEqual("GoodAccessKey", SecretKey),
+                ?assertEqual(undefined, SecurityToken),
+                ?assertEqual("us-east-1", Region),
                 meck:validate(rabbitmq_aws_config)
             end}
         ]

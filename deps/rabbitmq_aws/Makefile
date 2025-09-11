@@ -6,7 +6,7 @@ define PROJECT_ENV
 []
 endef
 
-LOCAL_DEPS = crypto inets ssl xmerl public_key
+LOCAL_DEPS = crypto inets ssl xmerl public_key gun
 BUILD_DEPS = rabbit_common
 # We do not depend on rabbit therefore can't run the broker.
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-build.mk
