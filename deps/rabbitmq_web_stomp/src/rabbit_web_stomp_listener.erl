@@ -34,7 +34,8 @@ init() ->
     logger:set_process_metadata(#{domain => ?RMQLOG_DOMAIN_CONN}),
     WsFrame = get_env(ws_frame, text),
     CowboyOpts0 = maps:from_list(get_env(cowboy_opts, [])),
-    CowboyOpts = CowboyOpts0#{proxy_header => get_env(proxy_protocol, false),
+    CowboyOpts = CowboyOpts0#{enable_connect_protocol => true,
+                              proxy_header => get_env(proxy_protocol, false),
                               stream_handlers => [rabbit_web_stomp_stream_handler, cowboy_stream_h]},
     CowboyWsOpts = maps:from_list(get_env(cowboy_ws_opts, [])),
 
@@ -136,7 +137,7 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
   TLSPort = proplists:get_value(port, TLSConf0),
   TLSConf = maybe_parse_ip(TLSConf0),
   RanchTransportOpts = #{
-    socket_opts     => TLSConf,
+    socket_opts     => [{alpn_preferred_protocols, [<<"h2">>, <<"http/1.1">>]}|TLSConf],
     connection_type => supervisor,
     max_connections => get_max_connections(),
     num_acceptors   => NumSslAcceptors,

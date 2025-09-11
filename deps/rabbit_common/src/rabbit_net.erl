@@ -117,10 +117,7 @@ getstat(Sock, Stats) when is_port(Sock) ->
 getstat({rabbit_proxy_socket, Sock, _}, Stats) when ?IS_SSL(Sock) ->
     ssl:getstat(Sock, Stats);
 getstat({rabbit_proxy_socket, Sock, _}, Stats) when is_port(Sock) ->
-    inet:getstat(Sock, Stats);
-%% Virtual sockets; we do not have access to the underlying socket.
-getstat({rabbit_virtual_socket, _}, _) ->
-    {error, enotsup}.
+    inet:getstat(Sock, Stats).
 
 recv(Sock) when ?IS_SSL(Sock) ->
     recv(Sock, {ssl, ssl_closed, ssl_error});
@@ -183,9 +180,7 @@ peername(Sock)   when ?IS_SSL(Sock) -> ssl:peername(Sock);
 peername(Sock)   when is_port(Sock) -> inet:peername(Sock).
 
 peercert(Sock)   when ?IS_SSL(Sock) -> ssl:peercert(Sock);
-peercert(Sock)   when is_port(Sock) -> nossl;
-peercert({rabbit_virtual_socket, #{cert := undefined}}) -> nossl;
-peercert({rabbit_virtual_socket, #{cert := Cert}}) -> Cert.
+peercert(Sock)   when is_port(Sock) -> nossl.
 
 connection_string(Sock, Direction) ->
     case socket_ends(Sock, Direction) of
@@ -224,15 +219,7 @@ socket_ends({rabbit_proxy_socket, Sock, ProxyInfo}, Direction) ->
          } ->
             {ok, {rdns(FromAddress), FromPort,
                   rdns(ToAddress),   ToPort}}
-    end;
-socket_ends({rabbit_virtual_socket, SocketInfo}, _) ->
-    #{
-        src_address := FromAddress,
-        src_port := FromPort,
-        dest_address := ToAddress,
-        dest_port := ToPort
-    } = SocketInfo,
-    {ok, {rdns(FromAddress), FromPort, rdns(ToAddress), ToPort}}.
+    end.
 
 maybe_ntoab(Addr) when is_tuple(Addr) -> rabbit_misc:ntoab(Addr);
 maybe_ntoab(Host)                     -> Host.
