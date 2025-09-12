@@ -253,9 +253,9 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
             %% a link for now. @todo In the future we will have a
             %% mechanism in Cowboy to attach them to the stream.
             {ok, Sender} = rabbit_heartbeat:start_heartbeat_sender(RealSocket,
-                SendTimeout, SendFun, unknown),
+                SendTimeout, SendFun, {heartbeat_sender, unknown}),
             {ok, Receiver} = rabbit_heartbeat:start_heartbeat_receiver(RealSocket,
-                ReceiveTimeout, ReceiveFun, unknown),
+                ReceiveTimeout, ReceiveFun, {heartbeat_receiver, unknown}),
             {Sender, Receiver};
         _ ->
             rabbit_heartbeat:start(SupPid, Sock, SendTimeout,
