@@ -291,7 +291,7 @@ websocket_info(Msg, State) ->
 
 terminate(_Reason, _Req, State = #state{proc_state = undefined}) ->
     terminate_heartbeaters(State);
-terminate(Reason, _Req, State = #state{proc_state = ProcState}) ->
+terminate(_Reason, _Req, State = #state{proc_state = ProcState}) ->
     _ = rabbit_stomp_processor:flush_and_die(ProcState),
     terminate_heartbeaters(State).
 
