@@ -79,7 +79,8 @@
         };
 
       // Stomp.js boilerplate
-      var client = Stomp.client('ws://' + window.location.hostname + ':15674/ws');
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var client = Stomp.client(wsProtocol + '//' + window.location.hostname + ':15674/ws');
       client.debug = pipe('#second');
 
       var print_first = pipe('#first', function(data) {

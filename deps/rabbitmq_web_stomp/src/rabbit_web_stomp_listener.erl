@@ -136,16 +136,20 @@ start_tls_listener(TLSConf0, CowboyOpts0, Routes) ->
   TLSPort = proplists:get_value(port, TLSConf0),
   TLSConf = maybe_parse_ip(TLSConf0),
   RanchTransportOpts = #{
-    socket_opts     => TLSConf,
+    socket_opts     => [{alpn_preferred_protocols, [<<"h2">>, <<"http/1.1">>]}|TLSConf],
     connection_type => supervisor,
     max_connections => get_max_connections(),
     num_acceptors   => NumSslAcceptors,
     num_conns_sups => 1
   },
-  CowboyOpts = CowboyOpts0#{env => #{dispatch => Routes},
-                            middlewares => [cowboy_router,
-                                            rabbit_web_stomp_middleware,
-                                            cowboy_handler]},
+  CowboyOpts = CowboyOpts0#{
+        env => #{dispatch => Routes},
+        middlewares => [cowboy_router,
+                        rabbit_web_stomp_middleware,
+                        cowboy_handler],
+        %% Enable HTTP/2 Websocket if not explicitly disabled.
+        enable_connect_protocol => maps:get(enable_connect_protocol, CowboyOpts0, true)
+  },
   case ranch:start_listener(rabbit_networking:ranch_ref(TLSConf),
                             ranch_ssl,
                             RanchTransportOpts,
