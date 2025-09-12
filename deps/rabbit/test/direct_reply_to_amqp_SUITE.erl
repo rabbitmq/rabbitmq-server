@@ -38,7 +38,9 @@ groups() ->
       [
        responder_attaches_queue_target,
        many_replies,
-       many_volatile_queues_same_session
+       many_volatile_queues_same_session,
+       failure_multiple_consumers_same_session_same_queue,
+       failure_multiple_consumers_different_session_same_queue
       ]},
      {cluster_size_3, [shuffle],
       [
@@ -494,6 +496,63 @@ many_volatile_queues_same_session(Config) ->
     ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair),
     ok = close_connection_sync(ConnResponder),
     ok = close_connection_sync(ConnRequester).
+
+%% Test that there can't be multiple consumers (from one session) on one volatile queue.
+failure_multiple_consumers_same_session_same_queue(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Conn} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Conn),
+    {ok, Receiver1} = amqp10_client:attach_link(Session, attach_args(<<"receiver-1">>)),
+    AddrVolQ = receive {amqp10_event, {link, Receiver1, {attached, Attach}}} ->
+                           #'v1_0.attach'{
+                              source = #'v1_0.source'{
+                                          address = {utf8, Addr}}} = Attach,
+                           Addr
+               after 9000 -> ct:fail({missing_event, ?LINE})
+               end,
+
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session, <<"receiver-2">>, AddrVolQ, settled),
+    receive {amqp10_event, {link, Receiver2, {detached, #'v1_0.detach'{}}}} ->
+                ok
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = end_session_sync(Session),
+    ok = close_connection_sync(Conn).
+
+%% Test that there can't be multiple consumers (from different sessions) on one volatile queue.
+failure_multiple_consumers_different_session_same_queue(Config) ->
+    OpnConf0 = connection_config(Config),
+    OpnConf = OpnConf0#{notify_with_performative => true},
+    {ok, Conn} = amqp10_client:open_connection(OpnConf),
+    {ok, Session1} = amqp10_client:begin_session_sync(Conn),
+    {ok, Session2} = amqp10_client:begin_session_sync(Conn),
+
+    {ok, Receiver1} = amqp10_client:attach_link(Session1, attach_args(<<"receiver-1">>)),
+    AddrVolQ = receive {amqp10_event, {link, Receiver1, {attached, Attach}}} ->
+                           #'v1_0.attach'{
+                              source = #'v1_0.source'{
+                                          address = {utf8, Addr}}} = Attach,
+                           Addr
+               after 9000 -> ct:fail({missing_event, ?LINE})
+               end,
+
+    {ok, Receiver2} = amqp10_client:attach_receiver_link(
+                        Session2, <<"receiver-2">>, AddrVolQ, settled),
+    receive {amqp10_event, {link, Receiver2, {detached, #'v1_0.detach'{error = Error}}}} ->
+                ?assertMatch(
+                   #'v1_0.error'{
+                      description = {utf8, <<"only creator channel may consume from "
+                                             "queue 'amq.rabbitmq.reply-to.", _/binary>>}},
+                   Error)
+    after 9000 -> ct:fail({missing_event, ?LINE})
+    end,
+
+    ok = end_session_sync(Session1),
+    ok = end_session_sync(Session2),
+    ok = close_connection_sync(Conn).
 
 %% "new" and "old" refers to new and old RabbitMQ versions in mixed version tests.
 rpc_new_to_old_node(Config) ->

@@ -84,7 +84,7 @@ new(#resource{virtual_host = Vhost,
     new0(Name, self(), Vhost);
 new(#resource{virtual_host = Vhost,
               name = NameBin} = Name) ->
-    case pid_from_name(NameBin, nodes_with_hashes()) of
+    case pid_from_name(NameBin) of
         {ok, Pid} when is_pid(Pid) ->
             new0(Name, Pid, Vhost);
         _ ->
@@ -104,19 +104,31 @@ is(Name) when is_binary(Name) ->
 init(Q) ->
     {ok, #?STATE{name = amqqueue:get_name(Q)}}.
 
-consume(_Q, Spec, State) ->
-    #{no_ack := true,
-      consumer_tag := Ctag,
-      mode := Mode} = Spec,
-    {DeliveryCount, Credit} = case Mode of
-                                  {credited, InitialDC} ->
-                                      {InitialDC, 0};
-                                  {simple_prefetch, 0} ->
-                                      {undefined, undefined}
-                              end,
-    {ok, State#?STATE{ctag = Ctag,
-                      delivery_count = DeliveryCount,
-                      credit = Credit}}.
+consume(Q, Spec, #?STATE{name = Name,
+                         ctag = undefined} = State) ->
+    case amqqueue:get_pid(Q) of
+        Pid when Pid =:= self() ->
+            #{no_ack := true,
+              consumer_tag := Ctag,
+              mode := Mode} = Spec,
+            {DeliveryCount, Credit} = case Mode of
+                                          {credited, InitialDC} ->
+                                              {InitialDC, 0};
+                                          {simple_prefetch, 0} ->
+                                              {undefined, undefined}
+                                      end,
+            {ok, State#?STATE{ctag = Ctag,
+                              delivery_count = DeliveryCount,
+                              credit = Credit}};
+        _ ->
+            {error, precondition_failed,
+             "only creator channel may consume from ~ts",
+             [rabbit_misc:rs(Name)]}
+    end;
+consume(_Q, _Spec, #?STATE{name = Name}) ->
+    {error, precondition_failed,
+     "multiple consumers are unsupported for ~ts",
+     [rabbit_misc:rs(Name)]}.
 
 declare(Q, _Node) ->
     #resource{name = NameBin} = Name = amqqueue:get_name(Q),
@@ -135,7 +147,7 @@ declare(Q, _Node) ->
 -spec exists(rabbit_amqqueue:name()) -> boolean().
 exists(#resource{kind = queue,
                  name = QNameBin} = QName) ->
-    case pid_from_name(QNameBin, nodes_with_hashes()) of
+    case pid_from_name(QNameBin) of
         {ok, Pid} when is_pid(Pid) ->
             case ff_enabled() of
                 true ->
@@ -362,6 +374,9 @@ encode_pid(Pid) ->
                            rabbit_nodes_common:make("reply", integer_to_list(NodeHash)),
                            PidParts0),
     base64:encode(rabbit_pid_codec:recompose_to_binary(PidParts)).
+
+pid_from_name(Name) ->
+    pid_from_name(Name, nodes_with_hashes()).
 
 -spec pid_from_name(rabbit_misc:resource_name(),
                     #{non_neg_integer() => node()}) ->
