@@ -23,7 +23,9 @@ groups() ->
      {unit, [], [
                  maybe_add_tag_filters,
                  get_hostname_name_from_reservation_set,
-                 registration_support
+                 registration_support,
+                 network_interface_sorting,
+                 private_ip_address_sorting
                 ]},
      {lock, [], [
                  lock_single_node,
@@ -75,11 +77,92 @@ get_hostname_name_from_reservation_set(_Config) ->
                 ?assertEqual(Expectation,
                              rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
                                reservation_set(), []))
+        end},
+       {"from private IP DNS in network interface",
+        fun() ->
+                os:putenv("AWS_HOSTNAME_PATH", "networkInterfaceSet,2,privateIpAddressesSet,1,privateDnsName"),
+                Expectation = ["ip-10-0-15-100.eu-west-1.compute.internal",
+                               "ip-10-0-16-31.eu-west-1.compute.internal"],
+                ?assertEqual(Expectation,
+                             rabbit_peer_discovery_aws:get_hostname_name_from_reservation_set(
+                               reservation_set(), []))
         end}]
     }).
 
 registration_support(_Config) ->
     ?assertEqual(false, rabbit_peer_discovery_aws:supports_registration()).
+
+network_interface_sorting(_Config) ->
+    %% Test ENI sorting by deviceIndex (DescribeInstances only returns attached ENIs)
+    NetworkInterfaces = [
+        {"item", [
+            {"networkInterfaceId", "eni-secondary"},
+            {"attachment", [{"deviceIndex", "1"}]}
+        ]},
+        {"item", [
+            {"networkInterfaceId", "eni-primary"},
+            {"attachment", [{"deviceIndex", "0"}]}
+        ]},
+        {"item", [
+            {"networkInterfaceId", "eni-tertiary"},
+            {"attachment", [{"deviceIndex", "2"}]}
+        ]}
+    ],
+    
+    %% Should sort ENIs by deviceIndex
+    Sorted = rabbit_peer_discovery_aws:sort_network_interfaces_by_device_index(NetworkInterfaces),
+    
+    %% Should have all 3 ENIs
+    ?assertEqual(3, length(Sorted)),
+    
+    %% Primary ENI (deviceIndex=0) should be first
+    {"item", FirstENI} = lists:nth(1, Sorted),
+    ?assertEqual("eni-primary", proplists:get_value("networkInterfaceId", FirstENI)),
+    
+    %% Secondary ENI (deviceIndex=1) should be second
+    {"item", SecondENI} = lists:nth(2, Sorted),
+    ?assertEqual("eni-secondary", proplists:get_value("networkInterfaceId", SecondENI)),
+    
+    %% Tertiary ENI (deviceIndex=2) should be third
+    {"item", ThirdENI} = lists:nth(3, Sorted),
+    ?assertEqual("eni-tertiary", proplists:get_value("networkInterfaceId", ThirdENI)).
+
+private_ip_address_sorting(_Config) ->
+    %% Test private IP address sorting by primary flag
+    PrivateIpAddresses = [
+        {"item", [
+            {"privateIpAddress", "10.0.14.176"},
+            {"privateDnsName", "ip-10-0-14-176.us-west-2.compute.internal"},
+            {"primary", "false"}
+        ]},
+        {"item", [
+            {"privateIpAddress", "10.0.12.112"},
+            {"privateDnsName", "ip-10-0-12-112.us-west-2.compute.internal"},
+            {"primary", "true"}
+        ]},
+        {"item", [
+            {"privateIpAddress", "10.0.15.200"},
+            {"privateDnsName", "ip-10-0-15-200.us-west-2.compute.internal"},
+            {"primary", "false"}
+        ]}
+    ],
+    
+    Sorted = rabbit_peer_discovery_aws:sort_private_ip_addresses_by_primary(PrivateIpAddresses),
+    ?assertEqual(3, length(Sorted)),
+    
+    %% Primary IP (primary=true) should be first
+    {"item", FirstIP} = lists:nth(1, Sorted),
+    ?assertEqual("10.0.12.112", proplists:get_value("privateIpAddress", FirstIP)),
+    ?assertEqual("true", proplists:get_value("primary", FirstIP)),
+    
+    %% Non-primary IPs should maintain relative order
+    {"item", SecondIP} = lists:nth(2, Sorted),
+    ?assertEqual("10.0.14.176", proplists:get_value("privateIpAddress", SecondIP)),
+    ?assertEqual("false", proplists:get_value("primary", SecondIP)),
+    
+    {"item", ThirdIP} = lists:nth(3, Sorted),
+    ?assertEqual("10.0.15.200", proplists:get_value("privateIpAddress", ThirdIP)),
+    ?assertEqual("false", proplists:get_value("primary", ThirdIP)).
 
 lock_single_node(_Config) ->
   LocalNode = node(),
@@ -141,16 +224,30 @@ reservation_set() ->
                    {"vpcId","vpc-4fe1562b"},
                    {"networkInterfaceSet", [
                     {"item",
-                    [{"association",
-                     [{"publicIp","203.0.113.11"},
-                      {"publicDnsName",
-                       "ec2-203-0-113-11.eu-west-1.compute.amazonaws.com"},
-                      {"ipOwnerId","amazon"}]}]},
-                    {"item",
-                    [{"association",
+                    [{"attachment", [{"deviceIndex", "1"}]},
+                     {"association",
                      [{"publicIp","203.0.113.12"},
                       {"publicDnsName",
                        "ec2-203-0-113-12.eu-west-1.compute.amazonaws.com"},
+                      {"ipOwnerId","amazon"}]},
+                     {"privateIpAddressesSet", [
+                        {"item", [
+                            {"privateIpAddress", "10.0.15.101"},
+                            {"privateDnsName", "ip-10-0-15-101.eu-west-1.compute.internal"},
+                            {"primary", "false"}
+                        ]},
+                        {"item", [
+                            {"privateIpAddress", "10.0.15.100"},
+                            {"privateDnsName", "ip-10-0-15-100.eu-west-1.compute.internal"},
+                            {"primary", "true"}
+                        ]}
+                     ]}]},
+                    {"item",
+                    [{"attachment", [{"deviceIndex", "0"}]},
+                     {"association",
+                     [{"publicIp","203.0.113.11"},
+                      {"publicDnsName",
+                       "ec2-203-0-113-11.eu-west-1.compute.amazonaws.com"},
                       {"ipOwnerId","amazon"}]}]}]},
                    {"privateIpAddress","10.0.16.29"}]}]}]},
      {"item", [{"reservationId","r-006cfdbf8d04c5f01"},
@@ -171,15 +268,24 @@ reservation_set() ->
                    {"vpcId","vpc-4fe1562b"},
                    {"networkInterfaceSet", [
                     {"item",
-                    [{"association",
+                    [{"attachment", [{"deviceIndex", "0"}]},
+                     {"association",
                      [{"publicIp","203.0.113.21"},
                       {"publicDnsName",
                        "ec2-203-0-113-21.eu-west-1.compute.amazonaws.com"},
                       {"ipOwnerId","amazon"}]}]},
                     {"item",
-                    [{"association",
+                    [{"attachment", [{"deviceIndex", "1"}]},
+                     {"association",
                      [{"publicIp","203.0.113.22"},
                       {"publicDnsName",
                        "ec2-203-0-113-22.eu-west-1.compute.amazonaws.com"},
-                      {"ipOwnerId","amazon"}]}]}]},
+                      {"ipOwnerId","amazon"}]},
+                     {"privateIpAddressesSet", [
+                        {"item", [
+                            {"privateIpAddress", "10.0.16.31"},
+                            {"privateDnsName", "ip-10-0-16-31.eu-west-1.compute.internal"},
+                            {"primary", "true"}
+                        ]}
+                     ]}]}]},
                    {"privateIpAddress","10.0.16.31"}]}]}]}].

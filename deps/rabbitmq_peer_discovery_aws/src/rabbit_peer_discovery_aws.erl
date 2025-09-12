@@ -351,10 +351,12 @@ get_hostname_by_tags(Tags) ->
 get_hostname_path() ->
     UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
     HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
-    case HostnamePath of
+    FinalPath = case HostnamePath of
         ["privateDnsName"] when UsePrivateIP -> ["privateIpAddress"];
         P -> P
-    end.
+    end,
+    ?LOG_DEBUG("AWS peer discovery using hostname path: ~tp", [FinalPath]),
+    FinalPath.
 
 -spec get_hostname(path(), props()) -> string().
 get_hostname(Path, Props) ->
@@ -370,8 +372,77 @@ get_value(_, []) ->
 get_value(Key, Props) when is_integer(Key) ->
     {"item", Props2} = lists:nth(Key, Props),
     Props2;
+get_value("networkInterfaceSet", Props) ->
+    NetworkInterfaces = proplists:get_value("networkInterfaceSet", Props),
+    sort_network_interfaces_by_device_index(NetworkInterfaces);
+get_value("privateIpAddressesSet", Props) ->
+    PrivateIpAddresses = proplists:get_value("privateIpAddressesSet", Props),
+    sort_private_ip_addresses_by_primary(PrivateIpAddresses);
 get_value(Key, Props) ->
     proplists:get_value(Key, Props).
+
+%% Sort network interfaces by deviceIndex to ensure consistent ENI ordering
+-spec sort_network_interfaces_by_device_index(list()) -> list().
+sort_network_interfaces_by_device_index(NetworkInterfaces) when is_list(NetworkInterfaces) ->
+    BeforeInfo = [format_network_interface_info(Props) || {"item", Props} <- NetworkInterfaces],
+    Sorted = lists:sort(fun({"item", A}, {"item", B}) ->
+        device_index(A) =< device_index(B)
+    end, NetworkInterfaces),
+    AfterInfo = [format_network_interface_info(Props) || {"item", Props} <- Sorted],
+    ?LOG_DEBUG("AWS peer discovery sorted network interfaces from ~tp to ~tp", [BeforeInfo, AfterInfo]),
+    Sorted;
+sort_network_interfaces_by_device_index(Other) ->
+    Other.
+
+%% Sort private IP addresses by primary flag to ensure primary=true comes first
+-spec sort_private_ip_addresses_by_primary(list()) -> list().
+sort_private_ip_addresses_by_primary(PrivateIpAddresses) when is_list(PrivateIpAddresses) ->
+    BeforeInfo = [format_private_ip_info(Props) || {"item", Props} <- PrivateIpAddresses],
+    Sorted = lists:sort(fun({"item", A}, {"item", B}) ->
+        is_primary(A) >= is_primary(B)
+    end, PrivateIpAddresses),
+    AfterInfo = [format_private_ip_info(Props) || {"item", Props} <- Sorted],
+    ?LOG_DEBUG("AWS peer discovery sorted private IPs from ~tp to ~tp", [BeforeInfo, AfterInfo]),
+    Sorted;
+sort_private_ip_addresses_by_primary(Other) ->
+    Other.
+
+%% Extract deviceIndex from network interface attachment
+-spec device_index(props()) -> integer().
+device_index(Interface) ->
+    Attachment = proplists:get_value("attachment", Interface),
+    case proplists:get_value("deviceIndex", Attachment) of
+        DeviceIndex when is_list(DeviceIndex) ->
+            {Int, []} = string:to_integer(DeviceIndex),
+            Int;
+        DeviceIndex when is_integer(DeviceIndex) ->
+            DeviceIndex
+    end.
+
+%% Extract primary flag from private IP address
+-spec is_primary(props()) -> boolean().
+is_primary(IpAddress) ->
+    case proplists:get_value("primary", IpAddress) of
+        "true" -> true;
+        _ -> false
+    end.
+
+%% Format network interface info for logging
+-spec format_network_interface_info(props()) -> string().
+format_network_interface_info(Interface) ->
+    ENI = proplists:get_value("networkInterfaceId", Interface, "unknown"),
+    DeviceIndex = device_index(Interface),
+    lists:flatten(io_lib:format("~s:~w", [ENI, DeviceIndex])).
+
+%% Format private IP info for logging  
+-spec format_private_ip_info(props()) -> string().
+format_private_ip_info(IpAddress) ->
+    IP = proplists:get_value("privateIpAddress", IpAddress, "unknown"),
+    Primary = case is_primary(IpAddress) of
+        true -> "primary";
+        false -> "secondary"
+    end,
+    lists:flatten(io_lib:format("~s:~s", [IP, Primary])).
 
 -spec get_tags() -> tags().
 get_tags() ->
