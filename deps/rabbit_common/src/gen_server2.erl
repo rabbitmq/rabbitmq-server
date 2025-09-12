@@ -1150,14 +1150,15 @@ print_event(Dev, Event, Name) ->
 
 terminate(Reason, Msg, #gs2_state { name  = Name,
                                     mod   = Mod,
-                                    state = State,
+                                    state = ModState0,
                                     debug = Debug,
                                     stop_stats_fun = StopStatsFun
                                     } = GS2State) ->
     StopStatsFun(stop_stats_timer(GS2State)),
-    case catch Mod:terminate(Reason, State) of
+    case catch Mod:terminate(Reason, ModState0) of
         {'EXIT', R} ->
-            error_info(R, Reason, Name, Msg, State, Debug),
+            ModState1 = maybe_format_state(Mod, ModState0),
+            error_info(R, Reason, Name, Msg, ModState1, Debug),
             exit(R);
         _ ->
             case Reason of
@@ -1168,9 +1169,18 @@ terminate(Reason, Msg, #gs2_state { name  = Name,
                 {shutdown,_}=Shutdown ->
                     exit(Shutdown);
                 _ ->
-                    error_info(Reason, undefined, Name, Msg, State, Debug),
+                    ModState1 = maybe_format_state(Mod, ModState0),
+                    error_info(Reason, undefined, Name, Msg, ModState1, Debug),
                     exit(Reason)
             end
+    end.
+
+maybe_format_state(M, ModState) ->
+    case erlang:function_exported(M, format_state, 1) of
+        true ->
+            M:format_state(ModState);
+        false ->
+            ModState
     end.
 
 error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
@@ -1178,7 +1188,7 @@ error_info(_Reason, _RootCause, application_controller, _Msg, _State, _Debug) ->
     %% application_controller which is terminating - let init take care
     %% of it instead
     ok;
-error_info(Reason, RootCause, Name, Msg, State, Debug) ->
+error_info(Reason, RootCause, Name, Msg, ModState, Debug) ->
     Reason1 = error_reason(Reason),
     Fmt =
         "** Generic server ~tp terminating~n"
@@ -1186,10 +1196,10 @@ error_info(Reason, RootCause, Name, Msg, State, Debug) ->
         "** When Server state == ~tp~n"
         "** Reason for termination == ~n** ~tp~n",
     case RootCause of
-        undefined -> format(Fmt, [Name, Msg, State, Reason1]);
+        undefined -> format(Fmt, [Name, Msg, ModState, Reason1]);
         _         -> format(Fmt ++ "** In 'terminate' callback "
                             "with reason ==~n** ~tp~n",
-                            [Name, Msg, State, Reason1,
+                            [Name, Msg, ModState, Reason1,
                              error_reason(RootCause)])
     end,
     sys:print_log(Debug),
