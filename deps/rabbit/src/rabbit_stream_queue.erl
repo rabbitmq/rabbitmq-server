@@ -1176,7 +1176,7 @@ stream_entries(QName, Name, CTag, LocalPid,
                        credit = Credit} = Str0) ->
     case Credit > 0 of
         true ->
-            case chunk_iterator(Str0, LocalPid) of
+            case chunk_iterator(Str0, LocalPid, undefined) of
                 {ok, Str} ->
                     stream_entries(QName, Name, CTag, LocalPid, Str);
                 {end_of_stream, Str} ->
@@ -1229,7 +1229,7 @@ stream_entries(QName, Name, CTag, LocalPid,
             gen_server:cast(self(), queue_event(QName, {resume_filtering, CTag})),
             {Str0#stream{filtering_paused = true}, lists:reverse(Acc0)};
         end_of_chunk ->
-            case chunk_iterator(Str0, LocalPid) of
+            case chunk_iterator(Str0, LocalPid, Iter0) of
                 {ok, Str} ->
                     stream_entries(QName, Name, CTag, LocalPid, Str, Acc0);
                 {end_of_stream, Str} ->
@@ -1294,8 +1294,8 @@ stream_entries(QName, Name, CTag, LocalPid,
 
 chunk_iterator(#stream{credit = Credit,
                        listening_offset = LOffs,
-                       log = Log0} = Str0, LocalPid) ->
-    case osiris_log:chunk_iterator(Log0, Credit) of
+                       log = Log0} = Str0, LocalPid, PrevIterator) ->
+    case osiris_log:chunk_iterator(Log0, Credit, PrevIterator) of
         {ok, _ChunkHeader, Iter, Log} ->
             {ok, Str0#stream{chunk_iterator = Iter,
                              log = Log}};
