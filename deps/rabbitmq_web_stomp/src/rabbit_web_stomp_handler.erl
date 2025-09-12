@@ -245,16 +245,16 @@ websocket_info({start_heartbeats, {SendTimeout, ReceiveTimeout}},
     SendFun = fun () -> Self ! {send, <<$\n>>}, ok end,
     ReceiveFun = fun() -> Self ! client_timeout end,
     Heartbeat = case Sock of
-        {rabbit_proxy_socket, _, #{http_version := 'HTTP/2'}} ->
+        {rabbit_proxy_socket, RealSocket, #{http_version := 'HTTP/2'}} ->
             %% HTTP/2 Websocket may have multiple Websocket sessions
             %% on a single connection (this can happen for example
             %% when refreshing a page). As a result we need to attach
             %% the heartbeat processes to the session. We do this via
             %% a link for now. @todo In the future we will have a
             %% mechanism in Cowboy to attach them to the stream.
-            {ok, Sender} = rabbit_heartbeat:start_heartbeat_sender(Sock,
+            {ok, Sender} = rabbit_heartbeat:start_heartbeat_sender(RealSocket,
                 SendTimeout, SendFun, unknown),
-            {ok, Receiver} = rabbit_heartbeat:start_heartbeat_receiver(Sock,
+            {ok, Receiver} = rabbit_heartbeat:start_heartbeat_receiver(RealSocket,
                 ReceiveTimeout, ReceiveFun, unknown),
             {Sender, Receiver};
         _ ->
