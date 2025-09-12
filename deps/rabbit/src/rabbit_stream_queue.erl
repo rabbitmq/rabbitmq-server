@@ -341,7 +341,7 @@ consume(Q, Spec, #stream_client{} = QState0)
               ok_msg := OkMsg,
               acting_user := ActingUser} = Spec,
             ?LOG_DEBUG("~s:~s Local pid resolved ~0p",
-                             [?MODULE, ?FUNCTION_NAME, LocalPid]),
+                       [?MODULE, ?FUNCTION_NAME, LocalPid]),
             case parse_offset_arg(
                    rabbit_misc:table_lookup(Args, <<"x-stream-offset">>)) of
                 {ok, OffsetSpec} ->
