@@ -245,7 +245,10 @@ is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
                                     management]).
 is_protected_user(T) -> intersects(T, [protected]).
 
-intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
+intersects(A, [B]) ->
+    lists:member(B, A);
+intersects(A, B) ->
+    lists:any(fun(I) -> lists:member(I, B) end, A).
 
 user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
