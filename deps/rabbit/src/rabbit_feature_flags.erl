@@ -124,6 +124,7 @@
          query_supported_feature_flags/0,
          does_enabled_feature_flags_list_file_exist/0,
          read_enabled_feature_flags_list/0,
+         write_enabled_feature_flags_list/1,
          copy_feature_states_after_reset/1,
          uses_callbacks/1,
          reset/0,
