@@ -1674,6 +1674,24 @@ end}.
 % Logging section
 % ==========================
 
+{mapping, "log.summarize_process_state", "rabbit.summarize_process_state_when_logged", [
+    {datatype, {enum, [true, false]}}
+]}.
+
+{mapping, "log.error_logger_format_depth", "kernel.error_logger_format_depth", [
+    {datatype, [{atom, unlimited}, integer]}
+]}.
+{translation, "kernel.error_logger_format_depth",
+ fun(Conf) ->
+   case cuttlefish:conf_get("log.error_logger_format_depth", Conf, undefined) of
+     undefined -> cuttlefish:unset();
+     unlimited -> unlimited;
+     Val when is_integer(Val) andalso Val > 0 -> Val;
+     _ -> cuttlefish:invalid("should be positive integer or 'unlimited'")
+   end
+ end
+}.
+
 {mapping, "log.dir", "rabbit.log_root", [
     {datatype, string},
     {validators, ["dir_writable"]}]}.
