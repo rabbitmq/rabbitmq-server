@@ -51,6 +51,7 @@
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
 -export([readers/1]).
+-export([read_ahead_on/0]).
 
 -export([parse_offset_arg/1,
          filter_spec/1]).
@@ -463,10 +464,11 @@ query_local_pid(#stream_client{stream_id = StreamId} = State) ->
 begin_stream(#stream_client{name = QName,
                             readers = Readers0,
                             local_pid = LocalPid} = State,
-             Tag, Offset, Mode, AckRequired, Filter, Options)
+             Tag, Offset, Mode, AckRequired, Filter, Options0)
   when is_pid(LocalPid) ->
     CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-    {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options),
+    Options1 = Options0#{read_ahead => read_ahead_on()},
+    {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options1),
     NextOffset = osiris_log:next_offset(Seg0) - 1,
     osiris:register_offset_listener(LocalPid, NextOffset),
     StartOffset = case Offset of
@@ -491,7 +493,7 @@ begin_stream(#stream_client{name = QName,
                    last_consumed_offset = StartOffset,
                    log = Seg0,
                    filter = Filter,
-                   reader_options = Options},
+                   reader_options = Options1},
     {ok, State#stream_client{readers = Readers0#{Tag => Str0}}}.
 
 cancel(_Q, #{consumer_tag := ConsumerTag,
@@ -659,8 +661,8 @@ handle_event(_QName, {stream_local_member_change, Pid},
                                  osiris_log:close(Log0),
                                  CounterSpec = {{?MODULE, QName, self()}, []},
                                  ?LOG_DEBUG("Re-creating Osiris reader for consumer ~tp at offset ~tp "
-                                                  " with options ~tp",
-                                                  [T, Offset, Options]),
+                                            " with options ~tp",
+                                            [T, Offset, Options]),
                                  {ok, Log1} = osiris:init_reader(Pid, Offset, CounterSpec, Options),
                                  NextOffset = osiris_log:next_offset(Log1) - 1,
                                  ?LOG_DEBUG("Registering offset listener at offset ~tp", [NextOffset]),
@@ -1527,3 +1529,6 @@ queue_vm_stats_sups() ->
 queue_vm_ets() ->
     {[],
      []}.
+
+read_ahead_on() ->
+    application:get_env(rabbit, stream_read_ahead, true).

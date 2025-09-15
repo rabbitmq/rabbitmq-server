@@ -119,6 +119,7 @@ define PROJECT_ENV
       	{dead_letter_worker_consumer_prefetch, 32},
       	{dead_letter_worker_publisher_confirm_timeout, 180000},
 		{vhost_process_reconciliation_run_interval, 30},
+		{stream_read_ahead, true},
 		%% for testing
 		{vhost_process_reconciliation_enabled, true},
 		{license_line, "Licensed under the MPL 2.0. Website: https://rabbitmq.com"}
