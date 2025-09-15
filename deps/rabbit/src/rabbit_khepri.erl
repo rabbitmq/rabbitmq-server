@@ -60,7 +60,7 @@
 %% executed. If the migration runs concurrently, whether it started before or
 %% during the execution of the Mnesia-specific anonymous function, {@link
 %% handle_fallback/1} will watch for "no exists" table exceptions from Mnesia
-%% and will retry the Mnesia functino or run the Khepri function accordingly.
+%% and will retry the Mnesia function or run the Khepri function accordingly.
 %% The Mnesia function must be idempotent because it can be executed multiple
 %% times.
 %%
@@ -1415,19 +1415,13 @@ register_rabbit_bindings_projection() ->
     khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_index_route_projection() ->
-    MapFun = fun(Path, _) ->
-                     {
-                      VHost,
-                      ExchangeName,
-                      Kind,
-                      DstName,
-                      RoutingKey
-                     } = rabbit_db_binding:khepri_route_path_to_args(Path),
-                     Exchange = rabbit_misc:r(VHost, exchange, ExchangeName),
-                     Destination = rabbit_misc:r(VHost, Kind, DstName),
-                     SourceKey = {Exchange, RoutingKey},
-                     #index_route{source_key = SourceKey,
-                                  destination = Destination}
+    MapFun = fun(_Path, #binding{source = Source,
+                                 key = Key,
+                                 destination = Destination,
+                                 args = Args}) ->
+                     #index_route{source_key = {Source, Key},
+                                  destination = Destination,
+                                  args = Args}
              end,
     ProjectionFun = projection_fun_for_sets(MapFun),
     Options = #{type => bag,
@@ -1435,14 +1429,14 @@ register_rabbit_index_route_projection() ->
                 read_concurrency => true},
     Projection = khepri_projection:new(
                    rabbit_khepri_index_route, ProjectionFun, Options),
-    DirectOrFanout = #if_data_matches{
-                        pattern = #exchange{type = '$1', _ = '_'},
-                        conditions = [{'andalso',
-                                       {'=/=', '$1', headers},
-                                       {'=/=', '$1', topic}}]},
+    IgnoreHeadersAndTopic = #if_data_matches{
+                               pattern = #exchange{type = '$1', _ = '_'},
+                               conditions = [{'andalso',
+                                              {'=/=', '$1', headers},
+                                              {'=/=', '$1', topic}}]},
     PathPattern = rabbit_db_binding:khepri_route_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
-                    _Exchange = DirectOrFanout,
+                    _Exchange = IgnoreHeadersAndTopic,
                     _Kind = ?KHEPRI_WILDCARD_STAR,
                     _DstName = ?KHEPRI_WILDCARD_STAR,
                     _RoutingKey = ?KHEPRI_WILDCARD_STAR),
