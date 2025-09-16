@@ -15,11 +15,6 @@
 %% watermark (configurable either as an absolute value or
 %% relative to the memory limit).
 %%
-%% Disk monitoring is done by shelling out to /usr/bin/df
-%% instead of related built-in OTP functions because currently
-%% this is the most reliable way of determining free disk space
-%% for the partition our internal database is on.
-%%
 %% Update interval is dynamically calculated assuming disk
 %% space is being filled at FAST_RATE.
 
@@ -65,11 +60,7 @@
           %% on start-up
           retries,
           %% Interval between retries
-          interval,
-          %% Operating system in use
-          os,
-          %% Port running sh to execute df commands
-          port
+          interval
 }).
 
 %%----------------------------------------------------------------------------
@@ -134,18 +125,9 @@ init([Limit]) ->
     State1 = set_min_check_interval(?DEFAULT_MIN_DISK_CHECK_INTERVAL, State0),
     State2 = set_max_check_interval(?DEFAULT_MAX_DISK_CHECK_INTERVAL, State1),
 
-    OS = os:type(),
-    Port = case OS of
-               {unix, _} ->
-                   start_portprogram();
-               {win32, _OSname} ->
-                   not_used
-           end,
-    State3 = State2#state{port=Port, os=OS},
+    State3 = enable(State2),
 
-    State4 = enable(State3),
-
-    {ok, State4}.
+    {ok, State3}.
 
 handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
     ?LOG_INFO("Cannot set disk free limit: "
@@ -210,43 +192,6 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%----------------------------------------------------------------------------
 
-start_portprogram() ->
-    Args = ["-s", "rabbit_disk_monitor"],
-    Opts = [stream, stderr_to_stdout, {args, Args}],
-    erlang:open_port({spawn_executable, "/bin/sh"}, Opts).
-
-run_port_cmd(Cmd0, Port) ->
-    %% Insert a carriage return, ^M or ASCII 13, after the command,
-    %% to indicate end of output
-    Cmd1 = io_lib:format("~ts < /dev/null; echo \"\^M\"~n", [Cmd0]),
-    Cmd2 = rabbit_data_coercion:to_utf8_binary(Cmd1),
-    Port ! {self(), {command, [Cmd2, 10]}}, % The 10 at the end is a newline
-    get_reply(Port, []).
-
-get_reply(Port, O) ->
-    receive
-        {Port, {data, N}} ->
-            case newline(N, O) of
-                {ok, Str} ->
-                    Str;
-                {more, Acc} ->
-                    get_reply(Port, Acc)
-            end;
-        {'EXIT', Port, Reason} ->
-            exit({port_died, Reason})
-    end.
-
-% Character 13 is ^M or carriage return
-newline([13|_], B) ->
-    {ok, lists:reverse(B)};
-newline([H|T], B) ->
-    newline(T, [H|B]);
-newline([], B) ->
-    {more, B}.
-
-find_cmd(Cmd) ->
-    os:find_executable(Cmd).
-
 safe_ets_lookup(Key, Default) ->
     try
         case ets:lookup(?ETS_NAME, Key) of
@@ -281,10 +226,8 @@ set_disk_limits(State, Limit0) ->
 
 internal_update(State = #state{limit   = Limit,
                                dir     = Dir,
-                               alarmed = Alarmed,
-                               os      = OS,
-                               port    = Port}) ->
-    CurrentFree = get_disk_free(Dir, OS, Port),
+                               alarmed = Alarmed}) ->
+    CurrentFree = get_disk_free(Dir),
     %% note: 'NaN' is considered to be less than a number
     NewAlarmed = CurrentFree < Limit,
     case {Alarmed, NewAlarmed} of
@@ -300,103 +243,16 @@ internal_update(State = #state{limit   = Limit,
     ets:insert(?ETS_NAME, {disk_free, CurrentFree}),
     State#state{alarmed = NewAlarmed, actual = CurrentFree}.
 
-get_disk_free(Dir, {unix, Sun}, Port)
-  when Sun =:= sunos; Sun =:= sunos4; Sun =:= solaris ->
-    Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -k '" ++ Dir ++ "'", Port));
-get_disk_free(Dir, {unix, _}, Port) ->
-    Df = find_cmd("df"),
-    parse_free_unix(run_port_cmd(Df ++ " -kP '" ++ Dir ++ "'", Port));
-get_disk_free(Dir, {win32, _}, not_used) ->
-    % Dir:
-    % "c:/Users/username/AppData/Roaming/RabbitMQ/db/rabbit2@username-z01-mnesia"
-    case win32_get_drive_letter(Dir) of
-        error ->
-            ?LOG_WARNING("Expected the mnesia directory absolute "
-                               "path to start with a drive letter like "
-                               "'C:'. The path is: '~tp'", [Dir]),
-            {ok, Free} = win32_get_disk_free_dir(Dir),
-            Free;
-        DriveLetter ->
-            % Note: yes, "$\s" is the $char sequence for an ASCII space
-            F = fun([D, $:, $\\, $\s | _]) when D =:= DriveLetter ->
-                        true;
-                   (_) -> false
-                end,
-            % Note: we can use os_mon_sysinfo:get_disk_info/1 after the following is fixed:
-            % https://github.com/erlang/otp/issues/6156
-            try
-                  % Note: DriveInfoStr is in this format
-                  % "C:\\ DRIVE_FIXED 720441434112 1013310287872 720441434112\n"
-                  Lines = os_mon_sysinfo:get_disk_info(),
-                  [DriveInfoStr] = lists:filter(F, Lines),
-                  [DriveLetter, $:, $\\, $\s | DriveInfo] = DriveInfoStr,
-
-                  % https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexa
-                  % lib/os_mon/c_src/win32sysinfo.c:
-                  % if (fpGetDiskFreeSpaceEx(drive,&availbytes,&totbytes,&totbytesfree)){
-                  %     sprintf(answer,"%s DRIVE_FIXED %I64u %I64u %I64u\n",drive,availbytes,totbytes,totbytesfree);
-                  ["DRIVE_FIXED", FreeBytesAvailableToCallerStr,
-                  _TotalNumberOfBytesStr, _TotalNumberOfFreeBytesStr] = string:tokens(DriveInfo, " "),
-                  list_to_integer(FreeBytesAvailableToCallerStr)
-            catch _:{timeout, _}:_ ->
-                    %% could not compute the result
-                    'NaN';
-                  _:Reason:_ ->
-                    ?LOG_WARNING("Free disk space monitoring failed to retrieve the amount of available space: ~p", [Reason]),
-                    %% could not compute the result
-                    'NaN'
-             end
-    end.
-
-parse_free_unix(Str) ->
-    case string:tokens(Str, "\n") of
-        [_, S | _] -> case string:tokens(S, " \t") of
-                          [_, _, _, Free | _] -> list_to_integer(Free) * 1024;
-                          _                   -> exit({unparseable, Str})
-                      end;
-        _          -> exit({unparseable, Str})
-    end.
-
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $a andalso DriveLetter =< $z) ->
-    % Note: os_mon_sysinfo returns drives with uppercase letters, so uppercase it here
-    DriveLetter - 32;
-win32_get_drive_letter([DriveLetter, $:, $/ | _]) when (DriveLetter >= $A andalso DriveLetter =< $Z) ->
-    DriveLetter;
-win32_get_drive_letter(_) ->
-    error.
-
-win32_get_disk_free_dir(Dir) ->
-    %% On Windows, the Win32 API enforces a limit of 260 characters
-    %% (MAX_PATH). If we call `dir` with a path longer than that, it
-    %% fails with "File not found". Starting with Windows 10 version
-    %% 1607, this limit was removed, but the administrator has to
-    %% configure that.
-    %%
-    %% NTFS supports paths up to 32767 characters. Therefore, paths
-    %% longer than 260 characters exist but they are "inaccessible" to
-    %% `dir`.
-    %%
-    %% A workaround is to tell the Win32 API to not parse a path and
-    %% just pass it raw to the underlying filesystem. To do this, the
-    %% path must be prepended with "\\?\". That's what we do here.
-    %%
-    %% However, the underlying filesystem may not support forward
-    %% slashes transparently, as the Win32 API does. Therefore, we
-    %% convert all forward slashes to backslashes.
-    %%
-    %% See the following page to learn more about this:
-    %% https://ss64.com/nt/syntax-filenames.html
-    RawDir = "\\\\?\\" ++ string:replace(Dir, "/", "\\", all),
-    case run_os_cmd("dir /-C /W \"" ++ RawDir ++ "\"") of
-        {error, Error} ->
-            exit({unparseable, Error});
-        CommandResult ->
-            LastLine0 = lists:last(string:tokens(CommandResult, "\r\n")),
-            LastLine1 = lists:reverse(LastLine0),
-            {match, [Free]} = re:run(LastLine1, "(\\d+)",
-                                     [{capture, all_but_first, list}]),
-            {ok, list_to_integer(lists:reverse(Free))}
+-spec get_disk_free(file:filename_all()) ->
+    AvailableBytes :: non_neg_integer() | 'NaN'.
+get_disk_free(Dir) ->
+    case disksup:get_disk_info(Dir) of
+        [{D, 0, 0, 0, 0}] when D =:= Dir orelse D =:= "none" ->
+            'NaN';
+        [{_MountPoint, _TotalKiB, AvailableKiB, _Capacity}] ->
+            AvailableKiB * 1024;
+        _DiskInfo ->
+            'NaN'
     end.
 
 interpret_limit({mem_relative, Relative})
@@ -437,8 +293,8 @@ interval(#state{limit        = Limit,
 enable(#state{retries = 0} = State) ->
     ?LOG_ERROR("Free disk space monitor failed to start!"),
     State;
-enable(#state{dir = Dir, os = OS, port = Port} = State) ->
-    enable_handle_disk_free(catch get_disk_free(Dir, OS, Port), State).
+enable(#state{dir = Dir} = State) ->
+    enable_handle_disk_free(get_disk_free(Dir), State).
 
 enable_handle_disk_free(DiskFree, State) when is_integer(DiskFree) ->
     enable_handle_total_memory(catch vm_memory_monitor:get_total_memory(), DiskFree, State);
@@ -461,20 +317,3 @@ enable_handle_total_memory(Error, _DiskFree, #state{interval = Interval, retries
                        [Retries, Error]),
     erlang:send_after(Interval, self(), try_enable),
     State#state{enabled = false}.
-
-run_os_cmd(Cmd) ->
-    Pid = self(),
-    Ref = make_ref(),
-    CmdFun = fun() ->
-        CmdResult = rabbit_misc:os_cmd(Cmd),
-        Pid ! {Pid, Ref, CmdResult}
-    end,
-    CmdPid = spawn(CmdFun),
-    receive
-        {Pid, Ref, CmdResult} ->
-            CmdResult
-    after 5000 ->
-        exit(CmdPid, kill),
-        ?LOG_ERROR("Command timed out: '~ts'", [Cmd]),
-        {error, timeout}
-    end.
