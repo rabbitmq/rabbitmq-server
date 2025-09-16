@@ -9,9 +9,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
-
--define(TIMEOUT, 30000).
+-compile([nowarn_export_all, export_all]).
 
 all() ->
     [
