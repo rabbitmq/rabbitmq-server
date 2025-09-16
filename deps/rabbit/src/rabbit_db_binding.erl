@@ -708,8 +708,15 @@ match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
     end.
 
 match_routing_key_in_khepri(Src, ['_']) ->
-    ets:lookup_element(?KHEPRI_ROUTE_BY_SOURCE_PROJECTION,
-                       Src, #route_by_source.destination, []);
+    try
+        ets:lookup_element(?KHEPRI_ROUTE_BY_SOURCE_PROJECTION,
+                           Src,
+                           #route_by_source.destination,
+                           [])
+    catch
+        error:badarg ->
+            []
+    end;
 match_routing_key_in_khepri(Src, RoutingKeys) ->
     lists:foldl(
       fun(RK, Acc) ->
