@@ -332,12 +332,7 @@ init(IsVirgin) ->
                    "local Khepri-based " ?RA_FRIENDLY_NAME " member is caught "
                    "up to the Raft cluster leader", [],
                    #{domain => ?RMQLOG_DOMAIN_DB}),
-                ok ?= case IsVirgin of
-                          true ->
-                              register_projections();
-                          false ->
-                              register_4_2_0_projections()
-                      end,
+                ok ?= register_projections(),
                 %% Delete transient queues on init.
                 %% Note that we also do this in the
                 %% `rabbit_amqqueue:on_node_down/1' callback. We must try this
@@ -1324,31 +1319,23 @@ register_projections() ->
                fun register_rabbit_route_by_source_key_projection/0,
                fun register_rabbit_route_by_source_projection/0,
                fun register_rabbit_topic_graph_projection/0],
-    rabbit_misc:for_each_while_ok(fun register_projection/1, RegFuns).
-
-%% This function registers projections introduced in 4.2.0. In a mixed version
-%% cluster, these new projections will appear but won't be used on older nodes.
-%% This function can be deleted after feature flag rabbitmq_4.2.0 becomes required.
-register_4_2_0_projections() ->
-    RegFuns = [fun register_rabbit_route_by_source_key_projection/0,
-               fun register_rabbit_route_by_source_projection/0],
-    rabbit_misc:for_each_while_ok(fun register_projection/1, RegFuns).
-
-register_projection(RegisterFun) ->
-    case RegisterFun() of
-        ok ->
-            ok;
-        %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3`
-        %% would return `{error, exists}` for projections which
-        %% already exist.
-        {error, exists} ->
-            ok;
-        %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
-        {error, {khepri, projection_already_exists, _Info}} ->
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
+    rabbit_misc:for_each_while_ok(
+      fun(RegisterFun) ->
+              case RegisterFun() of
+                  ok ->
+                      ok;
+                  %% Before Khepri v0.13.0, `khepri:register_projection/1,2,3`
+                  %% would return `{error, exists}` for projections which
+                  %% already exist.
+                  {error, exists} ->
+                      ok;
+                  %% In v0.13.0+, Khepri returns a `?khepri_error(..)` instead.
+                  {error, {khepri, projection_already_exists, _Info}} ->
+                      ok;
+                  {error, _} = Error ->
+                      Error
+              end
+      end, RegFuns).
 
 register_rabbit_exchange_projection() ->
     Name = rabbit_khepri_exchange,
