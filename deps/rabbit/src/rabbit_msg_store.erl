@@ -149,8 +149,7 @@
 -type gc_state() :: #gc_state { dir              :: file:filename(),
                                 index_ets        :: ets:tid(),
                                 file_summary_ets :: ets:tid(),
-                                file_handles_ets :: ets:tid(),
-                                msg_store        :: server()
+                                file_handles_ets :: ets:tid()
                               }.
 
 -type server() :: pid() | atom().
@@ -760,8 +759,7 @@ init([VHost, Type, BaseDir, ClientRefs, StartupFunState]) ->
                     #gc_state { dir              = Dir,
                                 index_ets        = IndexEts,
                                 file_summary_ets = FileSummaryEts,
-                                file_handles_ets = FileHandlesEts,
-                                msg_store        = self()
+                                file_handles_ets = FileHandlesEts
                               }),
 
     CreditDiscBound = rabbit_misc:get_env(rabbit, msg_store_credit_disc_bound,
@@ -814,7 +812,6 @@ prioritise_call(Msg, _From, _Len, _State) ->
 
 prioritise_cast(Msg, _Len, _State) ->
     case Msg of
-        {compacted_file, _File}       -> 8;
         {client_dying, _Pid}          -> 7;
         _                             -> 0
     end.
@@ -914,16 +911,7 @@ handle_cast({remove, CRef, MsgIds}, State) ->
                       ignore  -> State2
                   end
           end, State, MsgIds),
-    noreply(State1);
-
-handle_cast({compacted_file, File},
-            State = #msstate { file_summary_ets = FileSummaryEts }) ->
-    %% This can return false if the file gets deleted immediately
-    %% after compaction ends, but before we can process this message.
-    %% So this will become a no-op and we can ignore the return value.
-    _ = ets:update_element(FileSummaryEts, File,
-                           {#file_summary.locked, false}),
-    noreply(State).
+    noreply(State1).
 
 handle_info(sync, State) ->
     noreply(internal_sync(State));
@@ -2011,8 +1999,7 @@ compact_file(File, State = #gc_state { file_summary_ets = FileSummaryEts }) ->
 compact_file(File, FileSize,
              State = #gc_state { index_ets        = IndexEts,
                                  file_summary_ets = FileSummaryEts,
-                                 dir              = Dir,
-                                 msg_store        = Server }) ->
+                                 dir              = Dir }) ->
     %% Get metadata about the file. Will be used to calculate
     %% how much data was reclaimed as a result of compaction.
     [#file_summary{file_size = FileSize}] = ets:lookup(FileSummaryEts, File),
@@ -2048,8 +2035,6 @@ compact_file(File, FileSize,
     Reclaimed = FileSize - TruncateSize,
     ?LOG_DEBUG("Compacted segment file number ~tp; ~tp bytes can now be reclaimed",
                      [File, Reclaimed]),
-    %% Tell the message store to update its state.
-    gen_server2:cast(Server, {compacted_file, File}),
     %% Tell the GC process to truncate the file.
     %%
     %% We will truncate later when there are no readers. We want current
@@ -2158,6 +2143,8 @@ truncate_file(File, Size, ThresholdTimestamp, #gc_state{ file_summary_ets = File
                     ok = file:close(Fd),
                     true = ets:update_element(FileSummaryEts, File,
                                               {#file_summary.file_size, Size}),
+                    true = ets:update_element(FileSummaryEts, File,
+                                              {#file_summary.locked, false}),
                     ?LOG_DEBUG("Truncated file number ~tp; new size ~tp bytes", [File, Size]),
                     ok
             end
