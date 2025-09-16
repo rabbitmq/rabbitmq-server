@@ -1156,7 +1156,10 @@ i(messages, State) ->
 i(consumers, _) ->
     rabbit_queue_consumers:count();
 i(consumer_utilisation, State) ->
-    i(consumer_capacity, State);
+  case i(consumer_capacity, State) of
+    undefined -> 0;
+    Value -> Value
+  end;
 i(consumer_capacity, #q{consumers = Consumers}) ->
     case rabbit_queue_consumers:count() of
         0 -> 0;
