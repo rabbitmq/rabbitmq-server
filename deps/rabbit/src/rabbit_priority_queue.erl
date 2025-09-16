@@ -665,11 +665,15 @@ zip_msgs_and_acks(Pubs, AckTags) ->
               {Id, AckTag}
       end, Pubs, AckTags).
 
-format_state(S = #passthrough{bq = BQ, bqs = BQS0}) ->
+format_state(State = #state{bq = BQ, bqss = BQSs0}) when is_list(BQSs0) ->
     case erlang:function_exported(BQ, format_state, 1) of
         true ->
-            BQS1 = BQ:format_state(BQS0),
-            S#passthrough{bqs = BQS1};
+            BQSs1 = foreach1(fun (_Priority, BQSN) ->
+                                     BQ:format_state(BQSN)
+                             end, State),
+            State#state{bqss = BQSs1};
         _ ->
-            S#passthrough{bqs = passthrough_bqs_truncated}
-    end.
+            State#state{bqss = bqss_truncated}
+    end;
+format_state(State = #passthrough{bq = BQ, bqs = BQS}) ->
+    ?passthrough1(format_state(BQS)).
