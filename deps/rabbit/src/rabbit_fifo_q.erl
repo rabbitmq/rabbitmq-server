@@ -82,6 +82,7 @@ from_lqueue(LQ) ->
                         in(no, Item, Acc)
                 end, new(), LQ).
 
+-spec indexes(state()) -> [ra:index()].
 indexes(#?MODULE{hi = {Hi1, Hi2},
                  no = {No1, No2}}) ->
     A = lists:map(fun (?MSG(I, _)) -> I end, Hi1),

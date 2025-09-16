@@ -43,6 +43,7 @@
          init/1,
          apply/3,
          live_indexes/1,
+         snapshot_installed/4,
          state_enter/2,
          tick/2,
          overview/1,
@@ -487,7 +488,8 @@ apply(#{index := Idx} = Meta,
 apply(#{index := Index}, #purge{},
       #?STATE{messages_total = Total,
               returns = Returns,
-              ra_indexes = Indexes0
+              ra_indexes = Indexes0,
+              msg_bytes_enqueue = MsgBytesEnqueue
              } = State0) ->
     NumReady = messages_ready(State0),
     Indexes = case Total of
@@ -514,7 +516,9 @@ apply(#{index := Index}, #purge{},
                            returns = lqueue:new(),
                            msg_bytes_enqueue = 0
                           },
-    Effects0 = [{aux, force_checkpoint}, garbage_collection],
+    Effects0 = [{aux, {bytes_out, MsgBytesEnqueue}},
+                {aux, force_checkpoint},
+                garbage_collection],
     Reply = {purge, NumReady},
     {State, Effects} = evaluate_limit(Index, State0, State1, Effects0),
     {State, Reply, Effects};
@@ -688,14 +692,61 @@ apply(_Meta, Cmd, State) ->
     ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
--spec live_indexes(state()) ->
-    [ra:index()].
-live_indexes(#?STATE{returns = Returns,
+-spec live_indexes(state()) -> [ra:index()].
+live_indexes(#?STATE{cfg = #cfg{},
+                     returns = Returns,
                      messages = Messages,
+                     consumers = Consumers,
                      dlx = Dlx}) ->
     DlxIndexes = rabbit_fifo_dlx:live_indexes(Dlx),
     RtnIndexes = [I || ?MSG(I, _) <- lqueue:to_list(Returns)],
-    DlxIndexes ++ RtnIndexes ++ rabbit_fifo_q:indexes(Messages).
+    CheckedIdxs = maps:fold(
+                    fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
+                            maps:fold(
+                              fun (_MsgId, ?MSG(I, _), Acc) ->
+                                      [I | Acc]
+                              end, Acc0, Ch)
+                    end, RtnIndexes ++ DlxIndexes, Consumers),
+
+
+    CheckedIdxs ++ rabbit_fifo_q:indexes(Messages).
+
+
+-spec snapshot_installed(Meta, State, OldMeta, OldState) ->
+    ra_machine:effects() when
+      Meta :: ra_snapshot:meta(),
+      State :: state(),
+      OldMeta :: ra_snapshot:meta(),
+      OldState :: state().
+snapshot_installed(_Meta, #?MODULE{cfg = #cfg{resource = QR},
+                                   consumers = Consumers} = State,
+                   _OldMeta, _OldState) ->
+    %% here we need to redliver all pending consumer messages
+    %% to local consumers
+    %% TODO: with some additional state (raft indexes assigned to consumer)
+    %% we could reduce the number of resends but it is questionable if this
+    %% complexity is worth the effort. rabbit_fifo_index will de-duplicate
+    %% deliveries anyway
+    SendAcc = maps:fold(
+                fun (_ConsumerKey, #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                                 pid = Pid},
+                                             checked_out = Checked},
+                     Acc) ->
+                        case node(Pid) == node() of
+                            true ->
+                                Acc#{{Tag, Pid} => maps:to_list(Checked)};
+                            false ->
+                                Acc
+                        end
+                end, #{}, Consumers),
+    ?LOG_DEBUG("~ts: rabbit_fifo: install snapshot sending ~p",
+                     [rabbit_misc:rs(QR), SendAcc]),
+    Effs = add_delivery_effects([], SendAcc, State),
+    ?LOG_DEBUG("~ts: rabbit_fifo: effs ~p",
+                     [rabbit_misc:rs(QR), Effs]),
+    Effs.
+
+
 
 convert_v3_to_v4(#{} = _Meta, StateV3) ->
     %% TODO: consider emitting release cursors as checkpoints
@@ -972,7 +1023,7 @@ which_module(8) -> ?MODULE.
 -record(snapshot, {index :: ra:index(),
                    timestamp :: milliseconds(),
                    % smallest_index :: undefined | ra:index(),
-                   messages_total :: non_neg_integer(),
+                   messages_total = 0 :: non_neg_integer(),
                    % indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
                    bytes_out = 0 :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
@@ -997,10 +1048,9 @@ init_aux(Name) when is_atom(Name) ->
     Now = erlang:monotonic_time(microsecond),
     #?AUX{name = Name,
           capacity = {inactive, Now, 1, 1.0},
-          last_checkpoint = #snapshot{index = 0,
-                                      timestamp = erlang:system_time(millisecond),
-                                      messages_total = 0,
-                                      bytes_out = 0}}.
+          last_checkpoint = #checkpoint{index = 0,
+                                        timestamp = erlang:system_time(millisecond),
+                                        messages_total = 0}}.
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
@@ -1025,7 +1075,13 @@ handle_aux(leader, cast, eval,
         ra_aux:machine_state(RaAux),
 
     Ts = erlang:system_time(millisecond),
-    EffMacVer = ra_aux:effective_machine_version(RaAux),
+    EffMacVer = try ra_aux:effective_machine_version(RaAux) of
+                    V -> V
+                catch _:_ ->
+                          %% this function is not available in older aux states.
+                          %% this is a guess
+                          undefined
+                end,
     {Check, Effects0} = do_checkpoints(EffMacVer, Ts, Check0, RaAux,
                                        BytesIn, BytesOut, false),
 
@@ -1840,7 +1896,7 @@ complete(Meta, ConsumerKey, [MsgId],
             {State1#?STATE{ra_indexes = Indexes,
                           msg_bytes_checkout = BytesCheckout - SettledSize,
                           messages_total = Tot - 1},
-             [{aux, {bytes_out, SettledSize}}, Effects]};
+             [{aux, {bytes_out, SettledSize}} | Effects]};
         error ->
             {State0, Effects}
     end;
@@ -1867,7 +1923,7 @@ complete(Meta, ConsumerKey, MsgIds,
     {State1#?STATE{ra_indexes = Indexes,
                   msg_bytes_checkout = BytesCheckout - SettledSize,
                   messages_total = Tot - Len},
-     [{aux, {bytes_out, SettledSize}}, Effects]}.
+     [{aux, {bytes_out, SettledSize}} | Effects]}.
 
 increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
                           credit = Credit}, _) ->
@@ -3037,29 +3093,34 @@ priority_tag(Msg) ->
             no
     end.
 
-
-do_checkpoints(MacVer, Ts, #checkpoint{index = _ChIdx,
-                                    timestamp = _SnapTime},
-               RaAux, BytesIn, BytesOut, Force) when MacVer >= 8 ->
-    do_checkpoints(MacVer, Ts, #snapshot{}, RaAux, BytesIn, BytesOut, Force);
+do_checkpoints(MacVer, Ts, #checkpoint{timestamp = LastTs,
+                                       index = Idx},
+               RaAux, BytesIn, BytesOut, Force)
+  when is_integer(MacVer) andalso MacVer >= 8 ->
+    do_checkpoints(MacVer, Ts, #snapshot{index = Idx,
+                                         timestamp = LastTs}, RaAux, BytesIn,
+                   BytesOut, Force);
 do_checkpoints(MacVer, Ts, #snapshot{index = _ChIdx,
-                                    timestamp = SnapTime,
-                                    bytes_out = LastBytesOut} = Snap0,
-               RaAux, _BytesIn, BytesOut, _Force) when MacVer >= 8 ->
+                                     timestamp = SnapTime,
+                                     bytes_out = LastBytesOut} = Snap0,
+               RaAux, _BytesIn, BytesOut, Force)
+  when is_integer(MacVer) andalso MacVer >= 8 ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
     #?STATE{} = MacState = ra_aux:machine_state(RaAux),
     TimeSince = Ts - SnapTime,
     MsgsTot = messages_total(MacState),
-    ra_aux:overview(RaAux),
+    % ra_aux:overview(RaAux),
     % MaxBytesFactor = max(1, MsgsTot / CheckMaxIndexes),
+    % TODO: snapshots also need to be triggered by non settled commands
+    % that aren't enqueues
     EnoughDataRemoved = BytesOut - LastBytesOut > ?SNAP_OUT_BYTES,
     {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
         persistent_term:get(quorum_queue_checkpoint_config,
                             {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
     EnoughTimeHasPassed = TimeSince > CheckMinInterval,
-    case (EnoughTimeHasPassed andalso
-          EnoughDataRemoved) of
+    case (EnoughTimeHasPassed andalso EnoughDataRemoved) orelse
+         Force of
         true ->
             {#snapshot{index = LastAppliedIdx,
                        timestamp = Ts,
@@ -3074,7 +3135,8 @@ do_checkpoints(MacVer,Ts, #checkpoint{index = ChIdx,
                                       smallest_index = LastSmallest,
                                       bytes_in = LastBytesIn,
                                       indexes = MinIndexes} = Check0,
-               RaAux, BytesIn, _BytesOut, Force) when MacVer < 8 ->
+               RaAux, BytesIn, _BytesOut, Force)
+  when not is_integer(MacVer) orelse MacVer < 8 ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
     IndexesSince = LastAppliedIdx - ChIdx,
     #?STATE{} = MacState = ra_aux:machine_state(RaAux),

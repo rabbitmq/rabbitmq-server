@@ -2444,6 +2444,7 @@ aux_test(_) ->
                       queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B),
                       single_active_consumer_on => false}),
                log => mock_log,
+               cfg => #cfg{},
                last_applied => LastApplied},
     ok = meck:new(ra_log, []),
     meck:expect(ra_log, last_index_term, fun (_) -> {0, 0} end),
@@ -2475,6 +2476,7 @@ handle_aux_tick_test(Config) ->
     timer:sleep(10),
 
     persistent_term:put(quorum_queue_checkpoint_config, {1, 0, 1}),
+    meck:expect(ra_aux, effective_machine_version, fun (_) -> 1 end),
     {no_reply, _, _,
      [{checkpoint, 1, _},
       {release_cursor, 0}]} = handle_aux(follower, cast, force_checkpoint, Aux0, State1),
