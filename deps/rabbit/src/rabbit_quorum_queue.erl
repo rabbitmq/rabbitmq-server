@@ -2034,7 +2034,7 @@ make_ra_conf(Q, ServerId, Membership, MacVersion)
                  Membership, MacVersion).
 
 make_ra_conf(Q, ServerId, TickTimeout,
-             SnapshotInterval, CheckpointInterval,
+             _SnapshotInterval, CheckpointInterval,
              Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
     #resource{name = QNameBin} = QName,
@@ -2045,7 +2045,6 @@ make_ra_conf(Q, ServerId, TickTimeout,
     Formatter = {?MODULE, format_ra_event, [QName]},
     LogCfg = #{uid => UId,
                min_snapshot_interval => 0,
-               snapshot_interval => SnapshotInterval,
                min_checkpoint_interval => CheckpointInterval,
                max_checkpoints => 3},
     rabbit_misc:maps_put_truthy(membership, Membership,
