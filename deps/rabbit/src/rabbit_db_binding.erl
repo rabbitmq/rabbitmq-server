@@ -56,7 +56,8 @@
 -define(MNESIA_REVERSE_TABLE, rabbit_reverse_route).
 -define(MNESIA_INDEX_TABLE, rabbit_index_route).
 -define(KHEPRI_BINDINGS_PROJECTION, rabbit_khepri_binding).
--define(KHEPRI_INDEX_ROUTE_PROJECTION, rabbit_khepri_index_route).
+-define(KHEPRI_ROUTE_BY_SOURCE_KEY_PROJECTION, rabbit_khepri_route_by_source_key).
+-define(KHEPRI_ROUTE_BY_SOURCE_PROJECTION, rabbit_khepri_route_by_source).
 
 %% -------------------------------------------------------------------
 %% exists().
@@ -708,10 +709,10 @@ match_routing_key_in_mnesia(SrcName, RoutingKeys, UseIndex) ->
 
 match_routing_key_in_khepri(Src, ['_']) ->
     try
-        MatchHead = #index_route{source_key  = {Src, '_'},
-                                 destination = '$1',
-                                 _           = '_'},
-        ets:select(?KHEPRI_INDEX_ROUTE_PROJECTION, [{MatchHead, [], ['$1']}])
+        ets:lookup_element(?KHEPRI_ROUTE_BY_SOURCE_PROJECTION,
+                           Src,
+                           #route_by_source.destination,
+                           [])
     catch
         error:badarg ->
             []
@@ -721,7 +722,7 @@ match_routing_key_in_khepri(Src, RoutingKeys) ->
       fun(RK, Acc) ->
               try
                   Dst = ets:lookup_element(
-                          ?KHEPRI_INDEX_ROUTE_PROJECTION,
+                          ?KHEPRI_ROUTE_BY_SOURCE_KEY_PROJECTION,
                           {Src, RK},
                           #index_route.destination),
                   Dst ++ Acc
