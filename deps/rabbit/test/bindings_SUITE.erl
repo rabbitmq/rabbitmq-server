@@ -13,7 +13,6 @@
 -include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile([nowarn_export_all, export_all]).
--compile(export_all).
 
 suite() ->
     [{timetrap, 5 * 60000}].
@@ -49,8 +48,12 @@ all_tests() ->
      list_with_multiple_vhosts,
      list_with_multiple_arguments,
      bind_to_unknown_queue,
+     binding_args_direct_exchange,
+     binding_args_fanout_exchange,
+
      %% Exchange bindings
-     bind_and_unbind_exchange,
+     bind_and_unbind_direct_exchange,
+     bind_and_unbind_fanout_exchange,
      bind_and_delete_exchange_source,
      bind_and_delete_exchange_destination,
      bind_to_unknown_exchange,
@@ -116,6 +119,7 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
 bind_and_unbind(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
@@ -697,33 +701,116 @@ bind_to_unknown_queue(Config) ->
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
     ok.
 
-bind_and_unbind_exchange(Config) ->
+%% Test case for https://github.com/rabbitmq/rabbitmq-server/issues/14533
+binding_args_direct_exchange(Config) ->
+    binding_args(<<"amq.direct">>, Config).
+
+binding_args_fanout_exchange(Config) ->
+    binding_args(<<"amq.fanout">>, Config).
+
+binding_args(Exchange, Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    Q = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, [])),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+
+    %% Create two bindings that differ only in their binding arguments.
+    RoutingKey = <<"some-key">>,
+    BindingArgs1 = [{<<"app">>, longstr, <<"app-1">>}],
+    BindingArgs2 = [{<<"app">>, longstr, <<"app-2">>}],
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{exchange = Exchange,
+                                                             routing_key = RoutingKey,
+                                                             queue = Q,
+                                                             arguments = BindingArgs1}),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{exchange = Exchange,
+                                                             routing_key = RoutingKey,
+                                                             queue = Q,
+                                                             arguments = BindingArgs2}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{exchange = Exchange,
+                                            routing_key = RoutingKey},
+                           #amqp_msg{payload = <<"m1">>}),
+    receive #'basic.ack'{} -> ok
+    after 9000 -> ct:fail(confirm_timeout)
+    end,
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m1">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = true})),
+
+    %% If we delete the 1st binding, we expect RabbitMQ to still route via the 2nd binding.
+    #'queue.unbind_ok'{} = amqp_channel:call(Ch, #'queue.unbind'{exchange = Exchange,
+                                                                 routing_key = RoutingKey,
+                                                                 queue = Q,
+                                                                 arguments = BindingArgs1}),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{exchange = Exchange,
+                                            routing_key = RoutingKey},
+                           #amqp_msg{payload = <<"m2">>}),
+    receive #'basic.ack'{} -> ok
+    after 9000 -> ct:fail(confirm_timeout)
+    end,
+
+    ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = <<"m2">>}},
+                 amqp_channel:call(Ch, #'basic.get'{queue = Q, no_ack = true})).
+
+bind_and_unbind_direct_exchange(Config) ->
+    bind_and_unbind_exchange(<<"direct">>, Config).
+
+bind_and_unbind_fanout_exchange(Config) ->
+    bind_and_unbind_exchange(<<"fanout">>, Config).
+
+bind_and_unbind_exchange(Type, Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     X = ?config(exchange_name, Config),
+    Q = ?config(queue_name, Config),
+    RoutingKey = <<"some key">>,
+    SourceExchange = <<"amq.", Type/binary>>,
 
     ?assertEqual([],
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
 
-    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = X}),
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = X,
+                                                                         type = Type}),
     %% Let's bind to other exchange
     #'exchange.bind_ok'{} = amqp_channel:call(Ch, #'exchange.bind'{destination = X,
-                                                                   source = <<"amq.direct">>,
-                                                                   routing_key = <<"key">>}),
+                                                                   source = SourceExchange,
+                                                                   routing_key = RoutingKey}),
 
-    DirectBinding = binding_record(rabbit_misc:r(<<"/">>, exchange, <<"amq.direct">>),
-                                   rabbit_misc:r(<<"/">>, exchange, X),
-                                   <<"key">>, []),
+    Binding = binding_record(rabbit_misc:r(<<"/">>, exchange, SourceExchange),
+                             rabbit_misc:r(<<"/">>, exchange, X),
+                             RoutingKey, []),
 
-    ?assertEqual([DirectBinding],
+    ?assertEqual([Binding],
                  lists:sort(
                    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>]))),
 
+    %% Test that a message gets routed:
+    %% exchange -> exchange -> queue
+    ?assertEqual({'queue.declare_ok', Q, 0, 0}, declare(Ch, Q, [])),
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, #'queue.bind'{exchange = X,
+                                                             routing_key = RoutingKey,
+                                                             queue = Q}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch, #'confirm.select'{}),
+    amqp_channel:register_confirm_handler(Ch, self()),
+    ok = amqp_channel:cast(Ch,
+                           #'basic.publish'{exchange = SourceExchange,
+                                            routing_key = RoutingKey},
+                           #amqp_msg{payload = <<"m1">>}),
+    receive #'basic.ack'{} -> ok
+    after 9000 -> ct:fail(confirm_timeout)
+    end,
+    ?assertEqual(#'queue.delete_ok'{message_count = 1},
+                 amqp_channel:call(Ch, #'queue.delete'{queue = Q})),
+
     #'exchange.unbind_ok'{} = amqp_channel:call(Ch,
                                                 #'exchange.unbind'{destination = X,
-                                                                   source = <<"amq.direct">>,
-                                                                   routing_key = <<"key">>}),
+                                                                   source = SourceExchange,
+                                                                   routing_key = RoutingKey}),
 
     ?assertEqual([],
                  rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_binding, list, [<<"/">>])),
