@@ -212,7 +212,8 @@ is_compatible(_Durable = true,
 is_compatible(_, _, _) ->
     false.
 
--spec init(amqqueue:amqqueue()) -> {ok, rabbit_fifo_client:state()}.
+-spec init(amqqueue:amqqueue() | amqqueue:target()) ->
+    {ok, rabbit_fifo_client:state()} | {error, not_found}.
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     {Name, _} = MaybeLeader = amqqueue:get_pid(Q),
@@ -228,16 +229,24 @@ init(Q) when ?is_amqqueue(Q) ->
     %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
+    {ok, rabbit_fifo_client:init(Servers, SoftLimit)};
+init(QueueTarget) ->
+    QName = amqqueue:get_name(QueueTarget),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            init(Q);
+        Error ->
+            Error
+    end.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(State) ->
     rabbit_fifo_client:close(State).
 
--spec update(amqqueue:amqqueue(), rabbit_fifo_client:state()) ->
+-spec update(amqqueue:amqqueue() | amqqueue:target(), rabbit_fifo_client:state()) ->
     rabbit_fifo_client:state().
-update(Q, State) when ?amqqueue_is_quorum(Q) ->
-    %% QQ state maintains it's own updates
+update(_Q, State) ->
+    %% QQ state maintains its own updates
     State.
 
 -spec handle_event(rabbit_amqqueue:name(),
@@ -1139,7 +1148,6 @@ deliver(QSs, Msg0, Options) ->
                       {[{Q, S} | Qs], As ++ Actions}
               end
       end, {[], []}, QSs).
-
 
 state_info(S) ->
     #{pending_raft_commands => rabbit_fifo_client:pending_size(S),

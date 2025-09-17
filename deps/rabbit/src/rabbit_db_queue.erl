@@ -19,6 +19,7 @@
 -export([
          get/1,
          get_many/1,
+         get_targets/1,
          get_all/0,
          get_all/1,
          get_all_by_type/1,
@@ -85,6 +86,7 @@
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_queue).
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_queue).
+-define(KHEPRI_TARGET_PROJECTION, rabbit_khepri_queue_target).
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -467,6 +469,57 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
     %% we want to execute some things, as decided by rabbit_exchange,
     %% after the transaction.
     rabbit_db_binding:delete_for_destination_in_mnesia(QueueName, OnlyDurable).
+
+%% -------------------------------------------------------------------
+%% get_targets().
+%% -------------------------------------------------------------------
+
+%% Queue target optimisation is only available in Khepri.
+%% Mnesia falls back looking up the full amqqueue record.
+-spec get_targets(rabbit_exchange:route_return()) ->
+    [amqqueue:target() | amqqueue:amqqueue() |
+     {amqqueue:target() | amqqueue:amqqueue(), rabbit_exchange:route_infos()}].
+get_targets(Names) ->
+    rabbit_khepri:handle_fallback(
+      #{mnesia => fun() -> get_many_in_ets(?MNESIA_TABLE, Names) end,
+        khepri => fun() -> lookup_targets(Names) end
+       }).
+
+lookup_targets(Names) ->
+    lists:filtermap(fun({Name, RouteInfos})
+                          when is_map(RouteInfos) ->
+                            case lookup_target(Name) of
+                                not_found -> false;
+                                Target -> {true, {Target, RouteInfos}}
+                            end;
+                       (Name) ->
+                            case lookup_target(Name) of
+                                not_found -> false;
+                                Target -> {true, Target}
+                            end
+                    end, Names).
+
+lookup_target(#resource{name = NameBin} = Name) ->
+    case rabbit_volatile_queue:is(NameBin) of
+        true ->
+            %% This queue is not stored in the database.
+            %% We create it on the fly.
+            case rabbit_volatile_queue:new(Name) of
+                error -> not_found;
+                Q -> Q
+            end;
+        false ->
+            try
+                ets:lookup_element(?KHEPRI_TARGET_PROJECTION, Name, 2, not_found) of
+                {Type, Pid, ExtraBcc} ->
+                    amqqueue:new_target(Name, Type, Pid, ExtraBcc);
+                not_found ->
+                    not_found
+            catch
+                error:badarg ->
+                    not_found
+            end
+    end.
 
 %% -------------------------------------------------------------------
 %% get_many().

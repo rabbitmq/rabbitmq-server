@@ -382,7 +382,7 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
         end,
     Msg = set_annotations(Msg0, Dest),
     RoutedQNames = route(Msg, Dest),
-    Queues = rabbit_amqqueue:lookup_many(RoutedQNames),
+    Queues = rabbit_db_queue:get_targets(RoutedQNames),
     messages_received(AckMode),
     case rabbit_queue_type:deliver(Queues, Msg, Options, QState) of
         {ok, QState1, Actions} ->

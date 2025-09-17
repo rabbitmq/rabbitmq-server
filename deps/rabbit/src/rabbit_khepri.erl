@@ -1310,6 +1310,7 @@ delete_or_fail(Path) ->
 register_projections() ->
     RegFuns = [fun register_rabbit_exchange_projection/0,
                fun register_rabbit_queue_projection/0,
+               fun register_rabbit_queue_target_projection/0,
                fun register_rabbit_vhost_projection/0,
                fun register_rabbit_users_projection/0,
                fun register_rabbit_global_runtime_parameters_projection/0,
@@ -1351,7 +1352,26 @@ register_rabbit_queue_projection() ->
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _Name = ?KHEPRI_WILDCARD_STAR),
     KeyPos = 2, %% #amqqueue.name
-    register_simple_projection(Name, PathPattern, KeyPos, true).
+    register_simple_projection(Name, PathPattern, KeyPos, false).
+
+%% This projection exists to avoid looking up the full amqqueue record
+%% per message delivered to a target queue.
+register_rabbit_queue_target_projection() ->
+    PathPattern = rabbit_db_queue:khepri_queue_path(
+                    _VHost = ?KHEPRI_WILDCARD_STAR,
+                    _Name = ?KHEPRI_WILDCARD_STAR),
+    Fun = fun(_Path, Q) ->
+                  ?assert(amqqueue:is_amqqueue(Q)),
+                  Name = amqqueue:get_name(Q),
+                  Type = amqqueue:get_type(Q),
+                  Pid = amqqueue:get_pid(Q),
+                  ExtraBcc = amqqueue:get_extra_bcc(Q),
+                  {Name, {Type, Pid, ExtraBcc}}
+          end,
+    Opts = #{keypos => 1,
+             read_concurrency => true},
+    Projection = khepri_projection:new(rabbit_khepri_queue_target, Fun, Opts),
+    khepri:register_projection(?STORE_ID, PathPattern, Projection).
 
 register_rabbit_vhost_projection() ->
     Name = rabbit_khepri_vhost,

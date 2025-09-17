@@ -287,16 +287,17 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
      {state, State},
      {node, node(amqqueue:get_pid(Q))}].
 
--spec init(amqqueue:amqqueue()) -> {ok, state()}.
-init(Q) when ?amqqueue_is_classic(Q) ->
+-spec init(amqqueue:amqqueue() | amqqueue:target()) ->
+    {ok, state()}.
+init(Q) ->
     {ok, #?STATE{pid = amqqueue:get_pid(Q)}}.
 
 -spec close(state()) -> ok.
 close(_State) ->
     ok.
 
--spec update(amqqueue:amqqueue(), state()) -> state().
-update(Q, #?STATE{pid = Pid} = State) when ?amqqueue_is_classic(Q) ->
+-spec update(amqqueue:amqqueue() | amqqueue:target(), state()) -> state().
+update(Q, #?STATE{pid = Pid} = State) ->
     case amqqueue:get_pid(Q) of
         Pid ->
             State;
@@ -473,7 +474,7 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 
 supports_stateful_delivery() -> true.
 
--spec deliver([{amqqueue:amqqueue(), state()}],
+-spec deliver([{amqqueue:amqqueue() | amqqueue:target(), state()}],
               Delivery :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
     {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.

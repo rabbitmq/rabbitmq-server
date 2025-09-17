@@ -1013,8 +1013,16 @@ init(Q) when ?is_amqqueue(Q) ->
             {error, stream_not_found};
         {error, coordinator_unavailable} = E ->
             ?LOG_WARNING("Failed to start stream client ~tp: coordinator unavailable",
-                               [rabbit_misc:rs(QName)]),
+                         [rabbit_misc:rs(QName)]),
             E
+    end;
+init(QueueTarget) ->
+    QName = amqqueue:get_name(QueueTarget),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            init(Q);
+        Error ->
+            Error
     end.
 
 close(#stream_client{readers = Readers,
@@ -1024,8 +1032,7 @@ close(#stream_client{readers = Readers,
                          rabbit_core_metrics:consumer_deleted(self(), CTag, QName)
                  end, Readers).
 
-update(Q, State)
-  when ?is_amqqueue(Q) ->
+update(_Q, State) ->
     State.
 
 update_leader_pid(Pid, #stream_client{leader = Pid} =  State) ->
