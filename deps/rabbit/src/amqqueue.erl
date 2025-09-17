@@ -145,6 +145,8 @@
                           type_state :: #{}
                          }.
 
+-type target() :: #queue_target{}.
+
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
 
 -type amqqueue_pattern() :: amqqueue_v2_pattern().
@@ -175,6 +177,7 @@
               amqqueue_v2/0,
               amqqueue_pattern/0,
               amqqueue_v2_pattern/0,
+              target/0,
               ra_server_id/0]).
 
 -spec new(rabbit_amqqueue:name(),
@@ -418,9 +421,10 @@ set_operator_policy(#amqqueue{} = Queue, Policy) ->
 
 % name
 
--spec get_name(amqqueue()) -> rabbit_amqqueue:name().
+-spec get_name(amqqueue() | target()) -> rabbit_amqqueue:name().
 
-get_name(#amqqueue{name = Name}) -> Name.
+get_name(#amqqueue{name = Name}) -> Name;
+get_name(#queue_target{name = Name}) -> Name.
 
 -spec set_name(amqqueue(), rabbit_amqqueue:name()) -> amqqueue().
 
@@ -429,9 +433,10 @@ set_name(#amqqueue{} = Queue, Name) ->
 
 % pid
 
--spec get_pid(amqqueue_v2()) -> pid() | ra_server_id() | none.
+-spec get_pid(amqqueue_v2() | target()) -> pid() | ra_server_id() | none.
 
-get_pid(#amqqueue{pid = Pid}) -> Pid.
+get_pid(#amqqueue{pid = Pid}) -> Pid;
+get_pid(#queue_target{pid = Pid}) -> Pid.
 
 -spec set_pid(amqqueue_v2(), pid() | ra_server_id() | none) -> amqqueue_v2().
 
@@ -488,9 +493,10 @@ set_state(#amqqueue{} = Queue, State) ->
 
 %% New in v2.
 
--spec get_type(amqqueue()) -> atom().
+-spec get_type(amqqueue() | target()) -> atom().
 
-get_type(#amqqueue{type = Type}) -> Type.
+get_type(#amqqueue{type = Type}) -> Type;
+get_type(#queue_target{type = Type}) -> Type.
 
 -spec get_vhost(amqqueue()) -> rabbit_types:vhost() | undefined.
 

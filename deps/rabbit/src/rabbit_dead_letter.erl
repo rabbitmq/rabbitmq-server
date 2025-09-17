@@ -44,7 +44,7 @@ publish(Msg0, Reason, #exchange{name = XName} = DLX, RK,
     Routed0 = rabbit_exchange:route(DLX, DLMsg, #{return_binding_keys => true}),
     {Cycles, Routed} = detect_cycles(Reason, DLMsg, Routed0),
     lists:foreach(fun log_cycle_once/1, Cycles),
-    Qs0 = rabbit_amqqueue:lookup_many(Routed),
+    Qs0 = rabbit_db_queue:get_targets(Routed),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     _ = rabbit_queue_type:deliver(Qs, DLMsg, #{}, stateless),
     ok.
