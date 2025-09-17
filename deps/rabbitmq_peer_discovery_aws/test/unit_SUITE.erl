@@ -110,7 +110,7 @@ network_interface_sorting(_Config) ->
     ],
     
     %% Should sort ENIs by deviceIndex
-    Sorted = rabbit_peer_discovery_aws:sort_network_interfaces_by_device_index(NetworkInterfaces),
+    Sorted = rabbit_peer_discovery_aws:sort_ec2_hostname_path_set_members("networkInterfaceSet", NetworkInterfaces),
     
     %% Should have all 3 ENIs
     ?assertEqual(3, length(Sorted)),
@@ -147,7 +147,7 @@ private_ip_address_sorting(_Config) ->
         ]}
     ],
     
-    Sorted = rabbit_peer_discovery_aws:sort_private_ip_addresses_by_primary(PrivateIpAddresses),
+    Sorted = rabbit_peer_discovery_aws:sort_ec2_hostname_path_set_members("privateIpAddressesSet", PrivateIpAddresses),
     ?assertEqual(3, length(Sorted)),
     
     %% Primary IP (primary=true) should be first
