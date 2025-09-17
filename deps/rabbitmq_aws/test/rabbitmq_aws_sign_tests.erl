@@ -221,7 +221,7 @@ request_hash_test_() ->
                 {"Host", "iam.amazonaws.com"},
                 {"Date", "20150830T123600Z"}
             ],
-            Payload = "",
+            Payload = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
             Expectation = "49b454e0f20fe17f437eaa570846fc5d687efc1752c8b5a1eeee5597a7eb92a5",
             ?assertEqual(
                 Expectation,

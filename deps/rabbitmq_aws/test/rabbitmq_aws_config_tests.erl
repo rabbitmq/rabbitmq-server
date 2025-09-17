@@ -2,6 +2,14 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+%% Helper function to mock gun for IMDSv2 failure scenarios
+mock_gun_imdsv2_failure() ->
+    meck:expect(gun, open, fun(_, _, _) -> {ok, fake_conn} end),
+    meck:expect(gun, await_up, fun(_, _) -> {ok, http} end),
+    meck:expect(gun, get, fun(_, _, _) -> fake_stream end),
+    meck:expect(gun, await, fun(_, _, _) -> {response, fin, 404, []} end),
+    meck:expect(gun, close, fun(_) -> ok end).
+
 -include("rabbitmq_aws.hrl").
 
 config_file_test_() ->
@@ -145,6 +153,8 @@ credentials_test_() ->
             {"with missing environment variable", fun() ->
                 os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
                 meck:sequence(rabbitmq_aws, ensure_imdsv2_token_valid, 0, "secret_imdsv2_token"),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials()
@@ -167,6 +177,8 @@ credentials_test_() ->
             {"from config file with bad profile", fun() ->
                 setup_test_config_env_var(),
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials("bad-profile-name")
@@ -190,6 +202,8 @@ credentials_test_() ->
             {"from credentials file with bad profile", fun() ->
                 setup_test_credentials_env_var(),
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials("bad-profile-name")
@@ -198,6 +212,8 @@ credentials_test_() ->
             {"from credentials file with only the key in profile", fun() ->
                 setup_test_credentials_env_var(),
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials("only-key")
@@ -206,6 +222,8 @@ credentials_test_() ->
             {"from credentials file with only the value in profile", fun() ->
                 setup_test_credentials_env_var(),
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials("only-value")
@@ -214,6 +232,8 @@ credentials_test_() ->
             {"from credentials file with missing keys in profile", fun() ->
                 setup_test_credentials_env_var(),
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
+                mock_gun_imdsv2_failure(),
+
                 ?assertEqual(
                     {error, undefined},
                     rabbitmq_aws_config:credentials("bad-entry")
@@ -252,7 +272,7 @@ credentials_test_() ->
             end},
             {"with instance metadata service role error", fun() ->
                 meck:expect(rabbitmq_aws, ensure_imdsv2_token_valid, 0, undefined),
-                meck:expect(gun, open, fun(_, _, _) -> {error, timeout} end),
+                mock_gun_imdsv2_failure(),
                 ?assertEqual({error, undefined}, rabbitmq_aws_config:credentials())
             end},
             {"with instance metadata service role http error", fun() ->

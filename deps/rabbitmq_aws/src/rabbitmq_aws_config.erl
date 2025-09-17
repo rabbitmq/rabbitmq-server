@@ -535,14 +535,37 @@ lookup_credentials_from_proplist(_, undefined) ->
 lookup_credentials_from_proplist(AccessKey, SecretKey) ->
     {ok, AccessKey, SecretKey, undefined, undefined}.
 
+-spec with_metadata_connection(fun((gun:conn_ref()) -> Result)) -> Result.
+%% @doc Execute a function with a shared metadata service connection
+%% @end
+with_metadata_connection(Fun) ->
+    {Host, Port, _} = rabbitmq_aws:parse_uri(instance_metadata_url("")),
+    Opts = #{transport => tcp, protocols => [http]},
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, 5000) of
+                {ok, _Protocol} ->
+                    Result = Fun(ConnPid),
+                    gun:close(ConnPid),
+                    Result;
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 -spec lookup_credentials_from_instance_metadata() ->
     security_credentials().
 %% @spec lookup_credentials_from_instance_metadata() -> Result.
 %% @doc Attempt to lookup the values from the EC2 instance metadata service.
 %% @end
 lookup_credentials_from_instance_metadata() ->
-    Role = maybe_get_role_from_instance_metadata(),
-    maybe_get_credentials_from_instance_metadata(Role).
+    with_metadata_connection(fun(ConnPid) ->
+        Role = maybe_get_role_from_instance_metadata_with_conn(ConnPid),
+        maybe_get_credentials_from_instance_metadata_with_conn(ConnPid, Role)
+    end).
 
 -spec lookup_region(
     Profile :: string(),
@@ -595,19 +618,21 @@ maybe_convert_number(Value) ->
             F
     end.
 
--spec maybe_get_credentials_from_instance_metadata(
+-spec maybe_get_credentials_from_instance_metadata_with_conn(
+    ConnPid :: gun:conn_ref(),
     {ok, Role :: string()}
     | {error, undefined}
 ) ->
     {'ok', security_credentials()} | {'error', term()}.
 %% @doc Try to query the EC2 local instance metadata service to get temporary
-%%      authentication credentials.
+%%      authentication credentials using an existing connection.
 %% @end
-maybe_get_credentials_from_instance_metadata({error, undefined}) ->
+maybe_get_credentials_from_instance_metadata_with_conn(_, {error, undefined}) ->
     {error, undefined};
-maybe_get_credentials_from_instance_metadata({ok, Role}) ->
+maybe_get_credentials_from_instance_metadata_with_conn(ConnPid, {ok, Role}) ->
     URL = instance_credentials_url(Role),
-    parse_credentials_response(perform_http_get_instance_metadata(URL)).
+    {_, _, Path} = rabbitmq_aws:parse_uri(URL),
+    parse_credentials_response(perform_http_get_with_conn(ConnPid, Path)).
 
 -spec maybe_get_region_from_instance_metadata() ->
     {ok, Region :: string()} | {error, Reason :: atom()}.
@@ -617,12 +642,29 @@ maybe_get_region_from_instance_metadata() ->
     URL = instance_availability_zone_url(),
     parse_az_response(perform_http_get_instance_metadata(URL)).
 
-%% @doc Try to query the EC2 local instance metadata service to get the role
-%%      assigned to the instance.
+-spec perform_http_get_with_conn(gun:conn_ref(), string()) -> httpc_result().
+%% @doc Make HTTP GET request using existing Gun connection
 %% @end
-maybe_get_role_from_instance_metadata() ->
+perform_http_get_with_conn(ConnPid, Path) ->
+    Headers = instance_metadata_request_headers(),
+    StreamRef = gun:get(ConnPid, Path, Headers),
+    case gun:await(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT) of
+        {response, fin, Status, RespHeaders} ->
+            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, <<>>}};
+        {response, nofin, Status, RespHeaders} ->
+            {ok, Body} = gun:await_body(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT),
+            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, Body}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%% @doc Try to query the EC2 local instance metadata service to get the role
+%%      assigned to the instance using an existing connection.
+%% @end
+maybe_get_role_from_instance_metadata_with_conn(ConnPid) ->
     URL = instance_role_url(),
-    parse_body_response(perform_http_get_instance_metadata(URL)).
+    {_, _, Path} = rabbitmq_aws:parse_uri(URL),
+    parse_body_response(perform_http_get_with_conn(ConnPid, Path)).
 
 -spec parse_az_response(httpc_result()) ->
     {ok, Region :: string()} | {error, Reason :: atom()}.
