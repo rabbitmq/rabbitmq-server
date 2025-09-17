@@ -372,40 +372,18 @@ get_value(_, []) ->
 get_value(Key, Props) when is_integer(Key) ->
     {"item", Props2} = lists:nth(Key, Props),
     Props2;
-get_value("networkInterfaceSet", Props) ->
-    NetworkInterfaces = proplists:get_value("networkInterfaceSet", Props),
-    sort_network_interfaces_by_device_index(NetworkInterfaces);
-get_value("privateIpAddressesSet", Props) ->
-    PrivateIpAddresses = proplists:get_value("privateIpAddressesSet", Props),
-    sort_private_ip_addresses_by_primary(PrivateIpAddresses);
 get_value(Key, Props) ->
-    proplists:get_value(Key, Props).
+    Value = proplists:get_value(Key, Props),
+    sort_ec2_hostname_path_set_members(Key, Value).
 
-%% Sort network interfaces by deviceIndex to ensure consistent ENI ordering
--spec sort_network_interfaces_by_device_index(list()) -> list().
-sort_network_interfaces_by_device_index(NetworkInterfaces) when is_list(NetworkInterfaces) ->
-    BeforeInfo = [format_network_interface_info(Props) || {"item", Props} <- NetworkInterfaces],
-    Sorted = lists:sort(fun({"item", A}, {"item", B}) ->
-        device_index(A) =< device_index(B)
-    end, NetworkInterfaces),
-    AfterInfo = [format_network_interface_info(Props) || {"item", Props} <- Sorted],
-    ?LOG_DEBUG("AWS peer discovery sorted network interfaces from ~tp to ~tp", [BeforeInfo, AfterInfo]),
-    Sorted;
-sort_network_interfaces_by_device_index(Other) ->
-    Other.
-
-%% Sort private IP addresses by primary flag to ensure primary=true comes first
--spec sort_private_ip_addresses_by_primary(list()) -> list().
-sort_private_ip_addresses_by_primary(PrivateIpAddresses) when is_list(PrivateIpAddresses) ->
-    BeforeInfo = [format_private_ip_info(Props) || {"item", Props} <- PrivateIpAddresses],
-    Sorted = lists:sort(fun({"item", A}, {"item", B}) ->
-        is_primary(A) >= is_primary(B)
-    end, PrivateIpAddresses),
-    AfterInfo = [format_private_ip_info(Props) || {"item", Props} <- Sorted],
-    ?LOG_DEBUG("AWS peer discovery sorted private IPs from ~tp to ~tp", [BeforeInfo, AfterInfo]),
-    Sorted;
-sort_private_ip_addresses_by_primary(Other) ->
-    Other.
+%% Sort AWS API responses for consistent ordering
+-spec sort_ec2_hostname_path_set_members(string(), any()) -> any().
+sort_ec2_hostname_path_set_members("networkInterfaceSet", NetworkInterfaces) when is_list(NetworkInterfaces) ->
+    lists:sort(fun({"item", A}, {"item", B}) -> device_index(A) =< device_index(B) end, NetworkInterfaces);
+sort_ec2_hostname_path_set_members("privateIpAddressesSet", PrivateIpAddresses) when is_list(PrivateIpAddresses) ->
+    lists:sort(fun({"item", A}, {"item", B}) -> is_primary(A) >= is_primary(B) end, PrivateIpAddresses);
+sort_ec2_hostname_path_set_members(_, Value) ->
+    Value.
 
 %% Extract deviceIndex from network interface attachment
 -spec device_index(props()) -> integer().
@@ -426,23 +404,6 @@ is_primary(IpAddress) ->
         "true" -> true;
         _ -> false
     end.
-
-%% Format network interface info for logging
--spec format_network_interface_info(props()) -> string().
-format_network_interface_info(Interface) ->
-    ENI = proplists:get_value("networkInterfaceId", Interface, "unknown"),
-    DeviceIndex = device_index(Interface),
-    lists:flatten(io_lib:format("~s:~w", [ENI, DeviceIndex])).
-
-%% Format private IP info for logging  
--spec format_private_ip_info(props()) -> string().
-format_private_ip_info(IpAddress) ->
-    IP = proplists:get_value("privateIpAddress", IpAddress, "unknown"),
-    Primary = case is_primary(IpAddress) of
-        true -> "primary";
-        false -> "secondary"
-    end,
-    lists:flatten(io_lib:format("~s:~s", [IP, Primary])).
 
 -spec get_tags() -> tags().
 get_tags() ->
