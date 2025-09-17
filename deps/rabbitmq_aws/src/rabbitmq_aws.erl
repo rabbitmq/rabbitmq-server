@@ -26,7 +26,7 @@
     close_connection/1,
     direct_request/6,
     endpoint/4,
-    sign_headers/9
+    sign_headers/10
 ]).
 
 %% Export all for unit tests
@@ -37,83 +37,7 @@
 -include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--type connection_handle() :: {gun:conn_ref(), string()}.
-%%====================================================================
-%% ETS-based state management
-%%====================================================================
-
--spec get_credentials() ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
-get_credentials() ->
-    get_credentials(10).
-
--spec get_credentials(Retries :: non_neg_integer()) ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
-get_credentials(Retries) ->
-    case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
-        [{current, Creds}] ->
-            case expired_credentials(Creds#aws_credentials.expiration) of
-                false ->
-                    Region = get_region(),
-                    {ok, Creds#aws_credentials.access_key, Creds#aws_credentials.secret_key,
-                        Creds#aws_credentials.security_token, Region};
-                true ->
-                    refresh_credentials_with_lock(Retries)
-            end;
-        [] ->
-            refresh_credentials_with_lock(Retries)
-    end.
-
--spec refresh_credentials_with_lock(Retries :: non_neg_integer()) ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
-refresh_credentials_with_lock(0) ->
-    {error, lock_timeout};
-refresh_credentials_with_lock(Retries) ->
-    LockId = {aws_credentials_refresh, node()},
-    case global:set_lock(LockId, [node()], 0) of
-        true ->
-            try
-                % Double-check if someone else already refreshed
-                case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
-                    [{current, Creds}] ->
-                        case expired_credentials(Creds#aws_credentials.expiration) of
-                            false ->
-                                Region = get_region(),
-                                {ok, Creds#aws_credentials.access_key,
-                                    Creds#aws_credentials.secret_key,
-                                    Creds#aws_credentials.security_token, Region};
-                            true ->
-                                do_refresh_credentials()
-                        end;
-                    [] ->
-                        do_refresh_credentials()
-                end
-            after
-                global:del_lock(LockId, [node()])
-            end;
-        false ->
-            % Someone else is refreshing, wait and retry
-            timer:sleep(100),
-            get_credentials(Retries - 1)
-    end.
-
--spec do_refresh_credentials() ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
-do_refresh_credentials() ->
-    Region = get_region(),
-    case rabbitmq_aws_config:credentials() of
-        {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
-            Creds = #aws_credentials{
-                access_key = AccessKey,
-                secret_key = SecretAccessKey,
-                security_token = SecurityToken,
-                expiration = Expiration
-            },
-            ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}),
-            {ok, AccessKey, SecretAccessKey, SecurityToken, Region};
-        {error, Reason} ->
-            {error, Reason}
-    end.
+-type connection_handle() :: {pid(), string()}.
 
 -spec get_region() -> region().
 get_region() ->
@@ -258,7 +182,16 @@ direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
             URI = create_uri(Host, Path),
             BodyHash = proplists:get_value(payload_hash, Options),
             SignedHeaders = sign_headers(
-                AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash
+                AccessKey,
+                SecretKey,
+                SecurityToken,
+                Region,
+                Service,
+                Method,
+                URI,
+                Headers,
+                Body,
+                BodyHash
             ),
             direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options);
         {error, Reason} ->
@@ -277,7 +210,9 @@ direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
     Body :: body(),
     BodyHash :: iodata()
 ) -> headers().
-sign_headers(AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash) ->
+sign_headers(
+    AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash
+) ->
     rabbitmq_aws_sign:headers(
         #request{
             access_key = AccessKey,
@@ -388,7 +323,16 @@ perform_request_direct(Service, Method, Headers, Path, Body, Options, Host) ->
         {ok, AccessKey, SecretKey, SecurityToken, Region} ->
             URI = endpoint(Region, Host, Service, Path),
             SignedHeaders = sign_headers(
-                AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body
+                AccessKey,
+                SecretKey,
+                SecurityToken,
+                Region,
+                Service,
+                Method,
+                URI,
+                Headers,
+                Body,
+                undefined
             ),
             gun_request(Method, URI, SignedHeaders, Body, Options);
         {error, Reason} ->
@@ -421,6 +365,79 @@ endpoint_tld("cn-northwest-1") ->
     "amazonaws.com.cn";
 endpoint_tld(_Other) ->
     "amazonaws.com".
+
+-spec get_credentials() ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+get_credentials() ->
+    get_credentials(10).
+
+-spec get_credentials(Retries :: non_neg_integer()) ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+get_credentials(Retries) ->
+    case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
+        [{current, Creds}] ->
+            case expired_credentials(Creds#aws_credentials.expiration) of
+                false ->
+                    Region = get_region(),
+                    {ok, Creds#aws_credentials.access_key, Creds#aws_credentials.secret_key,
+                        Creds#aws_credentials.security_token, Region};
+                true ->
+                    refresh_credentials_with_lock(Retries)
+            end;
+        [] ->
+            refresh_credentials_with_lock(Retries)
+    end.
+
+-spec refresh_credentials_with_lock(Retries :: non_neg_integer()) ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+refresh_credentials_with_lock(0) ->
+    {error, lock_timeout};
+refresh_credentials_with_lock(Retries) ->
+    LockId = {aws_credentials_refresh, node()},
+    case global:set_lock(LockId, [node()], 0) of
+        true ->
+            try
+                % Double-check if someone else already refreshed
+                case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
+                    [{current, Creds}] ->
+                        case expired_credentials(Creds#aws_credentials.expiration) of
+                            false ->
+                                Region = get_region(),
+                                {ok, Creds#aws_credentials.access_key,
+                                    Creds#aws_credentials.secret_key,
+                                    Creds#aws_credentials.security_token, Region};
+                            true ->
+                                do_refresh_credentials()
+                        end;
+                    [] ->
+                        do_refresh_credentials()
+                end
+            after
+                global:del_lock(LockId, [node()])
+            end;
+        false ->
+            % Someone else is refreshing, wait and retry
+            timer:sleep(100),
+            get_credentials(Retries - 1)
+    end.
+
+-spec do_refresh_credentials() ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+do_refresh_credentials() ->
+    Region = get_region(),
+    case rabbitmq_aws_config:credentials() of
+        {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
+            Creds = #aws_credentials{
+                access_key = AccessKey,
+                secret_key = SecretAccessKey,
+                security_token = SecurityToken,
+                expiration = Expiration
+            },
+            ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}),
+            {ok, AccessKey, SecretAccessKey, SecurityToken, Region};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 -spec format_response(Response :: httpc_result()) -> result().
 %% @doc Format the httpc response result, returning the request result data
@@ -675,7 +692,6 @@ status_text(404) -> "Not Found";
 status_text(416) -> "Range Not Satisfiable";
 status_text(500) -> "Internal Server Error";
 status_text(Code) -> integer_to_list(Code).
-
 
 -spec direct_gun_request(
     GunPid :: pid(),

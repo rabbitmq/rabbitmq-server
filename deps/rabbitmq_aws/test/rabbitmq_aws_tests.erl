@@ -360,7 +360,8 @@ sign_headers_test_() ->
                         Method,
                         URI,
                         Headers,
-                        Body
+                        Body,
+                        undefined
                     )
                 ),
                 meck:validate(calendar)
