@@ -13,7 +13,7 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(rabbit_ct_broker_helpers,
-        [rpc/4]).
+        [rpc/4, rpc/5]).
 
 all() ->
     [
@@ -22,9 +22,11 @@ all() ->
 
 groups() ->
     [
-     {tests, [shuffle],
-      [message_size,
-       over_max_message_size]}
+     {tests, [],
+      [summary, %% needs to run first
+       message_size,
+       over_max_message_size]
+     }
     ].
 
 %% -------------------------------------------------------------------
@@ -34,14 +36,18 @@ groups() ->
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(amqp10_client),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config).
+    Config.
 
 end_per_suite(Config) ->
     rabbit_ct_helpers:run_teardown_steps(Config).
 
 init_per_group(_Group, Config) ->
-    rabbit_ct_helpers:run_steps(
-      Config,
+    Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodes_count, 3},
+                         {rmq_nodename_suffix, Suffix}]),
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -51,6 +57,13 @@ end_per_group(_Group, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
+init_per_testcase(summary, Config) ->
+    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.2.0') of
+        ok ->
+            rabbit_ct_helpers:testcase_started(Config, sumary);
+        {skip, _} = Skip ->
+            Skip
+    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -65,32 +78,7 @@ message_size(Config) ->
     AmqplBefore = get_msg_size_metrics(amqp091, Config),
     AmqpBefore = get_msg_size_metrics(amqp10, Config),
 
-    Binary2B = <<"12">>,
-    Binary200K  = binary:copy(<<"x">>, 200_000),
-    Payloads = [Binary2B, Binary200K, Binary2B],
-
-    {AmqplConn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
-    [amqp_channel:call(Ch,
-                       #'basic.publish'{routing_key = <<"nowhere">>},
-                       #amqp_msg{payload = Payload})
-     || Payload <- Payloads],
-
-    OpnConf = connection_config(Config),
-    {ok, Connection} = amqp10_client:open_connection(OpnConf),
-    {ok, Session} = amqp10_client:begin_session_sync(Connection),
-    Address = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
-    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
-    receive {amqp10_event, {link, Sender, credited}} -> ok
-    after 30_000 -> ct:fail(credited_timeout)
-    end,
-
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, Binary2B)),
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag2">>, Binary200K)),
-    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag3">>, Binary2B)),
-
-    ok = wait_for_settlement(released, <<"tag1">>),
-    ok = wait_for_settlement(released, <<"tag2">>),
-    ok = wait_for_settlement(released, <<"tag3">>),
+    publish_messages(Config),
 
     AmqplAfter = get_msg_size_metrics(amqp091, Config),
     AmqpAfter = get_msg_size_metrics(amqp10, Config),
@@ -100,10 +88,7 @@ message_size(Config) ->
     ?assertEqual(ExpectedDiff,
                  rabbit_msg_size_metrics:diff_raw_buckets(AmqplAfter, AmqplBefore)),
     ?assertEqual(ExpectedDiff,
-                 rabbit_msg_size_metrics:diff_raw_buckets(AmqpAfter, AmqpBefore)),
-
-    ok = amqp10_client:close_connection(Connection),
-    ok = rabbit_ct_client_helpers:close_connection_and_channel(AmqplConn, Ch).
+                 rabbit_msg_size_metrics:diff_raw_buckets(AmqpAfter, AmqpBefore)).
 
 over_max_message_size(Config) ->
     DefaultMaxMessageSize = rpc(Config, persistent_term, get, [max_message_size]),
@@ -134,6 +119,39 @@ over_max_message_size(Config) ->
     ok = rabbit_ct_client_helpers:close_connection(Conn),
     ok = rpc(Config, persistent_term, put, [max_message_size, DefaultMaxMessageSize]).
 
+summary(Config) ->
+    ZeroSummary = [{{0, 100}, {0, 0.0}},
+                   {{101, 1000}, {0, 0.0}},
+                   {{1001, 10000}, {0, 0.0}},
+                   {{10001, 100000}, {0, 0.0}},
+                   {{100001, 1000000}, {0, 0.0}},
+                   {{1000001, 10000000}, {0, 0.0}},
+                   {{10000001, 50000000}, {0, 0.0}},
+                   {{50000001, 100000000}, {0, 0.0}},
+                   {{100000001, infinity}, {0, 0.0}}],
+
+    ?assertEqual(ZeroSummary, rpc(Config, 0, rabbit_msg_size_metrics, local_summary, [])),
+    ?assertEqual(ZeroSummary, rpc(Config, 1, rabbit_msg_size_metrics, cluster_summary, [])),
+    ?assertEqual(ZeroSummary, rpc(Config, 0, rabbit_msg_size_metrics, local_summary, [])),
+    ?assertEqual(ZeroSummary, rpc(Config, 1, rabbit_msg_size_metrics, cluster_summary, [])),
+
+    publish_messages(Config),
+
+    ExpectedSummary = [{{0, 100}, {4, 66.66666666666666}},
+                       {{101, 1000}, {0, 0.0}},
+                       {{1001, 10000}, {0, 0.0}},
+                       {{10001, 100000}, {0, 0.0}},
+                       {{100001, 1000000}, {2, 33.33333333333333}},
+                       {{1000001, 10000000}, {0, 0.0}},
+                       {{10000001, 50000000}, {0, 0.0}},
+                       {{50000001, 100000000}, {0, 0.0}},
+                       {{100000001, infinity}, {0, 0.0}}],
+
+    ?assertEqual(ExpectedSummary, rpc(Config, 0, rabbit_msg_size_metrics, local_summary, [])),
+    ?assertEqual(ExpectedSummary, rpc(Config, 0, rabbit_msg_size_metrics, cluster_summary, [])),
+    ?assertEqual(ExpectedSummary, rpc(Config, 1, rabbit_msg_size_metrics, cluster_summary, [])),
+    ?assertEqual(ZeroSummary, rpc(Config, 1, rabbit_msg_size_metrics, local_summary, [])).
+
 get_msg_size_metrics(Protocol, Config) ->
     rpc(Config, rabbit_msg_size_metrics, raw_buckets, [Protocol]).
 
@@ -144,6 +162,36 @@ connection_config(Config) ->
       port => Port,
       container_id => <<"my container">>,
       sasl => anon}.
+
+publish_messages(Config) ->
+    Binary2B = <<"12">>,
+    Binary200K  = binary:copy(<<"x">>, 200_000),
+    Payloads = [Binary2B, Binary200K, Binary2B],
+
+    {AmqplConn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+    [amqp_channel:call(Ch,
+                       #'basic.publish'{routing_key = <<"nowhere">>},
+                       #amqp_msg{payload = Payload})
+     || Payload <- Payloads],
+
+    OpnConf = connection_config(Config),
+    {ok, Connection} = amqp10_client:open_connection(OpnConf),
+    {ok, Session} = amqp10_client:begin_session_sync(Connection),
+    Address = rabbitmq_amqp_address:exchange(<<"amq.fanout">>),
+    {ok, Sender} = amqp10_client:attach_sender_link_sync(Session, <<"sender">>, Address),
+    receive {amqp10_event, {link, Sender, credited}} -> ok
+    after 30_000 -> ct:fail(credited_timeout)
+    end,
+
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag1">>, Binary2B)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag2">>, Binary200K)),
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(<<"tag3">>, Binary2B)),
+
+    ok = wait_for_settlement(released, <<"tag1">>),
+    ok = wait_for_settlement(released, <<"tag2">>),
+    ok = wait_for_settlement(released, <<"tag3">>),
+    ok = amqp10_client:close_connection(Connection),
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(AmqplConn, Ch).
 
 wait_for_settlement(State, Tag) ->
     receive
