@@ -37,9 +37,7 @@
 -include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
 
-%% Types for new concurrent API
 -type connection_handle() :: {gun:conn_ref(), string()}.
-
 %%====================================================================
 %% ETS-based state management
 %%====================================================================
@@ -258,8 +256,9 @@ direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
         {ok, AccessKey, SecretKey, SecurityToken, Region} ->
             Host = endpoint_host(Region, Service),
             URI = create_uri(Host, Path),
+            BodyHash = proplists:get_value(payload_hash, Options),
             SignedHeaders = sign_headers(
-                AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body
+                AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash
             ),
             direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options);
         {error, Reason} ->
@@ -275,20 +274,24 @@ direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
     Method :: method(),
     URI :: string(),
     Headers :: headers(),
-    Body :: body()
+    Body :: body(),
+    BodyHash :: iodata()
 ) -> headers().
-sign_headers(AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body) ->
-    rabbitmq_aws_sign:headers(#request{
-        access_key = AccessKey,
-        secret_access_key = SecretKey,
-        security_token = SecurityToken,
-        region = Region,
-        service = Service,
-        method = Method,
-        uri = URI,
-        headers = Headers,
-        body = Body
-    }).
+sign_headers(AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash) ->
+    rabbitmq_aws_sign:headers(
+        #request{
+            access_key = AccessKey,
+            secret_access_key = SecretKey,
+            security_token = SecurityToken,
+            region = Region,
+            service = Service,
+            method = Method,
+            uri = URI,
+            headers = Headers,
+            body = Body
+        },
+        BodyHash
+    ).
 
 -spec request(
     Service :: string(),
@@ -673,8 +676,9 @@ status_text(416) -> "Range Not Satisfiable";
 status_text(500) -> "Internal Server Error";
 status_text(Code) -> integer_to_list(Code).
 
+
 -spec direct_gun_request(
-    GunPid :: gun:conn_ref(),
+    GunPid :: pid(),
     Method :: method(),
     Path :: path(),
     Headers :: headers(),
