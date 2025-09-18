@@ -3,13 +3,91 @@
         "aws.prefer_imdsv2 = false",
         [{rabbit, [
             {aws_prefer_imdsv2, false}
-        ]}],
+         ]},
+		 {rabbitmq_aws, [
+            % Note: due to how snippets are deepsorted, we also must
+            % deepsort the expected value here
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"}
+		 ]}
+		],
         [rabbitmq_aws]},
 
     {rabbitmq_aws_prefer_imdsv2_true,
         "aws.prefer_imdsv2 = true",
         [{rabbit, [
             {aws_prefer_imdsv2, true}
-        ]}],
+         ]},
+		 {rabbitmq_aws, [
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"}
+		 ]}
+		],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_cacertfiles_download_path,
+        "aws.cacertfiles.download_path = /path/to/dir",
+        [{rabbitmq_aws, [
+            {cacertfiles_download_path, "/path/to/dir"}
+         ]}
+        ],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_arns_ssl_options_cacertfile,
+        "aws.arns.ssl_options.cacertfile = arn:aws:s3:::private-ca-42/cacertfile.pem",
+        [{rabbitmq_aws, [
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"},
+            {aws_arns, [
+                {"aws.arns.ssl_options.cacertfile",
+                 "arn:aws:s3:::private-ca-42/cacertfile.pem",
+                 ssl_options_cacertfile}
+            ]}
+         ]}
+        ],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_arns_oauth2_cacertfile,
+        "aws.arns.auth_oauth2.https.cacertfile = arn:aws:s3:::private-ca-42/cacertfile.pem",
+        [{rabbitmq_aws, [
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"},
+            {aws_arns, [
+                {"aws.arns.auth_oauth2.https.cacertfile",
+                 "arn:aws:s3:::private-ca-42/cacertfile.pem",
+                 oauth2_https_cacertfile}
+            ]}
+         ]}
+        ],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_arns_ldap_cacertfile,
+        "aws.arns.auth_ldap.ssl_options.cacertfile = arn:aws:s3:::private-ca-42/cacertfile.pem",
+        [{rabbitmq_aws, [
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"},
+            {aws_arns, [
+                {"aws.arns.auth_ldap.ssl_options.cacertfile",
+                 "arn:aws:s3:::private-ca-42/cacertfile.pem",
+                 ldap_ssl_options_cacertfile}
+            ]}
+         ]}
+        ],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_arns_all_cacertfile_options,
+        "aws.arns.ssl_options.cacertfile = arn:aws:s3:::private-ca-42/cacertfile.pem
+         aws.arns.auth_oauth2.https.cacertfile = arn:aws:s3:::private-ca-43/cacertfile.pem
+         aws.arns.auth_ldap.ssl_options.cacertfile = arn:aws:s3:::private-ca-44/cacertfile.pem",
+        [{rabbitmq_aws, [
+            {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"},
+            {aws_arns, [
+                {"aws.arns.ssl_options.cacertfile",
+                 "arn:aws:s3:::private-ca-42/cacertfile.pem",
+                 ssl_options_cacertfile},
+                {"aws.arns.auth_oauth2.https.cacertfile",
+                 "arn:aws:s3:::private-ca-43/cacertfile.pem",
+                 oauth2_https_cacertfile},
+                {"aws.arns.auth_ldap.ssl_options.cacertfile",
+                 "arn:aws:s3:::private-ca-44/cacertfile.pem",
+                 ldap_ssl_options_cacertfile}
+            ]}
+         ]}
+        ],
         [rabbitmq_aws]}
 ].
