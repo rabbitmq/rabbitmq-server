@@ -16,6 +16,7 @@ init_test_() ->
         end,
         [
             {"ok", fun() ->
+                os:unsetenv("AWS_SESSION_TOKEN"),
                 os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
                 os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
                 {ok, Pid} = rabbitmq_aws:start_link(),
@@ -604,7 +605,7 @@ api_get_request_test_() ->
                 {ok, Pid} = rabbitmq_aws:start_link(),
                 rabbitmq_aws:set_region("us-east-1"),
                 rabbitmq_aws:set_credentials(State),
-                Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
+                Result = rabbitmq_aws:api_request_with_retries("AWS", get, "API", "", [], 3, 1),
                 ok = gen_server:stop(Pid),
                 ?assertEqual({error, "AWS service is unavailable"}, Result),
                 meck:validate(httpc)
@@ -637,7 +638,7 @@ api_get_request_test_() ->
                 {ok, Pid} = rabbitmq_aws:start_link(),
                 rabbitmq_aws:set_region("us-east-1"),
                 rabbitmq_aws:set_credentials(State),
-                Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
+                Result = rabbitmq_aws:api_request_with_retries("AWS", get, "API", "", [], 3, 1),
                 ok = gen_server:stop(Pid),
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
                 meck:validate(httpc)
