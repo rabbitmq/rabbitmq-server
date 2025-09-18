@@ -359,7 +359,7 @@ send_msg(Link, Msg) ->
             ok;
         {error, insufficient_credit} ->
             receive {amqp10_event, {link, Link, credited}} ->
-                        ok = amqp10_client:send_msg(Link, Msg)
+                    send_msg(Link, Msg)
             after ?LINK_CREDIT_TIMEOUT ->
                       {stop, credited_timeout}
             end
