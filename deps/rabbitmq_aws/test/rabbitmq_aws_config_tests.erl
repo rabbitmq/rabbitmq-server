@@ -135,6 +135,15 @@ credentials_test_() ->
                     rabbitmq_aws_config:credentials()
                 )
             end},
+            {"from environment variables with session token", fun() ->
+                os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
+                os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
+                os:putenv("AWS_SESSION_TOKEN", "session42"),
+                ?assertEqual(
+                    {ok, "Sésame", "ouvre-toi", undefined, "session42"},
+                    rabbitmq_aws_config:credentials()
+                )
+            end},
             {"from config file with default profile", fun() ->
                 setup_test_config_env_var(),
                 ?assertEqual(
@@ -185,6 +194,13 @@ credentials_test_() ->
                 ?assertEqual(
                     {ok, "foo2", "bar2", undefined, undefined},
                     rabbitmq_aws_config:credentials("development")
+                )
+            end},
+            {"from credentials file with session token", fun() ->
+                setup_test_credentials_env_var(),
+                ?assertEqual(
+                    {ok, "foo3", "bar3", undefined, "session42"},
+                    rabbitmq_aws_config:credentials("with-session-token")
                 )
             end},
             {"from credentials file with bad profile", fun() ->
