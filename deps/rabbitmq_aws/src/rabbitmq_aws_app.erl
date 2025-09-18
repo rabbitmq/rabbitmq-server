@@ -16,7 +16,13 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    rabbitmq_aws_sup:start_link().
+    case rabbitmq_aws_sup:start_link() of
+        {ok, Pid} ->
+            rabbitmq_aws_resource_fetcher:process_arns(),
+            {ok, Pid};
+        Error ->
+            Error
+    end.
 
 stop(_State) ->
     ok.
