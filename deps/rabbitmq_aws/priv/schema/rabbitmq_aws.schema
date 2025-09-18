@@ -17,3 +17,33 @@
 
 {mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
     [{datatype, {enum, [true, false]}}]}.
+
+%% @doc Directory path where downloaded CA certificate files from S3 will be stored
+{mapping, "aws.cacertfiles.download_path", "rabbitmq_aws.cacertfiles_download_path",
+    [{datatype, string}, {default, "/tmp/rabbitmq-aws-cacertfiles"}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_oauth2.https.cacertfile
+{mapping, "aws.arns.auth_oauth2.https.cacertfile", "rabbit.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to ssl_options.cacertfile
+{mapping, "aws.arns.ssl_options.cacertfile", "rabbit.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_ldap.ssl_options.cacertfile
+{mapping, "aws.arns.auth_ldap.ssl_options.cacertfile", "rabbit.aws_arns",
+    [{datatype, string}]}.
+
+{translation, "rabbit.aws_arns",
+fun(Conf) ->
+    lists:foldl(fun({Key, Handler}, Acc) ->
+        case cuttlefish:conf_get(Key, Conf, undefined) of
+            undefined -> Acc;
+            Arn -> [{Key, Arn, Handler} | Acc]
+        end
+    end, [], [
+        {"aws.arns.auth_oauth2.https.cacertfile", oauth2_https_cacertfile},
+        {"aws.arns.ssl_options.cacertfile", ssl_options_cacertfile},
+        {"aws.arns.auth_ldap.ssl_options.cacertfile", ldap_ssl_options_cacertfile}
+    ])
+end}.
