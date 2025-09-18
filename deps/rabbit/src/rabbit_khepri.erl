@@ -1358,17 +1358,8 @@ register_rabbit_queue_target_projection() ->
     PathPattern = rabbit_db_queue:khepri_queue_path(
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _Name = ?KHEPRI_WILDCARD_STAR),
-    Fun = fun(_Path, Q) ->
-                  BCC = case amqqueue:get_options(Q) of
-                            #{extra_bcc := Name} -> Name;
-                            _ -> none
-                        end,
-                  #queue_target{name = amqqueue:get_name(Q),
-                                type = amqqueue:get_type(Q),
-                                pid = amqqueue:get_pid(Q),
-                                extra_bcc = BCC}
-          end,
-    Opts = #{keypos => #queue_target.name,
+    Fun = fun(_Path, Q) -> amqqueue:to_target(Q) end,
+    Opts = #{keypos => 2, %% #queue_target.name
              read_concurrency => true},
     Projection = khepri_projection:new(rabbit_khepri_queue_target, Fun, Opts),
     khepri:register_projection(?STORE_ID, PathPattern, Projection).

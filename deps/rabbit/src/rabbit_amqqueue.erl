@@ -2057,7 +2057,7 @@ prepend_extra_bcc([]) ->
     [];
 prepend_extra_bcc([Q0] = Qs) ->
     Q = queue(Q0),
-    case get_extra_bcc(Q) of
+    case amqqueue:get_extra_bcc(Q) of
         none ->
             Qs;
         Name ->
@@ -2072,7 +2072,7 @@ prepend_extra_bcc(Qs) ->
     ExtraQs = lists:filtermap(
                 fun(Q0) ->
                         Q = queue(Q0),
-                        case get_extra_bcc(Q) of
+                        case amqqueue:get_extra_bcc(Q) of
                             none ->
                                 false;
                             Name ->
@@ -2101,16 +2101,6 @@ queue_names(Queues) ->
                  (Q) ->
                       amqqueue:get_name(Q)
               end, Queues).
-
-get_extra_bcc(Q) when ?is_amqqueue(Q) ->
-    case amqqueue:get_options(Q) of
-        #{extra_bcc := Name} ->
-            Name;
-        _ ->
-            none
-    end;
-get_extra_bcc(#queue_target{extra_bcc = Name}) ->
-    Name.
 
 -spec lookup_extra_bcc(amqqueue:amqqueue() | amqqueue:target(), binary()) ->
     {ok, amqqueue:amqqueue()} | {error, not_found}.

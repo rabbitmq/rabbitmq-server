@@ -14,6 +14,7 @@
          new/9,
          new_with_version/9,
          new_with_version/10,
+         to_target/1,
          fields/0,
          fields/1,
          field_vhost/0,
@@ -56,6 +57,7 @@
          set_state/2,
          get_type/1,
          get_vhost/1,
+         get_extra_bcc/1,
          is_amqqueue/1,
          is_auto_delete/1,
          is_durable/1,
@@ -120,6 +122,17 @@
           type_state = #{} :: map() | ets:match_pattern()
          }).
 
+%% A subset of the amqqueue record to avoid looking up the full amqqueue record
+%% when delivering a message to a target queue.
+-record(queue_target,
+        {name :: rabbit_amqqueue:name(),
+         type :: rabbit_queue_type:queue_type(),
+         pid :: pid() | ra_server_id() | none,
+         extra_bcc :: rabbit_misc:resource_name() | none
+        }).
+
+-type target() :: #queue_target{}.
+
 -type amqqueue() :: amqqueue_v2().
 -type amqqueue_v2() :: #amqqueue{
                           name :: rabbit_amqqueue:name(),
@@ -144,8 +157,6 @@
                           type :: atom(),
                           type_state :: #{}
                          }.
-
--type target() :: #queue_target{}.
 
 -type ra_server_id() :: {Name :: atom(), Node :: node()}.
 
@@ -330,6 +341,26 @@ new_with_version(?record_version,
               vhost           = VHost,
               options         = Options,
               type            = ensure_type_compat(Type)}.
+
+-spec to_target(amqqueue()) -> target().
+to_target(#amqqueue{name = Name,
+                    type = Type,
+                    pid = Pid,
+                    options = Options}) ->
+    #queue_target{name = Name,
+                  type = Type,
+                  pid = Pid,
+                  extra_bcc = extra_bcc_from_options(Options)}.
+
+get_extra_bcc(#amqqueue{options = Options})  ->
+    extra_bcc_from_options(Options);
+get_extra_bcc(#queue_target{extra_bcc = Name}) ->
+    Name.
+
+extra_bcc_from_options(#{extra_bcc := Name}) ->
+    Name;
+extra_bcc_from_options(#{}) ->
+    none.
 
 -spec is_amqqueue(any()) -> boolean().
 

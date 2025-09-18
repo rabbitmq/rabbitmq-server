@@ -96,15 +96,6 @@
 -record(index_route, {source_key, destination, args = []}).
 -record(route_by_source, {source, key, destination, args = []}).
 
-%% A subset of the amqqueue record to avoid looking up the full amqqueue record
-%% when delivering a message to a target queue.
--record(queue_target,
-        {name :: tuple(),
-         type :: module(),
-         pid :: pid() | {atom(), node()} | none,
-         extra_bcc :: binary() | none
-        }).
-
 -record(binding, {source, key, destination, args = []}).
 -record(reverse_binding, {destination, key, source, args = []}).
 
