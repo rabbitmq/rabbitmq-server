@@ -15,10 +15,12 @@
     refresh_credentials/0,
     request/5, request/6, request/7,
     set_credentials/2,
+    set_credentials/3,
     has_credentials/0,
     set_region/1,
     ensure_imdsv2_token_valid/0,
-    api_get_request/2
+    api_get_request/2,
+    api_post_request/4
 ]).
 
 %% gen-server exports
@@ -158,6 +160,12 @@ set_credentials(NewState) ->
 set_credentials(AccessKey, SecretAccessKey) ->
     gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
+-spec set_credentials(access_key(), secret_access_key(), security_token()) -> ok.
+%% @doc Manually set the access credentials with session token for requests.
+%% @end
+set_credentials(AccessKey, SecretAccessKey, SessionToken) ->
+    gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey, SessionToken}).
+
 -spec set_region(Region :: string()) -> ok.
 %% @doc Manually set the AWS region to perform API requests to.
 %% @end
@@ -221,6 +229,14 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
         access_key = AccessKey,
         secret_access_key = SecretAccessKey,
         security_token = undefined,
+        expiration = undefined,
+        error = undefined
+    }};
+handle_msg({set_credentials, AccessKey, SecretAccessKey, SessionToken}, State) ->
+    {reply, ok, State#state{
+        access_key = AccessKey,
+        secret_access_key = SecretAccessKey,
+        security_token = SessionToken,
         expiration = undefined,
         error = undefined
     }};
@@ -607,8 +623,10 @@ ensure_credentials_valid() ->
     case has_credentials(State) of
         true ->
             case expired_credentials(State#state.expiration) of
-                true -> refresh_credentials(State);
-                _ -> ok
+                true ->
+                    refresh_credentials(State);
+                _ ->
+                    ok
             end;
         _ ->
             refresh_credentials(State)
@@ -618,19 +636,42 @@ ensure_credentials_valid() ->
 %% @doc Invoke an API call to an AWS service.
 %% @end
 api_get_request(Service, Path) ->
-    ?LOG_DEBUG("Invoking AWS request {Service: ~tp; Path: ~tp}...", [Service, Path]),
-    api_get_request_with_retries(Service, Path, ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+    ?LOG_DEBUG("invoking AWS get request {Service: ~tp; Path: ~tp}...", [Service, Path]),
+    api_request_with_retries(Service, get, Path, "", [],
+                             ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
 
--spec api_get_request_with_retries(string(), path(), integer(), integer()) ->
+-spec api_post_request(
+    Service :: string(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers()
+) -> result().
+%% @doc Perform a HTTP Post request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+api_post_request(Service, Path, Body, Headers) ->
+    ?LOG_DEBUG("invoking AWS post request {Service: ~tp; Path: ~tp}...", [Service, Path]),
+    api_request_with_retries(Service, post, Path, Body, Headers,
+                             ?MAX_RETRIES, ?LINEAR_BACK_OFF_MILLIS).
+
+-spec api_request_with_retries(
+        Service :: string(),
+        Method :: method(),
+        Path :: path(),
+        Body :: body(),
+        Headers :: headers(),
+        Retries :: integer(),
+        WaitTime :: integer()) ->
     {'ok', list()} | {'error', term()}.
 %% @doc Invoke an API call to an AWS service with retries.
 %% @end
-api_get_request_with_retries(_, _, 0, _) ->
-    ?LOG_WARNING("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
+api_request_with_retries(_, _, _, _, _, 0, _) ->
+    ?LOG_ERROR("Request to AWS service has failed after ~b retries", [?MAX_RETRIES]),
     {error, "AWS service is unavailable"};
-api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
-    ensure_credentials_valid(),
-    case get(Service, Path) of
+api_request_with_retries(Service, Method, Path, Body, Headers, Retries, WaitTime) ->
+    ok = ensure_credentials_valid(),
+    case request(Service, Method, Path, Body, Headers) of
         {ok, {_Headers, Payload}} ->
             ?LOG_DEBUG("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
             {ok, Payload};
@@ -645,6 +686,6 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
                     ok
             end,
             ?LOG_WARNING("Will retry AWS request, remaining retries: ~b", [Retries]),
-            timer:sleep(WaitTimeBetweenRetries),
-            api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+            timer:sleep(WaitTime),
+            api_request_with_retries(Service, Method, Path, Body, Headers, Retries - 1, WaitTime)
     end.
