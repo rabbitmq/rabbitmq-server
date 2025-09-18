@@ -16,6 +16,7 @@ init_test_() ->
         end,
         [
             {"ok", fun() ->
+                os:unsetenv("AWS_SESSION_TOKEN"),
                 os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
                 os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
                 {ok, Pid} = rabbitmq_aws:start_link(),
