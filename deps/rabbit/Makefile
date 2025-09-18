@@ -366,7 +366,9 @@ RMQ_ERLC_OPTS += -DTRACE_SUPERVISOR2=true
 endif
 
 # https://www.erlang.org/doc/apps/parsetools/leex.html#file/2
-YRL_ERLC_OPTS ?= +deterministic
+ifeq ($(RMQ_NON_DETERMINISTIC_BUILD),)
+YRL_ERLC_OPTS += +deterministic
+endif
 
 # --------------------------------------------------------------------
 # Documentation.
