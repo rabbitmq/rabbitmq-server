@@ -42,6 +42,8 @@
          %% ra_machine callbacks
          init/1,
          apply/3,
+         live_indexes/1,
+         snapshot_installed/4,
          state_enter/2,
          tick/2,
          overview/1,
@@ -486,7 +488,8 @@ apply(#{index := Idx} = Meta,
 apply(#{index := Index}, #purge{},
       #?STATE{messages_total = Total,
               returns = Returns,
-              ra_indexes = Indexes0
+              ra_indexes = Indexes0,
+              msg_bytes_enqueue = MsgBytesEnqueue
              } = State0) ->
     NumReady = messages_ready(State0),
     Indexes = case Total of
@@ -513,7 +516,9 @@ apply(#{index := Index}, #purge{},
                            returns = lqueue:new(),
                            msg_bytes_enqueue = 0
                           },
-    Effects0 = [{aux, force_checkpoint}, garbage_collection],
+    Effects0 = [{aux, {bytes_out, MsgBytesEnqueue}},
+                {aux, force_checkpoint},
+                garbage_collection],
     Reply = {purge, NumReady},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
@@ -679,6 +684,62 @@ apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
+
+-spec live_indexes(state()) -> [ra:index()].
+live_indexes(#?STATE{cfg = #cfg{},
+                     returns = Returns,
+                     messages = Messages,
+                     consumers = Consumers,
+                     dlx = Dlx}) ->
+    DlxIndexes = rabbit_fifo_dlx:live_indexes(Dlx),
+    RtnIndexes = [I || ?MSG(I, _) <- lqueue:to_list(Returns)],
+    CheckedIdxs = maps:fold(
+                    fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
+                            maps:fold(
+                              fun (_MsgId, ?MSG(I, _), Acc) ->
+                                      [I | Acc]
+                              end, Acc0, Ch)
+                    end, RtnIndexes ++ DlxIndexes, Consumers),
+
+
+    CheckedIdxs ++ rabbit_fifo_q:indexes(Messages).
+
+
+-spec snapshot_installed(Meta, State, OldMeta, OldState) ->
+    ra_machine:effects() when
+      Meta :: ra_snapshot:meta(),
+      State :: state(),
+      OldMeta :: ra_snapshot:meta(),
+      OldState :: state().
+snapshot_installed(_Meta, #?MODULE{cfg = #cfg{resource = QR},
+                                   consumers = Consumers} = State,
+                   _OldMeta, _OldState) ->
+    %% here we need to redliver all pending consumer messages
+    %% to local consumers
+    %% TODO: with some additional state (raft indexes assigned to consumer)
+    %% we could reduce the number of resends but it is questionable if this
+    %% complexity is worth the effort. rabbit_fifo_index will de-duplicate
+    %% deliveries anyway
+    SendAcc = maps:fold(
+                fun (_ConsumerKey, #consumer{cfg = #consumer_cfg{tag = Tag,
+                                                                 pid = Pid},
+                                             checked_out = Checked},
+                     Acc) ->
+                        case node(Pid) == node() of
+                            true ->
+                                Acc#{{Tag, Pid} => maps:to_list(Checked)};
+                            false ->
+                                Acc
+                        end
+                end, #{}, Consumers),
+    ?LOG_DEBUG("~ts: rabbit_fifo: install snapshot sending ~p",
+                     [rabbit_misc:rs(QR), SendAcc]),
+    Effs = add_delivery_effects([], SendAcc, State),
+    ?LOG_DEBUG("~ts: rabbit_fifo: effs ~p",
+                     [rabbit_misc:rs(QR), Effs]),
+    Effs.
+
+
 
 convert_v3_to_v4(#{} = _Meta, StateV3) ->
     %% TODO: consider emitting release cursors as checkpoints
@@ -932,7 +993,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 7.
+version() -> 8.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
@@ -941,7 +1002,8 @@ which_module(3) -> rabbit_fifo_v3;
 which_module(4) -> ?MODULE;
 which_module(5) -> ?MODULE;
 which_module(6) -> ?MODULE;
-which_module(7) -> ?MODULE.
+which_module(7) -> ?MODULE;
+which_module(8) -> ?MODULE.
 
 -define(AUX, aux_v3).
 
@@ -951,6 +1013,12 @@ which_module(7) -> ?MODULE.
                      messages_total :: non_neg_integer(),
                      indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
                      bytes_in = 0 :: non_neg_integer()}).
+-record(snapshot, {index :: ra:index(),
+                   timestamp :: milliseconds(),
+                   % smallest_index :: undefined | ra:index(),
+                   messages_total = 0 :: non_neg_integer(),
+                   % indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
+                   bytes_out = 0 :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
 -record(aux, {name :: atom(),
               capacity :: term(),
@@ -961,7 +1029,7 @@ which_module(7) -> ?MODULE.
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: #checkpoint{},
+               last_checkpoint :: #checkpoint{} | #snapshot{},
                bytes_in = 0 :: non_neg_integer(),
                bytes_out = 0 :: non_neg_integer()}).
 
@@ -975,8 +1043,7 @@ init_aux(Name) when is_atom(Name) ->
           capacity = {inactive, Now, 1, 1.0},
           last_checkpoint = #checkpoint{index = 0,
                                         timestamp = erlang:system_time(millisecond),
-                                        messages_total = 0,
-                                        bytes_in = 0}}.
+                                        messages_total = 0}}.
 
 handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
                                      capacity = Cap,
@@ -994,13 +1061,22 @@ handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
                  bytes_in = BytesIn,
+                 bytes_out = BytesOut,
                  last_checkpoint = Check0} = Aux0,
            RaAux) ->
     #?STATE{cfg = #cfg{resource = QName}} = MacState =
         ra_aux:machine_state(RaAux),
 
     Ts = erlang:system_time(millisecond),
-    {Check, Effects0} = do_checkpoints(Ts, Check0, RaAux, BytesIn, false),
+    EffMacVer = try ra_aux:effective_machine_version(RaAux) of
+                    V -> V
+                catch _:_ ->
+                          %% this function is not available in older aux states.
+                          %% this is a guess
+                          undefined
+                end,
+    {Check, Effects0} = do_checkpoints(EffMacVer, Ts, Check0, RaAux,
+                                       BytesIn, BytesOut, false),
 
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
@@ -1017,15 +1093,23 @@ handle_aux(leader, cast, eval,
     end;
 handle_aux(_RaftState, cast, eval,
            #?AUX{last_checkpoint = Check0,
-                 bytes_in = BytesIn} = Aux0,
+                 bytes_in = BytesIn,
+                 bytes_out = BytesOut
+                } = Aux0,
            RaAux) ->
     Ts = erlang:system_time(millisecond),
-    {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, BytesIn, false),
+    EffMacVer = ra_aux:effective_machine_version(RaAux),
+    {Check, Effects} = do_checkpoints(EffMacVer, Ts, Check0, RaAux,
+                                      BytesIn, BytesOut, false),
     {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(_RaftState, cast, {bytes_in, {MetaSize, BodySize}},
            #?AUX{bytes_in = Bytes} = Aux0,
            RaAux) ->
     {no_reply, Aux0#?AUX{bytes_in = Bytes + MetaSize + BodySize}, RaAux, []};
+handle_aux(_RaftState, cast, {bytes_out, BodySize},
+           #?AUX{bytes_out = Bytes} = Aux0,
+           RaAux) ->
+    {no_reply, Aux0#?AUX{bytes_out = Bytes + BodySize}, RaAux, []};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
            Aux0, RaAux0) ->
@@ -1156,12 +1240,15 @@ handle_aux(_, _, garbage_collection, Aux, RaAux) ->
     {no_reply, force_eval_gc(RaAux, Aux), RaAux};
 handle_aux(_RaState, _, force_checkpoint,
            #?AUX{last_checkpoint  = Check0,
-                 bytes_in = BytesIn} = Aux, RaAux) ->
+                 bytes_in = BytesIn,
+                 bytes_out = BytesOut} = Aux, RaAux) ->
     Ts = erlang:system_time(millisecond),
     #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: forcing checkpoint at ~b",
                      [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
-    {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, BytesIn, true),
+    EffMacVer = ra_aux:effective_machine_version(RaAux),
+    {Check, Effects} = do_checkpoints(EffMacVer, Ts, Check0, RaAux,
+                                      BytesIn, BytesOut, true),
     {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(RaState, _, {dlx, _} = Cmd, Aux0, RaAux) ->
     #?STATE{dlx = DlxState,
@@ -1791,7 +1878,8 @@ complete(Meta, ConsumerKey, [MsgId],
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{ra_indexes = Indexes0,
                  msg_bytes_checkout = BytesCheckout,
-                 messages_total = Tot} = State0) ->
+                 messages_total = Tot} = State0,
+        Effects) ->
     case maps:take(MsgId, Checked0) of
         {?MSG(Idx, Hdr), Checked} ->
             SettledSize = get_header(size, Hdr),
@@ -1799,17 +1887,18 @@ complete(Meta, ConsumerKey, [MsgId],
             Con = Con0#consumer{checked_out = Checked,
                                 credit = increase_credit(Con0, 1)},
             State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
-            State1#?STATE{ra_indexes = Indexes,
+            {State1#?STATE{ra_indexes = Indexes,
                           msg_bytes_checkout = BytesCheckout - SettledSize,
-                          messages_total = Tot - 1};
+                          messages_total = Tot - 1},
+             [{aux, {bytes_out, SettledSize}} | Effects]};
         error ->
-            State0
+            {State0, Effects}
     end;
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
          #?STATE{ra_indexes = Indexes0,
                  msg_bytes_checkout = BytesCheckout,
-                 messages_total = Tot} = State0) ->
+                 messages_total = Tot} = State0, Effects) ->
     {SettledSize, Checked, Indexes}
         = lists:foldl(
             fun (MsgId, {S0, Ch0, Idxs}) ->
@@ -1825,9 +1914,10 @@ complete(Meta, ConsumerKey, MsgIds,
     Con = Con0#consumer{checked_out = Checked,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
-    State1#?STATE{ra_indexes = Indexes,
+    {State1#?STATE{ra_indexes = Indexes,
                   msg_bytes_checkout = BytesCheckout - SettledSize,
-                  messages_total = Tot - Len}.
+                  messages_total = Tot - Len},
+     [{aux, {bytes_out, SettledSize}} | Effects]}.
 
 increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
                           credit = Credit}, _) ->
@@ -1854,11 +1944,12 @@ increase_credit(#consumer{credit = Current}, Credit) ->
 complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       #consumer{} = Con0,
                       Effects0, State0) ->
-    State1 = complete(Meta, ConsumerKey, MsgIds, Con0, State0),
+    {State1, Effects1} = complete(Meta, ConsumerKey, MsgIds,
+                                  Con0, State0, Effects0),
     %% a completion could have removed the active/quiescing consumer
-    Effects1 = add_active_effect(Con0, State1, Effects0),
-    {State2, Effects2} = activate_next_consumer(State1, Effects1),
-    checkout(Meta, State0, State2, Effects2).
+    Effects2 = add_active_effect(Con0, State1, Effects1),
+    {State2, Effects} = activate_next_consumer(State1, Effects2),
+    checkout(Meta, State0, State2, Effects).
 
 add_active_effect(#consumer{status = quiescing} = Consumer,
                   #?STATE{cfg = #cfg{consumer_strategy = single_active},
@@ -1950,8 +2041,9 @@ return_one(Meta, MsgId, ?MSG(_, _) = Msg0, DelivFailed, Anns,
             {DlxState, DlxEffects} =
                 rabbit_fifo_dlx:discard([Msg], delivery_limit, DLH, DlxState0),
             State1 = State0#?STATE{dlx = DlxState},
-            State = complete(Meta, ConsumerKey, [MsgId], Con0, State1),
-            {State, DlxEffects ++ Effects0};
+            {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
+                                         Con0, State1, Effects0),
+            {State, DlxEffects ++ Effects};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
             Con = Con0#consumer{checked_out = Checked,
@@ -2817,7 +2909,10 @@ convert(Meta, 5, To, State) ->
     convert(Meta, 6, To, State);
 convert(Meta, 6, To, State) ->
     %% no conversion needed, this version only includes a logic change
-    convert(Meta, 7, To, State).
+    convert(Meta, 7, To, State);
+convert(Meta, 7, To, State) ->
+    %% no conversion needed, this version only includes a logic change
+    convert(Meta, 8, To, State).
 
 smallest_raft_index(#?STATE{messages = Messages,
                             ra_indexes = Indexes,
@@ -2986,13 +3081,50 @@ priority_tag(Msg) ->
             no
     end.
 
-
-do_checkpoints(Ts, #checkpoint{index = ChIdx,
-                               timestamp = ChTime,
-                               smallest_index = LastSmallest,
-                               bytes_in = LastBytesIn,
-                               indexes = MinIndexes} = Check0,
-               RaAux, BytesIn, Force) ->
+do_checkpoints(MacVer, Ts, #checkpoint{timestamp = LastTs,
+                                       index = Idx},
+               RaAux, BytesIn, BytesOut, Force)
+  when is_integer(MacVer) andalso MacVer >= 8 ->
+    do_checkpoints(MacVer, Ts, #snapshot{index = Idx,
+                                         timestamp = LastTs}, RaAux, BytesIn,
+                   BytesOut, Force);
+do_checkpoints(MacVer, Ts, #snapshot{index = _ChIdx,
+                                     timestamp = SnapTime,
+                                     bytes_out = LastBytesOut} = Snap0,
+               RaAux, _BytesIn, BytesOut, Force)
+  when is_integer(MacVer) andalso MacVer >= 8 ->
+    LastAppliedIdx = ra_aux:last_applied(RaAux),
+    #?STATE{} = MacState = ra_aux:machine_state(RaAux),
+    TimeSince = Ts - SnapTime,
+    MsgsTot = messages_total(MacState),
+    % ra_aux:overview(RaAux),
+    % MaxBytesFactor = max(1, MsgsTot / CheckMaxIndexes),
+    % TODO: snapshots also need to be triggered by non settled commands
+    % that aren't enqueues
+    EnoughDataRemoved = BytesOut - LastBytesOut > ?SNAP_OUT_BYTES,
+    {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
+        persistent_term:get(quorum_queue_checkpoint_config,
+                            {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES,
+                             ?CHECK_MAX_INDEXES}),
+    EnoughTimeHasPassed = TimeSince > CheckMinInterval,
+    case (EnoughTimeHasPassed andalso EnoughDataRemoved) orelse
+         Force of
+        true ->
+            {#snapshot{index = LastAppliedIdx,
+                       timestamp = Ts,
+                       messages_total = MsgsTot,
+                       bytes_out = BytesOut},
+             [{release_cursor, LastAppliedIdx, MacState}]};
+        false ->
+            {Snap0, []}
+    end;
+do_checkpoints(MacVer,Ts, #checkpoint{index = ChIdx,
+                                      timestamp = ChTime,
+                                      smallest_index = LastSmallest,
+                                      bytes_in = LastBytesIn,
+                                      indexes = MinIndexes} = Check0,
+               RaAux, BytesIn, _BytesOut, Force)
+  when not is_integer(MacVer) orelse MacVer < 8 ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
     IndexesSince = LastAppliedIdx - ChIdx,
     #?STATE{} = MacState = ra_aux:machine_state(RaAux),
@@ -3022,7 +3154,7 @@ do_checkpoints(Ts, #checkpoint{index = ChIdx,
            %% condition 1: enough indexes have been committed since the last
            %% checkpoint
            (IndexesSince > MinIndexes) orelse
-           %% condition 2: the queue is empty and _some_ commands
+          %% condition 2: the queue is empty and _some_ commands
            %% have been applied since the last checkpoint
            (MsgsTot == 0 andalso IndexesSince > 32)
           )
