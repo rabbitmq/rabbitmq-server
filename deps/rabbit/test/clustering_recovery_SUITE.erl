@@ -33,7 +33,11 @@ groups() ->
                          {clustered_3_nodes, [],
                           [{cluster_size_3, [], [
                                                  force_shrink_quorum_queue,
-                                                 force_shrink_all_quorum_queues
+                                                 force_shrink_all_quorum_queues,
+                                                 autodelete_queue_after_partition_recovery,
+                                                 autodelete_queue_after_node_loss,
+                                                 exclusive_queue_after_partition_recovery,
+                                                 exclusive_queue_after_node_loss
                                                 ]}
                           ]}
                         ]},
@@ -43,7 +47,11 @@ groups() ->
                                                  force_standalone_boot,
                                                  force_standalone_boot_and_restart,
                                                  force_standalone_boot_and_restart_with_quorum_queues,
-                                                 recover_after_partition_with_leader
+                                                 recover_after_partition_with_leader,
+                                                 autodelete_queue_after_partition_recovery,
+                                                 autodelete_queue_after_node_loss,
+                                                 exclusive_queue_after_partition_recovery,
+                                                 exclusive_queue_after_node_loss
                                                 ]}
                           ]},
                          {clustered_5_nodes, [],
@@ -110,7 +118,17 @@ init_per_testcase(Testcase, Config) ->
         {tcp_ports_base, {skip_n_nodes, TestNumber * ClusterSize}},
         {keep_pid_file_on_exit, true}
       ]),
-    rabbit_ct_helpers:run_steps(Config1,
+    Config2 = case Testcase of
+                  _ when Testcase =:= autodelete_queue_after_partition_recovery orelse
+                         Testcase =:= exclusive_queue_after_partition_recovery ->
+                      rabbit_ct_helpers:merge_app_env(
+                        Config1,
+                        {rabbit,
+                         [{cluster_partition_handling, pause_minority}]});
+                  _ ->
+                      Config1
+              end,
+    rabbit_ct_helpers:run_steps(Config2,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -484,6 +502,235 @@ forget_down_node(Config) ->
     assert_cluster_status({NNodes, NNodes, NNodes}, NNodes),
 
     ok.
+
+autodelete_queue_after_partition_recovery(Config) ->
+    QueueDeclare = #'queue.declare'{auto_delete = true},
+    temporary_queue_after_partition_recovery(Config, QueueDeclare).
+
+exclusive_queue_after_partition_recovery(Config) ->
+    QueueDeclare = #'queue.declare'{exclusive = true},
+    temporary_queue_after_partition_recovery(Config, QueueDeclare).
+
+temporary_queue_after_partition_recovery(Config, QueueDeclare) ->
+    [_Node1, Node2, _Node3] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
+                                        Config, nodename),
+    Majority = Nodes -- [Node2],
+    Timeout = 60000,
+
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(
+                   Config, Node2),
+    CMRef = erlang:monitor(process, Conn),
+
+    %% We create an exclusive queue on node 1 and get its PID on the server
+    %% side.
+    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch, QueueDeclare)),
+    Queues = rabbit_ct_broker_helpers:rpc(
+               Config, Node2, rabbit_amqqueue, list, []),
+    ?assertMatch([_], Queues),
+    [Queue] = Queues,
+    ct:pal("Queue = ~p", [Queue]),
+
+    QName = amqqueue:get_name(Queue),
+    QPid = amqqueue:get_pid(Queue),
+    QMRef = erlang:monitor(process, QPid),
+    subscribe(Ch, QName#resource.name),
+
+    lists:foreach(
+      fun(Node) ->
+              rabbit_ct_broker_helpers:block_traffic_between(Node2, Node)
+      end, Majority),
+    clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
+
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            clustering_utils:assert_cluster_status({Nodes, []}, [Node2]),
+
+            %% With Mnesia, the client connection is terminated (the node is
+            %% stopped thanks to the pause_minority partition handling) and
+            %% the exclusive queue is deleted.
+            receive
+                {'DOWN', CMRef, _, _, Reason1} ->
+                    ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
+                    ?assertMatch(
+                       {shutdown, {server_initiated_close, _, _}},
+                       Reason1),
+                    ok
+            after Timeout ->
+                      ct:fail("Connection ~p still running", [Conn])
+            end,
+            receive
+                {'DOWN', QMRef, _, _, Reason2} ->
+                    ct:pal("Queue ~p exited: ~p", [QPid, Reason2]),
+                    ?assertEqual(normal, Reason2),
+                    ok
+            after Timeout ->
+                      ct:fail("Queue ~p still running", [QPid])
+            end,
+
+            %% The queue was also deleted from the metadata store on nodes on
+            %% the majority side.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({error, not_found}, Ret)
+              end, Majority),
+
+            %% We can resolve the network partition.
+            lists:foreach(
+              fun(Node) ->
+                      rabbit_ct_broker_helpers:allow_traffic_between(
+                        Node2, Node)
+              end, Majority),
+            clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
+
+            %% The queue is not recorded anywhere.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({error, not_found}, Ret)
+              end, Nodes),
+            ok;
+
+        khepri ->
+            clustering_utils:assert_cluster_status({Nodes, [Node2]}, [Node2]),
+
+            %% The queue is still recorded everywhere.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({ok, Queue}, Ret)
+              end, Nodes),
+
+            %% Prepare a publisher.
+            {PConn, PCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                             Config, Node2),
+            publish_many(PCh, QName#resource.name, 10),
+            consume(10),
+
+            %% We resolve the network partition.
+            lists:foreach(
+              fun(Node) ->
+                      rabbit_ct_broker_helpers:allow_traffic_between(
+                        Node2, Node)
+              end, Majority),
+            clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
+
+            publish_many(PCh, QName#resource.name, 10),
+            consume(10),
+
+            rabbit_ct_client_helpers:close_connection_and_channel(PConn, PCh),
+
+            %% We terminate the channel and connection: the queue should
+            %% terminate and the metadata store should have no record of it.
+            _ = rabbit_ct_client_helpers:close_connection_and_channel(
+                  Conn, Ch),
+
+            receive
+                {'DOWN', CMRef, _, _, Reason1} ->
+                    ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
+                    ?assertEqual({shutdown, normal}, Reason1),
+                    ok
+            after Timeout ->
+                      ct:fail("Connection ~p still running", [Conn])
+            end,
+            receive
+                {'DOWN', QMRef, _, _, Reason} ->
+                    ct:pal("Queue ~p exited: ~p", [QPid, Reason]),
+                    ?assertEqual(normal, Reason),
+                    ok
+            after Timeout ->
+                      ct:fail("Queue ~p still running", [QPid])
+            end,
+
+            %% The queue was also deleted from the metadata store on all
+            %% nodes.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({error, not_found}, Ret)
+              end, Nodes),
+            ok
+    end.
+
+autodelete_queue_after_node_loss(Config) ->
+    QueueDeclare = #'queue.declare'{auto_delete = true},
+    temporary_queue_after_node_loss(Config, QueueDeclare).
+
+exclusive_queue_after_node_loss(Config) ->
+    QueueDeclare = #'queue.declare'{exclusive = true},
+    temporary_queue_after_node_loss(Config, QueueDeclare).
+
+temporary_queue_after_node_loss(Config, QueueDeclare) ->
+    [_Node1, Node2, Node3] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
+                                       Config, nodename),
+    Majority = Nodes -- [Node2],
+
+    {_Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(
+                    Config, Node2),
+
+    %% We create an exclusive queue on node 1.
+    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch, QueueDeclare)),
+    Queues = rabbit_ct_broker_helpers:rpc(
+               Config, Node2, rabbit_amqqueue, list, []),
+    ?assertMatch([_], Queues),
+    [Queue] = Queues,
+    ct:pal("Queue = ~p", [Queue]),
+
+    QName = amqqueue:get_name(Queue),
+
+    %% We kill the node.
+    rabbit_ct_broker_helpers:kill_node(Config, Node2),
+
+    case rabbit_ct_broker_helpers:configured_metadata_store(Config) of
+        mnesia ->
+            clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
+
+            %% The queue is already deleted from the metadata store on
+            %% remaining nodes.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({error, not_found}, Ret)
+              end, Majority),
+            ok;
+
+        khepri ->
+            clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
+
+            %% The queue is still recorded on the remaining nodes.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({ok, Queue}, Ret)
+              end, Majority),
+
+            %% We remove the lost node from the cluster.
+            rabbit_ct_broker_helpers:forget_cluster_node(Config, Node3, Node2),
+            clustering_utils:assert_cluster_status({Majority, Majority}, Majority),
+
+            %% The queue was deleted from the metadata store on remaining
+            %% nodes.
+            lists:foreach(
+              fun(Node) ->
+                      Ret = rabbit_ct_broker_helpers:rpc(
+                              Config, Node, rabbit_amqqueue, lookup, [QName]),
+                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                      ?assertEqual({error, not_found}, Ret)
+              end, Majority),
+            ok
+    end.
 
 %% -------------------------------------------------------------------
 %% Internal utils
