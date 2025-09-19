@@ -96,25 +96,36 @@ end_per_group(_, Config) ->
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_testcase(Testcase, Config) ->
-    Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
-    Name = rabbit_data_coercion:to_binary(Testcase),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_exchange, [Name]),
-    Config2 = rabbit_ct_helpers:set_config(Config1,
-                                           [{queue_name, Name},
-                                            {alt_queue_name, <<Name/binary, "_alt">>},
-                                            {exchange_name, Name}
-                                           ]),
-    rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps()).
+    case {Testcase, rabbit_ct_broker_helpers:configured_metadata_store(Config)} of
+        {transient_queue_on_node_down, khepri} ->
+            {skip, "Test irrelevant with Khepri"};
+        _ ->
+            Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+            Name = rabbit_data_coercion:to_binary(Testcase),
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_exchange, [Name]),
+            Config2 = rabbit_ct_helpers:set_config(
+                        Config1,
+                        [{queue_name, Name},
+                         {alt_queue_name, <<Name/binary, "_alt">>},
+                         {exchange_name, Name}
+                        ]),
+            rabbit_ct_helpers:run_steps(Config2, rabbit_ct_client_helpers:setup_steps())
+    end.
 
 end_per_testcase(Testcase, Config) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_exchange,
-                                 [?config(exchange_name, Config)]),
-    Config1 = rabbit_ct_helpers:run_steps(
-                Config,
-                rabbit_ct_client_helpers:teardown_steps()),
-    rabbit_ct_helpers:testcase_finished(Config1, Testcase).
+    case {Testcase, rabbit_ct_broker_helpers:configured_metadata_store(Config)} of
+        {transient_queue_on_node_down, khepri} ->
+            Config;
+        _ ->
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
+            rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_exchange,
+                                         [?config(exchange_name, Config)]),
+            Config1 = rabbit_ct_helpers:run_steps(
+                        Config,
+                        rabbit_ct_client_helpers:teardown_steps()),
+            rabbit_ct_helpers:testcase_finished(Config1, Testcase)
+    end.
 
 %% -------------------------------------------------------------------
 %% Testcases.
