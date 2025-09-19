@@ -710,6 +710,17 @@ msg_store_file_scan1(Config) ->
         [{bin, <<0, 0:48, 17, 17, "idididididididid", 255, 0:4352/unit:8, 255>>}],
         {ok, [{<<"idididididididid">>, 4378, 1}]},
         fun(Obj = {<<"idididididididid">>, 4378, 1}) -> {valid, Obj}; (_) -> invalid end),
+    %% Off-by-nine regression testing. The file scanning could miss
+    %% some messages if previous data looked like a message but its
+    %% size went past the end of the file.
+    lists:foreach(fun(N) ->
+        ok = Scan([
+            {bin, <<(4194304 + N):64, 0:(4194304 - 8 - 25 - 10)/unit:8>>},
+            {msg, gen_id(), <<>>},
+            %% Padding ensures there's no 255 at the end of the size indicated by 'bin'.
+            {pad, 10}
+        ])
+    end, lists:seq(-9, -1)),
     %% All good!!
     passed.
 
