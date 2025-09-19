@@ -32,7 +32,8 @@
          delete/2,
          update/2,
          update_decorators/2,
-         exists/1
+         exists/1,
+         foreach/2
         ]).
 
 %% Once mnesia is removed, all transient entities will be deleted. These can be replaced
@@ -57,8 +58,7 @@
 %% Only used by rabbit_amqqueue:forget_node_for_queue, which is only called
 %% by `rabbit_mnesia:remove_node_if_mnesia_running`. Thus, once mnesia and/or
 %% HA queues are removed it can be deleted.
--export([foreach_durable/2,
-         internal_delete/3]).
+-export([internal_delete/3]).
 
 %% Storing it on Khepri is not needed, this function is just used in
 %% rabbit_quorum_queue to ensure the queue is present in the rabbit_queue
@@ -1263,20 +1263,26 @@ foreach_transient_in_khepri(UpdateFun) ->
     end.
 
 %% -------------------------------------------------------------------
-%% foreach_durable().
+%% foreach().
 %% -------------------------------------------------------------------
 
--spec foreach_durable(UpdateFun, FilterFun) -> ok when
+-spec foreach(UpdateFun, FilterFun) -> ok when
       UpdateFun :: fun((Queue) -> any()),
       FilterFun :: fun((Queue) -> boolean()).
-%% @doc Applies `UpdateFun' to all durable queue records that match `FilterFun'.
+%% @doc Applies `UpdateFun' to all queue records that match `FilterFun'.
+%%
+%% With Mnesia, only durable queues are considered because we use the durable
+%% queues table.
+%%
+%% With Khepri, all queues are considered because they are all in the same
+%% "table".
 %%
 %% @private
 
-foreach_durable(UpdateFun, FilterFun) ->
+foreach(UpdateFun, FilterFun) ->
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> foreach_durable_in_mnesia(UpdateFun, FilterFun) end,
-        khepri => fun() -> foreach_durable_in_khepri(UpdateFun, FilterFun) end
+        khepri => fun() -> foreach_in_khepri(UpdateFun, FilterFun) end
        }).
 
 foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
@@ -1292,11 +1298,8 @@ foreach_durable_in_mnesia(UpdateFun, FilterFun) ->
           end),
     ok.
 
-foreach_durable_in_khepri(UpdateFun, FilterFun) ->
-    Path = khepri_queue_path(
-             ?KHEPRI_WILDCARD_STAR,
-             #if_data_matches{
-                pattern = amqqueue:pattern_match_on_durable(true)}),
+foreach_in_khepri(UpdateFun, FilterFun) ->
+    Path = khepri_queue_path(?KHEPRI_WILDCARD_STAR, ?KHEPRI_WILDCARD_STAR),
     case rabbit_khepri:filter(Path, fun(_, #{data := Q}) ->
                                             FilterFun(Q)
                                     end) of

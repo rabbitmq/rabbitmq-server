@@ -352,19 +352,64 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                                                 fun() -> emit_stats(State) end);
            true      -> ok
         end,
-        %% This try-catch block transforms throws to errors since throws are not
-        %% logged. When mnesia is removed this `try` can be removed: Khepri
-        %% returns errors as error tuples instead.
-        Reply = try rabbit_amqqueue:internal_delete(Q, ActingUser, Reason0) of
-                    ok ->
-                        {ok, Len};
-                    {error, _} = Err ->
-                        Err
-                catch
-                    {error, ReasonE} -> error(ReasonE)
-                end,
-        send_reply(ReplyTo, Reply),
+        case ReplyTo of
+            _ when ReplyTo =/= none ->
+                Reply = case delete_queue_record(Q, ActingUser, Reason0) of
+                            ok ->
+                                {ok, Len};
+                            {error, _} = Err ->
+                                Err
+                        end,
+                send_reply(ReplyTo, Reply);
+            none ->
+                %% No processes are waiting for this queue process to exit. We
+                %% can handle the deletion of the queue record differently: if
+                %% the deletion times out, we retry indefinitely.
+                %%
+                %% For instance, this allows an auto-delete queue process to
+                %% wait and retry until a network partition is resolved (or
+                %% this node stops of course). This reduces the risk of a
+                %% "leak" of a queue record in the metadata store.
+                %%
+                %% If for whatever reason the queue record is still leaked
+                %% (this process could not delete it before it was killed), the
+                %% "leaked" queue record will be cleaned up when the partition
+                %% is solved (or this node is removed from the cluster).
+                %% Indeed, when the partition is solved, all nodes are notified
+                %% with the `node_up' message from `rabbit_node_monitor'. This
+                %% calls `rabbit_amqqueue:on_node_up/1' which will delete any
+                %% transient queues.
+                %%
+                %% This infinite delete attempts loop is executed in a
+                %% separate process to let this queue process exits. This way,
+                %% connections will be notified that the queue process is
+                %% gone.
+                worker_pool:submit_async(
+                  fun() ->
+                          _ = infinite_internal_delete(Q, ActingUser, Reason0)
+                  end),
+                ok
+        end,
         BQS1
+    end.
+
+infinite_internal_delete(Q, ActingUser, Reason) ->
+    case delete_queue_record(Q, ActingUser, Reason) of
+        {error, timeout} ->
+            _ = rabbit_khepri:fence(infinity),
+            infinite_internal_delete(Q, ActingUser, Reason);
+        Ret ->
+            Ret
+    end.
+
+delete_queue_record(Q, ActingUser, Reason) ->
+    %% This try-catch block transforms throws to errors since throws are not
+    %% logged. When mnesia is removed this `try` can be removed: Khepri returns
+    %% errors as error tuples instead.
+    try
+        rabbit_amqqueue:internal_delete(Q, ActingUser, Reason)
+    catch
+        {error, ReasonE} -> error(ReasonE)
     end.
 
 terminated_by({terminated_by, auto_delete}) ->
