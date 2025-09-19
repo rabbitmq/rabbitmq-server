@@ -351,10 +351,12 @@ get_hostname_by_tags(Tags) ->
 get_hostname_path() ->
     UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
     HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
-    case HostnamePath of
+    FinalPath = case HostnamePath of
         ["privateDnsName"] when UsePrivateIP -> ["privateIpAddress"];
         P -> P
-    end.
+    end,
+    ?LOG_DEBUG("AWS peer discovery using hostname path: ~tp", [FinalPath]),
+    FinalPath.
 
 -spec get_hostname(path(), props()) -> string().
 get_hostname(Path, Props) ->
@@ -371,7 +373,37 @@ get_value(Key, Props) when is_integer(Key) ->
     {"item", Props2} = lists:nth(Key, Props),
     Props2;
 get_value(Key, Props) ->
-    proplists:get_value(Key, Props).
+    Value = proplists:get_value(Key, Props),
+    sort_ec2_hostname_path_set_members(Key, Value).
+
+%% Sort AWS API responses for consistent ordering
+-spec sort_ec2_hostname_path_set_members(string(), any()) -> any().
+sort_ec2_hostname_path_set_members("networkInterfaceSet", NetworkInterfaces) when is_list(NetworkInterfaces) ->
+    lists:sort(fun({"item", A}, {"item", B}) -> device_index(A) =< device_index(B) end, NetworkInterfaces);
+sort_ec2_hostname_path_set_members("privateIpAddressesSet", PrivateIpAddresses) when is_list(PrivateIpAddresses) ->
+    lists:sort(fun({"item", A}, {"item", B}) -> is_primary(A) >= is_primary(B) end, PrivateIpAddresses);
+sort_ec2_hostname_path_set_members(_, Value) ->
+    Value.
+
+%% Extract deviceIndex from network interface attachment
+-spec device_index(props()) -> integer().
+device_index(Interface) ->
+    Attachment = proplists:get_value("attachment", Interface),
+    case proplists:get_value("deviceIndex", Attachment) of
+        DeviceIndex when is_list(DeviceIndex) ->
+            {Int, []} = string:to_integer(DeviceIndex),
+            Int;
+        DeviceIndex when is_integer(DeviceIndex) ->
+            DeviceIndex
+    end.
+
+%% Extract primary flag from private IP address
+-spec is_primary(props()) -> boolean().
+is_primary(IpAddress) ->
+    case proplists:get_value("primary", IpAddress) of
+        "true" -> true;
+        _ -> false
+    end.
 
 -spec get_tags() -> tags().
 get_tags() ->
