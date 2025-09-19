@@ -342,7 +342,7 @@ forward(ConsumedMsg, ConsumedMsgId, ConsumedQRef, DLX, Reason,
                 {Cycles, RouteToQs1} = rabbit_dead_letter:detect_cycles(
                                          Reason, Msg, RouteToQs0),
                 State1 = log_cycles(Cycles, [RKey], State0),
-                RouteToQs2 = rabbit_amqqueue:lookup_many(RouteToQs1),
+                RouteToQs2 = rabbit_db_queue:get_targets(RouteToQs1),
                 RouteToQs = rabbit_amqqueue:prepend_extra_bcc(RouteToQs2),
                 State2 = case RouteToQs of
                              [] ->
@@ -496,7 +496,7 @@ redeliver0(#pending{delivery = Msg0,
     %% queues that do not exist. Therefore, filter out non-existent target queues.
     RouteToQs0 = queue_names(
                    rabbit_amqqueue:prepend_extra_bcc(
-                     rabbit_amqqueue:lookup_many(
+                     rabbit_db_queue:get_targets(
                        rabbit_exchange:route(DLX, Msg)))),
     case {RouteToQs0, Settled} of
         {[], [_|_]} ->
@@ -529,7 +529,10 @@ redeliver0(#pending{delivery = Msg0,
                                          rejected = []},
                     State = State0#state{pendings = maps:update(OutSeq, Pend, Pendings)},
                     Options = #{correlation => OutSeq},
-                    deliver_to_queues(Msg, Options, rabbit_amqqueue:lookup_many(RouteToQs), State)
+                    deliver_to_queues(Msg,
+                                      Options,
+                                      rabbit_db_queue:get_targets(RouteToQs),
+                                      State)
             end
     end.
 
@@ -569,8 +572,7 @@ cancel_timer(#state{timer = TRef} = State)
 cancel_timer(State) ->
     State.
 
-queue_names(Qs)
-  when is_list(Qs) ->
+queue_names(Qs) ->
     lists:map(fun amqqueue:get_name/1, Qs).
 
 format_status(#{state := #state{

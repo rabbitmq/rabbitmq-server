@@ -91,12 +91,12 @@ add_binding(_Tx, #exchange{ name = XName },
         {ok, X} ->
             Msgs = get_msgs_from_cache(XName),
             [begin
-                 Qs = rabbit_exchange:route(X, Msg),
-                 case rabbit_amqqueue:lookup_many(Qs) of
+                 QNames = rabbit_exchange:route(X, Msg),
+                 case rabbit_db_queue:get_targets(QNames) of
                      [] ->
-                         destination_not_found_error(Qs);
-                     QPids ->
-                         deliver_messages(QPids, [Msg])
+                         destination_not_found_error(QNames);
+                     Qs ->
+                         deliver_messages(Qs, [Msg])
                  end
              end || Msg <- Msgs]
     end,

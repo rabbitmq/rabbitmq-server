@@ -2528,7 +2528,7 @@ incoming_link_transfer(
             QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
             rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
-            Qs0 = rabbit_amqqueue:lookup_many(QNames),
+            Qs0 = rabbit_db_queue:get_targets(QNames),
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
             Mc = ensure_mc_cluster_compat(Mc2),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
@@ -2674,8 +2674,8 @@ process_routing_confirm([], _SenderSettles = false, DeliveryId, U) ->
     Disposition = released(DeliveryId),
     {U, [Disposition]};
 process_routing_confirm([_|_] = Qs, SenderSettles, DeliveryId, U0) ->
-    QNames = rabbit_amqqueue:queue_names(Qs),
     false = maps:is_key(DeliveryId, U0),
+    QNames = rabbit_amqqueue:queue_names(Qs),
     Map = maps:from_keys(QNames, ok),
     U = U0#{DeliveryId => {Map, SenderSettles, false}},
     rabbit_global_counters:messages_routed(?PROTOCOL, map_size(Map)),
