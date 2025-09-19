@@ -56,9 +56,40 @@
 upgrade(Req, Env, Handler, HandlerState) ->
     upgrade(Req, Env, Handler, HandlerState, #{}).
 
+%% We create a proxy socket for HTTP/2 even if no proxy was used,
+%% and add a special field 'http_version' to indicate this is HTTP/2.
+upgrade(Req=#{version := 'HTTP/2', pid := Parent, peer := Peer, sock := Sock},
+        Env, Handler, HandlerState, Opts) ->
+    %% Cowboy doesn't expose the socket when HTTP/2 is used.
+    %% We take it directly from the connection's state.
+    %%
+    %% @todo Ideally we would not need the real socket for
+    %%       normal operations. But we currently need it for
+    %%       the heartbeat processes to do their job. In the
+    %%       future we should not rely on those processes
+    %%       and instead do the heartbeating directly in the
+    %%       Websocket handler.
+    RealSocket = element(4,element(1,sys:get_state(Parent))),
+    ProxyInfo = case Req of
+        #{proxy_header := ProxyHeader} ->
+            ProxyHeader#{http_version => 'HTTP/2'};
+        _ ->
+            {SrcAddr, SrcPort} = Peer,
+            {DestAddr, DestPort} = Sock,
+            #{
+                http_version => 'HTTP/2',
+                src_address => SrcAddr,
+                src_port => SrcPort,
+                dest_address => DestAddr,
+                dest_port => DestPort
+            }
+    end,
+    ProxySocket = {rabbit_proxy_socket, RealSocket, ProxyInfo},
+    cowboy_websocket:upgrade(Req, Env, Handler, HandlerState#state{socket = ProxySocket}, Opts);
 upgrade(Req, Env, Handler, HandlerState, Opts) ->
     cowboy_websocket:upgrade(Req, Env, Handler, HandlerState, Opts).
 
+%% This is only called for HTTP/1.1.
 takeover(Parent, Ref, Socket, Transport, Opts, Buffer, {Handler, HandlerState}) ->
     Sock = case HandlerState#state.socket of
                undefined ->
@@ -84,7 +115,7 @@ init(Req, Opts) ->
                                    stats_timer = rabbit_event:init_stats_timer()},
                     WsOpts0 = proplists:get_value(ws_opts, Opts, #{}),
                     WsOpts  = maps:merge(#{compress => true}, WsOpts0),
-                    {?MODULE, Req1, State, WsOpts}
+                    {?MODULE, Req1, State, WsOpts#{data_delivery => relay}}
             end
     end.
 

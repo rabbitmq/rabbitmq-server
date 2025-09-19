@@ -124,7 +124,7 @@ start_tcp_listener(TCPConf0, CowboyOpts) ->
 
 
 start_tls_listener([], _) -> ok;
-start_tls_listener(TLSConf0, CowboyOpts) ->
+start_tls_listener(TLSConf0, CowboyOpts0) ->
     _ = rabbit_networking:ensure_ssl(),
     {TLSConf, TLSIpStr, TLSPort} = get_tls_conf(TLSConf0),
     RanchRef = rabbit_networking:ranch_ref(TLSConf),
@@ -135,6 +135,10 @@ start_tls_listener(TLSConf0, CowboyOpts) ->
       num_acceptors => get_env(num_ssl_acceptors, 10),
       num_conns_sups => get_env(num_conns_sup, 1)
      },
+    CowboyOpts = CowboyOpts0#{
+        %% Enable HTTP/2 Websocket if not explicitly disabled.
+        enable_connect_protocol => maps:get(enable_connect_protocol, CowboyOpts0, true)
+    },
     case cowboy:start_tls(RanchRef, RanchTransportOpts, CowboyOpts) of
         {ok, _} ->
             ok;
