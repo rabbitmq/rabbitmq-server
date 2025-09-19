@@ -54,10 +54,14 @@ groups() ->
                                                  recover_after_partition_with_leader,
                                                  autodelete_transient_queue_after_partition_recovery_1,
                                                  autodelete_durable_queue_after_partition_recovery_1,
+                                                 autodelete_transient_queue_after_partition_recovery_2,
+                                                 autodelete_durable_queue_after_partition_recovery_2,
                                                  autodelete_transient_queue_after_node_loss,
                                                  autodelete_durable_queue_after_node_loss,
                                                  exclusive_transient_queue_after_partition_recovery_1,
                                                  exclusive_durable_queue_after_partition_recovery_1,
+                                                 exclusive_transient_queue_after_partition_recovery_2,
+                                                 exclusive_durable_queue_after_partition_recovery_2,
                                                  exclusive_transient_queue_after_node_loss,
                                                  exclusive_durable_queue_after_node_loss
                                                 ]}
@@ -129,8 +133,12 @@ init_per_testcase(Testcase, Config) ->
     Config2 = case Testcase of
                   _ when Testcase =:= autodelete_transient_queue_after_partition_recovery_1 orelse
                          Testcase =:= autodelete_durable_queue_after_partition_recovery_1 orelse
+                         Testcase =:= autodelete_transient_queue_after_partition_recovery_2 orelse
+                         Testcase =:= autodelete_durable_queue_after_partition_recovery_2 orelse
                          Testcase =:= exclusive_transient_queue_after_partition_recovery_1 orelse
-                         Testcase =:= exclusive_durable_queue_after_partition_recovery_1 ->
+                         Testcase =:= exclusive_durable_queue_after_partition_recovery_1 orelse
+                         Testcase =:= exclusive_transient_queue_after_partition_recovery_2 orelse
+                         Testcase =:= exclusive_durable_queue_after_partition_recovery_2 ->
                       rabbit_ct_helpers:merge_app_env(
                         Config1,
                         {rabbit,
@@ -727,6 +735,117 @@ temporary_queue_after_partition_recovery_1(Config, QueueDeclare) ->
               end, Nodes),
             ok
     end.
+
+autodelete_transient_queue_after_partition_recovery_2(Config) ->
+    QueueDeclare = #'queue.declare'{auto_delete = true,
+                                    durable = false},
+    temporary_queue_after_partition_recovery_2(Config, QueueDeclare).
+
+autodelete_durable_queue_after_partition_recovery_2(Config) ->
+    QueueDeclare = #'queue.declare'{auto_delete = true,
+                                    durable = true},
+    temporary_queue_after_partition_recovery_2(Config, QueueDeclare).
+
+exclusive_transient_queue_after_partition_recovery_2(Config) ->
+    QueueDeclare = #'queue.declare'{exclusive = true,
+                                    durable = true},
+    temporary_queue_after_partition_recovery_2(Config, QueueDeclare).
+
+exclusive_durable_queue_after_partition_recovery_2(Config) ->
+    QueueDeclare = #'queue.declare'{exclusive = true,
+                                    durable = true},
+    temporary_queue_after_partition_recovery_2(Config, QueueDeclare).
+
+temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
+    [_Node1, Node2 | _] = Nodes = rabbit_ct_broker_helpers:get_node_configs(
+                                    Config, nodename),
+    Majority = Nodes -- [Node2],
+    Timeout = 60000,
+
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(
+                   Config, Node2),
+    CMRef = erlang:monitor(process, Conn),
+
+    %% We create an exclusive queue on node 1 and get its PID on the server
+    %% side.
+    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch, QueueDeclare)),
+    Queues = rabbit_ct_broker_helpers:rpc(
+               Config, Node2, rabbit_amqqueue, list, []),
+    ?assertMatch([_], Queues),
+    [Queue] = Queues,
+    ct:pal("Queue = ~p", [Queue]),
+
+    QName = amqqueue:get_name(Queue),
+    QPid = amqqueue:get_pid(Queue),
+    QMRef = erlang:monitor(process, QPid),
+    subscribe(Ch, QName#resource.name),
+
+    lists:foreach(
+      fun(Node) ->
+              rabbit_ct_broker_helpers:block_traffic_between(Node2, Node)
+      end, Majority),
+    clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
+    clustering_utils:assert_cluster_status({Nodes, [Node2]}, [Node2]),
+
+    %% The queue is still recorded everywhere.
+    lists:foreach(
+      fun(Node) ->
+              Ret = rabbit_ct_broker_helpers:rpc(
+                      Config, Node, rabbit_amqqueue, lookup, [QName]),
+              ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+              ?assertEqual({ok, Queue}, Ret)
+      end, Nodes),
+
+    %% Publich to and consume from the queue.
+    {_PConn, PCh} = rabbit_ct_client_helpers:open_connection_and_channel(
+                      Config, Node2),
+    publish_many(PCh, QName#resource.name, 10),
+    consume(10),
+
+    %% Close the consuming client to trigger the queue deletion during the
+    %% network partition.
+    _ = rabbit_ct_client_helpers:close_connection_and_channel(
+          Conn, Ch),
+
+    %% We resolve the network partition.
+    lists:foreach(
+      fun(Node) ->
+              rabbit_ct_broker_helpers:allow_traffic_between(
+                Node2, Node)
+      end, Majority),
+    clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
+
+    receive
+        {'DOWN', CMRef, _, _, Reason1} ->
+            ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
+            ?assertEqual({shutdown, normal}, Reason1),
+            ok
+    after Timeout ->
+              ct:fail("Connection ~p still running", [Conn])
+    end,
+    receive
+        {'DOWN', QMRef, _, _, Reason} ->
+            ct:pal("Queue ~p exited: ~p", [QPid, Reason]),
+            ?assertEqual(normal, Reason),
+            ok
+    after Timeout ->
+              ct:fail("Queue ~p still running", [QPid])
+    end,
+
+    %% The queue was also deleted from the metadata store on all
+    %% nodes.
+    lists:foreach(
+      fun(Node) ->
+              ?awaitMatch(
+                 {error, not_found},
+                 begin
+                     Ret = rabbit_ct_broker_helpers:rpc(
+                             Config, Node, rabbit_amqqueue, lookup, [QName]),
+                     ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                     Ret
+                 end, Timeout)
+      end, Nodes),
+    ok.
 
 autodelete_transient_queue_after_node_loss(Config) ->
     QueueDeclare = #'queue.declare'{auto_delete = true,
