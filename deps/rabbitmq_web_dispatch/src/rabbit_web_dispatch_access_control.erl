@@ -24,7 +24,7 @@
 -export([id/2]).
 -export([not_authorised/3, halt_response/5]).
 
--export([is_admin/1, is_policymaker/1, is_monitor/1, is_mgmt_user/1]).
+-export([is_admin/1, is_policymaker/1, is_monitor/1, is_mgmt_user/1, is_protected_user/1]).
 
 -import(rabbit_misc, [pget/2]).
 
@@ -243,8 +243,12 @@ is_policymaker(T) -> intersects(T, [administrator, policymaker]).
 is_monitor(T)     -> intersects(T, [administrator, monitoring]).
 is_mgmt_user(T)   -> intersects(T, [administrator, monitoring, policymaker,
                                     management]).
+is_protected_user(T) -> intersects(T, [protected]).
 
-intersects(A, B) -> lists:any(fun(I) -> lists:member(I, B) end, A).
+intersects(A, [B]) ->
+    lists:member(B, A);
+intersects(A, B) ->
+    lists:any(fun(I) -> lists:member(I, B) end, A).
 
 user_matches_vhost(ReqData, User) ->
     case vhost(ReqData) of
