@@ -1223,6 +1223,28 @@ credential_validator.regexp = ^abc\\d+",
    [{osiris, [
       {port_range, {4100, 4600}}
      ]}],
+   []},
+
+  %%
+  %% Stream read ahead on/off
+  %%
+
+  {stream_read_ahead,
+   "
+    stream.read_ahead = true
+   ",
+   [{rabbit, [
+      {stream_read_ahead, true}
+     ]}],
+   []},
+
+  {stream_read_ahead,
+   "
+    stream.read_ahead = false
+   ",
+   [{rabbit, [
+      {stream_read_ahead, false}
+     ]}],
    []}
 
 ].
