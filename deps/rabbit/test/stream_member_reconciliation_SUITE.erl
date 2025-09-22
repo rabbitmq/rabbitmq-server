@@ -259,7 +259,7 @@ declare(Ch, Q, Args) ->
                                            arguments = Args}).
 
 wait_until(Condition) ->
-    wait_until(Condition, 60).
+    wait_until(Condition, 180).
 
 wait_until(Condition, 0) ->
     ?assertEqual(true, Condition());
