@@ -79,7 +79,7 @@ jobs:
         - ${{ github.event.inputs.otp_version || '28' }}
     needs: build-package-generic-unix
     runs-on: ubuntu-latest
-    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == true
+    if: ${{ needs.build-package-generic-unix.outputs.authorized }} == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
