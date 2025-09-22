@@ -29,6 +29,7 @@ all_tests() ->
      returns_after_down,
      resends_after_lost_applied,
      handles_reject_notification,
+     resends_lost_command,
      two_quick_enqueues,
      detects_lost_delivery,
      dequeue,
@@ -42,8 +43,7 @@ all_tests() ->
      untracked_enqueue,
      flow,
      test_queries,
-     duplicate_delivery,
-     usage
+     duplicate_delivery
     ].
 
 groups() ->
@@ -278,21 +278,25 @@ duplicate_delivery(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
-usage(Config) ->
+resends_lost_command(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
     ok = start_cluster(ClusterName, [ServerId]),
+
+    ok = meck:new(ra, [passthrough]),
+
     F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
-    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
-    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, corr2, msg2, F2),
-    {_, _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
-    % force tick and usage stats emission
-    ServerId ! tick_timeout,
-    timer:sleep(50),
-    Use = rabbit_fifo:usage(element(1, ServerId)),
+    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, msg1, F0),
+    % lose the enqueue
+    meck:expect(ra, pipeline_command, fun (_, _, _) -> ok end),
+    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, msg2, F1),
+    meck:unload(ra),
+    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, msg3, F2),
+    {_, _, F4} = process_ra_events(receive_ra_events(2, 0), ClusterName, F3),
+    {ok, _, {_, _, _, _, msg1}, F5} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F4),
+    {ok, _, {_, _, _, _, msg2}, F6} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F5),
+    {ok, _, {_, _, _, _, msg3}, _F7} = rabbit_fifo_client:dequeue(ClusterName, <<"tag">>, settled, F6),
     rabbit_quorum_queue:stop_server(ServerId),
-    ?assert(Use > 0.0),
     ok.
 
 two_quick_enqueues(Config) ->
@@ -500,6 +504,7 @@ discard(Config) ->
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
              initial_member => [],
+             initial_machine_version => rabbit_fifo:version(),
              machine => {module, rabbit_fifo,
                          #{queue_resource => discard,
                            dead_letter_handler =>

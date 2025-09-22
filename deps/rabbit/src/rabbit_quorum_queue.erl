@@ -589,8 +589,7 @@ handle_tick(QName,
               num_discarded := NumDiscarded,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
-              discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
+              discard_checkout_message_bytes := DiscardCheckoutBytes} = Overview,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
