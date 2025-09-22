@@ -11,6 +11,7 @@
 
 -include_lib("rabbit/include/mc.hrl").
 -include("rabbit_shovel.hrl").
+-include_lib("amqp10_common/include/amqp10_framing.hrl").
 
 -export([
          parse/2,
@@ -81,7 +82,9 @@ connect_source(State = #{name := Name,
                         on_publish -> unsettled;
                         on_confirm -> unsettled
                     end,
-    AttachFun = fun amqp10_client:attach_receiver_link/5,
+    AttachFun = fun(S, L, A, SSM, D) ->
+                        amqp10_client:attach_receiver_link(S, L, A, SSM, D, #{}, #{}, true)
+                end,
     {Conn, Sess, LinkRef} = connect(Name, SndSettleMode, Uri, "receiver", Addr, Src,
                                     AttachFun),
     State#{source => Src#{current => #{conn => Conn,
@@ -128,6 +131,7 @@ connect(Name, SndSettleMode, Uri, Postfix, Addr, Map, AttachFun) ->
     % needs to be sync, i.e. awaits the 'attach' event as
     % else we may try to use the link before it is ready
     Durability = maps:get(durability, Map, unsettled_state),
+    %% Attach in raw mode
     {ok, LinkRef} = AttachFun(Sess, LinkName, Addr,
                               SndSettleMode,
                               Durability),
@@ -181,11 +185,10 @@ dest_endpoint(#{shovel_type := dynamic,
 
 -spec handle_source(Msg :: any(), state()) ->
     not_handled | state() | {stop, any()}.
-handle_source({amqp10_msg, _LinkRef, Msg0}, State) ->
-    Tag = amqp10_msg:delivery_id(Msg0),
-    [_ | Rest] = amqp10_msg:to_amqp_records(Msg0),
-    Bin = iolist_to_binary([amqp10_framing:encode_bin(D) || D <- Rest]),
-    Msg = mc:init(mc_amqp, Bin, #{}),
+handle_source({amqp10_msg, _LinkRef, RawMsg}, State) ->
+    Tag = amqp10_raw_msg:delivery_tag(RawMsg),
+    Payload = amqp10_raw_msg:payload(RawMsg),
+    Msg = mc:init(mc_amqp, Payload, #{}),
     rabbit_shovel_behaviour:forward(Tag, Msg, State);
 handle_source({amqp10_event, {connection, Conn, opened}},
               State = #{source := #{current := #{conn := Conn}}}) ->
@@ -333,11 +336,10 @@ forward(Tag, Msg0,
                     unacked := Unacked} = Dst,
           ack_mode := AckMode} = State) ->
     OutTag = rabbit_data_coercion:to_binary(Tag),
-    Msg1 = mc:protocol_state(mc:convert(mc_amqp, Msg0)),
-    Records = lists:flatten([amqp10_framing:decode_bin(iolist_to_binary(S)) || S <- Msg1]),
-    Msg2 = amqp10_msg:new(OutTag, Records, AckMode =/= on_confirm),
-    Msg = add_timestamp_header(State, add_forward_headers(State, Msg2)),
-    case send_msg(Link, Msg) of
+    Msg1 = add_timestamp_header(State, add_forward_headers(State, Msg0)),
+    Msg2 = mc:protocol_state(mc:convert(mc_amqp, Msg1)),
+    Msg3 = amqp10_raw_msg:new(AckMode =/= on_confirm, Tag, iolist_to_binary(Msg2)),
+    case send_msg(Link, Msg3) of
         ok ->
             rabbit_shovel_behaviour:decr_remaining_unacked(
               case AckMode of
@@ -366,10 +368,13 @@ send_msg(Link, Msg) ->
     end.
 
 add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
-    Anns = #{<<"x-opt-shovelled-timestamp">> => os:system_time(milli_seconds)},
-    amqp10_msg:set_message_annotations(Anns, Msg);
+    mc:set_annotation(
+      <<"x-opt-shovelled-timestamp">>, os:system_time(milli_seconds),
+      Msg);
 add_timestamp_header(_, Msg) -> Msg.
 
 add_forward_headers(#{dest := #{cached_forward_headers := Anns}}, Msg) ->
-    amqp10_msg:set_message_annotations(Anns, Msg);
+    maps:fold(fun(K, V, Acc) ->
+                      mc:set_annotation(K, V, Acc)
+              end, Msg, Anns);
 add_forward_headers(_, Msg) -> Msg.

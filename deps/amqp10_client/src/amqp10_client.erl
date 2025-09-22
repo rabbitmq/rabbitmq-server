@@ -28,6 +28,7 @@
          attach_receiver_link/5,
          attach_receiver_link/6,
          attach_receiver_link/7,
+         attach_receiver_link/8,
          attach_link/2,
          detach_link/1,
          send_msg/2,
@@ -277,7 +278,17 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter) ->
 -spec attach_receiver_link(pid(), binary(), binary(), snd_settle_mode(),
                            terminus_durability(), filter(), properties()) ->
     {ok, link_ref()}.
-attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties)
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties) ->
+    attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties, false).
+
+%% @doc Attaches a receiver link to a source.
+%% This is asynchronous and will notify completion of the attach request to the
+%% caller using an amqp10_event of the following format:
+%% {amqp10_event, {link, LinkRef, attached | {detached, Why}}}
+-spec attach_receiver_link(pid(), binary(), binary(), snd_settle_mode(),
+                           terminus_durability(), filter(), properties(), boolean()) ->
+    {ok, link_ref()}.
+attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Properties, RawMode)
   when is_pid(Session) andalso
        is_binary(Name) andalso
        is_binary(Source) andalso
@@ -286,14 +297,16 @@ attach_receiver_link(Session, Name, Source, SettleMode, Durability, Filter, Prop
         SettleMode == mixed) andalso
        is_atom(Durability) andalso
        is_map(Filter) andalso
-       is_map(Properties) ->
+       is_map(Properties) andalso
+       is_boolean(RawMode) ->
     AttachArgs = #{name => Name,
                    role => {receiver, #{address => Source,
                                         durable => Durability}, self()},
                    snd_settle_mode => SettleMode,
                    rcv_settle_mode => first,
                    filter => Filter,
-                   properties => Properties},
+                   properties => Properties,
+                   raw_mode => RawMode},
     amqp10_client_session:attach(Session, AttachArgs).
 
 -spec attach_link(pid(), attach_args()) -> {ok, link_ref()}.
@@ -355,11 +368,16 @@ stop_receiver_link(#link_ref{role = receiver,
 %%% messages
 
 %% @doc Send a message on a the link referred to be the 'LinkRef'.
--spec send_msg(link_ref(), amqp10_msg:amqp10_msg()) ->
+-spec send_msg(link_ref(), amqp10_msg:amqp10_msg() | amqp10_raw_msg:amqp10_raw_msg()) ->
     ok | amqp10_client_session:transfer_error().
 send_msg(#link_ref{role = sender, session = Session,
                    link_handle = Handle}, Msg0) ->
-    Msg = amqp10_msg:set_handle(Handle, Msg0),
+    Msg = case amqp10_raw_msg:is(Msg0) of
+              true ->
+                  amqp10_raw_msg:set_handle(Handle, Msg0);
+              false ->
+                  amqp10_msg:set_handle(Handle, Msg0)
+          end,
     amqp10_client_session:transfer(Session, Msg, ?TIMEOUT).
 
 %% @doc Accept a message on a the link referred to be the 'LinkRef'.
