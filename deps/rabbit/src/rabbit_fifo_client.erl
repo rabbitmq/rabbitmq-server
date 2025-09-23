@@ -160,7 +160,7 @@ enqueue(_QName, _Correlation, _Msg,
         #state{queue_status = reject_publish,
                cfg = #cfg{}} = State) ->
     {reject_publish, State};
-enqueue(QName, Correlation, Msg,
+enqueue(_QName, Correlation, Msg,
         #state{slow = WasSlow,
                pending = Pending,
                queue_status = go,
@@ -176,8 +176,9 @@ enqueue(QName, Correlation, Msg,
                          next_seq = Seq + 1,
                          next_enqueue_seq = EnqueueSeq + 1,
                          slow = IsSlow},
+
     if IsSlow andalso not WasSlow ->
-           {ok, set_timer(QName, State), [{block, cluster_name(State)}]};
+           {ok, State, [{block, cluster_name(State)}]};
        true ->
            {ok, State, []}
     end.
@@ -632,10 +633,10 @@ handle_ra_event(QName, Leader, {applied, Seqs},
                           when ActualLeader =/= OldLeader ->
                             %% there is a new leader
                             ?LOG_DEBUG("~ts: Detected QQ leader change (applied) "
-                                             "from ~w to ~w, "
-                                             "resending ~b pending commands",
-                                             [?MODULE, OldLeader, ActualLeader,
-                                              maps:size(State1#state.pending)]),
+                                       "from ~w to ~w, "
+                                       "resending ~b pending commands",
+                                       [?MODULE, OldLeader, ActualLeader,
+                                        maps:size(State1#state.pending)]),
                             resend_all_pending(State1#state{leader = ActualLeader});
                         _ ->
                             State1
@@ -702,9 +703,9 @@ handle_ra_event(QName, Leader, {machine, leader_change},
     %% we need to update leader
     %% and resend any pending commands
     ?LOG_DEBUG("~ts: ~s Detected QQ leader change from ~w to ~w, "
-                     "resending ~b pending commands",
-                     [rabbit_misc:rs(QName), ?MODULE, OldLeader,
-                      Leader, maps:size(Pending)]),
+               "resending ~b pending commands",
+               [rabbit_misc:rs(QName), ?MODULE, OldLeader,
+                Leader, maps:size(Pending)]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, State, []};
 handle_ra_event(_QName, _From, {rejected, {not_leader, Leader, _Seq}},
@@ -714,21 +715,27 @@ handle_ra_event(QName, _From, {rejected, {not_leader, Leader, _Seq}},
                 #state{leader = OldLeader,
                        pending = Pending} = State0) ->
     ?LOG_DEBUG("~ts: ~s Detected QQ leader change (rejection) from ~w to ~w, "
-                     "resending ~b pending commands",
-                     [rabbit_misc:rs(QName), ?MODULE, OldLeader,
-                      Leader, maps:size(Pending)]),
+               "resending ~b pending commands",
+               [rabbit_misc:rs(QName), ?MODULE, OldLeader,
+                Leader, maps:size(Pending)]),
     State = resend_all_pending(State0#state{leader = Leader}),
     {ok, cancel_timer(State), []};
 handle_ra_event(_QName, _From,
                 {rejected, {not_leader, _UndefinedMaybe, _Seq}}, State0) ->
     % TODO: how should these be handled? re-sent on timer or try random
     {ok, State0, []};
-handle_ra_event(QName, _, timeout, #state{cfg = #cfg{servers = Servers}} = State0) ->
+handle_ra_event(QName, _, timeout, #state{cfg = #cfg{servers = Servers},
+                                          leader = OldLeader,
+                                          pending = Pending} = State0) ->
     case find_leader(Servers) of
         undefined ->
             %% still no leader, set the timer again
             {ok, set_timer(QName, State0), []};
         Leader ->
+            ?LOG_DEBUG("~ts: ~s Pending applied Timeout ~w to ~w, "
+                       "resending ~b pending commands",
+                       [rabbit_misc:rs(QName), ?MODULE, OldLeader,
+                        Leader, maps:size(Pending)]),
             State = resend_all_pending(State0#state{leader = Leader}),
             {ok, State, []}
     end;
@@ -743,7 +750,7 @@ handle_ra_event(QName, Leader, close_cached_segments,
              case now_ms() > Last + ?CACHE_SEG_TIMEOUT of
                  true ->
                      ?LOG_DEBUG("~ts: closing_cached_segments",
-                                      [rabbit_misc:rs(QName)]),
+                                [rabbit_misc:rs(QName)]),
                      %% its been long enough, evict all
                      _ = ra_flru:evict_all(Cache),
                      State#state{cached_segments = undefined};
@@ -804,12 +811,16 @@ seq_applied({Seq, Response},
             {Corrs, Actions0, #state{} = State0}) ->
     %% sequences aren't guaranteed to be applied in order as enqueues are
     %% low priority commands and may be overtaken by others with a normal priority.
+    %%
+    %% if the response is 'not_enqueued' we need to still keep the pending
+    %% command for a later resend
     {Actions, State} = maybe_add_action(Response, Actions0, State0),
     case maps:take(Seq, State#state.pending) of
-        {{undefined, _}, Pending} ->
+        {{undefined, _}, Pending}
+          when Response =/= not_enqueued ->
             {Corrs, Actions, State#state{pending = Pending}};
         {{Corr, _}, Pending}
-          when Response /= not_enqueued ->
+          when Response =/= not_enqueued ->
             {[Corr | Corrs], Actions, State#state{pending = Pending}};
         _ ->
             {Corrs, Actions, State}
