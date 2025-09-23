@@ -1944,8 +1944,16 @@ is_dead_exclusive(Q) when ?amqqueue_exclusive_owner_is_pid(Q) ->
 
 -spec on_node_up(node()) -> 'ok'.
 
-on_node_up(_Node) ->
-    ok.
+on_node_up(Node) ->
+    case rabbit_khepri:is_enabled() of
+        true ->
+            %% With Khepri, we try to delete transient queues now because it's
+            %% possible any updates timed out because of the lack of a quorum
+            %% while `Node' was down.
+            ok = delete_transient_queues_on_node(Node);
+        false ->
+            ok
+    end.
 
 -spec on_node_down(node()) -> 'ok'.
 
