@@ -15,6 +15,7 @@
     refresh_credentials/0,
     request/5, request/6, request/7,
     set_credentials/2,
+    set_credentials/3,
     has_credentials/0,
     set_region/1,
     ensure_imdsv2_token_valid/0,
@@ -158,6 +159,12 @@ set_credentials(NewState) ->
 set_credentials(AccessKey, SecretAccessKey) ->
     gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
 
+-spec set_credentials(access_key(), secret_access_key(), security_token()) -> ok.
+%% @doc Manually set the access credentials with session token for requests.
+%% @end
+set_credentials(AccessKey, SecretAccessKey, SessionToken) ->
+    gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey, SessionToken}).
+
 -spec set_region(Region :: string()) -> ok.
 %% @doc Manually set the AWS region to perform API requests to.
 %% @end
@@ -221,6 +228,14 @@ handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
         access_key = AccessKey,
         secret_access_key = SecretAccessKey,
         security_token = undefined,
+        expiration = undefined,
+        error = undefined
+    }};
+handle_msg({set_credentials, AccessKey, SecretAccessKey, SessionToken}, State) ->
+    {reply, ok, State#state{
+        access_key = AccessKey,
+        secret_access_key = SecretAccessKey,
+        security_token = SessionToken,
         expiration = undefined,
         error = undefined
     }};
