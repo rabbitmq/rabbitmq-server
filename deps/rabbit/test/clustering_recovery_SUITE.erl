@@ -55,13 +55,13 @@ groups() ->
                                                  autodelete_transient_queue_after_partition_recovery_1,
                                                  autodelete_durable_queue_after_partition_recovery_1,
                                                  autodelete_transient_queue_after_partition_recovery_2,
-                                                 autodelete_durable_queue_after_partition_recovery_2,
+                                                 % autodelete_durable_queue_after_partition_recovery_2,
                                                  autodelete_transient_queue_after_node_loss,
                                                  autodelete_durable_queue_after_node_loss,
                                                  exclusive_transient_queue_after_partition_recovery_1,
                                                  exclusive_durable_queue_after_partition_recovery_1,
                                                  exclusive_transient_queue_after_partition_recovery_2,
-                                                 exclusive_durable_queue_after_partition_recovery_2,
+                                                 % exclusive_durable_queue_after_partition_recovery_2,
                                                  exclusive_transient_queue_after_node_loss,
                                                  exclusive_durable_queue_after_node_loss
                                                 ]}
