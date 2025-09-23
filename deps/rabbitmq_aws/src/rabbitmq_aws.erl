@@ -45,17 +45,9 @@ get_region() ->
         [{region, Region}] ->
             Region;
         [] ->
-            % Use proper region detection
-            case rabbitmq_aws_config:region() of
-                {ok, DetectedRegion} ->
-                    % Cache the detected region
-                    ets:insert(?AWS_CONFIG_TABLE, {region, DetectedRegion}),
-                    DetectedRegion;
-                _ ->
-                    % Final fallback
-                    ets:insert(?AWS_CONFIG_TABLE, {region, "us-east-1"}),
-                    "us-east-1"
-            end
+            {ok, DetectedRegion} =  rabbitmq_aws_config:region(),
+            ets:insert(?AWS_CONFIG_TABLE, {region, DetectedRegion}),
+            DetectedRegion
     end.
 
 -spec set_region(Region :: region()) -> ok.
@@ -65,9 +57,9 @@ set_region(Region) ->
 
 -spec has_credentials() -> boolean().
 has_credentials() ->
-    case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
-        [{current, Creds}] when Creds#aws_credentials.access_key =/= undefined ->
-            not expired_credentials(Creds#aws_credentials.expiration);
+    case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+        [#aws_credentials{access_key = Key, expiration = Expiration}] when Key =/= undefined ->
+            not expired_credentials(Expiration);
         _ ->
             false
     end.
@@ -76,26 +68,9 @@ has_credentials() ->
 %% exported wrapper functions
 %%====================================================================
 
--spec get(
-    ServiceOrHandle :: string() | connection_handle(),
-    Path :: path()
-) -> result().
-%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON, or XML
-%%      format.
-%% @end
 get(ServiceOrHandle, Path) ->
     get(ServiceOrHandle, Path, []).
 
--spec get(
-    ServiceOrHandle :: string() | connection_handle(),
-    Path :: path(),
-    Headers :: headers()
-) -> result().
-%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON or XML
-%%      format.
-%% @end
 get(ServiceOrHandle, Path, Headers) ->
     get(ServiceOrHandle, Path, Headers, []).
 
@@ -208,7 +183,7 @@ direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
     URI :: string(),
     Headers :: headers(),
     Body :: body(),
-    BodyHash :: iodata()
+    BodyHash :: iodata() | undefined
 ) -> headers().
 sign_headers(
     AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash
@@ -264,7 +239,7 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
     Body :: body(),
     Headers :: headers(),
     HTTPOptions :: http_options(),
-    Endpoint :: host()
+    Endpoint :: host() | undefined
 ) -> result().
 %% @doc Perform a HTTP request to the AWS API for the specified service, overriding
 %%      the endpoint URL to use when invoking the API. This is useful for local testing
@@ -291,7 +266,7 @@ set_credentials(AccessKey, SecretAccessKey) ->
         security_token = undefined,
         expiration = undefined
     },
-    ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}),
+    ets:insert(?AWS_CREDENTIALS_TABLE, Creds),
     ok.
 
 -spec ensure_credentials_valid() -> ok.
@@ -366,21 +341,16 @@ endpoint_tld("cn-northwest-1") ->
 endpoint_tld(_Other) ->
     "amazonaws.com".
 
--spec get_credentials() ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
 get_credentials() ->
     get_credentials(10).
 
--spec get_credentials(Retries :: non_neg_integer()) ->
-    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
 get_credentials(Retries) ->
-    case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
-        [{current, Creds}] ->
-            case expired_credentials(Creds#aws_credentials.expiration) of
+    case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+        [#aws_credentials{access_key = Key, expiration = Expiration, secret_key = SecretKey, security_token = SecurityToken}] ->
+            case expired_credentials(Expiration) of
                 false ->
                     Region = get_region(),
-                    {ok, Creds#aws_credentials.access_key, Creds#aws_credentials.secret_key,
-                        Creds#aws_credentials.security_token, Region};
+                    {ok, Key, SecretKey, SecurityToken, Region};
                 true ->
                     refresh_credentials_with_lock(Retries)
             end;
@@ -398,14 +368,12 @@ refresh_credentials_with_lock(Retries) ->
         true ->
             try
                 % Double-check if someone else already refreshed
-                case ets:lookup(?AWS_CREDENTIALS_TABLE, current) of
-                    [{current, Creds}] ->
-                        case expired_credentials(Creds#aws_credentials.expiration) of
+                case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+                    [#aws_credentials{access_key = Key, expiration = Expiration, secret_key = SecretKey, security_token = SecurityToken}] ->
+                        case expired_credentials(Expiration) of
                             false ->
                                 Region = get_region(),
-                                {ok, Creds#aws_credentials.access_key,
-                                    Creds#aws_credentials.secret_key,
-                                    Creds#aws_credentials.security_token, Region};
+                                {ok, Key, SecretKey, SecurityToken, Region};
                             true ->
                                 do_refresh_credentials()
                         end;
@@ -433,7 +401,7 @@ do_refresh_credentials() ->
                 security_token = SecurityToken,
                 expiration = Expiration
             },
-            ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}),
+            ets:insert(?AWS_CREDENTIALS_TABLE, Creds),
             {ok, AccessKey, SecretAccessKey, SecurityToken, Region};
         {error, Reason} ->
             {error, Reason}

@@ -535,7 +535,7 @@ lookup_credentials_from_proplist(_, undefined) ->
 lookup_credentials_from_proplist(AccessKey, SecretKey) ->
     {ok, AccessKey, SecretKey, undefined, undefined}.
 
--spec with_metadata_connection(fun((gun:conn_ref()) -> Result)) -> Result.
+-spec with_metadata_connection(fun((pid()) -> Result)) -> Result.
 %% @doc Execute a function with a shared metadata service connection
 %% @end
 with_metadata_connection(Fun) ->
@@ -619,7 +619,7 @@ maybe_convert_number(Value) ->
     end.
 
 -spec maybe_get_credentials_from_instance_metadata_with_conn(
-    ConnPid :: gun:conn_ref(),
+    ConnPid :: pid(),
     {ok, Role :: string()}
     | {error, undefined}
 ) ->
@@ -627,7 +627,7 @@ maybe_convert_number(Value) ->
 %% @doc Try to query the EC2 local instance metadata service to get temporary
 %%      authentication credentials using an existing connection.
 %% @end
-maybe_get_credentials_from_instance_metadata_with_conn(_, {error, undefined}) ->
+maybe_get_credentials_from_instance_metadata_with_conn(_, {error, _}) ->
     {error, undefined};
 maybe_get_credentials_from_instance_metadata_with_conn(ConnPid, {ok, Role}) ->
     URL = instance_credentials_url(Role),
@@ -642,7 +642,7 @@ maybe_get_region_from_instance_metadata() ->
     URL = instance_availability_zone_url(),
     parse_az_response(perform_http_get_instance_metadata(URL)).
 
--spec perform_http_get_with_conn(gun:conn_ref(), string()) -> httpc_result().
+-spec perform_http_get_with_conn(pid(), string()) -> httpc_result().
 %% @doc Make HTTP GET request using existing Gun connection
 %% @end
 perform_http_get_with_conn(ConnPid, Path) ->

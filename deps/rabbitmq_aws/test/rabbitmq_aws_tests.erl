@@ -24,7 +24,7 @@ set_test_credentials(AccessKey, SecretKey, SecurityToken, Expiration) ->
         security_token = SecurityToken,
         expiration = Expiration
     },
-    ets:insert(?AWS_CREDENTIALS_TABLE, {current, Creds}).
+    ets:insert(?AWS_CREDENTIALS_TABLE, Creds).
 
 set_test_region(Region) ->
     ets:insert(?AWS_CONFIG_TABLE, {region, Region}).

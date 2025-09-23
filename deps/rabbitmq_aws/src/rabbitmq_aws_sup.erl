@@ -18,4 +18,6 @@ start_link() ->
 
 init([]) ->
     % No children needed - just return empty supervisor
+    ets:new(aws_credentials, [named_table, public, {read_concurrency, true}]),
+    ets:new(aws_config, [named_table, public, {read_concurrency, true}]),
     {ok, {{one_for_one, 5, 10}, []}}.
