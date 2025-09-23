@@ -803,17 +803,10 @@ temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
     consume(10),
 
     %% Close the consuming client to trigger the queue deletion during the
-    %% network partition.
+    %% network partition. Because of the network partition, the queue process
+    %% exits but it couldn't delete the queue record.
     _ = rabbit_ct_client_helpers:close_connection_and_channel(
           Conn, Ch),
-
-    %% We resolve the network partition.
-    lists:foreach(
-      fun(Node) ->
-              rabbit_ct_broker_helpers:allow_traffic_between(
-                Node2, Node)
-      end, Majority),
-    clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
 
     receive
         {'DOWN', CMRef, _, _, Reason1} ->
@@ -831,6 +824,14 @@ temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
     after Timeout ->
               ct:fail("Queue ~p still running", [QPid])
     end,
+
+    %% We resolve the network partition.
+    lists:foreach(
+      fun(Node) ->
+              rabbit_ct_broker_helpers:allow_traffic_between(
+                Node2, Node)
+      end, Majority),
+    clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
 
     %% The queue was also deleted from the metadata store on all
     %% nodes.
