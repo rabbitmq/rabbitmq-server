@@ -92,11 +92,40 @@ fetch_s3_object(Arn) ->
     {ok, #{resource := Resource}} = parse_arn(Arn),
     [Bucket | KeyParts] = string:tokens(Resource, "/"),
     Key = string:join(KeyParts, "/"),
-    % Set region from environment variable
-    {ok, Region} = rabbitmq_aws_config:region(),
-    rabbitmq_aws:set_region(Region),
-    % Refresh credentials to pick up environment variables
+    case rabbitmq_aws_config:region() of
+        {ok, Region} ->
+            rabbitmq_aws:set_region(Region),
+            fetch_s3_object_with_region(Bucket, Key);
+        {error, RegionError} ->
+            ?LOG_ERROR("Failed to get AWS region: ~p", [RegionError]),
+            {error, {region_lookup_failed, RegionError}}
+    end.
+
+-spec fetch_s3_object_with_region(string(), string()) -> {ok, binary()} | {error, term()}.
+fetch_s3_object_with_region(Bucket, Key) ->
     rabbitmq_aws:refresh_credentials(),
+    case rabbitmq_aws:has_credentials() of
+        false ->
+            ?LOG_ERROR("No AWS credentials available for assume role operation"),
+            {error, no_base_credentials};
+        true ->
+            case application:get_env(rabbitmq_aws, assume_role_arn) of
+                {ok, RoleArn} ->
+                    case assume_role(RoleArn) of
+                        ok ->
+                            fetch_s3_object_final(Bucket, Key);
+                        {error, AssumeRoleReason} ->
+                            ?LOG_ERROR("Failed to assume role ~p: ~p", [RoleArn, AssumeRoleReason]),
+                            {error, {assume_role_failed, AssumeRoleReason}}
+                    end;
+                _ ->
+                    % No assume role configured, use existing credentials
+                    fetch_s3_object_final(Bucket, Key)
+            end
+    end.
+
+-spec fetch_s3_object_final(string(), string()) -> {ok, binary()} | {error, term()}.
+fetch_s3_object_final(Bucket, Key) ->
     Path = "/" ++ Bucket ++ "/" ++ Key,
     case rabbitmq_aws:get("s3", Path) of
         {ok, {_Headers, Body}} ->
@@ -115,3 +144,38 @@ write_to_file(Arn, Content) ->
     FilePath = TempDir ++ "/" ++ Filename,
     ok = rabbit_file:write_file(FilePath, Content),
     FilePath.
+
+-spec assume_role(string()) -> ok | {error, term()}.
+assume_role(RoleArn) ->
+    SessionName = "rabbitmq-resource-fetcher-" ++ integer_to_list(erlang:system_time(second)),
+    Body = "Action=AssumeRole&RoleArn=" ++ uri_string:quote(RoleArn) ++
+           "&RoleSessionName=" ++ uri_string:quote(SessionName) ++
+           "&Version=2011-06-15",
+    Headers = [
+        {"content-type", "application/x-www-form-urlencoded"},
+        {"accept", "application/json"}
+    ],
+    case rabbitmq_aws:post("sts", "/", Body, Headers) of
+        {ok, {_Headers, ResponseBody}} ->
+            parse_assume_role_response(ResponseBody);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec parse_assume_role_response(binary()) -> ok | {error, term()}.
+parse_assume_role_response(Body) ->
+    try
+        [{"AssumeRoleResponse", ResponseData}] = Body,
+        {"AssumeRoleResult", ResultData} = lists:keyfind("AssumeRoleResult", 1, ResponseData),
+        {"Credentials", CredentialsData} = lists:keyfind("Credentials", 1, ResultData),
+        {"AccessKeyId", AccessKey} = lists:keyfind("AccessKeyId", 1, CredentialsData),
+        {"SecretAccessKey", SecretKey} = lists:keyfind("SecretAccessKey", 1, CredentialsData),
+        {"SessionToken", SessionToken} = lists:keyfind("SessionToken", 1, CredentialsData),
+
+        rabbitmq_aws:set_credentials(AccessKey, SecretKey, SessionToken),
+        ok
+    catch
+        _:Error:Stacktrace ->
+            ?LOG_ERROR("Parse error: ~p~nStacktrace: ~p", [Error, Stacktrace]),
+            {error, {parse_error, Error}}
+    end.
