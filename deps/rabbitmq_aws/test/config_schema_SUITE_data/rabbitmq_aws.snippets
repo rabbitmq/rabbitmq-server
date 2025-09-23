@@ -1,0 +1,15 @@
+[
+    {rabbitmq_aws_prefer_imdsv2_false,
+        "aws.prefer_imdsv2 = false",
+        [{rabbit, [
+            {aws_prefer_imdsv2, false}
+        ]}],
+        [rabbitmq_aws]},
+
+    {rabbitmq_aws_prefer_imdsv2_true,
+        "aws.prefer_imdsv2 = true",
+        [{rabbit, [
+            {aws_prefer_imdsv2, true}
+        ]}],
+        [rabbitmq_aws]}
+].
