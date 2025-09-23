@@ -629,6 +629,14 @@ apply(#{machine_version := Vsn} = Meta,
                              E#enqueuer{status = up};
                         (_, E) -> E
                      end, Enqs0),
+    %% send leader change events to all disconnected enqueuers to prompt them
+    %% to resend any messages stuck during disconnection,
+    %% ofc it may not be a leader change per se
+    Effects0 = maps:fold(fun(P, _E, Acc) when node(P) =:= Node ->
+                                 [{send_msg, P, leader_change, ra_event} | Acc];
+                            (_, _E, Acc) -> Acc
+                         end, Monitors, Enqs0),
+
     ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     %% mark all consumers as up
     {State1, Effects1} =
@@ -643,7 +651,7 @@ apply(#{machine_version := Vsn} = Meta,
                                         SAcc), EAcc1};
              (_, _, Acc) ->
                   Acc
-          end, {State0, Monitors}, Cons0, Vsn),
+          end, {State0, Effects0}, Cons0, Vsn),
     Waiting = update_waiting_consumer_status(Node, State1, up),
     State2 = State1#?STATE{enqueuers = Enqs1,
                            waiting_consumers = Waiting},
