@@ -27,7 +27,8 @@ groups() ->
             pubsub_binary,
             sub_non_existent,
             disconnect,
-            http_auth
+            http_auth,
+            wss_http2
       ]},
       %% rabbitmq/rabbitmq-web-stomp#110
       {default_login_enabled, [],
@@ -48,7 +49,25 @@ init_per_suite(Config) ->
                                            [{rmq_nodename_suffix, ?MODULE},
                                             {protocol, "ws"}]),
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1),
+    {rmq_certsdir, CertsDir} = proplists:lookup(rmq_certsdir, Config2),
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2,
+                {rabbitmq_web_stomp,
+                 [{ssl_config,
+                   [{cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
+                    {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                    {keyfile, filename:join([CertsDir, "server", "key.pem"])},
+                    %% We only want to ensure HTTP/2 Websocket is working.
+                    {fail_if_no_peer_cert, false},
+                    {versions, ['tlsv1.3']},
+                    %% We hard code this port number here because it will be computed later by
+                    %% rabbit_ct_broker_helpers:init_tcp_port_numbers/3 when we start the broker.
+                    %% (The alternative is to first start the broker, stop the rabbitmq_web_amqp app,
+                    %% configure tls_config, and then start the app again.)
+                    {port, 21014}
+                   ]}]}),
+    rabbit_ct_helpers:run_setup_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps()).
 
 end_per_suite(Config) ->
@@ -285,4 +304,24 @@ Protocol = ?config(protocol, Config),
     {<<"CONNECTED">>, _, <<>>} = raw_recv(WS3),
     {close, _} = rfc6455_client:close(WS3),
 
+    ok.
+
+wss_http2(Config) ->
+    {ok, _} = application:ensure_all_started(gun),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_stomp_tls),
+    {ok, ConnPid} = gun:open("localhost", Port, #{
+        transport => tls,
+        tls_opts => [{verify, verify_none}],
+        protocols => [http2],
+        http2_opts => #{notify_settings_changed => true},
+        ws_opts => #{protocols => [{<<"v12.stomp">>, gun_ws_h}]}
+    }),
+    {ok, http2} = gun:await_up(ConnPid),
+    {notify, settings_changed, #{enable_connect_protocol := true}}
+        = gun:await(ConnPid, undefined),
+    StreamRef = gun:ws_upgrade(ConnPid, "/ws", []),
+    {upgrade, [<<"websocket">>], _} = gun:await(ConnPid, StreamRef),
+    gun:ws_send(ConnPid, StreamRef, {text, stomp:marshal("CONNECT", [{"login","guest"}, {"passcode", "guest"}])}),
+    {ws, {text, P}} = gun:await(ConnPid, StreamRef),
+    {<<"CONNECTED">>, _, <<>>} = stomp:unmarshal(P),
     ok.
