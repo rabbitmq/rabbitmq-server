@@ -19,7 +19,7 @@ export BUILD_WITHOUT_QUIC
 
 LOCAL_DEPS = ssl
 DEPS = rabbit cowboy rabbitmq_mqtt
-TEST_DEPS = emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_stomp rabbitmq_consistent_hash_exchange
+TEST_DEPS = gun emqtt rabbitmq_ct_helpers rabbitmq_ct_client_helpers rabbitmq_management rabbitmq_stomp rabbitmq_consistent_hash_exchange
 
 PLT_APPS += rabbitmq_cli elixir cowlib ssl
 
@@ -27,6 +27,7 @@ PLT_APPS += rabbitmq_cli elixir cowlib ssl
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
+dep_gun = hex 2.2.0
 dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
