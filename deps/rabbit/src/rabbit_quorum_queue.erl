@@ -595,8 +595,7 @@ handle_tick(QName,
               num_discarded := NumDiscarded,
               num_discard_checked_out  :=  NumDiscardedCheckedOut,
               discard_message_bytes := DiscardBytes,
-              discard_checkout_message_bytes := DiscardCheckoutBytes,
-              smallest_raft_index := _} = Overview,
+              discard_checkout_message_bytes := DiscardCheckoutBytes} = Overview,
             Nodes) ->
     %% this makes calls to remote processes so cannot be run inside the
     %% ra server
@@ -2000,7 +1999,7 @@ make_ra_conf(Q, ServerId, Membership, MacVersion)
                  Membership, MacVersion).
 
 make_ra_conf(Q, ServerId, TickTimeout,
-             SnapshotInterval, CheckpointInterval,
+             _SnapshotInterval, CheckpointInterval,
              Membership, MacVersion) ->
     QName = amqqueue:get_name(Q),
     #resource{name = QNameBin} = QName,
@@ -2010,7 +2009,7 @@ make_ra_conf(Q, ServerId, TickTimeout,
     FName = rabbit_misc:rs(QName),
     Formatter = {?MODULE, format_ra_event, [QName]},
     LogCfg = #{uid => UId,
-               snapshot_interval => SnapshotInterval,
+               min_snapshot_interval => 0,
                min_checkpoint_interval => CheckpointInterval,
                max_checkpoints => 3},
     rabbit_misc:maps_put_truthy(membership, Membership,
