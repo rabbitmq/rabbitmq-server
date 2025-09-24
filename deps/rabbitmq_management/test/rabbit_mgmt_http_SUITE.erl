@@ -663,11 +663,11 @@ users_protected_test(Config) ->
     rabbit_ct_broker_helpers:add_user(Config, ProtectedUser),
     rabbit_ct_broker_helpers:set_user_tags(Config, 0, ProtectedUser, [management, protected]),
 
-    %% Verify protected user cannot be updated via API
+    %% Verify that a protected user cannot be updated via the HTTP API
     http_put(Config, "/users/protected_user", [{password, <<"new_password">>},
                                                {tags, <<"management,protected">>}], ?BAD_REQUEST),
 
-    %% Verify protected user cannot be deleted via API
+    %% Verify that a protected user cannot be deleted via the HTTP API
     http_delete(Config, "/users/protected_user", ?BAD_REQUEST),
 
     rabbit_ct_broker_helpers:delete_user(Config, ProtectedUser),
