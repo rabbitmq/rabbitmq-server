@@ -77,6 +77,7 @@ groups() ->
 some_tests() ->
     [
         users_test,
+        users_protected_test,
         exchanges_test,
         queues_test,
         bindings_test,
@@ -655,6 +656,21 @@ users_test(Config) ->
     http_delete(Config, "/users/users_test", {group, '2xx'}),
     test_auth(Config, ?NOT_AUTHORISED, [auth_header("users_test", "password")]),
     http_get(Config, "/users/users_test", ?NOT_FOUND),
+    passed.
+
+users_protected_test(Config) ->
+    ProtectedUser = <<"protected_user">>,
+    rabbit_ct_broker_helpers:add_user(Config, ProtectedUser),
+    rabbit_ct_broker_helpers:set_user_tags(Config, 0, ProtectedUser, [management, protected]),
+
+    %% Verify protected user cannot be updated via API
+    http_put(Config, "/users/protected_user", [{password, <<"new_password">>},
+                                               {tags, <<"management,protected">>}], ?BAD_REQUEST),
+
+    %% Verify protected user cannot be deleted via API
+    http_delete(Config, "/users/protected_user", ?BAD_REQUEST),
+
+    rabbit_ct_broker_helpers:delete_user(Config, ProtectedUser),
     passed.
 
 without_permissions_users_test(Config) ->
