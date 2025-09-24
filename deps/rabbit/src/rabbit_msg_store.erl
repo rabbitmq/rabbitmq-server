@@ -1599,7 +1599,7 @@ scan_data(<<Size:64, MsgIdInt:128, _Rest/bits>> = Data, Fd, Fun, Offset, FileSiz
     end;
 %% This might be the start of a message.
 scan_data(<<Size:64, Rest/bits>> = Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
-          when byte_size(Rest) < Size + 1, Size < FileSize - Offset ->
+          when byte_size(Rest) < Size + 1, Size + 9 =< FileSize - Offset ->
     scan(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc);
 scan_data(Data, Fd, Fun, Offset, FileSize, MsgIdsFound, Acc)
           when byte_size(Data) < 8 ->
