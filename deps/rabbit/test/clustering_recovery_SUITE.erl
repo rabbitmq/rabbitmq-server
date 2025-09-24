@@ -762,23 +762,32 @@ temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
     Majority = Nodes -- [Node2],
     Timeout = 60000,
 
-    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(
-                   Config, Node2),
-    CMRef = erlang:monitor(process, Conn),
+    {Conn1, Ch1} = rabbit_ct_client_helpers:open_connection_and_channel(
+                     Config, Node2),
+    CMRef1 = erlang:monitor(process, Conn1),
+    {Conn2, Ch2} = rabbit_ct_client_helpers:open_connection_and_channel(
+                     Config, Node2),
+    CMRef2 = erlang:monitor(process, Conn2),
 
     %% We create an exclusive queue on node 1 and get its PID on the server
     %% side.
-    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch, QueueDeclare)),
+    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch1, QueueDeclare)),
+    ?assertMatch(#'queue.declare_ok'{}, amqp_channel:call(Ch2, QueueDeclare)),
     Queues = rabbit_ct_broker_helpers:rpc(
                Config, Node2, rabbit_amqqueue, list, []),
-    ?assertMatch([_], Queues),
-    [Queue] = Queues,
-    ct:pal("Queue = ~p", [Queue]),
+    ?assertMatch([_, _], Queues),
+    [Queue1, Queue2] = Queues,
+    ct:pal("Queues = ~p", [Queues]),
 
-    QName = amqqueue:get_name(Queue),
-    QPid = amqqueue:get_pid(Queue),
-    QMRef = erlang:monitor(process, QPid),
-    subscribe(Ch, QName#resource.name),
+    QName1 = amqqueue:get_name(Queue1),
+    QPid1 = amqqueue:get_pid(Queue1),
+    QMRef1 = erlang:monitor(process, QPid1),
+    subscribe(Ch1, QName1#resource.name),
+
+    QName2 = amqqueue:get_name(Queue2),
+    QPid2 = amqqueue:get_pid(Queue2),
+    QMRef2 = erlang:monitor(process, QPid2),
+    subscribe(Ch2, QName2#resource.name),
 
     lists:foreach(
       fun(Node) ->
@@ -787,43 +796,41 @@ temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
     clustering_utils:assert_cluster_status({Nodes, Majority}, Majority),
     clustering_utils:assert_cluster_status({Nodes, [Node2]}, [Node2]),
 
-    %% The queue is still recorded everywhere.
+    %% The queues are still recorded everywhere.
     lists:foreach(
       fun(Node) ->
-              Ret = rabbit_ct_broker_helpers:rpc(
-                      Config, Node, rabbit_amqqueue, lookup, [QName]),
-              ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
-              ?assertEqual({ok, Queue}, Ret)
+              Ret1 = rabbit_ct_broker_helpers:rpc(
+                       Config, Node, rabbit_amqqueue, lookup, [QName1]),
+              Ret2 = rabbit_ct_broker_helpers:rpc(
+                       Config, Node, rabbit_amqqueue, lookup, [QName2]),
+              ct:pal(
+                "Queues lookup on node ~0p:~n  ~p~n~p",
+                [Node, Ret1, Ret2]),
+              ?assertEqual({ok, Queue1}, Ret1),
+              ?assertEqual({ok, Queue2}, Ret2)
       end, Nodes),
 
     %% Publich to and consume from the queue.
     {_PConn, PCh} = rabbit_ct_client_helpers:open_connection_and_channel(
                       Config, Node2),
-    publish_many(PCh, QName#resource.name, 10),
-    consume(10),
+    publish_many(PCh, QName1#resource.name, 10),
+    publish_many(PCh, QName2#resource.name, 10),
+    consume(20),
 
-    %% Close the consuming client to trigger the queue deletion during the
-    %% network partition. Because of the network partition, the queue process
-    %% exits but it couldn't delete the queue record.
+    %% Close the first consuming client to trigger the queue deletion during
+    %% the network partition. Because of the network partition, the queue
+    %% process exits but it couldn't delete the queue record.
     _ = rabbit_ct_client_helpers:close_connection_and_channel(
-          Conn, Ch),
+          Conn1, Ch1),
 
-    receive
-        {'DOWN', CMRef, _, _, Reason1} ->
-            ct:pal("Connection ~p exited: ~p", [Conn, Reason1]),
-            ?assertEqual({shutdown, normal}, Reason1),
-            ok
-    after Timeout ->
-              ct:fail("Connection ~p still running", [Conn])
-    end,
-    receive
-        {'DOWN', QMRef, _, _, Reason} ->
-            ct:pal("Queue ~p exited: ~p", [QPid, Reason]),
-            ?assertEqual(normal, Reason),
-            ok
-    after Timeout ->
-              ct:fail("Queue ~p still running", [QPid])
-    end,
+    KhepriTimeout = rabbit_ct_broker_helpers:rpc(Config, Node2, khepri_app, get_default_timeout, []),
+    timer:sleep(KhepriTimeout + 10000),
+
+    %% Close the second consuming client to trigger the queue deletion during
+    %% the network partition. This time, the partition is solved while the
+    %% queue process tries to delete the record.
+    _ = rabbit_ct_client_helpers:close_connection_and_channel(
+          Conn2, Ch2),
 
     %% We resolve the network partition.
     lists:foreach(
@@ -833,15 +840,61 @@ temporary_queue_after_partition_recovery_2(Config, QueueDeclare) ->
       end, Majority),
     clustering_utils:assert_cluster_status({Nodes, Nodes}, Nodes),
 
-    %% The queue was also deleted from the metadata store on all
-    %% nodes.
+    receive
+        {'DOWN', CMRef1, _, _, Reason1_1} ->
+            ct:pal("Connection ~p exited: ~p", [Conn1, Reason1_1]),
+            ?assertEqual({shutdown, normal}, Reason1_1),
+            ok
+    after Timeout ->
+              ct:fail("Connection ~p still running", [Conn1])
+    end,
+    receive
+        {'DOWN', QMRef1, _, _, Reason1_2} ->
+            ct:pal("Queue ~p exited: ~p", [QPid1, Reason1_2]),
+            ?assertEqual(normal, Reason1_2),
+            ok
+    after Timeout ->
+              ct:fail("Queue ~p still running", [QPid1])
+    end,
+
+    %% The first queue was deleted from the metadata store on all nodes.
     lists:foreach(
       fun(Node) ->
               ?awaitMatch(
                  {error, not_found},
                  begin
                      Ret = rabbit_ct_broker_helpers:rpc(
-                             Config, Node, rabbit_amqqueue, lookup, [QName]),
+                             Config, Node, rabbit_amqqueue, lookup, [QName1]),
+                     ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
+                     Ret
+                 end, Timeout)
+      end, Nodes),
+
+    receive
+        {'DOWN', CMRef2, _, _, Reason2_1} ->
+            ct:pal("Connection ~p exited: ~p", [Conn2, Reason2_1]),
+            ?assertEqual({shutdown, normal}, Reason2_1),
+            ok
+    after Timeout ->
+              ct:fail("Connection ~p still running", [Conn2])
+    end,
+    receive
+        {'DOWN', QMRef2, _, _, Reason2_2} ->
+            ct:pal("Queue ~p exited: ~p", [QPid2, Reason2_2]),
+            ?assertEqual(normal, Reason2_2),
+            ok
+    after Timeout ->
+              ct:fail("Queue ~p still running", [QPid2])
+    end,
+
+    %% The second queue was deleted from the metadata store on all nodes.
+    lists:foreach(
+      fun(Node) ->
+              ?awaitMatch(
+                 {error, not_found},
+                 begin
+                     Ret = rabbit_ct_broker_helpers:rpc(
+                             Config, Node, rabbit_amqqueue, lookup, [QName2]),
                      ct:pal("Queue lookup on node ~0p: ~p", [Node, Ret]),
                      Ret
                  end, Timeout)
