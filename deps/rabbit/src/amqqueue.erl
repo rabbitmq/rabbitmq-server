@@ -14,7 +14,7 @@
          new/9,
          new_with_version/9,
          new_with_version/10,
-         new_target/4,
+         new_target/2,
          fields/0,
          fields/1,
          field_vhost/0,
@@ -87,6 +87,7 @@
         (T =:= classic orelse T =:= ?amqqueue_v1_type)).
 
 -type amqqueue_options() ::  map() | ets:match_pattern().
+-type extra_bcc() :: rabbit_misc:resource_name() | none.
 
 -record(amqqueue, {
           %% immutable
@@ -127,9 +128,9 @@
 %% to deliver a message to a target queue.
 -record(queue_target,
         {name :: rabbit_amqqueue:name(),
-         type :: rabbit_queue_type:queue_type(),
-         pid :: pid() | ra_server_id() | none,
-         extra_bcc :: rabbit_misc:resource_name() | none
+         target :: {rabbit_queue_type:queue_type(),
+                    pid() | ra_server_id() | none,
+                    extra_bcc()}
         }).
 
 -opaque target() :: #queue_target{}.
@@ -344,15 +345,13 @@ new_with_version(?record_version,
               type            = ensure_type_compat(Type)}.
 
 -spec new_target(rabbit_amqqueue:name(),
-                 rabbit_queue_type:queue_type(),
-                 pid() | ra_server_id() | none,
-                 rabbit_misc:resource_name() | none) ->
+                 {rabbit_queue_type:queue_type(),
+                  pid() | ra_server_id() | none,
+                  extra_bcc()}) ->
     target().
-new_target(Name, Type, Pid, ExtraBcc) ->
+new_target(Name, Target) when tuple_size(Target) =:= 3 ->
     #queue_target{name = Name,
-                  type = Type,
-                  pid = Pid,
-                  extra_bcc = ExtraBcc}.
+                  target = Target}.
 
 -spec is_amqqueue(any()) -> boolean().
 
@@ -395,13 +394,13 @@ set_options(#amqqueue{} = Queue, Options) ->
     Queue#amqqueue{options = Options}.
 
 -spec get_extra_bcc(amqqueue() | target()) ->
-    rabbit_misc:resource_name() | none.
-get_extra_bcc(#amqqueue{options = #{extra_bcc := Name}}) ->
-    Name;
+    extra_bcc().
+get_extra_bcc(#amqqueue{options = #{extra_bcc := ExtraBcc}}) ->
+    ExtraBcc;
 get_extra_bcc(#amqqueue{})  ->
     none;
-get_extra_bcc(#queue_target{extra_bcc = Name}) ->
-    Name.
+get_extra_bcc(#queue_target{target = {_Type, _Pid, ExtraBcc}}) ->
+    ExtraBcc.
 
 % decorators
 
@@ -465,7 +464,7 @@ set_name(#amqqueue{} = Queue, Name) ->
 -spec get_pid(amqqueue_v2() | target()) -> pid() | ra_server_id() | none.
 
 get_pid(#amqqueue{pid = Pid}) -> Pid;
-get_pid(#queue_target{pid = Pid}) -> Pid.
+get_pid(#queue_target{target = {_Type, Pid, _ExtraBcc}}) -> Pid.
 
 -spec set_pid(amqqueue_v2(), pid() | ra_server_id() | none) -> amqqueue_v2().
 
@@ -525,7 +524,7 @@ set_state(#amqqueue{} = Queue, State) ->
 -spec get_type(amqqueue() | target()) -> atom().
 
 get_type(#amqqueue{type = Type}) -> Type;
-get_type(#queue_target{type = Type}) -> Type.
+get_type(#queue_target{target = {Type, _Pid, _ExtraBcc}}) -> Type.
 
 -spec get_vhost(amqqueue()) -> rabbit_types:vhost() | undefined.
 

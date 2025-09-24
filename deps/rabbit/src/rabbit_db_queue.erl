@@ -511,10 +511,10 @@ lookup_target(#resource{name = NameBin} = Name) ->
         false ->
             try
                 ets:lookup_element(?KHEPRI_TARGET_PROJECTION, Name, 2, not_found) of
-                {Type, Pid, ExtraBcc} ->
-                    amqqueue:new_target(Name, Type, Pid, ExtraBcc);
                 not_found ->
-                    not_found
+                    not_found;
+                Target ->
+                    amqqueue:new_target(Name, Target)
             catch
                 error:badarg ->
                     not_found
