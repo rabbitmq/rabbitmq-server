@@ -978,8 +978,6 @@ handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
     handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
   when element(1, AuxV3) == aux_v3 ->
-    Name = element(2, AuxV3),
-    AuxV3 = init_aux(Name),
     AuxV4 = #?AUX{name = element(2, AuxV3),
                   last_decorators_state = element(3, AuxV3),
                   unused_1 = undefined,
