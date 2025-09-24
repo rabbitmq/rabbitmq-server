@@ -11,7 +11,7 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MessageSizeStatsCommand do
 
   @default_timeout 60_000
 
-  def scopes(), do: [:ctl, :diagnostics]
+  def scopes(), do: [:diagnostics]
 
   def switches(), do: [timeout: :integer]
   def aliases(), do: [t: :timeout]
