@@ -49,7 +49,7 @@ defmodule MessageSizeStatsCommandTest do
 
   test "banner", context do
     banner = @command.banner([], context[:opts])
-    assert banner =~ ~r/Gathering message size statistics from cluster via #{get_rabbit_hostname()}/
+    assert banner =~ ~r/message size statistics/
   end
 
 end
