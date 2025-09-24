@@ -24,6 +24,7 @@ groups() ->
        ,unacceptable_data_type
        ,handle_invalid_packets
        ,duplicate_connect
+       ,wss_http2
       ]}
     ].
 
@@ -36,7 +37,25 @@ init_per_suite(Config) ->
         {rmq_nodename_suffix, ?MODULE},
         {protocol, "ws"}
       ]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    Config2 = rabbit_ct_helpers:run_setup_steps(Config1),
+    {rmq_certsdir, CertsDir} = proplists:lookup(rmq_certsdir, Config2),
+    Config3 = rabbit_ct_helpers:merge_app_env(
+                Config2,
+                {rabbitmq_web_mqtt,
+                 [{ssl_config,
+                   [{cacertfile, filename:join([CertsDir, "testca", "cacert.pem"])},
+                    {certfile, filename:join([CertsDir, "server", "cert.pem"])},
+                    {keyfile, filename:join([CertsDir, "server", "key.pem"])},
+                    %% We only want to ensure HTTP/2 Websocket is working.
+                    {fail_if_no_peer_cert, false},
+                    {versions, ['tlsv1.3']},
+                    %% We hard code this port number here because it will be computed later by
+                    %% rabbit_ct_broker_helpers:init_tcp_port_numbers/3 when we start the broker.
+                    %% (The alternative is to first start the broker, stop the rabbitmq_web_amqp app,
+                    %% configure tls_config, and then start the app again.)
+                    {port, 21010}
+                   ]}]}),
+    rabbit_ct_helpers:run_setup_steps(Config3,
       rabbit_ct_broker_helpers:setup_steps() ++
       rabbit_ct_client_helpers:setup_steps()).
 
@@ -113,6 +132,26 @@ duplicate_connect(Config) ->
     receive {'EXIT', WS, _} -> ok
     after 500 -> ct:fail("expected web socket to exit")
     end.
+
+wss_http2(Config) ->
+    {ok, _} = application:ensure_all_started(gun),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_web_mqtt_tls),
+    {ok, ConnPid} = gun:open("localhost", Port, #{
+        transport => tls,
+        tls_opts => [{verify, verify_none}],
+        protocols => [http2],
+        http2_opts => #{notify_settings_changed => true},
+        ws_opts => #{protocols => [{<<"mqtt">>, gun_ws_h}]}
+    }),
+    {ok, http2} = gun:await_up(ConnPid),
+    {notify, settings_changed, #{enable_connect_protocol := true}}
+        = gun:await(ConnPid, undefined),
+    StreamRef = gun:ws_upgrade(ConnPid, "/ws", []),
+    {upgrade, [<<"websocket">>], _} = gun:await(ConnPid, StreamRef),
+    gun:ws_send(ConnPid, StreamRef, {binary, rabbit_ws_test_util:mqtt_3_1_1_connect_packet()}),
+    {ws, {binary, _P}} = gun:await(ConnPid, StreamRef),
+    eventually(?_assertEqual(1, num_mqtt_connections(Config, 0))),
+    ok.
 
 %% -------------------------------------------------------------------
 %% Internal helpers
