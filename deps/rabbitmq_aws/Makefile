@@ -1,6 +1,6 @@
 PROJECT = rabbitmq_aws
 PROJECT_DESCRIPTION = AWS API library used by rabbitmq_peer_discovery_aws
-PROJECT_MOD = rabbitmq_aws
+PROJECT_MOD = rabbitmq_aws_app
 PROJECT_REGISTERED = rabbitmq_aws_sup
 
 define PROJECT_ENV
