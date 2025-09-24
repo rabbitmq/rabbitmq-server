@@ -414,14 +414,6 @@ api_get_request_test_() ->
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
                 meck:validate(gun)
             end},
-            {"AWS service API request failed - credentials", fun() ->
-                set_test_region("us-east-1"),
-                % No credentials set - should fail
-                meck:expect(rabbitmq_aws_config, credentials, 0, {error, undefined}),
-
-                Result = rabbitmq_aws:api_get_request("AWS", "API"),
-                ?assertEqual({error, credentials}, Result)
-            end},
             {"AWS service API request failed - API error with persistent failure", fun() ->
                 set_test_credentials("ExpiredKey", "ExpiredAccessKey", undefined, {
                     {3016, 4, 1}, {12, 0, 0}

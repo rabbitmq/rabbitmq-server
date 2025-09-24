@@ -311,7 +311,7 @@ perform_request_direct(Service, Method, Headers, Path, Body, Options, Host) ->
             ),
             gun_request(Method, URI, SignedHeaders, Body, Options);
         {error, Reason} ->
-            {error, {credentials, Reason}}
+            {error,  Reason}
     end.
 
 -spec endpoint(
@@ -545,8 +545,6 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
         {ok, {_Headers, Payload}} ->
             ?LOG_DEBUG("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
             {ok, Payload};
-        {error, {credentials, _}} ->
-            {error, credentials};
         {error, Message, Response} ->
             ?LOG_WARNING("Error occurred: ~ts", [Message]),
             case Response of

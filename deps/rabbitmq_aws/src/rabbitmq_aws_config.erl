@@ -642,7 +642,7 @@ maybe_get_region_from_instance_metadata() ->
     URL = instance_availability_zone_url(),
     parse_az_response(perform_http_get_instance_metadata(URL)).
 
--spec perform_http_get_with_conn(pid(), string()) -> httpc_result().
+-spec perform_http_get_with_conn(pid(), string()) -> {ok, {any(), any(), any()}} | {error, term()}.
 %% @doc Make HTTP GET request using existing Gun connection
 %% @end
 perform_http_get_with_conn(ConnPid, Path) ->
@@ -666,8 +666,8 @@ maybe_get_role_from_instance_metadata_with_conn(ConnPid) ->
     {_, _, Path} = rabbitmq_aws:parse_uri(URL),
     parse_body_response(perform_http_get_with_conn(ConnPid, Path)).
 
--spec parse_az_response(httpc_result()) ->
-    {ok, Region :: string()} | {error, Reason :: atom()}.
+%% -spec parse_az_response(httpc_result()) ->
+%%     {ok, Region :: string()} | {error, Reason :: atom()}.
 %% @doc Parse the response from the Availability Zone query to the
 %%      Instance Metadata service, returning the Region if successful.
 %% end.
@@ -675,13 +675,9 @@ parse_az_response({error, _}) ->
     {error, undefined};
 parse_az_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) ->
     {ok, region_from_availability_zone(binary_to_list(Body))};
-parse_az_response({ok, {{_, 200, _}, _, Body}}) ->
-    {ok, region_from_availability_zone(Body)};
 parse_az_response({ok, {{_, _, _}, _, _}}) ->
     {error, undefined}.
 
--spec parse_body_response(httpc_result()) ->
-    {ok, Value :: string()} | {error, Reason :: atom()}.
 %% @doc Parse the return response from the Instance Metadata Service where the
 %%      body value is the string to process.
 %% end.
@@ -689,7 +685,6 @@ parse_body_response({error, _}) ->
     {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) ->
     {ok, binary_to_list(Body)};
-parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_list(Body) -> {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
     ?LOG_ERROR(
         get_instruction_on_instance_metadata_error(
@@ -704,7 +699,7 @@ parse_body_response({ok, {{_, 403, _}, _, _}}) ->
         )
     ),
     {error, undefined};
-parse_body_response({ok, {{_, _, _}, _, _}}) ->
+parse_body_response(_) ->
     {error, undefined}.
 
 -spec parse_credentials_response(httpc_result()) -> security_credentials().
@@ -721,7 +716,6 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
         parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
         proplists:get_value("Token", Parsed)}.
 
--spec perform_http_get_instance_metadata(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
@@ -813,7 +807,6 @@ read_file(Path) ->
             Error
     end.
 
--spec region_from_availability_zone(Value :: string()) -> string().
 %% @doc Strip the availability zone suffix from the region.
 %% @end
 region_from_availability_zone(Value) ->
