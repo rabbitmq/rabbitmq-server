@@ -100,7 +100,8 @@
                          properties => amqp10_client_types:properties(),
                          max_message_size => max_message_size(),
                          handle => output_handle(),
-                         footer_opt => footer_opt()
+                         footer_opt => footer_opt(),
+                         raw_mode => boolean()
                         }.
 
 -type transfer_error() :: {error,
@@ -142,7 +143,8 @@
          auto_flow :: never | {RenewWhenBelow :: pos_integer(),
                                Credit :: pos_integer()},
          incoming_unsettled = #{} :: #{delivery_number() => ok},
-         footer_opt :: footer_opt() | undefined
+         footer_opt :: footer_opt() | undefined,
+         raw_mode = false :: boolean()
         }).
 
 -record(state,
@@ -208,11 +210,18 @@ attach(Session, Args) ->
 detach(Session, Handle) ->
     gen_statem:call(Session, {detach, Handle}, ?TIMEOUT).
 
--spec transfer(pid(), amqp10_msg:amqp10_msg(), timeout()) ->
+-spec transfer(pid(), amqp10_msg:amqp10_msg() | amqp10_raw_msg:amqp10_raw_msg(), timeout()) ->
     ok | transfer_error().
 transfer(Session, Amqp10Msg, Timeout) ->
-    [Transfer | Sections] = amqp10_msg:to_amqp_records(Amqp10Msg),
-    gen_statem:call(Session, {transfer, Transfer, Sections}, Timeout).
+    case amqp10_raw_msg:is(Amqp10Msg) of
+        true ->
+            Transfer = amqp10_raw_msg:transfer(Amqp10Msg),
+            Payload = amqp10_raw_msg:payload(Amqp10Msg),
+            gen_statem:call(Session, {transfer, Transfer, {raw, Payload}}, Timeout);
+        false ->
+            [Transfer | Sections] = amqp10_msg:to_amqp_records(Amqp10Msg),
+            gen_statem:call(Session, {transfer, Transfer, Sections}, Timeout)
+    end.
 
 -spec flow(pid(), non_neg_integer(), never | pos_integer()) -> ok.
 flow(Session, IncomingWindow, RenewWhenBelow) when
@@ -413,7 +422,8 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
     {ok, #link{target = {pid, TargetPid},
                ref = LinkRef,
                incoming_unsettled = Unsettled,
-               footer_opt = FooterOpt
+               footer_opt = FooterOpt,
+               raw_mode = RawMode
               } = Link0} = find_link_by_input_handle(InHandle, State0),
 
     {Transfer = #'v1_0.transfer'{settled = Settled,
@@ -428,7 +438,7 @@ mapped(cast, {Transfer0 = #'v1_0.transfer'{handle = {uint, InHandle}},
                     %% then the settled flag MUST be interpreted as being false." [2.7.5]
                     Link1#link{incoming_unsettled = Unsettled#{DeliveryId => ok}}
             end,
-    case decode_as_msg(Transfer, Payload, FooterOpt) of
+    case decode_as_msg(Transfer, Payload, FooterOpt, RawMode) of
         {ok, Msg} ->
             % link bookkeeping
             % notify when credit is exhausted (link_credit = 0)
@@ -619,6 +629,25 @@ send(Record, #state{socket = Socket} = State) ->
     Frame = encode_frame(Record, State),
     socket_send(Socket, Frame).
 
+send_transfer(Transfer0, {raw, Payload}, _FooterOpt, MaxMessageSize,
+              #state{socket = Socket,
+                     channel = Channel,
+                     connection_config = Config}) ->
+    OutMaxFrameSize = maps:get(outgoing_max_frame_size, Config),
+    Transfer = Transfer0#'v1_0.transfer'{more = false},
+    TransferSize = iolist_size(amqp10_framing:encode_bin(Transfer)),
+    if is_integer(MaxMessageSize) andalso
+       MaxMessageSize > 0 andalso
+       byte_size(Payload) > MaxMessageSize ->
+           {error, message_size_exceeded};
+       true ->
+           % TODO: this does not take the extended header into account
+           % see: 2.3
+           MaxPayloadSize = OutMaxFrameSize - ?FRAME_HEADER_SIZE - TransferSize,
+           Frames = build_frames(Channel, Transfer, Payload, MaxPayloadSize, []),
+           ok = socket_send(Socket, Frames),
+           {ok, length(Frames)}
+    end;
 send_transfer(Transfer0, Sections0, FooterOpt, MaxMessageSize,
               #state{socket = Socket,
                      channel = Channel,
@@ -918,7 +947,8 @@ send_attach(Send, #{name := Name, role := RoleTuple} = Args, {FromPid, _},
                  target = LinkTarget,
                  delivery_count = unpack(InitialDeliveryCount),
                  max_message_size = unpack(MaxMessageSize),
-                 footer_opt = maps:get(footer_opt, Args, undefined)},
+                 footer_opt = maps:get(footer_opt, Args, undefined),
+                 raw_mode = maps:get(raw_mode, Args, false)},
 
     {State#state{links = Links#{OutHandle => Link},
                  next_link_handle = NextLinkHandle,
@@ -1199,10 +1229,14 @@ complete_partial_transfer(_Transfer, Payload,
     {T, iolist_to_binary(lists:reverse([Payload | Payloads])),
      Link#link{partial_transfers = undefined}}.
 
-decode_as_msg(Transfer, Payload, undefined) ->
+decode_as_msg(#'v1_0.transfer'{settled = Settled,
+                               delivery_id = {uint, DeliveryId}},
+              Payload, _, true) ->
+    {ok, amqp10_raw_msg:new(Settled, DeliveryId, Payload)};
+decode_as_msg(Transfer, Payload, undefined, _) ->
     Sections = amqp10_framing:decode_bin(Payload),
     {ok, amqp10_msg:from_amqp_records([Transfer | Sections])};
-decode_as_msg(Transfer, Payload, FooterOpt) ->
+decode_as_msg(Transfer, Payload, FooterOpt, _) ->
     PosSections = decode_sections([], Payload, byte_size(Payload), 0),
     Sections = lists:map(fun({_Pos, S}) -> S end, PosSections),
     Msg = amqp10_msg:from_amqp_records([Transfer | Sections]),
