@@ -1015,14 +1015,6 @@ init(Q) when ?is_amqqueue(Q) ->
             ?LOG_WARNING("Failed to start stream client ~tp: coordinator unavailable",
                          [rabbit_misc:rs(QName)]),
             E
-    end;
-init(QueueTarget) ->
-    QName = amqqueue:get_name(QueueTarget),
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            init(Q);
-        Error ->
-            Error
     end.
 
 close(#stream_client{readers = Readers,

@@ -212,7 +212,7 @@ is_compatible(_Durable = true,
 is_compatible(_, _, _) ->
     false.
 
--spec init(amqqueue:amqqueue() | amqqueue:target()) ->
+-spec init(amqqueue:amqqueue()) ->
     {ok, rabbit_fifo_client:state()} | {error, not_found}.
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
@@ -229,15 +229,7 @@ init(Q) when ?is_amqqueue(Q) ->
     %% server tried is the one we want
     Servers0 = [{Name, N} || N <- Nodes],
     Servers = [Leader | lists:delete(Leader, Servers0)],
-    {ok, rabbit_fifo_client:init(Servers, SoftLimit)};
-init(QueueTarget) ->
-    QName = amqqueue:get_name(QueueTarget),
-    case rabbit_amqqueue:lookup(QName) of
-        {ok, Q} ->
-            init(Q);
-        Error ->
-            Error
-    end.
+    {ok, rabbit_fifo_client:init(Servers, SoftLimit)}.
 
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(State) ->

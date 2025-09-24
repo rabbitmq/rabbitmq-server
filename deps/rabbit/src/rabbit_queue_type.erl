@@ -204,7 +204,7 @@
 -callback policy_changed(amqqueue:amqqueue()) -> ok.
 
 %% intitialise and return a queue type specific session context
--callback init(amqqueue:amqqueue() | amqqueue:target()) ->
+-callback init(amqqueue:amqqueue()) ->
     {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
@@ -233,10 +233,10 @@
 
 -callback supports_stateful_delivery() -> boolean().
 
--callback deliver([{amqqueue:amqqueue() | amqqueue:target(), queue_state()}],
+-callback deliver([{amqqueue:target(), queue_state()}],
                   Message :: mc:state(),
                   Options :: delivery_options()) ->
-    {[{amqqueue:amqqueue() | amqqueue:target(), queue_state()}], actions()}.
+    {[{amqqueue:target(), queue_state()}], actions()}.
 
 -callback settle(queue_name(), settle_op(), rabbit_types:ctag(),
                  [non_neg_integer()], queue_state()) ->
@@ -626,9 +626,8 @@ publish_at_most_once(X, Msg)
     _ = deliver(Qs, Msg, #{}, stateless),
     ok.
 
--spec deliver([amqqueue:amqqueue() | amqqueue:target() |
-               {amqqueue:amqqueue() | amqqueue:target(),
-                rabbit_exchange:route_infos()}],
+-spec deliver([amqqueue:target() |
+               {amqqueue:target(), rabbit_exchange:route_infos()}],
               Message :: mc:state(),
               delivery_options(),
               stateless | state()) ->
@@ -792,12 +791,14 @@ get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState) ->
         _ when InitState == undefined ->
             %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
-            case Mod:init(Q) of
+            maybe
+                {ok, Q1} ?= to_queue(Q),
+                {ok, QState} ?= Mod:init(Q1),
+                #ctx{module = Mod,
+                     state = QState}
+            else
                 {error, Reason} ->
-                    exit({Reason, Ref});
-                {ok, QState} ->
-                    #ctx{module = Mod,
-                         state = QState}
+                    exit({Reason, Ref})
             end;
         _  ->
             %% not found - initialize with supplied initial state
@@ -819,6 +820,12 @@ qref(#resource{kind = queue} = QName) ->
     QName;
 qref(Q) ->
     amqqueue:get_name(Q).
+
+to_queue(Q) when ?is_amqqueue(Q) ->
+    {ok, Q};
+to_queue(Target) ->
+    QName = amqqueue:get_name(Target),
+    rabbit_amqqueue:lookup(QName).
 
 -spec known_queue_type_modules() -> [module()].
 known_queue_type_modules() ->

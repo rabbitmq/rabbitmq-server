@@ -11,7 +11,7 @@
          delete_immediately/1, delete_exclusive/2, delete/4, purge/1,
          forget_all_durable/1]).
 -export([pseudo_queue/2, pseudo_queue/3]).
--export([exists/1, lookup/1, lookup/2, lookup_many/1, lookup_durable_queue/1,
+-export([exists/1, lookup/1, lookup/2, lookup_durable_queue/1,
          not_found_or_absent_dirty/1,
          with/2, with/3, with_or_die/2,
          assert_equivalence/5,
@@ -366,14 +366,6 @@ lookup(Name) when is_record(Name, resource) ->
 
 lookup_durable_queue(QName) ->
     rabbit_db_queue:get_durable(QName).
-
--spec lookup_many(rabbit_exchange:route_return()) ->
-    [amqqueue:amqqueue() | {amqqueue:amqqueue(), route_infos()}].
-lookup_many([]) ->
-    %% optimisation
-    [];
-lookup_many(Names) when is_list(Names) ->
-    rabbit_db_queue:get_many(Names).
 
 -spec lookup(binary(), binary()) ->
     rabbit_types:ok(amqqueue:amqqueue()) |

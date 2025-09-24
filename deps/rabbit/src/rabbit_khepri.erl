@@ -1361,7 +1361,6 @@ register_rabbit_queue_target_projection() ->
                     _VHost = ?KHEPRI_WILDCARD_STAR,
                     _Name = ?KHEPRI_WILDCARD_STAR),
     Fun = fun(_Path, Q) ->
-                  ?assert(amqqueue:is_amqqueue(Q)),
                   Name = amqqueue:get_name(Q),
                   Type = amqqueue:get_type(Q),
                   Pid = amqqueue:get_pid(Q),
