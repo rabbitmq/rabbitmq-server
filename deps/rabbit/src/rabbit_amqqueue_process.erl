@@ -368,10 +368,13 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 %% `node_up' message from `rabbit_node_monitor'. This calls
                 %% `rabbit_amqqueue:on_node_up/1' which will delete any
                 %% transient queues.
-                _ = spawn(fun() ->
-                                  rabbit_amqqueue:internal_delete(
-                                    Q, ActingUser, Reason0)
-                          end);
+                Ret = infinite_internal_delete(Q, ActingUser, Reason0, Len),
+                logger:alert("rabbit_amqqueue:internal_delete: ~p", [Ret]),
+                % _ = spawn(fun() ->
+                %                   rabbit_amqqueue:internal_delete(
+                %                     Q, ActingUser, Reason0)
+                %           end),
+                ok;
             _ ->
                 %% This try-catch block transforms throws to errors since
                 %% throws are not logged. When mnesia is removed this `try`
@@ -388,6 +391,22 @@ terminate_delete(EmitStats, Reason0, ReplyTo,
                 send_reply(ReplyTo, Reply)
         end,
         BQS1
+    end.
+
+infinite_internal_delete(Q, ActingUser, Reason, Len) ->
+    Reply = try rabbit_amqqueue:internal_delete(Q, ActingUser, Reason) of
+                ok ->
+                    {ok, Len};
+                {error, _} = Err ->
+                    Err
+            catch
+                {error, ReasonE} -> error(ReasonE)
+            end,
+    case Reply of
+        {error, timeout} ->
+            infinite_internal_delete(Q, ActingUser, Reason, Len);
+        _ ->
+            Reply
     end.
 
 terminated_by({terminated_by, auto_delete}) ->
