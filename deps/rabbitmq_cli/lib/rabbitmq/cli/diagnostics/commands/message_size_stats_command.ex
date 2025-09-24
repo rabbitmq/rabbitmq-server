@@ -51,6 +51,6 @@ defmodule RabbitMQ.CLI.Diagnostics.Commands.MessageSizeStatsCommand do
   def description(),
     do: "Displays message size distribution statistics aggregated across all cluster nodes"
 
-  def banner(_, %{node: node_name}), do: "Gathering message size statistics from cluster via #{node_name} ..."
+  def banner(_, %{node: node_name}), do: "Gathering message size statistics across the cluster using node #{node_name} ..."
 
 end
