@@ -13,6 +13,7 @@
 -export([validate_plugins/1, format_invalid_plugins/1]).
 -export([is_strictly_plugin/1, strictly_plugins/2, strictly_plugins/1]).
 -export([plugins_dir/0, plugin_names/1, plugins_expand_dir/0, enabled_plugins_file/0]).
+-export([plugins_data_dir/0]).
 -export([is_enabled/1, is_enabled_on_node/2, enabled_plugins/0]).
 -export([which_plugin/1]).
 
@@ -91,6 +92,15 @@ plugins_dir() ->
             PluginsDistDir;
         _ ->
             filename:join([rabbit:data_dir(), "plugins_dir_stub"])
+    end.
+
+plugins_data_dir() ->
+    case application:get_env(rabbit, plugins_data_dir) of
+        {ok, PluginsDataDir} ->
+            PluginsDataDir;
+        _ ->
+            DataDir = rabbit_mnesia:dir(),
+            filename:join([DataDir, "plugins_data_dir"])
     end.
 
 -spec enabled_plugins_file() -> file:filename().
