@@ -535,14 +535,37 @@ lookup_credentials_from_proplist(_, undefined) ->
 lookup_credentials_from_proplist(AccessKey, SecretKey) ->
     {ok, AccessKey, SecretKey, undefined, undefined}.
 
+-spec with_metadata_connection(fun((pid()) -> Result)) -> Result.
+%% @doc Execute a function with a shared metadata service connection
+%% @end
+with_metadata_connection(Fun) ->
+    {Host, Port, _} = rabbitmq_aws:parse_uri(instance_metadata_url("")),
+    Opts = #{transport => tcp, protocols => [http]},
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, 5000) of
+                {ok, _Protocol} ->
+                    Result = Fun(ConnPid),
+                    gun:close(ConnPid),
+                    Result;
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
 -spec lookup_credentials_from_instance_metadata() ->
     security_credentials().
 %% @spec lookup_credentials_from_instance_metadata() -> Result.
 %% @doc Attempt to lookup the values from the EC2 instance metadata service.
 %% @end
 lookup_credentials_from_instance_metadata() ->
-    Role = maybe_get_role_from_instance_metadata(),
-    maybe_get_credentials_from_instance_metadata(Role).
+    with_metadata_connection(fun(ConnPid) ->
+        Role = maybe_get_role_from_instance_metadata_with_conn(ConnPid),
+        maybe_get_credentials_from_instance_metadata_with_conn(ConnPid, Role)
+    end).
 
 -spec lookup_region(
     Profile :: string(),
@@ -595,19 +618,21 @@ maybe_convert_number(Value) ->
             F
     end.
 
--spec maybe_get_credentials_from_instance_metadata(
+-spec maybe_get_credentials_from_instance_metadata_with_conn(
+    ConnPid :: pid(),
     {ok, Role :: string()}
     | {error, undefined}
 ) ->
     {'ok', security_credentials()} | {'error', term()}.
 %% @doc Try to query the EC2 local instance metadata service to get temporary
-%%      authentication credentials.
+%%      authentication credentials using an existing connection.
 %% @end
-maybe_get_credentials_from_instance_metadata({error, undefined}) ->
+maybe_get_credentials_from_instance_metadata_with_conn(_, {error, _}) ->
     {error, undefined};
-maybe_get_credentials_from_instance_metadata({ok, Role}) ->
+maybe_get_credentials_from_instance_metadata_with_conn(ConnPid, {ok, Role}) ->
     URL = instance_credentials_url(Role),
-    parse_credentials_response(perform_http_get_instance_metadata(URL)).
+    {_, _, Path} = rabbitmq_aws:parse_uri(URL),
+    parse_credentials_response(perform_http_get_with_conn(ConnPid, Path)).
 
 -spec maybe_get_region_from_instance_metadata() ->
     {ok, Region :: string()} | {error, Reason :: atom()}.
@@ -617,15 +642,32 @@ maybe_get_region_from_instance_metadata() ->
     URL = instance_availability_zone_url(),
     parse_az_response(perform_http_get_instance_metadata(URL)).
 
-%% @doc Try to query the EC2 local instance metadata service to get the role
-%%      assigned to the instance.
+-spec perform_http_get_with_conn(pid(), string()) -> {ok, {any(), any(), any()}} | {error, term()}.
+%% @doc Make HTTP GET request using existing Gun connection
 %% @end
-maybe_get_role_from_instance_metadata() ->
-    URL = instance_role_url(),
-    parse_body_response(perform_http_get_instance_metadata(URL)).
+perform_http_get_with_conn(ConnPid, Path) ->
+    Headers = instance_metadata_request_headers(),
+    StreamRef = gun:get(ConnPid, Path, Headers),
+    case gun:await(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT) of
+        {response, fin, Status, RespHeaders} ->
+            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, <<>>}};
+        {response, nofin, Status, RespHeaders} ->
+            {ok, Body} = gun:await_body(ConnPid, StreamRef, ?DEFAULT_HTTP_TIMEOUT),
+            {ok, {{http_version, Status, rabbitmq_aws:status_text(Status)}, RespHeaders, Body}};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
--spec parse_az_response(httpc_result()) ->
-    {ok, Region :: string()} | {error, Reason :: atom()}.
+%% @doc Try to query the EC2 local instance metadata service to get the role
+%%      assigned to the instance using an existing connection.
+%% @end
+maybe_get_role_from_instance_metadata_with_conn(ConnPid) ->
+    URL = instance_role_url(),
+    {_, _, Path} = rabbitmq_aws:parse_uri(URL),
+    parse_body_response(perform_http_get_with_conn(ConnPid, Path)).
+
+%% -spec parse_az_response(httpc_result()) ->
+%%     {ok, Region :: string()} | {error, Reason :: atom()}.
 %% @doc Parse the response from the Availability Zone query to the
 %%      Instance Metadata service, returning the Region if successful.
 %% end.
@@ -633,13 +675,9 @@ parse_az_response({error, _}) ->
     {error, undefined};
 parse_az_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) ->
     {ok, region_from_availability_zone(binary_to_list(Body))};
-parse_az_response({ok, {{_, 200, _}, _, Body}}) ->
-    {ok, region_from_availability_zone(Body)};
 parse_az_response({ok, {{_, _, _}, _, _}}) ->
     {error, undefined}.
 
--spec parse_body_response(httpc_result()) ->
-    {ok, Value :: string()} | {error, Reason :: atom()}.
 %% @doc Parse the return response from the Instance Metadata Service where the
 %%      body value is the string to process.
 %% end.
@@ -647,7 +685,6 @@ parse_body_response({error, _}) ->
     {error, undefined};
 parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_binary(Body) ->
     {ok, binary_to_list(Body)};
-parse_body_response({ok, {{_, 200, _}, _, Body}}) when is_list(Body) -> {ok, Body};
 parse_body_response({ok, {{_, 401, _}, _, _}}) ->
     ?LOG_ERROR(
         get_instruction_on_instance_metadata_error(
@@ -662,7 +699,7 @@ parse_body_response({ok, {{_, 403, _}, _, _}}) ->
         )
     ),
     {error, undefined};
-parse_body_response({ok, {{_, _, _}, _, _}}) ->
+parse_body_response(_) ->
     {error, undefined}.
 
 -spec parse_credentials_response(httpc_result()) -> security_credentials().
@@ -679,7 +716,6 @@ parse_credentials_response({ok, {{_, 200, _}, _, Body}}) ->
         parse_iso8601_timestamp(proplists:get_value("Expiration", Parsed)),
         proplists:get_value("Token", Parsed)}.
 
--spec perform_http_get_instance_metadata(string()) -> httpc_result().
 %% @doc Wrap httpc:get/4 to simplify Instance Metadata service v2 requests
 %% @end
 perform_http_get_instance_metadata(URL) ->
@@ -771,7 +807,6 @@ read_file(Path) ->
             Error
     end.
 
--spec region_from_availability_zone(Value :: string()) -> string().
 %% @doc Strip the availability zone suffix from the region.
 %% @end
 region_from_availability_zone(Value) ->

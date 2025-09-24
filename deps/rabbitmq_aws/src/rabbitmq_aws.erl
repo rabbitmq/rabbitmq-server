@@ -6,8 +6,6 @@
 %% ====================================================================
 -module(rabbitmq_aws).
 
--behavior(gen_server).
-
 %% API exports
 -export([
     get/2, get/3, get/4,
@@ -19,22 +17,16 @@
     has_credentials/0,
     parse_uri/1,
     set_region/1,
+    get_region/0,
+    ensure_credentials_valid/0,
     ensure_imdsv2_token_valid/0,
     api_get_request/2,
     status_text/1,
     open_connection/1, open_connection/2,
-    close_connection/1
-]).
-
-%% gen-server exports
--export([
-    start_link/0,
-    init/1,
-    terminate/2,
-    code_change/3,
-    handle_call/3,
-    handle_cast/2,
-    handle_info/2
+    close_connection/1,
+    direct_request/6,
+    endpoint/4,
+    sign_headers/10
 ]).
 
 %% Export all for unit tests
@@ -45,40 +37,40 @@
 -include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
 
-%% Types for new concurrent API
--type connection_handle() :: {pid(), credential_context()}.
--type credential_context() :: #{
-    access_key => access_key(),
-    secret_access_key => secret_access_key(),
-    security_token => security_token(),
-    region => region(),
-    service => string()
-}.
+-type connection_handle() :: {pid(), string()}.
+
+-spec get_region() -> region().
+get_region() ->
+    case ets:lookup(?AWS_CONFIG_TABLE, region) of
+        [{region, Region}] ->
+            Region;
+        [] ->
+            {ok, DetectedRegion} =  rabbitmq_aws_config:region(),
+            ets:insert(?AWS_CONFIG_TABLE, {region, DetectedRegion}),
+            DetectedRegion
+    end.
+
+-spec set_region(Region :: region()) -> ok.
+set_region(Region) ->
+    ets:insert(?AWS_CONFIG_TABLE, {region, Region}),
+    ok.
+
+-spec has_credentials() -> boolean().
+has_credentials() ->
+    case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+        [#aws_credentials{access_key = Key, expiration = Expiration}] when Key =/= undefined ->
+            not expired_credentials(Expiration);
+        _ ->
+            false
+    end.
 
 %%====================================================================
 %% exported wrapper functions
 %%====================================================================
 
--spec get(
-    ServiceOrHandle :: string() | connection_handle(),
-    Path :: path()
-) -> result().
-%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON, or XML
-%%      format.
-%% @end
 get(ServiceOrHandle, Path) ->
     get(ServiceOrHandle, Path, []).
 
--spec get(
-    ServiceOrHandle :: string() | connection_handle(),
-    Path :: path(),
-    Headers :: headers()
-) -> result().
-%% @doc Perform a HTTP GET request to the AWS API for the specified service. The
-%%      response will automatically be decoded if it is either in JSON or XML
-%%      format.
-%% @end
 get(ServiceOrHandle, Path, Headers) ->
     get(ServiceOrHandle, Path, Headers, []).
 
@@ -121,7 +113,10 @@ put(Service, Path, Body, Headers, Options) ->
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
-    gen_server:call(rabbitmq_aws, refresh_credentials).
+    case refresh_credentials_with_lock(10) of
+        {ok, _, _, _, _} -> ok;
+        {error, _} -> error
+    end.
 
 %%====================================================================
 %% New Concurrent API Functions
@@ -135,11 +130,16 @@ open_connection(Service) ->
 -spec open_connection(Service :: string(), Options :: list()) ->
     {ok, connection_handle()} | {error, term()}.
 open_connection(Service, Options) ->
-    gen_server:call(?MODULE, {open_direct_connection, Service, Options}).
+    % Just get region and open connection - no credential validation needed
+    Region = get_region(),
+    Host = endpoint_host(Region, Service),
+    Port = 443,
+    GunPid = create_gun_connection(Host, Port, Options),
+    {ok, {GunPid, Service}}.
 
 %% Close a direct connection
 -spec close_connection(Handle :: connection_handle()) -> ok.
-close_connection({GunPid, _CredContext}) ->
+close_connection({GunPid, _Service}) ->
     gun:close(GunPid).
 
 -spec direct_request(
@@ -150,27 +150,58 @@ close_connection({GunPid, _CredContext}) ->
     Headers :: headers(),
     Options :: list()
 ) -> result().
-direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
-    #{service := Service, region := Region} = CredContext,
-    % Build URI for signing
-    Host = endpoint_host(Region, Service),
-    URI = create_uri(Host, Path),
-    BodyHash = proplists:get_value(payload_hash, Options),
-    % Sign headers directly (no gen_server call)
-    SignedHeaders = sign_headers_with_context(
-        CredContext, Method, URI, Headers, Body, BodyHash
-    ),
-    % Make Gun request directly
-    direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
+direct_request({GunPid, Service}, Method, Path, Body, Headers, Options) ->
+    case get_credentials() of
+        {ok, AccessKey, SecretKey, SecurityToken, Region} ->
+            Host = endpoint_host(Region, Service),
+            URI = create_uri(Host, Path),
+            BodyHash = proplists:get_value(payload_hash, Options),
+            SignedHeaders = sign_headers(
+                AccessKey,
+                SecretKey,
+                SecurityToken,
+                Region,
+                Service,
+                Method,
+                URI,
+                Headers,
+                Body,
+                BodyHash
+            ),
+            direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options);
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
--spec refresh_credentials(state()) -> ok | error.
-%% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
-%% @end
-refresh_credentials(State) ->
-    ?LOG_DEBUG("Refreshing AWS credentials..."),
-    {_, NewState} = load_credentials(State),
-    ?LOG_DEBUG("AWS credentials have been refreshed"),
-    set_credentials(NewState).
+-spec sign_headers(
+    AccessKey :: access_key(),
+    SecretKey :: secret_access_key(),
+    SecurityToken :: security_token(),
+    Region :: region(),
+    Service :: string(),
+    Method :: method(),
+    URI :: string(),
+    Headers :: headers(),
+    Body :: body(),
+    BodyHash :: iodata() | undefined
+) -> headers().
+sign_headers(
+    AccessKey, SecretKey, SecurityToken, Region, Service, Method, URI, Headers, Body, BodyHash
+) ->
+    rabbitmq_aws_sign:headers(
+        #request{
+            access_key = AccessKey,
+            secret_access_key = SecretKey,
+            security_token = SecurityToken,
+            region = Region,
+            service = Service,
+            method = Method,
+            uri = URI,
+            headers = Headers,
+            body = Body
+        },
+        BodyHash
+    ).
 
 -spec request(
     Service :: string(),
@@ -208,25 +239,19 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
     Body :: body(),
     Headers :: headers(),
     HTTPOptions :: http_options(),
-    Endpoint :: host()
+    Endpoint :: host() | undefined
 ) -> result().
 %% @doc Perform a HTTP request to the AWS API for the specified service, overriding
 %%      the endpoint URL to use when invoking the API. This is useful for local testing
 %%      of services such as DynamoDB. The response will automatically be decoded
 %%      if it is either in JSON or XML format.
 %% @end
-request({GunPid, _CredContext} = Handle, Method, Path, Body, Headers, HTTPOptions, _) when
+request({GunPid, Service}, Method, Path, Body, Headers, HTTPOptions, _) when
     is_pid(GunPid)
 ->
-    direct_request(Handle, Method, Path, Body, Headers, HTTPOptions);
+    direct_request({GunPid, Service}, Method, Path, Body, Headers, HTTPOptions);
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
-    gen_server:call(
-        rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}
-    ).
-
--spec set_credentials(state()) -> ok.
-set_credentials(NewState) ->
-    gen_server:call(rabbitmq_aws, {set_credentials, NewState}).
+    perform_request_direct(Service, Method, Headers, Path, Body, HTTPOptions, Endpoint).
 
 -spec set_credentials(access_key(), secret_access_key()) -> ok.
 %% @doc Manually set the access credentials for requests. This should
@@ -235,121 +260,70 @@ set_credentials(NewState) ->
 %%      configuration or the AWS Instance Metadata service.
 %% @end
 set_credentials(AccessKey, SecretAccessKey) ->
-    gen_server:call(rabbitmq_aws, {set_credentials, AccessKey, SecretAccessKey}).
-
--spec set_region(Region :: string()) -> ok.
-%% @doc Manually set the AWS region to perform API requests to.
-%% @end
-set_region(Region) ->
-    gen_server:call(rabbitmq_aws, {set_region, Region}).
-
--spec set_imdsv2_token(imdsv2token()) -> ok.
-%% @doc Manually set the Imdsv2Token used to perform instance metadata service requests.
-%% @end
-set_imdsv2_token(Imdsv2Token) ->
-    gen_server:call(rabbitmq_aws, {set_imdsv2_token, Imdsv2Token}).
-
--spec get_imdsv2_token() -> imdsv2token() | 'undefined'.
-%% @doc return the current Imdsv2Token used to perform instance metadata service requests.
-%% @end
-get_imdsv2_token() ->
-    {ok, Imdsv2Token} = gen_server:call(rabbitmq_aws, get_imdsv2_token),
-    Imdsv2Token.
-
-%%====================================================================
-%% gen_server functions
-%%====================================================================
-
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
-
--spec init(list()) -> {ok, state()}.
-init([]) ->
-    {ok, _} = application:ensure_all_started(gun),
-    {ok, #state{}}.
-
-terminate(_, _State) ->
+    Creds = #aws_credentials{
+        access_key = AccessKey,
+        secret_key = SecretAccessKey,
+        security_token = undefined,
+        expiration = undefined
+    },
+    ets:insert(?AWS_CREDENTIALS_TABLE, Creds),
     ok.
 
-code_change(_, _, State) ->
-    {ok, State}.
+-spec ensure_credentials_valid() -> ok.
+%% @doc Invoked before each AWS service API request to check if the current credentials are available and that they have not expired.
+%%      If the credentials are available and are still current, then move on and perform the request.
+%%      If the credentials are not available or have expired, then refresh them before performing the request.
+%% @end
+ensure_credentials_valid() ->
+    ?LOG_DEBUG("Making sure AWS credentials are available and still valid"),
+    case has_credentials() of
+        true ->
+            ok;
+        false ->
+            refresh_credentials(),
+            ok
+    end.
 
-handle_call(Msg, _From, State) ->
-    handle_msg(Msg, State).
-
-handle_cast(_Request, State) ->
-    {noreply, State}.
-
-handle_info(_Info, State) ->
-    {noreply, State}.
-
-%%====================================================================
-%% Internal functions
-%%====================================================================
-handle_msg({request, Service, Method, Headers, Path, Body, Options, Host}, State) ->
-    {Response, NewState} = perform_request(
-        State, Service, Method, Headers, Path, Body, Options, Host
-    ),
-    {reply, Response, NewState};
-handle_msg({open_direct_connection, Service, Options}, State) ->
-    case ensure_credentials_valid_internal(State) of
-        {ok, ValidState} ->
-            case create_direct_connection(ValidState, Service, Options) of
-                {ok, Handle} ->
-                    {reply, {ok, Handle}, ValidState};
-                {error, Reason} ->
-                    {reply, {error, Reason}, ValidState}
-            end;
+-spec perform_request_direct(
+    Service :: string(),
+    Method :: method(),
+    Headers :: headers(),
+    Path :: path(),
+    Body :: body(),
+    Options :: http_options(),
+    Host :: string() | undefined
+) -> result().
+perform_request_direct(Service, Method, Headers, Path, Body, Options, Host) ->
+    case get_credentials() of
+        {ok, AccessKey, SecretKey, SecurityToken, Region} ->
+            URI = endpoint(Region, Host, Service, Path),
+            SignedHeaders = sign_headers(
+                AccessKey,
+                SecretKey,
+                SecurityToken,
+                Region,
+                Service,
+                Method,
+                URI,
+                Headers,
+                Body,
+                undefined
+            ),
+            gun_request(Method, URI, SignedHeaders, Body, Options);
         {error, Reason} ->
-            {reply, {error, Reason}, State}
-    end;
-handle_msg(get_state, State) ->
-    {reply, {ok, State}, State};
-handle_msg(refresh_credentials, State) ->
-    {Reply, NewState} = load_credentials(State),
-    {reply, Reply, NewState};
-handle_msg({set_credentials, AccessKey, SecretAccessKey}, State) ->
-    {reply, ok, State#state{
-        access_key = AccessKey,
-        secret_access_key = SecretAccessKey,
-        security_token = undefined,
-        expiration = undefined,
-        error = undefined
-    }};
-handle_msg({set_credentials, NewState}, State) ->
-    {reply, ok, State#state{
-        access_key = NewState#state.access_key,
-        secret_access_key = NewState#state.secret_access_key,
-        security_token = NewState#state.security_token,
-        expiration = NewState#state.expiration,
-        error = NewState#state.error
-    }};
-handle_msg({set_region, Region}, State) ->
-    {reply, ok, State#state{region = Region}};
-handle_msg({set_imdsv2_token, Imdsv2Token}, State) ->
-    {reply, ok, State#state{imdsv2_token = Imdsv2Token}};
-handle_msg(has_credentials, State) ->
-    {reply, has_credentials(State), State};
-handle_msg(get_imdsv2_token, State) ->
-    {reply, {ok, State#state.imdsv2_token}, State};
-handle_msg(_Request, State) ->
-    {noreply, State}.
+            {error,  Reason}
+    end.
 
 -spec endpoint(
-    State :: state(),
-    Host :: string(),
+    Region :: region(),
+    Host :: string() | undefined,
     Service :: string(),
     Path :: string()
 ) -> string().
-%% @doc Return the endpoint URL, either by constructing it with the service
-%%      information passed in, or by using the passed in Host value.
-%% @ednd
-endpoint(#state{region = Region}, undefined, Service, Path) ->
+endpoint(Region, undefined, Service, Path) ->
     lists:flatten(["https://", endpoint_host(Region, Service), Path]);
 endpoint(_, Host, _, Path) ->
     lists:flatten(["https://", Host, Path]).
-
--spec endpoint_host(Region :: region(), Service :: string()) -> host().
 %% @doc Construct the endpoint hostname for the request based upon the service
 %%      and region.
 %% @end
@@ -366,6 +340,72 @@ endpoint_tld("cn-northwest-1") ->
     "amazonaws.com.cn";
 endpoint_tld(_Other) ->
     "amazonaws.com".
+
+get_credentials() ->
+    get_credentials(10).
+
+get_credentials(Retries) ->
+    case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+        [#aws_credentials{access_key = Key, expiration = Expiration, secret_key = SecretKey, security_token = SecurityToken}] ->
+            case expired_credentials(Expiration) of
+                false ->
+                    Region = get_region(),
+                    {ok, Key, SecretKey, SecurityToken, Region};
+                true ->
+                    refresh_credentials_with_lock(Retries)
+            end;
+        [] ->
+            refresh_credentials_with_lock(Retries)
+    end.
+
+-spec refresh_credentials_with_lock(Retries :: non_neg_integer()) ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+refresh_credentials_with_lock(0) ->
+    {error, lock_timeout};
+refresh_credentials_with_lock(Retries) ->
+    LockId = {aws_credentials_refresh, node()},
+    case global:set_lock(LockId, [node()], 0) of
+        true ->
+            try
+                % Double-check if someone else already refreshed
+                case ets:lookup(?AWS_CREDENTIALS_TABLE, aws_credentials) of
+                    [#aws_credentials{access_key = Key, expiration = Expiration, secret_key = SecretKey, security_token = SecurityToken}] ->
+                        case expired_credentials(Expiration) of
+                            false ->
+                                Region = get_region(),
+                                {ok, Key, SecretKey, SecurityToken, Region};
+                            true ->
+                                do_refresh_credentials()
+                        end;
+                    [] ->
+                        do_refresh_credentials()
+                end
+            after
+                global:del_lock(LockId, [node()])
+            end;
+        false ->
+            % Someone else is refreshing, wait and retry
+            timer:sleep(100),
+            get_credentials(Retries - 1)
+    end.
+
+-spec do_refresh_credentials() ->
+    {ok, access_key(), secret_access_key(), security_token(), region()} | {error, term()}.
+do_refresh_credentials() ->
+    Region = get_region(),
+    case rabbitmq_aws_config:credentials() of
+        {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
+            Creds = #aws_credentials{
+                access_key = AccessKey,
+                secret_key = SecretAccessKey,
+                security_token = SecurityToken,
+                expiration = Expiration
+            },
+            ets:insert(?AWS_CREDENTIALS_TABLE, Creds),
+            {ok, AccessKey, SecretAccessKey, SecurityToken, Region};
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 -spec format_response(Response :: httpc_result()) -> result().
 %% @doc Format the httpc response result, returning the request result data
@@ -395,18 +435,6 @@ get_content_type(Headers) ->
         end,
     parse_content_type(Value).
 
--spec has_credentials() -> boolean().
-has_credentials() ->
-    gen_server:call(rabbitmq_aws, has_credentials).
-
--spec has_credentials(state()) -> boolean().
-%% @doc check to see if there are credentials made available in the current state
-%%      returning false if not or if they have expired.
-%% @end
-has_credentials(#state{error = Error}) when Error /= undefined -> false;
-has_credentials(#state{access_key = Key}) when Key /= undefined -> true;
-has_credentials(_) -> false.
-
 -spec expired_credentials(Expiration :: calendar:datetime()) -> boolean().
 %% @doc Indicates if the date that is passed in has expired.
 %% end
@@ -416,40 +444,6 @@ expired_credentials(Expiration) ->
     Now = calendar:datetime_to_gregorian_seconds(local_time()),
     Expires = calendar:datetime_to_gregorian_seconds(Expiration),
     Now >= Expires.
-
--spec load_credentials(State :: state()) -> {ok, state()} | {error, state()}.
-%% @doc Load the credentials using the following order of configuration precedence:
-%%        - Environment variables
-%%        - Credentials file
-%%        - EC2 Instance Metadata Service
-%% @end
-load_credentials(#state{region = Region}) ->
-    case rabbitmq_aws_config:credentials() of
-        {ok, AccessKey, SecretAccessKey, Expiration, SecurityToken} ->
-            {ok, #state{
-                region = Region,
-                error = undefined,
-                access_key = AccessKey,
-                secret_access_key = SecretAccessKey,
-                expiration = Expiration,
-                security_token = SecurityToken,
-                imdsv2_token = undefined
-            }};
-        {error, Reason} ->
-            ?LOG_ERROR(
-                "Could not load AWS credentials from environment variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE or EC2 metadata endpoint: ~tp. Will depend on config settings to be set~n",
-                [Reason]
-            ),
-            {error, #state{
-                region = Region,
-                error = Reason,
-                access_key = undefined,
-                secret_access_key = undefined,
-                expiration = undefined,
-                security_token = undefined,
-                imdsv2_token = undefined
-            }}
-    end.
 
 -spec local_time() -> calendar:datetime().
 %% @doc Return the current local time.
@@ -483,179 +477,36 @@ parse_content_type(ContentType) ->
     [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
     {Type, Subtype}.
 
--spec perform_request(
-    State :: state(),
-    Service :: string(),
-    Method :: method(),
-    Headers :: headers(),
-    Path :: path(),
-    Body :: body(),
-    Options :: http_options(),
-    Host :: string() | undefined
-) ->
-    {Result :: result(), NewState :: state()}.
-%% @doc Make the API request and return the formatted response.
-%% @end
-perform_request(State, Service, Method, Headers, Path, Body, Options, Host) ->
-    perform_request_has_creds(
-        has_credentials(State),
-        State,
-        Service,
-        Method,
-        Headers,
-        Path,
-        Body,
-        Options,
-        Host
-    ).
-
--spec perform_request_has_creds(
-    HasCreds :: boolean(),
-    State :: state(),
-    Service :: string(),
-    Method :: method(),
-    Headers :: headers(),
-    Path :: path(),
-    Body :: body(),
-    Options :: http_options(),
-    Host :: string() | undefined
-) ->
-    {Result :: result(), NewState :: state()}.
-%% @doc Invoked after checking to see if there are credentials. If there are,
-%%      validate they have not or will not expire, performing the request if not,
-%%      otherwise return an error result.
-%% @end
-perform_request_has_creds(true, State, Service, Method, Headers, Path, Body, Options, Host) ->
-    perform_request_creds_expired(
-        expired_credentials(State#state.expiration),
-        State,
-        Service,
-        Method,
-        Headers,
-        Path,
-        Body,
-        Options,
-        Host
-    );
-perform_request_has_creds(false, State, _, _, _, _, _, _, _) ->
-    perform_request_creds_error(State).
-
--spec perform_request_creds_expired(
-    CredsExp :: boolean(),
-    State :: state(),
-    Service :: string(),
-    Method :: method(),
-    Headers :: headers(),
-    Path :: path(),
-    Body :: body(),
-    Options :: http_options(),
-    Host :: string() | undefined
-) ->
-    {Result :: result(), NewState :: state()}.
-%% @doc Invoked after checking to see if the current credentials have expired.
-%%      If they haven't, perform the request, otherwise try and refresh the
-%%      credentials before performing the request.
-%% @end
-perform_request_creds_expired(false, State, Service, Method, Headers, Path, Body, Options, Host) ->
-    perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host);
-perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
-    perform_request_creds_error(State#state{error = "Credentials expired!"}).
-
--spec perform_request_with_creds(
-    State :: state(),
-    Service :: string(),
-    Method :: method(),
-    Headers :: headers(),
-    Path :: path(),
-    Body :: body(),
-    Options :: http_options(),
-    Host :: string() | undefined
-) ->
-    {Result :: result(), NewState :: state()}.
-%% @doc Once it is validated that there are credentials to try and that they have not
-%%      expired, perform the request and return the response.
-%% @end
-perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host) ->
-    URI = endpoint(State, Host, Service, Path),
-    SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
-    perform_request_with_creds(State, Method, URI, SignedHeaders, Body, Options).
-
--spec perform_request_with_creds(
-    State :: state(),
-    Method :: method(),
-    URI :: string(),
-    Headers :: headers(),
-    Body :: body(),
-    Options :: http_options()
-) ->
-    {Result :: result(), NewState :: state()}.
-%% @doc Once it is validated that there are credentials to try and that they have not
-%%      expired, perform the request and return the response.
-%% @end
-perform_request_with_creds(State, Method, URI, Headers, "", Options0) ->
-    Response = gun_request(Method, URI, Headers, <<>>, Options0),
-    {Response, State};
-perform_request_with_creds(State, Method, URI, Headers, Body, Options0) ->
-    Response = gun_request(Method, URI, Headers, Body, Options0),
-    {Response, State}.
-
--spec perform_request_creds_error(State :: state()) ->
-    {result_error(), NewState :: state()}.
-%% @doc Return the error response when there are not any credentials to use with
-%%      the request.
-%% @end
-perform_request_creds_error(State) ->
-    {{error, {credentials, State#state.error}}, State}.
-
--spec sign_headers(
-    State :: state(),
-    Service :: string(),
-    Method :: method(),
-    URI :: string(),
-    Headers :: headers(),
-    Body :: body()
-) -> headers().
-%% @doc Build the signed headers for the API request.
-%% @end
-sign_headers(
-    #state{
-        access_key = AccessKey,
-        secret_access_key = SecretKey,
-        security_token = SecurityToken,
-        region = Region
-    },
-    Service,
-    Method,
-    URI,
-    Headers,
-    Body
-) ->
-    rabbitmq_aws_sign:headers(#request{
-        access_key = AccessKey,
-        secret_access_key = SecretKey,
-        security_token = SecurityToken,
-        region = Region,
-        service = Service,
-        method = Method,
-        uri = URI,
-        headers = Headers,
-        body = Body
-    }).
-
 -spec expired_imdsv2_token('undefined' | imdsv2token()) -> boolean().
 %% @doc Determine whether or not an Imdsv2Token has expired.
 %% @end
 expired_imdsv2_token(undefined) ->
     ?LOG_DEBUG("EC2 IMDSv2 token has not yet been obtained"),
     true;
-expired_imdsv2_token({_, _, undefined}) ->
+expired_imdsv2_token(#imdsv2token{expiration = undefined}) ->
     ?LOG_DEBUG("EC2 IMDSv2 token is not available"),
     true;
-expired_imdsv2_token({_, _, Expiration}) ->
+expired_imdsv2_token(#imdsv2token{expiration = Expiration}) ->
     Now = calendar:datetime_to_gregorian_seconds(local_time()),
     HasExpired = Now >= Expiration,
     ?LOG_DEBUG("EC2 IMDSv2 token has expired: ~tp", [HasExpired]),
     HasExpired.
+
+-spec get_imdsv2_token() -> imdsv2token() | 'undefined'.
+%% @doc return the current Imdsv2Token used to perform instance metadata service requests.
+%% @end
+get_imdsv2_token() ->
+    case ets:lookup(?AWS_CONFIG_TABLE, imdsv2_token) of
+        [{imdsv2_token, Token}] -> Token;
+        [] -> undefined
+    end.
+
+-spec set_imdsv2_token(imdsv2token()) -> ok.
+%% @doc Manually set the Imdsv2Token used to perform instance metadata service requests.
+%% @end
+set_imdsv2_token(Imdsv2Token) ->
+    ets:insert(?AWS_CONFIG_TABLE, {imdsv2_token, Imdsv2Token}),
+    ok.
 
 -spec ensure_imdsv2_token_valid() -> security_token().
 ensure_imdsv2_token_valid() ->
@@ -672,24 +523,6 @@ ensure_imdsv2_token_valid() ->
             Value;
         _ ->
             Imdsv2Token#imdsv2token.token
-    end.
-
--spec ensure_credentials_valid() -> ok.
-%% @doc Invoked before each AWS service API request to check if the current credentials are available and that they have not expired.
-%%      If the credentials are available and are still current, then move on and perform the request.
-%%      If the credentials are not available or have expired, then refresh them before performing the request.
-%% @end
-ensure_credentials_valid() ->
-    ?LOG_DEBUG("Making sure AWS credentials are available and still valid"),
-    {ok, State} = gen_server:call(rabbitmq_aws, get_state),
-    case has_credentials(State) of
-        true ->
-            case expired_credentials(State#state.expiration) of
-                true -> refresh_credentials(State);
-                _ -> ok
-            end;
-        _ ->
-            refresh_credentials(State)
     end.
 
 -spec api_get_request(string(), path()) -> {'ok', list()} | {'error', term()}.
@@ -712,8 +545,6 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
         {ok, {_Headers, Payload}} ->
             ?LOG_DEBUG("AWS request: ~ts~nResponse: ~tp", [Path, Payload]),
             {ok, Payload};
-        {error, {credentials, _}} ->
-            {error, credentials};
         {error, Message, Response} ->
             ?LOG_WARNING("Error occurred: ~ts", [Message]),
             case Response of
@@ -828,60 +659,6 @@ status_text(416) -> "Range Not Satisfiable";
 status_text(500) -> "Internal Server Error";
 status_text(Code) -> integer_to_list(Code).
 
-%%====================================================================
-%% New Concurrent API Helper Functions
-%%====================================================================
-
-%% Create a direct connection handle
--spec create_direct_connection(State :: state(), Service :: string(), Options :: list()) ->
-    {ok, connection_handle()} | {error, term()}.
-create_direct_connection(State, Service, Options) ->
-    Region = State#state.region,
-    Host = endpoint_host(Region, Service),
-    Port = 443,
-    GunPid = create_gun_connection(Host, Port, Options),
-    CredContext = #{
-        access_key => State#state.access_key,
-        secret_access_key => State#state.secret_access_key,
-        security_token => State#state.security_token,
-        region => Region,
-        service => Service
-    },
-    {ok, {GunPid, CredContext}}.
-
-%% Sign headers using credential context (no gen_server state needed)
--spec sign_headers_with_context(
-    CredContext :: credential_context(),
-    Method :: method(),
-    URI :: string(),
-    Headers :: headers(),
-    Body :: body(),
-    BodyHash :: iodata()
-) -> headers().
-sign_headers_with_context(CredContext, Method, URI, Headers, Body, BodyHash) ->
-    #{
-        access_key := AccessKey,
-        secret_access_key := SecretKey,
-        security_token := SecurityToken,
-        region := Region,
-        service := Service
-    } = CredContext,
-    rabbitmq_aws_sign:headers(
-        #request{
-            access_key = AccessKey,
-            secret_access_key = SecretKey,
-            security_token = SecurityToken,
-            region = Region,
-            service = Service,
-            method = Method,
-            uri = URI,
-            headers = Headers,
-            body = Body
-        },
-        BodyHash
-    ).
-
-%% Direct Gun request (extracted from existing gun_request function)
 -spec direct_gun_request(
     GunPid :: pid(),
     Method :: method(),
@@ -917,16 +694,3 @@ direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
                 {error, Error}
         end,
     format_response(Response).
-
-%% Internal credential validation (extracted from existing logic)
--spec ensure_credentials_valid_internal(State :: state()) -> {ok, state()} | {error, term()}.
-ensure_credentials_valid_internal(State) ->
-    case has_credentials(State) of
-        true ->
-            case expired_credentials(State#state.expiration) of
-                false -> {ok, State};
-                true -> load_credentials(State)
-            end;
-        false ->
-            load_credentials(State)
-    end.
