@@ -49,7 +49,7 @@ accept_content(ReqData0, Context = #context{user = #user{username = ActingUser}}
     case rabbit_mgmt_util:is_protected_user(Username) of
         true ->
             rabbit_mgmt_util:bad_request(
-              <<"User updates via API are disabled for this user">>,
+              <<"Protected users cannot be modified via the HTTP API">>,
               ReqData0, Context);
         false ->
             rabbit_mgmt_util:with_decode(
@@ -65,7 +65,7 @@ delete_resource(ReqData, Context = #context{user = #user{username = ActingUser}}
     case rabbit_mgmt_util:is_protected_user(User) of
         true ->
             rabbit_mgmt_util:bad_request(
-              <<"User deletion via API is disabled for this user">>,
+              <<"Protected users cannot be modified via the HTTP API">>,
               ReqData, Context);
         false ->
             rabbit_auth_backend_internal:delete_user(User, ActingUser),
