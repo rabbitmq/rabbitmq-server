@@ -208,8 +208,6 @@
     {ok, queue_state()} | {error, Reason :: term()}.
 
 -callback close(queue_state()) -> ok.
-%% update the queue type state from amqqrecord
--callback update(amqqueue:amqqueue(), queue_state()) -> queue_state().
 
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
@@ -232,10 +230,10 @@
 
 -callback supports_stateful_delivery() -> boolean().
 
--callback deliver([{amqqueue:amqqueue(), queue_state()}],
+-callback deliver([{amqqueue:target(), queue_state()}],
                   Message :: mc:state(),
                   Options :: delivery_options()) ->
-    {[{amqqueue:amqqueue(), queue_state()}], actions()}.
+    {[{amqqueue:target(), queue_state()}], actions()}.
 
 -callback settle(queue_name(), settle_op(), rabbit_types:ctag(),
                  [non_neg_integer()], queue_state()) ->
@@ -250,7 +248,7 @@
                  Drain :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
--callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
+-callback dequeue(amqqueue:amqqueue(), NoAck :: boolean(), LimiterPid :: pid(),
                   rabbit_types:ctag(), queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
@@ -619,14 +617,14 @@ publish_at_most_once(#resource{} = XName, Msg) ->
             Err
     end;
 publish_at_most_once(X, Msg)
-    when element(1, X) == exchange -> % hacky but good enough
+  when element(1, X) == exchange -> % hacky but good enough
     QNames = rabbit_exchange:route(X, Msg, #{return_binding_keys => true}),
-    Qs = rabbit_amqqueue:lookup_many(QNames),
+    Qs = rabbit_db_queue:get_targets(QNames),
     _ = deliver(Qs, Msg, #{}, stateless),
     ok.
 
--spec deliver([amqqueue:amqqueue() |
-               {amqqueue:amqqueue(), rabbit_exchange:route_infos()}],
+-spec deliver([amqqueue:target() |
+               {amqqueue:target(), rabbit_exchange:route_infos()}],
               Message :: mc:state(),
               delivery_options(),
               stateless | state()) ->
@@ -688,14 +686,13 @@ deliver0(Qs, Message0, Options, #?STATE{} = State0) ->
               end, State0, Xs),
     {ok, State, Actions}.
 
-queue_binding_keys(Q)
-  when ?is_amqqueue(Q) ->
-    {Q, #{}};
 queue_binding_keys({Q, #{binding_keys := BindingKeys}})
-  when ?is_amqqueue(Q) andalso is_map(BindingKeys) ->
+  when is_map(BindingKeys) ->
     {Q, BindingKeys};
-queue_binding_keys({Q, _RouteInfos})
-  when ?is_amqqueue(Q) ->
+queue_binding_keys({Q, RouteInfos})
+  when is_map(RouteInfos) ->
+    {Q, #{}};
+queue_binding_keys(Q) ->
     {Q, #{}}.
 
 add_binding_keys(Message, BindingKeys)
@@ -751,8 +748,7 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    QName = amqqueue:get_name(Q),
-    case Mod:dequeue(QName, NoAck, LimiterPid, CTag, State0) of
+    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
@@ -775,35 +771,35 @@ removed_from_rabbit_registry(_Type) -> ok.
 get_ctx(QOrQref, State) ->
     get_ctx_with(QOrQref, State, undefined).
 
-get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState)
-  when ?is_amqqueue(Q) ->
-    Ref = qref(Q),
-    case Contexts of
-        #{Ref := #ctx{module = Mod,
-                      state = State} = Ctx} ->
-            Ctx#ctx{state = Mod:update(Q, State)};
-        _ when InitState == undefined ->
-            %% not found and no initial state passed - initialize new state
-            Mod = amqqueue:get_type(Q),
-            case Mod:init(Q) of
-                {error, Reason} ->
-                    exit({Reason, Ref});
-                {ok, QState} ->
-                    #ctx{module = Mod,
-                         state = QState}
-            end;
-        _  ->
-            %% not found - initialize with supplied initial state
-            Mod = amqqueue:get_type(Q),
-            #ctx{module = Mod,
-                 state = InitState}
-    end;
 get_ctx_with(#resource{kind = queue} = QRef, Contexts, undefined) ->
     case get_ctx(QRef, Contexts, undefined) of
         undefined ->
             exit({queue_context_not_found, QRef});
         Ctx ->
             Ctx
+    end;
+get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState) ->
+    Ref = amqqueue:get_name(Q),
+    case Contexts of
+        #{Ref := Ctx} ->
+            Ctx;
+        _ when InitState =:= undefined ->
+            %% not found and no initial state passed - initialize new state
+            Mod = amqqueue:get_type(Q),
+            maybe
+                {ok, Q1} ?= to_queue(Q),
+                {ok, QState} ?= Mod:init(Q1),
+                #ctx{module = Mod,
+                     state = QState}
+            else
+                {error, Reason} ->
+                    exit({Reason, Ref})
+            end;
+        _  ->
+            %% not found - initialize with supplied initial state
+            Mod = amqqueue:get_type(Q),
+            #ctx{module = Mod,
+                 state = InitState}
     end.
 
 get_ctx(QRef, #?STATE{ctxs = Contexts}, Default) ->
@@ -817,8 +813,14 @@ set_ctx(QRef, Ctx, #?STATE{ctxs = Contexts} = State) ->
 
 qref(#resource{kind = queue} = QName) ->
     QName;
-qref(Q) when ?is_amqqueue(Q) ->
+qref(Q) ->
     amqqueue:get_name(Q).
+
+to_queue(Q) when ?is_amqqueue(Q) ->
+    {ok, Q};
+to_queue(Target) ->
+    QName = amqqueue:get_name(Target),
+    rabbit_amqqueue:lookup(QName).
 
 -spec known_queue_type_modules() -> [module()].
 known_queue_type_modules() ->

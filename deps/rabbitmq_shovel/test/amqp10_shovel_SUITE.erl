@@ -74,7 +74,9 @@ amqp_encoded_data_list(_Config) ->
             #'v1_0.data'{content = <<"one">>},
             #'v1_0.data'{content = <<"two">>}
            ],
-    Msg = amqp10_msg:new(55, Body),
+    [_Transfer | Sections] = amqp10_msg:to_amqp_records(amqp10_msg:new(<<"55">>, Body)),
+    Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
+    Msg = amqp10_raw_msg:new(true, 55, Bin),
     rabbit_amqp10_shovel:handle_source({amqp10_msg, linkref, Msg}, State),
 
     ?assert(meck:validate(rabbit_shovel_behaviour)),
@@ -91,8 +93,11 @@ amqp_encoded_amqp_value(_Config) ->
     State = #{source => #{},
               dest => #{module => rabbit_amqp10_shovel},
               ack_mode => no_ack},
+
     Body = #'v1_0.amqp_value'{content = {utf8, <<"hi">>}},
-    Msg = amqp10_msg:new(55, Body),
+    [_Transfer | Sections] = amqp10_msg:to_amqp_records(amqp10_msg:new(<<"55">>, Body)),
+    Bin = iolist_to_binary([amqp10_framing:encode_bin(S) || S <- Sections]),
+    Msg = amqp10_raw_msg:new(true, 55, Bin),
     rabbit_amqp10_shovel:handle_source({amqp10_msg, linkref, Msg}, State),
 
     ?assert(meck:validate(rabbit_shovel_behaviour)),

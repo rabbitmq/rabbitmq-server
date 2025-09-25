@@ -169,18 +169,21 @@ restart_stream(QRes) ->
     {ok, node()} |
     {error, term()} |
     {timeout, term()}.
-restart_stream(QRes, Options)
-  when element(1, QRes) == resource ->
-    restart_stream(hd(rabbit_amqqueue:lookup_many([QRes])), Options);
 restart_stream(Q, Options)
-  when ?is_amqqueue(Q) andalso
-       ?amqqueue_is_stream(Q) ->
+  when ?amqqueue_is_stream(Q) ->
     ?LOG_INFO("restarting stream ~s in vhost ~s with options ~p",
-                    [maps:get(name, amqqueue:get_type_state(Q)), amqqueue:get_vhost(Q), Options]),
+              [maps:get(name, amqqueue:get_type_state(Q)), amqqueue:get_vhost(Q), Options]),
     #{name := StreamId} = amqqueue:get_type_state(Q),
     case process_command({restart_stream, StreamId, Options}) of
         {ok, {ok, LeaderPid}, _} ->
             {ok, node(LeaderPid)};
+        Err ->
+            Err
+    end;
+restart_stream(QRes, Options) ->
+    case rabbit_amqqueue:lookup(QRes) of
+        {ok, Q} ->
+            restart_stream(Q, Options);
         Err ->
             Err
     end.

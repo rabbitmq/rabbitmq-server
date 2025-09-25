@@ -15,7 +15,15 @@
 -include_lib("rabbit/include/mc.hrl").
 -include("rabbit_shovel.hrl").
 
+-rabbit_boot_step({rabbit_global_local_shovel_counters,
+                   [{description, "global local shovel counters"},
+                    {mfa,         {?MODULE, boot_step,
+                                   []}},
+                    {requires,    rabbit_global_counters},
+                    {enables,     external_infrastructure}]}).
+
 -export([
+         boot_step/0,
          parse/2,
          connect_source/1,
          connect_dest/1,
@@ -53,11 +61,19 @@
 %% See rabbit_amqp_session.erl
 -define(INITIAL_DELIVERY_COUNT, 16#ff_ff_ff_ff - 4).
 -define(DEFAULT_MAX_LINK_CREDIT, 1000).
+-define(PROTOCOL, 'local-shovel').
 
 -record(pending_ack, {
                       delivery_tag,
                       msg_id
                      }).
+
+boot_step() ->
+    Labels = #{protocol => ?PROTOCOL},
+    rabbit_global_counters:init(Labels),
+    rabbit_global_counters:init(Labels#{queue_type => rabbit_classic_queue}),
+    rabbit_global_counters:init(Labels#{queue_type => rabbit_quorum_queue}),
+    rabbit_global_counters:init(Labels#{queue_type => rabbit_stream_queue}).
 
 parse(_Name, {source, Source}) ->
     Queue = parse_parameter(queue, fun parse_binary/1,
@@ -185,6 +201,7 @@ init_source(State = #{source := #{queue_r := QName,
                    end
            end) of
         {Remaining, {ok, QState1}} ->
+            rabbit_global_counters:consumer_created(?PROTOCOL),
             {ok, QState, Actions} = rabbit_queue_type:credit(QName, CTag, ?INITIAL_DELIVERY_COUNT, MaxLinkCredit, false, QState1),
             State2 = State#{source => Src#{current => Current#{queue_states => QState,
                                                                consumer_tag => CTag},
@@ -214,6 +231,7 @@ init_source(State = #{source := #{queue_r := QName,
 init_dest(#{name := Name,
             shovel_type := Type,
             dest := #{add_forward_headers := AFH} = Dst} = State) ->
+    rabbit_global_counters:publisher_created(?PROTOCOL),
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
     case AFH of
         true ->
@@ -258,12 +276,14 @@ dest_endpoint(_Config) ->
     [].
       
 close_dest(_State) ->
+    rabbit_global_counters:publisher_deleted(?PROTOCOL),
     ok.
 
 close_source(#{source := #{current := #{queue_states := QStates0,
                                         consumer_tag := CTag,
                                         user := User},
                            queue_r := QName}}) ->
+    rabbit_global_counters:consumer_deleted(?PROTOCOL),
     case rabbit_amqqueue:with(
            QName,
            fun(Q) ->
@@ -362,7 +382,8 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
         end,
     Msg = set_annotations(Msg0, Dest),
     RoutedQNames = route(Msg, Dest),
-    Queues = rabbit_amqqueue:lookup_many(RoutedQNames),
+    Queues = rabbit_db_queue:get_targets(RoutedQNames),
+    messages_received(AckMode),
     case rabbit_queue_type:deliver(Queues, Msg, Options, QState) of
         {ok, QState1, Actions} ->
             State1 = State#{dest => Dest1#{current => Current1#{queue_states => QState1}}},
@@ -451,13 +472,15 @@ handle_queue_actions(Actions, State) ->
       end, State, Actions).
 
 handle_deliver(AckRequired, Msgs, State) when is_list(Msgs) ->
+    NumMsgs = length(Msgs),
     maybe_grant_credit(
       lists:foldl(
-        fun({_QName, _QPid, MsgId, _Redelivered, Mc}, S0) ->
+        fun({QName, _QPid, MsgId, _Redelivered, Mc}, #{source := #{current := #{queue_states := QStates }}} = S0) ->
+                messages_delivered(QName, QStates),
                 DeliveryTag = next_tag(S0),
                 S = record_pending(AckRequired, DeliveryTag, MsgId, increase_next_tag(S0)),
                 rabbit_shovel_behaviour:forward(DeliveryTag, Mc, S)
-        end, sent_delivery(State, length(Msgs)), Msgs)).
+        end, sent_delivery(State, NumMsgs), Msgs)).
 
 next_tag(#{source := #{current := #{next_tag := DeliveryTag}}}) ->
     DeliveryTag.
@@ -616,6 +639,7 @@ settle(Op, DeliveryTag, Multiple,
     {MsgIds, UAMQ} = collect_acks(UAMQ0, DeliveryTag, Multiple),
     case rabbit_queue_type:settle(QRef, Op, CTag, lists:reverse(MsgIds), QState0) of
         {ok, QState1, Actions} ->
+            messages_acknowledged(Op, QRef, QState1, MsgIds),
             State = State0#{source => Src#{current => Current#{queue_states => QState1,
                                                                unacked_message_q => UAMQ}}},
             handle_queue_actions(Actions, State);
@@ -739,12 +763,18 @@ handle_credit_reply({credit_reply, CTag, DeliveryCount, Credit, _Available, _Dra
                                    at_least_one_credit_req_in_flight => false}}
     end.
 
-process_routing_confirm(undefined, _, _, State) ->
+process_routing_confirm(undefined, _, [], State) ->
+    rabbit_global_counters:messages_unroutable_returned(?PROTOCOL, 1),
+    State;
+process_routing_confirm(undefined, _, QRefs, State) ->
+    rabbit_global_counters:messages_routed(?PROTOCOL, length(QRefs)),
     State;
 process_routing_confirm(MsgSeqNo, Tag, [], State)
   when is_integer(MsgSeqNo) ->
+    rabbit_global_counters:messages_unroutable_dropped(?PROTOCOL, 1),
     record_confirms([{MsgSeqNo, Tag}], State);
 process_routing_confirm(MsgSeqNo, Tag, QRefs, #{dest := Dst = #{unconfirmed := Unconfirmed}} = State) when is_integer(MsgSeqNo) ->
+    rabbit_global_counters:messages_routed(?PROTOCOL, length(QRefs)),
     State#{dest => Dst#{unconfirmed =>
                             rabbit_shovel_confirms:insert(MsgSeqNo, QRefs, Tag, Unconfirmed)}}.
 
@@ -781,8 +811,10 @@ send_nacks(Rs, Cs, State) ->
 send_confirms([], _, State) ->
     State;
 send_confirms([MsgSeqNo], _, State) ->
+    rabbit_global_counters:messages_confirmed(?PROTOCOL, 1),
     rabbit_shovel_behaviour:ack(MsgSeqNo, false, State);
 send_confirms(Cs, Rs, State) ->
+    rabbit_global_counters:messages_confirmed(?PROTOCOL, length(Cs)),
     coalesce_and_send(Cs, Rs,
                       fun(MsgSeqNo, Multiple, StateX) ->
                               rabbit_shovel_behaviour:ack(MsgSeqNo, Multiple, StateX)
@@ -832,4 +864,31 @@ decr_remaining(Num, State) ->
         exit:{shutdown, autodelete} = R ->
             _ = send_confirms_and_nacks(State),
             exit(R)
+    end.
+
+messages_acknowledged(complete, QName, QS, MsgIds) ->
+    case rabbit_queue_type:module(QName, QS) of
+        {ok, QType} ->
+            rabbit_global_counters:messages_acknowledged(?PROTOCOL, QType, length(MsgIds));
+        _ ->
+            ok
+    end;
+messages_acknowledged(_, _, _, _) ->
+    ok.
+
+messages_received(AckMode) ->
+    rabbit_global_counters:messages_received(?PROTOCOL, 1),
+    case AckMode of
+        on_confirm ->
+            rabbit_global_counters:messages_received_confirm(?PROTOCOL, 1);
+        _ ->
+            ok
+    end.
+
+messages_delivered(QName, S0) ->
+    case rabbit_queue_type:module(QName, S0) of
+        {ok, QType} ->
+            rabbit_global_counters:messages_delivered(?PROTOCOL, QType, 1);
+        _ ->
+            ok
     end.

@@ -77,7 +77,8 @@ groups() ->
                   local_to_local_stream_credit_flow_on_confirm,
                   local_to_local_stream_credit_flow_on_publish,
                   local_to_local_stream_credit_flow_no_ack,
-                  local_to_local_simple_uri
+                  local_to_local_simple_uri,
+                  local_to_local_counters
                  ]}
     ].
 
@@ -1050,6 +1051,36 @@ local_to_local_simple_uri(Config) ->
             none]),
     shovel_test_utils:await_shovel(Config, ?PARAM).
 
+local_to_local_counters(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    %% Let's restart the node so the counters are reset
+    ok = rabbit_ct_broker_helpers:stop_node(Config, 0),
+    ok = rabbit_ct_broker_helpers:start_node(Config, 0),
+    with_session(
+      Config,
+      fun (Sess) ->
+              ?awaitMatch(#{publishers := 0, consumers := 0},
+                          get_global_counters(Config), 30_000),
+              shovel_test_utils:set_param(Config, ?PARAM,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-queue">>, Dest}
+                                          ]),
+              ?awaitMatch(#{publishers := 1, consumers := 1},
+                          get_global_counters(Config), 30_000),
+              _ = publish_many(Sess, Src, Dest, <<"tag1">>, 150),
+              ?awaitMatch(#{consumers := 1, publishers := 1,
+                            messages_received_total := 150,
+                            messages_received_confirm_total := 150,
+                            messages_routed_total := 150,
+                            messages_unroutable_dropped_total := 0,
+                            messages_unroutable_returned_total := 0,
+                            messages_confirmed_total := 150},
+                          get_global_counters(Config), 30_000)
+      end).
+
 %%----------------------------------------------------------------------------
 with_session(Config, Fun) ->
     with_session(Config, <<"/">>, Fun).
@@ -1217,3 +1248,10 @@ delete_queue(Name, VHost) ->
         _ ->
             ok
     end.
+
+get_global_counters(Config) ->
+    get_global_counters0(Config, #{protocol => 'local-shovel'}).
+
+get_global_counters0(Config, Key) ->
+    Overview = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []),
+    maps:get(Key, Overview).

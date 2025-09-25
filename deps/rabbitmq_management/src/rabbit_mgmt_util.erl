@@ -54,6 +54,8 @@
 
 -export([set_resp_not_found/2]).
 
+-export([is_protected_user/1]).
+
 -import(rabbit_misc, [pget/2]).
 
 -include("rabbit_mgmt.hrl").
@@ -208,6 +210,14 @@ is_authorized_user(ReqData, Context, Username, Password, ReplyWhenFailed) ->
                                                 Password,
                                                 ReplyWhenFailed,
                                                 auth_config()).
+
+is_protected_user(Username) ->
+    case rabbit_auth_backend_internal:lookup_user(Username) of
+        {ok, User} ->
+            Tags = internal_user:get_tags(User),
+            rabbit_web_dispatch_access_control:is_protected_user(Tags);
+        {error, _} -> false
+    end.
 
 vhost_from_headers(ReqData) ->
     rabbit_web_dispatch_access_control:vhost_from_headers(ReqData).

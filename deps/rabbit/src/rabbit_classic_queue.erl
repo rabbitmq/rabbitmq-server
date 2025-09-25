@@ -13,8 +13,7 @@
 
 -define(STATE, ?MODULE).
 -record(?STATE, {
-           %% the current master pid
-           pid :: undefined | pid(),
+           pid :: pid(),
            unconfirmed = #{} :: #{non_neg_integer() => #msg_status{}},
            monitored = #{} :: #{pid() => ok}
           }).
@@ -50,7 +49,6 @@
          format/2,
          init/1,
          close/1,
-         update/2,
          consume/3,
          cancel/3,
          handle_event/3,
@@ -295,16 +293,6 @@ init(Q) when ?amqqueue_is_classic(Q) ->
 close(_State) ->
     ok.
 
--spec update(amqqueue:amqqueue(), state()) -> state().
-update(Q, #?STATE{pid = Pid} = State) when ?amqqueue_is_classic(Q) ->
-    case amqqueue:get_pid(Q) of
-        Pid ->
-            State;
-        NewPid ->
-            %% master pid is different, update
-            State#?STATE{pid = NewPid}
-    end.
-
 consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
     QPid = amqqueue:get_pid(Q),
     QRef = amqqueue:get_name(Q),
@@ -326,9 +314,8 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
                             ExclusiveConsume, Args, OkMsg, ActingUser},
                            infinity]}) of
         ok ->
-            %% TODO: track pids as they change
-            State = ensure_monitor(QPid, QRef, State0),
-            {ok, State#?STATE{pid = QPid}};
+            State = State0#?STATE{pid = QPid},
+            {ok, ensure_monitor(QRef, State)};
         {error, exclusive_consume_unavailable} ->
             {error, access_refused, "~ts in exclusive use",
              [rabbit_misc:rs(QRef)]};
@@ -364,10 +351,12 @@ cancel(Q, Spec, State) ->
                       OkMsg = maps:get(ok_msg, Spec, undefined),
                       {basic_cancel, self(), ConsumerTag, OkMsg, ActingUser}
               end,
-    case delegate:invoke(amqqueue:get_pid(Q),
-                         {gen_server2, call, [Request, infinity]}) of
-        ok -> {ok, State};
-        Err -> Err
+    Pid = amqqueue:get_pid(Q),
+    case delegate:invoke(Pid, {gen_server2, call, [Request, infinity]}) of
+        ok ->
+            {ok, State#?STATE{pid = Pid}};
+        Err ->
+            Err
     end.
 
 -spec settle(rabbit_amqqueue:name(), rabbit_queue_type:settle_op(),
@@ -473,10 +462,10 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 
 supports_stateful_delivery() -> true.
 
--spec deliver([{amqqueue:amqqueue(), state()}],
+-spec deliver([{amqqueue:target(), state()}],
               Delivery :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
-    {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
+    {[{amqqueue:target(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
@@ -502,19 +491,21 @@ deliver(Qs0, Msg0, Options) ->
     delegate:invoke_no_result(MPids, {gen_server2, cast, [MMsg]}),
     {Qs, []}.
 
--spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(),
+-spec dequeue(amqqueue:amqqueue(), NoAck :: boolean(),
               LimiterPid :: pid(), rabbit_types:ctag(), state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), state()} |
     {empty, state()}.
-dequeue(QName, NoAck, LimiterPid, _CTag, State0) ->
-    QPid = State0#?STATE.pid,
-    State1 = ensure_monitor(QPid, QName, State0),
+dequeue(Q, NoAck, LimiterPid, _CTag, State0) ->
+    QName = amqqueue:get_name(Q),
+    QPid = amqqueue:get_pid(Q),
+    State1 = State0#?STATE{pid = QPid},
+    State = ensure_monitor(QName, State1),
     case delegate:invoke(QPid, {gen_server2, call,
                                 [{basic_get, self(), NoAck, LimiterPid}, infinity]}) of
         empty ->
-            {empty, State1};
+            {empty, State};
         {ok, Count, Msg} ->
-            {ok, Count, Msg, State1}
+            {ok, Count, Msg, State}
     end.
 
 -spec state_info(state()) -> #{atom() := term()}.
@@ -603,9 +594,10 @@ qpids(Qs, Confirm, MsgNo) ->
       fun ({Q, S0}, {MPidAcc, Qs0}) ->
               QPid = amqqueue:get_pid(Q),
               QRef = amqqueue:get_name(Q),
-              S1 = ensure_monitor(QPid, QRef, S0),
               %% confirm record only if necessary
-              S = case S1 of
+              S = case S0 of
+                      stateless ->
+                          S0;
                       #?STATE{unconfirmed = U0} ->
                           Rec = [QPid],
                           U = case Confirm of
@@ -614,10 +606,9 @@ qpids(Qs, Confirm, MsgNo) ->
                                   true ->
                                       U0#{MsgNo => #msg_status{pending = Rec}}
                               end,
-                          S1#?STATE{pid = QPid,
-                                    unconfirmed = U};
-                      stateless ->
-                          S1
+                          S1 = S0#?STATE{pid = QPid,
+                                         unconfirmed = U},
+                          ensure_monitor(QRef, S1)
                   end,
               {[QPid | MPidAcc], [{Q, S} | Qs0]}
       end, {[], []}, Qs).
@@ -728,14 +719,15 @@ update_msg_status(confirm, Pid, #msg_status{pending = P,
 update_msg_status(down, Pid, #msg_status{pending = P} = S) ->
     S#msg_status{pending = lists:delete(Pid, P)}.
 
-ensure_monitor(_, _, State = stateless) ->
-    State;
-ensure_monitor(Pid, _, State = #?STATE{monitored = Monitored})
-  when is_map_key(Pid, Monitored) ->
-    State;
-ensure_monitor(Pid, QName, State = #?STATE{monitored = Monitored}) ->
-    _ = erlang:monitor(process, Pid, [{tag, {'DOWN', QName}}]),
-    State#?STATE{monitored = Monitored#{Pid => ok}}.
+ensure_monitor(QName, #?STATE{pid = Pid,
+                              monitored = Monitored} = State) ->
+    case is_map_key(Pid, Monitored) of
+        true ->
+            State;
+        false ->
+            _Ref = erlang:monitor(process, Pid, [{tag, {'DOWN', QName}}]),
+            State#?STATE{monitored = Monitored#{Pid => ok}}
+    end.
 
 %% part of channel <-> queue api
 confirm_to_sender(Pid, QName, MsgSeqNos) ->

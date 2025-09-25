@@ -1222,7 +1222,7 @@ handle_method(#'basic.publish'{exchange    = ExchangeNameBin,
             check_user_id_header(Message0, User),
             Message = rabbit_msg_interceptor:intercept_incoming(Message0, MsgIcptCtx),
             QNames = rabbit_exchange:route(Exchange, Message, #{return_binding_keys => true}),
-            Queues = rabbit_amqqueue:lookup_many(QNames),
+            Queues = rabbit_db_queue:get_targets(QNames),
             rabbit_trace:tap_in(Message, QNames, ConnName, ChannelNum,
                                 Username, TraceState),
             %% TODO: call delivery_to_queues with plain args
@@ -2126,7 +2126,12 @@ deliver_to_queues(XName,
             rabbit_misc:protocol_error(
               resource_error,
               "Stream coordinator unavailable for ~ts",
-              [rabbit_misc:rs(Resource)])
+              [rabbit_misc:rs(Resource)]);
+        {error, Reason} ->
+            rabbit_misc:protocol_error(
+              resource_error,
+              "failed to deliver message: ~tp",
+              [Reason])
     end.
 
 process_routing_mandatory(_Mandatory = true,

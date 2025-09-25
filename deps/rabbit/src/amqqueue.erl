@@ -14,6 +14,7 @@
          new/9,
          new_with_version/9,
          new_with_version/10,
+         new_target/2,
          fields/0,
          fields/1,
          field_vhost/0,
@@ -39,6 +40,7 @@
          % options
          get_options/1,
          set_options/2,
+         get_extra_bcc/1,
          % pid
          get_pid/1,
          set_pid/2,
@@ -77,13 +79,15 @@
          qnode/1,
          to_printable/1,
          to_printable/2,
-         macros/0]).
+         macros/0
+        ]).
 
 -define(record_version, amqqueue_v2).
 -define(is_backwards_compat_classic(T),
         (T =:= classic orelse T =:= ?amqqueue_v1_type)).
 
 -type amqqueue_options() ::  map() | ets:match_pattern().
+-type extra_bcc() :: rabbit_misc:resource_name() | none.
 
 -record(amqqueue, {
           %% immutable
@@ -119,6 +123,17 @@
           type = ?amqqueue_v1_type :: module() | ets:match_pattern(),
           type_state = #{} :: map() | ets:match_pattern()
          }).
+
+%% A subset of the amqqueue record containing just the necessary fields
+%% to deliver a message to a target queue.
+-record(queue_target,
+        {name :: rabbit_amqqueue:name(),
+         target :: {rabbit_queue_type:queue_type(),
+                    pid() | ra_server_id() | none,
+                    extra_bcc()}
+        }).
+
+-opaque target() :: #queue_target{}.
 
 -type amqqueue() :: amqqueue_v2().
 -type amqqueue_v2() :: #amqqueue{
@@ -175,6 +190,7 @@
               amqqueue_v2/0,
               amqqueue_pattern/0,
               amqqueue_v2_pattern/0,
+              target/0,
               ra_server_id/0]).
 
 -spec new(rabbit_amqqueue:name(),
@@ -328,6 +344,15 @@ new_with_version(?record_version,
               options         = Options,
               type            = ensure_type_compat(Type)}.
 
+-spec new_target(rabbit_amqqueue:name(),
+                 {rabbit_queue_type:queue_type(),
+                  pid() | ra_server_id() | none,
+                  extra_bcc()}) ->
+    target().
+new_target(Name, Target) when tuple_size(Target) =:= 3 ->
+    #queue_target{name = Name,
+                  target = Target}.
+
 -spec is_amqqueue(any()) -> boolean().
 
 is_amqqueue(#amqqueue{}) -> true.
@@ -361,15 +386,21 @@ set_arguments(#amqqueue{} = Queue, Args) ->
 % options
 
 -spec get_options(amqqueue()) -> amqqueue_options().
-
 get_options(#amqqueue{options = Options}) ->
     Options.
 
 -spec set_options(amqqueue(), amqqueue_options()) -> amqqueue().
-
 set_options(#amqqueue{} = Queue, Options) ->
     Queue#amqqueue{options = Options}.
 
+-spec get_extra_bcc(amqqueue() | target()) ->
+    extra_bcc().
+get_extra_bcc(#amqqueue{options = #{extra_bcc := ExtraBcc}}) ->
+    ExtraBcc;
+get_extra_bcc(#amqqueue{})  ->
+    none;
+get_extra_bcc(#queue_target{target = {_Type, _Pid, ExtraBcc}}) ->
+    ExtraBcc.
 
 % decorators
 
@@ -418,9 +449,10 @@ set_operator_policy(#amqqueue{} = Queue, Policy) ->
 
 % name
 
--spec get_name(amqqueue()) -> rabbit_amqqueue:name().
+-spec get_name(amqqueue() | target()) -> rabbit_amqqueue:name().
 
-get_name(#amqqueue{name = Name}) -> Name.
+get_name(#amqqueue{name = Name}) -> Name;
+get_name(#queue_target{name = Name}) -> Name.
 
 -spec set_name(amqqueue(), rabbit_amqqueue:name()) -> amqqueue().
 
@@ -429,9 +461,10 @@ set_name(#amqqueue{} = Queue, Name) ->
 
 % pid
 
--spec get_pid(amqqueue_v2()) -> pid() | ra_server_id() | none.
+-spec get_pid(amqqueue_v2() | target()) -> pid() | ra_server_id() | none.
 
-get_pid(#amqqueue{pid = Pid}) -> Pid.
+get_pid(#amqqueue{pid = Pid}) -> Pid;
+get_pid(#queue_target{target = {_Type, Pid, _ExtraBcc}}) -> Pid.
 
 -spec set_pid(amqqueue_v2(), pid() | ra_server_id() | none) -> amqqueue_v2().
 
@@ -488,9 +521,10 @@ set_state(#amqqueue{} = Queue, State) ->
 
 %% New in v2.
 
--spec get_type(amqqueue()) -> atom().
+-spec get_type(amqqueue() | target()) -> atom().
 
-get_type(#amqqueue{type = Type}) -> Type.
+get_type(#amqqueue{type = Type}) -> Type;
+get_type(#queue_target{target = {Type, _Pid, _ExtraBcc}}) -> Type.
 
 -spec get_vhost(amqqueue()) -> rabbit_types:vhost() | undefined.
 
@@ -628,8 +662,6 @@ to_printable(QName = #resource{name = Name, virtual_host = VHost}, Type) ->
        <<"name">> => Name,
        <<"virtual_host">> => VHost,
        <<"type">> => Type}.
-
-% private
 
 macros() ->
     io:format(
