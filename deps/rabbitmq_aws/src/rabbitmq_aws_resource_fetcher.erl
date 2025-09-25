@@ -69,15 +69,14 @@ resolve_arn(Arn) ->
 
 -spec parse_arn(string()) -> {ok, map()} | {error, term()}.
 parse_arn(Arn) ->
-    ArnBin = list_to_binary(Arn),
-    case binary:split(ArnBin, <<":">>, [global]) of
-        [<<"arn">>, Partition, Service, Region, Account, Resource] ->
+    case string:split(Arn, ":", all) of
+        ["arn", Partition, Service, Region, Account, Resource] ->
             {ok, #{
-                partition => binary_to_list(Partition),
-                service => binary_to_list(Service),
-                region => binary_to_list(Region),
-                account => binary_to_list(Account),
-                resource => binary_to_list(Resource)
+                partition => Partition,
+                service => Service,
+                region => Region,
+                account => Account,
+                resource => Resource
             }};
         _ ->
             {error, invalid_arn_format}
@@ -86,7 +85,7 @@ parse_arn(Arn) ->
 -spec fetch_s3_object(string()) -> {ok, binary()} | {error, term()}.
 fetch_s3_object(Arn) ->
     {ok, #{resource := Resource}} = parse_arn(Arn),
-    [Bucket | KeyParts] = string:tokens(Resource, "/"),
+    [Bucket | KeyParts] = string:split(Resource, "/"),
     Key = string:join(KeyParts, "/"),
     case rabbitmq_aws_config:region() of
         {ok, Region} ->
