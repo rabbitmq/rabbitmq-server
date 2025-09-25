@@ -2043,8 +2043,7 @@ get_quorum_nodes(Q) ->
     end.
 
 -spec prepend_extra_bcc(Qs) ->
-    Qs when Qs :: [amqqueue:amqqueue() | amqqueue:target() |
-                   {amqqueue:amqqueue() | amqqueue:target(), route_infos()}].
+    Qs when Qs :: [amqqueue:target() | {amqqueue:target(), route_infos()}].
 prepend_extra_bcc([]) ->
     [];
 prepend_extra_bcc([Q0] = Qs) ->
@@ -2053,12 +2052,7 @@ prepend_extra_bcc([Q0] = Qs) ->
         none ->
             Qs;
         Name ->
-            case lookup_extra_bcc(Q, Name) of
-                {ok, BCCQueue} ->
-                    [BCCQueue | Qs];
-                {error, not_found} ->
-                    Qs
-            end
+            lookup_extra_bcc(Q, Name) ++ Qs
     end;
 prepend_extra_bcc(Qs) ->
     ExtraQs = lists:filtermap(
@@ -2069,9 +2063,9 @@ prepend_extra_bcc(Qs) ->
                                 false;
                             Name ->
                                 case lookup_extra_bcc(Q, Name) of
-                                    {ok, BCCQ} ->
-                                        {true, BCCQ};
-                                    {error, not_found} ->
+                                    [ExtraQ] ->
+                                        {true, ExtraQ};
+                                    [] ->
                                         false
                                 end
                         end
@@ -2079,14 +2073,14 @@ prepend_extra_bcc(Qs) ->
     lists:usort(ExtraQs) ++ Qs.
 
 -spec queue(Q | {Q, route_infos()}) ->
-    Q when Q :: amqqueue:amqqueue() | amqqueue:target().
+    Q when Q :: amqqueue:target().
 queue({Q, RouteInfos}) when is_map(RouteInfos) ->
     Q;
 queue(Q) ->
     Q.
 
 -spec queue_names([Q | {Q, route_infos()}]) ->
-    [name()] when Q :: amqqueue:amqqueue() | amqqueue:target().
+    [name()] when Q :: amqqueue:target().
 queue_names(Queues) ->
     lists:map(fun({Q, RouteInfos}) when is_map(RouteInfos) ->
                       amqqueue:get_name(Q);
@@ -2094,12 +2088,12 @@ queue_names(Queues) ->
                       amqqueue:get_name(Q)
               end, Queues).
 
--spec lookup_extra_bcc(amqqueue:amqqueue() | amqqueue:target(), binary()) ->
-    {ok, amqqueue:amqqueue()} | {error, not_found}.
+-spec lookup_extra_bcc(amqqueue:target(), binary()) ->
+    [amqqueue:target()].
 lookup_extra_bcc(Q, BCCName) ->
     #resource{virtual_host = VHost} = amqqueue:get_name(Q),
     BCCQueueName = rabbit_misc:r(VHost, queue, BCCName),
-    lookup(BCCQueueName).
+    rabbit_db_queue:get_targets([BCCQueueName]).
 
 is_queue_args_combination_permitted(Q) ->
     Durable = amqqueue:is_durable(Q),

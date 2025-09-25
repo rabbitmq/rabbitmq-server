@@ -212,8 +212,7 @@ is_compatible(_Durable = true,
 is_compatible(_, _, _) ->
     false.
 
--spec init(amqqueue:amqqueue()) ->
-    {ok, rabbit_fifo_client:state()} | {error, not_found}.
+-spec init(amqqueue:amqqueue()) -> {ok, rabbit_fifo_client:state()}.
 init(Q) when ?is_amqqueue(Q) ->
     {ok, SoftLimit} = application:get_env(rabbit, quorum_commands_soft_limit),
     {Name, _} = MaybeLeader = amqqueue:get_pid(Q),

@@ -287,9 +287,8 @@ format(Q, _Ctx) when ?is_amqqueue(Q) ->
      {state, State},
      {node, node(amqqueue:get_pid(Q))}].
 
--spec init(amqqueue:amqqueue()) ->
-    {ok, state()}.
-init(Q) ->
+-spec init(amqqueue:amqqueue()) -> {ok, state()}.
+init(Q) when ?amqqueue_is_classic(Q) ->
     {ok, #?STATE{pid = amqqueue:get_pid(Q)}}.
 
 -spec close(state()) -> ok.
