@@ -209,9 +209,6 @@
 
 -callback close(queue_state()) -> ok.
 
--callback update(amqqueue:amqqueue() | amqqueue:target(), queue_state()) ->
-    queue_state().
-
 -callback consume(amqqueue:amqqueue(),
                   consume_spec(),
                   queue_state()) ->
@@ -251,7 +248,7 @@
                  Drain :: boolean(), queue_state()) ->
     {queue_state(), actions()}.
 
--callback dequeue(queue_name(), NoAck :: boolean(), LimiterPid :: pid(),
+-callback dequeue(amqqueue:amqqueue(), NoAck :: boolean(), LimiterPid :: pid(),
                   rabbit_types:ctag(), queue_state()) ->
     {ok, Count :: non_neg_integer(), rabbit_amqqueue:qmsg(), queue_state()} |
     {empty, queue_state()} |
@@ -751,8 +748,7 @@ credit(QName, CTag, DeliveryCount, Credit, Drain, Ctxs) ->
 dequeue(Q, NoAck, LimiterPid, CTag, Ctxs) ->
     #ctx{state = State0} = Ctx = get_ctx(Q, Ctxs),
     Mod = amqqueue:get_type(Q),
-    QName = amqqueue:get_name(Q),
-    case Mod:dequeue(QName, NoAck, LimiterPid, CTag, State0) of
+    case Mod:dequeue(Q, NoAck, LimiterPid, CTag, State0) of
         {ok, Num, Msg, State} ->
             {ok, Num, Msg, set_ctx(Q, Ctx#ctx{state = State}, Ctxs)};
         {empty, State} ->
@@ -785,10 +781,9 @@ get_ctx_with(#resource{kind = queue} = QRef, Contexts, undefined) ->
 get_ctx_with(Q, #?STATE{ctxs = Contexts}, InitState) ->
     Ref = amqqueue:get_name(Q),
     case Contexts of
-        #{Ref := #ctx{module = Mod,
-                      state = State} = Ctx} ->
-            Ctx#ctx{state = Mod:update(Q, State)};
-        _ when InitState == undefined ->
+        #{Ref := Ctx} ->
+            Ctx;
+        _ when InitState =:= undefined ->
             %% not found and no initial state passed - initialize new state
             Mod = amqqueue:get_type(Q),
             maybe
