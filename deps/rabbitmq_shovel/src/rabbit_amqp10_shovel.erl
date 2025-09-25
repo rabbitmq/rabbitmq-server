@@ -32,7 +32,8 @@
          ack/3,
          nack/3,
          status/1,
-         forward/3
+         forward/3,
+         pending_count/1
         ]).
 
 -import(rabbit_misc, [pget/2, pget/3]).
@@ -316,6 +317,10 @@ status(#{dest := #{current := #{link_state := credited}}}) ->
 status(_) ->
     %% Destination not yet connected
     ignore.
+
+pending_count(#{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, []),
+    length(Pending).
 
 -spec forward(Tag :: tag(), Mc :: mc:state(), state()) ->
     state() | {stop, any()}.
