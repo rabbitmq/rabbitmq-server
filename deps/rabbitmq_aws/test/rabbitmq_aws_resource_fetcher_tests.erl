@@ -32,34 +32,14 @@ parse_arn_empty_test() ->
 parse_arn_incomplete_test() ->
     ?assertEqual({error, invalid_arn_format}, rabbitmq_aws_resource_fetcher:parse_arn("arn:aws:s3")).
 
-update_env_test() ->
-    application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{cacertfile, "old_cert"}]),
+replace_in_env_test() ->
+    ExpectedOtherKeyValue = "value",
+    Expected = [<<"cacertdata">>],
+    ok = application:set_env(rabbitmq_auth_backend_oauth2, key_config,
+                             [{other_key, ExpectedOtherKeyValue}, {cacertfile, "/tmp/ca.pem"}]),
 
-    rabbitmq_aws_resource_fetcher:update_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile, "/tmp/new_cert"),
-
-    {ok, KeyConfig} = application:get_env(rabbitmq_auth_backend_oauth2, key_config),
-    ?assertEqual("/tmp/new_cert", proplists:get_value(cacertfile, KeyConfig)).
-
-update_env_new_key_test() ->
-    application:set_env(rabbitmq_auth_backend_oauth2, key_config, [{other_key, "value"}]),
-
-    rabbitmq_aws_resource_fetcher:update_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile, "/tmp/cert"),
+    ok = rabbitmq_aws_resource_fetcher:replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile, cacerts, Expected),
 
     {ok, KeyConfig} = application:get_env(rabbitmq_auth_backend_oauth2, key_config),
-    ?assertEqual("/tmp/cert", proplists:get_value(cacertfile, KeyConfig)),
-    ?assertEqual("value", proplists:get_value(other_key, KeyConfig)).
-
-write_to_file_test() ->
-    application:set_env(rabbitmq_aws, cacertfiles_download_path, "/tmp/test-certs"),
-
-    Content = "test certificate content",
-    Arn = "arn:aws:s3:::bucket/cert.pem",
-
-    FilePath = rabbitmq_aws_resource_fetcher:write_to_file(Arn, Content),
-
-    ?assert(filelib:is_file(FilePath)),
-
-    {ok, ReadContent} = file:read_file(FilePath),
-    ?assertEqual(Content, binary_to_list(ReadContent)),
-
-    file:delete(FilePath).
+    ?assertMatch(Expected, proplists:get_value(cacerts, KeyConfig)),
+    ?assertMatch(ExpectedOtherKeyValue, proplists:get_value(other_key, KeyConfig)).

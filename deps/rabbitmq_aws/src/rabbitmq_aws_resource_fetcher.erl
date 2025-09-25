@@ -20,8 +20,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -spec process_arns() -> ok.
-%% @doc Fetch certificate files from Amazon S3 and update application
-%%      configuration when users don't have access to the local file system
+%% @doc Fetch certificate files from Amazon S3 and update application configuration to use them
 %% @end
 process_arns() ->
     case application:get_env(rabbitmq_aws, aws_arns) of
@@ -29,44 +28,39 @@ process_arns() ->
             lists:foreach(fun({_Key, Arn, Handler}) ->
                 case resolve_arn(Arn) of
                     {ok, Content} ->
-                        FilePath = write_to_file(Arn, Content),
-                        case Handler of
-                            oauth2_https_cacertfile ->
-                                update_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile, FilePath);
-                            ssl_options_cacertfile ->
-                                update_env(rabbit, ssl_options, cacertfile, FilePath);
-                            ldap_ssl_options_cacertfile ->
-                                update_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile, FilePath)
-                        end,
-                        ?LOG_INFO("Fetched ARN ~p and stored to ~p", [Arn, FilePath]);
+                        ok = handle_content(Handler, Content);
                     {error, Reason} ->
-                        ?LOG_ERROR("Failed to resolve ARN ~p: ~p", [Arn, Reason])
+                        ?LOG_ERROR("aws arn: failed to resolve ~tp: ~tp", [Arn, Reason])
                 end
             end, ArnList);
         _ ->
             ok
     end.
 
--spec update_env(atom(), atom(), atom(), string()) -> ok.
-update_env(App, ConfigKey, Key, Value) ->
-    Config = case application:get_env(App, ConfigKey) of
-        {ok, ExistingConfig} -> ExistingConfig;
-        undefined -> []
-    end,
-    NewConfig = lists:keystore(Key, 1, Config, {Key, Value}),
-    application:set_env(App, ConfigKey, NewConfig).
+handle_content(oauth2_https_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
+                        cacerts, CaCertsDerEncoded);
+handle_content(ssl_options_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbit, ssl_options, cacertfile,
+                        cacerts, CaCertsDerEncoded);
+handle_content(ldap_ssl_options_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
+                        cacerts, CaCertsDerEncoded).
 
 -spec resolve_arn(string()) -> {ok, binary()} | {error, term()}.
 resolve_arn(Arn) ->
-    ?LOG_INFO("Attempting to resolve ARN: ~p", [Arn]),
+    ?LOG_INFO("aws arn: attempting to resolve: ~tp", [Arn]),
     case parse_arn(Arn) of
         {ok, #{service := "s3"}} ->
             fetch_s3_object(Arn);
         {ok, #{service := Service}} ->
-            ?LOG_ERROR("Unsupported service: ~p", [Service]),
+            ?LOG_ERROR("aws arn: unsupported service: ~tp", [Service]),
             {error, {unsupported_service, Service}};
         {error, _} = Error ->
-            ?LOG_ERROR("Failed to parse ARN ~p: ~p", [Arn, Error]),
+            ?LOG_ERROR("aws arn: failed to parse ~tp: ~tp", [Arn, Error]),
             Error
     end.
 
@@ -96,7 +90,7 @@ fetch_s3_object(Arn) ->
             rabbitmq_aws:set_region(Region),
             fetch_s3_object_with_region(Bucket, Key);
         {error, RegionError} ->
-            ?LOG_ERROR("Failed to get AWS region: ~p", [RegionError]),
+            ?LOG_ERROR("aws arn: failed to get AWS region: ~tp", [RegionError]),
             {error, {region_lookup_failed, RegionError}}
     end.
 
@@ -105,7 +99,7 @@ fetch_s3_object_with_region(Bucket, Key) ->
     rabbitmq_aws:refresh_credentials(),
     case rabbitmq_aws:has_credentials() of
         false ->
-            ?LOG_ERROR("No AWS credentials available for assume role operation"),
+            ?LOG_ERROR("aws arn: no AWS credentials available for assume role operation"),
             {error, no_base_credentials};
         true ->
             case application:get_env(rabbitmq_aws, assume_role_arn) of
@@ -114,7 +108,7 @@ fetch_s3_object_with_region(Bucket, Key) ->
                         ok ->
                             fetch_s3_object_final(Bucket, Key);
                         {error, AssumeRoleReason} ->
-                            ?LOG_ERROR("Failed to assume role ~p: ~p", [RoleArn, AssumeRoleReason]),
+                            ?LOG_ERROR("aws arn: failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
                             {error, {assume_role_failed, AssumeRoleReason}}
                     end;
                 _ ->
@@ -134,15 +128,6 @@ fetch_s3_object_final(Bucket, Key) ->
         Other ->
             {error, {unexpected_response, Other}}
     end.
-
--spec write_to_file(string(), binary()) -> string().
-write_to_file(Arn, Content) ->
-    {ok, TempDir} = application:get_env(rabbitmq_aws, cacertfiles_download_path),
-    Filename = re:replace(Arn, "[^a-zA-Z0-9]", "_", [global, {return, list}]),
-    ok = filelib:ensure_dir(TempDir ++ "/"),
-    FilePath = TempDir ++ "/" ++ Filename,
-    ok = rabbit_file:write_file(FilePath, Content),
-    FilePath.
 
 -spec assume_role(string()) -> ok | {error, term()}.
 assume_role(RoleArn) ->
@@ -174,7 +159,48 @@ parse_assume_role_response(Body) ->
         rabbitmq_aws:set_credentials(AccessKey, SecretKey, SessionToken),
         ok
     catch
-        _:Error:Stacktrace ->
-            ?LOG_ERROR("Parse error: ~p~nStacktrace: ~p", [Error, Stacktrace]),
+        Class:Error:Stacktrace ->
+            ?LOG_ERROR("aws arn: parse error: ~tp:~tp", [Class, Error]),
+            ?LOG_ERROR("~tp", [Stacktrace]),
             {error, {parse_error, Error}}
+    end.
+
+-spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
+replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
+    ok = delete_from_env(App, ConfigKey, KeyToDelete),
+    ok = update_env(App, ConfigKey, Key, Value).
+
+-spec delete_from_env(atom(), atom(), atom()) -> ok.
+delete_from_env(App, ConfigKey, KeyToDelete) ->
+    Config = case application:get_env(App, ConfigKey) of
+        {ok, ExistingConfig} -> ExistingConfig;
+        undefined -> []
+    end,
+    NewConfig = lists:keydelete(KeyToDelete, 1, Config),
+    ok = application:set_env(App, ConfigKey, NewConfig).
+
+-spec update_env(atom(), atom(), atom(), any()) -> ok.
+update_env(App, ConfigKey, Key, Value) ->
+    Config = case application:get_env(App, ConfigKey) of
+        {ok, ExistingConfig} -> ExistingConfig;
+        undefined -> []
+    end,
+    NewConfig = lists:keystore(Key, 1, Config, {Key, Value}),
+    ok = application:set_env(App, ConfigKey, NewConfig).
+
+decode_pem_data(PemList) when is_list(PemList) ->
+    decode_pem_data(list_to_binary(PemList));
+decode_pem_data(PemBin) when is_binary(PemBin) ->
+    try
+        CaCertsDerEncoded = [Der || {'Certificate', Der, not_encrypted} <- public_key:pem_decode(PemBin)],
+        case CaCertsDerEncoded of
+            Certs when is_list(Certs) andalso length(Certs) > 0 ->
+                {ok, CaCertsDerEncoded};
+            _ ->
+                ?LOG_ERROR("aws arn: invalid PEM data: no valid certificates found"),
+                {ok, []}
+        end
+    catch Class:Error:Stacktrace ->
+        ?LOG_ERROR("aws arn: error decoding certs ~tp:~tp", [Class, Error]),
+        ?LOG_ERROR("~tp", [Stacktrace])
     end.
