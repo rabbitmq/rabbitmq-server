@@ -23,19 +23,22 @@
 %% @doc Fetch certificate files from Amazon S3 and update application configuration to use them
 %% @end
 process_arns() ->
-    case application:get_env(rabbitmq_aws, aws_arns) of
-        {ok, ArnList} ->
-            lists:foreach(fun({_Key, Arn, Handler}) ->
-                case resolve_arn(Arn) of
-                    {ok, Content} ->
-                        ok = handle_content(Handler, Content);
-                    {error, Reason} ->
-                        ?LOG_ERROR("aws arn: failed to resolve ~tp: ~tp", [Arn, Reason])
-                end
-            end, ArnList);
-        _ ->
-            ok
-    end.
+    process_arns(application:get_env(rabbitmq_aws, aws_arns)).
+
+process_arns([]) ->
+    ok;
+process_arns([{_Key, Arn, Handler} | Rest]) ->
+    case resolve_arn(Arn) of
+        {ok, Content} ->
+            ok = handle_content(Handler, Content);
+        {error, Reason} ->
+            ?LOG_ERROR("aws arn: failed to resolve ~tp: ~tp", [Arn, Reason])
+    end,
+    process_arns(Rest);
+process_arns({ok, ArnList}) ->
+    process_arns(ArnList);
+process_arns(undefined) ->
+    ok.
 
 handle_content(oauth2_https_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
