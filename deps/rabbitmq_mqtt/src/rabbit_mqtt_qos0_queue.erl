@@ -133,7 +133,7 @@ delete(Q, _IfUnused, _IfEmpty, ActingUser) ->
 supports_stateful_delivery() ->
     false.
 
--spec deliver([{amqqueue:amqqueue(), stateless}],
+-spec deliver([{amqqueue:target(), stateless}],
               Msg :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
     {[], rabbit_queue_type:actions()}.

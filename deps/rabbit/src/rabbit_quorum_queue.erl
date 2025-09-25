@@ -234,10 +234,10 @@ init(Q) when ?is_amqqueue(Q) ->
 close(State) ->
     rabbit_fifo_client:close(State).
 
--spec update(amqqueue:amqqueue(), rabbit_fifo_client:state()) ->
+-spec update(amqqueue:amqqueue() | amqqueue:target(), rabbit_fifo_client:state()) ->
     rabbit_fifo_client:state().
-update(Q, State) when ?amqqueue_is_quorum(Q) ->
-    %% QQ state maintains it's own updates
+update(_Q, State) ->
+    %% QQ state maintains its own updates
     State.
 
 -spec handle_event(rabbit_amqqueue:name(),
@@ -1139,7 +1139,6 @@ deliver(QSs, Msg0, Options) ->
                       {[{Q, S} | Qs], As ++ Actions}
               end
       end, {[], []}, QSs).
-
 
 state_info(S) ->
     #{pending_raft_commands => rabbit_fifo_client:pending_size(S),

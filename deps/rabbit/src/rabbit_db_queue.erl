@@ -18,7 +18,7 @@
 
 -export([
          get/1,
-         get_many/1,
+         get_targets/1,
          get_all/0,
          get_all/1,
          get_all_by_type/1,
@@ -85,6 +85,7 @@
 -define(MNESIA_DURABLE_TABLE, rabbit_durable_queue).
 
 -define(KHEPRI_PROJECTION, rabbit_khepri_queue).
+-define(KHEPRI_TARGET_PROJECTION, rabbit_khepri_queue_target).
 
 %% -------------------------------------------------------------------
 %% get_all().
@@ -469,58 +470,62 @@ internal_delete_in_mnesia(QueueName, OnlyDurable, Reason) ->
     rabbit_db_binding:delete_for_destination_in_mnesia(QueueName, OnlyDurable).
 
 %% -------------------------------------------------------------------
-%% get_many().
+%% get_targets().
 %% -------------------------------------------------------------------
 
--spec get_many(rabbit_exchange:route_return()) ->
-    [amqqueue:amqqueue() | {amqqueue:amqqueue(), rabbit_exchange:route_infos()}].
-get_many(Names) when is_list(Names) ->
+-spec get_targets(rabbit_exchange:route_return()) ->
+    [amqqueue:target() | {amqqueue:target(), rabbit_exchange:route_infos()}].
+get_targets(Names) ->
     rabbit_khepri:handle_fallback(
-      #{mnesia => fun() -> get_many_in_ets(?MNESIA_TABLE, Names) end,
-        khepri => fun() -> get_many_in_khepri(Names) end
+      #{mnesia => fun() -> lookup_targets(mnesia, Names) end,
+        khepri => fun() -> lookup_targets(khepri, Names) end
        }).
 
-get_many_in_khepri(Names) ->
-    try
-        get_many_in_ets(?KHEPRI_PROJECTION, Names)
-    catch
-        error:badarg ->
-            []
-    end.
-
-get_many_in_ets(Table, [{Name, RouteInfos}])
-  when is_map(RouteInfos) ->
-    case ets_lookup(Table, Name) of
-        [] -> [];
-        [Q] -> [{Q, RouteInfos}]
-    end;
-get_many_in_ets(Table, [Name]) ->
-    ets_lookup(Table, Name);
-get_many_in_ets(Table, Names) when is_list(Names) ->
+lookup_targets(Store, Names) ->
     lists:filtermap(fun({Name, RouteInfos})
                           when is_map(RouteInfos) ->
-                            case ets_lookup(Table, Name) of
-                                [] -> false;
-                                [Q] -> {true, {Q, RouteInfos}}
+                            case lookup_target(Store, Name) of
+                                not_found -> false;
+                                Target -> {true, {Target, RouteInfos}}
                             end;
                        (Name) ->
-                            case ets_lookup(Table, Name) of
-                                [] -> false;
-                                [Q] -> {true, Q}
+                            case lookup_target(Store, Name) of
+                                not_found -> false;
+                                Target -> {true, Target}
                             end
                     end, Names).
 
-ets_lookup(Table, QName = #resource{name = QNameBin}) ->
-    case rabbit_volatile_queue:is(QNameBin) of
+lookup_target(Store, #resource{name = NameBin} = Name) ->
+    case rabbit_volatile_queue:is(NameBin) of
         true ->
-            %% This queue record is not stored in the database.
-            %% We create it on the fly.
-            case rabbit_volatile_queue:new(QName) of
-                error -> [];
-                Q -> [Q]
+            %% This queue is not stored in the database. We create it on the fly.
+            case rabbit_volatile_queue:new_target(Name) of
+                error -> not_found;
+                Target -> Target
             end;
         false ->
-            ets:lookup(Table, QName)
+            lookup_target0(Store, Name)
+    end.
+
+lookup_target0(khepri, Name) ->
+    try ets:lookup_element(?KHEPRI_TARGET_PROJECTION, Name, 2, not_found) of
+        not_found ->
+            not_found;
+        Target ->
+            amqqueue:new_target(Name, Target)
+    catch
+        error:badarg ->
+            not_found
+    end;
+lookup_target0(mnesia, Name) ->
+    case ets:lookup(?MNESIA_TABLE, Name) of
+        [] ->
+            not_found;
+        [Q] ->
+            Type = amqqueue:get_type(Q),
+            Pid = amqqueue:get_pid(Q),
+            ExtraBcc = amqqueue:get_extra_bcc(Q),
+            amqqueue:new_target(Name, {Type, Pid, ExtraBcc})
     end.
 
 %% -------------------------------------------------------------------
@@ -609,6 +614,14 @@ get_many_durable_in_khepri(Names) ->
         error:badarg ->
             []
     end.
+
+get_many_in_ets(Table, Names) ->
+    lists:filtermap(fun(Name) ->
+                            case ets:lookup(Table, Name) of
+                                [] -> false;
+                                [Q] -> {true, Q}
+                            end
+                    end, Names).
 
 %% -------------------------------------------------------------------
 %% update().
