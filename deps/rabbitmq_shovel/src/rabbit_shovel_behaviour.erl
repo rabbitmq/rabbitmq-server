@@ -85,6 +85,7 @@
 -callback forward(Tag :: tag(), Msg :: mc:state(), state()) ->
     state() | {stop, any()}.
 -callback status(state()) -> rabbit_shovel_status:shovel_status().
+-callback pending_count(state()) -> non_neg_integer().
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
     source_config() | dest_config().
@@ -164,12 +165,12 @@ incr_forwarded(State = #{dest := Dest}) ->
     State#{dest => maps:put(forwarded, maps:get(forwarded, Dest, 0) + 1, Dest)}.
 
 -spec metrics(state()) -> rabbit_shovel_status:metrics().
-metrics(_State = #{source := Source,
-                   dest := Dest}) ->
+metrics(#{source := Source,
+          dest := #{module := Mod}} = State) ->
     #{remaining => maps:get(remaining, Source, unlimited),
-     remaining_unacked => maps:get(remaining_unacked, Source, 0),
-      pending => maps:get(pending, Dest, 0),
-      forwarded => maps:get(forwarded, Dest, 0)}.
+      remaining_unacked => maps:get(remaining_unacked, Source, 0),
+      pending => Mod:pending_count(State),
+      forwarded => maps:get(forwarded, maps:get(dest, State), 0)}.
 
 
 %% Common functions
