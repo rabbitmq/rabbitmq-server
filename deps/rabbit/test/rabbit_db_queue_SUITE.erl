@@ -31,7 +31,7 @@ all_tests() ->
     [
      create_or_get,
      get,
-     get_many,
+     get_targets,
      get_all,
      get_all_by_vhost,
      get_all_by_type,
@@ -131,20 +131,24 @@ get1(_Config) ->
                  rabbit_db_queue:get(rabbit_misc:r(?VHOST, queue, <<"test-queue2">>))),
     passed.
 
-get_many(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_many1, [Config]).
+get_targets(Config) ->
+    passed = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, get_targets1, [Config]).
 
-get_many1(_Config) ->
+get_targets1(_Config) ->
     QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
     QName2 = rabbit_misc:r(?VHOST, queue, <<"test-queue2">>),
     Q = new_queue(QName, rabbit_classic_queue),
     Q2 = new_queue(QName2, rabbit_classic_queue),
     ok = rabbit_db_queue:set(Q),
-    ?assertEqual([Q], rabbit_db_queue:get_many([QName])),
-    ?assertEqual([Q], rabbit_db_queue:get_many([QName, QName2])),
-    ?assertEqual([], rabbit_db_queue:get_many([QName2])),
+    Target = {rabbit_classic_queue, none, none},
+    QTarget = amqqueue:new_target(QName, Target),
+    QTarget2 = amqqueue:new_target(QName2, Target),
+    ?assertEqual([QTarget], rabbit_db_queue:get_targets([QName])),
+    ?assertEqual([QTarget], rabbit_db_queue:get_targets([QName, QName2])),
+    ?assertEqual([], rabbit_db_queue:get_targets([QName2])),
     ok = rabbit_db_queue:set(Q2),
-    ?assertEqual(lists:sort([Q, Q2]), lists:sort(rabbit_db_queue:get_many([QName, QName2]))),
+    ?assertEqual(lists:sort([QTarget, QTarget2]),
+                 lists:sort(rabbit_db_queue:get_targets([QName, QName2]))),
     passed.
 
 get_all(Config) ->

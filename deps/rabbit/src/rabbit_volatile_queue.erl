@@ -16,6 +16,7 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 
 -export([new/1,
+         new_target/1,
          new_name/0,
          is/1,
          key_from_name/1,
@@ -93,6 +94,16 @@ new(#resource{virtual_host = Vhost,
 
 new0(Name, Pid, Vhost) ->
     amqqueue:new(Name, Pid, false, true, none, [], Vhost, #{}, ?MODULE).
+
+-spec new_target(rabbit_amqqueue:name()) ->
+    amqqueue:target() | error.
+new_target(#resource{name = NameBin} = Name) ->
+    case pid_from_name(NameBin) of
+        {ok, Pid} when is_pid(Pid) ->
+            amqqueue:new_target(Name, {?MODULE, Pid, none});
+        _ ->
+            error
+    end.
 
 -spec is(rabbit_misc:resource_name()) ->
     boolean().
