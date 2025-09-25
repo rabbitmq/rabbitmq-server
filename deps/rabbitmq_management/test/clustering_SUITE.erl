@@ -214,7 +214,7 @@ queue_on_other_node(Config) ->
     Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, 1),
     {ok, Chan} = amqp_connection:open_channel(Conn),
     _ = queue_declare(Chan, <<"some-queue">>),
-    _ = wait_for_queue(Config, "/queues/%2F/some-queue"),
+    eventually(?_assertEqual(1, length(http_get(Config, "/queues/%2F"))), 2000, 5),
 
     {ok, Chan2} = amqp_connection:open_channel(?config(conn, Config)),
     consume(Chan2, <<"some-queue">>),
@@ -899,7 +899,6 @@ wait_for_queue(Config, Path, Keys) ->
 
 wait_for_queue(_Config, Path, Keys, 0) ->
     exit({timeout, {Path, Keys}});
-
 wait_for_queue(Config, Path, Keys, Count) ->
     Res = http_get(Config, Path),
     case present(Keys, Res) of

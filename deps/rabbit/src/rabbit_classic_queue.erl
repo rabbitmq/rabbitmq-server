@@ -295,8 +295,8 @@ init(Q) when ?amqqueue_is_classic(Q) ->
 close(_State) ->
     ok.
 
--spec update(amqqueue:amqqueue(), state()) -> state().
-update(Q, #?STATE{pid = Pid} = State) when ?amqqueue_is_classic(Q) ->
+-spec update(amqqueue:amqqueue() | amqqueue:target(), state()) -> state().
+update(Q, #?STATE{pid = Pid} = State) ->
     case amqqueue:get_pid(Q) of
         Pid ->
             State;
@@ -473,10 +473,10 @@ settlement_action(Type, QRef, MsgSeqs, Acc) ->
 
 supports_stateful_delivery() -> true.
 
--spec deliver([{amqqueue:amqqueue(), state()}],
+-spec deliver([{amqqueue:target(), state()}],
               Delivery :: mc:state(),
               rabbit_queue_type:delivery_options()) ->
-    {[{amqqueue:amqqueue(), state()}], rabbit_queue_type:actions()}.
+    {[{amqqueue:target(), state()}], rabbit_queue_type:actions()}.
 deliver(Qs0, Msg0, Options) ->
     %% add guid to content here instead of in rabbit_basic:message/3,
     %% as classic queues are the only ones that need it
