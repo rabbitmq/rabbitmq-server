@@ -17,7 +17,6 @@
 -compile(export_all).
 -endif.
 
--include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -spec process_arns() -> ok.
@@ -25,7 +24,7 @@
 %%      configuration when users don't have access to the local file system
 %% @end
 process_arns() ->
-    case application:get_env(rabbit, aws_arns) of
+    case application:get_env(rabbitmq_aws, aws_arns) of
         {ok, ArnList} ->
             lists:foreach(fun({_Key, Arn, Handler}) ->
                 case resolve_arn(Arn) of
