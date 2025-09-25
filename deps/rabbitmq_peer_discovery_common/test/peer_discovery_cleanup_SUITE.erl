@@ -26,7 +26,8 @@ groups() ->
 
 all_tests() ->
     [
-     cleanup_queues
+     cleanup_queues,
+     backend_errors_do_not_trigger_cleanup
     ].
 
 %% -------------------------------------------------------------------
@@ -117,6 +118,45 @@ cleanup_queues(Config) ->
     %% Node C should be removed from the quorum queue members.
     ?assertEqual(
       lists:sort([A, B]),
+      begin
+          Info = rpc:call(A, rabbit_quorum_queue, infos,
+                          [rabbit_misc:r(<<"/">>, queue, QQ)]),
+          lists:sort(proplists:get_value(members, Info))
+      end),
+
+    %% Cleanup.
+    ok = rabbit_ct_client_helpers:close_connection_and_channel(Conn, Ch).
+
+backend_errors_do_not_trigger_cleanup(Config) ->
+    %% The backend could have some transient failures. While the backend is
+    %% not giving reliable peer information, skip cleanup.
+    [A, B, C] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    {Conn, Ch} = rabbit_ct_client_helpers:open_connection_and_channel(Config),
+
+    QQ = <<"quorum-queue">>,
+    declare_queue(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
+
+    %% Have the backend return an error.
+    mock_list_nodes(Config, {error, "...internal server error..."}),
+    %% Make node C unreachable.
+    rabbit_ct_broker_helpers:block_traffic_between(A, C),
+    rabbit_ct_broker_helpers:block_traffic_between(B, C),
+    Ts1 = erlang:system_time(millisecond),
+    ?awaitMatch([C],
+                rabbit_ct_broker_helpers:rpc(Config, A,
+                                             rabbit_nodes,
+                                             list_unreachable, []),
+                30_000, 1_000),
+    ct:log(?LOW_IMPORTANCE, "Node C became unreachable in ~bms",
+           [erlang:system_time(millisecond) - Ts1]),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, A,
+                                      rabbit_peer_discovery_cleanup,
+                                      check_cluster, []),
+
+    %% Node C should remain in the quorum queue members.
+    ?assertEqual(
+      lists:sort([A, B, C]),
       begin
           Info = rpc:call(A, rabbit_quorum_queue, infos,
                           [rabbit_misc:r(<<"/">>, queue, QQ)]),
