@@ -26,7 +26,6 @@
 {mapping, "aws.resource_fetcher.assume_role_arn", "rabbitmq_aws.assume_role_arn",
     [{datatype, string}]}.
 
-
 %% @doc Fetch cacertfile from Amazon S3, store locally and pass to ssl_options.cacertfile
 {mapping, "aws.arns.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
