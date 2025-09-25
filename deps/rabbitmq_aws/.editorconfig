@@ -12,4 +12,4 @@ indent_style = tab
 # 2 space indentation
 [{*.erl, *.hrl, *.md}]
 indent_style = space
-indent_size = 2
+indent_size = 4

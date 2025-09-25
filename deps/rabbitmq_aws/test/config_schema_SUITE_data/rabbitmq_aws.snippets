@@ -1,10 +1,8 @@
 [
     {rabbitmq_aws_prefer_imdsv2_false,
         "aws.prefer_imdsv2 = false",
-        [{rabbit, [
-            {aws_prefer_imdsv2, false}
-         ]},
-		 {rabbitmq_aws, [
+        [{rabbitmq_aws, [
+            {aws_prefer_imdsv2, false},
             % Note: due to how snippets are deepsorted, we also must
             % deepsort the expected value here
             {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"}
@@ -14,10 +12,8 @@
 
     {rabbitmq_aws_prefer_imdsv2_true,
         "aws.prefer_imdsv2 = true",
-        [{rabbit, [
-            {aws_prefer_imdsv2, true}
-         ]},
-		 {rabbitmq_aws, [
+        [{rabbitmq_aws, [
+            {aws_prefer_imdsv2, true},
             {cacertfiles_download_path, "--//aaabbcceefiilmmpqrrsstttw"}
 		 ]}
 		],
