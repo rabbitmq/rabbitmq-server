@@ -35,7 +35,6 @@
          transfer_leadership/2,
          init/1,
          close/1,
-         update/2,
          state_info/1,
          stat/1,
          format/2,
@@ -1023,9 +1022,6 @@ close(#stream_client{readers = Readers,
                          close_log(Log),
                          rabbit_core_metrics:consumer_deleted(self(), CTag, QName)
                  end, Readers).
-
-update(_Q, State) ->
-    State.
 
 update_leader_pid(Pid, #stream_client{leader = Pid} =  State) ->
     State;

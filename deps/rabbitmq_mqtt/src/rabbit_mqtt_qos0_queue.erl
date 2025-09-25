@@ -58,7 +58,6 @@
         [
          init/1,
          close/1,
-         update/2,
          consume/3,
          cancel/3,
          handle_event/3,
@@ -290,9 +289,6 @@ init(A1) ->
 
 close(A1) ->
     ?UNSUPPORTED([A1]).
-
-update(A1,A2) ->
-    ?UNSUPPORTED([A1,A2]).
 
 consume(A1,A2,A3) ->
     ?UNSUPPORTED([A1,A2,A3]).
