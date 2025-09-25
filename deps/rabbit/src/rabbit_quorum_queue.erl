@@ -14,7 +14,6 @@
 
 -export([init/1,
          close/1,
-         update/2,
          handle_event/3]).
 -export([is_recoverable/1,
          recover/2,
@@ -233,12 +232,6 @@ init(Q) when ?is_amqqueue(Q) ->
 -spec close(rabbit_fifo_client:state()) -> ok.
 close(State) ->
     rabbit_fifo_client:close(State).
-
--spec update(amqqueue:amqqueue() | amqqueue:target(), rabbit_fifo_client:state()) ->
-    rabbit_fifo_client:state().
-update(_Q, State) ->
-    %% QQ state maintains its own updates
-    State.
 
 -spec handle_event(rabbit_amqqueue:name(),
                    {amqqueue:ra_server_id(), any()},
@@ -975,12 +968,13 @@ credit_v1(_QName, CTag, Credit, Drain, QState) ->
 credit(_QName, CTag, DeliveryCount, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, QState).
 
--spec dequeue(rabbit_amqqueue:name(), NoAck :: boolean(), pid(),
+-spec dequeue(amqqueue:amqqueue(), NoAck :: boolean(), pid(),
               rabbit_types:ctag(), rabbit_fifo_client:state()) ->
     {empty, rabbit_fifo_client:state()} |
     {ok, QLen :: non_neg_integer(), qmsg(), rabbit_fifo_client:state()} |
     {error, term()}.
-dequeue(QName, NoAck, _LimiterPid, CTag0, QState0) ->
+dequeue(Q, NoAck, _LimiterPid, CTag0, QState0) ->
+    QName = amqqueue:get_name(Q),
     CTag = quorum_ctag(CTag0),
     Settlement = case NoAck of
                      true ->

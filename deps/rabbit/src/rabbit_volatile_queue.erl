@@ -33,7 +33,6 @@
          credit/6,
          init/1,
          close/1,
-         update/2,
          consume/3,
          cancel/3,
          handle_event/3,
@@ -276,9 +275,6 @@ credit(_QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
 
 close(#?STATE{}) ->
     ok.
-
-update(_, #?STATE{} = State) ->
-    State.
 
 cancel(_, _, #?STATE{} = State) ->
     {ok, State}.
