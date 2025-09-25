@@ -38,6 +38,15 @@
 {mapping, "aws.arns.auth_ldap.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
 
+%% @doc Fetch LDAP directory lookup service account user's password from AWS Secret Manager
+{mapping, "aws.arns.auth_ldap.dn_lookup_bind.password", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch optional LDAP authroization look up account user's password. (default reusing dn_lookup account)
+{mapping, "aws.arns.auth_ldap.other_bind.password", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+
 {translation, "rabbitmq_aws.aws_arns",
 fun(Conf) ->
     lists:foldl(fun({Key, Handler}, Acc) ->
@@ -48,6 +57,8 @@ fun(Conf) ->
     end, [], [
         {"aws.arns.auth_oauth2.https.cacertfile", oauth2_https_cacertfile},
         {"aws.arns.ssl_options.cacertfile", ssl_options_cacertfile},
-        {"aws.arns.auth_ldap.ssl_options.cacertfile", ldap_ssl_options_cacertfile}
+        {"aws.arns.auth_ldap.ssl_options.cacertfile", ldap_ssl_options_cacertfile},
+        {"aws.arns.auth_ldap.dn_lookup_bind.password", ldap_dn_lookup_bind_password},
+        {"aws.arns.auth_ldap.other_bind.password", ldap_other_bind_password}
     ])
 end}.
