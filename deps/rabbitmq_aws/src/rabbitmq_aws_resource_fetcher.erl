@@ -7,6 +7,7 @@
 
 -module(rabbitmq_aws_resource_fetcher).
 
+
 %% API
 -export([
     process_arns/0
@@ -51,32 +52,42 @@ handle_content(ssl_options_cacertfile, PemData) ->
 handle_content(ldap_ssl_options_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
     ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
-                        cacerts, CaCertsDerEncoded).
+                        cacerts, CaCertsDerEncoded);
+handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
+    ok = update_ldap_bind_password_env(ldap_dn_lookup_bind_password, SecretJsonBin);
+handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
+    ok = update_ldap_bind_password_env(ldap_other_bind_password, SecretJsonBin).
+                
 
 -spec resolve_arn(string()) -> {ok, binary()} | {error, term()}.
 resolve_arn(Arn) ->
     ?LOG_INFO("aws arn: attempting to resolve: ~tp", [Arn]),
     case parse_arn(Arn) of
-        {ok, #{service := "s3"}} ->
-            fetch_s3_object(Arn);
+        {ok, #{service := "s3", resource := Resource}} ->
+            fetch_s3_object(Resource);
+        {ok, #{service := "secretsmanager", region := Region}} ->
+            fetch_secretsmanager_secret(Arn, Region);
         {ok, #{service := Service}} ->
-            ?LOG_ERROR("aws arn: unsupported service: ~tp", [Service]),
+            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR]Unsupported service: ~p", [Service]),
             {error, {unsupported_service, Service}};
         {error, _} = Error ->
-            ?LOG_ERROR("aws arn: failed to parse ~tp: ~tp", [Arn, Error]),
+            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR]Failed to parse ARN ~p: ~p", [Arn, Error]),
             Error
     end.
 
 -spec parse_arn(string()) -> {ok, map()} | {error, term()}.
 parse_arn(Arn) ->
-    case string:split(Arn, ":", all) of
-        ["arn", Partition, Service, Region, Account, Resource] ->
+    ArnBin = list_to_binary(Arn),
+    % resource name in arn could contain ":" itself, therefore using parts. eg: arn:aws:secretsmanager:us-east-1:12345678910:secret:mysecret
+    case re:split(ArnBin, <<":">>, [{parts,6}, {return, binary}]) of
+        [<<"arn">>, Partition, Service, Region, Account, Resource] ->
+            ?LOG_INFO("rabbitmq_aws_resource_fetcher parsed ARN: arn:~tp:~tp:~tp:~tp:~tp", [Partition, Service, Region, Account, Resource]),
             {ok, #{
-                partition => Partition,
-                service => Service,
-                region => Region,
-                account => Account,
-                resource => Resource
+                partition => binary_to_list(Partition),
+                service => binary_to_list(Service),
+                region => binary_to_list(Region),
+                account => binary_to_list(Account),
+                resource => binary_to_list(Resource)
             }};
         _ ->
             {error, invalid_arn_format}
@@ -104,7 +115,7 @@ fetch_s3_object_with_region(Bucket, Key) ->
             ?LOG_ERROR("aws arn: no AWS credentials available for assume role operation"),
             {error, no_base_credentials};
         true ->
-            case application:get_env(rabbitmq_aws, assume_role_arn) of
+            case application:get_env(rabbit_aws, assume_role_arn) of
                 {ok, RoleArn} ->
                     case assume_role(RoleArn) of
                         ok ->
@@ -130,6 +141,43 @@ fetch_s3_object_final(Bucket, Key) ->
         Other ->
             {error, {unexpected_response, Other}}
     end.
+
+-spec fetch_secretsmanager_secret(string(), string()) -> {ok, binary()} | {error, term()}.
+fetch_secretsmanager_secret(Arn, Region) ->
+    rabbitmq_aws:set_region(Region),
+    rabbitmq_aws:refresh_credentials(),
+    RequestBody = binary_to_list(rabbit_json:encode(#{
+        <<"SecretId">> => list_to_binary(Arn),
+        <<"VersionStage">> => <<"AWSCURRENT">>
+    })),
+    Headers = [
+        {"X-Amz-Target", "secretsmanager.GetSecretValue"},
+        {"Content-Type", "application/x-amz-json-1.1"}
+    ],
+    case rabbitmq_aws:post("secretsmanager", "/", RequestBody, Headers) of
+        {ok, {_ResponseHeaders, ResponseBody}} ->
+            case rabbit_json:decode(ResponseBody) of
+                #{<<"SecretString">> := SecretValue} ->
+                    {ok, SecretValue};
+                #{<<"SecretBinary">> := SecretBinary} ->
+                    {ok, base64:decode(SecretBinary)};
+                _ ->
+                    {error, no_secret_value}
+            end;
+        {error, Reason} ->
+            {error, Reason};
+        Other ->
+            {error, {unexpected_response, Other}}
+    end.
+
+-spec write_to_file(string(), binary()) -> string().
+write_to_file(Arn, Content) ->
+    {ok, TempDir} = application:get_env(rabbitmq_aws, cacertfiles_download_path),
+    Filename = re:replace(Arn, "[^a-zA-Z0-9]", "_", [global, {return, list}]),
+    ok = filelib:ensure_dir(TempDir ++ "/"),
+    FilePath = TempDir ++ "/" ++ Filename,
+    ok = rabbit_file:write_file(FilePath, Content),
+    FilePath.
 
 -spec assume_role(string()) -> ok | {error, term()}.
 assume_role(RoleArn) ->
@@ -205,4 +253,73 @@ decode_pem_data(PemBin) when is_binary(PemBin) ->
     catch Class:Error:Stacktrace ->
         ?LOG_ERROR("aws arn: error decoding certs ~tp:~tp", [Class, Error]),
         ?LOG_ERROR("~tp", [Stacktrace])
+    end.
+
+-spec update_ldap_bind_password_env(string(), atom()) -> ok.
+update_ldap_bind_password_env(PasswordType, SecretContent) ->
+    % parse Json content to be a map.
+    case rabbit_json:decode(SecretContent) of
+        SecretMap when is_map(SecretMap) ->
+            % Determine which password key to look for in secret manager. keep it the same with external configuration name.
+            JsonKey = case PasswordType of
+                ldap_dn_lookup_bind_password -> <<"auth_ldap.dn_lookup_bind.password">>;
+                ldap_other_bind_password -> <<"auth_ldap.other_bind.password">>
+            end,
+            
+            % Get password from json object
+            case maps:get(JsonKey, SecretMap, undefined) of
+                undefined ->
+                    ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Key ~p not found in fetched customer secret content", [JsonKey]);
+                Password ->
+                    PasswordStr = binary_to_list(Password),
+                    
+                    case PasswordType of
+                        % set password in application env based on password type
+                        ldap_dn_lookup_bind_password ->
+                            case application:get_env(rabbitmq_auth_backend_ldap, dn_lookup_bind) of
+                                {ok, ExistingConfig} ->
+                                NewConfig = get_updated_dn_lookup_bind_password(ExistingConfig, PasswordStr),
+                                application:set_env(rabbitmq_auth_backend_ldap, dn_lookup_bind, NewConfig),
+                                ?LOG_INFO("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
+                                _ ->
+                                ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.dn_lookup_bind doesn't exist before password fetch.")
+                            end;
+                        ldap_other_bind_password ->
+                            case application:get_env(rabbitmq_auth_backend_ldap, other_bind) of
+                                {ok, ExistingConfig} ->
+                                NewConfig = get_updated_other_bind_password(ExistingConfig, PasswordStr),
+                                application:set_env(rabbitmq_auth_backend_ldap, other_bind, NewConfig),
+                                ?LOG_INFO("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
+                                _ ->
+                                ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.other_bind doesn't exist before password is fetched.")
+                            end
+                    end
+            end; 
+    _ ->
+            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Invalid JSON format from fetched secret content")
+    end.
+
+
+-spec get_updated_dn_lookup_bind_password(tuple() | atom(), string()) -> tuple().
+get_updated_dn_lookup_bind_password(ExistingConfig, Password) ->
+    case ExistingConfig of
+        {Username, _OldPassword} ->
+            % Replace with new password
+            {Username, list_to_binary(Password)};
+        _ ->
+            % Case 2: Any other value (as_user, anon, etc.) - this should not happen
+            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
+            ExistingConfig
+    end.
+
+-spec get_updated_other_bind_password(list(), string()) -> list().
+get_updated_other_bind_password(ExistingConfig, Password) ->
+    case lists:keyfind(other_bind, 1, ExistingConfig) of
+        {other_bind, {Username, _OldPassword}} ->
+            % Case 1: Proper tuple - replace with new password
+            lists:keyreplace(other_bind, 1, ExistingConfig, {other_bind, {Username, list_to_binary(Password)}});
+        _ ->
+            % Case 2: Any other value (as_user, anon, etc.) - this should not happen
+            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
+            ExistingConfig
     end.
