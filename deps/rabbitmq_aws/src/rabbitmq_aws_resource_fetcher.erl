@@ -42,10 +42,6 @@ process_arns({ok, ArnList}) ->
 process_arns(undefined) ->
     ok.
 
-%
-% =======================Fetch Resource From AWS===========================
-% 
-
 -spec resolve_arn(string()) -> {ok, binary()} | {error, term()}.
 resolve_arn(Arn) ->
     ?LOG_DEBUG("aws arn: attempting to resolve: ~tp", [Arn]),
@@ -91,28 +87,10 @@ fetch_s3_object(Resource) ->
     %% Note: splits on the first / only
     %% https://www.erlang.org/doc/apps/stdlib/string.html#split/2
     [Bucket | Key] = string:split(Resource, "/"),
-    {ok, Region} = rabbitmq_aws_config:region(),
-    rabbitmq_aws:set_region(Region),
-    rabbitmq_aws:refresh_credentials(),
-    case rabbitmq_aws:has_credentials() of
-        false ->
-            ?LOG_ERROR("aws arn: no AWS credentials available for assume role operation"),
-            {error, no_base_credentials};
-        true ->
-            case application:get_env(rabbitmq_aws, assume_role_arn) of
-                {ok, RoleArn} ->
-                    case assume_role(RoleArn) of
-                        ok ->
-                            fetch_s3_object_final(Bucket, Key);
-                        {error, AssumeRoleReason} ->
-                            ?LOG_ERROR("aws arn: failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
-                            {error, {assume_role_failed, AssumeRoleReason}}
-                    end;
-                _ ->
-                    % No assume role configured, use existing credentials
-                    fetch_s3_object_final(Bucket, Key)
-            end
-    end.
+    F = fun() ->
+            fetch_s3_object_final(Bucket, Key)
+        end,
+    with_credentials_and_role(F).
 
 -spec fetch_s3_object_final(string(), string()) -> {ok, binary()} | {error, term()}.
 fetch_s3_object_final(Bucket, Key) ->
@@ -129,27 +107,10 @@ fetch_s3_object_final(Bucket, Key) ->
 -spec fetch_secretsmanager_secret(string(), string()) -> {ok, binary()} | {error, term()}.
 fetch_secretsmanager_secret(Arn, Region) ->
     rabbitmq_aws:set_region(Region),
-    rabbitmq_aws:refresh_credentials(),
-    case rabbitmq_aws:has_credentials() of
-      false ->
-        ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]aws arn: no AWS credentials available for assume role operation"),
-            {error, no_base_credentials};
-      true ->
-        case application:get_env(rabbitmq_aws, assume_role_arn) of
-                {ok, RoleArn} ->
-                    case assume_role(RoleArn) of
-                        ok ->
-                            fetch_secretsmanager_secret_after_env_credential_set(Arn, Region);
-                        {error, AssumeRoleReason} ->
-                            ?LOG_ERROR("aws arn: failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
-                            {error, {assume_role_failed, AssumeRoleReason}}
-                    end;
-                _ ->
-                    % No assume role configured, use existing credentials
-                    fetch_secretsmanager_secret_after_env_credential_set(Arn, Region)
-            end
-    end.
-
+    F = fun() ->
+            fetch_secretsmanager_secret_after_env_credential_set(Arn, Region)
+        end,
+    with_credentials_and_role(Region, F).
 
 fetch_secretsmanager_secret_after_env_credential_set(Arn, _Region) ->
     RequestBody = binary_to_list(rabbit_json:encode(#{
@@ -174,6 +135,34 @@ fetch_secretsmanager_secret_after_env_credential_set(Arn, _Region) ->
             {error, Reason};
         Other ->
             {error, {unexpected_response, Other}}
+    end.
+
+%% TODO spec
+with_credentials_and_role(F) when is_function(F) ->
+    {ok, Region} = rabbitmq_aws_config:region(),
+    with_credentials_and_role(Region, F).
+
+with_credentials_and_role(Region, F) when is_function(F) ->
+    rabbitmq_aws:set_region(Region),
+    rabbitmq_aws:refresh_credentials(),
+    case rabbitmq_aws:has_credentials() of
+        false ->
+            ?LOG_ERROR("aws arn: no AWS credentials available"),
+            {error, no_base_credentials};
+        true ->
+            case application:get_env(rabbitmq_aws, assume_role_arn) of
+                {ok, RoleArn} ->
+                    case assume_role(RoleArn) of
+                        ok ->
+                            F();
+                        {error, AssumeRoleReason} ->
+                            ?LOG_ERROR("aws arn: failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
+                            {error, {assume_role_failed, AssumeRoleReason}}
+                    end;
+                _ ->
+                    % No assume role configured, use existing credentials
+                    F()
+            end
     end.
 
 -spec assume_role(string()) -> ok | {error, term()}.
@@ -212,10 +201,6 @@ parse_assume_role_response(Body) ->
             {error, {parse_error, Error}}
     end.
 
-%
-% ==================Set Application Environment Based on Fetched Value===============
-% 
-
 handle_content(oauth2_https_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
     ok = replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
@@ -232,8 +217,6 @@ handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(Secre
     ok = update_ldap_bind_password_env(ldap_dn_lookup_bind_password, SecretJsonBin);
 handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
     ok = update_ldap_bind_password_env(ldap_other_bind_password, SecretJsonBin).
-
-
 
 -spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
 replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
