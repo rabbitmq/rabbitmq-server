@@ -169,8 +169,8 @@ with_credentials_and_role(Region, F) when is_function(F) ->
                     case assume_role(RoleArn) of
                         ok ->
                             F();
-                        {error, AssumeRoleReason} ->
-                            {error, {assume_role_failed, AssumeRoleReason}}
+                        Error ->
+                            {error, {assume_role_failed, Error}}
                     end;
                 _ ->
                     % No assume role configured, use existing credentials
@@ -191,8 +191,8 @@ assume_role(RoleArn) ->
     case rabbitmq_aws:post("sts", "/", Body, Headers) of
         {ok, {_Headers, ResponseBody}} ->
             parse_assume_role_response(ResponseBody);
-        {error, Reason} ->
-            {error, Reason}
+        Error ->
+            Error
     end.
 
 -spec parse_assume_role_response(binary()) -> ok | {error, term()}.
