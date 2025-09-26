@@ -121,6 +121,7 @@ groups() ->
                                            ]},
                       {clustered_with_partitions, [],
                        [
+                        partitioned_publisher,
                         reconnect_consumer_and_publish,
                         reconnect_consumer_and_wait,
                         reconnect_consumer_and_wait_channel_down
@@ -285,7 +286,8 @@ end_per_group(_, Config) ->
     rabbit_ct_helpers:run_steps(Config,
                                 rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publish;
+init_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
+                                         Testcase == reconnect_consumer_and_publish;
                                          Testcase == reconnect_consumer_and_wait;
                                          Testcase == reconnect_consumer_and_wait_channel_down ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
@@ -377,7 +379,8 @@ merge_app_env(Config) ->
                                       {rabbit, [{core_metrics_gc_interval, 100}]}),
       {ra, [{min_wal_roll_over_interval, 30000}]}).
 
-end_per_testcase(Testcase, Config) when Testcase == reconnect_consumer_and_publish;
+end_per_testcase(Testcase, Config) when Testcase == partitioned_publisher;
+                                        Testcase == reconnect_consumer_and_publish;
                                         Testcase == reconnect_consumer_and_wait;
                                         Testcase == reconnect_consumer_and_wait_channel_down ->
     Config1 = rabbit_ct_helpers:run_steps(Config,
@@ -3009,6 +3012,51 @@ cleanup_data_dir(Config) ->
     ?assertEqual(ok,
                  rpc:call(Server2, rabbit_quorum_queue, cleanup_data_dir, [])),
     ?awaitMatch(false, filelib:is_dir(DataDir2), 30000),
+    ok.
+
+partitioned_publisher(Config) ->
+    [Node0, Node1, Node2] = Nodes =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Node0),
+    Ch1 = rabbit_ct_client_helpers:open_channel(Config, Node1),
+    QQ = ?config(queue_name, Config),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch1, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    RaName = ra_name(QQ),
+    {ok, _, {_, Node1}} = ra:members({RaName, Node1}),
+
+    #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch1, #'confirm.select'{}),
+    %% first publish with confirm
+    publish_confirm(Ch0, QQ),
+
+    %% then partition
+    rabbit_ct_broker_helpers:block_traffic_between(Node0, Node1),
+    rabbit_ct_broker_helpers:block_traffic_between(Node0, Node2),
+
+    %% check that we can still publish from another channel that is on the
+    %% majority side
+    publish_confirm(Ch1, QQ),
+
+    %% publish one from partitioned node that will not go through
+    publish(Ch0, QQ),
+
+    %% wait for disconnections
+    rabbit_ct_helpers:await_condition(
+      fun() ->
+              ConnectedNodes = erpc:call(Node0, erlang, nodes, []),
+              not lists:member(Node1, ConnectedNodes)
+      end, 30000),
+
+    flush(10),
+
+    %% then heal the partition
+    rabbit_ct_broker_helpers:allow_traffic_between(Node0, Node1),
+    rabbit_ct_broker_helpers:allow_traffic_between(Node0, Node2),
+
+    publish(Ch0, QQ),
+    wait_for_messages_ready(Nodes, RaName, 4),
     ok.
 
 reconnect_consumer_and_publish(Config) ->
