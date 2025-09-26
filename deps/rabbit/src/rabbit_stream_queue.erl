@@ -133,7 +133,7 @@
 -type client() :: #stream_client{}.
 
 -spec is_enabled() -> boolean().
-is_enabled() -> true.
+is_enabled() -> application:get_env(rabbit, stream_queues_enabled, true).
 
 -spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
 is_compatible(_Durable = true,
