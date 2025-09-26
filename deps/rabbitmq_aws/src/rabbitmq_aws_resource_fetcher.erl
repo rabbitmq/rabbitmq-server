@@ -46,8 +46,7 @@ process_arns([{_Key, Arn, Handler} | Rest]) ->
         {ok, Content} ->
             ok = handle_content(Handler, Content);
         {error, Reason} ->
-            %% TODO logging domain
-            ?AWS_LOG_ERROR(" ~tp", [Reason])
+            ?AWS_LOG_ERROR("~tp", [Reason])
     end,
     process_arns(Rest);
 process_arns({ok, ArnList}) ->
@@ -65,10 +64,10 @@ resolve_arn(Arn) ->
             fetch_secretsmanager_secret(Arn, Region);
         {ok, #{service := Service}} ->
             Reason = unsupported_service,
-            ?AWS_LOG_ERROR(" ~tp ~tp ~tp", [Arn, Reason, Service]),
+            ?AWS_LOG_ERROR("~tp ~tp ~tp", [Arn, Reason, Service]),
             {error, {Reason, Service}};
         {error, Reason} = Error ->
-            ?AWS_LOG_ERROR(" ~tp ~tp", [Arn, Reason]),
+            ?AWS_LOG_ERROR("~tp ~tp", [Arn, Reason]),
             Error
     end.
 
@@ -160,7 +159,6 @@ with_credentials_and_role(Region, F) when is_function(F) ->
     rabbitmq_aws:refresh_credentials(),
     case rabbitmq_aws:has_credentials() of
         false ->
-            ?AWS_LOG_ERROR(" no AWS credentials available"),
             {error, no_base_credentials};
         true ->
             case application:get_env(rabbitmq_aws, assume_role_arn) of
@@ -169,7 +167,6 @@ with_credentials_and_role(Region, F) when is_function(F) ->
                         ok ->
                             F();
                         {error, AssumeRoleReason} ->
-                            ?AWS_LOG_ERROR(" failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
                             {error, {assume_role_failed, AssumeRoleReason}}
                     end;
                 _ ->
@@ -197,22 +194,13 @@ assume_role(RoleArn) ->
 
 -spec parse_assume_role_response(binary()) -> ok | {error, term()}.
 parse_assume_role_response(Body) ->
-    try
-        [{"AssumeRoleResponse", ResponseData}] = Body,
-        {"AssumeRoleResult", ResultData} = lists:keyfind("AssumeRoleResult", 1, ResponseData),
-        {"Credentials", CredentialsData} = lists:keyfind("Credentials", 1, ResultData),
-        {"AccessKeyId", AccessKey} = lists:keyfind("AccessKeyId", 1, CredentialsData),
-        {"SecretAccessKey", SecretKey} = lists:keyfind("SecretAccessKey", 1, CredentialsData),
-        {"SessionToken", SessionToken} = lists:keyfind("SessionToken", 1, CredentialsData),
-
-        rabbitmq_aws:set_credentials(AccessKey, SecretKey, SessionToken),
-        ok
-    catch
-        Class:Error:Stacktrace ->
-            ?AWS_LOG_ERROR(" parse error: ~tp:~tp", [Class, Error]),
-            ?AWS_LOG_ERROR("~tp", [Stacktrace]),
-            {error, {parse_error, Error}}
-    end.
+    [{"AssumeRoleResponse", ResponseData}] = Body,
+    {"AssumeRoleResult", ResultData} = lists:keyfind("AssumeRoleResult", 1, ResponseData),
+    {"Credentials", CredentialsData} = lists:keyfind("Credentials", 1, ResultData),
+    {"AccessKeyId", AccessKey} = lists:keyfind("AccessKeyId", 1, CredentialsData),
+    {"SecretAccessKey", SecretKey} = lists:keyfind("SecretAccessKey", 1, CredentialsData),
+    {"SessionToken", SessionToken} = lists:keyfind("SessionToken", 1, CredentialsData),
+    ok = rabbitmq_aws:set_credentials(AccessKey, SecretKey, SessionToken).
 
 handle_content(oauth2_https_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
@@ -263,12 +251,12 @@ decode_pem_data(PemBin) when is_binary(PemBin) ->
             Certs when is_list(Certs) andalso length(Certs) > 0 ->
                 {ok, CaCertsDerEncoded};
             _ ->
-                ?AWS_LOG_ERROR(" invalid PEM data: no valid certificates found"),
-                {ok, []}
+                ?AWS_LOG_ERROR("invalid PEM data: no valid certificates found"),
+                {error, invalid_pem_data}
         end
-    catch Class:Error:Stacktrace ->
-        ?AWS_LOG_ERROR(" error decoding certs ~tp:~tp", [Class, Error]),
-        ?AWS_LOG_ERROR("~tp", [Stacktrace])
+    catch Class:Error ->
+        ?AWS_LOG_ERROR("error decoding certs ~tp:~tp", [Class, Error]),
+        {error, error_decoding_certs}
     end.
 
 -spec update_ldap_bind_password_env(string(), atom()) -> ok.
@@ -281,14 +269,12 @@ update_ldap_bind_password_env(PasswordType, SecretContent) ->
                           ldap_dn_lookup_bind_password -> <<"auth_ldap.dn_lookup_bind.password">>;
                           ldap_other_bind_password -> <<"auth_ldap.other_bind.password">>
                       end,
-
             % Get password from json object
             case maps:get(JsonKey, SecretMap, undefined) of
                 undefined ->
                     ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Key ~p not found in fetched customer secret content", [JsonKey]);
                 Password ->
                     PasswordStr = binary_to_list(Password),
-
                     case PasswordType of
                         % set password in application env based on password type
                         ldap_dn_lookup_bind_password ->
@@ -315,7 +301,6 @@ update_ldap_bind_password_env(PasswordType, SecretContent) ->
             ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Invalid JSON format from fetched secret content")
     end.
 
-
 -spec get_updated_dn_lookup_bind_password(tuple() | atom(), string()) -> tuple().
 get_updated_dn_lookup_bind_password(ExistingConfig, Password) ->
     case ExistingConfig of
@@ -324,7 +309,8 @@ get_updated_dn_lookup_bind_password(ExistingConfig, Password) ->
             {Username, list_to_binary(Password)};
         _ ->
             % Case 2: Any other value (as_user, anon, etc.) - this should not happen
-            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
+            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, "
+                           "but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
             ExistingConfig
     end.
 
@@ -336,6 +322,7 @@ get_updated_other_bind_password(ExistingConfig, Password) ->
             lists:keyreplace(other_bind, 1, ExistingConfig, {other_bind, {Username, list_to_binary(Password)}});
         _ ->
             % Case 2: Any other value (as_user, anon, etc.) - this should not happen
-            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
+            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, "
+                           "but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
             ExistingConfig
     end.
