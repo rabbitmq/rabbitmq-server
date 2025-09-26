@@ -21,7 +21,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -spec process_arns() -> ok.
-%% @doc Fetch certificate files from Amazon S3 and update application configuration to use them
+%% @doc Fetch certificate files, secrets from Amazon S3 and Secret Manager and update application configuration to use them
 %% @end
 process_arns() ->
     process_arns(application:get_env(rabbitmq_aws, aws_arns)).
@@ -41,23 +41,9 @@ process_arns({ok, ArnList}) ->
 process_arns(undefined) ->
     ok.
 
-handle_content(oauth2_https_cacertfile, PemData) ->
-    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
-                        cacerts, CaCertsDerEncoded);
-handle_content(ssl_options_cacertfile, PemData) ->
-    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbit, ssl_options, cacertfile,
-                        cacerts, CaCertsDerEncoded);
-handle_content(ldap_ssl_options_cacertfile, PemData) ->
-    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
-                        cacerts, CaCertsDerEncoded);
-handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_bind_password_env(ldap_dn_lookup_bind_password, SecretJsonBin);
-handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_bind_password_env(ldap_other_bind_password, SecretJsonBin).
-                
+%
+% =======================Fetch Resource From AWS===========================
+% 
 
 -spec resolve_arn(string()) -> {ok, binary()} | {error, term()}.
 resolve_arn(Arn) ->
@@ -146,6 +132,28 @@ fetch_s3_object_final(Bucket, Key) ->
 fetch_secretsmanager_secret(Arn, Region) ->
     rabbitmq_aws:set_region(Region),
     rabbitmq_aws:refresh_credentials(),
+    case rabbitmq_aws:has_credentials() of
+      false ->
+        ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]aws arn: no AWS credentials available for assume role operation"),
+            {error, no_base_credentials};
+      true ->
+        case application:get_env(rabbit_aws, assume_role_arn) of
+                {ok, RoleArn} ->
+                    case assume_role(RoleArn) of
+                        ok ->
+                            fetch_secretsmanager_secret_after_env_credential_set(Arn, Region);
+                        {error, AssumeRoleReason} ->
+                            ?LOG_ERROR("aws arn: failed to assume role ~tp: ~tp", [RoleArn, AssumeRoleReason]),
+                            {error, {assume_role_failed, AssumeRoleReason}}
+                    end;
+                _ ->
+                    % No assume role configured, use existing credentials
+                    fetch_secretsmanager_secret_after_env_credential_set(Arn, Region)
+            end
+    end.
+
+
+fetch_secretsmanager_secret_after_env_credential_set(Arn, Region) ->
     RequestBody = binary_to_list(rabbit_json:encode(#{
         <<"SecretId">> => list_to_binary(Arn),
         <<"VersionStage">> => <<"AWSCURRENT">>
@@ -169,15 +177,6 @@ fetch_secretsmanager_secret(Arn, Region) ->
         Other ->
             {error, {unexpected_response, Other}}
     end.
-
--spec write_to_file(string(), binary()) -> string().
-write_to_file(Arn, Content) ->
-    {ok, TempDir} = application:get_env(rabbitmq_aws, cacertfiles_download_path),
-    Filename = re:replace(Arn, "[^a-zA-Z0-9]", "_", [global, {return, list}]),
-    ok = filelib:ensure_dir(TempDir ++ "/"),
-    FilePath = TempDir ++ "/" ++ Filename,
-    ok = rabbit_file:write_file(FilePath, Content),
-    FilePath.
 
 -spec assume_role(string()) -> ok | {error, term()}.
 assume_role(RoleArn) ->
@@ -214,6 +213,29 @@ parse_assume_role_response(Body) ->
             ?LOG_ERROR("~tp", [Stacktrace]),
             {error, {parse_error, Error}}
     end.
+
+%
+% ==================Set Application Environment Based on Fetched Value===============
+% 
+
+handle_content(oauth2_https_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
+                        cacerts, CaCertsDerEncoded);
+handle_content(ssl_options_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbit, ssl_options, cacertfile,
+                        cacerts, CaCertsDerEncoded);
+handle_content(ldap_ssl_options_cacertfile, PemData) ->
+    {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
+                        cacerts, CaCertsDerEncoded);
+handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
+    ok = update_ldap_bind_password_env(ldap_dn_lookup_bind_password, SecretJsonBin);
+handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
+    ok = update_ldap_bind_password_env(ldap_other_bind_password, SecretJsonBin).
+
+
 
 -spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
 replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
