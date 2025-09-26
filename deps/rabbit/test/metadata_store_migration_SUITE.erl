@@ -124,6 +124,11 @@ from_mnesia_to_khepri(Config) ->
     Maintenance = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_maintenance, get, [Server]),
     ?assertNot(undefined == Maintenance),
 
+    PluginsDataDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_plugins, user_provided_plugins_data_dir, []),
+    ok = file:make_dir(PluginsDataDir),
+    PluginDataFile = filename:join(PluginsDataDir, "test.txt"),
+    ok = file:write_file(PluginDataFile, "test content"),
+
     %% 2)
     Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, Servers, khepri_db),
@@ -155,6 +160,9 @@ from_mnesia_to_khepri(Config) ->
     ?assertEqual(Bindings, BindingsK),
     MaintenanceK = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_maintenance, get, [Server]),
     ?assertEqual(MaintenanceK, Maintenance),
+
+    %% plugin data file should be preserved
+    ?assertEqual({ok, <<"test content">>}, file:read_file(PluginDataFile)),
 
     ok.
 
