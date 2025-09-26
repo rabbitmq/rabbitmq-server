@@ -19,11 +19,14 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(AWS_LOG_ERROR(A),
-    ?LOG_ERROR("~tp: ~tp", [?MODULE, A])).
+-define(AWS_LOG_ERROR(Arg),
+    ?LOG_ERROR("~tp: ~tp", [?MODULE, Arg])).
 
 -define(AWS_LOG_ERROR(Fmt, A),
     ?LOG_ERROR("~tp: " ++ Fmt, [?MODULE, A])).
+
+-define(AWS_LOG_DEBUG(Arg),
+    ?LOG_DEBUG("~tp: ~tp", [?MODULE, Arg])).
 
 -define(AWS_LOG_DEBUG(Fmt, Args),
     ?LOG_DEBUG("~tp: " ++ Fmt, [?MODULE | Args])).
@@ -155,8 +158,8 @@ with_credentials_and_role(F) when is_function(F) ->
     with_credentials_and_role(Region, F).
 
 with_credentials_and_role(Region, F) when is_function(F) ->
-    rabbitmq_aws:set_region(Region),
-    rabbitmq_aws:refresh_credentials(),
+    ok = rabbitmq_aws:set_region(Region),
+    ok = rabbitmq_aws:refresh_credentials(),
     case rabbitmq_aws:has_credentials() of
         false ->
             {error, no_base_credentials};
@@ -215,9 +218,9 @@ handle_content(ldap_ssl_options_cacertfile, PemData) ->
     ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
                         cacerts, CaCertsDerEncoded);
 handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_bind_password_env(ldap_dn_lookup_bind_password, SecretJsonBin);
+    ok = update_ldap_env(ldap_dn_lookup_bind_password, SecretJsonBin);
 handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_bind_password_env(ldap_other_bind_password, SecretJsonBin).
+    ok = update_ldap_env(ldap_other_bind_password, SecretJsonBin).
 
 -spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
 replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
@@ -259,70 +262,34 @@ decode_pem_data(PemBin) when is_binary(PemBin) ->
         {error, error_decoding_certs}
     end.
 
--spec update_ldap_bind_password_env(string(), atom()) -> ok.
-update_ldap_bind_password_env(PasswordType, SecretContent) ->
-    % parse Json content to be a map.
-    case rabbit_json:decode(SecretContent) of
-        SecretMap when is_map(SecretMap) ->
-            % Determine which password key to look for in secret manager. keep it the same with external configuration name.
-            JsonKey = case PasswordType of
-                          ldap_dn_lookup_bind_password -> <<"auth_ldap.dn_lookup_bind.password">>;
-                          ldap_other_bind_password -> <<"auth_ldap.other_bind.password">>
-                      end,
-            % Get password from json object
-            case maps:get(JsonKey, SecretMap, undefined) of
-                undefined ->
-                    ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Key ~p not found in fetched customer secret content", [JsonKey]);
-                Password ->
-                    PasswordStr = binary_to_list(Password),
-                    case PasswordType of
-                        % set password in application env based on password type
-                        ldap_dn_lookup_bind_password ->
-                            case application:get_env(rabbitmq_auth_backend_ldap, dn_lookup_bind) of
-                                {ok, ExistingConfig} ->
-                                    NewConfig = get_updated_dn_lookup_bind_password(ExistingConfig, PasswordStr),
-                                    application:set_env(rabbitmq_auth_backend_ldap, dn_lookup_bind, NewConfig),
-                                    ?AWS_LOG_DEBUG("updated LDAP ~p with password from fetched secrets", [PasswordType]);
-                                _ ->
-                                    ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.dn_lookup_bind doesn't exist before password fetch.")
-                            end;
-                        ldap_other_bind_password ->
-                            case application:get_env(rabbitmq_auth_backend_ldap, other_bind) of
-                                {ok, ExistingConfig} ->
-                                    NewConfig = get_updated_other_bind_password(ExistingConfig, PasswordStr),
-                                    application:set_env(rabbitmq_auth_backend_ldap, other_bind, NewConfig),
-                                    ?AWS_LOG_DEBUG("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
-                                _ ->
-                                    ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.other_bind doesn't exist before password is fetched.")
-                            end
-                    end
-            end; 
+-spec update_ldap_env(string(), atom()) -> ok.
+update_ldap_env(ldap_dn_lookup_bind_password, SecretContent) ->
+    do_update_ldap_env(dn_lookup_bind, SecretContent, <<"auth_ldap.dn_lookup_bind.password">>);
+update_ldap_env(ldap_other_bind_password, SecretContent) ->
+    do_update_ldap_env(other_bind, SecretContent, <<"auth_ldap.other_bind.password">>).
+
+do_update_ldap_env(LdapAppConfigKey, SecretContent, SecretMapKey) ->
+    case application:get_env(rabbitmq_auth_backend_ldap, LdapAppConfigKey) of
+        {ok, ExistingConfig} ->
+            SecretMap = rabbit_json:decode(SecretContent),
+            Password = maps:get(SecretMapKey, SecretMap),
+            {ok, NewConfig} = update_ldap_config_password(LdapAppConfigKey, ExistingConfig, Password),
+            ok = application:set_env(rabbitmq_auth_backend_ldap, LdapAppConfigKey, NewConfig),
+            ?AWS_LOG_DEBUG("updated LDAP ~p with password from fetched secrets", [LdapAppConfigKey]),
+            ok;
         _ ->
-            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Invalid JSON format from fetched secret content")
+            {error, {ldap_config_key_missing, LdapAppConfigKey}}
     end.
 
--spec get_updated_dn_lookup_bind_password(tuple() | atom(), string()) -> tuple().
-get_updated_dn_lookup_bind_password(ExistingConfig, Password) ->
-    case ExistingConfig of
-        {Username, _OldPassword} ->
-            % Replace with new password
-            {Username, list_to_binary(Password)};
-        _ ->
-            % Case 2: Any other value (as_user, anon, etc.) - this should not happen
-            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, "
-                           "but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
-            ExistingConfig
-    end.
-
--spec get_updated_other_bind_password(list(), string()) -> list().
-get_updated_other_bind_password(ExistingConfig, Password) ->
-    case lists:keyfind(other_bind, 1, ExistingConfig) of
-        {other_bind, {Username, _OldPassword}} ->
+-spec update_ldap_config_password(atom(), list(), string()) -> list().
+update_ldap_config_password(ConfigKey, ExistingConfig, Password) ->
+    case lists:keyfind(ConfigKey, 1, ExistingConfig) of
+        {ConfigKey, {Username, _OldPassword}} ->
             % Case 1: Proper tuple - replace with new password
-            lists:keyreplace(other_bind, 1, ExistingConfig, {other_bind, {Username, list_to_binary(Password)}});
+            NewConfig = lists:keyreplace(ConfigKey, 1, ExistingConfig, {ConfigKey, {Username, list_to_binary(Password)}}),
+            {ok, NewConfig};
         _ ->
             % Case 2: Any other value (as_user, anon, etc.) - this should not happen
-            ?AWS_LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]dn_lookup_bind in env is configured either as scalar or not present, "
-                           "but password config is present. tuple of {user,password} is expected and therefore cannot overwrite password.", [ExistingConfig]),
-            ExistingConfig
+            ?AWS_LOG_ERROR("expected to find properly configured ~tp key in LDAP configuration", [ConfigKey]),
+            {ok, ExistingConfig}
     end.
