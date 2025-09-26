@@ -124,7 +124,7 @@ from_mnesia_to_khepri(Config) ->
     Maintenance = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_db_maintenance, get, [Server]),
     ?assertNot(undefined == Maintenance),
 
-    PluginsDataDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_plugins, plugins_data_dir, []),
+    PluginsDataDir = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_plugins, user_provided_plugins_data_dir, []),
     ok = file:make_dir(PluginsDataDir),
     PluginDataFile = filename:join(PluginsDataDir, "test.txt"),
     ok = file:write_file(PluginDataFile, "test content"),

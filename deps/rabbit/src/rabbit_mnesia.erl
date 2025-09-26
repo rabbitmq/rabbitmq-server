@@ -1067,7 +1067,7 @@ mnesia_and_msg_store_files() ->
              rabbit_node_monitor:quorum_filename(),
              rabbit_feature_flags:enabled_feature_flags_list_file(),
              rabbit_khepri:dir(),
-             rabbit_plugins:plugins_data_dir()],
+             rabbit_plugins:user_provided_plugins_data_dir()],
             IgnoredFiles = [filename:basename(File) || File <- IgnoredFiles0],
             ?LOG_DEBUG("Files and directories found in node's data directory: ~ts, of them to be ignored: ~ts",
                             [string:join(lists:usort(List0), ", "), string:join(lists:usort(IgnoredFiles), ", ")]),
