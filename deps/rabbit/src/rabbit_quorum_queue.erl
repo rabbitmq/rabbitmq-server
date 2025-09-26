@@ -201,7 +201,7 @@ merge_policy_value(<<"target-group-size">>, Val, OpVal) ->
 %%----------- rabbit_queue_type ---------------------------------------------
 
 -spec is_enabled() -> boolean().
-is_enabled() -> true.
+is_enabled() -> application:get_env(rabbit, quorum_queues_enabled, true).
 
 -spec is_compatible(boolean(), boolean(), boolean()) -> boolean().
 is_compatible(_Durable = true,

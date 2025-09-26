@@ -2629,6 +2629,18 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
+%% Enable queue types
+
+{mapping, "queue_types.classic.enabled", "rabbit.classic_queues_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "queue_types.stream.enabled", "rabbit.stream_queues_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+{mapping, "queue_types.quorum.enabled", "rabbit.quorum_queues_enabled", [
+    {datatype, {enum, [true, false]}}
+]}.
+
 %%
 %% Backing queue version
 %%
