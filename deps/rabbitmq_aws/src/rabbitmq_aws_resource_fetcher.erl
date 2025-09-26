@@ -48,62 +48,58 @@ process_arns(undefined) ->
 
 -spec resolve_arn(string()) -> {ok, binary()} | {error, term()}.
 resolve_arn(Arn) ->
-    ?LOG_INFO("aws arn: attempting to resolve: ~tp", [Arn]),
+    ?LOG_DEBUG("aws arn: attempting to resolve: ~tp", [Arn]),
     case parse_arn(Arn) of
         {ok, #{service := "s3", resource := Resource}} ->
             fetch_s3_object(Resource);
         {ok, #{service := "secretsmanager", region := Region}} ->
             fetch_secretsmanager_secret(Arn, Region);
         {ok, #{service := Service}} ->
-            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR]Unsupported service: ~p", [Service]),
-            {error, {unsupported_service, Service}};
-        {error, _} = Error ->
-            ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR]Failed to parse ARN ~p: ~p", [Arn, Error]),
+            Reason = unsupported_service,
+            ?LOG_ERROR("aws arn: ~tp ~tp ~tp", [Arn, Reason, Service]),
+            {error, {Reason, Service}};
+        {error, Reason} = Error ->
+            ?LOG_ERROR("aws arn: ~tp ~tp", [Arn, Reason]),
             Error
     end.
 
 -spec parse_arn(string()) -> {ok, map()} | {error, term()}.
 parse_arn(Arn) ->
-    % resource name in arn could contain ":" itself, therefore using parts.
-    % eg: arn:aws:secretsmanager:us-east-1:12345678910:secret:mysecret
-    case re:split(Arn, ":", [{parts,6}, {return, list}]) of
-        ["arn", Partition, Service, Region, Account, Resource] ->
-            ?LOG_DEBUG("aws arn: parsed arn: ~tp into ~tp:~tp:~tp:~tp:~tp",
-                       [Arn, Partition, Service, Region, Account, Resource]),
-            {ok, #{
-                partition => Partition,
-                service => Service,
-                region => Region,
-                account => Account,
-                resource => Resource
-            }};
-        _ ->
-            ?LOG_ERROR("aws arn: could not parse arn: ~tp", [Arn]),
-            {error, invalid_arn_format}
+    try
+        % resource name in arn could contain ":" itself, therefore using parts.
+        % eg: arn:aws:secretsmanager:us-east-1:12345678910:secret:mysecret
+        case re:split(Arn, ":", [{parts,6}, {return, list}]) of
+            ["arn", Partition, Service, Region, Account, Resource] ->
+                ?LOG_DEBUG("aws arn: parsed arn: ~tp into ~tp:~tp:~tp:~tp:~tp",
+                           [Arn, Partition, Service, Region, Account, Resource]),
+                {ok, #{
+                    partition => Partition,
+                    service => Service,
+                    region => Region,
+                    account => Account,
+                    resource => Resource
+                }};
+            UnexpectedMatch ->
+                {error, {invalid_arn_format, UnexpectedMatch}}
+        end
+    catch Class:Reason ->
+        {error, {Class, Reason}}
     end.
 
 -spec fetch_s3_object(string()) -> {ok, binary()} | {error, term()}.
 fetch_s3_object(Resource) ->
-    [Bucket | KeyParts] = string:split(Resource, "/"),
-    Key = string:join(KeyParts, "/"),
-    case rabbitmq_aws_config:region() of
-        {ok, Region} ->
-            rabbitmq_aws:set_region(Region),
-            fetch_s3_object_with_region(Bucket, Key);
-        {error, RegionError} ->
-            ?LOG_ERROR("aws arn: failed to get AWS region: ~tp", [RegionError]),
-            {error, {region_lookup_failed, RegionError}}
-    end.
-
--spec fetch_s3_object_with_region(string(), string()) -> {ok, binary()} | {error, term()}.
-fetch_s3_object_with_region(Bucket, Key) ->
+    %% Note: splits on the first / only
+    %% https://www.erlang.org/doc/apps/stdlib/string.html#split/2
+    [Bucket | Key] = string:split(Resource, "/"),
+    {ok, Region} = rabbitmq_aws_config:region(),
+    rabbitmq_aws:set_region(Region),
     rabbitmq_aws:refresh_credentials(),
     case rabbitmq_aws:has_credentials() of
         false ->
             ?LOG_ERROR("aws arn: no AWS credentials available for assume role operation"),
             {error, no_base_credentials};
         true ->
-            case application:get_env(rabbit_aws, assume_role_arn) of
+            case application:get_env(rabbitmq_aws, assume_role_arn) of
                 {ok, RoleArn} ->
                     case assume_role(RoleArn) of
                         ok ->
@@ -139,7 +135,7 @@ fetch_secretsmanager_secret(Arn, Region) ->
         ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]aws arn: no AWS credentials available for assume role operation"),
             {error, no_base_credentials};
       true ->
-        case application:get_env(rabbit_aws, assume_role_arn) of
+        case application:get_env(rabbitmq_aws, assume_role_arn) of
                 {ok, RoleArn} ->
                     case assume_role(RoleArn) of
                         ok ->
@@ -286,40 +282,40 @@ update_ldap_bind_password_env(PasswordType, SecretContent) ->
         SecretMap when is_map(SecretMap) ->
             % Determine which password key to look for in secret manager. keep it the same with external configuration name.
             JsonKey = case PasswordType of
-                ldap_dn_lookup_bind_password -> <<"auth_ldap.dn_lookup_bind.password">>;
-                ldap_other_bind_password -> <<"auth_ldap.other_bind.password">>
-            end,
-            
+                          ldap_dn_lookup_bind_password -> <<"auth_ldap.dn_lookup_bind.password">>;
+                          ldap_other_bind_password -> <<"auth_ldap.other_bind.password">>
+                      end,
+
             % Get password from json object
             case maps:get(JsonKey, SecretMap, undefined) of
                 undefined ->
                     ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Key ~p not found in fetched customer secret content", [JsonKey]);
                 Password ->
                     PasswordStr = binary_to_list(Password),
-                    
+
                     case PasswordType of
                         % set password in application env based on password type
                         ldap_dn_lookup_bind_password ->
                             case application:get_env(rabbitmq_auth_backend_ldap, dn_lookup_bind) of
                                 {ok, ExistingConfig} ->
-                                NewConfig = get_updated_dn_lookup_bind_password(ExistingConfig, PasswordStr),
-                                application:set_env(rabbitmq_auth_backend_ldap, dn_lookup_bind, NewConfig),
-                                ?LOG_INFO("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
+                                    NewConfig = get_updated_dn_lookup_bind_password(ExistingConfig, PasswordStr),
+                                    application:set_env(rabbitmq_auth_backend_ldap, dn_lookup_bind, NewConfig),
+                                    ?LOG_DEBUG("aws arn: updated LDAP ~p with password from fetched secrets", [PasswordType]);
                                 _ ->
-                                ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.dn_lookup_bind doesn't exist before password fetch.")
+                                    ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.dn_lookup_bind doesn't exist before password fetch.")
                             end;
                         ldap_other_bind_password ->
                             case application:get_env(rabbitmq_auth_backend_ldap, other_bind) of
                                 {ok, ExistingConfig} ->
-                                NewConfig = get_updated_other_bind_password(ExistingConfig, PasswordStr),
-                                application:set_env(rabbitmq_auth_backend_ldap, other_bind, NewConfig),
-                                ?LOG_INFO("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
+                                    NewConfig = get_updated_other_bind_password(ExistingConfig, PasswordStr),
+                                    application:set_env(rabbitmq_auth_backend_ldap, other_bind, NewConfig),
+                                    ?LOG_DEBUG("Updated LDAP ~p with password from fetched secrets", [PasswordType]);
                                 _ ->
-                                ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.other_bind doesn't exist before password is fetched.")
+                                    ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]auth_ldap.other_bind doesn't exist before password is fetched.")
                             end
                     end
             end; 
-    _ ->
+        _ ->
             ?LOG_ERROR("[AWS_ARNS_FETCH_ERROR_LDAP_CONFIG]Invalid JSON format from fetched secret content")
     end.
 
