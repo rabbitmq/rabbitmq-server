@@ -187,9 +187,11 @@
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
-         % a counter of enqueues - used to trigger shadow copy points
+         % discareded bytes - a counter that is incremented every time a command
+         % is procesesed that does not need to be kept (live indexes).
+         % Approximate, used for triggering snapshots
          % reset to 0 when release_cursor gets stored
-         enqueue_count = 0 :: non_neg_integer(),
+         discarded_bytes = 0,
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
@@ -198,7 +200,7 @@
          % rabbit_fifo_index can be slow when calculating the smallest
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
-         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         unused_0 = ?NIL,
          unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
@@ -211,6 +213,8 @@
          %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_key(), consumer()}],
+         %% records the timestamp whenever the queue was last considered
+         %% active in terms of consumer activity
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          unused_2 = ?NIL
