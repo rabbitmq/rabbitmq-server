@@ -33,7 +33,8 @@ process_arns([{_Key, Arn, Handler} | Rest]) ->
         {ok, Content} ->
             ok = handle_content(Handler, Content);
         {error, Reason} ->
-            ?LOG_ERROR("aws arn: failed to resolve ~tp: ~tp", [Arn, Reason])
+            %% TODO logging domain
+            ?LOG_ERROR("~tp", [Reason])
     end,
     process_arns(Rest);
 process_arns({ok, ArnList}) ->
@@ -82,8 +83,7 @@ parse_arn(Arn) ->
     end.
 
 -spec fetch_s3_object(string()) -> {ok, binary()} | {error, term()}.
-fetch_s3_object(Arn) ->
-    {ok, #{resource := Resource}} = parse_arn(Arn),
+fetch_s3_object(Resource) ->
     [Bucket | KeyParts] = string:split(Resource, "/"),
     Key = string:join(KeyParts, "/"),
     case rabbitmq_aws_config:region() of
