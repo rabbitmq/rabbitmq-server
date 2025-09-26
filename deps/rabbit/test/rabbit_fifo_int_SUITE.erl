@@ -219,7 +219,9 @@ lost_return_is_resent_on_applied_after_leader_change(Config) ->
                                                      RaEvt, F5),
     %% this should resend the never applied enqueue
     {_, _, F7} = process_ra_events(receive_ra_events(1, 0), ClusterName, F6),
-    ?assertEqual(0, rabbit_fifo_client:pending_size(F7)),
+    {_, _, F8} = process_ra_events(receive_ra_events(1, 0), ClusterName, F7),
+
+    ?assertEqual(0, rabbit_fifo_client:pending_size(F8)),
 
     flush(),
     ok.
