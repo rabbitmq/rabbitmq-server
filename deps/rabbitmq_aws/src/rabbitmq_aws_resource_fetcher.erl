@@ -19,24 +19,25 @@
 
 -include_lib("kernel/include/logger.hrl").
 
--define(AWS_LOG_ERROR(Arg),
-    ?LOG_ERROR("~tp: ~tp", [?MODULE, Arg])).
-
--define(AWS_LOG_ERROR(Fmt, A),
-    ?LOG_ERROR("~tp: " ++ Fmt, [?MODULE, A])).
-
--define(AWS_LOG_DEBUG(Arg),
-    ?LOG_DEBUG("~tp: ~tp", [?MODULE, Arg])).
-
 -define(AWS_LOG_DEBUG(Fmt, Args),
     ?LOG_DEBUG("~tp: " ++ Fmt, [?MODULE | Args])).
+
+-define(AWS_LOG_ERROR(Arg),
+    ?LOG_ERROR("~tp: ~ts", [?MODULE, Arg])).
+
+-define(AWS_LOG_ERROR(Fmt, Args),
+    ?LOG_ERROR("~tp: " ++ Fmt, [?MODULE | Args])).
+
+-define(AWS_LOG_INFO(Arg),
+    ?LOG_INFO("~tp: ~ts", [?MODULE, Arg])).
 
 -spec process_arns() -> ok.
 %% @doc Fetch certificate files, secrets from Amazon S3 and Secret Manager and update application configuration to use them
 %% @end
 process_arns() ->
     try
-        process_arns(application:get_env(rabbitmq_aws, aws_arns))
+        ok = process_arns(application:get_env(rabbitmq_aws, aws_arns)),
+        ?AWS_LOG_INFO("success")
     catch Class:Reason:Stacktrace ->
         ?AWS_LOG_ERROR("~tp:~tp", [Class, Reason]),
         ?AWS_LOG_ERROR("~tp", [Stacktrace])
@@ -207,20 +208,20 @@ parse_assume_role_response(Body) ->
 
 handle_content(oauth2_https_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
-                        cacerts, CaCertsDerEncoded);
+    replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
+                   cacerts, CaCertsDerEncoded);
 handle_content(ssl_options_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbit, ssl_options, cacertfile,
-                        cacerts, CaCertsDerEncoded);
+    replace_in_env(rabbit, ssl_options, cacertfile,
+                   cacerts, CaCertsDerEncoded);
 handle_content(ldap_ssl_options_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
-    ok = replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
-                        cacerts, CaCertsDerEncoded);
+    replace_in_env(rabbitmq_auth_backend_ldap, ssl_options, cacertfile,
+                   cacerts, CaCertsDerEncoded);
 handle_content(ldap_dn_lookup_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_env(ldap_dn_lookup_bind_password, SecretJsonBin);
+    update_ldap_env(ldap_dn_lookup_bind_password, SecretJsonBin);
 handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJsonBin) ->
-    ok = update_ldap_env(ldap_other_bind_password, SecretJsonBin).
+    update_ldap_env(ldap_other_bind_password, SecretJsonBin).
 
 -spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
 replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
@@ -270,26 +271,13 @@ update_ldap_env(ldap_other_bind_password, SecretContent) ->
 
 do_update_ldap_env(LdapAppConfigKey, SecretContent, SecretMapKey) ->
     case application:get_env(rabbitmq_auth_backend_ldap, LdapAppConfigKey) of
-        {ok, ExistingConfig} ->
+        {ok, {DN, _OldPassword}} ->
             SecretMap = rabbit_json:decode(SecretContent),
-            Password = maps:get(SecretMapKey, SecretMap),
-            {ok, NewConfig} = update_ldap_config_password(LdapAppConfigKey, ExistingConfig, Password),
+            NewPassword = maps:get(SecretMapKey, SecretMap),
+            NewConfig = {DN, NewPassword},
             ok = application:set_env(rabbitmq_auth_backend_ldap, LdapAppConfigKey, NewConfig),
             ?AWS_LOG_DEBUG("updated LDAP ~p with password from fetched secrets", [LdapAppConfigKey]),
             ok;
         _ ->
             {error, {ldap_config_key_missing, LdapAppConfigKey}}
-    end.
-
--spec update_ldap_config_password(atom(), list(), string()) -> list().
-update_ldap_config_password(ConfigKey, ExistingConfig, Password) ->
-    case lists:keyfind(ConfigKey, 1, ExistingConfig) of
-        {ConfigKey, {Username, _OldPassword}} ->
-            % Case 1: Proper tuple - replace with new password
-            NewConfig = lists:keyreplace(ConfigKey, 1, ExistingConfig, {ConfigKey, {Username, list_to_binary(Password)}}),
-            {ok, NewConfig};
-        _ ->
-            % Case 2: Any other value (as_user, anon, etc.) - this should not happen
-            ?AWS_LOG_ERROR("expected to find properly configured ~tp key in LDAP configuration", [ConfigKey]),
-            {ok, ExistingConfig}
     end.
