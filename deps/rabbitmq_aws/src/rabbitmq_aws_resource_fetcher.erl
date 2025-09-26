@@ -63,19 +63,21 @@ resolve_arn(Arn) ->
 
 -spec parse_arn(string()) -> {ok, map()} | {error, term()}.
 parse_arn(Arn) ->
-    ArnBin = list_to_binary(Arn),
-    % resource name in arn could contain ":" itself, therefore using parts. eg: arn:aws:secretsmanager:us-east-1:12345678910:secret:mysecret
-    case re:split(ArnBin, <<":">>, [{parts,6}, {return, binary}]) of
-        [<<"arn">>, Partition, Service, Region, Account, Resource] ->
-            ?LOG_INFO("rabbitmq_aws_resource_fetcher parsed ARN: arn:~tp:~tp:~tp:~tp:~tp", [Partition, Service, Region, Account, Resource]),
+    % resource name in arn could contain ":" itself, therefore using parts.
+    % eg: arn:aws:secretsmanager:us-east-1:12345678910:secret:mysecret
+    case re:split(Arn, ":", [{parts,6}, {return, list}]) of
+        ["arn", Partition, Service, Region, Account, Resource] ->
+            ?LOG_DEBUG("aws arn: parsed arn: ~tp into ~tp:~tp:~tp:~tp:~tp",
+                       [Arn, Partition, Service, Region, Account, Resource]),
             {ok, #{
-                partition => binary_to_list(Partition),
-                service => binary_to_list(Service),
-                region => binary_to_list(Region),
-                account => binary_to_list(Account),
-                resource => binary_to_list(Resource)
+                partition => Partition,
+                service => Service,
+                region => Region,
+                account => Account,
+                resource => Resource
             }};
         _ ->
+            ?LOG_ERROR("aws arn: could not parse arn: ~tp", [Arn]),
             {error, invalid_arn_format}
     end.
 
@@ -153,7 +155,7 @@ fetch_secretsmanager_secret(Arn, Region) ->
     end.
 
 
-fetch_secretsmanager_secret_after_env_credential_set(Arn, Region) ->
+fetch_secretsmanager_secret_after_env_credential_set(Arn, _Region) ->
     RequestBody = binary_to_list(rabbit_json:encode(#{
         <<"SecretId">> => list_to_binary(Arn),
         <<"VersionStage">> => <<"AWSCURRENT">>
