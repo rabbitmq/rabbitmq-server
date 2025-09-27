@@ -208,6 +208,8 @@ parse_assume_role_response(Body) ->
 
 handle_content(oauth2_https_cacertfile, PemData) ->
     {ok, CaCertsDerEncoded} = decode_pem_data(PemData),
+    %% Note: yes it's really key_config and not https like in the
+    %% cuttlefish schema
     replace_in_env(rabbitmq_auth_backend_oauth2, key_config, cacertfile,
                    cacerts, CaCertsDerEncoded);
 handle_content(ssl_options_cacertfile, PemData) ->
@@ -224,18 +226,24 @@ handle_content(ldap_other_bind_password, SecretJsonBin) when is_binary(SecretJso
     update_ldap_env(ldap_other_bind_password, SecretJsonBin).
 
 -spec replace_in_env(atom(), atom(), atom(), atom(), any()) -> ok.
+replace_in_env(App, ConfigKey, cacertfile, cacerts, CaCertsDerEncoded0) ->
+    {ok, OrigCacertFile} =  delete_from_env(App, ConfigKey, cacertfile),
+    {ok, CaCertsDerEncoded1} = maybe_add_cacertfile_to_cacerts(OrigCacertFile, CaCertsDerEncoded0),
+    ok = update_env(App, ConfigKey, cacerts, CaCertsDerEncoded1);
 replace_in_env(App, ConfigKey, KeyToDelete, Key, Value) ->
-    ok = delete_from_env(App, ConfigKey, KeyToDelete),
+    {ok, _} = delete_from_env(App, ConfigKey, KeyToDelete),
     ok = update_env(App, ConfigKey, Key, Value).
 
 -spec delete_from_env(atom(), atom(), atom()) -> ok.
 delete_from_env(App, ConfigKey, KeyToDelete) ->
-    Config = case application:get_env(App, ConfigKey) of
-        {ok, ExistingConfig} -> ExistingConfig;
+    ConfigValue = case application:get_env(App, ConfigKey) of
+        {ok, Val} -> Val;
         undefined -> []
     end,
-    NewConfig = lists:keydelete(KeyToDelete, 1, Config),
-    ok = application:set_env(App, ConfigKey, NewConfig).
+    OrigConfigValue = lists:keyfind(KeyToDelete, 1, ConfigValue),
+    NewConfig = lists:keydelete(KeyToDelete, 1, ConfigValue),
+    ok = application:set_env(App, ConfigKey, NewConfig),
+    {ok, OrigConfigValue}.
 
 -spec update_env(atom(), atom(), atom(), any()) -> ok.
 update_env(App, ConfigKey, Key, Value) ->
@@ -245,6 +253,19 @@ update_env(App, ConfigKey, Key, Value) ->
     end,
     NewConfig = lists:keystore(Key, 1, Config, {Key, Value}),
     ok = application:set_env(App, ConfigKey, NewConfig).
+
+maybe_add_cacertfile_to_cacerts({cacertfile, CacertFilePath}, CaCertsDerEncoded) ->
+    maybe_add_cacertfile_to_cacerts_from_file(file:read_file(CacertFilePath), CaCertsDerEncoded).
+
+maybe_add_cacertfile_to_cacerts_from_file({ok, CacertBin}, CaCertsDerEncoded) ->
+    maybe_add_decoded_pem_to_cacerts(decode_pem_data(CacertBin), CaCertsDerEncoded);
+maybe_add_cacertfile_to_cacerts_from_file(_, CaCertsDerEncoded) ->
+    {ok, CaCertsDerEncoded}.
+
+maybe_add_decoded_pem_to_cacerts({ok, CaCertsDerEncoded0}, CaCertsDerEncoded1) ->
+    {ok, CaCertsDerEncoded0 ++ CaCertsDerEncoded1};
+maybe_add_decoded_pem_to_cacerts(_, CaCertsDerEncoded1) ->
+    {ok, CaCertsDerEncoded1}.
 
 decode_pem_data(PemList) when is_list(PemList) ->
     decode_pem_data(list_to_binary(PemList));
