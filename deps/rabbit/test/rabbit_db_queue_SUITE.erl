@@ -500,7 +500,7 @@ foreach_durable1(_Config) ->
     QName1 = rabbit_misc:r(?VHOST, queue, <<"test-queue1">>),
     Q1 = new_queue(QName1, rabbit_classic_queue),
     ?assertEqual(ok, rabbit_db_queue:set(Q1)),
-    ?assertEqual(ok, rabbit_db_queue:foreach_durable(
+    ?assertEqual(ok, rabbit_db_queue:foreach(
                        fun(Q0) ->
                                rabbit_db_queue:internal_delete(amqqueue:get_name(Q0), true, normal)
                        end,
@@ -566,7 +566,7 @@ internal_delete1(_Config) ->
     QName = rabbit_misc:r(?VHOST, queue, <<"test-queue">>),
     Q = new_queue(QName, rabbit_classic_queue),
     ?assertEqual(ok, rabbit_db_queue:set(Q)),
-    ?assertEqual(ok, rabbit_db_queue:foreach_durable(
+    ?assertEqual(ok, rabbit_db_queue:foreach(
                        fun(Q0) -> rabbit_db_queue:internal_delete(amqqueue:get_name(Q0),
                                                                   false, normal) end,
                        fun(Q0) when ?is_amqqueue(Q0) -> true end)),
