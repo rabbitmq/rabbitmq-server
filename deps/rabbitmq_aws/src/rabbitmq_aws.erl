@@ -10,15 +10,20 @@
 
 %% API exports
 -export([
-    get/2, get/3,
+    get/2, get/3, get/4,
+    put/4, put/5,
     post/4,
     refresh_credentials/0,
     request/5, request/6, request/7,
     set_credentials/2,
     has_credentials/0,
+    parse_uri/1,
     set_region/1,
     ensure_imdsv2_token_valid/0,
-    api_get_request/2
+    api_get_request/2,
+    status_text/1,
+    open_connection/1, open_connection/2,
+    close_connection/1
 ]).
 
 %% gen-server exports
@@ -40,23 +45,33 @@
 -include("rabbitmq_aws.hrl").
 -include_lib("kernel/include/logger.hrl").
 
+%% Types for new concurrent API
+-type connection_handle() :: {pid(), credential_context()}.
+-type credential_context() :: #{
+    access_key => access_key(),
+    secret_access_key => secret_access_key(),
+    security_token => security_token(),
+    region => region(),
+    service => string()
+}.
+
 %%====================================================================
 %% exported wrapper functions
 %%====================================================================
 
 -spec get(
-    Service :: string(),
+    ServiceOrHandle :: string() | connection_handle(),
     Path :: path()
 ) -> result().
 %% @doc Perform a HTTP GET request to the AWS API for the specified service. The
 %%      response will automatically be decoded if it is either in JSON, or XML
 %%      format.
 %% @end
-get(Service, Path) ->
-    get(Service, Path, []).
+get(ServiceOrHandle, Path) ->
+    get(ServiceOrHandle, Path, []).
 
 -spec get(
-    Service :: string(),
+    ServiceOrHandle :: string() | connection_handle(),
     Path :: path(),
     Headers :: headers()
 ) -> result().
@@ -64,11 +79,14 @@ get(Service, Path) ->
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
-get(Service, Path, Headers) ->
-    request(Service, get, Path, "", Headers).
+get(ServiceOrHandle, Path, Headers) ->
+    get(ServiceOrHandle, Path, Headers, []).
+
+get(Service, Path, Headers, Options) ->
+    request(Service, get, Path, <<>>, Headers, Options).
 
 -spec post(
-    Service :: string(),
+    ServiceOrHandle :: string() | connection_handle(),
     Path :: path(),
     Body :: body(),
     Headers :: headers()
@@ -77,14 +95,73 @@ get(Service, Path, Headers) ->
 %%      response will automatically be decoded if it is either in JSON or XML
 %%      format.
 %% @end
-post(Service, Path, Body, Headers) ->
-    request(Service, post, Path, Body, Headers).
+post(ServiceOrHandle, Path, Body, Headers) ->
+    post(ServiceOrHandle, Path, Body, Headers, []).
+
+post(Service, Path, Body, Headers, Options) ->
+    request(Service, post, Path, Body, Headers, Options).
+
+-spec put(
+    ServiceOrHandle :: string() | connection_handle(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers()
+) -> result().
+%% @doc Perform a HTTP Post request to the AWS API for the specified service. The
+%%      response will automatically be decoded if it is either in JSON or XML
+%%      format.
+%% @end
+put(ServiceOrHandle, Path, Body, Headers) ->
+    put(ServiceOrHandle, Path, Body, Headers, []).
+
+put(Service, Path, Body, Headers, Options) ->
+    request(Service, put, Path, Body, Headers, Options).
 
 -spec refresh_credentials() -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
 %% @end
 refresh_credentials() ->
     gen_server:call(rabbitmq_aws, refresh_credentials).
+
+%%====================================================================
+%% New Concurrent API Functions
+%%====================================================================
+
+%% Open a connection and return handle for direct use
+-spec open_connection(Service :: string()) -> {ok, connection_handle()} | {error, term()}.
+open_connection(Service) ->
+    open_connection(Service, []).
+
+-spec open_connection(Service :: string(), Options :: list()) ->
+    {ok, connection_handle()} | {error, term()}.
+open_connection(Service, Options) ->
+    gen_server:call(?MODULE, {open_direct_connection, Service, Options}).
+
+%% Close a direct connection
+-spec close_connection(Handle :: connection_handle()) -> ok.
+close_connection({GunPid, _CredContext}) ->
+    gun:close(GunPid).
+
+-spec direct_request(
+    Handle :: connection_handle(),
+    Method :: method(),
+    Path :: path(),
+    Body :: body(),
+    Headers :: headers(),
+    Options :: list()
+) -> result().
+direct_request({GunPid, CredContext}, Method, Path, Body, Headers, Options) ->
+    #{service := Service, region := Region} = CredContext,
+    % Build URI for signing
+    Host = endpoint_host(Region, Service),
+    URI = create_uri(Host, Path),
+    BodyHash = proplists:get_value(payload_hash, Options),
+    % Sign headers directly (no gen_server call)
+    SignedHeaders = sign_headers_with_context(
+        CredContext, Method, URI, Headers, Body, BodyHash
+    ),
+    % Make Gun request directly
+    direct_gun_request(GunPid, Method, Path, SignedHeaders, Body, Options).
 
 -spec refresh_credentials(state()) -> ok | error.
 %% @doc Manually refresh the credentials from the environment, filesystem or EC2 Instance Metadata Service.
@@ -107,7 +184,7 @@ refresh_credentials(State) ->
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers) ->
-    gen_server:call(rabbitmq_aws, {request, Service, Method, Headers, Path, Body, [], undefined}).
+    request(Service, Method, Path, Body, Headers, []).
 
 -spec request(
     Service :: string(),
@@ -122,12 +199,10 @@ request(Service, Method, Path, Body, Headers) ->
 %%      format.
 %% @end
 request(Service, Method, Path, Body, Headers, HTTPOptions) ->
-    gen_server:call(
-        rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, undefined}
-    ).
+    request(Service, Method, Path, Body, Headers, HTTPOptions, undefined).
 
 -spec request(
-    Service :: string(),
+    ServiceOrHandle :: string() | connection_handle(),
     Method :: method(),
     Path :: path(),
     Body :: body(),
@@ -140,6 +215,10 @@ request(Service, Method, Path, Body, Headers, HTTPOptions) ->
 %%      of services such as DynamoDB. The response will automatically be decoded
 %%      if it is either in JSON or XML format.
 %% @end
+request({GunPid, _CredContext} = Handle, Method, Path, Body, Headers, HTTPOptions, _) when
+    is_pid(GunPid)
+->
+    direct_request(Handle, Method, Path, Body, Headers, HTTPOptions);
 request(Service, Method, Path, Body, Headers, HTTPOptions, Endpoint) ->
     gen_server:call(
         rabbitmq_aws, {request, Service, Method, Headers, Path, Body, HTTPOptions, Endpoint}
@@ -186,9 +265,10 @@ start_link() ->
 
 -spec init(list()) -> {ok, state()}.
 init([]) ->
+    {ok, _} = application:ensure_all_started(gun),
     {ok, #state{}}.
 
-terminate(_, _) ->
+terminate(_, _State) ->
     ok.
 
 code_change(_, _, State) ->
@@ -211,6 +291,18 @@ handle_msg({request, Service, Method, Headers, Path, Body, Options, Host}, State
         State, Service, Method, Headers, Path, Body, Options, Host
     ),
     {reply, Response, NewState};
+handle_msg({open_direct_connection, Service, Options}, State) ->
+    case ensure_credentials_valid_internal(State) of
+        {ok, ValidState} ->
+            case create_direct_connection(ValidState, Service, Options) of
+                {ok, Handle} ->
+                    {reply, {ok, Handle}, ValidState};
+                {error, Reason} ->
+                    {reply, {error, Reason}, ValidState}
+            end;
+        {error, Reason} ->
+            {reply, {error, Reason}, State}
+    end;
 handle_msg(get_state, State) ->
     {reply, {ok, State}, State};
 handle_msg(refresh_credentials, State) ->
@@ -282,6 +374,8 @@ endpoint_tld(_Other) ->
 %% @end
 format_response({ok, {{_Version, 200, _Message}, Headers, Body}}) ->
     {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
+format_response({ok, {{_Version, 206, _Message}, Headers, Body}}) ->
+    {ok, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({ok, {{_Version, StatusCode, Message}, Headers, Body}}) when StatusCode >= 400 ->
     {error, Message, {Headers, maybe_decode_body(get_content_type(Headers), Body)}};
 format_response({error, Reason}) ->
@@ -293,9 +387,9 @@ format_response({error, Reason}) ->
 %% @end
 get_content_type(Headers) ->
     Value =
-        case proplists:get_value("content-type", Headers, undefined) of
+        case proplists:get_value(<<"content-type">>, Headers, undefined) of
             undefined ->
-                proplists:get_value("Content-Type", Headers, "text/xml");
+                proplists:get_value(<<"Content-Type">>, Headers, "text/xml");
             Other ->
                 Other
         end,
@@ -368,6 +462,8 @@ local_time() ->
     list() | body().
 %% @doc Attempt to decode the response body by its MIME
 %% @end
+maybe_decode_body(_, <<>>) ->
+    <<>>;
 maybe_decode_body({"application", "x-amz-json-1.0"}, Body) ->
     rabbitmq_aws_json:decode(Body);
 maybe_decode_body({"application", "json"}, Body) ->
@@ -380,6 +476,8 @@ maybe_decode_body(_ContentType, Body) ->
 -spec parse_content_type(ContentType :: string()) -> {Type :: string(), Subtype :: string()}.
 %% @doc parse a content type string returning a tuple of type/subtype
 %% @end
+parse_content_type(ContentType) when is_binary(ContentType) ->
+    parse_content_type(binary_to_list(ContentType));
 parse_content_type(ContentType) ->
     Parts = string:tokens(ContentType, ";"),
     [Type, Subtype] = string:tokens(lists:nth(1, Parts), "/"),
@@ -480,15 +578,13 @@ perform_request_creds_expired(true, State, _, _, _, _, _, _, _) ->
 perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options, Host) ->
     URI = endpoint(State, Host, Service, Path),
     SignedHeaders = sign_headers(State, Service, Method, URI, Headers, Body),
-    ContentType = proplists:get_value("content-type", SignedHeaders, undefined),
-    perform_request_with_creds(State, Method, URI, SignedHeaders, ContentType, Body, Options).
+    perform_request_with_creds(State, Method, URI, SignedHeaders, Body, Options).
 
 -spec perform_request_with_creds(
     State :: state(),
     Method :: method(),
     URI :: string(),
     Headers :: headers(),
-    ContentType :: string() | undefined,
     Body :: body(),
     Options :: http_options()
 ) ->
@@ -496,14 +592,12 @@ perform_request_with_creds(State, Service, Method, Headers, Path, Body, Options,
 %% @doc Once it is validated that there are credentials to try and that they have not
 %%      expired, perform the request and return the response.
 %% @end
-perform_request_with_creds(State, Method, URI, Headers, undefined, "", Options0) ->
-    Options1 = ensure_timeout(Options0),
-    Response = httpc:request(Method, {URI, Headers}, Options1, []),
-    {format_response(Response), State};
-perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Options0) ->
-    Options1 = ensure_timeout(Options0),
-    Response = httpc:request(Method, {URI, Headers, ContentType, Body}, Options1, []),
-    {format_response(Response), State}.
+perform_request_with_creds(State, Method, URI, Headers, "", Options0) ->
+    Response = gun_request(Method, URI, Headers, <<>>, Options0),
+    {Response, State};
+perform_request_with_creds(State, Method, URI, Headers, Body, Options0) ->
+    Response = gun_request(Method, URI, Headers, Body, Options0),
+    {Response, State}.
 
 -spec perform_request_creds_error(State :: state()) ->
     {result_error(), NewState :: state()}.
@@ -512,22 +606,6 @@ perform_request_with_creds(State, Method, URI, Headers, ContentType, Body, Optio
 %% @end
 perform_request_creds_error(State) ->
     {{error, {credentials, State#state.error}}, State}.
-
-%% @doc Ensure that the timeout option is set and greater than 0 and less
-%%      than about 1/2 of the default gen_server:call timeout. This gives
-%%      enough time for a long connect and request phase to succeed.
-%% @end
--spec ensure_timeout(Options :: http_options()) -> http_options().
-ensure_timeout(Options) ->
-    case proplists:get_value(timeout, Options) of
-        undefined ->
-            Options ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}];
-        Value when is_integer(Value) andalso Value >= 0 andalso Value =< ?DEFAULT_HTTP_TIMEOUT ->
-            Options;
-        _ ->
-            Options1 = proplists:delete(timeout, Options),
-            Options1 ++ [{timeout, ?DEFAULT_HTTP_TIMEOUT}]
-    end.
 
 -spec sign_headers(
     State :: state(),
@@ -647,4 +725,208 @@ api_get_request_with_retries(Service, Path, Retries, WaitTimeBetweenRetries) ->
             ?LOG_WARNING("Will retry AWS request, remaining retries: ~b", [Retries]),
             timer:sleep(WaitTimeBetweenRetries),
             api_get_request_with_retries(Service, Path, Retries - 1, WaitTimeBetweenRetries)
+    end.
+
+%% Gun HTTP client functions
+gun_request(Method, URI, Headers, Body, Options) ->
+    {Host, Port, Path} = parse_uri(URI),
+    GunPid = create_gun_connection(Host, Port, Options),
+    Reply = direct_gun_request(GunPid, Method, Path, Headers, Body, Options),
+    gun:close(GunPid),
+    Reply.
+
+do_gun_request(ConnPid, get, Path, Headers, _Body) ->
+    gun:get(ConnPid, Path, Headers);
+do_gun_request(ConnPid, post, Path, Headers, Body) ->
+    gun:post(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, put, Path, Headers, Body) ->
+    gun:put(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, head, Path, Headers, _Body) ->
+    gun:head(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, delete, Path, Headers, _Body) ->
+    gun:delete(ConnPid, Path, Headers, #{});
+do_gun_request(ConnPid, patch, Path, Headers, Body) ->
+    gun:patch(ConnPid, Path, Headers, Body, #{});
+do_gun_request(ConnPid, options, Path, Headers, _Body) ->
+    gun:options(ConnPid, Path, Headers, #{}).
+
+create_gun_connection(Host, Port, Options) ->
+    % Map HTTP version to Gun protocols, always include http as fallback
+    HttpVersion = proplists:get_value(version, Options, "HTTP/1.1"),
+    Protocols =
+        case HttpVersion of
+            "HTTP/2" -> [http2, http];
+            "HTTP/2.0" -> [http2, http];
+            "HTTP/1.1" -> [http];
+            "HTTP/1.0" -> [http];
+            % Default: try HTTP/2, fallback to HTTP/1.1
+            _ -> [http2, http]
+        end,
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, infinity),
+    Opts = #{
+        transport =>
+            if
+                Port == 443 -> tls;
+                true -> tcp
+            end,
+        protocols => Protocols,
+        connect_timeout => ConnectTimeout
+    },
+    case gun:open(Host, Port, Opts) of
+        {ok, ConnPid} ->
+            case gun:await_up(ConnPid, ConnectTimeout) of
+                {ok, _Protocol} ->
+                    ConnPid;
+                {error, Reason} ->
+                    gun:close(ConnPid),
+                    error({gun_connection_failed, Reason})
+            end;
+        {error, Reason} ->
+            error({gun_open_failed, Reason})
+    end.
+
+create_uri(Host, Path) when is_list(Path) ->
+    "https://" ++ Host ++ Path;
+create_uri(Host, {Bucket, Key}) ->
+    "https://" ++ Bucket ++ "." ++ Host ++ "/" ++ Key.
+
+parse_uri(URI) ->
+    case string:split(URI, "://", leading) of
+        [Scheme, Rest] ->
+            case string:split(Rest, "/", leading) of
+                [HostPort] ->
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
+                    {Host, Port, "/"};
+                [HostPort, Path] ->
+                    {Host, Port} = parse_host_port(HostPort, Scheme),
+                    {Host, Port, "/" ++ Path}
+            end
+    end.
+
+parse_host_port(HostPort, Scheme) ->
+    DefaultPort =
+        case Scheme of
+            "https" -> 443;
+            "http" -> 80;
+            % Fallback to HTTPS
+            _ -> 443
+        end,
+    case string:split(HostPort, ":", trailing) of
+        [Host] ->
+            {Host, DefaultPort};
+        [Host, PortStr] ->
+            {Host, list_to_integer(PortStr)}
+    end.
+
+status_text(200) -> "OK";
+status_text(206) -> "Partial Content";
+status_text(400) -> "Bad Request";
+status_text(401) -> "Unauthorized";
+status_text(403) -> "Forbidden";
+status_text(404) -> "Not Found";
+status_text(416) -> "Range Not Satisfiable";
+status_text(500) -> "Internal Server Error";
+status_text(Code) -> integer_to_list(Code).
+
+%%====================================================================
+%% New Concurrent API Helper Functions
+%%====================================================================
+
+%% Create a direct connection handle
+-spec create_direct_connection(State :: state(), Service :: string(), Options :: list()) ->
+    {ok, connection_handle()} | {error, term()}.
+create_direct_connection(State, Service, Options) ->
+    Region = State#state.region,
+    Host = endpoint_host(Region, Service),
+    Port = 443,
+    GunPid = create_gun_connection(Host, Port, Options),
+    CredContext = #{
+        access_key => State#state.access_key,
+        secret_access_key => State#state.secret_access_key,
+        security_token => State#state.security_token,
+        region => Region,
+        service => Service
+    },
+    {ok, {GunPid, CredContext}}.
+
+%% Sign headers using credential context (no gen_server state needed)
+-spec sign_headers_with_context(
+    CredContext :: credential_context(),
+    Method :: method(),
+    URI :: string(),
+    Headers :: headers(),
+    Body :: body(),
+    BodyHash :: iodata()
+) -> headers().
+sign_headers_with_context(CredContext, Method, URI, Headers, Body, BodyHash) ->
+    #{
+        access_key := AccessKey,
+        secret_access_key := SecretKey,
+        security_token := SecurityToken,
+        region := Region,
+        service := Service
+    } = CredContext,
+    rabbitmq_aws_sign:headers(
+        #request{
+            access_key = AccessKey,
+            secret_access_key = SecretKey,
+            security_token = SecurityToken,
+            region = Region,
+            service = Service,
+            method = Method,
+            uri = URI,
+            headers = Headers,
+            body = Body
+        },
+        BodyHash
+    ).
+
+%% Direct Gun request (extracted from existing gun_request function)
+-spec direct_gun_request(
+    GunPid :: pid(),
+    Method :: method(),
+    Path :: path(),
+    Headers :: headers(),
+    Body :: body(),
+    Options :: list()
+) -> result().
+direct_gun_request(GunPid, Method, {_, Path}, Headers, Body, Options) ->
+    direct_gun_request(GunPid, Method, [$/ | Path], Headers, Body, Options);
+direct_gun_request(GunPid, Method, Path, Headers, Body, Options) ->
+    HeadersBin = lists:map(
+        fun({Key, Value}) ->
+            {list_to_binary(Key), list_to_binary(Value)}
+        end,
+        Headers
+    ),
+    Timeout = proplists:get_value(timeout, Options, ?DEFAULT_HTTP_TIMEOUT),
+    Response =
+        try
+            StreamRef = do_gun_request(GunPid, Method, Path, HeadersBin, Body),
+            case gun:await(GunPid, StreamRef, Timeout) of
+                {response, fin, Status, RespHeaders} ->
+                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, <<>>}};
+                {response, nofin, Status, RespHeaders} ->
+                    {ok, RespBody} = gun:await_body(GunPid, StreamRef, Timeout),
+                    {ok, {{http_version, Status, status_text(Status)}, RespHeaders, RespBody}};
+                {error, Reason} ->
+                    {error, Reason}
+            end
+        catch
+            _:Error ->
+                {error, Error}
+        end,
+    format_response(Response).
+
+%% Internal credential validation (extracted from existing logic)
+-spec ensure_credentials_valid_internal(State :: state()) -> {ok, state()} | {error, term()}.
+ensure_credentials_valid_internal(State) ->
+    case has_credentials(State) of
+        true ->
+            case expired_credentials(State#state.expiration) of
+                false -> {ok, State};
+                true -> load_credentials(State)
+            end;
+        false ->
+            load_credentials(State)
     end.
