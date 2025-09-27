@@ -15,5 +15,50 @@
 %% When false, EC2 IMDSv1 will be used first and no attempt will be made to use EC2 IMDSv2.
 %% See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.
 
-{mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
+{mapping, "aws.prefer_imdsv2", "rabbitmq_aws.aws_prefer_imdsv2",
     [{datatype, {enum, [true, false]}}]}.
+
+%% @doc Directory path where downloaded CA certificate files from S3 will be stored
+{mapping, "aws.cacertfiles.download_path", "rabbitmq_aws.cacertfiles_download_path",
+    [{datatype, string}, {default, "/tmp/rabbitmq-aws-cacertfiles"}]}.
+
+%% @doc IAM role ARN to assume before fetching resources from S3
+{mapping, "aws.resource_fetcher.assume_role_arn", "rabbitmq_aws.assume_role_arn",
+    [{datatype, string}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to ssl_options.cacertfile
+{mapping, "aws.arns.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_oauth2.https.cacertfile
+{mapping, "aws.arns.auth_oauth2.https.cacertfile", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_ldap.ssl_options.cacertfile
+{mapping, "aws.arns.auth_ldap.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch LDAP directory lookup service account user's password from AWS Secret Manager
+{mapping, "aws.arns.auth_ldap.dn_lookup_bind.password", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% @doc Fetch optional LDAP authroization look up account user's password. (default reusing dn_lookup account)
+{mapping, "aws.arns.auth_ldap.other_bind.password", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+
+{translation, "rabbitmq_aws.aws_arns",
+fun(Conf) ->
+    lists:foldl(fun({Key, Handler}, Acc) ->
+        case cuttlefish:conf_get(Key, Conf, undefined) of
+            undefined -> Acc;
+            Arn -> [{Key, Arn, Handler} | Acc]
+        end
+    end, [], [
+        {"aws.arns.auth_oauth2.https.cacertfile", oauth2_https_cacertfile},
+        {"aws.arns.ssl_options.cacertfile", ssl_options_cacertfile},
+        {"aws.arns.auth_ldap.ssl_options.cacertfile", ldap_ssl_options_cacertfile},
+        {"aws.arns.auth_ldap.dn_lookup_bind.password", ldap_dn_lookup_bind_password},
+        {"aws.arns.auth_ldap.other_bind.password", ldap_other_bind_password}
+    ])
+end}.
