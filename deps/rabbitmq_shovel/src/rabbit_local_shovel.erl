@@ -444,8 +444,6 @@ add_routing(Msg0, Dest) ->
 status(_) ->
     running.
 
-pending_count(#{source := #{current := #{unacked_message_q := UAMQ}}}) ->
-    ?QUEUE:len(UAMQ);
 pending_count(_State) ->
     0.
 
