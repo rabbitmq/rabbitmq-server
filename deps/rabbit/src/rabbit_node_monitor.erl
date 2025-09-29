@@ -430,16 +430,8 @@ handle_call(status, _From, State = #state{partitions = Partitions}) ->
 handle_call(_Request, _From, State) ->
     {noreply, State}.
 
-handle_cast(notify_node_up, State = #state{guid = GUID}) ->
-    Nodes = rabbit_nodes:list_reachable() -- [node()],
-    gen_server:abcast(Nodes, ?SERVER,
-                      {node_up, node(), rabbit_db_cluster:node_type(), GUID}),
-    %% register other active rabbits with this rabbit
-    DiskNodes = rabbit_db_cluster:disc_members(),
-    [gen_server:cast(?SERVER, {node_up, N, case lists:member(N, DiskNodes) of
-                                               true  -> disc;
-                                               false -> ram
-                                           end}) || N <- Nodes],
+handle_cast(notify_node_up, State) ->
+    do_notify_node_up(State),
     {noreply, State};
 
 %%----------------------------------------------------------------------------
@@ -665,6 +657,12 @@ handle_info({nodedown, Node, Info}, State) ->
 
 handle_info({nodeup, Node, _Info}, State) ->
     ?LOG_INFO("node ~tp up", [Node]),
+    %% We notify that `rabbit' is up here too (in addition to the message sent
+    %% explicitly by a boot step. That's because nodes may go down then up
+    %% during a network partition, and with Khepri, nodes are not restarted
+    %% (unlike with some partition handling strategies used with Mnesia), and
+    %% thus the boot steps are not executed.
+    do_notify_node_up(State),
     {noreply, State};
 
 handle_info({mnesia_system_event,
@@ -853,6 +851,20 @@ wait_for_cluster_recovery(Condition) ->
         false -> timer:sleep(?RABBIT_DOWN_PING_INTERVAL),
                  wait_for_cluster_recovery(Condition)
     end.
+
+do_notify_node_up(#state{guid = GUID}) ->
+    Nodes = rabbit_nodes:list_reachable() -- [node()],
+    gen_server:abcast(Nodes, ?SERVER,
+                      {node_up, node(), rabbit_db_cluster:node_type(), GUID}),
+    %% register other active rabbits with this rabbit
+    DiskNodes = rabbit_db_cluster:disc_members(),
+    _ = [gen_server:cast(
+           ?SERVER,
+           {node_up, N, case lists:member(N, DiskNodes) of
+                            true  -> disc;
+                            false -> ram
+                        end}) || N <- Nodes],
+    ok.
 
 handle_dead_rabbit(Node, State) ->
     %% TODO: This may turn out to be a performance hog when there are
