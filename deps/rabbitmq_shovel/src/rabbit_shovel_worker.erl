@@ -82,7 +82,7 @@ handle_cast(init, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_ERROR("Shovel ~ts could not connect to source: ~p ~p",
                  [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, shutdown, State}
+      {stop, {shutdown, restart}, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
@@ -93,7 +93,7 @@ handle_cast(connect_dest, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_ERROR("Shovel ~ts could not connect to destination: ~p ~p",
                  [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, shutdown, State}
+      {stop, {shutdown, restart}, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
     %% Don't trap exits until we have established connections so that
