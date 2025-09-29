@@ -140,9 +140,16 @@ create_unauthorized_user(Config) ->
     Cmd = ["add_user", ?UNAUTHORIZED_USER, ?UNAUTHORIZED_USER],
     case rabbit_ct_broker_helpers:rabbitmqctl(Config, 0, Cmd) of
         {ok, _} -> rabbit_ct_helpers:set_config(
-                  Config,
-                  [{rmq_unauthorized_username, ?UNAUTHORIZED_USER},
-                   {rmq_unauthorized_password, ?UNAUTHORIZED_USER}]);
+                  Config, [
+                    {rmq_unauthorized_username, ?UNAUTHORIZED_USER},
+                    {rmq_unauthorized_password, ?UNAUTHORIZED_USER},
+                    {ignored_crashes, [
+                        %% used in channel_death/1
+                        "bogus_message",
+                        %% used in channel_writer_death/1
+                        "badrecord"
+                    ]}
+            ]);
         _       -> {skip, "Failed to create unauthorized user"}
     end.
 
@@ -156,9 +163,25 @@ delete_unauthorized_user(Config) ->
 %% -------------------------------------------------------------------
 
 init_per_group(direct_connection_tests, Config) ->
-    rabbit_ct_helpers:set_config(Config, {amqp_client_conn_type, direct});
+    rabbit_ct_helpers:set_config(Config, [
+        {amqp_client_conn_type, direct},
+        {ignored_crashes, [
+            %% used in channel_death/1
+            "bogus_message",
+            %% used in channel_writer_death/1
+            "badrecord"
+        ]}
+    ]);
 init_per_group(network_connection_tests, Config) ->
-    rabbit_ct_helpers:set_config(Config, {amqp_client_conn_type, network});
+    rabbit_ct_helpers:set_config(Config, [
+        {amqp_client_conn_type, network},
+        {ignored_crashes, [
+            %% used in channel_death/1
+            "bogus_message",
+            %% used in channel_writer_death/1
+            "badrecord"
+        ]}
+    ]);
 init_per_group(Group, Config)
   when Group =:= parallel_tests
   orelse Group =:= non_parallel_tests
@@ -167,7 +190,15 @@ init_per_group(Group, Config)
   orelse Group =:= hard_error_loop ->
     case ?config(amqp_client_conn_type, Config) of
         undefined -> rabbit_ct_helpers:set_config(
-                       Config, {amqp_client_conn_type, network});
+                       Config, [
+                                {amqp_client_conn_type, network},
+                                {ignored_crashes, [
+                                    %% used in channel_death/1
+                                    "bogus_message",
+                                    %% used in channel_writer_death/1
+                                    "badrecord"
+                                ]}
+                              ]);
         _         -> Config
     end.
 
@@ -257,8 +288,15 @@ init_per_testcase(Test, Config) ->
               channel_max  = ChannelMax,
               ssl_options  = SSLOpts}
     end,
-    rabbit_ct_helpers:set_config(Config,
-                                 {amqp_client_conn_params, ConnParams}).
+    rabbit_ct_helpers:set_config(Config, [
+        {amqp_client_conn_params, ConnParams},
+        {ignored_crashes, [
+            %% used in channel_death/1
+            "bogus_message",
+            %% used in channel_writer_death/1
+            "badrecord"
+        ]}
+    ]).
 
 end_per_testcase(Test, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Test).
