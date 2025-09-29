@@ -601,8 +601,6 @@ pending_count(#{dest := #{pending_delivery := Pending}}) ->
 pending_count(_) ->
     0.
 
-pending_count(#{source := #{current := #{unacked_message_q := UAMQ}}}) ->
-    ?QUEUE:len(UAMQ);
 pending_count(_State) ->
     0.
 
