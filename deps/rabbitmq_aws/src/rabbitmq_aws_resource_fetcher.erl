@@ -22,6 +22,9 @@
 -define(AWS_LOG_DEBUG(Fmt, Args),
     ?LOG_DEBUG("~tp: " ++ Fmt, [?MODULE | Args])).
 
+-define(AWS_LOG_WARNING(Arg),
+    ?LOG_WARNING("~tp: ~ts", [?MODULE, Arg])).
+
 -define(AWS_LOG_ERROR(Arg),
     ?LOG_ERROR("~tp: ~ts", [?MODULE, Arg])).
 
@@ -36,12 +39,28 @@
 %% @end
 process_arns() ->
     try
+        ok = maybe_assume_role(),
         ok = process_arns(application:get_env(rabbitmq_aws, aws_arns)),
         ?AWS_LOG_INFO("success")
     catch Class:Reason:Stacktrace ->
         ?AWS_LOG_ERROR("~tp:~tp", [Class, Reason]),
         ?AWS_LOG_ERROR("~tp", [Stacktrace])
     end.
+
+maybe_assume_role() ->
+    maybe_assume_role(application:get_env(rabbitmq_aws, assume_role_arn)).
+
+maybe_assume_role({ok, RoleArn}) ->
+    case assume_role(RoleArn) of
+        ok ->
+            ok;
+        Error ->
+            {error, {assume_role_failed, Error}}
+    end;
+maybe_assume_role(_) ->
+    % No assume role configured, use existing credentials
+    ?AWS_LOG_WARNING("aws.resource_fetcher.assume_role_arn is not present in configuration"),
+    ok.
 
 process_arns([]) ->
     ok;
@@ -165,18 +184,7 @@ with_credentials_and_role(Region, F) when is_function(F) ->
         false ->
             {error, no_base_credentials};
         true ->
-            case application:get_env(rabbitmq_aws, assume_role_arn) of
-                {ok, RoleArn} ->
-                    case assume_role(RoleArn) of
-                        ok ->
-                            F();
-                        Error ->
-                            {error, {assume_role_failed, Error}}
-                    end;
-                _ ->
-                    % No assume role configured, use existing credentials
-                    F()
-            end
+            F()
     end.
 
 -spec assume_role(string()) -> ok | {error, term()}.
@@ -301,4 +309,19 @@ do_update_ldap_env(LdapAppConfigKey, SecretContent, SecretMapKey) ->
             ok;
         _ ->
             {error, {ldap_config_key_missing, LdapAppConfigKey}}
+    end.
+
+-spec update_ldap_config_password(atom(), tuple() | atom(), binary()) -> {ok, tuple()}.
+update_ldap_config_password(ConfigKey, ExistingConfig, Password) ->
+    case ExistingConfig of
+        {Username, _OldPassword} ->
+            % Case 1: Proper tuple - replace with new password
+            % Password is already binary from JSON decode
+            NewConfig = {Username, Password},
+            {ok, NewConfig};
+        _ ->
+            % Case 2: Any other value (as_user, anon, etc.) - this should not happen
+            ?AWS_LOG_ERROR("expected ~tp to be configured as {username, password} but got ~tp",
+                           [ConfigKey, ExistingConfig]),
+            {ok, ExistingConfig}
     end.
