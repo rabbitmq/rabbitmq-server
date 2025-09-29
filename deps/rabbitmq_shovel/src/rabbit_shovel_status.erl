@@ -42,6 +42,9 @@
 -type info() :: starting
               | {running, proplists:proplist()}
               | {terminated, term()}.
+-type info_with_node() :: starting
+                        | {running, proplists:proplist()}
+                        | {terminated, proplists:proplist(), term()}.
 -type blocked_status() :: running | flow | blocked.
 -type shovel_status() :: blocked_status() | ignore.
 
@@ -52,7 +55,7 @@
                      pending := rabbit_types:option(non_neg_integer()),
                      forwarded := rabbit_types:option(non_neg_integer())
                     } | #{}.
--type status_tuple_41x() :: {name(), type(), info(), metrics(), calendar:datetime()}.
+-type status_tuple_41x() :: {name(), type(), info() | info_with_node(), metrics(), calendar:datetime()}.
 -type status_tuple_40x_and_older() :: {name(), type(), info(), calendar:datetime()}.
 -type status_tuple() :: status_tuple_41x() | status_tuple_40x_and_older().
 
@@ -216,7 +219,7 @@ inject_node_info(Node, Shovels) ->
              {Name, Type, {State, Opts}, Metrics, Timestamp};
            %% terminated
            ({Name, Type, {terminated, Reason}, Metrics, Timestamp}) ->
-             {Name, Type, {terminated, Reason}, Metrics, Timestamp};
+             {Name, Type, {terminated, [{node, Node}], Reason}, Metrics, Timestamp};
             %% running
            ({Name, Type, {State, Opts}, Metrics, Timestamp}) ->
              Opts1 = Opts ++ [{node, Node}],
