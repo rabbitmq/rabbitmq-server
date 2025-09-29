@@ -26,15 +26,38 @@
 {mapping, "aws.resource_fetcher.assume_role_arn", "rabbitmq_aws.assume_role_arn",
     [{datatype, string}]}.
 
+%% @doc custom headers for rabbitmq_aws plugin
+{mapping, "aws.resource_fetcher.custom_headers.x-amzn-source-arn",
+          "rabbitmq_aws.resource_fetcher.custom_headers.X-Amzn-Source-Arn", [{datatype, string}]}.
+
+%% @doc custom headers for rabbitmq_aws plugin
+{mapping, "aws.resource_fetcher.custom_headers.x-amzn-source-account",
+          "rabbitmq_aws.resource_fetcher.custom_headers.X-Amzn-Source-Account", [{datatype, string}]}.
+
 %% @doc Fetch cacertfile from Amazon S3, store locally and pass to ssl_options.cacertfile
 {mapping, "aws.arns.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
+
+%% rabbitmq_management plugin
+%%
+%% @doc Fetch cacertfile from Amazon S3 and pass to management.ssl_config.cacertfile
+{mapping, "aws.arns.management.ssl.cacertfile", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
 
-%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_oauth2.https.cacertfile
+%% rabbitmq_auth_backend_oauth2
+%%
+%% @doc Fetch cacertfile from Amazon S3 and pass to auth_oauth2.https.cacertfile
 {mapping, "aws.arns.auth_oauth2.https.cacertfile", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
 
-%% @doc Fetch cacertfile from Amazon S3, store locally and pass to auth_ldap.ssl_options.cacertfile
+%% rabbit
+%%
+%% @doc Fetch cacertfile from Amazon S3 and pass to ssl_options.cacertfile
+{mapping, "aws.arns.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
+    [{datatype, string}]}.
+
+%% rabbitmq_auth_backend_ldap
+%%
+%% @doc Fetch cacertfile from Amazon S3 and pass to auth_ldap.ssl_options.cacertfile
 {mapping, "aws.arns.auth_ldap.ssl_options.cacertfile", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
 
@@ -46,7 +69,6 @@
 {mapping, "aws.arns.auth_ldap.other_bind.password", "rabbitmq_aws.aws_arns",
     [{datatype, string}]}.
 
-
 {translation, "rabbitmq_aws.aws_arns",
 fun(Conf) ->
     lists:foldl(fun({Key, Handler}, Acc) ->
@@ -55,8 +77,18 @@ fun(Conf) ->
             Arn -> [{Key, Arn, Handler} | Acc]
         end
     end, [], [
+        %% rabbitmq_management
+        {"aws.arns.management.ssl.cacertfile", management_cacertfile},
+        {"aws.arns.management.ssl.certfile", management_certfile},
+        {"aws.arns.management.ssl.keyfile", management_keyfile},
+
+        %% rabbitmq_auth_backend_oauth2
         {"aws.arns.auth_oauth2.https.cacertfile", oauth2_https_cacertfile},
+
+        %% rabbit
         {"aws.arns.ssl_options.cacertfile", ssl_options_cacertfile},
+
+        %% rabbitmq_auth_backend_ldap
         {"aws.arns.auth_ldap.ssl_options.cacertfile", ldap_ssl_options_cacertfile},
         {"aws.arns.auth_ldap.dn_lookup_bind.password", ldap_dn_lookup_bind_password},
         {"aws.arns.auth_ldap.other_bind.password", ldap_other_bind_password}
