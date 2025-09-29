@@ -62,6 +62,8 @@ run([Name], #{node := Node, vhost := VHost}) ->
             case rabbit_shovel_status:find_matching_shovel(VHost, Name, Xs) of
                 undefined ->
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
+                {{_Name, _VHost}, _Type, {terminated, Opts, _}, _Metrics, _Timestamp} ->
+                    restart_shovel(ErrMsg, Name, VHost, Opts);
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
                     HostingNode = proplists:get_value(node, Opts, Node),
                     restart_shovel(ErrMsg, Name, VHost, HostingNode);
