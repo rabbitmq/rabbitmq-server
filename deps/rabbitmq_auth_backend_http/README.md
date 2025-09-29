@@ -123,11 +123,11 @@ Your web server should always return HTTP 200 OK, with a body
 containing:
 
 * `deny`: deny access to the user / vhost / resource
+* `deny <Reason>`: deny access to the user / vhost / resource. RabbitMQ will log the `<Reason>` at INFO level.
 * `allow`: allow access to the user / vhost / resource
 * `allow [list of tags]` (for `user_path` only): allow access, and mark the user as an having the tags listed
 
 ## Using TLS/HTTPS
-
 If your Web server uses HTTPS and certificate verification, you need to
 configure the plugin to use a CA and client certificate/key pair using the `rabbitmq_auth_backend_http.ssl_options` config variable:
 
