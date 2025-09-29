@@ -23,6 +23,7 @@
 -export([list/0, list_durable/0, list/1, info_keys/0, info/1, info/2, info_all/1, info_all/2,
          emit_info_all/5, list_local/1, info_local/1,
          emit_info_local/4, emit_info_down/4]).
+-export([get_nodes/1]).
 -export([count/0]).
 -export([list_down/1, list_down/2, list_all/1,
          count/1, list_names/0, list_names/1, list_local_names/0,
@@ -1214,6 +1215,12 @@ list() ->
 count() ->
     rabbit_db_queue:count().
 
+-spec get_nodes(amqqueue:amqqueue_v2()) -> [node(),...].
+
+get_nodes(Q) ->
+    [{members, Nodes}] = info(Q, [members]),
+    Nodes.
+
 -spec list_names() -> [name()].
 
 list_names() ->
@@ -2034,12 +2041,7 @@ pseudo_queue(#resource{kind = queue} = QueueName, Pid, Durable)
                 ).
 
 get_quorum_nodes(Q) ->
-    case amqqueue:get_type_state(Q) of
-        #{nodes := Nodes} ->
-            Nodes;
-        _ ->
-            []
-    end.
+    rabbit_amqqueue:get_nodes(Q).
 
 -spec prepend_extra_bcc(Qs) ->
     Qs when Qs :: [amqqueue:target() | {amqqueue:target(), route_infos()}].

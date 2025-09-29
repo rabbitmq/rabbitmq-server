@@ -208,7 +208,7 @@ assert_number_of_replicas(Config, Server, VHost, QQ, Count) ->
        begin
            {ok, Q} = rabbit_ct_broker_helpers:rpc(
                        Config, Server, rabbit_amqqueue, lookup, [QQ, VHost]),
-           #{nodes := Nodes} = amqqueue:get_type_state(Q),
+           Nodes = rabbit_amqqueue:get_nodes(Q),
            length(Nodes)
        end,
        30000).

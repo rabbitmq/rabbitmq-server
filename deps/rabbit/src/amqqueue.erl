@@ -30,7 +30,6 @@
          % exclusive_owner
          get_exclusive_owner/1,
          get_leader_node/1,
-         get_nodes/1,
          % name (#resource)
          get_name/1,
          set_name/2,
@@ -426,15 +425,6 @@ get_leader_node(#amqqueue{pid = {_, Leader}}) -> Leader;
 get_leader_node(#amqqueue{pid = none}) -> none;
 get_leader_node(#amqqueue{pid = Pid}) -> node(Pid).
 
--spec get_nodes(amqqueue_v2()) -> [node(),...].
-
-get_nodes(Q) ->
-    case amqqueue:get_type_state(Q) of
-        #{nodes := Nodes} ->
-            Nodes;
-        _ ->
-            [get_leader_node(Q)]
-    end.
 
 % operator_policy
 

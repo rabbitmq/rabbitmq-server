@@ -106,7 +106,9 @@ groups() ->
                                             force_checkpoint,
                                             policy_repair,
                                             gh_12635,
-                                            replica_states
+                                            replica_states,
+                                            restart_after_queue_reincarnation,
+                                            no_messages_after_queue_reincarnation
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -3149,15 +3151,21 @@ add_member_wrong_type(Config) ->
                           [<<"/">>, SQ, Server, voter, 5000])).
 
 add_member_already_a_member(Config) ->
-    [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    [Server, Server2 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    R1 = rpc:call(Server, rabbit_amqqueue, lookup, [{resource, <<"/">>, queue, QQ}]),
     %% idempotent by design
     ?assertEqual(ok,
                  rpc:call(Server, rabbit_queue_type_ra, add_member,
-                          [<<"/">>, QQ, Server, voter, 5000])).
+                          [<<"/">>, QQ, Server, voter, 5000])),
+    ?assertEqual(R1, rpc:call(Server, rabbit_amqqueue, lookup, [{resource, <<"/">>, queue, QQ}])),
+    ?assertEqual(ok,
+                 rpc:call(Server, rabbit_queue_type_ra, add_member,
+                          [<<"/">>, QQ, Server2, voter, 5000])),
+    ?assertEqual(R1, rpc:call(Server, rabbit_amqqueue, lookup, [{resource, <<"/">>, queue, QQ}])).
 
 add_member_not_found(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -3199,10 +3207,14 @@ add_member_2(Config) ->
                                   {<<"x-quorum-initial-group-size">>, long, 1}])),
     ?assertEqual(ok, rpc:call(Server0, rabbit_queue_type_ra, add_member,
                               [<<"/">>, QQ, Server0, voter, 5000])),
-    Info = rpc:call(Server0, rabbit_quorum_queue, infos,
-                    [rabbit_misc:r(<<"/">>, queue, QQ)]),
+    #{online := Onlines} = ?awaitMatch(#{online := [_One, _Two]},
+                                       maps:from_list(rpc:call(Server0,
+                                                               rabbit_quorum_queue,
+                                                               infos,
+                                                               [rabbit_misc:r(<<"/">>, queue, QQ)])),
+                                       3000),
     Servers = lists:sort([Server0, Server1]),
-    ?assertEqual(Servers, lists:sort(proplists:get_value(online, Info, []))).
+    ?assertEqual(Servers, lists:sort(Onlines)).
 
 delete_member_not_running(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -5292,6 +5304,141 @@ replica_states(Config) ->
                 end
              end, Result2).
 
+% Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/discussions/13131
+restart_after_queue_reincarnation(Config) ->
+    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    QName = <<"QQ">>,
+
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+    VHost = amqqueue:get_vhost(Q),
+
+    MessagesPublished = 1000,
+    publish_many(Ch, QName, MessagesPublished),
+
+    %% Trigger a snapshot by purging the queue.
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_queue_type, purge, [Q]),
+
+    %% Stop S3
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, S3),
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, S3)),
+
+    %% Delete and re-declare queue with the same name.
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete, [Q,false,false,<<"dummy_user">>]),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    % Now S3 should have the old queue state, and S1 and S2 a new one.
+    St1 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
+    Status0 = [{proplists:get_value(<<"Node Name">>, S), S} || S <- St1],
+    S3_Status1 = proplists:get_value(S3, Status0),
+    Others_Status1 = [V || {_K, V} <- proplists:delete(S3, Status0)],
+
+    S3_LastLogIndex = proplists:get_value(<<"Last Log Index">>, S3_Status1),
+    S3_LastWritten = proplists:get_value(<<"Last Written">>, S3_Status1),
+    S3_LastApplied = proplists:get_value(<<"Last Applied">>, S3_Status1),
+    S3_CommitIndex = proplists:get_value(<<"Commit Index">>, S3_Status1),
+    S3_Term = proplists:get_value(<<"Term">>, S3_Status1),
+
+    ?assertEqual(noproc, proplists:get_value(<<"Raft State">>, S3_Status1)),
+    ?assertEqual(unknown, proplists:get_value(<<"Membership">>, S3_Status1)),
+    [begin
+        ?assert(S3_LastLogIndex > proplists:get_value(<<"Last Log Index">>, O)),
+        ?assert(S3_LastWritten > proplists:get_value(<<"Last Written">>, O)),
+        ?assert(S3_LastApplied > proplists:get_value(<<"Last Applied">>, O)),
+        ?assert(S3_CommitIndex > proplists:get_value(<<"Commit Index">>, O)),
+        ?assertEqual(S3_Term, proplists:get_value(<<"Term">>, O))
+     end || O <- Others_Status1],
+
+    %% Bumping term in online nodes
+    rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_quorum_queue, transfer_leadership, [Q, S2]),
+
+    %% Restart S3
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, S3)),
+
+    ?awaitMatch(true, begin
+                          %% Now all three nodes should have the new state.
+                          % They are either leader or follower.
+                          Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
+                          lists:all(
+                            fun(NodeStatus) ->
+                                    NodeRaftState = proplists:get_value(<<"Raft State">>, NodeStatus),
+                                    lists:member(NodeRaftState, [leader, follower])
+                            end, Status2)
+                      end, ?DEFAULT_AWAIT),
+    Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
+
+    % Remove "Node Name" and "Raft State" from the status.
+    Status3 = [NE1, NE2, NE3]= [
+        begin
+            R = proplists:delete(<<"Node Name">>, NodeEntry),
+            proplists:delete(<<"Raft State">>, R)
+        end || NodeEntry <- Status2],
+    % Check all other properties have same value on all nodes.
+    ct:pal("Status3: ~tp", [Status3]),
+    [
+     begin
+        ?assertEqual(V, proplists:get_value(K, NE2)),
+        ?assertEqual(V, proplists:get_value(K, NE3))
+     end || {K, V} <- NE1
+    ].
+
+% Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/issues/12366
+no_messages_after_queue_reincarnation(Config) ->
+    [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
+    QName = <<"QQ">>,
+
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    [Q] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, list, []),
+
+    publish(Ch, QName, <<"msg1">>),
+    publish(Ch, QName, <<"msg2">>),
+
+    %% Stop S3
+    rabbit_ct_broker_helpers:mark_as_being_drained(Config, S3),
+    ?assertEqual(ok, rabbit_control_helper:command(stop_app, S3)),
+
+    qos(Ch, 1, false),
+    subscribe(Ch, QName, false, <<"tag0">>, [], 500),
+    DeliveryTag = receive
+        {#'basic.deliver'{delivery_tag = DT}, #amqp_msg{}} ->
+            receive
+                {#'basic.deliver'{consumer_tag = <<"tag0">>}, #amqp_msg{}} ->
+                    ct:fail("did not expect the second one")
+            after 500 ->
+                DT
+            end
+    after 500 ->
+            ct:fail("Expected some delivery, but got none")
+    end,
+
+    %% Delete and re-declare queue with the same name.
+    rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, delete, [Q,false,false,<<"dummy_user">>]),
+    ?assertEqual({'queue.declare_ok', QName, 0, 0},
+                 declare(Ch, QName, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Bumping term in online nodes
+    rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_quorum_queue, transfer_leadership, [Q, S2]),
+
+    %% Restart S3
+    ?assertEqual(ok, rabbit_control_helper:command(start_app, S3)),
+
+    ok = amqp_channel:cast(Ch, #'basic.ack'{delivery_tag = DeliveryTag,
+                                       multiple     = false}),
+    %% No message should be delivered after reincarnation
+    receive
+        {#'basic.deliver'{consumer_tag = <<"tag0">>}, #amqp_msg{}} ->
+            ct:fail("Expected no deliveries, but got one")
+    after 500 ->
+            ok
+    end.
+
 %%----------------------------------------------------------------------------
 
 same_elements(L1, L2)
@@ -5361,7 +5508,10 @@ consume_empty(Ch, Queue, NoAck) ->
 subscribe(Ch, Queue, NoAck) ->
     subscribe(Ch, Queue, NoAck, <<"ctag">>, []).
 
+
 subscribe(Ch, Queue, NoAck, Tag, Args) ->
+    subscribe(Ch, Queue, NoAck, Tag, Args, ?TIMEOUT).
+subscribe(Ch, Queue, NoAck, Tag, Args, Timeout) ->
     amqp_channel:subscribe(Ch, #'basic.consume'{queue = Queue,
                                                 no_ack = NoAck,
                                                 arguments = Args,
@@ -5370,7 +5520,7 @@ subscribe(Ch, Queue, NoAck, Tag, Args) ->
     receive
         #'basic.consume_ok'{consumer_tag = Tag} ->
              ok
-    after ?TIMEOUT ->
+    after Timeout ->
               flush(100),
               exit(subscribe_timeout)
     end.

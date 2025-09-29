@@ -449,8 +449,7 @@ emit_queue_info(Prefix, VHostsFilter, Callback) ->
                            true -> Acc;
                            false ->
                                Type = amqqueue:get_type(Q),
-                               TypeState = amqqueue:get_type_state(Q),
-                               Members = maps:get(nodes, TypeState, []),
+                               Members = rabbit_amqqueue:get_nodes(Q),
                                case membership(amqqueue:get_pid(Q), Members) of
                                    not_a_member ->
                                        Acc;

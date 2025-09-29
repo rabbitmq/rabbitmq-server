@@ -153,8 +153,8 @@ stop() ->
 
 new_stream(Q, LeaderNode)
   when ?is_amqqueue(Q) andalso is_atom(LeaderNode) ->
-    #{name := StreamId,
-      nodes := Nodes} = amqqueue:get_type_state(Q),
+    #{name := StreamId} = amqqueue:get_type_state(Q),
+    Nodes = rabbit_amqqueue:get_nodes(Q),
     %% assertion leader is in nodes configuration
     true = lists:member(LeaderNode, Nodes),
     process_command({new_stream, StreamId,
