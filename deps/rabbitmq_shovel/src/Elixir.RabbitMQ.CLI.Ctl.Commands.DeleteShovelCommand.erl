@@ -82,6 +82,9 @@ run([Name], #{node := Node, vhost := VHost, force := Force}) ->
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
                 {{_Name, _VHost}, _Type, {terminated, _}, _Metrics, _Timestamp} ->
                     delete_shovel(ErrMsg, VHost, Name, ActingUser, Node, Node);
+                {{_Name, _VHost}, _Type, {terminated, Opts, _}, _Metrics, _Timestamp} ->
+                    HostingNode = proplists:get_value(node, Opts, Node),
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node);
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
                     HostingNode = proplists:get_value(node, Opts, Node),
                     delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node);
