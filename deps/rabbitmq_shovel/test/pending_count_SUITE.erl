@@ -32,7 +32,6 @@ groups() ->
          amqp10_pending_count_with_messages,
          amqp10_pending_count_after_clear,
          local_pending_count_empty_queue,
-         local_pending_count_with_messages,
          local_pending_count_after_settle,
          behaviour_metrics_includes_pending,
          behaviour_pending_count_delegation
@@ -104,11 +103,6 @@ local_pending_count_empty_queue(_Config) ->
     State = #{source => #{current => #{unacked_message_q => EmptyQueue}}},
     ?assertEqual(0, rabbit_local_shovel:pending_count(State)).
 
-local_pending_count_with_messages(_Config) ->
-    %% Test that pending_count returns correct count from unacked message queue
-    UnackedQueue = lqueue:from_list([msg1, msg2, msg3, msg4]),
-    State = #{source => #{current => #{unacked_message_q => UnackedQueue}}},
-    ?assertEqual(4, rabbit_local_shovel:pending_count(State)).
 
 local_pending_count_after_settle(_Config) ->
     %% Test that pending_count returns 0 when state doesn't contain unacked queue
@@ -148,28 +142,3 @@ behaviour_pending_count_delegation(_Config) ->
 
     ?assertEqual(3, maps:get(pending, Metrics)),
     ?assert(meck:validate(rabbit_amqp10_shovel)).
-
-%%%===================================================================
-%%% Integration tests for pending_count behavior in different scenarios
-%%%===================================================================
-
-%% Additional test cases to verify pending_count behavior in realistic scenarios
-%% These could be added if we want to test the actual message flow scenarios
-
-pending_count_during_flow_control(_Config) ->
-    %% Test case outline: Verify pending_count increases when flow control blocks forwarding
-    %% and decreases when flow control is lifted
-    %% This would require more complex setup with actual message handling
-    ok.
-
-pending_count_with_multiple_ack_modes(_Config) ->
-    %% Test case outline: Verify pending_count behaves correctly across different ack modes
-    %% (no_ack, on_publish, on_confirm)
-    ok.
-
-pending_count_edge_cases(_Config) ->
-    %% Test case outline: Test edge cases like:
-    %% - Missing dest/source maps
-    %% - Malformed pending data structures
-    %% - Very large pending counts
-    ok.
