@@ -55,9 +55,8 @@ init([Type, Name, Config0]) ->
                      %% TODO It could handle errors while parsing
                      %% (i.e. missing predeclared queues) and stop nicely
                      %% without long stacktraces
-                    {ok, Conf} = rabbit_shovel_parameters:parse(Name,
-                                                                ClusterName,
-                                                                Config0),
+                    {ok, Mod} = rabbit_registry:lookup_module(runtime_parameter, shovel),
+                    {ok, Conf} = Mod:parse(Name, ClusterName, Config0),
                     Conf
             end,
     ?LOG_DEBUG("Initialising a Shovel ~ts of type '~ts'", [human_readable_name(Name), Type]),
