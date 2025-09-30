@@ -82,7 +82,7 @@ handle_cast(init, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_ERROR("Shovel ~ts could not connect to source: ~p ~p",
                  [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, shutdown, State}
+      {stop, {shutdown, inbound_conn_failed}, State}
     end;
 handle_cast(connect_dest, State = #state{config = Config0}) ->
     try rabbit_shovel_behaviour:connect_dest(Config0) of
@@ -93,7 +93,7 @@ handle_cast(connect_dest, State = #state{config = Config0}) ->
     catch E:R ->
       ?LOG_ERROR("Shovel ~ts could not connect to destination: ~p ~p",
                  [human_readable_name(maps:get(name, Config0)), E, R]),
-      {stop, shutdown, State}
+      {stop, {shutdown, outbond_conn_failed}, State}
     end;
 handle_cast(init_shovel, State = #state{config = Config}) ->
     %% Don't trap exits until we have established connections so that
@@ -225,6 +225,20 @@ terminate({{shutdown, {server_initiated_close, Code, Reason}}, _}, State = #stat
                             [human_readable_name(Name), Code, Reason]),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {terminated, "needed a restart"}),
+    close_connections(State),
+    ok;
+terminate({shutdown, outbond_conn_failed}, State = #state{name = Name}) ->
+    ?LOG_ERROR("Shovel ~ts is stopping because if failed to connect to destination",
+               [human_readable_name(Name)]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, "failed to connect to destination"}),
+    close_connections(State),
+    ok;
+terminate({shutdown, inbound_conn_failed}, State = #state{name = Name}) ->
+    ?LOG_ERROR("Shovel ~ts is stopping because it failed to connect to source",
+               [human_readable_name(Name)]),
+    rabbit_shovel_status:report(State#state.name, State#state.type,
+                                {terminated, "failed to connect to source"}),
     close_connections(State),
     ok;
 terminate(Reason, State = #state{name = Name}) ->

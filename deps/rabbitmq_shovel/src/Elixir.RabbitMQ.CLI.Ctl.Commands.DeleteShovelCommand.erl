@@ -68,7 +68,6 @@ run([Name], #{node := Node, vhost := VHost, force := Force}) ->
                      true -> ?INTERNAL_USER;
                      false -> 'Elixir.RabbitMQ.CLI.Core.Helpers':cli_acting_user()
                  end,
-
     case rabbit_misc:rpc_call(Node, rabbit_shovel_status, cluster_status_with_nodes, []) of
         {badrpc, _} = Error ->
             Error;
@@ -82,14 +81,15 @@ run([Name], #{node := Node, vhost := VHost, force := Force}) ->
                     try_force_removing(Node, VHost, Name, ActingUser),
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
-                    delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node);
+                    HostingNode = proplists:get_value(node, Opts, Node),
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node);
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} ->
-                    delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node)
+                    HostingNode = proplists:get_value(node, Opts, Node),
+                    delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node)
             end
     end.
 
-delete_shovel(ErrMsg, VHost, Name, ActingUser, Opts, Node) ->
-    {_, HostingNode} = lists:keyfind(node, 1, Opts),
+delete_shovel(ErrMsg, VHost, Name, ActingUser, HostingNode, Node) ->
     case rabbit_misc:rpc_call(
         HostingNode, rabbit_shovel_util, delete_shovel, [VHost, Name, ActingUser]) of
         {badrpc, _} = Error ->

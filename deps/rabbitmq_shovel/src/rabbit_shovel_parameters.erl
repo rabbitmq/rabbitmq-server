@@ -89,7 +89,10 @@ notify_clear(VHost, <<"shovel">>, Name, _Username) ->
     OpMode = rabbit_shovel_operating_mode:operating_mode(),
     case OpMode of
         standard ->
-            rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name});
+            rabbit_shovel_dyn_worker_sup_sup:stop_child({VHost, Name}),
+            %% Only necessary for shovels stuck in a restart loop, as no
+            %% process is running the terminate won't be called
+            rabbit_shovel_status:remove({VHost, Name});
         _Other ->
             ?LOG_DEBUG("Shovel: ignoring a cleared runtime parameter, operating mode: ~ts", [OpMode])
     end.

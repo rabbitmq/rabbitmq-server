@@ -63,14 +63,15 @@ run([Name], #{node := Node, vhost := VHost}) ->
                 undefined ->
                     {error, rabbit_data_coercion:to_binary(ErrMsg)};
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Metrics, _Timestamp} ->
-                    restart_shovel(ErrMsg, Name, VHost, Opts);
+                    HostingNode = proplists:get_value(node, Opts, Node),
+                    restart_shovel(ErrMsg, Name, VHost, HostingNode);
                 {{_Name, _VHost}, _Type, {_State, Opts}, _Timestamp} ->
-                    restart_shovel(ErrMsg, Name, VHost, Opts)
+                    HostingNode = proplists:get_value(node, Opts, Node),
+                    restart_shovel(ErrMsg, Name, VHost, HostingNode)
             end
     end.
 
-restart_shovel(ErrMsg, Name, VHost, Opts) ->
-    {_, HostingNode} = lists:keyfind(node, 1, Opts),
+restart_shovel(ErrMsg, Name, VHost, HostingNode) ->
     case rabbit_misc:rpc_call(
         HostingNode, rabbit_shovel_util, restart_shovel, [VHost, Name]) of
         {badrpc, _} = Error ->
