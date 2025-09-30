@@ -251,15 +251,6 @@ end}.
 {mapping, "auth_ldap.ssl_options.certfile", "rabbitmq_auth_backend_ldap.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "auth_ldap.ssl_options.cacerts.$name", "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
-    [{datatype, string}]}.
-
-{translation, "rabbitmq_auth_backend_ldap.ssl_options.cacerts",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("auth_ldap.ssl_options.cacerts", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
-end}.
-
 {mapping, "auth_ldap.ssl_options.cert", "rabbitmq_auth_backend_ldap.ssl_options.cert",
     [{datatype, string}]}.
 

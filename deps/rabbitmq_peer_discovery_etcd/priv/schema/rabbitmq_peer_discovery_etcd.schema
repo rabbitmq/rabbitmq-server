@@ -188,15 +188,6 @@ end}.
 {mapping, "cluster_formation.etcd.ssl_options.certfile", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "cluster_formation.etcd.ssl_options.cacerts.$name", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacerts",
-    [{datatype, string}]}.
-
-{translation, "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cacerts",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.etcd.ssl_options.cacerts", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
-end}.
-
 {mapping, "cluster_formation.etcd.ssl_options.cert", "rabbit.cluster_formation.peer_discovery_etcd.ssl_options.cert",
     [{datatype, string}]}.
 

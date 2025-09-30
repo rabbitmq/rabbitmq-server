@@ -180,15 +180,6 @@ end}.
 {mapping, "definitions.tls.certfile", "rabbit.definitions.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "definitions.tls.cacerts.$name", "rabbit.definitions.ssl_options.cacerts",
-    [{datatype, string}]}.
-
-{translation, "rabbit.definitions.ssl_options.cacerts",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("definitions.tls.cacerts", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
-end}.
-
 {mapping, "definitions.tls.cert", "rabbit.definitions.ssl_options.cert",
     [{datatype, string}]}.
 
@@ -329,15 +320,6 @@ end}.
 
 {mapping, "ssl_options.certfile", "rabbit.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
-
-{mapping, "ssl_options.cacerts.$name", "rabbit.ssl_options.cacerts",
-    [{datatype, string}]}.
-
-{translation, "rabbit.ssl_options.cacerts",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("ssl_options.cacerts", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
-end}.
 
 {mapping, "ssl_options.cert", "rabbit.ssl_options.cert",
     [{datatype, string}]}.
@@ -1931,9 +1913,6 @@ end}.
 {mapping, "log.syslog.ssl_options.certfile", "syslog.protocol",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "log.syslog.ssl_options.cacerts.$name", "syslog.protocol",
-    [{datatype, string}]}.
-
 {mapping, "log.syslog.ssl_options.cert", "syslog.protocol",
     [{datatype, string}]}.
 
@@ -2021,8 +2000,7 @@ fun(Conf) ->
             DefinedSettings) ++
         [ {K, V}
           || {K, V} <-
-            [{cacerts, [ list_to_binary(V) || {_, V} <- cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.cacerts", Conf)]},
-             {versions, [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.versions", Conf) ]},
+            [{versions, [ V || {_, V} <- cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.versions", Conf)]},
              {key, case cuttlefish_variable:filter_by_prefix("log.syslog.ssl_options.key", Conf) of
                       [{[_,_,Key], Val}|_] -> {list_to_atom(Key), list_to_binary(Val)};
                       _ -> undefined
