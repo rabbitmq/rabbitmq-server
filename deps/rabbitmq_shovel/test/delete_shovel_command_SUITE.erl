@@ -9,6 +9,7 @@
 
 -include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 
 -compile(export_all).
 
@@ -26,11 +27,14 @@ groups() ->
                                delete_not_found,
                                delete,
                                delete_internal,
-                               delete_internal_owner
+                               delete_internal_owner,
+                               delete_invalid_uri,
+                               delete_non_existent_dest_address
                               ]},
      {cluster_size_2, [], [
-                               clear_param_on_different_node
-                              ]}
+                           clear_param_on_different_node,
+                           delete_invalid_uri_another_node
+                          ]}
     ].
 
 %% -------------------------------------------------------------------
@@ -148,3 +152,67 @@ clear_param_on_different_node(Config) ->
                                                   status, []), "Deleted shovel still reported on node A"),
     ?assertEqual([], rabbit_ct_broker_helpers:rpc(Config, B, rabbit_shovel_status,
                                                   status, []), "Deleted shovel still reported on node B").
+
+delete_invalid_uri(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, <<"myshovel">>,
+            [{<<"src-protocol">>, <<"amqp091">>},
+             {<<"src-uri">>, <<"amqp://foo">>},
+             {<<"src-queue">>,  <<"src">>},
+             {<<"dest-protocol">>, <<"amqp091">>},
+             {<<"dest-uri">>, shovel_test_utils:make_uri(Config, 0)},
+             {<<"dest-queue">>, <<"dest">>}],
+            none]),
+    ?awaitMatch([{{<<"/">>, <<"myshovel">>}, dynamic, {terminated, _}, _, _}],
+                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                             status, []),
+                45_000),
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    ok = ?CMD:run([<<"myshovel">>], Opts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                      status, []).
+
+delete_non_existent_dest_address(Config) ->
+    Uri = shovel_test_utils:make_uri(Config, 0),
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, <<"myshovel">>,
+            [{<<"src-protocol">>, <<"amqp091">>},
+             {<<"src-uri">>, Uri},
+             {<<"src-queue">>,  <<"src">>},
+             {<<"dest-protocol">>, <<"amqp10">>},
+             {<<"dest-uri">>, Uri},
+             {<<"dest-address">>, <<"/queues/q2">>}],
+            none]),
+    ?awaitMatch([{{<<"/">>, <<"myshovel">>}, dynamic, {terminated, _}, _, _}],
+                rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                             status, []),
+                45_000),
+    [A] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    ok = ?CMD:run([<<"myshovel">>], Opts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status,
+                                      status, []).
+
+delete_invalid_uri_another_node(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 1, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, <<"myshovel">>,
+            [{<<"src-protocol">>, <<"amqp091">>},
+             {<<"src-uri">>, <<"amqp://foo">>},
+             {<<"src-queue">>,  <<"src">>},
+             {<<"dest-protocol">>, <<"amqp091">>},
+             {<<"dest-uri">>, shovel_test_utils:make_uri(Config, 0)},
+             {<<"dest-queue">>, <<"dest">>}],
+            none]),
+    ?awaitMatch([{{<<"/">>, <<"myshovel">>}, dynamic, {terminated, _}, _, _}],
+                rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_shovel_status,
+                                             status, []),
+                45_000),
+    [A, _B] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    Opts = #{node => A, vhost => <<"/">>, force => false},
+    ok = ?CMD:run([<<"myshovel">>], Opts),
+    [] = rabbit_ct_broker_helpers:rpc(Config, 1, rabbit_shovel_status,
+                                      status, []).
