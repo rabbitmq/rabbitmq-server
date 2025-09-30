@@ -44,7 +44,7 @@
               | {terminated, term()}.
 -type info_with_node() :: starting
                         | {running, proplists:proplist()}
-                        | {terminated, proplists:proplist(), term()}.
+                        | {terminated, proplists:proplist()}.
 -type blocked_status() :: running | flow | blocked.
 -type shovel_status() :: blocked_status() | ignore.
 
@@ -219,7 +219,8 @@ inject_node_info(Node, Shovels) ->
              {Name, Type, {State, Opts}, Metrics, Timestamp};
            %% terminated
            ({Name, Type, {terminated, Reason}, Metrics, Timestamp}) ->
-             {Name, Type, {terminated, [{node, Node}], Reason}, Metrics, Timestamp};
+             {Name, Type, {terminated, [{node, Node},
+                                        {reason, Reason}]}, Metrics, Timestamp};
             %% running
            ({Name, Type, {State, Opts}, Metrics, Timestamp}) ->
              Opts1 = Opts ++ [{node, Node}],
