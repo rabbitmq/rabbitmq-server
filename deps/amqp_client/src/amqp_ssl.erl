@@ -19,9 +19,10 @@ maybe_enhance_ssl_options(Params) ->
 
 % https://github.com/erlang/otp/blob/master/lib/inets/src/http_client/httpc_handler.erl
 maybe_add_sni(Host, Options) ->
-    maybe_add_sni_0(lists:keyfind(server_name_indication, 1, Options), Host, Options).
+    ServerNameIndicationKeyFound = lists:keyfind(server_name_indication, 1, Options),
+    maybe_add_sni_0(ServerNameIndicationKeyFound, Host, Options).
 
-maybe_add_sni_0(false, Host, Options) ->
+maybe_add_sni_0(false = _ServerNameIndicationKeyFound, Host, Options) ->
     % NB: this is the case where the user did not specify
     % server_name_indication at all. If Host is a DNS host name,
     % we will specify server_name_indication via code
@@ -37,23 +38,14 @@ maybe_add_sni_1(false, _Host, Options) ->
 maybe_add_sni_1(true, Host, Options) ->
     [{server_name_indication, Host} | Options].
 
-%% This check is no longer necessary starting with OTP-26.
-%% @todo Remove the check once we support only OTP-26 and above.
 maybe_add_verify(Options) ->
-    %% This function is only defined starting in OTP-26.
-    case erlang:function_exported(user_drv, whereis_group, 0) of
-        true -> Options;
-        false -> maybe_add_verify1(Options)
-    end.
-
-maybe_add_verify1(Options) ->
     case lists:keymember(verify, 1, Options) of
         true ->
             % NB: user has explicitly set 'verify'
             Options;
         _ ->
             ?LOG_WARNING("Connection (~tp): certificate chain verification is not enabled for this TLS connection. "
-                    "Please see https://rabbitmq.com/ssl.html for more information.", [self()]),
+            "Please see https://rabbitmq.com/ssl.html for more information.", [self()]),
             Options
     end.
 
