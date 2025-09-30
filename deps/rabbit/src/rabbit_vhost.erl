@@ -215,7 +215,12 @@ do_add(Name, Metadata0, ActingUser) ->
                         true ->
                             ok;
                         false ->
-                            throw({error, queue_type_feature_flag_is_not_enabled})
+                            ?LOG_WARNING("Default queue type '~ts' of virtual "
+                                         "host '~ts' is not enabled. All "
+                                         "declarations relying on the default "
+                                         "queue type will fail.",
+                                         [QueueType, Name]),
+                            ok
                     end
             catch _:_ ->
                       throw({error, invalid_queue_type, DQT})
