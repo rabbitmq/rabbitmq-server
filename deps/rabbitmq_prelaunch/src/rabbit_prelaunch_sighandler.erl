@@ -28,7 +28,15 @@
           %% we can't handle SIGCONT, the signal used to resume the
           %% program. Unfortunately, it makes a SIGTSTP handler less
           %% useful here.
-          sigtstp => ignore
+          sigtstp => ignore,
+
+          %% SIGINFO is triggered on *BSD systems by Ctrl+T to query the status
+          %% of the program. Things like the progress of a task.
+          siginfo => ignore,
+
+          %% SIGWINCH is triggered when the terminal window size changes to
+          %% allow the prograp to redraw its output.
+          sigwinch => ignore
          }).
 
 -define(SIGNAL_HANDLED_BY_ERLANG(Signal),
@@ -55,13 +63,13 @@ setup() ->
     end.
 
 init(_Args) ->
-    maps:fold(
+    maps:foreach(
       fun
-          (Signal, _, Ret) when ?SIGNAL_HANDLED_BY_ERLANG(Signal) -> Ret;
-          (Signal, default, ok) -> os:set_signal(Signal, default);
-          (Signal, ignore, ok)  -> os:set_signal(Signal, ignore);
-          (Signal, _, ok)       -> os:set_signal(Signal, handle)
-      end, ok, ?SIGNALS_HANDLED_BY_US),
+          (Signal, _) when ?SIGNAL_HANDLED_BY_ERLANG(Signal) -> ok;
+          (Signal, default) -> catch os:set_signal(Signal, default);
+          (Signal, ignore)  -> catch os:set_signal(Signal, ignore);
+          (Signal, _)       -> catch os:set_signal(Signal, handle)
+      end, ?SIGNALS_HANDLED_BY_US),
     {ok, #{}}.
 
 handle_event(Signal, State) when ?SIGNAL_HANDLED_BY_ERLANG(Signal) ->
