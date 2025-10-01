@@ -449,7 +449,7 @@ emit_queue_info(Prefix, VHostsFilter, Callback) ->
                            true -> Acc;
                            false ->
                                Type = amqqueue:get_type(Q),
-                               Members = rabbit_amqqueue:get_nodes(Q),
+                               Members = rabbit_queue_type:get_nodes(Q),
                                case membership(amqqueue:get_pid(Q), Members) of
                                    not_a_member ->
                                        Acc;
