@@ -16,12 +16,20 @@
 
 all() ->
     [
-     {group, all_tests}
+     {group, network_connection},
+     {group, direct_connection}
     ].
 
 groups() ->
     [
-     {all_tests, [], all_tests()}
+     {network_connection, [], [
+                               dest_resource_alarm_on_confirm,
+                               dest_resource_alarm_on_publish,
+                               dest_resource_alarm_no_ack
+                              ]},
+     {direct_connection, [], [
+                              dest_resource_alarm_on_confirm
+                             ]}
     ].
 
 all_tests() ->
@@ -51,12 +59,20 @@ end_per_suite(Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_group(_, Config) ->
+init_per_group(network_connection, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
       [{shovel_source_uri, shovel_test_utils:make_uri(Config, 1)},
        {shovel_source_idx, 1},
        {shovel_dest_uri, shovel_test_utils:make_uri(Config, 0)},
+       {shovel_dest_idx, 0}
+      ]);
+init_per_group(direct_connection, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [{shovel_source_uri, shovel_test_utils:make_uri(Config, 1)},
+       {shovel_source_idx, 1},
+       {shovel_dest_uri, <<"amqp://">>},
        {shovel_dest_idx, 0}
       ]).
 
