@@ -2506,7 +2506,7 @@ transfer_leadership(_CandidateNodes) ->
          %% wait for leader elections before processing next chunk of queues
          [begin
               {RaName, LeaderNode} = amqqueue:get_pid(Q),
-              MemberNodes = lists:delete(LeaderNode, amqqueue:get_nodes(Q)),
+              MemberNodes = lists:delete(LeaderNode, rabbit_queue_type:get_nodes(Q)),
               %% we don't do any explicit error handling here as it is more
               %% important to make progress
               _ = lists:any(fun (N) ->
