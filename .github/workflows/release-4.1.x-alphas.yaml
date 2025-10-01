@@ -18,7 +18,7 @@ jobs:
       - name: Compute prerelease identifier from commit SHA
         run: echo "PRERELEASE_IDENTIFIER=`echo ${{ github.sha }} | cut -c1-8`" >> $GITHUB_ENV
       - name: Trigger a 4.0.x alpha build in ${{ env.DEV_WORKFLOW_REPOSITORY }}
-        uses: peter-evans/repository-dispatch@v3
+        uses: peter-evans/repository-dispatch@v4
         with:
           token: ${{ secrets.MK_RELEASE_AUTOMATION_TOKEN }}
           repository: ${{ env.DEV_WORKFLOW_REPOSITORY }}
