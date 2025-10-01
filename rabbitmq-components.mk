@@ -40,7 +40,7 @@ endif
 # all projects use the same versions. It avoids conflicts.
 
 dep_accept = hex 0.3.5
-dep_cowboy = hex 2.14.0
+dep_cowboy = hex 2.14.1
 dep_cowlib = hex 2.16.0
 dep_credentials_obfuscation = hex 3.5.0
 dep_cuttlefish = hex 3.5.0
