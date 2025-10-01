@@ -916,7 +916,7 @@ remove_node_if_mnesia_running(Node) ->
             case mnesia:del_table_copy(schema, Node) of
                 {atomic, ok} ->
                     rabbit_node_monitor:notify_left_cluster(Node),
-                    rabbit_amqqueue:forget_all_durable(Node),
+                    rabbit_amqqueue:forget_all(Node),
                     ok;
                 {aborted, Reason} ->
                     {error, {failed_to_remove_node, Node, Reason}}
