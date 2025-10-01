@@ -143,7 +143,7 @@ select_members(Size, _, AllNodes, RunningNodes, _, _, GetQueues) ->
     Counters0 = maps:from_list([{N, 0} || N <- lists:delete(?MODULE:node(), AllNodes)]),
     Queues = GetQueues(),
     Counters = lists:foldl(fun(Q, Acc) ->
-                                   Nodes = rabbit_amqqueue:get_nodes(Q),
+                                   Nodes = rabbit_queue_type:get_nodes(Q),
                                    lists:foldl(fun(N, A)
                                                      when is_map_key(N, A) ->
                                                        maps:update_with(N, fun(C) -> C+1 end, A);
