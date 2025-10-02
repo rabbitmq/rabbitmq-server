@@ -69,15 +69,16 @@ init_per_group(Group, Config0) ->
     Config1 = rabbit_ct_helpers:set_config(
                 Config0,
                 [{rmq_nodes_count, Nodes},
-                 {mqtt_version, v5}]),
+                 {mqtt_version, v5},
+                 {start_rmq_with_plugins_disabled, true}
+                ]),
     Config = rabbit_ct_helpers:run_steps(
                Config1,
                rabbit_ct_broker_helpers:setup_steps() ++
                rabbit_ct_client_helpers:setup_steps()),
-
-    Plugins = [rabbitmq_stomp,
-               rabbitmq_stream],
-    [ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, Plugin) || Plugin <- Plugins],
+    util:enable_plugin(Config, rabbitmq_mqtt),
+    util:enable_plugin(Config, rabbitmq_stomp),
+    util:enable_plugin(Config, rabbitmq_stream),
     Config.
 
 end_per_group(_Group, Config) ->
