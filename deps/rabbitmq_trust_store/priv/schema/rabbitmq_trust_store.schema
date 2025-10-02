@@ -60,15 +60,6 @@ end}.
 {mapping, "trust_store.ssl_options.certfile", "rabbitmq_trust_store.ssl_options.certfile",
     [{datatype, string}, {validators, ["file_accessible"]}]}.
 
-{mapping, "trust_store.ssl_options.cacerts.$name", "rabbitmq_trust_store.ssl_options.cacerts",
-    [{datatype, string}]}.
-
-{translation, "rabbitmq_trust_store.ssl_options.cacerts",
-fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("trust_store.ssl_options.cacerts", Conf),
-    [ list_to_binary(V) || {_, V} <- Settings ]
-end}.
-
 {mapping, "trust_store.ssl_options.cert", "rabbitmq_trust_store.ssl_options.cert",
     [{datatype, string}]}.
 

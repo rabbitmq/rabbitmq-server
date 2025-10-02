@@ -317,6 +317,17 @@ format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
+%% https://www.erlang.org/doc/apps/ssl/ssl.html#t:server_option_cert/0
+format_socket_opts([{cacerts, Cacerts} | Tail], Acc) ->
+    CacertsMsg = rabbit_data_coercion:to_utf8_binary(
+        io_lib:format("(~b cacerts entries)", [length(Cacerts)])),
+    format_socket_opts(Tail, [{cacerts, CacertsMsg} | Acc]);
+%% https://www.erlang.org/doc/apps/ssl/ssl.html#t:common_option_cert/0
+%% https://www.erlang.org/doc/apps/ssl/ssl.html#t:cert_key_conf/0
+format_socket_opts([{certs_keys, CertsKeys} | Tail], Acc)  ->
+    CertsKeysMsg = rabbit_data_coercion:to_utf8_binary(
+        io_lib:format("(~b certs_keys entries)", [length(CertsKeys)])),
+    format_socket_opts(Tail, [{cacerts, CertsKeysMsg} | Acc]);
 %% we do not report SNI host details in the UI,
 %% so skip this option and avoid some recursive formatting
 %% complexity
