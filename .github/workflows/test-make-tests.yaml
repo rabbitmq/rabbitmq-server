@@ -31,6 +31,7 @@ jobs:
           - parallel-ct-set-5
           - ct-amqp_client
           - ct-clustering_management
+          - ct-clustering_recovery
           - eunit ct-dead_lettering
           - ct-feature_flags
           - ct-metadata_store_clustering
