@@ -5306,6 +5306,14 @@ replica_states(Config) ->
 
 % Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/discussions/13131
 restart_after_queue_reincarnation(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "queue reincarnation protection can't work on mixed mode"};
+        false ->
+            restart_after_queue_reincarnation_(Config)
+    end.
+
+restart_after_queue_reincarnation_(Config) ->
     [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
@@ -5369,25 +5377,31 @@ restart_after_queue_reincarnation(Config) ->
                                     lists:member(NodeRaftState, [leader, follower])
                             end, Status2)
                       end, ?DEFAULT_AWAIT),
-    Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
+    ?awaitMatch(true, begin
+        Status2 = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_quorum_queue, status, [VHost, QName]),
 
-    % Remove "Node Name" and "Raft State" from the status.
-    Status3 = [NE1, NE2, NE3]= [
-        begin
-            R = proplists:delete(<<"Node Name">>, NodeEntry),
-            proplists:delete(<<"Raft State">>, R)
-        end || NodeEntry <- Status2],
-    % Check all other properties have same value on all nodes.
-    ct:pal("Status3: ~tp", [Status3]),
-    [
-     begin
-        ?assertEqual({K, V}, {K, proplists:get_value(K, NE2)}),
-        ?assertEqual({K, V}, {K, proplists:get_value(K, NE3)})
-     end || {K, V} <- NE1
-    ].
+        % Remove "Node Name" and "Raft State" from the status.
+        Status3 = [NE1, NE2, NE3]= [
+            begin
+                R = proplists:delete(<<"Node Name">>, NodeEntry),
+                proplists:delete(<<"Raft State">>, R)
+            end || NodeEntry <- Status2],
+        % Check all other properties have same value on all nodes.
+        ct:pal("Status3: ~tp", [Status3]),
+        lists:all(fun({A, B}) -> A == B end, [ {V, proplists:get_value(K, NE2)} || {K, V} <- NE1]) andalso
+        lists:all(fun({A, B}) -> A == B end, [ {V, proplists:get_value(K, NE3)} || {K, V} <- NE1])
+    end, ?DEFAULT_AWAIT).
 
 % Testcase motivated by : https://github.com/rabbitmq/rabbitmq-server/issues/12366
 no_messages_after_queue_reincarnation(Config) ->
+    case rabbit_ct_helpers:is_mixed_versions() of
+        true ->
+            {skip, "queue reincarnation protection can't work on mixed mode"};
+        false ->
+            no_messages_after_queue_reincarnation_(Config)
+    end.
+
+no_messages_after_queue_reincarnation_(Config) ->
     [S1, S2, S3] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, S1),
     QName = <<"QQ">>,
