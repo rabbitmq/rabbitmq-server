@@ -5381,8 +5381,8 @@ restart_after_queue_reincarnation(Config) ->
     ct:pal("Status3: ~tp", [Status3]),
     [
      begin
-        ?assertEqual(V, proplists:get_value(K, NE2)),
-        ?assertEqual(V, proplists:get_value(K, NE3))
+        ?assertEqual({K, V}, {K, proplists:get_value(K, NE2)}),
+        ?assertEqual({K, V}, {K, proplists:get_value(K, NE3)})
      end || {K, V} <- NE1
     ].
 
