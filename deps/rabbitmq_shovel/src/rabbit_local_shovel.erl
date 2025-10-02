@@ -369,6 +369,12 @@ ack(DeliveryTag, Multiple, State) ->
 nack(DeliveryTag, Multiple, State) ->
     maybe_grant_credit(settle(requeue, DeliveryTag, Multiple, State)).
 
+forward(_, _, #{source := #{remaining_unacked := 0}} = State) ->
+    %% We are in on-confirm mode, and are autodelete. We have
+    %% published all the messages we need to; we just wait for acks to
+    %% come back. So drop subsequent messages on the floor to be
+    %% requeued later
+    State;
 forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} = Dest,
                      ack_mode := AckMode} = State0) ->
     {Options, #{dest := #{current := Current1} = Dest1} = State} =
