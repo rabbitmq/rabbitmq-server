@@ -419,8 +419,12 @@ info(Q, Items) ->
 
 -spec get_nodes(amqqueue:amqqueue_v2()) -> [node(),...].
 get_nodes(Q) ->
-    [{members, Nodes}] = info(Q, [members]),
-    Nodes.
+    case info(Q, [members]) of
+        [{members, Nodes}] ->
+            Nodes;
+        [] ->
+            []
+    end.
 
 fold_state(Fun, Acc, #?STATE{ctxs = Ctxs}) ->
     maps:fold(Fun, Acc, Ctxs).
