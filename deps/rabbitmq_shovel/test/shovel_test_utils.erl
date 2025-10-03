@@ -131,8 +131,12 @@ get_shovel_status(Config, Node, Name) ->
         not_found ->
             not_found;
         _ ->
-            {Status, Info} = proplists:get_value(info, S),
-            proplists:get_value(blocked_status, Info, Status)
+            case proplists:get_value(info, S) of
+                starting ->
+                    starting;
+                {Status, Info} ->
+                    proplists:get_value(blocked_status, Info, Status)
+            end
     end.
 
 await(Pred) ->

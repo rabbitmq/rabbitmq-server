@@ -13,7 +13,8 @@
 -deprecated([{force_event_refresh, 1, eventually}]).
 
 %% Internal
--export([list_local/0]).
+-export([list_local/0,
+         conserve_resources/3]).
 
 %% For testing only
 -export([extract_extra_auth_props/4]).
@@ -206,6 +207,8 @@ connect1(User = #user{username = Username}, VHost, Protocol, Pid, Infos) ->
                 ok -> ok = pg_local:join(rabbit_direct, Pid),
                       rabbit_core_metrics:connection_created(Pid, Infos),
                       rabbit_event:notify(connection_created, Infos),
+                      _ = rabbit_alarm:register(
+                            Pid, {?MODULE, conserve_resources, []}),
                       {ok, {User, rabbit_reader:server_properties(Protocol)}}
             catch
                 exit:#amqp_error{name = Reason = not_allowed} ->
@@ -252,3 +255,9 @@ disconnect(Pid, Infos) ->
     pg_local:leave(rabbit_direct, Pid),
     rabbit_core_metrics:connection_closed(Pid),
     rabbit_event:notify(connection_closed, Infos).
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> 'ok'.
+conserve_resources(ChannelPid, Source, {_, Conserve, _}) ->
+    gen_server:cast(ChannelPid, {conserve_resources, Source, Conserve}).

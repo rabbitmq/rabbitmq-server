@@ -42,9 +42,6 @@ groups() ->
           security_validation,
           get_connection_name,
           credit_flow,
-          dest_resource_alarm_on_confirm,
-          dest_resource_alarm_on_publish,
-          dest_resource_alarm_no_ack,
           missing_src_queue_with_src_predeclared,
           missing_dest_queue_with_dest_predeclared
         ]},
@@ -744,130 +741,6 @@ credit_flow(Config) ->
               end
       end).
 
-dest_resource_alarm_on_confirm(Config) ->
-    dest_resource_alarm(<<"on-confirm">>, Config).
-
-dest_resource_alarm_on_publish(Config) ->
-    dest_resource_alarm(<<"on-publish">>, Config).
-
-dest_resource_alarm_no_ack(Config) ->
-    dest_resource_alarm(<<"no-ack">>, Config).
-
-dest_resource_alarm(AckMode, Config) ->
-    with_ch(Config,
-      fun (Ch) ->
-              amqp_channel:call(Ch, #'confirm.select'{}),
-              amqp_channel:call(Ch, #'queue.declare'{queue = <<"src">>}),
-              publish(Ch, <<>>, <<"src">>, <<"hello">>),
-              amqp_channel:call(Ch, #'queue.declare'{queue = <<"temp">>}),
-              publish_count(Ch, <<>>, <<"temp">>, <<"hello">>, 1000),
-              true = amqp_channel:wait_for_confirms(Ch),
-
-              #{messages := 1} = message_count(Config, <<"src">>),
-              %%#{messages := 0} = message_count(Config, <<"dest">>),
-
-              %% A resource alarm will block publishing connections
-              OrigLimit = set_vm_memory_high_watermark(Config, 0.00000001),
-              %% Let connection block.
-              timer:sleep(100),
-
-              try
-                  shovel_test_utils:set_param(
-                    Config,
-                    <<"test">>, [{<<"src-queue">>,    <<"src">>},
-                                 {<<"dest-queue">>,   <<"dest">>},
-                                 {<<"src-prefetch-count">>, 50},
-                                 {<<"ack-mode">>,     AckMode},
-                                 {<<"src-delete-after">>, <<"never">>}]),
-
-                  %% The shovel is blocked
-                  blocked = shovel_test_utils:get_shovel_status(Config, <<"test">>),
-
-                  %% The shoveled message triggered a
-                  %% connection.blocked notification, but hasn't
-                  %% reached the dest queue because of the resource
-                  %% alarm
-                  InitialMsgCnt =
-                      case AckMode of
-                          <<"on-confirm">> -> 1;
-                          _ -> 0
-                      end,
-
-                  #{messages := InitialMsgCnt,
-                    messages_unacknowledged := InitialMsgCnt} = message_count(Config, <<"src">>),
-                  #{messages := 0} = message_count(Config, <<"dest">>),
-
-                  %% Now publish messages to "src" queue
-                  %% (network connections are blocked from publishing
-                  %% so we use a temporary shovel with direct
-                  %% connections to populate "src" queue with messages
-                  %% from the "temp" queue)
-                  ok = rabbit_ct_broker_helpers:rpc(
-                         Config, 0,
-                         rabbit_runtime_parameters, set,
-                         [
-                          <<"/">>, <<"shovel">>, <<"temp">>,
-                          [{<<"src-uri">>, <<"amqp://">>},
-                           {<<"dest-uri">>, [<<"amqp://">>]},
-                           {<<"src-queue">>, <<"temp">>},
-                           {<<"dest-queue">>, <<"src">>},
-                           {<<"src-delete-after">>, <<"queue-length">>}], none]),
-                  shovel_test_utils:await(
-                    fun() ->
-                            #{messages := Cnt} = message_count(Config, <<"temp">>),
-                            Cnt =:= 0
-                    end,
-                    5000),
-
-                  %% No messages reached the dest queue
-                  #{messages := 0} = message_count(Config, <<"dest">>),
-
-                  %% When the shovel sets a prefetch_count
-                  %% (on-confirm/on-publish mode), all messages are in
-                  %% the source queue, prefrech count are
-                  %% unacknowledged and buffered in the shovel
-                  MsgCnts =
-                      case AckMode of
-                          <<"on-confirm">> ->
-                              #{messages => 1001,
-                                messages_unacknowledged => 50};
-                          <<"on-publish">> ->
-                              #{messages => 1000,
-                                messages_unacknowledged => 50};
-                          <<"no-ack">> ->
-                              %% no prefetch limit, all messages are
-                              %% buffered in the shovel
-                              #{messages => 0,
-                                messages_unacknowledged => 0}
-                      end,
-
-                  MsgCnts = message_count(Config, <<"src">>),
-
-                  %% There should be no process with a message buildup
-                  eventually(?_assertEqual(0, begin
-                      Top = [{_, P, _}] = rabbit_ct_broker_helpers:rpc(
-                          Config, 0, recon, proc_count, [message_queue_len, 1]),
-                      ct:pal("Top process by message queue length: ~p", [Top]),
-                      P
-                  end)),
-
-                  %% Clear the resource alarm, all messages should
-                  %% arrive to the dest queue
-                  set_vm_memory_high_watermark(Config, OrigLimit),
-
-                  catch shovel_test_utils:await(
-                    fun() ->
-                            #{messages := Cnt} = message_count(Config, <<"dest">>),
-                            Cnt =:= 1001
-                    end,
-                    5000),
-                  #{messages := 0} = message_count(Config, <<"src">>),
-                  running = shovel_test_utils:get_shovel_status(Config, <<"test">>)
-              after
-                  set_vm_memory_high_watermark(Config, OrigLimit)
-              end
-      end).
-
 %%----------------------------------------------------------------------------
 
 with_ch(Config, Fun) ->
@@ -999,15 +872,6 @@ set_default_credit(Config, Value) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, persistent_term, put, [Key, Value]),
     OrigValue.
 
-set_vm_memory_high_watermark(Config, Limit) ->
-    OrigLimit =
-        rabbit_ct_broker_helpers:rpc(
-          Config, 0, vm_memory_monitor, get_vm_memory_high_watermark, []),
-    ok =
-        rabbit_ct_broker_helpers:rpc(
-          Config, 0, vm_memory_monitor, set_vm_memory_high_watermark, [Limit]),
-    OrigLimit.
-
 message_count(Config, QueueName) ->
     Resource = rabbit_misc:r(<<"/">>, queue, QueueName),
     {ok, Q} = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_amqqueue, lookup, [Resource]),
@@ -1072,9 +936,6 @@ process_name(Pid) ->
     catch _:_ ->
             undefined
     end.
-
-proc_info(Pid) ->
-    erpc:call(node(Pid), erlang, process_info, [Pid]).
 
 proc_info(Pid, Item) ->
     {Item, Value} = erpc:call(node(Pid), erlang, process_info, [Pid, Item]),
