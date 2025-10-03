@@ -28,5 +28,5 @@ authenticate(QsVals, Users) ->
         {_OtherPassword, _, _} ->
             <<"deny">>;
         undefined ->
-            <<"deny">>
+            <<"deny unknown_user">>
    end.

@@ -34,16 +34,27 @@ description() ->
 %%--------------------------------------------------------------------
 
 user_login_authentication(Username, AuthProps) ->
-    case http_req(p(user_path), q([{username, Username}] ++ extract_other_credentials(AuthProps))) of
-        {error, _} = E  -> E;
-        "deny"          -> {refused, "Denied by the backing HTTP service", []};
-        "allow" ++ Rest -> Tags = [rabbit_data_coercion:to_atom(T) ||
-                                   T <- string:tokens(Rest, " ")],
-
-                           {ok, #auth_user{username = Username,
-                                           tags     = Tags,
-                                           impl     = fun() -> proplists:delete(username, AuthProps) end}};
-        Other           -> {error, {bad_response, Other}}
+    Path = p(user_path),
+    Query = q([{username, Username}] ++ extract_other_credentials(AuthProps)),
+    case http_req(Path, Query) of
+        {error, _} = Err  ->
+            Err;
+        "deny " ++ Reason ->
+            ?LOG_INFO("HTTP authentication denied for user '~ts': ~ts",
+                      [Username, Reason]),
+            {refused, "Denied by the backing HTTP service", []};
+        Body ->
+            case string:lowercase(Body) of
+                "deny" ->
+                    {refused, "Denied by the backing HTTP service", []};
+                "allow" ++ Rest ->
+                    Tags = [rabbit_data_coercion:to_atom(T)
+                            || T <- string:tokens(Rest, " ")],
+                    {ok, #auth_user{
+                            username = Username,
+                            tags = Tags,
+                            impl = fun() -> proplists:delete(username, AuthProps) end}}
+            end
     end.
 
 %% When a protocol plugin uses an internal AMQP 0-9-1 client to interact with RabbitMQ core,
@@ -153,13 +164,26 @@ context_as_parameters(_) ->
     [].
 
 bool_req(PathName, Props) ->
-    case http_req(p(PathName), q(Props)) of
-        "deny"  -> false;
-        "allow" -> true;
-        E       -> E
+    Path = p(PathName),
+    Query = q(Props),
+    case http_req(Path, Query) of
+        {error, _} = Err ->
+            Err;
+        "deny " ++ Reason ->
+            ?LOG_INFO("HTTP authorisation denied for path ~ts with query ~ts: ~ts",
+                      [Path, Query, Reason]),
+            false;
+        Body ->
+            case string:lowercase(Body) of
+                "deny" ->
+                    false;
+                "allow" ->
+                    true
+            end
     end.
 
-http_req(Path, Query) -> http_req(Path, Query, ?RETRY_ON_KEEPALIVE_CLOSED).
+http_req(Path, Query) ->
+    http_req(Path, Query, ?RETRY_ON_KEEPALIVE_CLOSED).
 
 http_req(Path, Query, Retry) ->
     case do_http_req(Path, Query) of
@@ -204,8 +228,10 @@ do_http_req(Path0, Query) ->
         {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
             ?LOG_DEBUG("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
-                true  -> parse_resp(Body);
-                false -> {error, {Code, Body}}
+                true ->
+                    string:strip(Body);
+                false ->
+                    {error, {Code, Body}}
             end;
         {error, _} = E ->
             E
@@ -239,8 +265,6 @@ escape(K, Map) when is_map(Map) ->
         || {Key, Value} <- maps:to_list(Map), not is_function(Value)], "&");
 escape(K, V) ->
     rabbit_data_coercion:to_list(K) ++ "=" ++ rabbit_http_util:quote_plus(V).
-
-parse_resp(Resp) -> string:to_lower(string:strip(Resp)).
 
 join_tags([])   -> "";
 join_tags(Tags) ->
