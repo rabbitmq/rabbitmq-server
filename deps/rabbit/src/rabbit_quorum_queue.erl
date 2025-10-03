@@ -446,7 +446,8 @@ become_leader0(QName, Name) ->
                     amqqueue:set_pid(Q1, {Name, node()}),
                     live)
           end,
-    _ = rabbit_amqqueue:update(QName, Fun),
+    Timeout = max(tick_interval() - 1000, 1000),
+    _ = rabbit_amqqueue:update(QName, Fun, #{timeout => Timeout}),
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q0} when ?is_amqqueue(Q0) ->
             Nodes = get_nodes(Q0),
@@ -656,7 +657,7 @@ handle_tick(QName,
                           ok;
                       repaired ->
                           ?LOG_DEBUG("Repaired quorum queue ~ts amqqueue record",
-                                           [rabbit_misc:rs(QName)])
+                                     [rabbit_misc:rs(QName)])
                   end,
                   ExpectedNodes = rabbit_nodes:list_members(),
                   case Nodes -- ExpectedNodes of
@@ -1981,8 +1982,7 @@ make_ra_conf(Q, ServerId) ->
 
 make_ra_conf(Q, ServerId, Membership, MacVersion)
   when is_integer(MacVersion) ->
-    TickTimeout = application:get_env(rabbit, quorum_tick_interval,
-                                      ?TICK_INTERVAL),
+    TickTimeout = tick_interval(),
     SnapshotInterval = application:get_env(rabbit, quorum_snapshot_interval,
                                            ?SNAPSHOT_INTERVAL),
     CheckpointInterval = application:get_env(rabbit,
@@ -2408,3 +2408,6 @@ queue_vm_stats_sups() ->
 queue_vm_ets() ->
     {[quorum_ets],
      [[ra_log_ets]]}.
+
+tick_interval() ->
+    application:get_env(rabbit, quorum_tick_interval, ?TICK_INTERVAL).
