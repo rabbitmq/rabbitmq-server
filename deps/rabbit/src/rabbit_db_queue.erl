@@ -31,6 +31,7 @@
          set/1,
          delete/2,
          update/2,
+         update/3,
          update_decorators/2,
          exists/1,
          foreach/2
@@ -637,9 +638,23 @@ get_many_in_ets(Table, Names) ->
 %% @private
 
 update(QName, Fun) ->
+    update(QName, Fun, #{}).
+
+-spec update(QName, UpdateFun, Options) -> Ret when
+      QName :: rabbit_amqqueue:name(),
+      Queue :: amqqueue:amqqueue(),
+      UpdateFun :: fun((Queue) -> NewQueue),
+      NewQueue :: amqqueue:amqqueue(),
+      Options :: #{timeout => timeout()},
+      Ret :: Queue | not_found.
+%% @doc Updates an existing queue record using `UpdateFun'.
+%%
+%% @private
+
+update(QName, Fun, Options) ->
     rabbit_khepri:handle_fallback(
       #{mnesia => fun() -> update_in_mnesia(QName, Fun) end,
-        khepri => fun() -> update_in_khepri(QName, Fun) end
+        khepri => fun() -> update_in_khepri(QName, Fun, Options) end
        }).
 
 update_in_mnesia(QName, Fun) ->
@@ -648,15 +663,19 @@ update_in_mnesia(QName, Fun) ->
               update_in_mnesia_tx(QName, Fun)
       end).
 
+
 update_in_khepri(QName, Fun) ->
+    update_in_khepri(QName, Fun, #{}).
+
+update_in_khepri(QName, Fun, Options) ->
     Path = khepri_queue_path(QName),
-    Ret1 = rabbit_khepri:adv_get(Path),
+    Ret1 = rabbit_khepri:adv_get(Path, Options),
     case Ret1 of
         {ok, #{Path := #{data := Q, payload_version := Vsn}}} ->
             UpdatePath = khepri_path:combine_with_conditions(
                            Path, [#if_payload_version{version = Vsn}]),
             Q1 = Fun(Q),
-            Ret2 = rabbit_khepri:put(UpdatePath, Q1),
+            Ret2 = rabbit_khepri:put(UpdatePath, Q1, Options),
             case Ret2 of
                 ok -> Q1;
                 {error, {khepri, mismatching_node, _}} ->
