@@ -33,7 +33,8 @@
          ack/3,
          nack/3,
          status/1,
-         forward/3
+         forward/3,
+         pending_count/1
         ]).
 
 %% Function references should not be stored on the metadata store.
@@ -359,6 +360,10 @@ status(#{dest := #{blocked_by := BlockReasons}}) when BlockReasons =/= [] ->
     blocked;
 status(_) ->
     running.
+
+pending_count(#{dest := Dest}) ->
+    Pending = maps:get(pending, Dest, queue:new()),
+    queue:len(Pending).
 
 add_pending(Elem, State = #{dest := Dest}) ->
     Pending = maps:get(pending, Dest, queue:new()),
