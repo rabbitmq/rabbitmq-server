@@ -14,7 +14,6 @@
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
--include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
 
 % -define(PROTOMOD, rabbit_framing_amqp_0_9_1).
 %%%===================================================================
@@ -101,12 +100,202 @@ test_init(Name) ->
 
 -define(FUNCTION_NAME_B, atom_to_binary(?FUNCTION_NAME)).
 -define(LINE_B, integer_to_binary(?LINE)).
-
 enq_enq_checkout_compat_test(C) ->
     enq_enq_checkout_test(C, {auto, 2, simple_prefetch}).
 
 enq_enq_checkout_v4_test(C) ->
     enq_enq_checkout_test(C, {auto, {simple_prefetch, 2}}).
+
+discarded_bytes_test(Config) ->
+    Conf = #{name => ?FUNCTION_NAME_B,
+             queue_resource => rabbit_misc:r("/", queue, ?FUNCTION_NAME_B)
+            },
+    CPid = spawn(fun () -> ok end),
+    Cid = {?FUNCTION_NAME_B, CPid},
+    Msg = crypto:strong_rand_bytes(1000),
+    {State1, _} = enq(Config, ?LINE, 1, Msg, init(Conf)),
+    %% enqueues should not increment discarded bytes
+    ?assertMatch(#{num_messages := 1,
+                   discarded_bytes := 0}, rabbit_fifo:overview(State1)),
+    Spec = {auto, {simple_prefetch, 2}},
+    {State2, #{key := CKey,
+               next_msg_id := NextMsgId}, _Effects} =
+        checkout(Config, ?LINE, Cid, Spec, State1),
+    #{discarded_bytes := DiscBytes2} = rabbit_fifo:overview(State2),
+    ?assert(DiscBytes2 > 0),
+    {State3, _} = settle(Config, CKey, ?LINE, [NextMsgId], State2),
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes3} = rabbit_fifo:overview(State3),
+    %% disc bytes increment shoudl include message size _and_ settle size
+    ?assert(DiscBytes3 - DiscBytes2 > 1000),
+
+    {State4, _, _} = apply(meta(Config, ?LINE),
+                           {down, CPid, noconnection}, State3),
+    #{discarded_bytes := DiscBytes4} = rabbit_fifo:overview(State4),
+    ?assert(DiscBytes4 > DiscBytes3),
+    {State5, _, _} = apply(meta(Config, ?LINE),
+                           {nodeup, node()}, State4),
+    #{discarded_bytes := DiscBytes5} = rabbit_fifo:overview(State5),
+    ?assert(DiscBytes5 > DiscBytes4),
+
+    {State6, _} = enq(Config, ?LINE, 2, Msg, State5),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes5} = rabbit_fifo:overview(State6),
+    {State7, _, _} = apply(meta(Config, ?LINE),
+                           rabbit_fifo:make_return(CKey, [NextMsgId + 1]),
+                           State6),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes7} = rabbit_fifo:overview(State7),
+    ?assert(DiscBytes7 > DiscBytes5 andalso DiscBytes7 - DiscBytes5 < 1000),
+
+    %% discard without at-least-once dead lettering configured should
+    %% discard the full message body
+    {State8, _, _} = apply(meta(Config, ?LINE),
+                           rabbit_fifo:make_discard(CKey, [NextMsgId + 2]),
+                           State7),
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes8} = rabbit_fifo:overview(State8),
+    ?assert(DiscBytes8 - DiscBytes7 > 1000),
+
+    {State9, _} = enq(Config, ?LINE, 3, Msg, State8),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes9} = rabbit_fifo:overview(State9),
+
+    %% update config to have a delivery-limit
+    Conf2 = Conf#{delivery_limit => 1},
+    {State10, ok, _} = apply(meta(Config, 5),
+                             rabbit_fifo:make_update_config(Conf2), State9),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes10} = rabbit_fifo:overview(State10),
+    ?assert(DiscBytes10 > DiscBytes9),
+
+    {State11, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_return(CKey, [NextMsgId + 3]),
+                            State10),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes11} = rabbit_fifo:overview(State11),
+    ?assert(DiscBytes11 > DiscBytes10),
+
+    {State12, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_return(CKey, [NextMsgId + 4]),
+                            State11),
+
+    %% delivery-limit was reached and message was discarded
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes12} = rabbit_fifo:overview(State12),
+    ?assert(DiscBytes12 - DiscBytes11 > 1000),
+
+    %% at-least-once dead lettering
+    Conf3 = Conf2#{dead_letter_handler => at_least_once},
+    {State13, ok, _} = apply(meta(Config, ?LINE),
+                             rabbit_fifo:make_update_config(Conf3), State12),
+
+    {State14, _} = enq(Config, ?LINE, 4, Msg, State13),
+
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes14} = rabbit_fifo:overview(State14),
+
+    {State15, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_discard(CKey, [NextMsgId + 5]),
+                            State14),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes15} = rabbit_fifo:overview(State15),
+    ?assert(DiscBytes15 > DiscBytes14 andalso
+            DiscBytes15 - DiscBytes14 < 1000),
+
+    %% attach dlx consumer
+
+    DlxPid = spawn(fun () -> ok end),
+    {State16, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo_dlx:make_checkout(DlxPid, 2),
+                            State15),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes16} = rabbit_fifo:overview(State16),
+    ?assert(DiscBytes16 > DiscBytes15),
+
+    {State17, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo_dlx:make_settle([0]),
+                            State16),
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes17} = rabbit_fifo:overview(State17),
+    ?assert(DiscBytes17 - DiscBytes16 > 1000),
+
+    {State18, _} = enq(Config, ?LINE, 5, Msg, State17),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes17} = rabbit_fifo:overview(State18),
+
+    {State19, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_modify(CKey, [NextMsgId + 5],
+                                                    false, false, #{}),
+                            State18),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes19} = rabbit_fifo:overview(State19),
+    ?assert(DiscBytes19 > DiscBytes17),
+
+    %% change the dlx handler
+    Conf4 = Conf3#{dead_letter_handler => {at_most_once, {?MODULE, ?FUNCTION_NAME, []}},
+                   max_length => 2},
+    {State20, ok, _} = apply(meta(Config, ?LINE),
+                             rabbit_fifo:make_update_config(Conf4), State19),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes20} = rabbit_fifo:overview(State20),
+
+    {State21, _, _} = apply(meta(Config, ?LINE),
+                            rabbit_fifo:make_modify(CKey, [NextMsgId + 6],
+                                                    true, true, #{}),
+                            State20),
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes21} = rabbit_fifo:overview(State21),
+    ?assert(DiscBytes21 - DiscBytes20 > 1000),
+
+    %% unsubsrcibe
+    {State22, _, _} = apply(meta(Config, ?LINE),
+                            make_checkout(Cid, cancel, #{}), State21),
+    #{num_messages := 0,
+      discarded_bytes := DiscBytes22} = rabbit_fifo:overview(State22),
+    ?assert(DiscBytes22 > DiscBytes21),
+
+    {State23, _} = enq(Config, ?LINE, 6, Msg, State22),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes23} = rabbit_fifo:overview(State23),
+    ?assert(DiscBytes22 =:= DiscBytes23),
+
+    {State24, _} = enq(Config, ?LINE, 7, Msg, State23),
+    #{num_messages := 2,
+      discarded_bytes := DiscBytes24} = rabbit_fifo:overview(State24),
+    ?assert(DiscBytes23 =:= DiscBytes24),
+
+    %% drop head should increment
+    {State25, _} = enq(Config, ?LINE, 8, Msg, State24),
+    #{num_messages := 2,
+      discarded_bytes := DiscBytes25} = rabbit_fifo:overview(State25),
+    ?assert(DiscBytes25 - DiscBytes24 > 1000),
+
+    %% duplicate enqueue should also increment discarded bytes
+    {State26, _} = enq(Config, ?LINE, 8, Msg, State25),
+    #{num_messages := 2,
+      discarded_bytes := DiscBytes26} = rabbit_fifo:overview(State26),
+    ?assert(DiscBytes26 - DiscBytes25 > 1000),
+    %% test expiration
+    {State27, _, _} = apply(meta(Config, ?LINE),
+                             rabbit_fifo:make_purge(), State26),
+    #{num_messages := 0,
+      discarded_bytes := _DiscBytes27} = rabbit_fifo:overview(State27),
+
+    Conf5 = Conf4#{msg_ttl => 1000,
+                   max_length => undefined},
+    {State28, ok, _} = apply(meta(Config, ?LINE),
+                             rabbit_fifo:make_update_config(Conf5), State27),
+    {State29, _} = enq_ts(Config, ?LINE, 9, Msg, 0, State28),
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes29} = rabbit_fifo:overview(State29),
+    {State30, _} = enq_ts(Config, ?LINE, 10, Msg, 3000, State29),
+    % {State31, _} = enq_ts(Config, ?LINE, 11, Msg, 5000, State30),
+
+    #{num_messages := 1,
+      discarded_bytes := DiscBytes30} = rabbit_fifo:overview(State30),
+    ?assert(DiscBytes30 - DiscBytes29 > 1000),
+    ok.
 
 enq_enq_checkout_test(Config, Spec) ->
     Cid = {?FUNCTION_NAME_B, self()},
@@ -500,8 +689,6 @@ return_dequeue_delivery_limit_test(C) ->
     Init = init(#{name => test,
                   queue_resource => rabbit_misc:r("/", queue,
                                                   atom_to_binary(test, utf8)),
-                  max_in_memory_length => 0,
-                  release_cursor_interval => 0,
                   delivery_limit => 1}),
     {State0, _} = enq(C, 1, 1, msg, Init),
 
@@ -2220,7 +2407,8 @@ reject_publish_applied_after_limit_test(Config) ->
              overflow_strategy => reject_publish,
              dead_letter_handler => undefined
             },
-    {State5, ok, Efx1} = apply(meta(Config, 5), rabbit_fifo:make_update_config(Conf), State4),
+    {State5, ok, Efx1} = apply(meta(Config, 5),
+                               rabbit_fifo:make_update_config(Conf), State4),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]},
                 P == Pid1, Efx1),
     Pid2 = test_util:fake_pid(node()),
@@ -2337,6 +2525,12 @@ meta(Config, Idx, Timestamp, ReplyMode) ->
 enq(Config, Idx, MsgSeq, Msg, State) ->
     strip_reply(
       apply(meta(Config, Idx, 0, {notify, MsgSeq, self()}),
+            rabbit_fifo:make_enqueue(self(), MsgSeq, Msg),
+            State)).
+
+enq_ts(Config, Idx, MsgSeq, Msg, Ts, State) ->
+    strip_reply(
+      apply(meta(Config, Idx, Ts, {notify, MsgSeq, self()}),
             rabbit_fifo:make_enqueue(self(), MsgSeq, Msg),
             State)).
 

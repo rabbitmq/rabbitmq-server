@@ -7,7 +7,8 @@
 -record(dlx_consumer,
         {pid :: pid(),
          prefetch :: non_neg_integer(),
-         checked_out = #{} :: #{msg_id() => optimised_tuple(rabbit_dead_letter:reason(), msg())},
+         checked_out = #{} :: #{msg_id() =>
+                                optimised_tuple(rabbit_dead_letter:reason(), msg())},
          next_msg_id = 0 :: msg_id()}).
 
 -record(rabbit_fifo_dlx,

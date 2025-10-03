@@ -7,7 +7,7 @@
 -module(rabbit_fifo_dlx).
 
 -include("rabbit_fifo_dlx.hrl").
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v7.hrl").
 -include_lib("kernel/include/logger.hrl").
 -compile({no_auto_import, [apply/3]}).
 

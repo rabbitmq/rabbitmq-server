@@ -180,6 +180,31 @@
          unused_3 = ?NIL
         }).
 
+-record(messages,
+        {
+         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
+         messages_total = 0 :: non_neg_integer(),
+         % queue of returned msg_in_ids - when checking out it picks from
+         returns = lqueue:new() :: lqueue:lqueue(term())
+        }).
+
+-record(dlx_consumer,
+        {pid :: pid(),
+         prefetch :: non_neg_integer(),
+         checked_out = #{} :: #{msg_id() =>
+                                optimised_tuple(rabbit_dead_letter:reason(), msg())},
+         next_msg_id = 0 :: msg_id()}).
+
+-record(rabbit_fifo_dlx,
+        {consumer :: option(#dlx_consumer{}),
+         %% Queue of dead-lettered messages.
+         discards = lqueue:new() :: lqueue:lqueue(optimised_tuple(rabbit_dead_letter:reason(), msg())),
+         %% Raft indexes of messages in both discards queue and dlx_consumer's checked_out map
+         %% so that we get the smallest ra index in O(1).
+         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
+         msg_bytes = 0 :: non_neg_integer(),
+         msg_bytes_checkout = 0 :: non_neg_integer()}).
+
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
@@ -207,7 +232,7 @@
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
-         dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
+         dlx = #rabbit_fifo_dlx{} :: #rabbit_fifo_dlx{},
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% one is picked if active consumer is cancelled or dies
