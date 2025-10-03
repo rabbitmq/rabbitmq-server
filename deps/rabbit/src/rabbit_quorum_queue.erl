@@ -375,13 +375,11 @@ ra_machine_config(Q) when ?is_amqqueue(Q) ->
     PolicyConfig = gather_policy_config(Q, true),
     QName = amqqueue:get_name(Q),
     {Name, _} = amqqueue:get_pid(Q),
-    PolicyConfig#{
-      name => Name,
-      queue_resource => QName,
-      become_leader_handler => {?MODULE, become_leader, [QName]},
-      single_active_consumer_on => single_active_consumer_on(Q),
-      created => erlang:system_time(millisecond)
-     }.
+    PolicyConfig#{name => Name,
+                  queue_resource => QName,
+                  single_active_consumer_on => single_active_consumer_on(Q),
+                  created => erlang:system_time(millisecond)
+                 }.
 
 resolve_delivery_limit(PolVal, ArgVal)
   when PolVal < 0 orelse ArgVal < 0 ->
@@ -680,13 +678,13 @@ handle_tick(QName,
               catch
                   _:Err ->
                       ?LOG_DEBUG("~ts: handle tick failed with ~p",
-                                       [rabbit_misc:rs(QName), Err]),
+                                 [rabbit_misc:rs(QName), Err]),
                       ok
               end
       end);
 handle_tick(QName, Config, _Nodes) ->
     ?LOG_DEBUG("~ts: handle tick received unexpected config format ~tp",
-                     [rabbit_misc:rs(QName), Config]).
+               [rabbit_misc:rs(QName), Config]).
 
 repair_leader_record(Q, Name) ->
     Node = node(),
@@ -697,7 +695,7 @@ repair_leader_record(Q, Name) ->
         _ ->
             QName = amqqueue:get_name(Q),
             ?LOG_DEBUG("~ts: updating leader record to current node ~ts",
-                             [rabbit_misc:rs(QName), Node]),
+                       [rabbit_misc:rs(QName), Node]),
             ok = become_leader0(QName, Name),
             ok
     end,

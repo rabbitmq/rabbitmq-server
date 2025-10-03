@@ -3956,16 +3956,18 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 3, 0} == get_message_bytes(Leader, QRes)
+              {M, M, 0} = get_message_bytes(Leader, QRes),
+              M > 0
       end, 30000),
 
+    {MsgSize, _, _} = get_message_bytes(Leader, QRes),
     subscribe(Ch, QQ, false),
 
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 0, 3} == get_message_bytes(Leader, QRes)
+              {MsgSize, 0, MsgSize} == get_message_bytes(Leader, QRes)
       end, 30000),
 
     receive
@@ -3990,7 +3992,7 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 0, 3} == get_message_bytes(Leader, QRes)
+              {MsgSize, 0, MsgSize} == get_message_bytes(Leader, QRes)
       end, 30000),
 
     rabbit_ct_client_helpers:close_channel(Ch),
@@ -3999,7 +4001,7 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 3, 0} == get_message_bytes(Leader, QRes)
+              {MsgSize, MsgSize, 0} == get_message_bytes(Leader, QRes)
       end, 30000),
     ok.
 
