@@ -183,6 +183,12 @@
                                    [rabbit_quorum_queue_periodic_membership_reconciliation]}},
                     {requires, [database]}]}).
 
+-rabbit_boot_step({rabbit_stream_periodic_membership_reconciliation,
+                   [{description, "Stream membership reconciliation"},
+                    {mfa,         {rabbit_sup, start_restartable_child,
+                                   [rabbit_stream_periodic_membership_reconciliation]}},
+                    {requires, [recovery]}]}).
+
 -rabbit_boot_step({rabbit_epmd_monitor,
                    [{description, "epmd monitor"},
                     {mfa,         {rabbit_sup, start_restartable_child,
