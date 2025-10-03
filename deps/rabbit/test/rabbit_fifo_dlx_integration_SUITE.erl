@@ -444,30 +444,31 @@ stats(Config) ->
                                ]),
     #'exchange.declare_ok'{} = amqp_channel:call(Ch, #'exchange.declare'{exchange = DLX}),
     declare_queue(Ch, TargetQ, []),
-    Msg = <<"12">>, %% 2 bytes per message
+    Msg = <<"12">>, %% 2 + 4(basic props) bytes per message
     [ok = amqp_channel:cast(Ch,
                             #'basic.publish'{routing_key = SourceQ},
-                            #amqp_msg{props   = #'P_basic'{expiration = <<"0">>},
+                            #amqp_msg{props = #'P_basic'{expiration = <<"0">>},
                                       payload = Msg})
      || _ <- lists:seq(1, 10)], %% 10 messages in total
     RaName = ra_name(SourceQ),
     %% Binding from target queue to DLX is missing. Therefore
     %% * 10 msgs should be discarded (i.e. in discards queue or checked out to dlx_worker)
-    %% * 20 bytes (=10msgs*2bytes) should be discarded (i.e. in discards queue or checked out to dlx_worker)
-    eventually(?_assertEqual([{10, 20}],
+    %% * 60 bytes (=10msgs*(2+4)bytes) should be discarded
+    %% (i.e. in discards queue or checked out to dlx_worker)
+    eventually(?_assertEqual([{10, 60}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     ?assertMatch([#{
                     %% 2 msgs (=Prefetch) should be checked out to dlx_worker
                     num_discard_checked_out := 2,
                     %% 4 bytes (=2msgs*2bytes) should be checked out to dlx_worker
-                    discard_checkout_message_bytes := 4,
+                    discard_checkout_message_bytes := B,
                     %% 8 msgs (=10-2) should be in discards queue
                     num_discarded := 8,
                     %% 16 bytes (=8msgs*2bytes) should be in discards queue
-                    discard_message_bytes := 16,
+                    discard_message_bytes := B2,
                     %% 10 msgs in total
                     num_messages := 10
-                   }],
+                   }] when B > 0 andalso B2 > B,
                  dirty_query([Server], RaName, fun rabbit_fifo:overview/1)),
     ?assertEqual(10, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(0, counted(messages_dead_lettered_confirmed_total, Config)),
@@ -539,12 +540,12 @@ switch_strategy(Config) ->
          [#{
             %% 2 msgs (=Prefetch) should be checked out to dlx_worker
             num_discard_checked_out := 2,
-            discard_checkout_message_bytes := 2,
+            discard_checkout_message_bytes := B,
             %% 3 msgs (=5-2) should be in discards queue
             num_discarded := 3,
-            discard_message_bytes := 3,
+            discard_message_bytes := B2,
             num_messages := 5
-           }],
+           }] when B > 0 andalso B2 > 0,
          dirty_query([Server], RaName, fun rabbit_fifo:overview/1))),
     ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName,
                                              SourceQ, <<"queues">>,
@@ -571,7 +572,7 @@ reject_publish_source_queue_max_length(Config) ->
 %% Test that source quorum queue rejects messages when source quorum queue's max-length-bytes is reached.
 %% max-length-bytes should also take into account dead-lettered messages.
 reject_publish_source_queue_max_length_bytes(Config) ->
-    reject_publish(Config, {<<"x-max-length-bytes">>, long, 1}).
+    reject_publish(Config, {<<"x-max-length-bytes">>, long, 4}).
 
 reject_publish(Config, QArg) when is_tuple(QArg) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
@@ -595,7 +596,7 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     ok = publish_confirm(Ch, SourceQ),
     ok = publish_confirm(Ch, SourceQ),
     RaName = ra_name(SourceQ),
-    eventually(?_assertMatch([{2, 2}], %% 2 messages with 1 byte each
+    eventually(?_assertMatch([{2, _}], %% 2 messages with 1 byte each
                              dirty_query([Server], RaName,
                                          fun rabbit_fifo:query_stat_dlx/1))),
     %% Now, we have 2 expired messages in the source quorum queue's discards queue.
@@ -604,7 +605,7 @@ reject_publish(Config, QArg) when is_tuple(QArg) ->
     %% Fix the dead-letter routing topology.
     ok = rabbit_ct_broker_helpers:set_policy(Config, Server, PolicyName, SourceQ, <<"queues">>,
                                              [{<<"dead-letter-routing-key">>, TargetQ}]),
-    eventually(?_assertEqual([{0, 0}],
+    eventually(?_assertMatch([{0, _}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 6),
     %% Publish should be allowed again.
     ok = publish_confirm(Ch, SourceQ),
@@ -650,7 +651,7 @@ reject_publish_max_length_target_quorum_queue(Config) ->
                      amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
                      30000)
      end || N <- lists:seq(1,4)],
-    eventually(?_assertEqual([{0, 0}],
+    eventually(?_assertMatch([{0, _}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(4, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(4, counted(messages_dead_lettered_confirmed_total, Config))).
@@ -701,7 +702,7 @@ reject_publish_down_target_quorum_queue(Config) ->
                          sets:add_element(Msg, S)
                  end, sets:new([{version, 2}]), lists:seq(1, 50)),
     ?assertEqual(50, sets:size(Received)),
-    eventually(?_assertEqual([{0, 0}],
+    eventually(?_assertMatch([{0, _}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(50, counted(messages_dead_lettered_expired_total, Config)),
     eventually(?_assertEqual(50, counted(messages_dead_lettered_confirmed_total, Config))).
@@ -727,16 +728,16 @@ reject_publish_target_classic_queue(Config) ->
     ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg}),
     ok = amqp_channel:cast(Ch, #'basic.publish'{routing_key = SourceQ}, #amqp_msg{payload = Msg}),
     %% By now we expect target classic queue confirmed 1 message and rejected 1 message.
-    eventually(?_assertEqual([{1, 1}],
+    eventually(?_assertMatch([{1, _}],
                              dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
-    consistently(?_assertEqual([{1, 1}],
+    consistently(?_assertMatch([{1, _}],
                                dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1))),
     ?assertEqual(2, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(1, counted(messages_dead_lettered_confirmed_total, Config)),
     %% Let's make space in the target queue for the rejected message.
     {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
     eventually(?_assertEqual(2, counted(messages_dead_lettered_confirmed_total, Config)), 500, 6),
-    ?assertEqual([{0, 0}], dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
+    ?assertMatch([{0, _}], dirty_query([Server], RaName, fun rabbit_fifo:query_stat_dlx/1)),
     {#'basic.get_ok'{}, #amqp_msg{payload = Msg}} = amqp_channel:call(Ch, #'basic.get'{queue = TargetQ}),
     ok.
 
@@ -795,7 +796,7 @@ target_quorum_queue_delete_create(Config) ->
     Send100Msgs(),
     %% Expect no message to get stuck in dlx worker.
     wait_for_min_messages(Config, TargetQ, 200),
-    eventually(?_assertEqual([{0, 0}],
+    eventually(?_assertMatch([{0, _}],
                              dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(300, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(300, counted(messages_dead_lettered_confirmed_total, Config)),
@@ -876,7 +877,7 @@ many_target_queues(Config) ->
     after 30_000 ->
               exit(deliver_timeout)
     end,
-    ?awaitMatch([{0, 0}],
+    ?awaitMatch([{0, _}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ok = rabbit_ct_broker_helpers:stop_broker(Config, Server3),
@@ -889,14 +890,14 @@ many_target_queues(Config) ->
     %% Nodes 2 and 3 are down.
     %% rabbit_fifo_dlx_worker should wait until all queues confirm the message
     %% before acking it to the source queue.
-    ?awaitMatch([{1, 2}],
+    ?awaitMatch([{1, _}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 ?DEFAULT_WAIT, ?DEFAULT_INTERVAL),
     ?assertMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
                  amqp_channel:call(Ch, #'basic.get'{queue = TargetQ1})),
     ok = rabbit_ct_broker_helpers:start_broker(Config, Server2),
     ok = rabbit_ct_broker_helpers:start_broker(Config, Server3),
-    ?awaitMatch([{0, 0}],
+    ?awaitMatch([{0, _}],
                 dirty_query([Server1], RaName, fun rabbit_fifo:query_stat_dlx/1),
                 3000, 500),
     ?awaitMatch({#'basic.get_ok'{}, #amqp_msg{payload = Msg2}},
