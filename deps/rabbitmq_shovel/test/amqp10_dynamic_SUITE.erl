@@ -9,6 +9,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_assert.hrl").
 -compile(export_all).
 
 -import(shovel_test_utils, [with_amqp10_session/2,
@@ -34,6 +35,7 @@ groups() ->
           autodelete_amqp091_src_on_publish,
           autodelete_amqp091_dest_on_confirm,
           autodelete_amqp091_dest_on_publish,
+          autodelete_with_rejections,
           simple_amqp10_dest,
           simple_amqp10_src,
           amqp091_to_amqp10_with_dead_lettering,
@@ -83,6 +85,7 @@ init_per_testcase(Testcase, Config0) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_all_queues, []),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -348,6 +351,36 @@ autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             amqp10_expect_count(Session, Dest, ExpDest),
             amqp10_expect_count(Session, Src, ExpSrc)
     end.
+
+autodelete_with_rejections(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_session(
+      Config,
+      fun (Sess) ->
+              {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"my link pair">>),
+              {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, Dest,
+                                               #{arguments =>#{<<"x-max-length">> => {uint, 5},
+                                                               <<"x-overflow">> => {utf8, <<"reject-publish">>}}}),
+
+              shovel_test_utils:set_param(Config, <<"test">>,
+                                          [{<<"src-protocol">>, <<"local">>},
+                                           {<<"src-queue">>, Src},
+                                           {<<"src-delete-after">>, 10},
+                                           {<<"dest-protocol">>, <<"local">>},
+                                           {<<"dest-predeclared">>, true},
+                                           {<<"dest-queue">>, Dest}
+                                          ]),
+              publish_count(Sess, Src, <<"hello">>, 10),
+              await_autodelete(Config, <<"test">>),
+              Expected = lists:sort([[Src, <<"5">>], [Dest, <<"5">>]]),
+              ?awaitMatch(
+                 Expected,
+                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0,
+                              ["list_queues", "name", "messages_ready", "--no-table-headers"])),
+                 30_000)
+      end).
 
 test_amqp10_delete_after_queue_length(Config) ->
     Src = ?config(srcq, Config),
