@@ -7,7 +7,6 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("rabbit/src/rabbit_fifo.hrl").
--include_lib("rabbit/src/rabbit_fifo_dlx.hrl").
 -include_lib("rabbit_common/include/rabbit_framing.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 
@@ -61,7 +60,6 @@ all_tests() ->
      scenario32,
      upgrade,
      messages_total,
-     ra_indexes,
      simple_prefetch,
      simple_prefetch_without_checkout_cancel,
      simple_prefetch_01,
@@ -910,30 +908,6 @@ messages_total(_Config) ->
                       end)
       end, [], Size).
 
-ra_indexes(_Config) ->
-    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
-    Size = 256,
-    run_proper(
-      fun () ->
-              ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
-                      frequency([{5, {undefined, undefined, undefined, false}},
-                                 {5, {oneof([range(1, 10), undefined]),
-                                      oneof([range(1, 1000), undefined]),
-                                      oneof([range(1, 3), undefined]),
-                                      oneof([true, false])
-                                     }}]),
-                      begin
-                          Config  = config(?FUNCTION_NAME,
-                                           Length,
-                                           Bytes,
-                                           SingleActive,
-                                           DeliveryLimit),
-                      ?FORALL(O, ?LET(Ops, log_gen(Size), expand(Ops, Config)),
-                              collect({log_size, length(O)},
-                                      ra_indexes_prop(Config, O)))
-                      end)
-      end, [], Size).
-
 simple_prefetch(_Config) ->
     Size = 500,
     meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> true end),
@@ -1592,38 +1566,6 @@ messages_total_invariant() ->
             end
     end.
 
-ra_indexes_prop(Conf0, Commands) ->
-    Conf = Conf0#{release_cursor_interval => 100},
-    Indexes = lists:seq(1, length(Commands)),
-    Entries = lists:zip(Indexes, Commands),
-    InitState = test_init(Conf),
-    run_log(InitState, Entries, ra_indexes_invariant()),
-    true.
-
-ra_indexes_invariant() ->
-    %% The raft indexes contained in the `ra_indexes` `rabbit_fifo_index` must
-    %% be the same as all indexes checked out by consumers plus those in the
-    %% `returns` queue.
-    fun(#rabbit_fifo{ra_indexes = Index,
-                     consumers = C,
-                     returns = R}) ->
-            RIdxs = lqueue:fold(fun(?MSG(I, _), Acc) -> [I | Acc] end, [], R),
-            CIdxs = maps:fold(fun(_, #consumer{checked_out = Ch}, Acc0) ->
-                                      maps:fold(fun(_, ?MSG(I, _), Acc) ->
-                                                        [I | Acc]
-                                                end, Acc0, Ch)
-                              end, [], C),
-            ActualIdxs = lists:sort(RIdxs ++ CIdxs),
-            IndexIdxs = lists:sort(rabbit_fifo_index:to_list(Index)),
-            case ActualIdxs == IndexIdxs of
-                true -> true;
-                false ->
-                    ct:pal("ra_indexes invariant failed Expected ~b Got ~b",
-                           [ActualIdxs, IndexIdxs]),
-                    false
-            end
-    end.
-
 simple_prefetch_prop(Conf0, Commands, WithCheckoutCancel) ->
     Conf = Conf0#{release_cursor_interval => 100},
     Indexes = lists:seq(1, length(Commands)),
@@ -1686,7 +1628,7 @@ upgrade_prop(Conf0, Commands) ->
                                  fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply(
+         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply_(
                                             meta(length(PreEntries) + 1),
                                             {machine_version, FromVersion, ToVersion},
                                             V3)),
@@ -2157,7 +2099,7 @@ do_apply(Cmd, #t{effects = Effs,
                               EnqCmds0
                       end,
 
-            {St, Effects} = case rabbit_fifo:apply(meta(Index), Cmd, S0) of
+            {St, Effects} = case rabbit_fifo:apply_(meta(Index), Cmd, S0) of
                                 {S, _, E} when is_list(E) ->
                                     {S, E};
                                 {S, _, E} ->

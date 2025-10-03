@@ -7,7 +7,7 @@
 -module(rabbit_fifo_dlx).
 
 -include("rabbit_fifo_dlx.hrl").
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v7.hrl").
 -include_lib("kernel/include/logger.hrl").
 -compile({no_auto_import, [apply/3]}).
 
@@ -26,7 +26,8 @@
          dehydrate/1,
          stat/1,
          update_config/4,
-         smallest_raft_index/1
+         smallest_raft_index/1,
+         live_indexes/1
         ]).
 
 -record(checkout, {consumer :: pid(),
@@ -364,6 +365,10 @@ dehydrate(State) ->
     option(non_neg_integer()).
 smallest_raft_index(#?MODULE{ra_indexes = Indexes}) ->
     rabbit_fifo_index:smallest(Indexes).
+
+-spec live_indexes(state()) -> [ra:index()].
+live_indexes(#?MODULE{ra_indexes = Indexes}) ->
+    rabbit_fifo_index:indexes(Indexes).
 
 annotate_msg(H, Msg) ->
     rabbit_fifo:annotate_msg(H, Msg).
