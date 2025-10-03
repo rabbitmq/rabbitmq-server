@@ -18,7 +18,9 @@
                                                         {line, ?LINE},
                                                         {expression, (??Expr)},
                                                         {pattern, (??Guard)},
-                                                        {value, __V}]})
+                                                        {value, __V},
+                                                        {timeout, Timeout},
+                                                        {polling_interval, PollingInterval}]})
                                  end
                       end
               end)(erlang:monotonic_time(millisecond) + Timeout))
