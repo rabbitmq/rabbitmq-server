@@ -14,7 +14,8 @@
 
 -compile(export_all).
 
--import(shovel_test_utils, [await_amqp10_event/3, await_credit/1]).
+-import(shovel_test_utils, [await_amqp10_event/3, await_credit/1,
+                            with_amqp10_session/2]).
 
 -define(PARAM, <<"test">>).
 
@@ -84,7 +85,7 @@ init_per_testcase(Testcase, Config0) ->
 
 end_per_testcase(Testcase, Config) ->
     shovel_test_utils:clear_param(Config, ?PARAM),
-    rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_all_queues, []),
+    rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_all_queues, []),
     _ = rabbit_ct_broker_helpers:delete_vhost(Config, ?config(alt_vhost, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -97,7 +98,7 @@ local_to_local_dest_down(Config) ->
     Dest = ?config(destq, Config),
     declare_queue(Config, 0, <<"/">>, Src),
     declare_queue(Config, 1, <<"/">>, Dest),
-    with_session(
+    with_amqp10_session(
       Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
@@ -128,7 +129,7 @@ local_to_local_multiple_all_dest_down(Config) ->
     declare_queue(Config, 0, <<"/">>, Src),
     declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest, Dest),
     declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest2, Dest2),
-    with_session(
+    with_amqp10_session(
       Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
@@ -164,7 +165,7 @@ local_to_local_multiple_some_dest_down(Config) ->
     %% and should be requeued.
     declare_and_bind_queue(Config, 1, <<"/">>, <<"amq.fanout">>, Dest, Dest),
     declare_and_bind_queue(Config, 2, <<"/">>, <<"amq.fanout">>, Dest2, Dest2),
-    with_session(
+    with_amqp10_session(
       Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
@@ -200,7 +201,7 @@ local_to_local_no_destination(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     declare_queue(Config, 0, <<"/">>, Src),
-    with_session(
+    with_amqp10_session(
       Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
@@ -228,22 +229,6 @@ to_int(<<>>) ->
     0;
 to_int(Int) ->
     binary_to_integer(Int).
-
-with_session(Config, Fun) ->
-    with_session(Config, <<"/">>, Fun).
-
-with_session(Config, VHost, Fun) ->
-    Hostname = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    Cfg = #{address => Hostname,
-            port => Port,
-            sasl => {plain, <<"guest">>, <<"guest">>},
-            hostname => <<"vhost:", VHost/binary>>},
-    {ok, Conn} = amqp10_client:open_connection(Cfg),
-    {ok, Sess} = amqp10_client:begin_session(Conn),
-    Fun(Sess),
-    amqp10_client:close_connection(Conn),
-    ok.
 
 publish(Sender, Tag, Payload) when is_binary(Payload) ->
     Headers = #{durable => true},
@@ -343,13 +328,6 @@ declare_exchange(Config, VHost, Exchange) ->
        amqp_channel:call(Ch, #'exchange.declare'{exchange = Exchange})),
     rabbit_ct_client_helpers:close_channel(Ch),
     rabbit_ct_client_helpers:close_connection(Conn).
-
-delete_all_queues() ->
-    Queues = rabbit_amqqueue:list(),
-    lists:foreach(
-      fun(Q) ->
-              {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
-      end, Queues).
 
 delete_queue(Name, VHost) ->
     QName = rabbit_misc:r(VHost, queue, Name),

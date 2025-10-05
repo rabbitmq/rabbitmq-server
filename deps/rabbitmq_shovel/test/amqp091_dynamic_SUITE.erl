@@ -11,6 +11,9 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 -import(rabbit_ct_helpers, [eventually/1]).
+-import(shovel_test_utils, [await_autodelete/2,
+                            invalid_param/2, invalid_param/3,
+                            valid_param/2, valid_param/3]).
 
 -compile(export_all).
 
@@ -941,23 +944,6 @@ expect_count(Ch, Q, M, Count) ->
      end || _ <- lists:seq(1, Count)],
     expect_empty(Ch, Q).
 
-invalid_param(Config, Value, User) ->
-    {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
-      rabbit_runtime_parameters, set,
-      [<<"/">>, <<"shovel">>, <<"invalid">>, Value, User]).
-
-valid_param(Config, Value, User) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, valid_param1, [Config, Value, User]).
-
-valid_param1(_Config, Value, User) ->
-    ok = rabbit_runtime_parameters:set(
-           <<"/">>, <<"shovel">>, <<"name">>, Value, User),
-    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"name">>, <<"acting-user">>).
-
-invalid_param(Config, Value) -> invalid_param(Config, Value, none).
-valid_param(Config, Value) -> valid_param(Config, Value, none).
-
 lookup_user(Config, Name) ->
     {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0,
       rabbit_access_control, check_user_login, [Name, []]),
@@ -975,23 +961,6 @@ cleanup1(_Config) ->
         P <- rabbit_runtime_parameters:list()],
     [rabbit_amqqueue:delete(Q, false, false, <<"acting-user">>)
      || Q <- rabbit_amqqueue:list()].
-
-await_autodelete(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name]).
-
-await_autodelete1(_Config, Name) ->
-    shovel_test_utils:await(
-      fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    shovel_test_utils:await(
-      fun () ->
-              not lists:member(Name,
-                               shovel_test_utils:shovels_from_status())
-      end).
-
-shovels_from_parameters() ->
-    L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
-    [rabbit_misc:pget(name, Shovel) || Shovel <- L].
 
 set_default_credit(Config, Value) ->
     Key = credit_flow_default_credit,
