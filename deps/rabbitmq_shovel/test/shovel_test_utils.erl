@@ -16,7 +16,16 @@
          await/1, await/2, await_amqp10_event/3, await_credit/1,
          clear_param/2, clear_param/3, make_uri/2,
          make_uri/3, make_uri/5,
-         await_shovel1/4, await_no_shovel/2]).
+         await_shovel1/4, await_no_shovel/2,
+         delete_all_queues/0,
+         with_amqp10_session/2, with_amqp10_session/3,
+         amqp10_publish/3, amqp10_publish/4,
+         amqp10_expect_empty/2, amqp10_expect_one/2,
+         amqp10_expect_count/3, amqp10_expect/3,
+         amqp10_publish_expect/5,
+         await_autodelete/2, await_autodelete1/2,
+         invalid_param/2, invalid_param/3,
+         valid_param/2, valid_param/3, valid_param1/3]).
 
 make_uri(Config, Node) ->
     Hostname = ?config(rmq_hostname, Config),
@@ -170,3 +179,145 @@ restart_shovel(Config, Name) ->
 restart_shovel(Config, Node, Name) ->
     rabbit_ct_broker_helpers:rpc(Config,
                         Node, rabbit_shovel_util, restart_shovel, [<<"/">>, Name]).
+
+delete_all_queues() ->
+    Queues = rabbit_amqqueue:list(),
+    lists:foreach(
+      fun(Q) ->
+              {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>)
+      end, Queues).
+
+with_amqp10_session(Config, Fun) ->
+    with_amqp10_session(Config, <<"/">>, Fun).
+
+with_amqp10_session(Config, VHost, Fun) ->
+    Hostname = ?config(rmq_hostname, Config),
+    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
+    Cfg = #{address => Hostname,
+            port => Port,
+            sasl => {plain, <<"guest">>, <<"guest">>},
+            hostname => <<"vhost:", VHost/binary>>},
+    {ok, Conn} = amqp10_client:open_connection(Cfg),
+    {ok, Sess} = amqp10_client:begin_session(Conn),
+    Fun(Sess),
+    amqp10_client:close_connection(Conn),
+    ok.
+
+amqp10_publish(Sender, Tag, Payload) when is_binary(Payload) ->
+    Headers = #{durable => true},
+    Msg = amqp10_msg:set_headers(Headers,
+                                 amqp10_msg:new(Tag, Payload, false)),
+    ok = amqp10_client:send_msg(Sender, Msg),
+    receive
+        {amqp10_disposition, {accepted, Tag}} -> ok
+    after 3000 ->
+              exit(publish_disposition_not_received)
+    end.
+
+amqp10_expect_empty(Session, Dest) ->
+    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
+                                                        Dest, settled,
+                                                        unsettled_state),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    receive
+        {amqp10_msg, Receiver, _} ->
+            throw(unexpected_msg)
+    after 500 ->
+            ok
+    end,
+    amqp10_client:detach_link(Receiver).
+
+amqp10_publish(Session, Address, Payload, Count) ->
+    LinkName = <<"dynamic-sender-", Address/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Address,
+                                                    unsettled, unsettled_state),
+    ok = await_amqp10_event(link, Sender, attached),
+    ok = await_credit(Sender),
+    [begin
+         Tag = rabbit_data_coercion:to_binary(I),
+         amqp10_publish(Sender, Tag, <<Payload/binary, Tag/binary>>)
+     end || I <- lists:seq(1, Count)],
+    amqp10_client:detach_link(Sender).
+
+amqp10_publish_expect(Session, Source, Destination, Payload, Count) ->
+    amqp10_publish(Session, Source, Payload, Count),
+    amqp10_expect_count(Session, Destination, Count).
+
+amqp10_expect_one(Session, Dest) ->
+    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
+                                                        Dest, settled,
+                                                        unsettled_state),
+    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
+    Msg = amqp10_expect(Receiver),
+    amqp10_client:detach_link(Receiver),
+    Msg.
+
+amqp10_expect_count(Session, Dest, Count) ->
+    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
+                                                        Dest, settled,
+                                                        unsettled_state),
+    ok = amqp10_client:flow_link_credit(Receiver, Count, never),
+    Msgs = amqp10_expect(Receiver, Count, []),
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            throw({unexpected_msg, Msg})
+    after 500 ->
+            ok
+    end,
+    amqp10_client:detach_link(Receiver),
+    Msgs.
+
+amqp10_expect(_, 0, Acc) ->
+    Acc;
+amqp10_expect(Receiver, N, Acc) ->
+    receive
+        {amqp10_msg, Receiver, InMsg} ->
+            amqp10_expect(Receiver, N - 1, [InMsg | Acc])
+    after 4000 ->
+            throw({timeout_in_expect_waiting_for_delivery, N, Acc})
+    end.
+
+amqp10_expect(Receiver) ->
+    receive
+        {amqp10_msg, Receiver, InMsg} ->
+            InMsg
+    after 4000 ->
+            throw(timeout_in_expect_waiting_for_delivery)
+    end.
+
+await_autodelete(Config, Name) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, await_autodelete1, [Config, Name], 10000).
+
+await_autodelete1(_Config, Name) ->
+    await(
+      fun () -> not lists:member(Name, shovels_from_parameters()) end),
+    await(
+      fun () ->
+              not lists:member(Name,
+                               shovels_from_status())
+      end).
+
+shovels_from_parameters() ->
+    L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
+    [rabbit_misc:pget(name, Shovel) || Shovel <- L].
+
+invalid_param(Config, Value, User) ->
+    {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
+      rabbit_runtime_parameters, set,
+      [<<"/">>, <<"shovel">>, <<"invalid">>, Value, User]).
+
+valid_param(Config, Value, User) ->
+    rabbit_ct_broker_helpers:rpc(Config, 0,
+      ?MODULE, valid_param1, [Config, Value, User]).
+
+valid_param1(_Config, Value, User) ->
+    ok = rabbit_runtime_parameters:set(
+           <<"/">>, <<"shovel">>, <<"name">>, Value, User),
+    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"name">>, <<"acting-user">>).
+
+invalid_param(Config, Value) -> invalid_param(Config, Value, none).
+valid_param(Config, Value) -> valid_param(Config, Value, none).

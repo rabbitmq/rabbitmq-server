@@ -11,7 +11,13 @@
 -include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
--import(shovel_test_utils, [await_credit/1]).
+-import(shovel_test_utils, [with_amqp10_session/2,
+                            amqp10_publish/3, amqp10_publish/5,
+                            amqp10_expect_empty/2,
+                            await_amqp10_event/3, amqp10_expect_one/2,
+                            amqp10_expect_count/3, amqp10_publish/4,
+                            amqp10_publish_expect/5,
+                            await_autodelete/2]).
 
 all() ->
     [
@@ -86,7 +92,7 @@ end_per_testcase(Testcase, Config) ->
 simple(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp10">>,
                                       <<"src-address">>)
@@ -95,7 +101,7 @@ simple(Config) ->
 simple_amqp10_dest(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>,
                                       <<"src-queue">>)
@@ -105,7 +111,7 @@ amqp091_to_amqp10_with_dead_lettering(Config) ->
     Dest = ?config(destq, Config),
     Src = ?config(srcq, Config),
     TmpQ = <<"tmp">>,
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"my link pair">>),
               {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, TmpQ,
@@ -118,10 +124,10 @@ amqp091_to_amqp10_with_dead_lettering(Config) ->
                                                               unsettled,
                                                               unsettled_state),
               ok = await_amqp10_event(link, Sender, attached),
-              expect_empty(Sess, TmpQ),
+              amqp10_expect_empty(Sess, TmpQ),
               test_amqp10_destination(Config, Src, Dest, Sess, <<"amqp091">>, <<"src-queue">>),
               %% publish to tmp, it should be dead-lettered to src and then shovelled to dest
-              _ = publish_expect(Sess, TmpQ, Dest, <<"tag1">>, <<"hello">>)
+              _ = amqp10_publish_expect(Sess, TmpQ, Dest, <<"hello">>, 1)
       end).
 
 test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
@@ -156,7 +162,7 @@ test_amqp10_destination(Config, Src, Dest, Sess, Protocol, ProtocolSrc) ->
                                           [{<<"x-message-ann-key">>,
                                             <<"message-ann-value">>}]
                                   end}]),
-    Msg = publish_expect(Sess, Src, Dest, <<"tag1">>, <<"hello">>),
+    [Msg] = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
     AppProps = amqp10_msg:application_properties(Msg),
     Anns = amqp10_msg:message_annotations(Msg),
     %% We no longer add/override properties, application properties or
@@ -176,7 +182,7 @@ simple_amqp10_src(Config) ->
     MapConfig = ?config(map_config, Config),
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(
                 Config,
@@ -192,8 +198,7 @@ simple_amqp10_src(Config) ->
                                     _    -> [{<<"cluster_id">>, <<"x">>}]
                                 end}
                             ]),
-              _Msg = publish_expect(Sess, Src, Dest, <<"tag1">>,
-                                    <<"hello">>),
+              _Msg = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
               % the fidelity loss is quite high when consuming using the amqp10
               % plugin. For example custom headers aren't current translated.
               % This isn't due to the shovel though.
@@ -204,7 +209,7 @@ amqp10_to_amqp091_application_properties(Config) ->
     MapConfig = ?config(map_config, Config),
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(
                 Config,
@@ -240,25 +245,25 @@ change_definition(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     Dest2 = ?config(destq2, Config),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, <<"test">>,
                                           [{<<"src-address">>,  Src},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
                                            {<<"dest-address">>, Dest}]),
-              publish_expect(Sess, Src, Dest, <<"tag2">>,<<"hello">>),
+              amqp10_publish_expect(Sess, Src, Dest, <<"hello1">>, 1),
               shovel_test_utils:set_param(Config, <<"test">>,
                                           [{<<"src-address">>,  Src},
                                            {<<"src-protocol">>, <<"amqp10">>},
                                            {<<"dest-protocol">>, <<"amqp10">>},
                                            {<<"dest-address">>, Dest2}]),
-              publish_expect(Sess, Src, Dest2, <<"tag3">>, <<"hello">>),
-              expect_empty(Sess, Dest),
+              amqp10_publish_expect(Sess, Src, Dest2, <<"hello2">>, 1),
+              amqp10_expect_empty(Sess, Dest),
               shovel_test_utils:clear_param(Config, <<"test">>),
-              publish_expect(Sess, Src, Src, <<"tag4">>, <<"hello2">>),
-              expect_empty(Sess, Dest),
-              expect_empty(Sess, Dest2)
+              amqp10_publish_expect(Sess, Src, Src, <<"hello3">>, 1),
+              amqp10_expect_empty(Sess, Dest),
+              amqp10_expect_empty(Sess, Dest2)
       end).
 
 autodelete_amqp091_src_on_confirm(Config) ->
@@ -282,13 +287,13 @@ autodelete_amqp091_dest_on_publish(Config) ->
     ok.
 
 autodelete_case(Config, Args, CaseFun) ->
-    with_session(Config, CaseFun(Config, Args)).
+    with_amqp10_session(Config, CaseFun(Config, Args)).
 
 autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 100),
+            amqp10_publish(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-address">>,    Src},
@@ -300,15 +305,15 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>,     AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, ExpDest),
-            expect_count(Session, Src, ExpSrc)
+            amqp10_expect_count(Session, Dest, ExpDest),
+            amqp10_expect_count(Session, Src, ExpSrc)
     end.
 
 autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 100),
+            amqp10_publish(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-queue">>, Src},
@@ -320,15 +325,15 @@ autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, ExpDest),
-            expect_count(Session, Src, ExpSrc)
+            amqp10_expect_count(Session, Dest, ExpDest),
+            amqp10_expect_count(Session, Src, ExpSrc)
     end.
 
 autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     fun (Session) ->
-            publish_count(Session, Src, <<"hello">>, 100),
+            amqp10_publish(Session, Src, <<"hello">>, 100),
             shovel_test_utils:set_param_nowait(
               Config,
               <<"test">>, [{<<"src-address">>, Src},
@@ -340,8 +345,8 @@ autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
                            {<<"ack-mode">>, AckMode}
                           ]),
             await_autodelete(Config, <<"test">>),
-            expect_count(Session, Dest, ExpDest),
-            expect_count(Session, Src, ExpSrc)
+            amqp10_expect_count(Session, Dest, ExpDest),
+            amqp10_expect_count(Session, Src, ExpSrc)
     end.
 
 test_amqp10_delete_after_queue_length(Config) ->
@@ -364,27 +369,6 @@ test_amqp10_delete_after_queue_length(Config) ->
     ?assertMatch(match, re:run(Msg, "Validation failed.*", [{capture, none}])).
 
 %%----------------------------------------------------------------------------
-
-with_session(Config, Fun) ->
-    Hostname = ?config(rmq_hostname, Config),
-    Port = rabbit_ct_broker_helpers:get_node_config(Config, 0, tcp_port_amqp),
-    {ok, Conn} = amqp10_client:open_connection(Hostname, Port),
-    {ok, Sess} = amqp10_client:begin_session(Conn),
-    Fun(Sess),
-    amqp10_client:close_connection(Conn),
-    ok.
-
-publish(Sender, Tag, Payload) when is_binary(Payload) ->
-    Headers = #{durable => true},
-    Msg = amqp10_msg:set_headers(Headers,
-                                 amqp10_msg:new(Tag, Payload, false)),
-    ok = amqp10_client:send_msg(Sender, Msg),
-    receive
-        {amqp10_disposition, {accepted, Tag}} -> ok
-    after 3000 ->
-              exit(publish_disposition_not_received)
-    end.
-
 publish(Sender, Msg) ->
     ok = amqp10_client:send_msg(Sender, Msg),
     Tag = amqp10_msg:delivery_tag(Msg),
@@ -394,16 +378,6 @@ publish(Sender, Msg) ->
             exit(publish_disposition_not_received)
     end.
 
-publish_expect(Session, Source, Dest, Tag, Payload) ->
-    LinkName = <<"dynamic-sender-", Dest/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
-                                                    unsettled, unsettled_state),
-    ok = await_amqp10_event(link, Sender, attached),
-    await_credit(Sender),
-    publish(Sender, Tag, Payload),
-    amqp10_client:detach_link(Sender),
-    expect_one(Session, Dest).
-
 publish_expect_msg(Session, Source, Dest, Msg) ->
     LinkName = <<"dynamic-sender-", Dest/binary>>,
     {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Source,
@@ -411,104 +385,9 @@ publish_expect_msg(Session, Source, Dest, Msg) ->
     ok = await_amqp10_event(link, Sender, attached),
     publish(Sender, Msg),
     amqp10_client:detach_link(Sender),
-    expect_one(Session, Dest).
-
-await_amqp10_event(On, Ref, Evt) ->
-    receive
-        {amqp10_event, {On, Ref, Evt}} -> ok
-    after 5000 ->
-          exit({amqp10_event_timeout, On, Ref, Evt})
-    end.
-
-expect_one(Session, Dest) ->
-    LinkName = <<"dynamic-receiver-", Dest/binary>>,
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
-                                                        unsettled_state),
-    ok = amqp10_client:flow_link_credit(Receiver, 1, never),
-    Msg = expect(Receiver),
-    amqp10_client:detach_link(Receiver),
-    Msg.
-
-expect(Receiver) ->
-    receive
-        {amqp10_msg, Receiver, InMsg} ->
-            InMsg
-    after 4000 ->
-              throw(timeout_in_expect_waiting_for_delivery)
-    end.
-
-expect_empty(Session, Dest) ->
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"dynamic-receiver">>,
-                                                        Dest, settled,
-                                                        unsettled_state),
-    % probably good enough given we don't currently have a means of
-    % echoing flow state
-    {error, timeout} = amqp10_client:get_msg(Receiver, 250),
-    amqp10_client:detach_link(Receiver).
-
-publish_count(Session, Address, Payload, Count) ->
-    LinkName = <<"dynamic-sender-", Address/binary>>,
-    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName,
-                                                    Address, unsettled,
-                                                    unsettled_state),
-    ok = await_amqp10_event(link, Sender, attached),
-    [begin
-         Tag = rabbit_data_coercion:to_binary(I),
-         publish(Sender, Tag, <<Payload/binary, Tag/binary>>)
-     end || I <- lists:seq(1, Count)],
-     amqp10_client:detach_link(Sender).
-
-expect_count(Session, Address, Count) ->
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session,
-                                                        <<"dynamic-receiver",
-                                                          Address/binary>>,
-                                                        Address, settled,
-                                                        unsettled_state),
-    ok = amqp10_client:flow_link_credit(Receiver, Count, never),
-    [begin
-         expect(Receiver)
-     end || _ <- lists:seq(1, Count)],
-    expect_empty(Session, Address),
-    amqp10_client:detach_link(Receiver).
-
-
-invalid_param(Config, Value, User) ->
-    {error_string, _} = rabbit_ct_broker_helpers:rpc(Config, 0,
-      rabbit_runtime_parameters, set,
-      [<<"/">>, <<"shovel">>, <<"invalid">>, Value, User]).
-
-valid_param(Config, Value, User) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, valid_param1, [Config, Value, User]).
-
-valid_param1(_Config, Value, User) ->
-    ok = rabbit_runtime_parameters:set(
-           <<"/">>, <<"shovel">>, <<"a">>, Value, User),
-    ok = rabbit_runtime_parameters:clear(<<"/">>, <<"shovel">>, <<"a">>, <<"acting-user">>).
-
-invalid_param(Config, Value) -> invalid_param(Config, Value, none).
-valid_param(Config, Value) -> valid_param(Config, Value, none).
+    amqp10_expect_one(Session, Dest).
 
 lookup_user(Config, Name) ->
     {ok, User} = rabbit_ct_broker_helpers:rpc(Config, 0,
       rabbit_access_control, check_user_login, [Name, []]),
     User.
-
-await_autodelete(Config, Name) ->
-    rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, await_autodelete1, [Config, Name], 10000).
-
-await_autodelete1(_Config, Name) ->
-    shovel_test_utils:await(
-      fun () -> not lists:member(Name, shovels_from_parameters()) end),
-    shovel_test_utils:await(
-      fun () ->
-              not lists:member(Name,
-                               shovel_test_utils:shovels_from_status())
-      end).
-
-shovels_from_parameters() ->
-    L = rabbit_runtime_parameters:list(<<"/">>, <<"shovel">>),
-    [rabbit_misc:pget(name, Shovel) || Shovel <- L].
