@@ -47,9 +47,12 @@ create(VirtualHost, Reference, Arguments, Username) ->
     StreamQueueArguments = stream_queue_arguments(Arguments),
     maybe
         ok ?= validate_stream_queue_arguments(StreamQueueArguments),
+        true ?= rabbit_stream_queue:is_enabled(),
         do_create_stream(VirtualHost, Reference, StreamQueueArguments, Username)
     else
         error ->
+            {error, validation_failed};
+        false ->
             {error, validation_failed};
         {error, _} = Err ->
             Err
