@@ -1628,7 +1628,7 @@ upgrade_prop(Conf0, Commands) ->
                                  fun (_) -> true end, FromVersion),
 
          %% perform conversion
-         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply_(
+         #rabbit_fifo{} = V4 = element(1, rabbit_fifo:apply(
                                             meta(length(PreEntries) + 1),
                                             {machine_version, FromVersion, ToVersion},
                                             V3)),
@@ -2101,7 +2101,7 @@ do_apply(Cmd, #t{effects = Effs,
                               EnqCmds0
                       end,
 
-            {St, Effects} = case rabbit_fifo:apply_(meta(Index), Cmd, S0) of
+            {St, Effects} = case rabbit_fifo:apply(meta(Index), Cmd, S0) of
                                 {S, _, E} when is_list(E) ->
                                     {S, E};
                                 {S, _, E} ->
