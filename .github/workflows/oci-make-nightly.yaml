@@ -20,11 +20,12 @@ jobs:
           - '27'
         branch:
           - main
+          - v4.2.x
           - v4.1.x
           - v4.0.x
         include:
           - branch: main
-            project_version: 4.2.0
+            project_version: 4.3.0
 
     runs-on: ubuntu-latest
     steps:
@@ -69,6 +70,7 @@ jobs:
           - '27'
         branch:
           - main
+          - v4.2.x
           - v4.1.x
           - v4.0.x
 
