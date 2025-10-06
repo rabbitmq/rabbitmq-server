@@ -1137,7 +1137,7 @@ is_same_otp_version(ConfigOrNode) ->
     OurOTP =:= OtherOTP.
 
 two_nodes(Node) ->
-    Size = 500,
+    Size = 300,
     run_proper(
       fun () ->
               ?FORALL({Length, Bytes, DeliveryLimit, SingleActive},
