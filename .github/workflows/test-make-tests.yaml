@@ -17,6 +17,14 @@ on:
       previous_version:
         required: false
         type: string
+      # in almost all cases this should not be set and the ref that triggered
+      # the workflow will be used. however, mixed version tests for skip-version
+      # upgrades (eg. 3.13->4.2) need this because they run on scheduled
+      # and scheduled workflows get `main` as ref
+      ref:
+        required: false
+        type: string
+        description: 'Git ref (branch, tag, or SHA) to checkout'
 jobs:
   test-rabbit:
     name: Test rabbit
@@ -47,6 +55,7 @@ jobs:
       previous_version: ${{ inputs.previous_version }}
       make_target: ${{ matrix.make_target }}
       plugin: rabbit
+      ref: ${{ inputs.ref }}
 
   test-rabbitmq-mqtt:
     name: Test rabbitmq_mqtt
@@ -59,6 +68,7 @@ jobs:
       previous_version: ${{ inputs.previous_version }}
       make_target: parallel-ct-set-1
       plugin: rabbitmq_mqtt
+      ref: ${{ inputs.ref }}
 
   # The integration_SUITE requires secrets and
   # is therefore run from a separate workflow.
@@ -73,6 +83,7 @@ jobs:
       previous_version: ${{ inputs.previous_version }}
       make_target: ct-config_schema ct-unit
       plugin: rabbitmq_peer_discovery_aws
+      ref: ${{ inputs.ref }}
 
   test-plugin:
     name: Test plugins
@@ -132,3 +143,4 @@ jobs:
       previous_version: ${{ inputs.previous_version }}
       make_target: tests
       plugin: ${{ matrix.plugin }}
+      ref: ${{ inputs.ref }}
