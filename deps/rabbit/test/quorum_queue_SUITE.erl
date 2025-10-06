@@ -1693,7 +1693,7 @@ policy_repair(Config) ->
             consume_all(Ch, QQ),
 
             % Ensure the queue process is unavailable
-            lists:foreach(fun(Srv) -> ensure_qq_proc_dead(Config, Srv, RaName) end, Servers),
+            [ok = ra:stop_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
             % Add policy with higher priority, allowing even more messages.
             ExpectedMaxLength3 = 30,
@@ -1714,24 +1714,7 @@ policy_repair(Config) ->
                 ]),
 
             % Restart the queue process.
-            {ok, Queue} =
-                rabbit_ct_broker_helpers:rpc(
-                    Config,
-                    0,
-                    rabbit_amqqueue,
-                    lookup,
-                    [{resource, <<"/">>, queue, QQ}]),
-            lists:foreach(
-                fun(Srv) ->
-                    rabbit_ct_broker_helpers:rpc(
-                        Config,
-                        Srv,
-                        rabbit_quorum_queue,
-                        recover,
-                        [foo, [Queue]]
-                    )
-                end,
-                Servers),
+            [ok = ra:restart_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
             % Wait for the queue to be available again.
             lists:foreach(fun(Srv) ->

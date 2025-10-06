@@ -365,11 +365,12 @@ apply_(_, #checkout{spec = {dequeue, _}},
       #?STATE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
     {State0, {error, {unsupported, single_active_consumer}}};
 apply_(#{index := Index,
-        system_time := Ts,
-        from := From} = Meta, #checkout{spec = {dequeue, Settlement},
-                                        meta = ConsumerMeta,
-                                        consumer_id = ConsumerId},
-      #?STATE{consumers = Consumers} = State00) ->
+         system_time := Ts,
+         from := From} = Meta,
+       #checkout{spec = {dequeue, Settlement},
+                 meta = ConsumerMeta,
+                 consumer_id = ConsumerId},
+       #?STATE{consumers = Consumers} = State00) ->
     %% dequeue always updates last_active
     State0 = State00#?STATE{last_active = Ts},
     %% all dequeue operations result in keeping the queue from expiring
@@ -416,8 +417,8 @@ apply_(#{index := Index,
             end
     end;
 apply_(#{index := _Idx} = Meta,
-      #checkout{spec = Spec,
-                consumer_id = ConsumerId}, State0)
+       #checkout{spec = Spec,
+                 consumer_id = ConsumerId}, State0)
   when Spec == cancel orelse
        Spec == remove ->
     case consumer_key_from_id(ConsumerId, State0) of
@@ -432,9 +433,9 @@ apply_(#{index := _Idx} = Meta,
             {State0, {error, consumer_not_found}, []}
     end;
 apply_(#{index := Idx} = Meta,
-      #checkout{spec = Spec0,
-                meta = ConsumerMeta,
-                consumer_id = {_, Pid} = ConsumerId}, State0) ->
+       #checkout{spec = Spec0,
+                 meta = ConsumerMeta,
+                 consumer_id = {_, Pid} = ConsumerId}, State0) ->
     %% might be better to check machine_version
     IsV4 = tuple_size(Spec0) == 2,
     %% normalise spec format
@@ -475,7 +476,7 @@ apply_(#{index := Idx} = Meta,
                    num_checked_out => map_size(Checked)}},
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
 apply_(#{index := Index}, #purge{},
-      #?STATE{messages_total = Total} = State0) ->
+       #?STATE{messages_total = Total} = State0) ->
     NumReady = messages_ready(State0),
     State1 = State0#?STATE{messages = rabbit_fifo_q:new(),
                            messages_total = Total - NumReady,
@@ -491,11 +492,11 @@ apply_(#{index := _Idx}, #garbage_collection{}, State) ->
 apply_(Meta, {timeout, expire_msgs}, State) ->
     checkout(Meta, State, State, []);
 apply_(#{system_time := Ts} = Meta,
-      {down, Pid, noconnection},
-      #?STATE{consumers = Cons0,
-              cfg = #cfg{consumer_strategy = single_active},
-              waiting_consumers = Waiting0,
-              enqueuers = Enqs0} = State0) ->
+       {down, Pid, noconnection},
+       #?STATE{consumers = Cons0,
+               cfg = #cfg{consumer_strategy = single_active},
+               waiting_consumers = Waiting0,
+               enqueuers = Enqs0} = State0) ->
     Node = node(Pid),
     %% if the pid refers to an active or cancelled consumer,
     %% mark it as suspected and return it to the waiting queue
@@ -538,9 +539,9 @@ apply_(#{system_time := Ts} = Meta,
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
 apply_(#{system_time := Ts} = Meta,
-      {down, Pid, noconnection},
-      #?STATE{consumers = Cons0,
-              enqueuers = Enqs0} = State0) ->
+       {down, Pid, noconnection},
+       #?STATE{consumers = Cons0,
+               enqueuers = Enqs0} = State0) ->
     %% A node has been disconnected. This doesn't necessarily mean that
     %% any processes on this node are down, they _may_ come back so here
     %% we just mark them as suspected (effectively deactivated)
@@ -580,7 +581,7 @@ apply_(Meta, {down, Pid, _Info}, State0) ->
     {State1, Effects1} = activate_next_consumer(handle_down(Meta, Pid, State0)),
     checkout(Meta, State0, State1, Effects1);
 apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
-                                    enqueuers = Enqs0} = State0) ->
+                                     enqueuers = Enqs0} = State0) ->
     %% A node we are monitoring has come back.
     %% If we have suspected any processes of being
     %% down we should now re-issue the monitors for them to detect if they're
@@ -628,10 +629,10 @@ apply_(Meta, #purge_nodes{nodes = Nodes}, State0) ->
                                    end, {State0, []}, Nodes),
     {State, ok, Effects};
 apply_(Meta,
-      #update_config{config = #{} = Conf},
-      #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
-                         resource = QRes},
-              dlx = DlxState0} = State0) ->
+       #update_config{config = #{} = Conf},
+       #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
+                          resource = QRes},
+               dlx = DlxState0} = State0) ->
     NewDLH = maps:get(dead_letter_handler, Conf, OldDLH),
     {DlxState, Effects0} = update_config(OldDLH, NewDLH, QRes,
                                          DlxState0),
@@ -656,19 +657,18 @@ live_indexes(#?STATE{cfg = #cfg{},
                      messages = Messages,
                      consumers = Consumers,
                      dlx = #?DLX{discards = Discards}}) ->
+    MsgsIdxs = rabbit_fifo_q:indexes(Messages),
     DlxIndexes = lqueue:fold(fun (?TUPLE(_, ?MSG(I, _)), Acc) ->
                                      [I | Acc]
-                             end, [], Discards),
-    RtnIndexes = [I || ?MSG(I, _) <- lqueue:to_list(Returns)],
-    CheckedIdxs = maps:fold(
-                    fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                            maps:fold(
-                              fun (_MsgId, ?MSG(I, _), Acc) ->
-                                      [I | Acc]
-                              end, Acc0, Ch)
-                    end, RtnIndexes ++ DlxIndexes, Consumers),
-
-    CheckedIdxs ++ rabbit_fifo_q:indexes(Messages).
+                             end, MsgsIdxs, Discards),
+    RtnIndexes = lqueue:fold(fun(?MSG(I, _), Acc) -> [I | Acc] end,
+                             DlxIndexes, Returns),
+    maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
+                      maps:fold(
+                        fun (_MsgId, ?MSG(I, _), Acc) ->
+                                [I | Acc]
+                        end, Acc0, Ch)
+              end, RtnIndexes, Consumers).
 
 -spec snapshot_installed(Meta, State, OldMeta, OldState) ->
     ra_machine:effects() when
@@ -676,7 +676,7 @@ live_indexes(#?STATE{cfg = #cfg{},
       State :: state(),
       OldMeta :: ra_snapshot:meta(),
       OldState :: state().
-snapshot_installed(_Meta, #?MODULE{cfg = #cfg{resource = _QR},
+snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
                                    consumers = Consumers} = State,
                    _OldMeta, _OldState) ->
     %% here we need to redliver all pending consumer messages
