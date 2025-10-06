@@ -34,7 +34,7 @@
 -export([notify_sent/2, notify_sent_queue_down/1, resume/2]).
 -export([notify_down_all/2, notify_down_all/3, activate_limit_all/2]).
 -export([on_node_up/1, on_node_down/1]).
--export([update/2, store_queue/1, update_decorators/2, policy_changed/2]).
+-export([update/2, update/3, store_queue/1, update_decorators/2, policy_changed/2]).
 -export([emit_unresponsive/6, emit_unresponsive_local/5, is_unresponsive/2]).
 -export([is_match/2, is_in_virtual_host/2]).
 -export([is_replicable/1, is_exclusive/1, is_not_exclusive/1, is_dead_exclusive/1]).
@@ -298,12 +298,18 @@ do_internal_declare(Q0, false) ->
     Queue = rabbit_queue_decorator:set(Q),
     rabbit_db_queue:create_or_get(Queue).
 
--spec update
-        (name(), fun((amqqueue:amqqueue()) -> amqqueue:amqqueue())) ->
-            'not_found' | amqqueue:amqqueue().
+-spec update(name(), fun((amqqueue:amqqueue()) -> amqqueue:amqqueue())) ->
+    'not_found' | amqqueue:amqqueue().
 
 update(Name, Fun) ->
-    rabbit_db_queue:update(Name, Fun).
+    update(Name, Fun, #{}).
+
+-spec update(name(), fun((amqqueue:amqqueue()) -> amqqueue:amqqueue()),
+             #{timeout => timeout()}) ->
+    'not_found' | amqqueue:amqqueue().
+
+update(Name, Fun, Options) ->
+    rabbit_db_queue:update(Name, Fun, Options).
 
 -spec ensure_rabbit_queue_record_is_initialized(Queue) -> Ret when
       Queue :: amqqueue:amqqueue(),
