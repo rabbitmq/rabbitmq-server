@@ -21,6 +21,26 @@
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
+%% constants for packed msg references where both the raft index and the size
+%% is packed into a single immidate term
+%%
+%% 59 bytes as immedate ints are signed
+-define(PACKED_MAX, 16#7FFF_FFFF_FFFF_FFF).
+%% index bits - enough for 2000 days at 100k indexes p/sec
+-define(PACKED_IDX_BITS, 44).
+-define(PACKED_IDX_MAX, 16#FFFF_FFFF_FFF).
+-define(PACKED_SZ_BITS, 15). %% size
+-define(PACKED_SZ_MAX, 16#7FFF). %% 15 bits
+
+-define(PACK(Idx, Sz),
+        (Idx bxor (Sz bsl ?PACKED_IDX_BITS))).
+-define(PACKED_IDX(PackedInt),
+        (PackedInt band ?PACKED_IDX_MAX)).
+-define(PACKED_SZ(PackedInt),
+        ((PackedInt bsr 44) band 16#7FFF)).
+
+-define(IS_PACKED(Int), (Int >= 0 andalso Int =< ?PACKED_MAX)).
+
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
@@ -57,7 +77,10 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
--type msg() :: optimised_tuple(ra:index(), msg_header()).
+%% 60 byte integer, immediate
+-type packed_msg() :: 0..?PACKED_MAX.
+
+-type msg() :: packed_msg() | optimised_tuple(ra:index(), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.

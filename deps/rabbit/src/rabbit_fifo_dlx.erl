@@ -165,7 +165,7 @@ discard(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
                                   Cmd = maps:get(Idx, Lookup),
                                   %% ensure header delivery count
                                   %% is copied to the message container
-                                  annotate_msg(H, rabbit_fifo:get_msg(Cmd))
+                                  annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))
                               end || ?MSG(Idx, H) <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
@@ -238,7 +238,7 @@ delivery_effects(CPid, Msgs0) ->
               Msgs = lists:zipwith(
                        fun (Cmd, {Reason, H, MsgId}) ->
                                {MsgId, {Reason,
-                                        annotate_msg(H, rabbit_fifo:get_msg(Cmd))}}
+                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
                        end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
