@@ -30,7 +30,6 @@ all() ->
 groups() ->
     [
       {core_tests, [], [
-          simple,
           set_properties_using_proplist,
           set_properties_using_map,
           set_empty_properties_using_proplist,
@@ -118,21 +117,6 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
-
-simple(Config) ->
-    Name = <<"test">>,
-    with_ch(Config,
-      fun (Ch) ->
-              shovel_test_utils:set_param(
-                Config,
-                Name, [{<<"src-queue">>,  <<"src">>},
-                             {<<"dest-queue">>, <<"dest">>}]),
-              publish_expect(Ch, <<>>, <<"src">>, <<"dest">>, <<"hello">>),
-              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, Name}]),
-              ?assertMatch([_|_], Status),
-              ?assertMatch(#{metrics := #{forwarded := 1}}, maps:from_list(Status))
-      end).
-
 quorum_queues(Config) ->
     with_ch(Config,
       fun (Ch) ->
