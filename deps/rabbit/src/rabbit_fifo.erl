@@ -77,7 +77,7 @@
          get_msg_header/1,
          get_header/2,
          annotate_msg/2,
-         get_msg/1,
+         get_msg_from_cmd/1,
 
          %% protocol helpers
          make_enqueue/3,
@@ -386,8 +386,9 @@ apply_(#{index := Index,
                                           {once, {simple_prefetch, 1}}, 0,
                                           State0),
             case checkout_one(Meta, false, State1, []) of
-                {success, _, MsgId,
-                 ?MSG(RaftIdx, Header), _ExpiredMsg, State2, Effects0} ->
+                {success, _, MsgId, Msg, _ExpiredMsg, State2, Effects0} ->
+                    RaftIdx = get_msg_idx(Msg),
+                    Header = get_msg_header(Msg),
                     {State4, Effects1} =
                         case Settlement of
                             unsettled ->
@@ -658,15 +659,16 @@ live_indexes(#?STATE{cfg = #cfg{},
                      consumers = Consumers,
                      dlx = #?DLX{discards = Discards}}) ->
     MsgsIdxs = rabbit_fifo_q:indexes(Messages),
-    DlxIndexes = lqueue:fold(fun (?TUPLE(_, ?MSG(I, _)), Acc) ->
+    DlxIndexes = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
+                                     I = get_msg_idx(Msg),
                                      [I | Acc]
                              end, MsgsIdxs, Discards),
-    RtnIndexes = lqueue:fold(fun(?MSG(I, _), Acc) -> [I | Acc] end,
+    RtnIndexes = lqueue:fold(fun(Msg, Acc) -> [get_msg_idx(Msg) | Acc] end,
                              DlxIndexes, Returns),
     maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
                       maps:fold(
-                        fun (_MsgId, ?MSG(I, _), Acc) ->
-                                [I | Acc]
+                        fun (_MsgId, Msg, Acc) ->
+                                [get_msg_idx(Msg) | Acc]
                         end, Acc0, Ch)
               end, RtnIndexes, Consumers).
 
@@ -901,7 +903,9 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
             [begin
-                 ?MSG(I, H) = maps:get(K, Checked),
+                 Msg = maps:get(K, Checked),
+                 I = get_msg_idx(Msg),
+                 H = get_msg_header(Msg),
                  {K, {I, H}}
              end || K <- lists:seq(From, To), maps:is_key(K, Checked)];
         _ ->
@@ -1025,12 +1029,14 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                 {ConsumerKey, #consumer{checked_out = Checked}} ->
                     {RaAux, ToReturn} =
                         maps:fold(
-                          fun (MsgId, ?MSG(Idx, Header), {RA0, Acc}) ->
+                          fun (MsgId, Msg, {RA0, Acc}) ->
+                                  Idx = get_msg_idx(Msg),
+                                  Header = get_msg_header(Msg),
                                   %% it is possible this is not found if the consumer
                                   %% crashed and the message got removed
                                   case ra_aux:log_fetch(Idx, RA0) of
                                       {{_Term, _Meta, Cmd}, RA} ->
-                                          Msg = get_msg(Cmd),
+                                          Msg = get_msg_from_cmd(Cmd),
                                           {RA, [{MsgId, Idx, Header, Msg} | Acc]};
                                       {undefined, RA} ->
                                           {RA, Acc}
@@ -1070,13 +1076,14 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
             {RaState, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, ?MSG(Idx, Header), {S0, Acc}) ->
+                  fun (MsgId, Msg, {S0, Acc}) ->
+                          Idx = get_msg_idx(Msg),
+                          Header = get_msg_idx(Msg),
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
                               {{_Term, _Meta, Cmd}, S} ->
-                                  Msg = get_msg(Cmd),
-                                  {S, [{MsgId, {Header, Msg}} | Acc]};
+                                  {S, [{MsgId, {Header, get_msg_from_cmd(Cmd)}} | Acc]};
                               {undefined, S} ->
                                   {S, Acc}
                           end
@@ -1121,11 +1128,13 @@ handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            RaAux0) ->
     MacState = ra_aux:machine_state(RaAux0),
     case query_peek(Pos, MacState) of
-        {ok, ?MSG(Idx, Header)} ->
+        {ok, Msg} ->
+            Idx = get_msg_idx(Msg),
+            Header = get_msg_header(Msg),
             %% need to re-hydrate from the log
             {{_, _, Cmd}, RaAux} = ra_aux:log_fetch(Idx, RaAux0),
-            Msg = get_msg(Cmd),
-            {reply, {ok, {Header, Msg}}, Aux0, RaAux};
+            ActualMsg = get_msg_from_cmd(Cmd),
+            {reply, {ok, {Header, ActualMsg}}, Aux0, RaAux};
         Err ->
             {reply, Err, Aux0, RaAux0}
     end;
@@ -1320,10 +1329,15 @@ query_peek(Pos, State0) when Pos > 0 ->
             {error, no_message_at_pos};
         {Msg, _State}
           when Pos == 1 ->
-            {ok, Msg};
+            {ok, unpack(Msg)};
         {_Msg, State} ->
             query_peek(Pos-1, State)
     end.
+
+unpack(Packed) when ?IS_PACKED(Packed) ->
+    ?MSG(?PACKED_IDX(Packed), ?PACKED_SZ(Packed));
+unpack(Msg) ->
+    Msg.
 
 query_notify_decorators_info(#?STATE{consumers = Consumers} = State) ->
     MaxActivePriority = maps:fold(
@@ -1568,7 +1582,8 @@ decr_total(#?STATE{messages_total = Tot} = State) ->
 
 drop_head(#?STATE{discarded_bytes = DiscardedBytes0} = State0, Effects) ->
     case take_next_msg(State0) of
-        {?MSG(_Idx, Header) = Msg, State1} ->
+        {Msg, State1} ->
+            Header = get_msg_header(Msg),
             State = decr_total(add_bytes_drop(Header, State1)),
             #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                     dlx = DlxState} = State,
@@ -1638,6 +1653,13 @@ update_expiry_header(RaCmdTs, TTL, Header) ->
 update_expiry_header(ExpiryTs, Header) ->
     update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
 
+make_msg(Idx, Sz)
+  when Idx =< ?PACKED_IDX_MAX andalso
+       (is_integer(Sz) andalso Sz =< ?PACKED_SZ_MAX) ->
+       ?PACK(Idx, Sz);
+make_msg(Idx, Hdr) ->
+    ?MSG(Idx, Hdr).
+
 maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
               {MetaSize, BodySize},
               Effects, #?STATE{msg_bytes_enqueue = Enqueue,
@@ -1647,7 +1669,7 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     Size = MetaSize + BodySize,
     Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
-    Msg = ?MSG(RaftIdx, Header),
+    Msg = make_msg(RaftIdx, Header),
     PTag = priority_tag(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
                           messages_total = Total + 1,
@@ -1673,7 +1695,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             % it is the next expected seqno
             Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
             Header = maybe_set_msg_delivery_count(RawMsg, Header0),
-            Msg = ?MSG(RaftIdx, Header),
+            Msg = make_msg(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             MsgCache = case can_immediately_deliver(State0) of
                            true ->
@@ -1734,7 +1756,8 @@ complete(Meta, ConsumerKey, [MsgId],
                  messages_total = Tot} = State0,
         Effects) ->
     case maps:take(MsgId, Checked0) of
-        {?MSG(_Idx, Hdr), Checked} ->
+        {Msg, Checked} ->
+            Hdr = get_msg_header(Msg),
             SettledSize = get_header(size, Hdr),
             Con = Con0#consumer{checked_out = Checked,
                                 credit = increase_credit(Con0, 1)},
@@ -1755,7 +1778,8 @@ complete(Meta, ConsumerKey, MsgIds,
         = lists:foldl(
             fun (MsgId, {S0, Ch0}) ->
                     case maps:take(MsgId, Ch0) of
-                        {?MSG(_Idx, Hdr), Ch} ->
+                        {Msg, Ch} ->
+                            Hdr = get_msg_header(Msg),
                             S = get_header(size, Hdr) + S0,
                             {S, Ch};
                         error ->
@@ -1822,8 +1846,9 @@ cancel_consumer_effects(ConsumerId,
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
 
-update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
-    ?MSG(Idx, update_header(Key, Fun, Def, Header)).
+update_msg_header(Key, Fun, Def, Msg) ->
+    ?MSG(get_msg_idx(Msg),
+         update_header(Key, Fun, Def, get_msg_header(Msg))).
 
 update_header(expiry, _, Expiry, Size)
   when is_integer(Size) ->
@@ -1840,8 +1865,15 @@ update_header(Key, UpdateFun, Default, Header)
   when is_map_key(size, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
+get_msg_idx(?MSG(Idx, _Header)) ->
+    Idx;
+get_msg_idx(Packed) when ?IS_PACKED(Packed) ->
+    ?PACKED_IDX(Packed).
+
 get_msg_header(?MSG(_Idx, Header)) ->
-    Header.
+    Header;
+get_msg_header(Packed) when ?IS_PACKED(Packed) ->
+    ?PACKED_SZ(Packed).
 
 get_header(size, Size)
   when is_integer(Size) ->
@@ -1878,7 +1910,7 @@ annotate_msg(Header, Msg0) ->
             Msg0
     end.
 
-return_one(Meta, MsgId, ?MSG(_, _) = Msg0, DelivFailed, Anns,
+return_one(Meta, MsgId, Msg0, DelivFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
@@ -1941,7 +1973,7 @@ checkout(#{index := Index} = Meta,
     {State, Reply, Effects}.
 
 checkout0(Meta, {success, ConsumerKey, MsgId,
-                 ?MSG(_, _) = Msg, ExpiredMsg, State, Effects},
+                 Msg, ExpiredMsg, State, Effects},
           SendAcc0) ->
     DelMsg = {MsgId, Msg},
     SendAcc = case maps:get(ConsumerKey, SendAcc0, undefined) of
@@ -2032,15 +2064,15 @@ chunk_disk_msgs([], _Bytes, [[] | Chunks]) ->
     Chunks;
 chunk_disk_msgs([], _Bytes, Chunks) ->
     Chunks;
-chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem],
+chunk_disk_msgs([{_MsgId, Msg} = ConsumerMsg | Rem],
                 Bytes, Chunks)
   when Bytes >= ?DELIVERY_CHUNK_LIMIT_B ->
-    Size = get_header(size, Header),
-    chunk_disk_msgs(Rem, Size, [[Msg] | Chunks]);
-chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem], Bytes,
+    Size = get_header(size, get_msg_header(Msg)),
+    chunk_disk_msgs(Rem, Size, [[ConsumerMsg] | Chunks]);
+chunk_disk_msgs([{_MsgId, Msg} = ConsumerMsg | Rem], Bytes,
                 [CurChunk | Chunks]) ->
-    Size = get_header(size, Header),
-    chunk_disk_msgs(Rem, Bytes + Size, [[Msg | CurChunk] | Chunks]).
+    Size = get_header(size, get_msg_header(Msg)),
+    chunk_disk_msgs(Rem, Bytes + Size, [[ConsumerMsg | CurChunk] | Chunks]).
 
 add_delivery_effects(Effects0, AccMap, _State)
   when map_size(AccMap) == 0 ->
@@ -2064,7 +2096,7 @@ take_next_msg(#?STATE{returns = Returns0,
             case rabbit_fifo_q:out(Messages0) of
                 empty ->
                     empty;
-                {?MSG(_RaftIdx, _) = Msg, Messages} ->
+                {Msg, Messages} ->
                     {Msg, State#?STATE{messages = Messages}}
             end
     end.
@@ -2083,10 +2115,18 @@ delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
+delivery_effect(ConsumerKey, [{MsgId, Msg}],
+                #?STATE{msg_cache = {Idx, RawMsg}} = State)
+  when is_integer(Msg) andalso ?PACKED_IDX(Msg) == Idx ->
+    Header = get_msg_header(Msg),
+    {CTag, CPid} = consumer_id(ConsumerKey, State),
+    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
+     ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {RaftIdxs, _Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
-                                           {[I | Acc], N+1}
+    {RaftIdxs, _Num} = lists:foldr(fun ({_, Msg}, {Acc, N}) ->
+
+                                           {[get_msg_idx(Msg) | Acc], N+1}
                                    end, {[], 0}, Msgs),
     {log_ext, RaftIdxs,
      fun (ReadPlan) ->
@@ -2113,7 +2153,7 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
              [];
          ([Cmd]) ->
              [{reply, From, {wrap_reply,
-                             {dequeue, {MsgId, {Header, get_msg(Cmd)}}, Ready}}}]
+                             {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
@@ -2199,11 +2239,12 @@ expire_msgs(RaCmdTs, Result, State, Effects) ->
           when is_integer(Expiry), RaCmdTs >= Expiry ->
             expire(RaCmdTs, State, Effects);
         _ ->
+            %% packed messages never have an expiry
             {Result, State, Effects}
     end.
 
 expire(RaCmdTs, State0, Effects) ->
-    {?MSG(_Idx, Header) = Msg,
+    {Msg,
      #?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0,
              messages_total = Tot,
@@ -2212,12 +2253,13 @@ expire(RaCmdTs, State0, Effects) ->
         take_next_msg(State0),
     {DlxState, _RetainedBytes, DlxEffects} =
         discard_or_dead_letter([Msg], expired, DLH, DlxState0),
-    DiscardedSize = get_header(size, Header) + ?ENQ_OVERHEAD,
+    Header = get_msg_header(Msg),
+    Size = get_header(size, Header),
+    DiscardedSize = Size + ?ENQ_OVERHEAD,
     State = State1#?STATE{dlx = DlxState,
                           messages_total = Tot - 1,
                           discarded_bytes = DiscardedBytes0 + DiscardedSize,
-                          msg_bytes_enqueue =
-                              MsgBytesEnqueue - get_header(size, Header)},
+                          msg_bytes_enqueue = MsgBytesEnqueue - Size},
     expire_msgs(RaCmdTs, true, State, DlxEffects ++ Effects).
 
 timer_effect(RaCmdTs, State, Effects) ->
@@ -2759,8 +2801,8 @@ convert(Meta, 7, To, State) ->
 
 smallest_raft_index(#?STATE{messages = Messages,
                             dlx = #?DLX{discards = Discards}} = State) ->
-    SmallestDlxRaIdx = lqueue:fold(fun (?TUPLE(_, ?MSG(I, _)), Acc) ->
-                                           min(I, Acc)
+    SmallestDlxRaIdx = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
+                                           min(get_msg_idx(Msg), Acc)
                                    end, undefined, Discards),
     SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
     %% scan consumers and returns queue here instead
@@ -2768,13 +2810,13 @@ smallest_raft_index(#?STATE{messages = Messages,
 
 smallest_checked_out(#?STATE{returns = Returns,
                              consumers = Consumers}, Min) ->
-    SmallestSoFar = lqueue:fold(fun (?MSG(I, _), Acc) ->
-                                        min(I, Acc)
+    SmallestSoFar = lqueue:fold(fun (Msg, Acc) ->
+                                        min(get_msg_idx(Msg), Acc)
                                 end, Min, Returns),
     maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
                       maps:fold(
-                        fun (_MsgId, ?MSG(I, _), Acc) ->
-                                min(I, Acc)
+                        fun (_MsgId, Msg, Acc) ->
+                                min(get_msg_idx(Msg), Acc)
                         end, Acc0, Ch)
               end, SmallestSoFar, Consumers).
 
@@ -2814,11 +2856,11 @@ can_immediately_deliver(#?STATE{service_queue = SQ,
 incr(I) ->
    I + 1.
 
-get_msg(#?ENQ_V2{msg = M}) ->
+get_msg_from_cmd(#?ENQ_V2{msg = M}) ->
     M;
-get_msg(#enqueue{msg = M}) ->
+get_msg_from_cmd(#enqueue{msg = M}) ->
     M;
-get_msg(#requeue{msg = M}) ->
+get_msg_from_cmd(#requeue{msg = M}) ->
     M.
 
 initial_delivery_count({credited, Count}) ->
@@ -3017,9 +3059,11 @@ exec_read(Flru0, ReadPlan, Msgs) ->
     try ra_log_read_plan:execute(ReadPlan, Flru0) of
         {Entries, Flru} ->
             %% return a list in original order
-            {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
+            {lists:map(fun ({MsgId, Msg}) ->
+                               Idx = get_msg_idx(Msg),
+                               Header = get_msg_header(Msg),
                                Cmd = maps:get(Idx, Entries),
-                               {MsgId, {Header, get_msg(Cmd)}}
+                               {MsgId, {Header, get_msg_from_cmd(Cmd)}}
                        end, Msgs), Flru}
     catch exit:{missing_key, _}
             when Flru0 =/= undefined ->
@@ -3075,19 +3119,21 @@ dlx_apply(_Meta, {dlx, {settle, MsgIds}}, at_least_once,
           #?DLX{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
     Acked = maps:with(MsgIds, Checked0),
     {DBytes, State} =
-        maps:fold(fun(MsgId, ?TUPLE(_Rsn, ?MSG(Idx, Hdr)),
-                      {Sz,
-                       #?DLX{consumer = #dlx_consumer{checked_out = Checked} = C,
-                             msg_bytes_checkout = BytesCheckout,
-                             ra_indexes = Indexes0} = S}) ->
-                          Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-                          Size = get_header(size, Hdr),
-                          {Sz + Size + ?ENQ_OVERHEAD, 
-                           S#?DLX{consumer = C#dlx_consumer{checked_out =
-                                                            maps:remove(MsgId, Checked)},
-                                  msg_bytes_checkout = BytesCheckout - Size,
-                                  ra_indexes = Indexes}}
-                  end, {0, State0}, Acked),
+        maps:fold(
+          fun(MsgId, ?TUPLE(_Rsn, Msg),
+              {Sz, #?DLX{consumer = #dlx_consumer{checked_out = Checked} = C,
+                         msg_bytes_checkout = BytesCheckout,
+                         ra_indexes = Indexes0} = S}) ->
+                  Idx = get_msg_idx(Msg),
+                  Hdr = get_msg_header(Msg),
+                  Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+                  Size = get_header(size, Hdr),
+                  {Sz + Size + ?ENQ_OVERHEAD, 
+                   S#?DLX{consumer = C#dlx_consumer{checked_out =
+                                                    maps:remove(MsgId, Checked)},
+                          msg_bytes_checkout = BytesCheckout - Size,
+                          ra_indexes = Indexes}}
+          end, {0, State0}, Acked),
     {State, DBytes,
      [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
        [rabbit_quorum_queue, at_least_once, maps:size(Acked)]}]};
@@ -3289,18 +3335,20 @@ discard_or_dead_letter(Msgs, Reason, undefined, State) ->
      [{mod_call, rabbit_global_counters, messages_dead_lettered,
        [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
 discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
-    Idxs = [I || ?MSG(I, _) <- Msgs0],
+    Idxs = lists:map(fun get_msg_idx/1, Msgs0),
     %% TODO: this could be turned into a log_ext effect instead to avoid
     %% reading from disk inside the qq process
     Effect = {log, Idxs,
               fun (Log) ->
                       Lookup = maps:from_list(lists:zip(Idxs, Log)),
                       Msgs = [begin
+                                  Idx = get_msg_idx(Msg),
+                                  Hdr = get_msg_header(Msg),
                                   Cmd = maps:get(Idx, Lookup),
                                   %% ensure header delivery count
                                   %% is copied to the message container
-                                  annotate_msg(H, rabbit_fifo:get_msg(Cmd))
-                              end || ?MSG(Idx, H) <- Msgs0],
+                                  annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd))
+                              end || Msg <- Msgs0],
                       [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
               end},
     {State, 0, [Effect]};
@@ -3309,13 +3357,13 @@ discard_or_dead_letter(Msgs, Reason, at_least_once, State0)
     RetainedBytes = lists:foldl(fun (M, Acc) ->
                                         Acc + size_in_bytes(M) + ?ENQ_OVERHEAD
                                 end, 0, Msgs),
-    State = lists:foldl(fun(?MSG(Idx, _) = Msg,
-                            #?DLX{discards = D0,
-                                  msg_bytes = B0,
-                                  ra_indexes = I0} = S0) ->
+    State = lists:foldl(fun(Msg, #?DLX{discards = D0,
+                                       msg_bytes = B0,
+                                       ra_indexes = I0} = S0) ->
                                 MsgSize = size_in_bytes(Msg),
                                 D = lqueue:in(?TUPLE(Reason, Msg), D0),
                                 B = B0 + MsgSize,
+                                Idx = get_msg_idx(Msg),
                                 I = rabbit_fifo_index:append(Idx, I0),
                                 S0#?DLX{discards = D,
                                         msg_bytes = B,
@@ -3335,8 +3383,10 @@ dlx_checkout(at_least_once, #?DLX{consumer = #dlx_consumer{}} = State) ->
 dlx_checkout(_, State) ->
     {State, []}.
 
-dlx_checkout0({success, MsgId, ?TUPLE(Reason, ?MSG(Idx, H)), State}, SendAcc) ->
-    DelMsg = {Idx, {Reason, H, MsgId}},
+dlx_checkout0({success, MsgId, ?TUPLE(Reason, Msg), State}, SendAcc) ->
+    Idx = get_msg_idx(Msg),
+    Hdr = get_msg_header(Msg),
+    DelMsg = {Idx, {Reason, Hdr, MsgId}},
     dlx_checkout0(dlx_checkout_one(State), [DelMsg | SendAcc]);
 dlx_checkout0(#?DLX{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
     Effects = dlx_delivery_effects(Pid, SendAcc),
@@ -3347,19 +3397,19 @@ dlx_checkout_one(#?DLX{consumer = #dlx_consumer{checked_out = Checked,
   when map_size(Checked) >= Prefetch ->
     State;
 dlx_checkout_one(#?DLX{discards = Discards0,
-                      msg_bytes = Bytes,
-                      msg_bytes_checkout = BytesCheckout,
-                      consumer = #dlx_consumer{checked_out = Checked0,
-                                               next_msg_id = Next} = Con0} = State0) ->
+                       msg_bytes = Bytes,
+                       msg_bytes_checkout = BytesCheckout,
+                       consumer = #dlx_consumer{checked_out = Checked0,
+                                                next_msg_id = Next} = Con0} = State0) ->
     case lqueue:out(Discards0) of
         {{value, ?TUPLE(_, Msg) = ReasonMsg}, Discards} ->
             Checked = maps:put(Next, ReasonMsg, Checked0),
             Size = size_in_bytes(Msg),
             State = State0#?DLX{discards = Discards,
-                                   msg_bytes = Bytes - Size,
-                                   msg_bytes_checkout = BytesCheckout + Size,
-                                   consumer = Con0#dlx_consumer{checked_out = Checked,
-                                                                next_msg_id = Next + 1}},
+                                msg_bytes = Bytes - Size,
+                                msg_bytes_checkout = BytesCheckout + Size,
+                                consumer = Con0#dlx_consumer{checked_out = Checked,
+                                                             next_msg_id = Next + 1}},
             {success, Next, ReasonMsg, State};
         {empty, _} ->
             State0
@@ -3375,7 +3425,7 @@ dlx_delivery_effects(CPid, Msgs0) ->
               Msgs = lists:zipwith(
                        fun (Cmd, {Reason, H, MsgId}) ->
                                {MsgId, {Reason,
-                                        annotate_msg(H, rabbit_fifo:get_msg(Cmd))}}
+                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
                        end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].

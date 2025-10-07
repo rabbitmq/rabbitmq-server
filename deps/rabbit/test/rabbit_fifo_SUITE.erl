@@ -2880,10 +2880,12 @@ queue_ttl_with_single_active_consumer_test(Config) ->
 query_peek_test(Config) ->
     State0 = test_init(test),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(1, State0)),
+
     {State1, _} = enq(Config, 1, 1, first, State0),
-    {State2, _} = enq(Config, 2, 2, second, State1),
     ?assertMatch({ok, [1 | _]}, rabbit_fifo:query_peek(1, State1)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(2, State1)),
+
+    {State2, _} = enq(Config, 2, 2, second, State1),
     ?assertMatch({ok, [1 | _]}, rabbit_fifo:query_peek(1, State2)),
     ?assertMatch({ok, [2 | _]}, rabbit_fifo:query_peek(2, State2)),
     ?assertEqual({error, no_message_at_pos}, rabbit_fifo:query_peek(3, State2)),
