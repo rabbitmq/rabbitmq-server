@@ -158,8 +158,11 @@ end_per_testcase(Testcase, Config) ->
     delete_queue(Ch, ?config(target_queue_6, Config)),
     #'exchange.delete_ok'{} = amqp_channel:call(Ch, #'exchange.delete'{exchange = ?config(dead_letter_exchange, Config)}),
 
-    DlxWorkers = rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children, [rabbit_fifo_dlx_sup]),
-    ?assert(lists:all(fun(L) -> L =:= [] end, DlxWorkers)),
+    DlxWorkersFun = fun () ->
+                            rabbit_ct_broker_helpers:rpc_all(Config, supervisor, which_children,
+                                                             [rabbit_fifo_dlx_sup])
+                    end,
+    eventually(?_assert(lists:all(fun(L) -> L =:= [] end, DlxWorkersFun()))),
 
     Config1 = rabbit_ct_helpers:run_steps(
                 Config,
@@ -802,10 +805,12 @@ target_quorum_queue_delete_create(Config) ->
     %% Expect no message to get stuck in dlx worker.
     wait_for_min_messages(Config, TargetQ, 200),
     eventually(?_assertMatch([{0, _}],
-                             dirty_query([Server], ra_name(SourceQ), fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
+                             dirty_query([Server], ra_name(SourceQ),
+                                         fun rabbit_fifo:query_stat_dlx/1)), 500, 10),
     ?assertEqual(300, counted(messages_dead_lettered_expired_total, Config)),
     ?assertEqual(300, counted(messages_dead_lettered_confirmed_total, Config)),
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}).
+    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = TargetQ}),
+    ok.
 
 %% Test that
 %% 1. Message is only acked to source queue once publisher confirms got received from **all** target queues.
