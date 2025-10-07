@@ -85,10 +85,10 @@ from_lqueue(LQ) ->
 -spec indexes(state()) -> [ra:index()].
 indexes(#?MODULE{hi = {Hi1, Hi2},
                  no = {No1, No2}}) ->
-    A = lists:map(fun (?MSG(I, _)) -> I end, Hi1),
-    B = lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, A, Hi2),
-    C = lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, B, No1),
-    lists:foldl(fun (?MSG(I, _), Acc) -> [I | Acc] end, C, No2).
+    A = lists:map(fun msg_idx/1, Hi1),
+    B = lists:foldl(fun msg_idx_fld/2, A, Hi2),
+    C = lists:foldl(fun msg_idx_fld/2, B, No1),
+    lists:foldl(fun msg_idx_fld/2, C, No2).
 
 -spec get_lowest_index(state()) -> undefined | ra:index().
 get_lowest_index(#?MODULE{len = 0}) ->
@@ -96,14 +96,14 @@ get_lowest_index(#?MODULE{len = 0}) ->
 get_lowest_index(#?MODULE{hi = Hi, no = No}) ->
     case peek(Hi) of
         empty ->
-            ?MSG(NoIdx, _) = peek(No),
-            NoIdx;
-        ?MSG(HiIdx, _) ->
+            msg_idx(peek(No));
+        HiMsg ->
+            HiIdx = msg_idx(HiMsg),
             case peek(No) of
-                ?MSG(NoIdx, _) ->
-                    min(HiIdx, NoIdx);
                 empty ->
-                    HiIdx
+                    HiIdx;
+                NoMsg ->
+                    min(HiIdx, msg_idx(NoMsg))
             end
     end.
 
@@ -128,8 +128,10 @@ overview(#?MODULE{len = Len,
 next(#?MODULE{hi = ?NON_EMPTY = Hi,
               no = ?NON_EMPTY = No,
               dequeue_counter = ?WEIGHT}) ->
-    ?MSG(HiIdx, _) = HiMsg = peek(Hi),
-    ?MSG(NoIdx, _) = NoMsg = peek(No),
+    HiMsg = peek(Hi),
+    NoMsg = peek(No),
+    HiIdx = msg_idx(HiMsg),
+    NoIdx = msg_idx(NoMsg),
     %% always favour hi priority messages when it is safe to do so,
     %% i.e. the index is lower than the next index for the 'no' queue
     case HiIdx < NoIdx of
@@ -159,3 +161,11 @@ drop({In, [_]}) ->
     {[], lists:reverse(In)};
 drop({In, [_ | Out]}) ->
     {In, Out}.
+
+msg_idx_fld(Msg, Acc) when is_list(Acc) ->
+    [msg_idx(Msg) | Acc].
+
+msg_idx(?MSG(Idx, _Header)) ->
+    Idx;
+msg_idx(Packed) when ?IS_PACKED(Packed) ->
+    ?PACKED_IDX(Packed).
