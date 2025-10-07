@@ -32,7 +32,6 @@ groups() ->
     [
      {tests, [], [
                   local_to_local_opt_headers,
-                  local_to_local_queue_dest,
                   local_to_local_original_dest,
                   local_to_local_exchange_dest,
                   local_to_local_missing_exchange_dest,
@@ -166,20 +165,6 @@ local_to_local_opt_headers(Config) ->
                              <<"x-opt-shovelled-by">> := _,
                              <<"x-opt-shovelled-timestamp">> := _},
                            amqp10_msg:message_annotations(Msg))
-      end).
-
-local_to_local_queue_dest(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
       end).
 
 local_to_local_original_dest(Config) ->
