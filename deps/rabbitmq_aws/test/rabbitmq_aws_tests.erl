@@ -46,7 +46,13 @@ init_test_() ->
         ]}.
 
 terminate_test() ->
-    ?assertEqual(ok, rabbitmq_aws:terminate(foo, bar)).
+    ?assertEqual(
+        ok,
+        rabbitmq_aws:terminate(
+            foo,
+            {state, undefined, undefined, undefined, undefined, "us-west-3", undefined, test_result}
+        )
+    ).
 
 code_change_test() ->
     ?assertEqual({ok, {state, denial}}, rabbitmq_aws:code_change(foo, bar, {state, denial})).
@@ -133,9 +139,11 @@ format_response_test_() ->
         {"ok", fun() ->
             Response =
                 {ok, {
-                    {"HTTP/1.1", 200, "Ok"}, [{"Content-Type", "text/xml"}], "<test>Value</test>"
+                    {"HTTP/1.1", 200, "Ok"},
+                    [{<<"Content-Type">>, <<"text/xml">>}],
+                    "<test>Value</test>"
                 }},
-            Expectation = {ok, {[{"Content-Type", "text/xml"}], [{"test", "Value"}]}},
+            Expectation = {ok, {[{<<"Content-Type">>, <<"text/xml">>}], [{"test", "Value"}]}},
             ?assertEqual(Expectation, rabbitmq_aws:format_response(Response))
         end},
         {"error", fun() ->
@@ -161,8 +169,8 @@ gen_server_call_test_() ->
             os:putenv("AWS_DEFAULT_REGION", "us-west-3"),
             os:putenv("AWS_ACCESS_KEY_ID", "Sésame"),
             os:putenv("AWS_SECRET_ACCESS_KEY", "ouvre-toi"),
-            meck:new(httpc, []),
-            [httpc]
+            meck:new(gun, []),
+            [gun]
         end,
         fun(Mods) ->
             meck:unload(Mods),
@@ -186,31 +194,41 @@ gen_server_call_test_() ->
                     Body = "",
                     Options = [],
                     Host = undefined,
+                    meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
+                    meck:expect(gun, close, fun(_) -> ok end),
+                    meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
                     meck:expect(
-                        httpc,
-                        request,
-                        fun(
-                            get,
-                            {"https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
-                                _Headers},
-                            _Options,
-                            []
-                        ) ->
-                            {ok, {
-                                {"HTTP/1.0", 200, "OK"},
-                                [{"content-type", "application/json"}],
-                                "{\"pass\": true}"
-                            }}
+                        gun,
+                        get,
+                        fun(_Pid, _Path, _Headers) -> nofin end
+                    ),
+                    %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
+                    %% end),
+                    meck:expect(
+                        gun,
+                        await,
+                        fun(_Pid, _, _) ->
+                            {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}
                         end
                     ),
+                    meck:expect(
+                        gun,
+                        await_body,
+                        fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end
+                    ),
+
+                    %%     {ok, {{"HTTP/1.0", 200, "OK"}, [{"content-type", "application/json"}],  "{\"pass\": true}"}}
+                    %% end),
                     Expectation =
-                        {reply, {ok, {[{"content-type", "application/json"}], [{"pass", true}]}},
+                        {reply,
+                            {ok,
+                                {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
                             State},
                     Result = rabbitmq_aws:handle_call(
                         {request, Service, Method, Headers, Path, Body, Options, Host}, eunit, State
                     ),
                     ?assertEqual(Expectation, Result),
-                    meck:validate(httpc)
+                    meck:validate(gun)
                 end
             },
             {
@@ -388,9 +406,9 @@ perform_request_test_() ->
     {
         foreach,
         fun() ->
-            meck:new(httpc, []),
+            meck:new(gun, []),
             meck:new(rabbitmq_aws_config, []),
-            [httpc, rabbitmq_aws_config]
+            [gun, rabbitmq_aws_config]
         end,
         fun meck:unload/1,
         [
@@ -411,33 +429,37 @@ perform_request_test_() ->
                     Host = undefined,
                     ExpectURI =
                         "https://ec2.us-east-1.amazonaws.com/?Action=DescribeTags&Version=2015-10-01",
+                    meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
+                    meck:expect(gun, close, fun(_) -> ok end),
+                    meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
+
                     meck:expect(
-                        httpc,
-                        request,
-                        fun(get, {URI, _Headers}, _Options, []) ->
-                            case URI of
-                                ExpectURI ->
-                                    {ok, {
-                                        {"HTTP/1.0", 200, "OK"},
-                                        [{"content-type", "application/json"}],
-                                        "{\"pass\": true}"
-                                    }};
-                                _ ->
-                                    {ok,
-                                        {{"HTTP/1.0", 400, "RequestFailure",
-                                            [{"content-type", "application/json"}],
-                                            "{\"pass\": false}"}}}
-                            end
+                        gun,
+                        get,
+                        fun(_Pid, "/?Action=DescribeTags&Version=2015-10-01", _Headers) -> nofin end
+                    ),
+                    meck:expect(
+                        gun,
+                        await,
+                        fun(_Pid, _, _) ->
+                            {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}
                         end
                     ),
+                    meck:expect(
+                        gun,
+                        await_body,
+                        fun(_Pid, _, _) -> {ok, <<"{\"pass\": true}">>} end
+                    ),
+
                     Expectation = {
-                        {ok, {[{"content-type", "application/json"}], [{"pass", true}]}}, State
+                        {ok, {[{<<"content-type">>, <<"application/json">>}], [{"pass", true}]}},
+                        State
                     },
                     Result = rabbitmq_aws:perform_request(
                         State, Service, Method, Headers, Path, Body, Options, Host
                     ),
                     ?assertEqual(Expectation, Result),
-                    meck:validate(httpc)
+                    meck:validate(gun)
                 end
             },
             {
@@ -451,19 +473,11 @@ perform_request_test_() ->
                     Body = "",
                     Options = [],
                     Host = undefined,
-                    meck:expect(httpc, request, fun(get, {_URI, _Headers}, _Options, []) ->
-                        {ok, {
-                            {"HTTP/1.0", 400, "RequestFailure"},
-                            [{"content-type", "application/json"}],
-                            "{\"pass\": false}"
-                        }}
-                    end),
                     Expectation = {{error, {credentials, State#state.error}}, State},
                     Result = rabbitmq_aws:perform_request(
                         State, Service, Method, Headers, Path, Body, Options, Host
                     ),
-                    ?assertEqual(Expectation, Result),
-                    meck:validate(httpc)
+                    ?assertEqual(Expectation, Result)
                 end
             },
             {
@@ -554,9 +568,9 @@ api_get_request_test_() ->
     {
         foreach,
         fun() ->
-            meck:new(httpc, []),
+            meck:new(gun, []),
             meck:new(rabbitmq_aws_config, []),
-            [httpc, rabbitmq_aws_config]
+            [gun, rabbitmq_aws_config]
         end,
         fun meck:unload/1,
         [
@@ -567,23 +581,34 @@ api_get_request_test_() ->
                     region = "us-east-1",
                     expiration = {{3016, 4, 1}, {12, 0, 0}}
                 },
+                meck:expect(gun, open, fun(_, _, _) -> {ok, pid} end),
+                meck:expect(gun, close, fun(_) -> ok end),
+                meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
                 meck:expect(
-                    httpc,
-                    request,
-                    4,
-                    {ok, {
-                        {"HTTP/1.0", 200, "OK"},
-                        [{"content-type", "application/json"}],
-                        "{\"data\": \"value\"}"
-                    }}
+                    gun,
+                    get,
+                    fun(_Pid, _Path, _Headers) -> nofin end
                 ),
+                meck:expect(
+                    gun,
+                    await,
+                    fun(_Pid, _, _) ->
+                        {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}
+                    end
+                ),
+                meck:expect(
+                    gun,
+                    await_body,
+                    fun(_Pid, _, _) -> {ok, <<"{\"data\": \"value\"}">>} end
+                ),
+
                 {ok, Pid} = rabbitmq_aws:start_link(),
                 rabbitmq_aws:set_region("us-east-1"),
                 rabbitmq_aws:set_credentials(State),
                 Result = rabbitmq_aws:api_get_request("AWS", "API"),
                 ok = gen_server:stop(Pid),
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
-                meck:validate(httpc)
+                meck:validate(gun)
             end},
             {"AWS service API request failed - credentials", fun() ->
                 meck:expect(rabbitmq_aws_config, credentials, 0, {error, undefined}),
@@ -600,14 +625,27 @@ api_get_request_test_() ->
                     region = "us-east-1",
                     expiration = {{3016, 4, 1}, {12, 0, 0}}
                 },
-                meck:expect(httpc, request, 4, {error, "network error"}),
+                meck:expect(gun, open, fun(_, _, _) -> {ok, spawn(fun() -> ok end)} end),
+                meck:expect(gun, close, fun(_) -> ok end),
+                meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
+                meck:expect(
+                    gun,
+                    get,
+                    fun(_Pid, _Path, _Headers) -> nofin end
+                ),
+                meck:expect(
+                    gun,
+                    await,
+                    fun(_Pid, _, _) -> {error, "network error"} end
+                ),
+
                 {ok, Pid} = rabbitmq_aws:start_link(),
                 rabbitmq_aws:set_region("us-east-1"),
                 rabbitmq_aws:set_credentials(State),
                 Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
                 ok = gen_server:stop(Pid),
                 ?assertEqual({error, "AWS service is unavailable"}, Result),
-                meck:validate(httpc)
+                meck:validate(gun)
             end},
             {"AWS service API request succeeded after a transient error", fun() ->
                 State = #state{
@@ -616,22 +654,35 @@ api_get_request_test_() ->
                     region = "us-east-1",
                     expiration = {{3016, 4, 1}, {12, 0, 0}}
                 },
+                meck:expect(gun, open, fun(_, _, _) -> {ok, spawn(fun() -> ok end)} end),
+                meck:expect(gun, close, fun(_) -> ok end),
+                meck:expect(gun, await_up, fun(_, _) -> {ok, protocol} end),
                 meck:expect(
-                    httpc,
-                    request,
-                    4,
+                    gun,
+                    get,
+                    fun(_Pid, _Path, _Headers) -> nofin end
+                ),
+
+                %% meck:expect(gun, get, 3, meck:seq(
+                %%             fun(_Pid, _Path, _Headers) -> {error, "network errors"} end),
+                meck:expect(
+                    gun,
+                    await,
+                    3,
                     meck:seq([
                         {error, "network error"},
-                        {ok, {
-                            {"HTTP/1.0", 500, "OK"},
-                            [{"content-type", "application/json"}],
-                            "{\"error\": \"server error\"}"
-                        }},
-                        {ok, {
-                            {"HTTP/1.0", 200, "OK"},
-                            [{"content-type", "application/json"}],
-                            "{\"data\": \"value\"}"
-                        }}
+                        {response, nofin, 500, [{<<"content-type">>, <<"application/json">>}]},
+                        {response, nofin, 200, [{<<"content-type">>, <<"application/json">>}]}
+                    ])
+                ),
+
+                meck:expect(
+                    gun,
+                    await_body,
+                    3,
+                    meck:seq([
+                        {ok, <<"{\"error\": \"server error\"}">>},
+                        {ok, <<"{\"data\": \"value\"}">>}
                     ])
                 ),
                 {ok, Pid} = rabbitmq_aws:start_link(),
@@ -640,7 +691,7 @@ api_get_request_test_() ->
                 Result = rabbitmq_aws:api_get_request_with_retries("AWS", "API", 3, 1),
                 ok = gen_server:stop(Pid),
                 ?assertEqual({ok, [{"data", "value"}]}, Result),
-                meck:validate(httpc)
+                meck:validate(gun)
             end}
         ]
     }.

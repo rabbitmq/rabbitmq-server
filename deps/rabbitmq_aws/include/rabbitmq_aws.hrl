@@ -103,7 +103,7 @@
 -type value() :: string().
 -type header() :: {Field :: field(), Value :: value()}.
 -type headers() :: [header()].
--type body() :: string() | binary().
+-type body() :: iodata().
 
 -type ssl_options() :: [ssl:tls_client_option()].
 
