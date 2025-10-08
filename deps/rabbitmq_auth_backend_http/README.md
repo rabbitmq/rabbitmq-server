@@ -53,6 +53,7 @@ auth_http.user_path     = http://some-server/auth/user
 auth_http.vhost_path    = http://some-server/auth/vhost
 auth_http.resource_path = http://some-server/auth/resource
 auth_http.topic_path    = http://some-server/auth/topic
+auth_http.authorization_failure_disclosure = false
 ```
 
 In the [`advanced.config` format](https://www.rabbitmq.com/configure.html#advanced-config-file):
@@ -65,7 +66,8 @@ In the [`advanced.config` format](https://www.rabbitmq.com/configure.html#advanc
     {user_path,     "http(s)://some-server/auth/user"},
     {vhost_path,    "http(s)://some-server/auth/vhost"},
     {resource_path, "http(s)://some-server/auth/resource"},
-    {topic_path,    "http(s)://some-server/auth/topic"}]}
+    {topic_path,    "http(s)://some-server/auth/topic"},
+    {authorization_failure_disclosure, false}]}
 ].
 ```
 
@@ -124,6 +126,8 @@ containing:
 
 * `deny`: deny access to the user / vhost / resource
 * `deny <Reason>`: deny access to the user / vhost / resource. RabbitMQ will log the `<Reason>` at INFO level.
+   If `auth_http.authorization_failure_disclosure` is set to `true` (the default is `false` for security reasons)
+   RabbitMQ will additionally forward the `<Reason>` to AMQP clients.
 * `allow`: allow access to the user / vhost / resource
 * `allow [list of tags]` (for `user_path` only): allow access, and mark the user as an having the tags listed
 

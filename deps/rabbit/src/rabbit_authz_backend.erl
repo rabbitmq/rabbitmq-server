@@ -32,38 +32,41 @@
 %% Possible responses:
 %% true
 %% false
+%% {false, Reason}
 %% {error, Error}
 %%     Something went wrong. Log and die.
 -callback check_vhost_access(AuthUser :: rabbit_types:auth_user(),
                              VHost :: rabbit_types:vhost(),
                              AuthzData :: rabbit_types:authz_data()) ->
-    boolean() | {'error', any()}.
+    boolean() | {false, Reason :: string()} | {'error', any()}.
 
 %% Given #auth_user, resource and permission, can a user access a resource?
 %%
 %% Possible responses:
 %% true
 %% false
+%% {false, Reason}
 %% {error, Error}
 %%     Something went wrong. Log and die.
 -callback check_resource_access(rabbit_types:auth_user(),
                                 rabbit_types:r(atom()),
                                 rabbit_types:permission_atom(),
                                 rabbit_types:authz_context()) ->
-    boolean() | {'error', any()}.
+    boolean() | {false, Reason :: string()} | {'error', any()}.
 
 %% Given #auth_user, topic as resource, permission, and context, can a user access the topic?
 %%
 %% Possible responses:
 %% true
 %% false
+%% {false, Reason}
 %% {error, Error}
 %%     Something went wrong. Log and die.
 -callback check_topic_access(rabbit_types:auth_user(),
     rabbit_types:r(atom()),
     rabbit_types:permission_atom(),
     rabbit_types:topic_access_context()) ->
-    boolean() | {'error', any()}.
+    boolean() | {false, Reason :: string()} | {'error', any()}.
 
 %% Updates backend state that has expired.
 %%

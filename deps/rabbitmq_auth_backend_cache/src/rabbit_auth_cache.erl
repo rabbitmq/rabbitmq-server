@@ -18,7 +18,7 @@
 -callback clear() -> ok.
 
 expiration(TTL) ->
-    erlang:system_time(milli_seconds) + TTL.
+    erlang:system_time(millisecond) + TTL.
 
 expired(Exp) ->
-    erlang:system_time(milli_seconds) > Exp.
+    erlang:system_time(millisecond) > Exp.

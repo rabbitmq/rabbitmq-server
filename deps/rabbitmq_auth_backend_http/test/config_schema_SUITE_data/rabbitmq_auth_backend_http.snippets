@@ -3,13 +3,15 @@
    auth_http.http_method   = post
    auth_http.user_path     = http://some-server/auth/user
    auth_http.vhost_path    = http://some-server/auth/vhost
-   auth_http.resource_path = http://some-server/auth/resource",
+   auth_http.resource_path = http://some-server/auth/resource
+   auth_http.authorization_failure_disclosure = true",
   [{rabbit,[{auth_backends,[rabbit_auth_backend_http]}]},
    {rabbitmq_auth_backend_http,
     [{http_method, post},
      {user_path,"http://some-server/auth/user"},
      {vhost_path,"http://some-server/auth/vhost"},
-     {resource_path,"http://some-server/auth/resource"}]}],
+     {resource_path,"http://some-server/auth/resource"},
+     {authorization_failure_disclosure, true}]}],
   [rabbitmq_auth_backend_http]},
  {default_http_method,
   "auth_backends.1        = http

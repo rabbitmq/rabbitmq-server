@@ -36,36 +36,33 @@ user_login_authorization(Username, AuthProps) ->
         end).
 
 check_vhost_access(#auth_user{} = AuthUser, VHostPath, AuthzData) ->
-    with_cache(authz, {check_vhost_access, [AuthUser, VHostPath, AuthzData]},
-        fun(true)  -> success;
-           (false) -> refusal;
-           ({error, _} = Err) -> Err;
-           (_)                -> unknown
-        end).
+    with_cache(authz,
+               {check_vhost_access, [AuthUser, VHostPath, AuthzData]},
+               fun convert_backend_result/1).
 
 check_resource_access(#auth_user{} = AuthUser,
                       #resource{} = Resource, Permission, AuthzContext) ->
-    with_cache(authz, {check_resource_access, [AuthUser, Resource, Permission, AuthzContext]},
-        fun(true)  -> success;
-           (false) -> refusal;
-           ({error, _} = Err) -> Err;
-           (_)                -> unknown
-        end).
+    with_cache(authz,
+               {check_resource_access, [AuthUser, Resource, Permission, AuthzContext]},
+               fun convert_backend_result/1).
 
 check_topic_access(#auth_user{} = AuthUser,
                    #resource{} = Resource, Permission, Context) ->
-    with_cache(authz, {check_topic_access, [AuthUser, Resource, Permission, Context]},
-        fun(true)  -> success;
-            (false) -> refusal;
-            ({error, _} = Err) -> Err;
-            (_)                -> unknown
-        end).
+    with_cache(authz,
+               {check_topic_access, [AuthUser, Resource, Permission, Context]},
+               fun convert_backend_result/1).
 
 expiry_timestamp(_) -> never.
 
 %%
 %% Implementation
 %%
+
+convert_backend_result(true) -> success;
+convert_backend_result(false) -> refusal;
+convert_backend_result({false, _}) -> refusal;
+convert_backend_result({error, _} = Err) -> Err;
+convert_backend_result(_) -> unknown.
 
 clear_cache_cluster_wide() ->
     Nodes = rabbit_nodes:list_running(),

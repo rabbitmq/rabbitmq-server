@@ -361,6 +361,10 @@ check_access(Fun, Module, ErrStr, ErrArgs, ErrName) ->
             ok;
         false ->
             rabbit_misc:protocol_error(ErrName, ErrStr, ErrArgs);
+        {false, Reason} ->
+            FullErrStr = ErrStr ++ " by backend ~ts: ~ts",
+            FullErrArgs = ErrArgs ++ [Module, Reason],
+            rabbit_misc:protocol_error(ErrName, FullErrStr, FullErrArgs);
         {error, E}  ->
             FullErrStr = ErrStr ++ ", backend ~ts returned an error: ~tp",
             FullErrArgs = ErrArgs ++ [Module, E],
