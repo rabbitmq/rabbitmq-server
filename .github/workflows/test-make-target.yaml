@@ -25,6 +25,14 @@ on:
       plugin:
         required: true
         type: string
+      # in almost all cases this should not be set and the ref that triggered
+      # the workflow will be used. however, mixed version tests for skip-version
+      # upgrades (eg. 3.13->4.2) need this because they run on scheduled
+      # and scheduled workflows get `main` as ref
+      ref:
+        required: false
+        type: string
+        description: 'Git ref (branch, tag, or SHA) to checkout'
 jobs:
   test:
     name: ${{ inputs.plugin }} (${{ inputs.make_target }})
@@ -33,6 +41,8 @@ jobs:
     steps:
     - name: CHECKOUT REPOSITORY
       uses: actions/checkout@v5
+      with:
+        ref: ${{ inputs.ref }}
 
     - name: FETCH TAGS
       run: git fetch --tags

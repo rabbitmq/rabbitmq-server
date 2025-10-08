@@ -28,3 +28,4 @@ jobs:
       previous_version: 'tags/v3.13.7'
       metadata_store: ${{ matrix.metadata_store }}
       mixed_clusters: true
+      ref: 'v4.2.x'
