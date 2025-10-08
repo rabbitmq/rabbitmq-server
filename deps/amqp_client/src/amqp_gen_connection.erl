@@ -31,6 +31,7 @@
                 server_properties,
                 %% connection.block, connection.unblock handler
                 block_handler,
+                blocked_by = sets:new([{version, 2}]),
                 closing = false %% #closing{} | false
                }).
 
@@ -199,9 +200,36 @@ handle_cast({server_misbehaved, AmqpError}, State) ->
     server_misbehaved_close(AmqpError, State);
 handle_cast({server_close, #'connection.close'{} = Close}, State) ->
     server_initiated_close(Close, State);
-handle_cast({register_blocked_handler, HandlerPid}, State) ->
+handle_cast({register_blocked_handler, HandlerPid},
+            #state{blocked_by = BlockedBy} = State) ->
     Ref = erlang:monitor(process, HandlerPid),
-    {noreply, State#state{block_handler = {HandlerPid, Ref}}}.
+    State1 = State#state{block_handler = {HandlerPid, Ref}},
+    %% If an alarm is already active, immediately block the handler.
+    _ = case sets:is_empty(BlockedBy) of
+            false ->
+                HandlerPid ! #'connection.blocked'{};
+            true ->
+                ok
+        end,
+    {noreply, State1};
+handle_cast({conserve_resources, Source, Conserve},
+            #state{blocked_by = BlockedBy} = State) ->
+    WasNotBlocked = sets:is_empty(BlockedBy),
+    BlockedBy1 = case Conserve of
+                     true ->
+                         sets:add_element(Source, BlockedBy);
+                     false ->
+                         sets:del_element(Source, BlockedBy)
+                 end,
+    State1 = State#state{blocked_by = BlockedBy1},
+    case sets:is_empty(BlockedBy1) of
+        true ->
+            handle_method(#'connection.unblocked'{}, State1);
+        false when WasNotBlocked ->
+            handle_method(#'connection.blocked'{}, State1);
+        false ->
+            {noreply, State1}
+    end.
 
 %% @private
 handle_info({'DOWN', _, process, BlockHandler, Reason},
