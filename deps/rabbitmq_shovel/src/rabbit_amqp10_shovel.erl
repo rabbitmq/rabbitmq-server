@@ -333,7 +333,7 @@ forward(Tag, Mc,
     State#{dest => Dst#{pending => {Pend}}};
 forward(Tag, Msg0,
         #{dest := #{current := #{link := Link},
-                    unacked := Unacked} = Dst,
+                    unacked := Unacked},
           ack_mode := AckMode} = State) ->
     OutTag = rabbit_data_coercion:to_binary(Tag),
     Msg1 = add_timestamp_header(State, add_forward_headers(State, Msg0)),
