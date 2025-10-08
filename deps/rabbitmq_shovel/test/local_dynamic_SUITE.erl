@@ -18,7 +18,7 @@
                             amqp10_expect_empty/2,
                             amqp10_publish/4, amqp10_expect_one/2,
                             amqp10_expect_count/3, amqp10_expect/3,
-                            amqp10_publish_expect/5,
+                            amqp10_publish_expect/5, amqp10_subscribe/2,
                             await_autodelete/2]).
 
 -define(PARAM, <<"test">>).
@@ -593,7 +593,7 @@ local_to_local_delete_after_with_rejections(Config) ->
     VHost = <<"/">>,
     declare_queue(Config, VHost, Dest, [{<<"x-max-length">>, long, 5},
                                         {<<"x-overflow">>, longstr, <<"reject-publish">>}]),
-    with_session(Config,
+    with_amqp10_session(Config,
       fun (Sess) ->
               shovel_test_utils:set_param(Config, ?PARAM,
                                           [{<<"src-protocol">>, <<"local">>},
@@ -603,7 +603,7 @@ local_to_local_delete_after_with_rejections(Config) ->
                                            {<<"dest-predeclared">>, true},
                                            {<<"dest-queue">>, Dest}
                                           ]),
-              publish_many(Sess, Src, Dest, <<"tag1">>, 10),
+              amqp10_publish(Sess, Src, <<"tag1">>, 10),
               ?awaitMatch(not_found, rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_runtime_parameters, lookup, [<<"/">>, <<"shovel">>, ?PARAM]), 30_000),
               Expected = lists:sort([[Src, <<"5">>], [Dest, <<"5">>]]),
               ?awaitMatch(
@@ -666,7 +666,7 @@ local_to_local_stream_no_ack(Config) ->
                                            {<<"dest-queue">>, Dest},
                                            {<<"ack-mode">>, <<"no-ack">>}
                                           ]),
-              Receiver = subscribe(Sess, Dest),
+              Receiver = amqp10_subscribe(Sess, Dest),
               amqp10_publish(Sess, Src, <<"tag1">>, 10),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 10}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -728,7 +728,7 @@ local_to_local_stream_on_confirm(Config) ->
                                            {<<"dest-queue">>, Dest},
                                            {<<"ack-mode">>, <<"on-confirm">>}
                                           ]),
-              Receiver = subscribe(Sess, Dest),
+              Receiver = amqp10_subscribe(Sess, Dest),
               amqp10_publish(Sess, Src, <<"tag1">>, 10),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 10}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -790,7 +790,7 @@ local_to_local_stream_on_publish(Config) ->
                                            {<<"dest-queue">>, Dest},
                                            {<<"ack-mode">>, <<"on-publish">>}
                                           ]),
-              Receiver = subscribe(Sess, Dest),
+              Receiver = amqp10_subscribe(Sess, Dest),
               amqp10_publish(Sess, Src, <<"tag1">>, 10),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 10}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1040,7 +1040,7 @@ local_to_local_stream_credit_flow(Config, AckMode) ->
                                            {<<"ack-mode">>, AckMode}
                                           ]),
 
-              Receiver = subscribe(Sess, Dest),
+              Receiver = amqp10_subscribe(Sess, Dest),
               amqp10_publish(Sess, Src, <<"tag1">>, 1000),
               ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1000}, _}],
                           rabbit_ct_broker_helpers:rpc(Config, 0,
@@ -1096,14 +1096,6 @@ local_to_local_counters(Config) ->
       end).
 
 %%----------------------------------------------------------------------------
-subscribe(Session, Dest) ->
-    LinkName = <<"dynamic-receiver-", Dest/binary>>,
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
-                                                        unsettled_state),
-    ok = amqp10_client:flow_link_credit(Receiver, 10, 1),
-    Receiver.
-
 declare_queue(Config, VHost, QName) ->
     declare_queue(Config, VHost, QName, []).
 
