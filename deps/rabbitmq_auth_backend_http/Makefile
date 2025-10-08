@@ -10,7 +10,8 @@ define PROJECT_ENV
 	    {user_path,     "http://localhost:8000/auth/user"},
 	    {vhost_path,    "http://localhost:8000/auth/vhost"},
 	    {resource_path, "http://localhost:8000/auth/resource"},
-	    {topic_path,    "http://localhost:8000/auth/topic"}
+	    {topic_path,    "http://localhost:8000/auth/topic"},
+	    {authorization_failure_disclosure, false}
 	  ]
 endef
 
@@ -20,7 +21,7 @@ endef
 
 LOCAL_DEPS = ssl inets crypto public_key
 DEPS = rabbit_common rabbit amqp_client
-TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers cowboy
+TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers cowboy rabbitmq_amqp_client
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

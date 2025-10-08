@@ -1609,8 +1609,9 @@ binding_action_with_checks(QName, TopicFilter, BindingArgs, Action,
                              fun rabbit_binding:Action/2, AuthState)
     else
         {error, Reason} = Err ->
-            ?LOG_ERROR("Failed to ~s binding between ~s and ~s for topic filter ~s: ~p",
-                       [Action, rabbit_misc:rs(ExchangeName), rabbit_misc:rs(QName), TopicFilter, Reason]),
+            ?LOG_ERROR(
+               "Failed to ~s binding between ~ts and ~ts for topic filter ~ts: ~tp",
+               [Action, rabbit_misc:rs(ExchangeName), rabbit_misc:rs(QName), TopicFilter, Reason]),
             Err
     end.
 
@@ -2292,7 +2293,7 @@ check_resource_access(User, Resource, Perm, Context) ->
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    ?LOG_ERROR("MQTT resource access refused: ~s", [Msg]),
+                    ?LOG_ERROR("MQTT resource access refused: ~ts", [Msg]),
                     {error, access_refused}
             end
     end.
@@ -2326,7 +2327,7 @@ check_topic_access(
             catch
                 exit:#amqp_error{name = access_refused,
                                  explanation = Msg} ->
-                    ?LOG_ERROR("MQTT topic access refused: ~s", [Msg]),
+                    ?LOG_ERROR("MQTT topic access refused: ~ts", [Msg]),
                     {error, access_refused}
             end
     end.

@@ -25,6 +25,8 @@
 
 -define(SUCCESSFUL_RESPONSE_CODES, [200, 201]).
 
+-define(APP, rabbitmq_auth_backend_http).
+
 %%--------------------------------------------------------------------
 
 description() ->
@@ -37,7 +39,7 @@ user_login_authentication(Username, AuthProps) ->
     Path = p(user_path),
     Query = q([{username, Username}] ++ extract_other_credentials(AuthProps)),
     case http_req(Path, Query) of
-        {error, _} = Err  ->
+        {error, _} = Err ->
             Err;
         "deny " ++ Reason ->
             ?LOG_INFO("HTTP authentication denied for user '~ts': ~ts",
@@ -53,7 +55,9 @@ user_login_authentication(Username, AuthProps) ->
                     {ok, #auth_user{
                             username = Username,
                             tags = Tags,
-                            impl = fun() -> proplists:delete(username, AuthProps) end}}
+                            impl = fun() -> proplists:delete(username, AuthProps) end}};
+                Other ->
+                    {error, {bad_response, Other}}
             end
     end.
 
@@ -120,34 +124,34 @@ check_vhost_access(#auth_user{username = Username, tags = Tags}, VHost,
 
 do_check_vhost_access(Username, Tags, VHost, Ip, AuthzData) ->
     OptionsParameters = context_as_parameters(AuthzData),
-    bool_req(vhost_path, [{username, Username},
-                          {vhost,    VHost},
-                          {ip,       Ip},
-                          {tags,     join_tags(Tags)}] ++ OptionsParameters).
+    req(vhost_path, [{username, Username},
+                     {vhost,    VHost},
+                     {ip,       Ip},
+                     {tags,     join_tags(Tags)}] ++ OptionsParameters).
 
 check_resource_access(#auth_user{username = Username, tags = Tags},
                       #resource{virtual_host = VHost, kind = Type, name = Name},
                       Permission,
                       AuthzContext) ->
     OptionsParameters = context_as_parameters(AuthzContext),
-    bool_req(resource_path, [{username,   Username},
-                             {vhost,      VHost},
-                             {resource,   Type},
-                             {name,       Name},
-                             {permission, Permission},
-                             {tags, join_tags(Tags)}] ++ OptionsParameters).
+    req(resource_path, [{username,   Username},
+                        {vhost,      VHost},
+                        {resource,   Type},
+                        {name,       Name},
+                        {permission, Permission},
+                        {tags, join_tags(Tags)}] ++ OptionsParameters).
 
 check_topic_access(#auth_user{username = Username, tags = Tags},
                    #resource{virtual_host = VHost, kind = topic = Type, name = Name},
                    Permission,
                    Context) ->
     OptionsParameters = context_as_parameters(Context),
-    bool_req(topic_path, [{username,   Username},
-        {vhost,      VHost},
-        {resource,   Type},
-        {name,       Name},
-        {permission, Permission},
-        {tags, join_tags(Tags)}] ++ OptionsParameters).
+    req(topic_path, [{username,   Username},
+                     {vhost,      VHost},
+                     {resource,   Type},
+                     {name,       Name},
+                     {permission, Permission},
+                     {tags, join_tags(Tags)}] ++ OptionsParameters).
 
 expiry_timestamp(_) -> never.
 
@@ -163,16 +167,21 @@ context_as_parameters(Options) when is_map(Options) ->
 context_as_parameters(_) ->
     [].
 
-bool_req(PathName, Props) ->
+req(PathName, Props) ->
     Path = p(PathName),
     Query = q(Props),
     case http_req(Path, Query) of
         {error, _} = Err ->
             Err;
         "deny " ++ Reason ->
-            ?LOG_INFO("HTTP authorisation denied for path ~ts with query ~ts: ~ts",
+            ?LOG_INFO("HTTP authorization denied for path ~ts with query '~ts': ~ts",
                       [Path, Query, Reason]),
-            false;
+            case application:get_env(?APP, authorization_failure_disclosure) of
+                {ok, true} ->
+                    {false, Reason};
+                _ ->
+                    false
+            end;
         Body ->
             case string:lowercase(Body) of
                 "deny" ->
@@ -201,7 +210,7 @@ do_http_req(Path0, Query) ->
     {host, Host} = lists:keyfind(host, 1, URI),
     {port, Port} = lists:keyfind(port, 1, URI),
     HostHdr = rabbit_misc:format("~ts:~b", [Host, Port]),
-    {ok, Method} = application:get_env(rabbitmq_auth_backend_http, http_method),
+    {ok, Method} = application:get_env(?APP, http_method),
     Request = case rabbit_data_coercion:to_atom(Method) of
         get  ->
             Path = Path0 ++ "?" ++ Query,
@@ -212,21 +221,22 @@ do_http_req(Path0, Query) ->
             {Path0, [{"Host", HostHdr}], "application/x-www-form-urlencoded", Query}
     end,
     RequestTimeout =
-        case application:get_env(rabbitmq_auth_backend_http, request_timeout) of
+        case application:get_env(?APP, request_timeout) of
             {ok, Val1} -> Val1;
             _ -> infinity
         end,
     ConnectionTimeout =
-        case application:get_env(rabbitmq_auth_backend_http, connection_timeout) of
+        case application:get_env(?APP, connection_timeout) of
             {ok, Val2} -> Val2;
             _ -> RequestTimeout
         end,
     ?LOG_DEBUG("auth_backend_http: request timeout: ~tp, connection timeout: ~tp", [RequestTimeout, ConnectionTimeout]),
     HttpOpts = [{timeout, RequestTimeout},
                 {connect_timeout, ConnectionTimeout}] ++ ssl_options(),
-    case httpc:request(Method, Request, HttpOpts, []) of
-        {ok, {{_HTTP, Code, _}, _Headers, Body}} ->
-            ?LOG_DEBUG("auth_backend_http: response code is ~tp, body: ~tp", [Code, Body]),
+    case httpc:request(Method, Request, HttpOpts, [{body_format, binary}]) of
+        {ok, {{_HTTP, Code, _}, _Headers, BodyBin}} ->
+            Body = unicode:characters_to_list(BodyBin),
+            ?LOG_DEBUG("auth_backend_http: response code is ~tp, body: '~ts'", [Code, Body]),
             case lists:member(Code, ?SUCCESSFUL_RESPONSE_CODES) of
                 true ->
                     string:strip(Body);
@@ -238,10 +248,10 @@ do_http_req(Path0, Query) ->
     end.
 
 ssl_options() ->
-    case application:get_env(rabbitmq_auth_backend_http, ssl_options) of
+    case application:get_env(?APP, ssl_options) of
         {ok, Opts0} when is_list(Opts0) ->
             Opts1 = [{ssl, rabbit_ssl_options:fix_client(Opts0)}],
-            case application:get_env(rabbitmq_auth_backend_http, ssl_hostname_verification) of
+            case application:get_env(?APP, ssl_hostname_verification) of
                 {ok, wildcard} ->
                     ?LOG_DEBUG("Enabling wildcard-aware hostname verification for HTTP client connections"),
                     %% Needed for HTTPS connections that connect to servers that use wildcard certificates.
@@ -254,7 +264,7 @@ ssl_options() ->
     end.
 
 p(PathName) ->
-    {ok, Path} = application:get_env(rabbitmq_auth_backend_http, PathName),
+    {ok, Path} = application:get_env(?APP, PathName),
     Path.
 
 q(Args) ->
