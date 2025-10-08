@@ -240,19 +240,29 @@ maybe_cleanup(State, UnreachableNodes) ->
     ?LOG_DEBUG(
        "Peer discovery: cleanup discovered unreachable nodes: ~tp",
        [UnreachableNodes]),
-    case lists:subtract(as_list(UnreachableNodes), as_list(service_discovery_nodes())) of
-        [] ->
-            ?LOG_DEBUG(
-               "Peer discovery: all unreachable nodes are still "
-               "registered with the discovery backend ~tp",
-               [rabbit_peer_discovery:backend()],
-               #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
-            ok;
-        Nodes ->
-            ?LOG_DEBUG(
-               "Peer discovery: unreachable nodes are not registered "
-               "with the discovery backend ~tp", [Nodes]),
-            maybe_remove_nodes(Nodes, State#state.warn_only)
+    Module = rabbit_peer_discovery:backend(),
+    case rabbit_peer_discovery:normalize(Module:list_nodes()) of
+        {ok, {OneOrMultipleNodes, _Type}} ->
+            DiscoveredNodes = as_list(OneOrMultipleNodes),
+            case lists:subtract(UnreachableNodes, DiscoveredNodes) of
+                [] ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: all unreachable nodes are still "
+                       "registered with the discovery backend ~tp",
+                       [rabbit_peer_discovery:backend()],
+                       #{domain => ?RMQLOG_DOMAIN_PEER_DISC}),
+                    ok;
+                Nodes ->
+                    ?LOG_DEBUG(
+                       "Peer discovery: unreachable nodes are not registered "
+                       "with the discovery backend ~tp", [Nodes]),
+                    maybe_remove_nodes(Nodes, State#state.warn_only)
+            end;
+        {error, Reason} ->
+            ?LOG_INFO(
+               "Peer discovery cleanup: ~tp returned error ~tp",
+               [Module, Reason]),
+            ok
     end.
 
 %%--------------------------------------------------------------------
@@ -288,26 +298,3 @@ maybe_remove_nodes([Node | Nodes], false) ->
 -spec unreachable_nodes() -> [node()].
 unreachable_nodes() ->
     rabbit_nodes:list_unreachable().
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc Return the nodes that the service discovery backend knows about
-%% @spec service_discovery_nodes() -> [node()]
-%% @end
-%%--------------------------------------------------------------------
--spec service_discovery_nodes() -> [node()].
-service_discovery_nodes() ->
-    Module = rabbit_peer_discovery:backend(),
-    case rabbit_peer_discovery:normalize(Module:list_nodes()) of
-        {ok, {OneOrMultipleNodes, _Type}} ->
-            Nodes = as_list(OneOrMultipleNodes),
-            ?LOG_DEBUG(
-               "Peer discovery cleanup: ~tp returned ~tp",
-               [Module, Nodes]),
-            Nodes;
-        {error, Reason} ->
-            ?LOG_DEBUG(
-               "Peer discovery cleanup: ~tp returned error ~tp",
-               [Module, Reason]),
-            []
-    end.
