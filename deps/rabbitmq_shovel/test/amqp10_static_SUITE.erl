@@ -146,7 +146,7 @@ amqp10_destination(Config, AckMode) ->
             ?assertMatch(#{durable := true}, amqp10_msg:headers(InMsg)),
             ok
     after ?TIMEOUT ->
-              throw(timeout_waiting_for_deliver1)
+            throw(timeout_waiting_for_deliver1)
     end,
 
     [{test_shovel, static, {running, _Info}, _Metrics, _Time}] =
