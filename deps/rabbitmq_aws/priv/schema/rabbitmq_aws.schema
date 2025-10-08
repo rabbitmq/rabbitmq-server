@@ -15,5 +15,5 @@
 %% When false, EC2 IMDSv1 will be used first and no attempt will be made to use EC2 IMDSv2.
 %% See https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html.
 
-{mapping, "aws.prefer_imdsv2", "rabbit.aws_prefer_imdsv2",
+{mapping, "aws.prefer_imdsv2", "rabbitmq_aws.aws_prefer_imdsv2",
     [{datatype, {enum, [true, false]}}]}.

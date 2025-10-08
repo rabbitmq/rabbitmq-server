@@ -30,7 +30,7 @@ headers(Request) ->
     {_, Host, _} = URI#uri.authority,
     Headers = append_headers(
         RequestTimestamp,
-        length(Request#request.body),
+        get_content_length(Request),
         PayloadHash,
         Host,
         Request#request.security_token,
@@ -313,3 +313,9 @@ string_to_sign(RequestTimestamp, RequestDate, Region, Service, RequestHash) ->
 %% @end
 sort_headers(Headers) ->
     lists:sort(fun({A, _}, {B, _}) -> string:to_lower(A) =< string:to_lower(B) end, Headers).
+
+-spec get_content_length(Request :: #request{}) -> non_neg_integer().
+get_content_length(#request{body = Body}) when is_binary(Body) ->
+    byte_size(Body);
+get_content_length(#request{body = Body}) when is_list(Body) ->
+    length(Body).
