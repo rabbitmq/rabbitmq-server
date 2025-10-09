@@ -38,8 +38,10 @@ CT_OPTS += -kernel net_ticktime 5
 #   This hook will change the output of common_test to something more
 #   concise and colored.
 
+ifndef GITHUB_ACTIONS
 CT_HOOKS += cth_styledout
 TEST_DEPS += cth_styledout
+endif
 
 ifdef CONCOURSE
 FAIL_FAST = 1
