@@ -130,7 +130,7 @@ jobs:
       if: inputs.plugin != 'rabbitmq_cli'
       run: |
         sudo netstat -ntp
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }}
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//"
 
     - name: CACHE ACTIVEMQ
       uses: actions/cache/save@v4
