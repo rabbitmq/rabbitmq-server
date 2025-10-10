@@ -556,7 +556,6 @@ untracked_enq_deq_test(Config) ->
                            State0),
     {_State2, _, Effs} =
         apply(meta(Config, 3), make_checkout(Cid, {dequeue, settled}, #{}), State1),
-        ct:pal("Effs ~p", [State1]),
     ?ASSERT_EFF({log, [1], _}, Effs),
     ok.
 
@@ -791,7 +790,6 @@ requeue_test(Config) ->
      [_Monitor, {log_ext, [1], _Fun, _}]} = checkout(Config, ?LINE, Cid, 1, State0),
 
     [{MsgId, {H1, _}}] = rabbit_fifo:get_checked_out(CKey, MsgId, MsgId, State1),
-    ct:pal("query consumers ~p", [rabbit_fifo:query_consumers(State1)]),
 
     [{append, Requeue, _}] = rabbit_fifo:make_requeue(CKey, {notify, 1, self()},
                                                       [{MsgId, 1, H1, Msg1}], []),
@@ -961,7 +959,6 @@ discarded_message_with_dead_letter_handler_emits_log_effect_test(Config) ->
 
     ?assertEqual(undefined, mc:get_annotation(acquired_count, McOut)),
     ?assertEqual(1, mc:get_annotation(delivery_count, McOut)),
-
     ok.
 
 discard_after_cancel_test(Config) ->
@@ -1910,18 +1907,18 @@ single_active_consumer_priority_test(Config) ->
     ],
     {#rabbit_fifo{ cfg = #cfg{resource = Resource}}, StateMachineEvents} = run_log(Config, S0, Entries, fun single_active_invariant/1),
     ModCalls = [ S || S = {mod_call, rabbit_quorum_queue, update_consumer_handler, _} <- StateMachineEvents ],
-    
-    %% C1 should be added as single_active    
+
+    %% C1 should be added as single_active
     assert_update_consumer_handler_state_transition(C1, Resource, true, single_active, lists:nth(1, ModCalls)),
-    %% C1 should transition to waiting because ...
-    assert_update_consumer_handler_state_transition(C1, Resource, false, waiting, lists:nth(2, ModCalls)),
     %% C2 should become single_active
-    assert_update_consumer_handler_state_transition(C2, Resource, true, single_active, lists:nth(3, ModCalls)),
-    %% C2 should transition as waiting because ...
-    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(4, ModCalls)),
+    assert_update_consumer_handler_state_transition(C2, Resource, true, single_active, lists:nth(2, ModCalls)),
+    %% C1 should transition to waiting
+    assert_update_consumer_handler_state_transition(C1, Resource, false, waiting, lists:nth(3, ModCalls)),
     %% C3 is added as single_active
-    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(5, ModCalls)),
-    
+    assert_update_consumer_handler_state_transition(C3, Resource, true, single_active, lists:nth(4, ModCalls)),
+    %% C2 should transition as waiting
+    assert_update_consumer_handler_state_transition(C2, Resource, false, waiting, lists:nth(5, ModCalls)),
+
     ok.
 
 assert_update_consumer_handler_state_transition(ConsumerId, Resource, IsActive, UpdatedState, ModCall) ->
@@ -2375,7 +2372,6 @@ reject_publish_purge_test(Config) ->
                             rabbit_fifo:make_enqueue(Pid1, 2, two), State2),
     {State4, ok, Efx} = apply(meta(Config, 4, ?LINE, {notify, 2, Pid1}),
                               rabbit_fifo:make_enqueue(Pid1, 3, three), State3),
-    % ct:pal("Efx ~tp", [Efx]),
     ?ASSERT_EFF({send_msg, P, {queue_status, reject_publish}, [ra_event]}, P == Pid1, Efx),
     {_State5, {purge, 3}, Efx1} = apply(meta(Config, 5), rabbit_fifo:make_purge(), State4),
     ?ASSERT_EFF({send_msg, P, {queue_status, go}, [ra_event]}, P == Pid1, Efx1),
