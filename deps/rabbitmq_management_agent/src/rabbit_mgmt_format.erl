@@ -284,9 +284,15 @@ listener(#listener{node = Node, protocol = Protocol,
     ].
 
 web_context(Props0) ->
-    SslOpts = pget(ssl_opts, Props0, []),
-    Props   = proplists:delete(ssl_opts, Props0),
-    [{ssl_opts, format_socket_opts(SslOpts)} | Props].
+    SslOpts0 = pget(ssl_opts, Props0, []),
+
+    % Note: cacerts is pre-formatted by cowboy, and is a very large binary
+    % at this point. This fixes up the output to not show the contents of
+    % the CA certs
+    SslOpts1 = lists:keyreplace(cacerts, 1, SslOpts0, {cacerts, truncated}),
+
+    Props1 = proplists:delete(ssl_opts, Props0),
+    [{ssl_opts, format_socket_opts(SslOpts1)} | Props1].
 
 has_tls_enabled(Opts) ->
     S = proplists:get_value(socket_opts, Opts, Opts),
@@ -318,16 +324,16 @@ format_socket_opts([{user_lookup_fun, _Value} | Tail], Acc) ->
 format_socket_opts([{sni_fun, _Value} | Tail], Acc) ->
     format_socket_opts(Tail, Acc);
 %% https://www.erlang.org/doc/apps/ssl/ssl.html#t:server_option_cert/0
-format_socket_opts([{cacerts, Cacerts} | Tail], Acc) ->
+format_socket_opts([{cacerts, Cacerts} | Tail], Acc) when is_list(Cacerts) ->
     CacertsMsg = rabbit_data_coercion:to_utf8_binary(
         io_lib:format("(~b cacerts entries)", [length(Cacerts)])),
     format_socket_opts(Tail, [{cacerts, CacertsMsg} | Acc]);
 %% https://www.erlang.org/doc/apps/ssl/ssl.html#t:common_option_cert/0
 %% https://www.erlang.org/doc/apps/ssl/ssl.html#t:cert_key_conf/0
-format_socket_opts([{certs_keys, CertsKeys} | Tail], Acc)  ->
+format_socket_opts([{certs_keys, CertsKeys} | Tail], Acc) when is_list(CertsKeys) ->
     CertsKeysMsg = rabbit_data_coercion:to_utf8_binary(
         io_lib:format("(~b certs_keys entries)", [length(CertsKeys)])),
-    format_socket_opts(Tail, [{cacerts, CertsKeysMsg} | Acc]);
+    format_socket_opts(Tail, [{certs_keys, CertsKeysMsg} | Acc]);
 %% we do not report SNI host details in the UI,
 %% so skip this option and avoid some recursive formatting
 %% complexity
