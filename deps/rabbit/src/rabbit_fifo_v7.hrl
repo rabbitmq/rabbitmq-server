@@ -21,26 +21,6 @@
 
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
-%% constants for packed msg references where both the raft index and the size
-%% is packed into a single immidate term
-%%
-%% 59 bytes as immedate ints are signed
--define(PACKED_MAX, 16#7FFF_FFFF_FFFF_FFF).
-%% index bits - enough for 2000 days at 100k indexes p/sec
--define(PACKED_IDX_BITS, 44).
--define(PACKED_IDX_MAX, 16#FFFF_FFFF_FFF).
--define(PACKED_SZ_BITS, 15). %% size
--define(PACKED_SZ_MAX, 16#7FFF). %% 15 bits
-
--define(PACK(Idx, Sz),
-        (Idx bxor (Sz bsl ?PACKED_IDX_BITS))).
--define(PACKED_IDX(PackedInt),
-        (PackedInt band ?PACKED_IDX_MAX)).
--define(PACKED_SZ(PackedInt),
-        ((PackedInt bsr 44) band 16#7FFF)).
-
--define(IS_PACKED(Int), (Int >= 0 andalso Int =< ?PACKED_MAX)).
-
 -type optimised_tuple(A, B) :: nonempty_improper_list(A, B).
 
 -type option(T) :: undefined | T.
@@ -77,10 +57,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
-%% 60 byte integer, immediate
--type packed_msg() :: 0..?PACKED_MAX.
-
--type msg() :: packed_msg() | optimised_tuple(ra:index(), msg_header()).
+-type msg() :: optimised_tuple(ra:index(), msg_header()).
 
 -type delivery_msg() :: {msg_id(), {msg_header(), raw_msg()}}.
 %% A tuple consisting of the message id, and the headered message.
@@ -128,7 +105,6 @@
 %% once these many bytes have been written since the last checkpoint
 %% we request a checkpoint irrespectively
 -define(CHECK_MAX_BYTES, 128_000_000).
--define(SNAP_OUT_BYTES, 64_000_000).
 
 -define(USE_AVG_HALF_LIFE, 10000.0).
 %% an average QQ without any message uses about 100KB so setting this limit
@@ -203,31 +179,6 @@
          unused_3 = ?NIL
         }).
 
--record(messages,
-        {
-         messages = rabbit_fifo_q:new() :: rabbit_fifo_q:state(),
-         messages_total = 0 :: non_neg_integer(),
-         % queue of returned msg_in_ids - when checking out it picks from
-         returns = lqueue:new() :: lqueue:lqueue(term())
-        }).
-
--record(dlx_consumer,
-        {pid :: pid(),
-         prefetch :: non_neg_integer(),
-         checked_out = #{} :: #{msg_id() =>
-                                optimised_tuple(rabbit_dead_letter:reason(), msg())},
-         next_msg_id = 0 :: msg_id()}).
-
--record(rabbit_fifo_dlx,
-        {consumer :: option(#dlx_consumer{}),
-         %% Queue of dead-lettered messages.
-         discards = lqueue:new() :: lqueue:lqueue(optimised_tuple(rabbit_dead_letter:reason(), msg())),
-         %% Raft indexes of messages in both discards queue and dlx_consumer's checked_out map
-         %% so that we get the smallest ra index in O(1).
-         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
-         msg_bytes = 0 :: non_neg_integer(),
-         msg_bytes_checkout = 0 :: non_neg_integer()}).
-
 -record(rabbit_fifo,
         {cfg :: #cfg{},
          % unassigned messages
@@ -235,11 +186,9 @@
          messages_total = 0 :: non_neg_integer(),
          % queue of returned msg_in_ids - when checking out it picks from
          returns = lqueue:new() :: lqueue:lqueue(term()),
-         % discareded bytes - a counter that is incremented every time a command
-         % is procesesed that does not need to be kept (live indexes).
-         % Approximate, used for triggering snapshots
+         % a counter of enqueues - used to trigger shadow copy points
          % reset to 0 when release_cursor gets stored
-         discarded_bytes = 0,
+         enqueue_count = 0 :: non_neg_integer(),
          % a map containing all the live processes that have ever enqueued
          % a message to this queue
          enqueuers = #{} :: #{pid() => #enqueuer{}},
@@ -248,21 +197,19 @@
          % rabbit_fifo_index can be slow when calculating the smallest
          % index when there are large gaps but should be faster than gb_trees
          % for normal appending operations as it's backed by a map
-         unused_0 = ?NIL,
+         ra_indexes = rabbit_fifo_index:empty() :: rabbit_fifo_index:state(),
          unused_1 = ?NIL,
          % consumers need to reflect consumer state at time of snapshot
          consumers = #{} :: #{consumer_key() => consumer()},
          % consumers that require further service are queued here
          service_queue = priority_queue:new() :: priority_queue:q(),
          %% state for at-least-once dead-lettering
-         dlx = #rabbit_fifo_dlx{} :: #rabbit_fifo_dlx{},
+         dlx = rabbit_fifo_dlx:init() :: rabbit_fifo_dlx:state(),
          msg_bytes_enqueue = 0 :: non_neg_integer(),
          msg_bytes_checkout = 0 :: non_neg_integer(),
          %% one is picked if active consumer is cancelled or dies
          %% used only when single active consumer is on
          waiting_consumers = [] :: [{consumer_key(), consumer()}],
-         %% records the timestamp whenever the queue was last considered
-         %% active in terms of consumer activity
          last_active :: option(non_neg_integer()),
          msg_cache :: option({ra:index(), raw_msg()}),
          unused_2 = ?NIL

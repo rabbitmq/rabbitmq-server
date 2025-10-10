@@ -39,13 +39,11 @@ all_tests() ->
      cancel_checkout_with_pending_using_cancel_reason,
      cancel_checkout_with_pending_using_remove_reason,
      lost_delivery,
-     credit_api_v1,
      credit_api_v2,
      untracked_enqueue,
      flow,
      test_queries,
-     duplicate_delivery,
-     usage
+     duplicate_delivery
     ].
 
 groups() ->
@@ -281,23 +279,6 @@ duplicate_delivery(Config) ->
     rabbit_quorum_queue:stop_server(ServerId),
     ok.
 
-usage(Config) ->
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init([ServerId]),
-    {ok, _, F1} = rabbit_fifo_client:checkout(<<"tag">>, {simple_prefetch, 10}, #{}, F0),
-    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, corr1, msg1, F1),
-    {ok, F3, []} = rabbit_fifo_client:enqueue(ClusterName, corr2, msg2, F2),
-    {_, _, _} = process_ra_events(receive_ra_events(2, 2), ClusterName, F3),
-    % force tick and usage stats emission
-    ServerId ! tick_timeout,
-    timer:sleep(50),
-    Use = rabbit_fifo:usage(element(1, ServerId)),
-    rabbit_quorum_queue:stop_server(ServerId),
-    ?assert(Use > 0.0),
-    ok.
-
 resends_lost_command(Config) ->
     ClusterName = ?config(cluster_name, Config),
     ServerId = ?config(node_id, Config),
@@ -524,6 +505,7 @@ discard(Config) ->
              uid => UId,
              log_init_args => #{data_dir => PrivDir, uid => UId},
              initial_member => [],
+             initial_machine_version => rabbit_fifo:version(),
              machine => {module, rabbit_fifo,
                          #{queue_resource => discard,
                            dead_letter_handler =>
@@ -653,52 +635,6 @@ lost_delivery(Config) ->
                             ?assertEqual(m2, M2),
                             S
                     end),
-    ok.
-
-credit_api_v1(Config) ->
-    meck:expect(rabbit_feature_flags, is_enabled, fun (_) -> false end),
-    ClusterName = ?config(cluster_name, Config),
-    ServerId = ?config(node_id, Config),
-    ok = start_cluster(ClusterName, [ServerId]),
-    F0 = rabbit_fifo_client:init([ServerId], 4),
-    {ok, F1, []} = rabbit_fifo_client:enqueue(ClusterName, m1, F0),
-    {ok, F2, []} = rabbit_fifo_client:enqueue(ClusterName, m2, F1),
-    {_, _, F3} = process_ra_events(receive_ra_events(2, 0), ClusterName, F2),
-    %% checkout with 0 prefetch
-    CTag = <<"my-tag">>,
-    {ok, _, F4} = rabbit_fifo_client:checkout(CTag, {credited, 0}, #{}, F3),
-    %% assert no deliveries
-    {_, _, F5} = process_ra_events(receive_ra_events(), ClusterName, F4, [], [],
-                                   fun
-                                       (D, _) -> error({unexpected_delivery, D})
-                                   end),
-    %% provide some credit
-    {F6, []} = rabbit_fifo_client:credit_v1(CTag, 1, false, F5),
-    {[{_, _, _, _, m1}], [{send_credit_reply, 1}], F7} =
-    process_ra_events(receive_ra_events(1, 1), ClusterName, F6),
-
-    %% credit and drain
-    Drain = true,
-    {F8, []} = rabbit_fifo_client:credit_v1(CTag, 4, Drain, F7),
-    AvailableAfterCheckout = 0,
-    {[{_, _, _, _, m2}],
-     [{send_credit_reply, AvailableAfterCheckout},
-      {credit_reply_v1, CTag, _CreditAfterCheckout = 3,
-       AvailableAfterCheckout, Drain}],
-     F9} = process_ra_events(receive_ra_events(2, 1), ClusterName, F8),
-    flush(),
-
-    %% enqueue another message - at this point the consumer credit should be
-    %% all used up due to the drain
-    {ok, F10, []} = rabbit_fifo_client:enqueue(ClusterName, m3, F9),
-    %% assert no deliveries
-    {_, _, F11} = process_ra_events(receive_ra_events(), ClusterName, F10, [], [],
-                                    fun
-                                        (D, _) -> error({unexpected_delivery, D})
-                                    end),
-    %% credit again and receive the last message
-    {F12, []} = rabbit_fifo_client:credit_v1(CTag, 10, false, F11),
-    {[{_, _, _, _, m3}], _, _} = process_ra_events(receive_ra_events(1, 1), ClusterName, F12),
     ok.
 
 credit_api_v2(Config) ->
