@@ -272,7 +272,7 @@ apply_(_Meta, #register_enqueuer{pid = Pid},
           end,
     {State, Res, [{monitor, process, Pid}]};
 apply_(Meta, #settle{msg_ids = MsgIds,
-                    consumer_key = Key},
+                     consumer_key = Key},
       #?STATE{consumers = Consumers} = State) ->
     case find_consumer(Key, Consumers) of
         {ConsumerKey, Con0} ->
@@ -284,7 +284,7 @@ apply_(Meta, #settle{msg_ids = MsgIds,
             {State, ok}
     end;
 apply_(Meta, #discard{consumer_key = ConsumerKey,
-                     msg_ids = MsgIds},
+                      msg_ids = MsgIds},
       #?STATE{consumers = Consumers } = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
         {ActualConsumerKey, #consumer{} = Con} ->
@@ -293,8 +293,8 @@ apply_(Meta, #discard{consumer_key = ConsumerKey,
             {State0, ok}
     end;
 apply_(Meta, #return{consumer_key = ConsumerKey,
-                    msg_ids = MsgIds},
-      #?STATE{consumers = Cons} = State) ->
+                     msg_ids = MsgIds},
+       #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}} ->
             return(Meta, ActualConsumerKey, MsgIds, false,
@@ -303,11 +303,11 @@ apply_(Meta, #return{consumer_key = ConsumerKey,
             {State, ok}
     end;
 apply_(Meta, #modify{consumer_key = ConsumerKey,
-                    delivery_failed = DelFailed,
-                    undeliverable_here = Undel,
-                    annotations = Anns,
-                    msg_ids = MsgIds},
-      #?STATE{consumers = Cons} = State) ->
+                     delivery_failed = DelFailed,
+                     undeliverable_here = Undel,
+                     annotations = Anns,
+                     msg_ids = MsgIds},
+       #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}}
           when Undel == false ->
@@ -1984,8 +1984,8 @@ checkout0(Meta, {success, ConsumerKey, MsgId,
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
 checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
-    Effects = add_delivery_effects(Effects0, SendAcc, State0),
-    {State0, ExpiredMsg, lists:reverse(Effects)}.
+    Effects = add_delivery_effects([], SendAcc, State0),
+    {State0, ExpiredMsg, Effects0 ++ lists:reverse(Effects)}.
 
 evaluate_limit(Idx, State1, State2, OuterEffects) ->
     case evaluate_limit0(Idx, State1, State2, []) of
@@ -2987,14 +2987,24 @@ do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
             RaAux, DiscardedBytes, Force)
   when is_integer(MacVer) andalso MacVer >= 8 ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
-    #?STATE{} = MacState = ra_aux:machine_state(RaAux),
+    #?STATE{consumers = Consumers,
+            enqueuers = Enqueuers} = MacState = ra_aux:machine_state(RaAux),
     TimeSince = Ts - SnapTime,
     MsgsTot = messages_total(MacState),
     %% if the approximate snapshot size * 2 can be reclaimed it is worth
     %% taking a snapshot
-    %% TODO: take number of enqueues and consumers into account
-    ApproxSnapSize = 4096 + (32 * MsgsTot),
-    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > (ApproxSnapSize * 2),
+    %% take number of enqueues and consumers into account
+    %% message: 32 bytes
+    %% enqueuer: 96 bytes
+    %% consumer: 256 bytes
+    NumEnqueuers = map_size(Enqueuers),
+    NumConsumers = map_size(Consumers),
+    ApproxSnapSize = 4096 +
+                     (MsgsTot * 32) +
+                     (NumEnqueuers * 96) +
+                     (NumConsumers * 256),
+
+    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > (ApproxSnapSize * 3),
 
     {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
         persistent_term:get(quorum_queue_checkpoint_config,
