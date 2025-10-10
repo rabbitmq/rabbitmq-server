@@ -82,7 +82,11 @@ is_authorized(ReqData, Context) ->
 %%--------------------------------------------------------------------
 
 policy(ReqData) ->
-    rabbit_policy:lookup_op(
-      rabbit_mgmt_util:vhost(ReqData), name(ReqData)).
+    case rabbit_mgmt_util:vhost(ReqData) of
+        not_found ->
+            not_found;
+        Vhost ->
+            rabbit_policy:lookup_op(Vhost, name(ReqData))
+    end.
 
 name(ReqData) -> rabbit_mgmt_util:id(name, ReqData).
