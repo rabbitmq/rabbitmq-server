@@ -11,83 +11,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("amqp_client/include/amqp_client.hrl").
-
--define(ALICE_NAME, "Alice").
--define(BOB_NAME, "Bob").
--define(CAROL_NAME, "Carol").
--define(PETER_NAME, "Peter").
--define(JIMMY_NAME, "Jimmy").
-
--define(VHOST, "test").
-
--define(ALICE, #amqp_params_network{username     = <<?ALICE_NAME>>,
-                                    password     = <<"password">>,
-                                    virtual_host = <<?VHOST>>}).
-
--define(BOB, #amqp_params_network{username       = <<?BOB_NAME>>,
-                                  password       = <<"password">>,
-                                  virtual_host   = <<?VHOST>>}).
-
--define(CAROL, #amqp_params_network{username     = <<?CAROL_NAME>>,
-                                    password     = <<"password">>,
-                                    virtual_host = <<?VHOST>>}).
-
--define(PETER, #amqp_params_network{username     = <<?PETER_NAME>>,
-                                    password     = <<"password">>,
-                                    virtual_host = <<?VHOST>>}).
-
--define(JIMMY, #amqp_params_network{username     = <<?JIMMY_NAME>>,
-                                    password     = <<"password">>,
-                                    virtual_host = <<?VHOST>>}).
-
--define(BASE_CONF_RABBIT, {rabbit, [{default_vhost, <<"test">>}]}).
-
-base_conf_ldap(LdapPort, IdleTimeout, PoolSize) ->
-                    {rabbitmq_auth_backend_ldap, [{servers, ["localhost"]},
-                                                  {user_dn_pattern,    "cn=${username},ou=People,dc=rabbitmq,dc=com"},
-                                                  {other_bind,         anon},
-                                                  {use_ssl,            false},
-                                                  {port,               LdapPort},
-                                                  {idle_timeout,       IdleTimeout},
-                                                  {pool_size,          PoolSize},
-                                                  {log,                true},
-                                                  {group_lookup_base,  "ou=groups,dc=rabbitmq,dc=com"},
-                                                  {vhost_access_query, vhost_access_query_base()},
-                                                  {resource_access_query,
-                                                   {for, [{resource, exchange,
-                                                           {for, [{permission, configure,
-                                                                   {in_group, "cn=wheel,ou=groups,dc=rabbitmq,dc=com"}
-                                                                  },
-                                                                  {permission, write, {constant, true}},
-                                                                  {permission, read,
-                                                                   {match, {string, "${name}"},
-                                                                           {string, "^xch-${username}-.*"}}
-                                                                  }
-                                                                 ]}},
-                                                          {resource, queue,
-                                                           {for, [{permission, configure,
-                                                                   {match, {attribute, "${user_dn}", "description"},
-                                                                           {string, "can-declare-queues"}}
-                                                                  },
-                                                                  {permission, write, {constant, true}},
-                                                                  {permission, read,
-                                                                   {'or',
-                                                                    [{'and',
-                                                                      [{equals, "${name}", "test1"},
-                                                                       {equals, "${username}", "Alice"}]},
-                                                                     {'and',
-                                                                      [{equals, "${name}", "test2"},
-                                                                       {'not', {equals, "${username}", "Bob"}}]}
-                                                                    ]}}
-                                                                 ]}}
-                                                          ]}},
-                                                  {topic_access_query, topic_access_query_base()},
-                                                  {tag_queries, [{monitor,       {constant, true}},
-                                                                 {administrator, {constant, false}},
-                                                                 {management,    {constant, false}}]}
-                                                ]}.
-
-%%--------------------------------------------------------------------
+-include_lib("rabbitmq_ct_helpers/include/rabbit_mgmt_test.hrl").
+-include_lib("rabbitmq_ct_helpers/include/rabbit_ldap_test.hrl").
 
 all() ->
     [
@@ -127,70 +52,18 @@ suite() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    rabbit_ct_helpers:run_setup_steps(Config, [fun init_slapd/1]).
+    rabbit_ct_helpers:run_setup_steps(Config, [fun rabbit_ct_ldap_utils:init_slapd/1]).
 
 end_per_suite(Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config, [fun stop_slapd/1]).
+    rabbit_ct_helpers:run_teardown_steps(Config, [fun rabbit_ct_ldap_utils:stop_slapd/1]).
 
 init_per_group(Group, Config) ->
-    Config1 = rabbit_ct_helpers:set_config(Config, [
-        {rmq_nodename_suffix, Group}
-      ]),
-    LdapPort = ?config(ldap_port, Config),
-    Config2 = rabbit_ct_helpers:merge_app_env(Config1, ?BASE_CONF_RABBIT),
-    Config3 = rabbit_ct_helpers:merge_app_env(Config2,
-                                              base_conf_ldap(LdapPort,
-                                                             idle_timeout(Group),
-                                                             pool_size(Group))),
-    rabbit_ldap_seed:seed({"localhost", LdapPort}),
-    Config4 = rabbit_ct_helpers:set_config(Config3, {ldap_port, LdapPort}),
+    rabbit_ct_ldap_utils:init_per_group(Group, Config,
+                                        rabbit_ct_client_helpers:setup_steps()).
 
-    rabbit_ct_helpers:run_steps(Config4,
-      rabbit_ct_broker_helpers:setup_steps() ++
-      rabbit_ct_client_helpers:setup_steps()).
-
-end_per_group(_, Config) ->
-    rabbit_ldap_seed:delete({"localhost", ?config(ldap_port, Config)}),
-    rabbit_ct_helpers:run_steps(Config,
-      rabbit_ct_client_helpers:teardown_steps() ++
-      rabbit_ct_broker_helpers:teardown_steps()).
-
-init_slapd(Config) ->
-    DataDir = ?config(data_dir, Config),
-    PrivDir = ?config(priv_dir, Config),
-    TcpPort = 25389,
-    SlapdDir = filename:join([PrivDir, "openldap"]),
-    InitSlapd = filename:join([DataDir, "init-slapd.sh"]),
-    Cmd = [InitSlapd, SlapdDir, {"~b", [TcpPort]}],
-    case rabbit_ct_helpers:exec(Cmd) of
-        {ok, Stdout} ->
-            {match, [SlapdPid]} = re:run(
-                                    Stdout,
-                                    "^SLAPD_PID=([0-9]+)$",
-                                    [{capture, all_but_first, list},
-                                     multiline]),
-            ct:pal(?LOW_IMPORTANCE,
-                   "slapd(8) PID: ~ts~nslapd(8) listening on: ~b",
-                   [SlapdPid, TcpPort]),
-            rabbit_ct_helpers:set_config(Config,
-                                         [{slapd_pid, SlapdPid},
-                                          {ldap_port, TcpPort}]);
-        _ ->
-            _ = rabbit_ct_helpers:exec(["pkill", "-INT", "slapd"]),
-            {skip, "Failed to initialize slapd(8)"}
-    end.
-
-stop_slapd(Config) ->
-    SlapdPid = ?config(slapd_pid, Config),
-    Cmd = ["kill", "-INT", SlapdPid],
-    _ = rabbit_ct_helpers:exec(Cmd),
-    Config.
-
-idle_timeout(with_idle_timeout) -> 2000;
-idle_timeout(non_parallel_tests) -> infinity.
-
-pool_size(with_idle_timeout) -> 1;
-pool_size(non_parallel_tests) -> 10.
+end_per_group(Group, Config) ->
+    rabbit_ct_ldap_utils:end_per_group(Group, Config,
+                                       rabbit_ct_client_helpers:teardown_steps()).
 
 init_internal(Config) ->
     ok = control_action(Config, add_user, [?ALICE_NAME, ""]),
@@ -205,6 +78,7 @@ end_internal(Config) ->
     ok = control_action(Config, delete_user, [?ALICE_NAME]),
     ok = control_action(Config, delete_user, [?BOB_NAME]),
     ok = control_action(Config, delete_user, [?PETER_NAME]).
+
 
 init_per_testcase(Testcase, Config)
     when Testcase == ldap_and_internal;
@@ -265,6 +139,11 @@ end_per_testcase(Testcase, Config)
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
+idle_timeout(Arg) ->
+    rabbit_ct_ldap_utils:idle_timeout(Arg).
+
+pool_size(Arg) ->
+    rabbit_ct_ldap_utils:pool_size(Arg).
 
 %% -------------------------------------------------------------------
 %% Testsuite cases
@@ -688,10 +567,7 @@ vhost_access_query_nested_groups_env() ->
     [{vhost_access_query, {in_group_nested, "cn=admins,ou=groups,dc=rabbitmq,dc=com"}}].
 
 vhost_access_query_base_env() ->
-    [{vhost_access_query, vhost_access_query_base()}].
-
-vhost_access_query_base() ->
-    {exists, "ou=${vhost},ou=vhosts,dc=rabbitmq,dc=com"}.
+    [{vhost_access_query, rabbit_ct_ldap_utils:vhost_access_query_base()}].
 
 resource_access_query_match_gh_100() ->
     [{resource_access_query,
@@ -724,10 +600,7 @@ resource_access_query_match_query_and_re_query_are_strings() ->
     }].
 
 topic_access_query_base_env() ->
-    [{topic_access_query, topic_access_query_base()}].
-
-topic_access_query_base() ->
-    {constant, true}.
+    [{topic_access_query, rabbit_ct_ldap_utils:topic_access_query_base()}].
 
 test_login(Config, {N, Env}, Login, FilterList, ResultFun) ->
     case lists:member(N, FilterList) of
