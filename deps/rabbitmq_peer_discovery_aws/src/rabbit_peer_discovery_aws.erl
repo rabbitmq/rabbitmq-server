@@ -62,6 +62,11 @@
                                                    env_variable  = "AWS_HOSTNAME_PATH",
                                                    default_value = ["privateDnsName"]
                                                   },
+          aws_hostname_paths                => #peer_discovery_config_entry_meta{
+                                                   type          = list,
+                                                   env_variable  = "AWS_HOSTNAME_PATHS",
+                                                   default_value = []
+                                                  },
           aws_use_private_ip                 => #peer_discovery_config_entry_meta{
                                                    type          = atom,
                                                    env_variable  = "AWS_USE_PRIVATE_IP",
@@ -318,10 +323,11 @@ get_hostname_name_from_reservation_set([], Accum) -> Accum;
 get_hostname_name_from_reservation_set([{"item", RI}|T], Accum) ->
     InstancesSet = proplists:get_value("instancesSet", RI),
     Items = [Item || {"item", Item} <- InstancesSet],
-    HostnamePath = get_hostname_path(),
-    Hostnames = [get_hostname(HostnamePath, Item) || Item <- Items],
-    Hostnames2 = [Name || Name <- Hostnames, Name =/= ""],
-    get_hostname_name_from_reservation_set(T, Accum ++ Hostnames2).
+    HostnamePaths = get_hostname_paths(),
+    ?LOG_DEBUG("AWS peer discovery: processing reservation with ~p instances using hostname paths: ~tp", 
+              [length(Items), HostnamePaths]),
+    UniqueHostnames = extract_unique_hostnames(HostnamePaths, Items),
+    get_hostname_name_from_reservation_set(T, Accum ++ UniqueHostnames).
 
 get_hostname_names(Path) ->
     case rabbitmq_aws:api_get_request("ec2", Path) of
@@ -347,23 +353,66 @@ get_hostname_by_tags(Tags) ->
             Names
     end.
 
--spec get_hostname_path() -> path().
-get_hostname_path() ->
-    UsePrivateIP = get_config_key(aws_use_private_ip, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
-    HostnamePath = get_config_key(aws_hostname_path, ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY)),
-    FinalPath = case HostnamePath of
-        ["privateDnsName"] when UsePrivateIP -> ["privateIpAddress"];
-        P -> P
+-spec get_hostname_paths() -> [path()].
+get_hostname_paths() ->
+    M = ?CONFIG_MODULE:config_map(?BACKEND_CONFIG_KEY),
+    UsePrivateIP = get_config_key(aws_use_private_ip, M),
+    RawPaths = case get_config_key(aws_hostname_paths, M) of
+        Paths when is_list(Paths), Paths =/= [] ->
+            ?LOG_DEBUG("AWS peer discovery using multiple hostname paths"),
+            Paths;
+        _ ->
+            %% Use single path configuration (including when Paths is [])
+            SinglePath = get_single_hostname_path_raw(M),
+            ?LOG_DEBUG("AWS peer discovery using single hostname path"),
+            [SinglePath]
     end,
-    ?LOG_DEBUG("AWS peer discovery using hostname path: ~tp", [FinalPath]),
-    FinalPath.
+    %% Apply use_private_ip override to all paths consistently
+    FinalPaths = apply_private_ip_override(RawPaths, UsePrivateIP),
+    ?LOG_DEBUG("AWS peer discovery final hostname paths: ~tp", [FinalPaths]),
+    FinalPaths.
+
+-spec get_single_hostname_path_raw(map()) -> path().
+get_single_hostname_path_raw(ConfigMap) ->
+    case get_config_key(aws_hostname_path, ConfigMap) of
+        undefined ->
+            ["privateDnsName"];
+        P ->
+            P
+    end.
+
+-spec apply_private_ip_override([path()], boolean()) -> [path()].
+apply_private_ip_override(Paths, UsePrivateIP) ->
+    apply_private_ip_override(Paths, UsePrivateIP, []).
+apply_private_ip_override([], _, Acc) ->
+    lists:reverse(Acc);
+apply_private_ip_override([["privateDnsName"] | Paths], true, Acc0) ->
+    Acc1 = [["privateIpAddress"] | Acc0],
+    apply_private_ip_override(Paths, true, Acc1);
+apply_private_ip_override([Path | Paths], UsePrivateIP, Acc0) ->
+    Acc1 = [Path | Acc0],
+    apply_private_ip_override(Paths, UsePrivateIP, Acc1).
 
 -spec get_hostname(path(), props()) -> string().
+get_hostname([], _Props) -> 
+    ?LOG_DEBUG("AWS peer discovery: empty hostname path provided"),
+    "";  %% Handle empty paths gracefully
 get_hostname(Path, Props) ->
-    List = lists:foldl(fun get_value/2, Props, Path),
+    List = try
+        lists:foldl(fun get_value/2, Props, Path)
+    catch
+        Error:Reason ->
+            ?LOG_DEBUG("AWS peer discovery: hostname extraction failed for path ~tp, error: ~tp:~tp", 
+                      [Path, Error, Reason]),
+            ""
+    end,
     case io_lib:latin1_char_list(List) of
-        true -> List;
-        _ -> ""
+        true -> 
+            ?LOG_DEBUG("AWS peer discovery: extracted hostname '~ts' from path ~tp", [List, Path]),
+            List;
+        _ -> 
+            ?LOG_DEBUG("AWS peer discovery: invalid hostname format from path ~tp, result: ~tp", [Path, List]),
+            ""
     end.
 
 -spec get_value(string()|integer(), props()) -> props().
@@ -413,3 +462,18 @@ get_tags() ->
             maps:from_list(Value);
         _ -> Tags
     end.
+
+%% Helper functions for multiple hostname paths support
+
+-spec extract_unique_hostnames([path()], [props()]) -> [string()].
+extract_unique_hostnames(Paths, Items) ->
+    ?LOG_DEBUG("AWS peer discovery: extracting hostnames using ~p paths for ~p items", 
+              [length(Paths), length(Items)]),
+    %% Extract all hostnames from all paths for all items
+    AllHostnames = [get_hostname(Path, Item) || Path <- Paths, Item <- Items],
+    %% Filter out empty hostnames and remove duplicates
+    ValidHostnames = [Name || Name <- AllHostnames, Name =/= ""],
+    UniqueHostnames = lists:uniq(ValidHostnames),
+    ?LOG_DEBUG("AWS peer discovery: extracted ~p total hostnames, ~p valid, ~p unique: ~tp", 
+              [length(AllHostnames), length(ValidHostnames), length(UniqueHostnames), UniqueHostnames]),
+    UniqueHostnames.

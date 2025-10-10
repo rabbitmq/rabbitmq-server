@@ -108,3 +108,35 @@ fun(Conf) ->
         Value     -> rabbit_peer_discovery_util:as_list(Value)
     end
 end}.
+
+%% hostname_paths (multiple paths support)
+
+{mapping, "cluster_formation.aws.hostname_path.$number", "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_paths", [
+    {datatype, string}
+]}.
+
+{translation, "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_paths",
+fun(Conf) ->
+    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.aws.hostname_path", Conf),
+    %% Helper function for number validation
+    IsNumberString = fun(Str) ->
+        try
+            _ = list_to_integer(Str),
+            true
+        catch
+            _:_ -> false
+        end
+    end,
+    %% Extract and sort numbered paths (hostname_path.1, hostname_path.2, etc.)
+    NumberedPaths = [{list_to_integer(N), V} || 
+                     {["cluster_formation", "aws", "hostname_path", N], V} <- Settings,
+                     IsNumberString(N)],
+    case NumberedPaths of
+        [] -> cuttlefish:unset();
+        _ ->
+            SortedPaths = lists:sort(NumberedPaths),
+            [rabbit_peer_discovery_util:as_list(V) || {_, V} <- SortedPaths]
+    end
+end}.
+
+
