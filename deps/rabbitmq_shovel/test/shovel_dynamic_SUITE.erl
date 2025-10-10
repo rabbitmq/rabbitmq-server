@@ -16,7 +16,8 @@
 
 -import(shovel_test_utils, [set_param/3,
                             with_amqp10_session/2,
-                            amqp10_publish_expect/5]).
+                            amqp10_publish_expect/5,
+                            amqp10_declare_queue/3]).
 
 -define(PARAM, <<"test">>).
 
@@ -48,7 +49,13 @@ groups() ->
 
 tests() ->
     [
-     simple
+     simple,
+     simple_classic_no_ack,
+     simple_classic_on_confirm,
+     simple_classic_on_publish,
+     simple_quorum_no_ack,
+     simple_quorum_on_confirm,
+     simple_quorum_on_publish
     ].
 
 %% -------------------------------------------------------------------
@@ -189,19 +196,49 @@ end_per_testcase(Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 simple(Config) ->
-    Name = <<"test">>,
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
     with_amqp10_session(
       Config,
       fun (Sess) ->
-              set_param(Config, Name, ?config(shovel_args, Config)),
+              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
-              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, Name}]),
+              Status = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, lookup, [{<<"/">>, ?PARAM}]),
               ?assertMatch([_|_], Status),
               ?assertMatch(#{metrics := #{forwarded := 1}}, maps:from_list(Status))
       end).
 
+simple_classic_no_ack(Config) ->
+    simple_queue_type_ack_mode(Config, <<"classic">>, <<"no-ack">>).
+
+simple_classic_on_confirm(Config) ->
+    simple_queue_type_ack_mode(Config, <<"classic">>, <<"on-confirm">>).
+
+simple_classic_on_publish(Config) ->
+    simple_queue_type_ack_mode(Config, <<"classic">>, <<"on-publish">>).
+
+simple_quorum_no_ack(Config) ->
+    simple_queue_type_ack_mode(Config, <<"quorum">>, <<"no-ack">>).
+
+simple_quorum_on_confirm(Config) ->
+    simple_queue_type_ack_mode(Config, <<"quorum">>, <<"on-confirm">>).
+
+simple_quorum_on_publish(Config) ->
+    simple_queue_type_ack_mode(Config, <<"quorum">>, <<"on-publish">>).
+
+simple_queue_type_ack_mode(Config, Type, AckMode) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type}}),
+              ExtraArgs = [{<<"ack-mode">>, AckMode}],
+              ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+              set_param(Config, ?PARAM, ShovelArgs),
+              amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 10)
+      end).
 
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->

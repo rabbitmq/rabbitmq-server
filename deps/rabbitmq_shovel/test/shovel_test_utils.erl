@@ -22,7 +22,8 @@
          amqp10_publish/3, amqp10_publish/4,
          amqp10_expect_empty/2, amqp10_expect_one/2,
          amqp10_expect_count/3, amqp10_expect/3,
-         amqp10_publish_expect/5,
+         amqp10_publish_expect/5, amqp10_declare_queue/3,
+         amqp10_subscribe/2, amqp10_expect/2,
          await_autodelete/2, await_autodelete1/2,
          invalid_param/2, invalid_param/3,
          valid_param/2, valid_param/3, valid_param1/3]).
@@ -200,7 +201,8 @@ with_amqp10_session(Config, VHost, Fun) ->
     {ok, Conn} = amqp10_client:open_connection(Cfg),
     {ok, Sess} = amqp10_client:begin_session(Conn),
     Fun(Sess),
-    amqp10_client:close_connection(Conn),
+    ok = amqp10_client:end_session(Sess),
+    ok = amqp10_client:close_connection(Conn),
     ok.
 
 amqp10_publish(Sender, Tag, Payload) when is_binary(Payload) ->
@@ -254,21 +256,8 @@ amqp10_expect_one(Session, Dest) ->
     amqp10_client:detach_link(Receiver),
     Msg.
 
-amqp10_expect_count(Session, Dest, Count) ->
-    LinkName = <<"dynamic-receiver-", Dest/binary>>,
-    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
-                                                        Dest, settled,
-                                                        unsettled_state),
-    ok = amqp10_client:flow_link_credit(Receiver, Count, never),
-    Msgs = amqp10_expect(Receiver, Count, []),
-    receive
-        {amqp10_msg, Receiver, Msg} ->
-            throw({unexpected_msg, Msg})
-    after 500 ->
-            ok
-    end,
-    amqp10_client:detach_link(Receiver),
-    Msgs.
+amqp10_expect(Receiver, N) ->
+    amqp10_expect(Receiver, N, []).
 
 amqp10_expect(_, 0, Acc) ->
     Acc;
@@ -287,6 +276,35 @@ amqp10_expect(Receiver) ->
     after 4000 ->
             throw(timeout_in_expect_waiting_for_delivery)
     end.
+
+amqp10_declare_queue(Sess, QName, Args) ->
+    {ok, LinkPair} = rabbitmq_amqp_client:attach_management_link_pair_sync(Sess, <<"mgmt link pair">>),
+    {ok, _} = rabbitmq_amqp_client:declare_queue(LinkPair, QName, #{arguments => Args}),
+    ok = rabbitmq_amqp_client:detach_management_link_pair_sync(LinkPair).
+
+amqp10_subscribe(Session, Dest) ->
+    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
+                                                        Dest, settled,
+                                                        unsettled_state),
+    ok = amqp10_client:flow_link_credit(Receiver, 10, 1),
+    Receiver.
+
+amqp10_expect_count(Session, Dest, Count) ->
+    LinkName = <<"dynamic-receiver-", Dest/binary>>,
+    {ok, Receiver} = amqp10_client:attach_receiver_link(Session, LinkName,
+                                                        Dest, settled,
+                                                        unsettled_state),
+    ok = amqp10_client:flow_link_credit(Receiver, Count, never),
+    Msgs = amqp10_expect(Receiver, Count, []),
+    receive
+        {amqp10_msg, Receiver, Msg} ->
+            throw({unexpected_msg, Msg})
+    after 500 ->
+            ok
+    end,
+    amqp10_client:detach_link(Receiver),
+    Msgs.
 
 await_autodelete(Config, Name) ->
     rabbit_ct_broker_helpers:rpc(Config, 0,

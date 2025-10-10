@@ -594,7 +594,12 @@ decl_queue(QName, QArgs, VHost, User) ->
     Method = #'queue.declare'{queue = QName,
                               durable = true,
                               arguments = Args},
-    decl_fun([Method], VHost, User).
+    try
+        decl_fun([#'queue.declare'{queue = QName,
+                                   passive = true}], VHost, User)
+    catch exit:{amqp_error, not_found, _, _} ->
+            decl_fun([Method], VHost, User)
+    end.
 
 dest_check_queue(none, _, _, _) ->
     ok;
