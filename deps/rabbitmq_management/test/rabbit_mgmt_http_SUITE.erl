@@ -3459,8 +3459,15 @@ operator_policy_test(Config) ->
              "/operator-policies/%2F/policy_even",
              PolicyEven,
              {group, '2xx'}),
+    http_put(Config,
+             "/operator-policies/absent_vhost/policy_even",
+             PolicyEven,
+             404),
+
     assert_item(PolicyPos,  http_get(Config, "/operator-policies/%2F/policy_pos",  ?OK)),
     assert_item(PolicyEven, http_get(Config, "/operator-policies/%2F/policy_even", ?OK)),
+    http_get(Config, "/operator-policies/absent_vhost/policy_even", 404),
+
     List = [PolicyPos, PolicyEven],
     assert_list(List, http_get(Config, "/operator-policies",     ?OK)),
     assert_list(List, http_get(Config, "/operator-policies/%2F", ?OK)),
