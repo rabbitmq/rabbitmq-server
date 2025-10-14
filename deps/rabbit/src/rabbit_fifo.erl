@@ -417,9 +417,8 @@ apply_(#{index := Index,
                     {State, {dequeue, empty}, Effects}
             end
     end;
-apply_(#{index := _Idx} = Meta,
-       #checkout{spec = Spec,
-                 consumer_id = ConsumerId}, State0)
+apply_(Meta, #checkout{spec = Spec,
+                       consumer_id = ConsumerId}, State0)
   when Spec == cancel orelse
        Spec == remove ->
     case consumer_key_from_id(ConsumerId, State0) of
@@ -463,18 +462,9 @@ apply_(#{index := Idx} = Meta,
     {Consumer, State1} = update_consumer(Meta, ConsumerKey, ConsumerId,
                                          ConsumerMeta, Spec, Priority, State0),
     {State2, Effs} = activate_next_consumer(State1, []),
-    #consumer{checked_out = Checked,
-              credit = Credit,
-              delivery_count = DeliveryCount,
-              next_msg_id = NextMsgId} = Consumer,
 
-    %% reply with a consumer summary
-    Reply = {ok, #{next_msg_id => NextMsgId,
-                   credit => Credit,
-                   key => ConsumerKey,
-                   delivery_count => DeliveryCount,
-                   is_active => is_active(ConsumerKey, State2),
-                   num_checked_out => map_size(Checked)}},
+    %% reply with a consumer infos
+    Reply = {ok, consumer_info(ConsumerKey, Consumer, State2)},
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
 apply_(#{index := Index}, #purge{},
        #?STATE{messages_total = Total} = State0) ->
@@ -685,7 +675,7 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
     %% to local consumers
     %% TODO: with some additional state (raft indexes assigned to consumer)
     %% we could reduce the number of resends but it is questionable if this
-    %% complexity is worth the effort. rabbit_fifo_index will de-duplicate
+    %% complexity is worth the effort. rabbit_fifo_client will de-duplicate
     %% deliveries anyway
     SendAcc = maps:fold(
                 fun (_ConsumerKey, #consumer{cfg = #consumer_cfg{tag = Tag,
@@ -3439,3 +3429,16 @@ dlx_delivery_effects(CPid, Msgs0) ->
                        end, Log, RsnIds),
               [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
       end}].
+
+consumer_info(ConsumerKey,
+              #consumer{checked_out = Checked,
+                        credit = Credit,
+                        delivery_count = DeliveryCount,
+                        next_msg_id = NextMsgId},
+              State) ->
+    #{next_msg_id => NextMsgId,
+      credit => Credit,
+      key => ConsumerKey,
+      delivery_count => DeliveryCount,
+      is_active => is_active(ConsumerKey, State),
+      num_checked_out => map_size(Checked)}.
