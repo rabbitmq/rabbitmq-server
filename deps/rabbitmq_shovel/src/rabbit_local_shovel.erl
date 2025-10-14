@@ -400,9 +400,7 @@ forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} =
                            on_confirm when length(Queues) > 0 ->
                                State2;
                            on_publish ->
-                               decr_remaining(
-                                 1,
-                                 record_confirms([{Tag, Tag}], State2));
+                               record_confirms([{Tag, Tag}], State2);
                            _ ->
                                decr_remaining(1, State2)
                        end),
