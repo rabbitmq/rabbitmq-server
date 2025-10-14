@@ -148,6 +148,10 @@ init_source(State = #{source := #{current := #{link := Link},
                     #{delete_after := Rem} -> Rem;
                     _ -> unlimited
                 end,
+    case Remaining of
+        0 -> exit({shutdown, autodelete});
+        _ -> ok
+    end,
     State#{source => Src#{remaining => Remaining,
                           remaining_unacked => Remaining,
                           last_acked_tag => -1}}.
