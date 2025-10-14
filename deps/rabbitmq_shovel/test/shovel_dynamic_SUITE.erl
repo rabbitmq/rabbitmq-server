@@ -14,10 +14,15 @@
 
 -compile(export_all).
 
--import(shovel_test_utils, [set_param/3,
+-import(shovel_test_utils, [await_autodelete/2,
+                            set_param/3,
+                            set_param_nowait/3,
                             with_amqp10_session/2,
                             amqp10_publish_expect/5,
-                            amqp10_declare_queue/3]).
+                            amqp10_declare_queue/3,
+                            amqp10_publish/4,
+                            amqp10_expect_count/3
+                           ]).
 
 -define(PARAM, <<"test">>).
 
@@ -55,7 +60,16 @@ tests() ->
      simple_classic_on_publish,
      simple_quorum_no_ack,
      simple_quorum_on_confirm,
-     simple_quorum_on_publish
+     simple_quorum_on_publish,
+     autodelete_classic_on_confirm,
+     autodelete_quorum_on_confirm,
+     autodelete_classic_on_publish,
+     autodelete_quorum_on_publish,
+     autodelete_no_ack,
+     autodelete_classic_on_confirm_no_transfer,
+     autodelete_quorum_on_confirm_no_transfer,
+     autodelete_classic_on_publish_no_transfer,
+     autodelete_quorum_on_publish_no_transfer
     ].
 
 %% -------------------------------------------------------------------
@@ -240,6 +254,64 @@ simple_queue_type_ack_mode(Config, Type, AckMode) ->
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 10)
       end).
 
+<<<<<<< HEAD
+=======
+autodelete_classic_on_confirm_no_transfer(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-confirm">>, 0, 100, 0).
+
+autodelete_quorum_on_confirm_no_transfer(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-confirm">>, 0, 100, 0).
+
+autodelete_classic_on_publish_no_transfer(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-publish">>, 0, 100, 0).
+
+autodelete_quorum_on_publish_no_transfer(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-publish">>, 0, 100, 0).
+
+autodelete_classic_on_confirm(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-confirm">>, 50, 50, 50).
+
+autodelete_quorum_on_confirm(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-confirm">>, 50, 50, 50).
+
+autodelete_classic_on_publish(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-publish">>, 50, 50, 50).
+
+autodelete_quorum_on_publish(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-publish">>, 50, 50, 50).
+
+autodelete_no_ack(Config) ->
+    ExtraArgs = [{<<"ack-mode">>, <<"no-ack">>},
+                 {<<"src-delete-after">>, 100}],
+    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+    Uri = shovel_test_utils:make_uri(Config, 0),
+    ?assertMatch({error_string, _},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_runtime_parameters, set,
+                   [<<"/">>, <<"shovel">>, ?PARAM,
+                    [{<<"src-uri">>,  Uri},
+                     {<<"dest-uri">>, [Uri]}] ++ ShovelArgs,
+                    none])).
+
+autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_publish(Sess, Src, <<"hello">>, 100),
+              ExtraArgs = [{<<"ack-mode">>, AckMode},
+                           {<<"src-delete-after">>, After}],
+              ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+              set_param_nowait(Config, ?PARAM, ShovelArgs),
+              await_autodelete(Config, ?PARAM),
+              amqp10_expect_count(Sess, Src, ExpSrc),
+              amqp10_expect_count(Sess, Dest, ExpDest)
+      end).
+
+>>>>>>> d5f9ff27b (Shovel tests: tests for autodelete common to all protocols)
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
