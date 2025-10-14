@@ -782,10 +782,10 @@ get_stable_feature_flags(#{feature_flags := FeatureFlags}) ->
 %% There are two ways to specify that list:
 %% <ol>
 %% <li>Using the `$RABBITMQ_FEATURE_FLAGS' environment variable; for
-%%   instance `RABBITMQ_FEATURE_FLAGS=rabbitmq_4.0.0,khepri_db'.</li>
+%%   instance `RABBITMQ_FEATURE_FLAGS=rabbitmq_4.2.0,khepri_db'.</li>
 %% <li>Using the `forced_feature_flags_on_init' configuration parameter;
 %%   for instance
-%%   `{rabbit, [{forced_feature_flags_on_init, [rabbitmq_4.0.0, khepri_db]}]}'.</li>
+%%   `{rabbit, [{forced_feature_flags_on_init, [rabbitmq_4.2.0, khepri_db]}]}'.</li>
 %% </ol>
 %%
 %% There's also a way to enable specific flags and skip others:

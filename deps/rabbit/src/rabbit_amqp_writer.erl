@@ -15,7 +15,6 @@
          send_command/3,
          send_command/4,
          send_command_sync/3,
-         send_command_and_notify/5,
          assemble_frame/3]).
 
 %% gen_server callbacks
@@ -75,16 +74,6 @@ send_command_sync(Writer, ChannelNum, Performative) ->
     Request = {send_command, ChannelNum, Performative},
     gen_server:call(Writer, Request, ?CALL_TIMEOUT).
 
-%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
--spec send_command_and_notify(pid(),
-                              pid(),
-                              rabbit_types:channel_number(),
-                              performative(),
-                              payload()) -> ok | {error, blocked}.
-send_command_and_notify(Writer, QueuePid, ChannelNum, Performative, Payload) ->
-    Request = {send_command_and_notify, QueuePid, self(), ChannelNum, Performative, Payload},
-    maybe_send(Writer, Request).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% gen_server callbacks %%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -105,12 +94,6 @@ handle_cast({send_command, ChannelNum, Performative}, State0) ->
 handle_cast({send_command, SessionPid, ChannelNum, Performative, Payload}, State0) ->
     State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
     State = credit_flow_ack(SessionPid, State1),
-    no_reply(State);
-%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
-handle_cast({send_command_and_notify, QueuePid, SessionPid, ChannelNum, Performative, Payload}, State0) ->
-    State1 = internal_send_command_async(ChannelNum, Performative, Payload, State0),
-    State = credit_flow_ack(SessionPid, State1),
-    rabbit_amqqueue:notify_sent(QueuePid, SessionPid),
     no_reply(State).
 
 handle_call({send_command, ChannelNum, Performative}, _From, State0) ->
@@ -132,10 +115,6 @@ handle_info({{'DOWN', session}, _MRef, process, SessionPid, _Reason},
             State0 = #state{monitored_sessions = Sessions}) ->
     credit_flow:peer_down(SessionPid),
     State = State0#state{monitored_sessions = maps:remove(SessionPid, Sessions)},
-    no_reply(State);
-%% Delete below function clause when feature flag rabbitmq_4.0.0 becomes required.
-handle_info({'DOWN', _MRef, process, QueuePid, _Reason}, State) ->
-    rabbit_amqqueue:notify_sent_queue_down(QueuePid),
     no_reply(State).
 
 format_status(Status) ->

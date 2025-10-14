@@ -25,8 +25,7 @@
          delete/4,
          delete_immediately/1]).
 -export([state_info/1, info/2, stat/1, infos/1, infos/2]).
--export([settle/5, dequeue/5, consume/3, cancel/3]).
--export([credit_v1/5, credit/6]).
+-export([credit/6, settle/5, dequeue/5, consume/3, cancel/3]).
 -export([purge/1]).
 -export([supports_stateful_delivery/0,
          deliver/3]).
@@ -962,9 +961,6 @@ settle(_QName, discard, CTag, MsgIds, QState) ->
 settle(_QName, {modify, DelFailed, Undel, Anns}, CTag, MsgIds, QState) ->
     rabbit_fifo_client:modify(quorum_ctag(CTag), MsgIds, DelFailed, Undel,
                               Anns, QState).
-
-credit_v1(_QName, CTag, Credit, Drain, QState) ->
-    rabbit_fifo_client:credit_v1(quorum_ctag(CTag), Credit, Drain, QState).
 
 credit(_QName, CTag, DeliveryCount, Credit, Drain, QState) ->
     rabbit_fifo_client:credit(quorum_ctag(CTag), DeliveryCount, Credit, Drain, QState).

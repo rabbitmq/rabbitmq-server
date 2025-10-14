@@ -1357,7 +1357,7 @@ handle_call({basic_get, ChPid, NoAck, LimiterPid}, _From,
     end;
 
 handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
-             ModeOrPrefetch, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
+             Mode, ConsumerTag, ExclusiveConsume, Args, OkMsg, ActingUser},
             _From, State = #q{consumers = Consumers,
                               active_consumer = Holder,
                               single_active_consumer_on = SingleActiveConsumerOn}) ->
@@ -1369,7 +1369,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                 false ->
                     Consumers1 = rabbit_queue_consumers:add(
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   LimiterPid, LimiterActive, Mode,
                                    Args, ActingUser, Consumers),
                     case Holder of
                         none ->
@@ -1388,7 +1388,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
               ok     ->
                     Consumers1 = rabbit_queue_consumers:add(
                                    ChPid, ConsumerTag, NoAck,
-                                   LimiterPid, LimiterActive, ModeOrPrefetch,
+                                   LimiterPid, LimiterActive, Mode,
                                    Args, ActingUser, Consumers),
                     ExclusiveConsumer =
                         if ExclusiveConsume -> {ChPid, ConsumerTag};
@@ -1416,7 +1416,7 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
                     {false, _} ->
                        {true, up}
                 end,
-                PrefetchCount = rabbit_queue_consumers:parse_prefetch_count(ModeOrPrefetch),
+                PrefetchCount = rabbit_queue_consumers:parse_prefetch_count(Mode),
                 rabbit_core_metrics:consumer_created(
                 ChPid, ConsumerTag, ExclusiveConsume, AckRequired, QName,
                 PrefetchCount, ConsumerIsActive, ActivityStatus, Args),
@@ -1426,13 +1426,6 @@ handle_call({basic_consume, NoAck, ChPid, LimiterPid, LimiterActive,
             notify_decorators(State1),
             reply(ok, run_message_queue(false, State1))
     end;
-
-handle_call({basic_cancel, ChPid, ConsumerTag, OkMsg, ActingUser}, From, State) ->
-    handle_call({stop_consumer, #{pid => ChPid,
-                                  consumer_tag => ConsumerTag,
-                                  ok_msg => OkMsg,
-                                  user => ActingUser}},
-                From, State);
 
 handle_call({stop_consumer, #{pid := ChPid,
                               consumer_tag := ConsumerTag,
@@ -1597,16 +1590,6 @@ handle_cast({deactivate_limit, ChPid}, State) ->
     noreply(possibly_unblock(rabbit_queue_consumers:deactivate_limit_fun(),
                              ChPid, State));
 
-handle_cast({credit, SessionPid, CTag, Credit, Drain},
-            #q{q = Q,
-               backing_queue = BQ,
-               backing_queue_state = BQS0} = State) ->
-    %% Credit API v1.
-    %% Delete this function clause when feature flag rabbitmq_4.0.0 becomes required.
-    %% Behave like non-native AMQP 1.0: Send send_credit_reply before deliveries.
-    rabbit_classic_queue:send_credit_reply_credit_api_v1(
-      SessionPid, amqqueue:get_name(Q), BQ:len(BQS0)),
-    handle_cast({credit, SessionPid, CTag, credit_api_v1, Credit, Drain}, State);
 handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain},
             #q{consumers = Consumers0,
                q = Q} = State0) ->
@@ -1622,25 +1605,15 @@ handle_cast({credit, SessionPid, CTag, DeliveryCountRcv, Credit, Drain},
                 run_message_queue(true, State1)
         end,
     case rabbit_queue_consumers:get_link_state(SessionPid, CTag) of
-        {credit_api_v1, PostCred}
+        {PostDeliveryCountSnd, PostCred}
           when Drain andalso
                is_integer(PostCred) andalso PostCred > 0 ->
-            %% credit API v1
-            rabbit_queue_consumers:drained(credit_api_v1, SessionPid, CTag),
-            rabbit_classic_queue:send_drained_credit_api_v1(SessionPid, QName, CTag, PostCred);
-        {PostDeliveryCountSnd, PostCred}
-          when is_integer(PostDeliveryCountSnd) andalso
-               Drain andalso
-               is_integer(PostCred) andalso PostCred > 0 ->
-            %% credit API v2
             AdvancedDeliveryCount = serial_number:add(PostDeliveryCountSnd, PostCred),
             rabbit_queue_consumers:drained(AdvancedDeliveryCount, SessionPid, CTag),
             Avail = BQ:len(PostBQS),
             rabbit_classic_queue:send_credit_reply(
               SessionPid, QName, CTag, AdvancedDeliveryCount, 0, Avail, Drain);
-        {PostDeliveryCountSnd, PostCred}
-          when is_integer(PostDeliveryCountSnd) ->
-            %% credit API v2
+        {PostDeliveryCountSnd, PostCred} ->
             Avail = BQ:len(PostBQS),
             rabbit_classic_queue:send_credit_reply(
               SessionPid, QName, CTag, PostDeliveryCountSnd, PostCred, Avail, Drain);

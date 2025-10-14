@@ -26,7 +26,6 @@
          supports_stateful_delivery/0,
          deliver/3,
          settle/5,
-         credit_v1/5,
          credit/6,
          dequeue/5,
          info/2,
@@ -513,10 +512,6 @@ cancel(_Q, #{consumer_tag := ConsumerTag,
         error ->
             {ok, State}
     end.
-
--dialyzer({nowarn_function, credit_v1/5}).
-credit_v1(_, _, _, _, _) ->
-    erlang:error(credit_v1_unsupported).
 
 credit(QName, CTag, DeliveryCountRcv, LinkCreditRcv, Drain,
        #stream_client{readers = Readers,

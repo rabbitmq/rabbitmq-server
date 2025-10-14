@@ -89,7 +89,6 @@
 -define(PROTOCOL, amqp10).
 -define(MAX_PERMISSION_CACHE_SIZE, 12).
 -define(HIBERNATE_AFTER, 6_000).
--define(CREDIT_REPLY_TIMEOUT, 30_000).
 %% Capability defined in amqp-bindmap-jms-v1.0-wd10 [5.2] and sent by Qpid JMS client.
 -define(CAP_TEMPORARY_QUEUE, <<"temporary-queue">>).
 -define(CAP_VOLATILE_QUEUE, <<"rabbitmq:volatile-queue">>).
@@ -221,16 +220,11 @@
           max_message_size :: unlimited | pos_integer(),
           filter :: list(),
 
-          %% When feature flag rabbitmq_4.0.0 becomes required,
-          %% the following 2 fields should be deleted.
-          credit_api_version :: 1 | 2,
-          %% When credit API v1 is used, our session process holds the delivery-count
-          delivery_count :: sequence_no() | credit_api_v2,
           %% We use a dual link approach for messages we send to the client.
           %% We hold link flow control state for the link to the receiving
           %% client and for the link to the sending queue.
-          client_flow_ctl :: #client_flow_ctl{} | credit_api_v1,
-          queue_flow_ctl :: #queue_flow_ctl{} | credit_api_v1,
+          client_flow_ctl :: #client_flow_ctl{},
+          queue_flow_ctl :: #queue_flow_ctl{},
           %% 'true' means:
           %% * we haven't processed a credit reply yet since we last sent
           %%   a credit request to the sending queue.
@@ -241,10 +235,10 @@
           %% * we processed a credit reply since we last sent a credit request to the sending queue
           %% * probably no credit request is in flight, but there might be
           %%   (we aren't sure since we don't use correlations for credit requests)
-          at_least_one_credit_req_in_flight :: boolean() | credit_api_v1,
+          at_least_one_credit_req_in_flight :: boolean(),
           %% While at_least_one_credit_req_in_flight is true, we stash the
           %% latest credit request from the receiving client.
-          stashed_credit_req :: none | #credit_req{} | credit_api_v1
+          stashed_credit_req :: none | #credit_req{}
          }).
 
 -record(outgoing_unsettled, {
@@ -258,9 +252,6 @@
           %% A large message can be split into multiple transfer frames.
           frames :: [transfer_frame_body(), ...],
           queue_ack_required :: boolean(),
-          %% Queue that sent us this message.
-          %% When feature flag rabbitmq_4.0.0 becomes required, this field should be deleted.
-          queue_pid :: pid() | credit_api_v2,
           delivery_id :: delivery_number(),
           outgoing_unsettled :: #outgoing_unsettled{}
          }).
@@ -1441,14 +1432,14 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                              rcv_settle_mode = RcvSettleMode,
                              max_message_size = MaybeMaxMessageSize,
                              properties = Properties},
-             State0 = #state{queue_states = QStates0,
-                             outgoing_links = OutgoingLinks0,
-                             permission_cache = PermCache0,
-                             topic_permission_cache = TopicPermCache0,
-                             cfg = #cfg{vhost = Vhost,
-                                        user = User = #user{username = Username},
-                                        container_id = ContainerId,
-                                        reader_pid = ReaderPid}}) ->
+              State0 = #state{queue_states = QStates0,
+                              outgoing_links = OutgoingLinks0,
+                              permission_cache = PermCache0,
+                              topic_permission_cache = TopicPermCache0,
+                              cfg = #cfg{vhost = Vhost,
+                                         user = User = #user{username = Username},
+                                         container_id = ContainerId,
+                                         reader_pid = ReaderPid}}) ->
     {SndSettled, EffectiveSndSettleMode} =
     case SndSettleMode of
         ?V_1_0_SENDER_SETTLE_MODE_SETTLED ->
@@ -1459,13 +1450,15 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
             %% client only for durable messages.
             {false, ?V_1_0_SENDER_SETTLE_MODE_UNSETTLED}
     end,
+
     case ensure_source(Source0, SndSettled, LinkNameBin,
                        Vhost, User, ContainerId, ReaderPid,
                        PermCache0, TopicPermCache0) of
         {error, Reason} ->
             link_error(?V_1_0_AMQP_ERROR_INVALID_FIELD, "Attach refused: ~tp", [Reason]);
-        {ok, QName = #resource{name = QNameBin},
-         Source = #'v1_0.source'{filter = DesiredFilter},
+        {ok, #resource{name = QNameBin} = QName,
+         #'v1_0.source'{address = {utf8, SourceAddress},
+                        filter = DesiredFilter} = Source,
          PermCache1, TopicPermCache} ->
             PermCache = check_resource_access(QName, read, User, PermCache1),
             case rabbit_amqqueue:with(
@@ -1479,59 +1472,24 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                        "cannot obtain exclusive access to locked ~s",
                                        [rabbit_misc:rs(QName)])
                            end,
-                           QType = amqqueue:get_type(Q),
-                           %% Whether credit API v1 or v2 is used is decided only here at link attachment time.
-                           %% This decision applies to the whole life time of the link.
-                           %% This means even when feature flag rabbitmq_4.0.0 will be enabled later, this consumer will
-                           %% continue to use credit API v1. This is the safest and easiest solution avoiding
-                           %% transferring link flow control state (the delivery-count) at runtime from this session
-                           %% process to the queue process.
-                           %% Eventually, after feature flag rabbitmq_4.0.0 gets enabled and a subsequent rolling upgrade,
-                           %% all consumers will use credit API v2.
-                           %% Streams always use credit API v2 since the stream client (rabbit_stream_queue) holds the link
-                           %% flow control state. Hence, credit API mixed version isn't an issue for streams.
-                           {CreditApiVsn, Mode, DeliveryCount, ClientFlowCtl,
-                            QueueFlowCtl, CreditReqInFlight, StashedCreditReq} =
-                           case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') orelse
-                                QType =:= rabbit_stream_queue of
-                               true ->
-                                   {2,
-                                    {credited, ?INITIAL_DELIVERY_COUNT},
-                                    credit_api_v2,
-                                    #client_flow_ctl{delivery_count = ?INITIAL_DELIVERY_COUNT,
-                                                     credit = 0,
-                                                     echo = false},
-                                    #queue_flow_ctl{delivery_count = ?INITIAL_DELIVERY_COUNT,
-                                                    credit = 0,
-                                                    drain = false},
-                                    false,
-                                    none};
-                               false ->
-                                   {1,
-                                    {credited, credit_api_v1},
-                                    ?INITIAL_DELIVERY_COUNT,
-                                    credit_api_v1,
-                                    credit_api_v1,
-                                    credit_api_v1,
-                                    credit_api_v1}
-                           end,
                            ConsumerArgs0 = parse_attach_properties(Properties),
-                           {EffectiveFilter, ConsumerFilter, ConsumerArgs1} =
-                           parse_filter(DesiredFilter),
-                           ConsumerArgs = ConsumerArgs0 ++ ConsumerArgs1,
+                           {EffectiveFilter,
+                            ConsumerFilter,
+                            ConsumerArgs1} = parse_filter(DesiredFilter),
                            Spec = #{no_ack => SndSettled,
                                     channel_pid => self(),
                                     limiter_pid => none,
                                     limiter_active => false,
-                                    mode => Mode,
+                                    mode => {credited, ?INITIAL_DELIVERY_COUNT},
                                     consumer_tag => handle_to_ctag(HandleInt),
                                     exclusive_consume => false,
-                                    args => ConsumerArgs,
+                                    args => ConsumerArgs0 ++ ConsumerArgs1,
                                     filter => ConsumerFilter,
                                     ok_msg => undefined,
                                     acting_user => Username},
                            case rabbit_queue_type:consume(Q, Spec, QStates0) of
                                {ok, QStates} ->
+                                   QType = amqqueue:get_type(Q),
                                    OfferedCaps0 = rabbit_queue_type:amqp_capabilities(QType),
                                    OfferedCaps = rabbit_amqp_util:capabilities(OfferedCaps0),
                                    A = #'v1_0.attach'{
@@ -1546,24 +1504,26 @@ handle_attach(#'v1_0.attach'{role = ?AMQP_ROLE_RECEIVER,
                                           %% Echo back that we will respect the client's requested max-message-size.
                                           max_message_size = MaybeMaxMessageSize,
                                           offered_capabilities = OfferedCaps},
-                                   {utf8, SourceAddress} = Source#'v1_0.source'.address,
-                                   MaxMessageSize = max_message_size(MaybeMaxMessageSize),
-                                   Link = #outgoing_link{
-                                             name = LinkNameBin,
-                                             source_address = SourceAddress,
-                                             queue_name = queue_resource(Vhost, QNameBin),
-                                             queue_type = QType,
-                                             dynamic = default(Source#'v1_0.source'.dynamic, false),
-                                             send_settled = SndSettled,
-                                             max_message_size = MaxMessageSize,
-                                             filter = format_filter(EffectiveFilter),
-                                             credit_api_version = CreditApiVsn,
-                                             delivery_count = DeliveryCount,
-                                             client_flow_ctl = ClientFlowCtl,
-                                             queue_flow_ctl = QueueFlowCtl,
-                                             at_least_one_credit_req_in_flight = CreditReqInFlight,
-                                             stashed_credit_req = StashedCreditReq},
-                                   OutgoingLinks = OutgoingLinks0#{HandleInt => Link},
+                                   L = #outgoing_link{
+                                          name = LinkNameBin,
+                                          source_address = SourceAddress,
+                                          queue_name = queue_resource(Vhost, QNameBin),
+                                          queue_type = QType,
+                                          dynamic = default(Source#'v1_0.source'.dynamic, false),
+                                          send_settled = SndSettled,
+                                          max_message_size = max_message_size(MaybeMaxMessageSize),
+                                          filter = format_filter(EffectiveFilter),
+                                          client_flow_ctl = #client_flow_ctl{
+                                                               delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                                               credit = 0,
+                                                               echo = false},
+                                          queue_flow_ctl = #queue_flow_ctl{
+                                                              delivery_count = ?INITIAL_DELIVERY_COUNT,
+                                                              credit = 0,
+                                                              drain = false},
+                                          at_least_one_credit_req_in_flight = false,
+                                          stashed_credit_req = none},
+                                   OutgoingLinks = OutgoingLinks0#{HandleInt => L},
                                    State1 = State0#state{queue_states = QStates,
                                                          outgoing_links = OutgoingLinks,
                                                          permission_cache = PermCache,
@@ -1829,38 +1789,18 @@ echo(Echo, HandleInt, DeliveryCount, LinkCredit, Available, State) ->
 
 send_pending_delivery(#pending_delivery{
                          frames = Frames,
-                         queue_pid = QPid,
-                         outgoing_unsettled = #outgoing_unsettled{consumer_tag = Ctag,
-                                                                  queue_name = QName}
+                         outgoing_unsettled = #outgoing_unsettled{consumer_tag = Ctag}
                         } = Pending,
                       Buf0,
                       #state{remote_incoming_window = Space,
                              outgoing_links = OutgoingLinks,
-                             queue_states = QStates,
                              cfg = #cfg{writer_pid = WriterPid,
                                         channel_num = Ch}
                             } = State0) ->
     Handle = ctag_to_handle(Ctag),
     case is_map_key(Handle, OutgoingLinks) of
         true ->
-            SendFun = case QPid of
-                          credit_api_v2 ->
-                              send_fun(WriterPid, Ch);
-                          _ ->
-                              case rabbit_queue_type:module(QName, QStates) of
-                                  {ok, rabbit_classic_queue} ->
-                                      %% Classic queue client and classic queue process that
-                                      %% communicate via credit API v1 use RabbitMQ internal
-                                      %% credit flow control.
-                                      fun(Transfer, Sections) ->
-                                              rabbit_amqp_writer:send_command_and_notify(
-                                                WriterPid, QPid, Ch, Transfer, Sections)
-                                      end;
-                                  {ok, _QType} ->
-                                      send_fun(WriterPid, Ch)
-                              end
-                      end,
-            case send_frames(SendFun, Frames, Space) of
+            case send_frames(send_fun(WriterPid, Ch), Frames, Space) of
                 {sent_all, SpaceLeft} ->
                     State1 = State0#state{outgoing_pending = Buf0},
                     State = sent_pending_delivery(Pending, Handle, State1),
@@ -1912,85 +1852,71 @@ send_fun(WriterPid, Ch) ->
             rabbit_amqp_writer:send_command(WriterPid, Ch, Transfer, Sections)
     end.
 
-sent_pending_delivery(
-  Pending = #pending_delivery{
-               outgoing_unsettled = #outgoing_unsettled{
-                                       consumer_tag = Ctag,
-                                       queue_name = QName}},
-  Handle,
-  S0 = #state{outgoing_links = OutgoingLinks0,
-              queue_states = QStates0}) ->
+sent_pending_delivery(#pending_delivery{
+                         outgoing_unsettled = #outgoing_unsettled{
+                                                 consumer_tag = Ctag,
+                                                 queue_name = QName}} = Pending,
+                      Handle,
+                      #state{outgoing_links = OutgoingLinks0,
+                             queue_states = QStates0} = S0) ->
 
-    #outgoing_link{
-       credit_api_version = CreditApiVsn,
-       client_flow_ctl = CFC0,
-       queue_flow_ctl = QFC0,
-       at_least_one_credit_req_in_flight = CreditReqInFlight0
-      } = Link0 = maps:get(Handle, OutgoingLinks0),
+    #outgoing_link{client_flow_ctl = CFC0,
+                   queue_flow_ctl = QFC0,
+                   at_least_one_credit_req_in_flight = CreditReqInFlight0
+                  } = Link0 = maps:get(Handle, OutgoingLinks0),
+    #client_flow_ctl{delivery_count = CDeliveryCount0,
+                     credit = CCredit0
+                    } = CFC0,
+    #queue_flow_ctl{delivery_count = QDeliveryCount0,
+                    credit = QCredit0
+                   } = QFC0,
 
-    S = case CreditApiVsn of
-            1 ->
-                S0;
-            2 ->
-                #client_flow_ctl{
-                   delivery_count = CDeliveryCount0,
-                   credit = CCredit0
-                  } = CFC0,
-                #queue_flow_ctl{
-                   delivery_count = QDeliveryCount0,
-                   credit = QCredit0
-                  } = QFC0,
+    CDeliveryCount = add(CDeliveryCount0, 1),
+    %% Even though the spec mandates
+    %% "If the link-credit is less than or equal to zero, i.e.,
+    %% the delivery-count is the same as or greater than the
+    %% delivery-limit, a sender MUST NOT send more messages."
+    %% we forced the message through to be sent to the client.
+    %% Due to our dual link approach, we don't want to buffer any
+    %% messages in the session if the receiving client dynamically
+    %% decreased link credit. The alternative is to requeue messages.
+    %% "the receiver MAY either handle the excess messages normally
+    %% or detach the link with a transfer-limit-exceeded error code."
+    CCredit = max(0, CCredit0 - 1),
 
-                CDeliveryCount = add(CDeliveryCount0, 1),
-                %% Even though the spec mandates
-                %% "If the link-credit is less than or equal to zero, i.e.,
-                %% the delivery-count is the same as or greater than the
-                %% delivery-limit, a sender MUST NOT send more messages."
-                %% we forced the message through to be sent to the client.
-                %% Due to our dual link approach, we don't want to buffer any
-                %% messages in the session if the receiving client dynamically
-                %% decreased link credit. The alternative is to requeue messages.
-                %% "the receiver MAY either handle the excess messages normally
-                %% or detach the link with a transfer-limit-exceeded error code."
-                CCredit = max(0, CCredit0 - 1),
+    QDeliveryCount = add(QDeliveryCount0, 1),
+    QCredit1 = max(0, QCredit0 - 1),
 
-                QDeliveryCount = add(QDeliveryCount0, 1),
-                QCredit1 = max(0, QCredit0 - 1),
+    {QCredit, CreditReqInFlight, QStates, Actions} =
+    case QCredit1 =:= 0 andalso
+         CCredit > 0 andalso
+         not CreditReqInFlight0 of
+        true ->
+            %% assertion
+            none = Link0#outgoing_link.stashed_credit_req,
+            %% Provide queue next batch of credits.
+            CappedCredit = cap_credit(CCredit,
+                                      S0#state.cfg#cfg.max_queue_credit),
+            {ok, QStates1, Actions0} =
+            rabbit_queue_type:credit(
+              QName, Ctag, QDeliveryCount, CappedCredit,
+              QFC0#queue_flow_ctl.drain, QStates0),
+            {CappedCredit, true, QStates1, Actions0};
+        false ->
+            {QCredit1, CreditReqInFlight0, QStates0, []}
+    end,
 
-                {QCredit, CreditReqInFlight, QStates, Actions} =
-                case QCredit1 =:= 0 andalso
-                     CCredit > 0 andalso
-                     not CreditReqInFlight0 of
-                    true ->
-                        %% assertion
-                        none = Link0#outgoing_link.stashed_credit_req,
-                        %% Provide queue next batch of credits.
-                        CappedCredit = cap_credit(CCredit,
-                                                  S0#state.cfg#cfg.max_queue_credit),
-                        {ok, QStates1, Actions0} =
-                        rabbit_queue_type:credit(
-                          QName, Ctag, QDeliveryCount, CappedCredit,
-                          QFC0#queue_flow_ctl.drain, QStates0),
-                        {CappedCredit, true, QStates1, Actions0};
-                    false ->
-                        {QCredit1, CreditReqInFlight0, QStates0, []}
-                end,
-
-                CFC = CFC0#client_flow_ctl{
-                        delivery_count = CDeliveryCount,
-                        credit = CCredit},
-                QFC = QFC0#queue_flow_ctl{
-                        delivery_count = QDeliveryCount,
-                        credit = QCredit},
-                Link = Link0#outgoing_link{
-                         client_flow_ctl = CFC,
-                         queue_flow_ctl = QFC,
-                         at_least_one_credit_req_in_flight = CreditReqInFlight},
-                OutgoingLinks = OutgoingLinks0#{Handle := Link},
-                S1 = S0#state{outgoing_links = OutgoingLinks,
-                              queue_states = QStates},
-                handle_queue_actions(Actions, S1)
-        end,
+    CFC = CFC0#client_flow_ctl{delivery_count = CDeliveryCount,
+                               credit = CCredit},
+    QFC = QFC0#queue_flow_ctl{delivery_count = QDeliveryCount,
+                              credit = QCredit},
+    Link = Link0#outgoing_link{client_flow_ctl = CFC,
+                               queue_flow_ctl = QFC,
+                               at_least_one_credit_req_in_flight = CreditReqInFlight},
+    OutgoingLinks = OutgoingLinks0#{Handle := Link},
+    S1 = S0#state{outgoing_links = OutgoingLinks,
+                  queue_states = QStates},
+    S = handle_queue_actions(Actions, S1),
     record_outgoing_unsettled(Pending, S).
 
 record_outgoing_unsettled(#pending_delivery{queue_ack_required = true,
@@ -2182,45 +2108,18 @@ handle_queue_event({queue_event, QRef, Evt},
 
 handle_queue_actions(Actions, State) ->
     lists:foldl(
-      fun ({settled, _QName, _DelIds} = Action, S = #state{stashed_settled = As}) ->
+      fun ({settled, _QName, _DelIds} = Action, #state{stashed_settled = As} = S) ->
               S#state{stashed_settled = [Action | As]};
-          ({rejected, _QName, _DelIds} = Action, S = #state{stashed_rejected = As}) ->
+          ({rejected, _QName, _DelIds} = Action, #state{stashed_rejected = As} = S) ->
               S#state{stashed_rejected = [Action | As]};
           ({deliver, CTag, AckRequired, Msgs}, S0) ->
               lists:foldl(fun(Msg, S) ->
                                   handle_deliver(CTag, AckRequired, Msg, S)
                           end, S0, Msgs);
           ({credit_reply, _Ctag, _DeliveryCount, _Credit, _Available, _Drain} = Action,
-           S = #state{outgoing_pending = Pending}) ->
-              %% credit API v2
+           #state{outgoing_pending = Pending} = S) ->
               S#state{outgoing_pending = queue:in(Action, Pending)};
-          ({credit_reply_v1, Ctag, Credit0, Available, Drain},
-           S0 = #state{outgoing_links = OutgoingLinks0,
-                       outgoing_pending = Pending}) ->
-              %% credit API v1
-              %% Delete this branch when feature flag rabbitmq_4.0.0 becomes required.
-              Handle = ctag_to_handle(Ctag),
-              Link = #outgoing_link{delivery_count = Count0} = maps:get(Handle, OutgoingLinks0),
-              {Count, Credit, S} = case Drain of
-                                       true ->
-                                           Count1 = add(Count0, Credit0),
-                                           OutgoingLinks = maps:update(
-                                                             Handle,
-                                                             Link#outgoing_link{delivery_count = Count1},
-                                                             OutgoingLinks0),
-                                           S1 = S0#state{outgoing_links = OutgoingLinks},
-                                           {Count1, 0, S1};
-                                       false ->
-                                           {Count0, Credit0, S0}
-                                   end,
-              Flow = #'v1_0.flow'{
-                        handle = ?UINT(Handle),
-                        delivery_count = ?UINT(Count),
-                        link_credit = ?UINT(Credit),
-                        available = ?UINT(Available),
-                        drain = Drain},
-              S#state{outgoing_pending = queue:in(Flow, Pending)};
-          ({queue_down, QName}, S = #state{stashed_down = L}) ->
+          ({queue_down, QName}, #state{stashed_down = L} = S) ->
               S#state{stashed_down = [QName | L]};
           ({Action, _QName}, S)
             when Action =:= block orelse
@@ -2232,31 +2131,28 @@ handle_queue_actions(Actions, State) ->
       end, State, Actions).
 
 handle_deliver(ConsumerTag, AckRequired,
-               Msg = {QName, QPid0, MsgId, Redelivered, Mc0},
-               State = #state{outgoing_pending = Pending,
-                              outgoing_delivery_id = DeliveryId,
-                              outgoing_links = OutgoingLinks0,
-                              cfg = #cfg{outgoing_max_frame_size = MaxFrameSize,
-                                         conn_name = ConnName,
-                                         channel_num = ChannelNum,
-                                         user = #user{username = Username},
-                                         trace_state = Trace,
-                                         msg_interceptor_ctx = MsgIcptCtx}}) ->
+               {QName, _QPid, MsgId, Redelivered, Mc0} = Msg,
+               #state{outgoing_pending = Pending,
+                      outgoing_delivery_id = DeliveryId,
+                      outgoing_links = OutgoingLinks,
+                      cfg = #cfg{outgoing_max_frame_size = MaxFrameSize,
+                                 conn_name = ConnName,
+                                 channel_num = ChannelNum,
+                                 user = #user{username = Username},
+                                 trace_state = Trace,
+                                 msg_interceptor_ctx = MsgIcptCtx}} = State) ->
     Handle = ctag_to_handle(ConsumerTag),
-    case OutgoingLinks0 of
+    case OutgoingLinks of
         #{Handle := #outgoing_link{queue_type = QType,
                                    send_settled = SendSettled,
-                                   max_message_size = MaxMessageSize,
-                                   credit_api_version = CreditApiVsn,
-                                   delivery_count = DelCount} = Link0} ->
+                                   max_message_size = MaxMessageSize}} ->
             Dtag = delivery_tag(MsgId, SendSettled),
-            Transfer = #'v1_0.transfer'{
-                          handle = ?UINT(Handle),
-                          delivery_id = ?UINT(DeliveryId),
-                          delivery_tag = {binary, Dtag},
-                          message_format = ?UINT(?MESSAGE_FORMAT),
-                          settled = SendSettled,
-                          more = false},
+            Transfer = #'v1_0.transfer'{handle = ?UINT(Handle),
+                                        delivery_id = ?UINT(DeliveryId),
+                                        delivery_tag = {binary, Dtag},
+                                        message_format = ?UINT(?MESSAGE_FORMAT),
+                                        settled = SendSettled,
+                                        more = false},
             Mc1 = rabbit_msg_interceptor:intercept_outgoing(Mc0, MsgIcptCtx),
             Mc2 = mc:convert(mc_amqp, Mc1),
             Mc = mc:set_annotation(redelivered, Redelivered, Mc2),
@@ -2265,29 +2161,15 @@ handle_deliver(ConsumerTag, AckRequired,
             Frames = transfer_frames(Transfer, Sections, MaxFrameSize),
             messages_delivered(Redelivered, QType),
             rabbit_trace:tap_out(Msg, ConnName, ChannelNum, Username, Trace),
-            {OutgoingLinks, QPid
-            } = case CreditApiVsn of
-                    2 ->
-                        {OutgoingLinks0, credit_api_v2};
-                    1 ->
-                        DelCount = Link0#outgoing_link.delivery_count,
-                        Link = Link0#outgoing_link{delivery_count = add(DelCount, 1)},
-                        OutgoingLinks1 = maps:update(Handle, Link, OutgoingLinks0),
-                        {OutgoingLinks1, QPid0}
-                end,
-            Del = #outgoing_unsettled{
-                     msg_id = MsgId,
-                     consumer_tag = ConsumerTag,
-                     queue_name = QName},
-            PendingDelivery = #pending_delivery{
-                                 frames = Frames,
-                                 queue_ack_required = AckRequired,
-                                 queue_pid = QPid,
-                                 delivery_id = DeliveryId,
-                                 outgoing_unsettled = Del},
-            State#state{outgoing_pending = queue:in(PendingDelivery, Pending),
-                        outgoing_delivery_id = add(DeliveryId, 1),
-                        outgoing_links = OutgoingLinks};
+            Del = #outgoing_unsettled{msg_id = MsgId,
+                                      consumer_tag = ConsumerTag,
+                                      queue_name = QName},
+            PendingDel = #pending_delivery{frames = Frames,
+                                           queue_ack_required = AckRequired,
+                                           delivery_id = DeliveryId,
+                                           outgoing_unsettled = Del},
+            State#state{outgoing_pending = queue:in(PendingDel, Pending),
+                        outgoing_delivery_id = add(DeliveryId, 1)};
         _ ->
             %% TODO handle missing link -- why does the queue think it's there?
             ?LOG_WARNING(
@@ -2524,13 +2406,12 @@ incoming_link_transfer(
             check_user_id(Mc1, User),
             TopicPermCache = check_write_permitted_on_topics(
                                X, User, RoutingKeys, TopicPermCache0),
-            Mc2 = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
-            QNames = rabbit_exchange:route(X, Mc2, #{return_binding_keys => true}),
-            rabbit_trace:tap_in(Mc2, QNames, ConnName, ChannelNum, Username, Trace),
+            Mc = rabbit_msg_interceptor:intercept_incoming(Mc1, MsgIcptCtx),
+            QNames = rabbit_exchange:route(X, Mc, #{return_binding_keys => true}),
+            rabbit_trace:tap_in(Mc, QNames, ConnName, ChannelNum, Username, Trace),
             Opts = #{correlation => {HandleInt, DeliveryId}},
             Qs0 = rabbit_db_queue:get_targets(QNames),
             Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
-            Mc = ensure_mc_cluster_compat(Mc2),
             case rabbit_queue_type:deliver(Qs, Mc, Opts, QStates0) of
                 {ok, QStates, Actions} ->
                     State1 = State0#state{queue_states = QStates,
@@ -3093,7 +2974,6 @@ handle_outgoing_mgmt_link_flow_control(
 
 handle_outgoing_link_flow_control(
   #outgoing_link{queue_name = QName,
-                 credit_api_version = CreditApiVsn,
                  client_flow_ctl = CFC,
                  queue_flow_ctl = QFC,
                  at_least_one_credit_req_in_flight = CreditReqInFlight
@@ -3110,58 +2990,46 @@ handle_outgoing_link_flow_control(
     DeliveryCountRcv = delivery_count_rcv(MaybeDeliveryCountRcv),
     Drain = default(Drain0, false),
     Echo = default(Echo0, false),
-    case CreditApiVsn of
-        2 ->
-            case CreditReqInFlight of
-                false ->
-                    LinkCreditSnd = amqp10_util:link_credit_snd(
-                                      DeliveryCountRcv,
-                                      LinkCreditRcv,
-                                      CFC#client_flow_ctl.delivery_count),
-                    CappedCredit = cap_credit(LinkCreditSnd,
-                                              State0#state.cfg#cfg.max_queue_credit),
-                    Link = Link0#outgoing_link{
-                             client_flow_ctl = CFC#client_flow_ctl{
-                                                 credit = LinkCreditSnd,
-                                                 echo = Echo},
-                             queue_flow_ctl = QFC#queue_flow_ctl{
-                                                credit = CappedCredit,
-                                                drain = Drain},
-                             at_least_one_credit_req_in_flight = true},
-                    {ok, QStates, Actions} = rabbit_queue_type:credit(
-                                               QName, Ctag,
-                                               QFC#queue_flow_ctl.delivery_count,
-                                               CappedCredit, Drain, QStates0),
-                    State = State0#state{
-                              queue_states = QStates,
-                              outgoing_links = OutgoingLinks#{HandleInt := Link}},
-                    handle_queue_actions(Actions, State);
-                true ->
-                    %% A credit request is currently in-flight. Let's first process its reply
-                    %% before sending the next request. This ensures our outgoing_pending
-                    %% queue won't contain lots of credit replies for the same consumer
-                    %% when the client floods us with credit requests, but closed its incoming-window.
-                    %% Processing one credit top up at a time between us and the queue is also easier
-                    %% to reason about. Therefore, we stash the new request. If there is already a
-                    %% stashed request, we replace it because the latest flow control state from the
-                    %% client applies.
-                    Link = Link0#outgoing_link{
-                             stashed_credit_req = #credit_req{
-                                                     delivery_count = DeliveryCountRcv,
-                                                     credit = LinkCreditRcv,
-                                                     drain = Drain,
-                                                     echo = Echo}},
-                    State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
-            end;
-        1 ->
-            DeliveryCountSnd = Link0#outgoing_link.delivery_count,
+    case CreditReqInFlight of
+        false ->
             LinkCreditSnd = amqp10_util:link_credit_snd(
-                              DeliveryCountRcv, LinkCreditRcv, DeliveryCountSnd),
-            {ok, QStates, Actions} = rabbit_queue_type:credit_v1(
-                                       QName, Ctag, LinkCreditSnd, Drain, QStates0),
-            State1 = State0#state{queue_states = QStates},
-            State = handle_queue_actions(Actions, State1),
-            process_credit_reply_sync(Ctag, QName, LinkCreditSnd, State)
+                              DeliveryCountRcv,
+                              LinkCreditRcv,
+                              CFC#client_flow_ctl.delivery_count),
+            CappedCredit = cap_credit(LinkCreditSnd,
+                                      State0#state.cfg#cfg.max_queue_credit),
+            Link = Link0#outgoing_link{
+                     client_flow_ctl = CFC#client_flow_ctl{
+                                         credit = LinkCreditSnd,
+                                         echo = Echo},
+                     queue_flow_ctl = QFC#queue_flow_ctl{
+                                        credit = CappedCredit,
+                                        drain = Drain},
+                     at_least_one_credit_req_in_flight = true},
+            {ok, QStates, Actions} = rabbit_queue_type:credit(
+                                       QName, Ctag,
+                                       QFC#queue_flow_ctl.delivery_count,
+                                       CappedCredit, Drain, QStates0),
+            State = State0#state{
+                      queue_states = QStates,
+                      outgoing_links = OutgoingLinks#{HandleInt := Link}},
+            handle_queue_actions(Actions, State);
+        true ->
+            %% A credit request is currently in-flight. Let's first process its reply
+            %% before sending the next request. This ensures our outgoing_pending
+            %% queue won't contain lots of credit replies for the same consumer
+            %% when the client floods us with credit requests, but closed its incoming-window.
+            %% Processing one credit top up at a time between us and the queue is also easier
+            %% to reason about. Therefore, we stash the new request. If there is already a
+            %% stashed request, we replace it because the latest flow control state from the
+            %% client applies.
+            Link = Link0#outgoing_link{
+                     stashed_credit_req = #credit_req{
+                                             delivery_count = DeliveryCountRcv,
+                                             credit = LinkCreditRcv,
+                                             drain = Drain,
+                                             echo = Echo}},
+            State0#state{outgoing_links = OutgoingLinks#{HandleInt := Link}}
     end.
 
 delivery_count_rcv(?UINT(DeliveryCount)) ->
@@ -3173,80 +3041,6 @@ delivery_count_rcv(undefined) ->
     %% receiver, i.e., the delivery-countsnd specified in the flow state carried
     %% by the initial attach frame from the sender to the receiver." [2.6.7]
     ?INITIAL_DELIVERY_COUNT.
-
-%% The AMQP 0.9.1 credit extension was poorly designed because a consumer granting
-%% credits to a queue has to synchronously wait for a credit reply from the queue:
-%% https://github.com/rabbitmq/rabbitmq-server/blob/b9566f4d02f7ceddd2f267a92d46affd30fb16c8/deps/rabbitmq_codegen/credit_extension.json#L43
-%% This blocks our entire AMQP 1.0 session process. Since the credit reply from the
-%% queue did not contain the consumr tag prior to feature flag rabbitmq_4.0.0, we
-%% must behave here the same way as non-native AMQP 1.0: We wait until the queue
-%% sends us a credit reply sucht that we can correlate that reply with our consumer tag.
-process_credit_reply_sync(
-  Ctag, QName, Credit, State = #state{queue_states = QStates}) ->
-    case rabbit_queue_type:module(QName, QStates) of
-        {ok, rabbit_classic_queue} ->
-            receive {'$gen_cast',
-                     {queue_event,
-                      QName,
-                      {send_credit_reply, Avail}}} ->
-                        Action = {credit_reply_v1, Ctag, Credit, Avail, false},
-                        handle_queue_actions([Action], State)
-            after ?CREDIT_REPLY_TIMEOUT ->
-                      credit_reply_timeout(classic, QName)
-            end;
-        {ok, rabbit_quorum_queue} ->
-            process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State);
-        {error, not_found} ->
-            State
-    end.
-
-process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State0) ->
-    receive {'$gen_cast',
-             {queue_event,
-              QName,
-              {QuorumQueue,
-               {applied,
-                Applied0}}}} ->
-
-                {Applied, ReceivedCreditReply}
-                = lists:mapfoldl(
-                    %% Convert v1 send_credit_reply to credit_reply_v1 action.
-                    %% Available refers to *after* and Credit refers to *before*
-                    %% quorum queue sends messages.
-                    %% We therefore keep the same wrong behaviour of RabbitMQ 3.x.
-                    fun({RaIdx, {send_credit_reply, Available}}, _) ->
-                            Action = {credit_reply_v1, Ctag, Credit, Available, false},
-                            {{RaIdx, Action}, true};
-                       ({RaIdx, {multi, [{send_credit_reply, Available},
-                                         {send_drained, _} = SendDrained]}}, _) ->
-                            Action = {credit_reply_v1, Ctag, Credit, Available, false},
-                            {{RaIdx, {multi, [Action, SendDrained]}}, true};
-                       (E, Acc) ->
-                            {E, Acc}
-                    end, false, Applied0),
-
-                Evt = {queue_event, QName, {QuorumQueue, {applied, Applied}}},
-                %% send_drained action must be processed by
-                %% rabbit_fifo_client to advance the delivery count.
-                State = handle_queue_event(Evt, State0),
-                case ReceivedCreditReply of
-                    true ->
-                        State;
-                    false ->
-                        process_credit_reply_sync_quorum_queue(Ctag, QName, Credit, State)
-                end
-    after ?CREDIT_REPLY_TIMEOUT ->
-              credit_reply_timeout(quorum, QName)
-    end.
-
--spec credit_reply_timeout(atom(), rabbit_types:rabbit_amqqueue_name()) ->
-    no_return().
-credit_reply_timeout(QType, QName) ->
-    Fmt = "Timed out waiting for credit reply from ~s ~s. "
-    "Hint: Enable feature flag rabbitmq_4.0.0",
-    Args = [QType, rabbit_misc:rs(QName)],
-    ?LOG_ERROR(Fmt, Args),
-    protocol_error(?V_1_0_AMQP_ERROR_INTERNAL_ERROR, Fmt, Args).
 
 default(undefined, Default) -> Default;
 default(Thing, _Default) -> Thing.
@@ -3987,20 +3781,6 @@ pg_scope() ->
 cap_credit(DesiredCredit, MaxCredit) ->
     min(DesiredCredit, MaxCredit).
 
-ensure_mc_cluster_compat(Mc) ->
-    Feature = 'rabbitmq_4.0.0',
-    IsEnabled = rabbit_feature_flags:is_enabled(Feature),
-    case IsEnabled of
-        true ->
-            Mc;
-        false ->
-            McEnv = #{Feature => IsEnabled},
-            %% other nodes in the cluster may not understand the new internal
-            %% amqp mc format - in this case we convert to AMQP legacy format
-            %% for compatibility
-            mc:convert(mc_amqpl, Mc, McEnv)
-    end.
-
 format_status(
   #{state := #state{cfg = Cfg,
                     outgoing_pending = OutgoingPending,
@@ -4128,26 +3908,19 @@ info_outgoing_management_links(Links) ->
                      credit = Credit} <- Links].
 
 info_outgoing_links(Links) ->
-    [begin
-         {DeliveryCount, Credit} = case ClientFlowCtl of
-                                       #client_flow_ctl{delivery_count = DC,
-                                                        credit = C} ->
-                                           {DC, C};
-                                       credit_api_v1 ->
-                                           {'', ''}
-                                   end,
-         info_outgoing_link(Handle, Name, SourceAddress, QueueName#resource.name,
-                            SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
-
-     end
+    [info_outgoing_link(Handle, Name, SourceAddress, QueueNameBin,
+                        SendSettled, MaxMessageSize, Filter, DeliveryCount, Credit)
      || Handle := #outgoing_link{
                      name = Name,
                      source_address = SourceAddress,
-                     queue_name = QueueName,
+                     queue_name = #resource{name = QueueNameBin},
                      send_settled = SendSettled,
                      max_message_size = MaxMessageSize,
                      filter = Filter,
-                     client_flow_ctl = ClientFlowCtl} <- Links].
+                     client_flow_ctl = #client_flow_ctl{
+                                          delivery_count = DeliveryCount,
+                                          credit = Credit}}
+        <- Links].
 
 info_outgoing_link(Handle, LinkName, SourceAddress, QueueNameBin, SendSettled,
                    MaxMessageSize, Filter, DeliveryCount, Credit) ->

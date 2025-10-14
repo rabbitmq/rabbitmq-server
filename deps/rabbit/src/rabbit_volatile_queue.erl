@@ -54,7 +54,6 @@
          delete/4,
          recover/2,
          settle/5,
-         credit_v1/5,
          dequeue/5,
          state_info/1,
          info/2,
@@ -341,9 +340,6 @@ recover(_, _) ->
     {[], []}.
 
 settle(_, _, _, _, #?STATE{} = State) ->
-    {State, []}.
-
-credit_v1(_, _, _, _, #?STATE{} = State) ->
     {State, []}.
 
 dequeue(_, _, _, _, #?STATE{name = Name}) ->
