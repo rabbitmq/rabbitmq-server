@@ -39,13 +39,20 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
-      - name: Determine closes tag
+      - name: Determine closest tag
         id: tag
         if: matrix.branch != 'main'
         shell: bash
         run: |
           t=$(git describe --tags --abbrev=0 ${{ matrix.branch }})
           printf "project_version=%s\n" "${t:1}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Get current SHA
+        id: sha
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD)
+          printf "current_sha=%s\n" "$sha" | tee -a "$GITHUB_OUTPUT"
 
       - name: Configure Erlang
         uses: erlef/setup-beam@v1
@@ -56,7 +63,7 @@ jobs:
       - name: make package-generic-unix
         id: make
         run: |
-          make package-generic-unix PROJECT_VERSION=${{ matrix.project_version || steps.tag.outputs.project_version }}+${{ github.sha }}
+          make package-generic-unix PROJECT_VERSION=${{ matrix.project_version || steps.tag.outputs.project_version }}+${{ steps.sha.outputs.current_sha }}
 
       - name: Upload package-generic-unix
         uses: actions/upload-artifact@v4
@@ -83,6 +90,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ matrix.branch }}
+
+      - name: Get current SHA
+        id: sha
+        shell: bash
+        run: |
+          sha=$(git rev-parse HEAD)
+          printf "current_sha=%s\n" "$sha" | tee -a "$GITHUB_OUTPUT"
 
       - name: Download package-generic-unix
         uses: actions/download-artifact@v5
@@ -133,4 +147,4 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.otp_version }}
           build-args: |
             OTP_VERSION=${{ matrix.otp_version }}
-            RABBITMQ_VERSION=${{ matrix.branch }}+${{ github.sha }}
+            RABBITMQ_VERSION=${{ matrix.branch }}+${{ steps.sha.outputs.current_sha }}
