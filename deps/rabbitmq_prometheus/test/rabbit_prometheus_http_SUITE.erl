@@ -411,7 +411,8 @@ aggregated_metrics_test(Config) ->
     ?assertEqual(match, re:run(Body, "^rabbitmq_io_read_time_seconds_total ", [{capture, none}, multiline])),
     %% Check the first TOTALS metric value
     ?assertEqual(match, re:run(Body, "^rabbitmq_connections ", [{capture, none}, multiline])),
-    ?assertEqual(nomatch, re:run(Body, "^rabbitmq_raft_commit_latency_seconds", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_commit_latency_seconds", [{capture, none}, multiline])),
+    ?assertEqual(match, re:run(Body, "^rabbitmq_raft_max_commit_latency_seconds", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_segment_writer", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_bytes_written.*ra_log_wal", [{capture, none}, multiline])),
     ?assertEqual(match, re:run(Body, "^rabbitmq_raft_entries{", [{capture, none}, multiline])),
@@ -870,16 +871,10 @@ detailed_raft_metrics_test(Config) ->
     QQMetrics = #{#{queue => "a_quorum_queue", vhost => "/"} => ["1.0"]},
 
     {_, Body1} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=foo", [], 200),
-    %% no queues in vhost foo, so no QQ metrics
-    ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body1))),
     ?assertEqual(undefined,
                  maps:get(rabbitmq_detailed_raft_term, parse_response(Body1), undefined)),
 
     {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=ra_metrics&vhost=/", [], 200),
-    %% there's a queue in vhost /
-    ?assertEqual(ComponentMetrics,
-                 map_get(rabbitmq_detailed_raft_wal_files, parse_response(Body2))),
     ?assertEqual(QQMetrics,
                  map_get(rabbitmq_detailed_raft_term, parse_response(Body2))),
 
