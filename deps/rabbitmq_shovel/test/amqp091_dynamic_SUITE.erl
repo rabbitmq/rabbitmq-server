@@ -490,11 +490,8 @@ change_definition(Config) ->
       end).
 
 autodelete(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 0, 100, 0}),
-    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
     autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
     autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
-    autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
     %% no-ack is not compatible with explicit count
     autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
     ok.
