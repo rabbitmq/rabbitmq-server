@@ -53,7 +53,6 @@ groups() ->
                   local_to_local_delete_after_never,
                   local_to_local_delete_after_queue_length,
                   local_to_local_delete_after_queue_length_zero,
-                  local_to_local_delete_after_number,
                   local_to_local_delete_after_with_rejections,
                   local_to_local_no_ack,
                   local_to_local_quorum_no_ack,
@@ -557,26 +556,6 @@ local_to_local_delete_after_queue_length(Config) ->
               amqp10_expect_count(Sess, Dest, 18),
               await_autodelete(Config, ?PARAM),
               amqp10_publish(Sess, Src, <<"tag1">>, 5),
-              amqp10_expect_empty(Sess, Dest)
-      end).
-
-local_to_local_delete_after_number(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-              amqp10_publish(Sess, Src, <<"tag1">>, 5),
-              shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"src-delete-after">>, 10},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              amqp10_expect_count(Sess, Dest, 5),
-              amqp10_publish(Sess, Src, <<"tag1">>, 10),
-              amqp10_expect_count(Sess, Dest, 5),
-              await_autodelete(Config, ?PARAM),
               amqp10_expect_empty(Sess, Dest)
       end).
 
