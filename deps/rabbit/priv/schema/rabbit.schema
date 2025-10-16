@@ -1238,6 +1238,69 @@ fun(Conf) ->
     end
 end}.
 
+%% Per-queue-type / per-mount-point disk alarms
+{mapping, "disk_free_limits.$id.mount_point", "rabbit.disk_free_limits", [
+    {datatype, [string]}
+]}.
+{mapping, "disk_free_limits.$id.absolute", "rabbit.disk_free_limits", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+{mapping, "disk_free_limits.$id.queue_types", "rabbit.disk_free_limits", [
+    {datatype, [binary]}
+]}.
+
+{translation, "rabbit.disk_free_limits",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("disk_free_limits", Conf) of
+        [] ->
+            cuttlefish:unset();
+        Settings ->
+            lists:foldl(
+              fun ({["disk_free_limits", Id, "mount_point"], Path}, Acc) ->
+                      maps:update_with(
+                        list_to_binary(Id),
+                        fun ({undefined, Limit, QTs}) ->
+                                {Path, Limit, QTs};
+                            ({ExistingPath, Limit, QTs}) ->
+                                cuttlefish:warn(
+                                  "Duplicate mount point set for ~ts, using "
+                                  "'~ts' instead of '~ts'",
+                                  [Id, Path, ExistingPath]),
+                                {Path, Limit, QTs}
+                        end, {Path, undefined, []}, Acc);
+                  ({["disk_free_limits", Id, "absolute"], Limit}, Acc) ->
+                      maps:update_with(
+                        list_to_binary(Id),
+                        fun ({Path, undefined, QTypes}) ->
+                                {Path, Limit, QTypes};
+                            ({Path, ExistingLimit, QTypes}) ->
+                                cuttlefish:warn(
+                                  "Duplicate disk free limits set for ~ts, "
+                                  "using ~tp instead of ~tp",
+                                  [Id, Limit, ExistingLimit]),
+                                {Path, Limit, QTypes}
+                        end, {undefined, Limit, []}, Acc);
+                  ({["disk_free_limits", Id, "queue_types"], QTs0}, Acc) ->
+                      QTs = string:split(QTs0, ","),
+                      maps:update_with(
+                        list_to_binary(Id),
+                        fun ({Path, Limit, []}) ->
+                                {Path, Limit, QTs};
+                            ({Path, Limit, ExistingQTs}) ->
+                                cuttlefish:warn("Duplicate queue types set "
+                                                "for disk free limit of ~ts, "
+                                                "using ~tp instead of ~tp",
+                                                [Id, QTs, ExistingQTs]),
+                                {Path, Limit, QTs}
+                        end, {undefined, undefined, QTs}, Acc);
+                  (Other, _Acc) ->
+                      cuttlefish:invalid(
+                        io_lib:format("~p is invalid", [Other]))
+              end, #{}, Settings)
+    end
+end}.
+
 %%
 %% Clustering
 %% =====================
