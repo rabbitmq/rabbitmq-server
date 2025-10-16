@@ -45,8 +45,8 @@ prep_stop(State) ->
 
 -spec stop(_) -> ok.
 stop(_State) ->
-    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TCP_PROTOCOL),
-    _ = rabbit_networking:stop_ranch_listener_of_protocol(?TLS_PROTOCOL),
+    rabbit_networking:stop_ranch_listeners_of_protocol(?TCP_PROTOCOL),
+    rabbit_networking:stop_ranch_listeners_of_protocol(?TLS_PROTOCOL),
     ok.
 
 init([]) -> {ok, {{one_for_one, 1, 5}, []}}.
