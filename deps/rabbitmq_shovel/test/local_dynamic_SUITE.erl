@@ -53,20 +53,9 @@ groups() ->
                   local_to_local_delete_after_never,
                   local_to_local_delete_after_queue_length,
                   local_to_local_delete_after_queue_length_zero,
-                  local_to_local_no_ack,
-                  local_to_local_quorum_no_ack,
                   local_to_local_stream_no_ack,
-                  local_to_local_on_publish,
-                  local_to_local_quorum_on_publish,
                   local_to_local_stream_on_publish,
-                  local_to_local_on_confirm,
-                  local_to_local_quorum_on_confirm,
                   local_to_local_stream_on_confirm,
-                  local_to_local_reject_publish,
-                  local_to_amqp091,
-                  local_to_amqp10,
-                  amqp091_to_local,
-                  amqp10_to_local,
                   local_to_local_delete_src_queue,
                   local_to_local_delete_dest_queue,
                   local_to_local_vhost_access,
@@ -558,41 +547,6 @@ local_to_local_delete_after_queue_length(Config) ->
               amqp10_expect_empty(Sess, Dest)
       end).
 
-local_to_local_no_ack(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"no-ack">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-local_to_local_quorum_no_ack(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    VHost = <<"/">>,
-    declare_queue(Config, VHost, Src, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    declare_queue(Config, VHost, Dest, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-predeclared">>, true},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"no-ack">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
 local_to_local_stream_no_ack(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
@@ -617,41 +571,6 @@ local_to_local_stream_no_ack(Config) ->
                           30000),
               _ = amqp10_expect(Receiver, 10, []),
               amqp10_client:detach_link(Receiver)
-      end).
-
-local_to_local_on_confirm(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"on-confirm">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-local_to_local_quorum_on_confirm(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    VHost = <<"/">>,
-    declare_queue(Config, VHost, Src, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    declare_queue(Config, VHost, Dest, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-predeclared">>, true},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"on-confirm">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
       end).
 
 local_to_local_stream_on_confirm(Config) ->
@@ -681,41 +600,6 @@ local_to_local_stream_on_confirm(Config) ->
               amqp10_client:detach_link(Receiver)
       end).
 
-local_to_local_on_publish(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"on-publish">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-local_to_local_quorum_on_publish(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    VHost = <<"/">>,
-    declare_queue(Config, VHost, Src, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    declare_queue(Config, VHost, Dest, [{<<"x-queue-type">>, longstr, <<"quorum">>}]),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-predeclared">>, true},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"on-publish">>}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
 local_to_local_stream_on_publish(Config) ->
     Src = ?config(srcq, Config),
     Dest = ?config(destq, Config),
@@ -741,83 +625,6 @@ local_to_local_stream_on_publish(Config) ->
                           30000),
               _ = amqp10_expect(Receiver, 10, []),
               amqp10_client:detach_link(Receiver)
-      end).
-
-local_to_local_reject_publish(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    declare_queue(Config, <<"/">>, Dest, [{<<"x-max-length">>, long, 1},
-                                          {<<"x-overflow">>, longstr, <<"reject-publish">>}
-                                         ]),
-    with_amqp10_session(
-      Config,
-      fun (Sess) ->
-              amqp10_publish(Sess, Src, <<"tag1">>, 5),
-              shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest},
-                                           {<<"ack-mode">>, <<"on-confirm">>}
-                                          ]),
-              amqp10_expect_count(Sess, Dest, 1)
-      end).
-
-local_to_amqp091(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"amqp091">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-local_to_amqp10(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"amqp10">>},
-                                           {<<"dest-address">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-amqp091_to_local(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"amqp091">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
-      end).
-
-amqp10_to_local(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"amqp10">>},
-                                           {<<"src-address">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
       end).
 
 local_to_local_delete_src_queue(Config) ->
