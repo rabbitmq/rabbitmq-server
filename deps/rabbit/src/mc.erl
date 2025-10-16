@@ -35,7 +35,7 @@
          convert/3,
          protocol_state/1,
          prepare/2,
-         record_death/4,
+         record_death/3,
          is_death_cycle/2,
          death_queue_names/1
         ]).
@@ -382,11 +382,8 @@ protocol_state(BasicMsg) ->
 
 -spec record_death(rabbit_dead_letter:reason(),
                    rabbit_misc:resource_name(),
-                   state(),
-                   environment()) -> state().
-record_death(Reason, SourceQueue,
-             #?MODULE{annotations = Anns0} = State,
-             Env)
+                   state()) -> state().
+record_death(Reason, SourceQueue, #?MODULE{annotations = Anns0} = State)
   when is_atom(Reason) andalso
        is_binary(SourceQueue) ->
     Key = {SourceQueue, Reason},
@@ -438,25 +435,17 @@ record_death(Reason, SourceQueue,
                           <<"x-last-death-exchange">> => Exchange,
                           deaths := Deaths};
                _ ->
-                   Deaths = case Env of
-                                #{?FF_MC_DEATHS_V2 := false} ->
-                                    #deaths{last = Key,
-                                            first = Key,
-                                            records = #{Key => NewDeath}};
-                                _ ->
-                                    [{Key, NewDeath}]
-                            end,
                    Anns0#{<<"x-first-death-reason">> => ReasonBin,
                           <<"x-first-death-queue">> => SourceQueue,
                           <<"x-first-death-exchange">> => Exchange,
                           <<"x-last-death-reason">> => ReasonBin,
                           <<"x-last-death-queue">> => SourceQueue,
                           <<"x-last-death-exchange">> => Exchange,
-                          deaths => Deaths}
+                          deaths => [{Key, NewDeath}]}
            end,
     State#?MODULE{annotations = Anns};
-record_death(Reason, SourceQueue, BasicMsg, Env) ->
-    mc_compat:record_death(Reason, SourceQueue, BasicMsg, Env).
+record_death(Reason, SourceQueue, BasicMsg) ->
+    mc_compat:record_death(Reason, SourceQueue, BasicMsg).
 
 update_death(#death{count = Count,
                     anns = DeathAnns} = Death, Timestamp) ->
