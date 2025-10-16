@@ -105,7 +105,8 @@ groups() ->
                                             force_checkpoint,
                                             policy_repair,
                                             gh_12635,
-                                            replica_states
+                                            replica_states,
+                                            consumer_message_is_delevered_after_snapshot
                                            ]
                        ++ all_tests()},
                       {cluster_size_5, [], [start_queue,
@@ -1114,7 +1115,7 @@ get_in_minority(Config) ->
     ok = rabbit_quorum_queue:restart_server({RaName, Server2}).
 
 single_active_consumer_priority_take_over(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server0, Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1163,7 +1164,7 @@ single_active_consumer_priority_take_over_requeue(Config) ->
     single_active_consumer_priority_take_over_base(-1, Config).
 
 single_active_consumer_priority_take_over_base(DelLimit, Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server0, Server1, _Server2] = Nodes =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1223,7 +1224,7 @@ single_active_consumer_priority_take_over_base(DelLimit, Config) ->
     ok.
 
 single_active_consumer_priority(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1444,8 +1445,8 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
     end.
 
 force_checkpoint_on_queue(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
+    check_quorum_queues_ff_v4_compat(Config),
+    check_quorum_queues_v8_compat(Config),
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1464,19 +1465,19 @@ force_checkpoint_on_queue(Config) ->
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           LCI =:= undefined
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server1, ra, member_overview, [{RaName, Server1}]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           LCI =:= undefined
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server2, ra, member_overview, [{RaName, Server2}]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           LCI =:= undefined
       end),
 
@@ -1493,26 +1494,26 @@ force_checkpoint_on_queue(Config) ->
       fun() ->
           {ok, State, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
           ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server1, ra, member_overview, [{RaName, Server1}]),
           ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end),
     rabbit_ct_helpers:await_condition(
       fun() ->
           {ok, State, _} = rpc:call(Server2, ra, member_overview, [{RaName, Server2}]),
           ct:pal("Ra server state post forced checkpoint: ~tp~n", [State]),
-          #{log := #{latest_checkpoint_index := LCI}} = State,
+          #{log := #{snapshot_index := LCI}} = State,
           (LCI =/= undefined) andalso (LCI >= N)
       end).
 
 force_checkpoint(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server0, _Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1624,7 +1625,7 @@ policy_repair(Config) ->
             consume_all(Ch, QQ),
 
             % Ensure the queue process is unavailable
-            lists:foreach(fun(Srv) -> ensure_qq_proc_dead(Config, Srv, RaName) end, Servers),
+            [ok = ra:stop_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
             % Add policy with higher priority, allowing even more messages.
             ExpectedMaxLength3 = 30,
@@ -1645,24 +1646,7 @@ policy_repair(Config) ->
                 ]),
 
             % Restart the queue process.
-            {ok, Queue} =
-                rabbit_ct_broker_helpers:rpc(
-                    Config,
-                    0,
-                    rabbit_amqqueue,
-                    lookup,
-                    [{resource, <<"/">>, queue, QQ}]),
-            lists:foreach(
-                fun(Srv) ->
-                    rabbit_ct_broker_helpers:rpc(
-                        Config,
-                        Srv,
-                        rabbit_quorum_queue,
-                        recover,
-                        [foo, [Queue]]
-                    )
-                end,
-                Servers),
+            [ok = ra:restart_server(quorum_queues, {RaName, Srv}) || Srv <- Servers],
 
             % Wait for the queue to be available again.
             lists:foreach(fun(Srv) ->
@@ -1735,7 +1719,7 @@ subscribe_from_each(Config) ->
     ok.
 
 dont_leak_file_handles(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1783,15 +1767,78 @@ dont_leak_file_handles(Config) ->
     rabbit_ct_client_helpers:close_channel(C),
     ok.
 
+consumer_message_is_delevered_after_snapshot(Config) ->
+    %% a consumer on a node that received a snapshot should have it's messages
+    %% delivered
+    [Server0, _Server1, Server2] = Nodes =
+        rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+
+    Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
+    #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
+    QQ = ?config(queue_name, Config),
+    RaName = ra_name(QQ),
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch0, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% stop server on a follower node
+    ok = rpc:call(Server2, ra, stop_server, [quorum_queues, {RaName, Server2}]),
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server2),
+    %% create a consumer
+    qos(Ch2, 2, false),
+    subscribe(Ch2, QQ, false),
+
+    %% publish some messages and make sure a snapshot has been taken
+    Msg = crypto:strong_rand_bytes(13_000),
+
+    [publish(Ch0, QQ, Msg) || _ <- lists:seq(1, 5000)],
+    amqp_channel:wait_for_confirms(Ch0, 5),
+    %% need to sleep here a bit as QQs wont take
+    %% snapshots more often than once every second
+    timer:sleep(1100),
+
+    %% then purge
+    #'queue.purge_ok'{} = amqp_channel:call(Ch0, #'queue.purge'{queue = QQ}),
+
+    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    ct:pal("machine version is ~b", [MacVer]),
+
+    %% only await snapshot if all members have at least machine version 8
+    if MacVer >= 8 ->
+           rabbit_ct_helpers:await_condition(
+             fun () ->
+                     {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview,
+                                                       [{RaName, Server0}]),
+                     undefined =/= maps:get(snapshot_index, Log)
+             end);
+       true ->
+           ok
+    end,
+    %% restart stopped member
+    ok = rpc:call(Server2, ra, restart_server, [quorum_queues, {RaName, Server2}]),
+
+    %% messages should be delivered
+    receive
+        {#'basic.deliver'{delivery_tag = _DeliveryTag}, _} ->
+            ok
+    after 30000 ->
+              flush(1),
+              ct:fail("expected messages were not delivered")
+    end,
+    ok.
+
 gh_12635(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
+    check_quorum_queues_v8_compat(Config),
 
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
-                                      [rabbit, quorum_min_checkpoint_interval, 1]),
+                                      [rabbit, quorum_snapshot_interval, 1]),
 
     Ch0 = rabbit_ct_client_helpers:open_channel(Config, Server0),
     #'confirm.select_ok'{} = amqp_channel:call(Ch0, #'confirm.select'{}),
@@ -1813,7 +1860,7 @@ gh_12635(Config) ->
     rabbit_ct_helpers:await_condition(
       fun () ->
               {ok, #{log := Log}, _} = rpc:call(Server0, ra, member_overview, [{RaName, Server0}]),
-              undefined =/= maps:get(latest_checkpoint_index, Log)
+              undefined =/= maps:get(snapshot_index, Log)
       end),
 
     %% publish 1 more message
@@ -1851,7 +1898,7 @@ gh_12635(Config) ->
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Queue = ?config(queue_name, Config),
@@ -1883,7 +1930,7 @@ priority_queue_fifo(Config) ->
 priority_queue_2_1_ratio(Config) ->
     %% testing: if lo priority messages are published before hi priority
     %% messages are consumed in a 2:1 hi to lo ratio
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Queue = ?config(queue_name, Config),
@@ -3329,7 +3376,7 @@ subscribe_redelivery_limit(Config) ->
     end.
 
 subscribe_redelivery_limit_disable(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -3569,16 +3616,18 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 3, 0} == get_message_bytes(Leader, QRes)
+              {M, M, 0} = get_message_bytes(Leader, QRes),
+              M > 0
       end, 30000),
 
+    {MsgSize, _, _} = get_message_bytes(Leader, QRes),
     subscribe(Ch, QQ, false),
 
     wait_for_messages_ready(Servers, RaName, 0),
     wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 0, 3} == get_message_bytes(Leader, QRes)
+              {MsgSize, 0, MsgSize} == get_message_bytes(Leader, QRes)
       end, 30000),
 
     receive
@@ -3603,7 +3652,7 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 1),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 0, 3} == get_message_bytes(Leader, QRes)
+              {MsgSize, 0, MsgSize} == get_message_bytes(Leader, QRes)
       end, 30000),
 
     rabbit_ct_client_helpers:close_channel(Ch),
@@ -3612,7 +3661,7 @@ message_bytes_metrics(Config) ->
     wait_for_messages_pending_ack(Servers, RaName, 0),
     rabbit_ct_helpers:await_condition(
       fun() ->
-              {3, 3, 0} == get_message_bytes(Leader, QRes)
+              {MsgSize, MsgSize, 0} == get_message_bytes(Leader, QRes)
       end, 30000),
     ok.
 
@@ -3727,7 +3776,7 @@ queue_length_limit_reject_publish(Config) ->
     ok.
 
 queue_length_limit_policy_cleared(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -4787,7 +4836,7 @@ select_nodes_with_least_replicas_node_down(Config) ->
      || Q <- Qs].
 
 requeue_multiple_true(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
@@ -4827,7 +4876,7 @@ requeue_multiple_true(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
 
 requeue_multiple_false(Config) ->
-    check_quorum_queues_v4_compat(Config),
+    check_quorum_queues_ff_v4_compat(Config),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
@@ -5114,7 +5163,17 @@ basic_get(Ch, Q, NoAck, Attempt) ->
             basic_get(Ch, Q, NoAck, Attempt - 1)
     end.
 
-check_quorum_queues_v4_compat(Config) ->
+check_quorum_queues_v8_compat(Config) ->
+    Nodes = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
+    MacVer = lists:min([V || {ok, V} <- erpc:multicall(Nodes, rabbit_fifo, version, [])]),
+    case MacVer >= 8 of
+        true ->
+            ok;
+        false ->
+            throw({skip, "test will only work on QQ machine version > 8"})
+    end.
+
+check_quorum_queues_ff_v4_compat(Config) ->
     case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
         true ->
             ok;

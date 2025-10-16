@@ -4,7 +4,7 @@
 %%
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
--module(rabbit_fifo).
+-module(rabbit_fifo_v7).
 
 -behaviour(ra_machine).
 
@@ -13,11 +13,10 @@
 -compile({no_auto_import, [apply/3]}).
 -dialyzer(no_improper_lists).
 
--include("rabbit_fifo.hrl").
+-include("rabbit_fifo_v7.hrl").
 -include_lib("kernel/include/logger.hrl").
 
--define(STATE, ?MODULE).
--define(DLX, rabbit_fifo_dlx).
+-define(STATE, rabbit_fifo).
 
 -define(CONSUMER_PID(Pid), #consumer{cfg = #consumer_cfg{pid = Pid}}).
 -define(CONSUMER_PRIORITY(P), #consumer{cfg = #consumer_cfg{priority = P}}).
@@ -25,7 +24,6 @@
         #consumer{cfg = #consumer_cfg{tag = Tag,
                                       pid = Pid}}).
 
--define(ENQ_OVERHEAD, 256).
 -ifdef(TEST).
 -define(SIZE(Msg),
         case mc:is(Msg) of
@@ -44,8 +42,6 @@
          %% ra_machine callbacks
          init/1,
          apply/3,
-         live_indexes/1,
-         snapshot_installed/4,
          state_enter/2,
          tick/2,
          overview/1,
@@ -62,6 +58,7 @@
          query_messages_checked_out/1,
          query_messages_total/1,
          query_processes/1,
+         query_ra_indexes/1,
          query_waiting_consumers/1,
          query_consumer_count/1,
          query_consumers/1,
@@ -72,12 +69,13 @@
          query_peek/2,
          query_notify_decorators_info/1,
          usage/1,
+         is_v4/0,
 
          %% misc
          get_msg_header/1,
          get_header/2,
          annotate_msg/2,
-         get_msg_from_cmd/1,
+         get_msg/1,
 
          %% protocol helpers
          make_enqueue/3,
@@ -94,7 +92,8 @@
          make_update_config/1,
          make_garbage_collection/0,
 
-         exec_read/3
+         exec_read/3,
+         convert_v3_to_v4/2
 
         ]).
 
@@ -144,6 +143,7 @@
 -record(purge_nodes, {nodes :: [node()]}).
 -record(update_config, {config :: config()}).
 -record(garbage_collection, {}).
+% -record(eval_consumer_timeouts, {consumer_keys :: [consumer_key()]}).
 
 -opaque protocol() ::
     #enqueue{} |
@@ -186,6 +186,8 @@
               state/0,
               config/0]).
 
+%% This function is never called since only rabbit_fifo_v0:init/1 is called.
+%% See https://github.com/rabbitmq/ra/blob/e0d1e6315a45f5d3c19875d66f9d7bfaf83a46e3/src/ra_machine.erl#L258-L265
 -spec init(config()) -> state().
 init(#{name := Name,
        queue_resource := Resource} = Conf) ->
@@ -194,7 +196,7 @@ init(#{name := Name,
 
 update_config(Conf, State) ->
     DLH = maps:get(dead_letter_handler, Conf, undefined),
-    % BLH = maps:get(become_leader_handler, Conf, undefined),
+    BLH = maps:get(become_leader_handler, Conf, undefined),
     Overflow = maps:get(overflow_strategy, Conf, drop_head),
     MaxLength = maps:get(max_length, Conf, undefined),
     MaxBytes = maps:get(max_bytes, Conf, undefined),
@@ -218,6 +220,7 @@ update_config(Conf, State) ->
 
     LastActive = maps:get(created, Conf, undefined),
     State#?STATE{cfg = Cfg#cfg{dead_letter_handler = DLH,
+                               become_leader_handler = BLH,
                                overflow_strategy = Overflow,
                                max_length = MaxLength,
                                max_bytes = MaxBytes,
@@ -228,33 +231,17 @@ update_config(Conf, State) ->
                  last_active = LastActive}.
 
 % msg_ids are scoped per consumer
+% ra_indexes holds all raft indexes for enqueues currently on queue
 -spec apply(ra_machine:command_meta_data(), command(), state()) ->
     {state(), ra_machine:reply(), ra_machine:effects() | ra_machine:effect()} |
     {state(), ra_machine:reply()}.
-apply(Meta, {machine_version, FromVersion, ToVersion}, VXState) ->
-    %% machine version upgrades cant be done in apply_
-    State = convert(Meta, FromVersion, ToVersion, VXState),
-    %% TODO: force snapshot now?
-    {State, ok, [{aux, {dlx, setup}}]};
-apply(Meta, Cmd, #?STATE{discarded_bytes = DiscBytes} = State) ->
-    %% add estimated discared_bytes
-    %% TODO: optimise!
-    %% this is the simplest way to record the discarded bytes for most
-    %% commands but it is a bit mory garby as almost always creates a new
-    %% state copy before even processing the command
-    Bytes = estimate_discarded_size(Cmd),
-    apply_(Meta, Cmd, State#?STATE{discarded_bytes = DiscBytes + Bytes}).
-
-apply_(Meta, #enqueue{pid = From, seq = Seq,
-                      msg = RawMsg}, State00) ->
+apply(Meta, #enqueue{pid = From, seq = Seq,
+                     msg = RawMsg}, State00) ->
     apply_enqueue(Meta, From, Seq, RawMsg, message_size(RawMsg), State00);
-apply_(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
+apply(#{reply_mode := {notify, _Corr, EnqPid}} = Meta,
       #?ENQ_V2{seq = Seq, msg = RawMsg, size = Size}, State00) ->
     apply_enqueue(Meta, EnqPid, Seq, RawMsg, Size, State00);
-apply_(Meta, #?ENQ_V2{seq = Seq, msg = RawMsg, size = Size}, State00) ->
-    %% untracked
-    apply_enqueue(Meta, undefined, Seq, RawMsg, Size, State00);
-apply_(_Meta, #register_enqueuer{pid = Pid},
+apply(_Meta, #register_enqueuer{pid = Pid},
       #?STATE{enqueuers = Enqueuers0,
               cfg = #cfg{overflow_strategy = Overflow}} = State0) ->
     State = case maps:is_key(Pid, Enqueuers0) of
@@ -271,8 +258,8 @@ apply_(_Meta, #register_enqueuer{pid = Pid},
                   ok
           end,
     {State, Res, [{monitor, process, Pid}]};
-apply_(Meta, #settle{msg_ids = MsgIds,
-                     consumer_key = Key},
+apply(Meta, #settle{msg_ids = MsgIds,
+                    consumer_key = Key},
       #?STATE{consumers = Consumers} = State) ->
     case find_consumer(Key, Consumers) of
         {ConsumerKey, Con0} ->
@@ -283,8 +270,20 @@ apply_(Meta, #settle{msg_ids = MsgIds,
         _ ->
             {State, ok}
     end;
-apply_(Meta, #discard{consumer_key = ConsumerKey,
-                      msg_ids = MsgIds},
+apply(#{machine_version := 4} = Meta,
+      #discard{consumer_key = ConsumerKey,
+               msg_ids = MsgIds},
+      #?STATE{consumers = Consumers } = State0) ->
+    %% buggy version that would have not found the consumer if the ConsumerKey
+    %% was a consumer_id()
+    case find_consumer(ConsumerKey, Consumers) of
+        {ConsumerKey, #consumer{} = Con} ->
+            discard(Meta, MsgIds, ConsumerKey, Con, true, #{}, State0);
+        _ ->
+            {State0, ok}
+    end;
+apply(Meta, #discard{consumer_key = ConsumerKey,
+                     msg_ids = MsgIds},
       #?STATE{consumers = Consumers } = State0) ->
     case find_consumer(ConsumerKey, Consumers) of
         {ActualConsumerKey, #consumer{} = Con} ->
@@ -292,9 +291,9 @@ apply_(Meta, #discard{consumer_key = ConsumerKey,
         _ ->
             {State0, ok}
     end;
-apply_(Meta, #return{consumer_key = ConsumerKey,
-                     msg_ids = MsgIds},
-       #?STATE{consumers = Cons} = State) ->
+apply(Meta, #return{consumer_key = ConsumerKey,
+                    msg_ids = MsgIds},
+      #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}} ->
             return(Meta, ActualConsumerKey, MsgIds, false,
@@ -302,12 +301,12 @@ apply_(Meta, #return{consumer_key = ConsumerKey,
         _ ->
             {State, ok}
     end;
-apply_(Meta, #modify{consumer_key = ConsumerKey,
-                     delivery_failed = DelFailed,
-                     undeliverable_here = Undel,
-                     annotations = Anns,
-                     msg_ids = MsgIds},
-       #?STATE{consumers = Cons} = State) ->
+apply(Meta, #modify{consumer_key = ConsumerKey,
+                    delivery_failed = DelFailed,
+                    undeliverable_here = Undel,
+                    annotations = Anns,
+                    msg_ids = MsgIds},
+      #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}}
           when Undel == false ->
@@ -320,13 +319,16 @@ apply_(Meta, #modify{consumer_key = ConsumerKey,
         _ ->
             {State, ok}
     end;
-apply_(#{index := Idx} = Meta,
+apply(#{index := Idx,
+        machine_version := MacVer} = Meta,
       #requeue{consumer_key = ConsumerKey,
                msg_id = MsgId,
-               index = _OldIdx,
+               index = OldIdx,
                header = Header0},
       #?STATE{consumers = Cons,
-              messages = Messages} = State00) ->
+              messages = Messages,
+              ra_indexes = Indexes0,
+              enqueue_count = EnqCount} = State00) ->
     %% the actual consumer key was looked up in the aux handler so we
     %% dont need to use find_consumer/2 here
     case Cons of
@@ -338,16 +340,24 @@ apply_(#{index := Idx} = Meta,
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
-            State1 = State0#?STATE{messages = rabbit_fifo_q:in(no,
+            State1 = State0#?STATE{ra_indexes = rabbit_fifo_index:delete(OldIdx,
+                                                                         Indexes0),
+                                   messages = rabbit_fifo_q:in(no,
                                                                ?MSG(Idx, Header),
-                                                               Messages)},
+                                                               Messages),
+                                   enqueue_count = EnqCount + 1},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
-            {State3, Effects} = activate_next_consumer({State2, []}),
+            {State3, Effects} = case MacVer >= 7 of
+                                     true ->
+                                         activate_next_consumer({State2, []});
+                                     false ->
+                                         {State2, []}
+                                 end,
             checkout(Meta, State0, State3, Effects);
         _ ->
             {State00, ok, []}
     end;
-apply_(Meta, #credit{consumer_key = ConsumerKey} = Credit,
+apply(Meta, #credit{consumer_key = ConsumerKey} = Credit,
       #?STATE{consumers = Cons} = State) ->
     case Cons of
         #{ConsumerKey := Con} ->
@@ -361,16 +371,15 @@ apply_(Meta, #credit{consumer_key = ConsumerKey} = Credit,
                     {State, ok}
             end
     end;
-apply_(_, #checkout{spec = {dequeue, _}},
+apply(_, #checkout{spec = {dequeue, _}},
       #?STATE{cfg = #cfg{consumer_strategy = single_active}} = State0) ->
     {State0, {error, {unsupported, single_active_consumer}}};
-apply_(#{index := Index,
-         system_time := Ts,
-         from := From} = Meta,
-       #checkout{spec = {dequeue, Settlement},
-                 meta = ConsumerMeta,
-                 consumer_id = ConsumerId},
-       #?STATE{consumers = Consumers} = State00) ->
+apply(#{index := Index,
+        system_time := Ts,
+        from := From} = Meta, #checkout{spec = {dequeue, Settlement},
+                                        meta = ConsumerMeta,
+                                        consumer_id = ConsumerId},
+      #?STATE{consumers = Consumers} = State00) ->
     %% dequeue always updates last_active
     State0 = State00#?STATE{last_active = Ts},
     %% all dequeue operations result in keeping the queue from expiring
@@ -386,9 +395,8 @@ apply_(#{index := Index,
                                           {once, {simple_prefetch, 1}}, 0,
                                           State0),
             case checkout_one(Meta, false, State1, []) of
-                {success, _, MsgId, Msg, _ExpiredMsg, State2, Effects0} ->
-                    RaftIdx = get_msg_idx(Msg),
-                    Header = get_msg_header(Msg),
+                {success, _, MsgId,
+                 ?MSG(RaftIdx, Header), _ExpiredMsg, State2, Effects0} ->
                     {State4, Effects1} =
                         case Settlement of
                             unsettled ->
@@ -417,9 +425,9 @@ apply_(#{index := Index,
                     {State, {dequeue, empty}, Effects}
             end
     end;
-apply_(#{index := _Idx} = Meta,
-       #checkout{spec = Spec,
-                 consumer_id = ConsumerId}, State0)
+apply(#{index := _Idx} = Meta,
+      #checkout{spec = Spec,
+                consumer_id = ConsumerId}, State0)
   when Spec == cancel orelse
        Spec == remove ->
     case consumer_key_from_id(ConsumerId, State0) of
@@ -433,10 +441,10 @@ apply_(#{index := _Idx} = Meta,
         error ->
             {State0, {error, consumer_not_found}, []}
     end;
-apply_(#{index := Idx} = Meta,
-       #checkout{spec = Spec0,
-                 meta = ConsumerMeta,
-                 consumer_id = {_, Pid} = ConsumerId}, State0) ->
+apply(#{index := Idx} = Meta,
+      #checkout{spec = Spec0,
+                meta = ConsumerMeta,
+                consumer_id = {_, Pid} = ConsumerId}, State0) ->
     %% might be better to check machine_version
     IsV4 = tuple_size(Spec0) == 2,
     %% normalise spec format
@@ -476,10 +484,32 @@ apply_(#{index := Idx} = Meta,
                    is_active => is_active(ConsumerKey, State2),
                    num_checked_out => map_size(Checked)}},
     checkout(Meta, State0, State2, [{monitor, process, Pid} | Effs], Reply);
-apply_(#{index := Index}, #purge{},
-       #?STATE{messages_total = Total} = State0) ->
+apply(#{index := Index}, #purge{},
+      #?STATE{messages_total = Total,
+              returns = Returns,
+              ra_indexes = Indexes0
+             } = State0) ->
     NumReady = messages_ready(State0),
-    State1 = State0#?STATE{messages = rabbit_fifo_q:new(),
+    Indexes = case Total of
+                  NumReady ->
+                      %% All messages are either in 'messages' queue or
+                      %% 'returns' queue.
+                      %% No message is awaiting acknowledgement.
+                      %% Optimization: empty all 'ra_indexes'.
+                      rabbit_fifo_index:empty();
+                  _ ->
+                      %% Some messages are checked out to consumers
+                      %% awaiting acknowledgement.
+                      %% Therefore we cannot empty all 'ra_indexes'.
+                      %% We only need to delete the indexes from the 'returns'
+                      %% queue because messages of the 'messages' queue are
+                      %% not part of the 'ra_indexes'.
+                      lqueue:fold(fun(?MSG(I, _), Acc) ->
+                                          rabbit_fifo_index:delete(I, Acc)
+                                  end, Indexes0, Returns)
+              end,
+    State1 = State0#?STATE{ra_indexes = Indexes,
+                           messages = rabbit_fifo_q:new(),
                            messages_total = Total - NumReady,
                            returns = lqueue:new(),
                            msg_bytes_enqueue = 0
@@ -489,21 +519,22 @@ apply_(#{index := Index}, #purge{},
     {State, _, Effects} = evaluate_limit(Index, false, State0,
                                          State1, Effects0),
     {State, Reply, Effects};
-apply_(#{index := _Idx}, #garbage_collection{}, State) ->
+apply(#{index := _Idx}, #garbage_collection{}, State) ->
     {State, ok, [{aux, garbage_collection}]};
-apply_(Meta, {timeout, expire_msgs}, State) ->
+apply(Meta, {timeout, expire_msgs}, State) ->
     checkout(Meta, State, State, []);
-apply_(#{system_time := Ts} = Meta,
-       {down, Pid, noconnection},
-       #?STATE{consumers = Cons0,
-               cfg = #cfg{consumer_strategy = single_active},
-               waiting_consumers = Waiting0,
-               enqueuers = Enqs0} = State0) ->
+apply(#{machine_version := Vsn,
+        system_time := Ts} = Meta,
+      {down, Pid, noconnection},
+      #?STATE{consumers = Cons0,
+              cfg = #cfg{consumer_strategy = single_active},
+              waiting_consumers = Waiting0,
+              enqueuers = Enqs0} = State0) ->
     Node = node(Pid),
     %% if the pid refers to an active or cancelled consumer,
     %% mark it as suspected and return it to the waiting queue
     {State1, Effects0} =
-        maps:fold(
+        rabbit_fifo_maps:fold(
           fun(CKey, ?CONSUMER_PID(P) = C0, {S0, E0})
                 when node(P) =:= Node ->
                   %% the consumer should be returned to waiting
@@ -525,7 +556,7 @@ apply_(#{system_time := Ts} = Meta,
                    Effs1};
              (_, _, S) ->
                   S
-          end, {State0, []}, maps:iterator(Cons0, ordered)),
+          end, {State0, []}, Cons0, Vsn),
     WaitingConsumers = update_waiting_consumer_status(Node, State1,
                                                       suspected_down),
 
@@ -540,9 +571,10 @@ apply_(#{system_time := Ts} = Meta,
                     end, Enqs0),
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
-apply_(#{system_time := Ts} = Meta,
-       {down, Pid, noconnection},
-       #?STATE{consumers = Cons0,
+apply(#{machine_version := Vsn,
+        system_time := Ts} = Meta,
+      {down, Pid, noconnection},
+      #?STATE{consumers = Cons0,
                enqueuers = Enqs0} = State0) ->
     %% A node has been disconnected. This doesn't necessarily mean that
     %% any processes on this node are down, they _may_ come back so here
@@ -555,7 +587,7 @@ apply_(#{system_time := Ts} = Meta,
     Node = node(Pid),
 
     {State, Effects1} =
-        maps:fold(
+        rabbit_fifo_maps:fold(
           fun(CKey, #consumer{cfg = #consumer_cfg{pid = P},
                               status = up} = C0,
               {St0, Eff}) when node(P) =:= Node ->
@@ -566,7 +598,7 @@ apply_(#{system_time := Ts} = Meta,
                   {St, Eff1};
              (_, _, {St, Eff}) ->
                   {St, Eff}
-          end, {State0, []}, maps:iterator(Cons0, ordered)),
+          end, {State0, []}, Cons0, Vsn),
     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
                             E#enqueuer{status = suspected_down};
                        (_, E) -> E
@@ -579,34 +611,29 @@ apply_(#{system_time := Ts} = Meta,
     Effects = [{monitor, node, Node} | Effects1],
     checkout(Meta, State0, State#?STATE{enqueuers = Enqs,
                                         last_active = Ts}, Effects);
-apply_(Meta, {down, Pid, _Info}, State0) ->
+apply(Meta, {down, Pid, _Info}, State0) ->
     {State1, Effects1} = activate_next_consumer(handle_down(Meta, Pid, State0)),
     checkout(Meta, State0, State1, Effects1);
-apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
-                                     enqueuers = Enqs0} = State0) ->
+apply(#{machine_version := Vsn} = Meta,
+      {nodeup, Node},
+      #?STATE{consumers = Cons0,
+              enqueuers = Enqs0,
+              service_queue = _SQ0} = State0) ->
     %% A node we are monitoring has come back.
     %% If we have suspected any processes of being
     %% down we should now re-issue the monitors for them to detect if they're
     %% actually down or not
     Monitors = [{monitor, process, P}
-                || P <- suspected_pids_for(Node, State0)],
+                || P <- suspected_pids_for(Node, Vsn, State0)],
 
     Enqs1 = maps:map(fun(P, E) when node(P) =:= Node ->
                              E#enqueuer{status = up};
                         (_, E) -> E
                      end, Enqs0),
-    %% send leader change events to all disconnected enqueuers to prompt them
-    %% to resend any messages stuck during disconnection,
-    %% ofc it may not be a leader change per se
-    Effects0 = maps:fold(fun(P, _E, Acc) when node(P) =:= Node ->
-                                 [{send_msg, P, leader_change, ra_event} | Acc];
-                            (_, _E, Acc) -> Acc
-                         end, Monitors, Enqs0),
-
     ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     %% mark all consumers as up
     {State1, Effects1} =
-        maps:fold(
+        rabbit_fifo_maps:fold(
           fun(ConsumerKey, ?CONSUMER_PID(P) = C, {SAcc, EAcc})
                 when (node(P) =:= Node) and
                      (C#consumer.status =/= cancelled) ->
@@ -617,107 +644,95 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
                                         SAcc), EAcc1};
              (_, _, Acc) ->
                   Acc
-          end, {State0, Effects0}, maps:iterator(Cons0, ordered)),
+          end, {State0, Monitors}, Cons0, Vsn),
     Waiting = update_waiting_consumer_status(Node, State1, up),
     State2 = State1#?STATE{enqueuers = Enqs1,
                            waiting_consumers = Waiting},
     {State, Effects} = activate_next_consumer(State2, Effects1),
     checkout(Meta, State0, State, Effects);
-apply_(_, {nodedown, _Node}, State) ->
+apply(_, {nodedown, _Node}, State) ->
     {State, ok};
-apply_(Meta, #purge_nodes{nodes = Nodes}, State0) ->
+apply(Meta, #purge_nodes{nodes = Nodes}, State0) ->
     {State, Effects} = lists:foldl(fun(Node, {S, E}) ->
                                            purge_node(Meta, Node, S, E)
                                    end, {State0, []}, Nodes),
     {State, ok, Effects};
-apply_(Meta,
-       #update_config{config = #{} = Conf},
-       #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
-                          resource = QRes},
-               dlx = DlxState0} = State0) ->
+apply(Meta,
+      #update_config{config = #{} = Conf},
+      #?STATE{cfg = #cfg{dead_letter_handler = OldDLH,
+                         resource = QRes},
+              dlx = DlxState0} = State0) ->
     NewDLH = maps:get(dead_letter_handler, Conf, OldDLH),
-    {DlxState, Effects0} = update_config(OldDLH, NewDLH, QRes,
-                                         DlxState0),
+    {DlxState, Effects0} = rabbit_fifo_dlx:update_config(OldDLH, NewDLH, QRes,
+                                                         DlxState0),
     State1 = update_config(Conf, State0#?STATE{dlx = DlxState}),
     checkout(Meta, State0, State1, Effects0);
-apply_(Meta, {dlx, _} = Cmd,
-       #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-               discarded_bytes = DiscardedBytes0,
+apply(Meta, {machine_version, FromVersion, ToVersion}, V0State) ->
+    State = convert(Meta, FromVersion, ToVersion, V0State),
+    {State, ok, [{aux, {dlx, setup}}]};
+apply(Meta, {dlx, _} = Cmd,
+      #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                dlx = DlxState0} = State0) ->
-    {DlxState, DiscardedBytes, Effects0} = dlx_apply(Meta, Cmd, DLH, DlxState0),
-    State1 = State0#?STATE{dlx = DlxState,
-                           discarded_bytes = DiscardedBytes0 + DiscardedBytes},
+    {DlxState, Effects0} = rabbit_fifo_dlx:apply(Meta, Cmd, DLH, DlxState0),
+    State1 = State0#?STATE{dlx = DlxState},
     checkout(Meta, State0, State1, Effects0);
-apply_(_Meta, Cmd, State) ->
+apply(_Meta, Cmd, State) ->
     %% handle unhandled commands gracefully
     ?LOG_DEBUG("rabbit_fifo: unhandled command ~W", [Cmd, 10]),
     {State, ok, []}.
 
--spec live_indexes(state()) -> [ra:index()].
-live_indexes(#?STATE{cfg = #cfg{},
-                     returns = Returns,
-                     messages = Messages,
-                     consumers = Consumers,
-                     dlx = #?DLX{discards = Discards}}) ->
-    MsgsIdxs = rabbit_fifo_q:indexes(Messages),
-    DlxIndexes = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
-                                     I = get_msg_idx(Msg),
-                                     [I | Acc]
-                             end, MsgsIdxs, Discards),
-    RtnIndexes = lqueue:fold(fun(Msg, Acc) -> [get_msg_idx(Msg) | Acc] end,
-                             DlxIndexes, Returns),
-    maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                      maps:fold(
-                        fun (_MsgId, Msg, Acc) ->
-                                [get_msg_idx(Msg) | Acc]
-                        end, Acc0, Ch)
-              end, RtnIndexes, Consumers).
+convert_v3_to_v4(#{} = _Meta, StateV3) ->
+    %% TODO: consider emitting release cursors as checkpoints
+    Messages0 = rabbit_fifo_v3:get_field(messages, StateV3),
+    Returns0 = lqueue:to_list(rabbit_fifo_v3:get_field(returns, StateV3)),
+    Consumers0 = rabbit_fifo_v3:get_field(consumers, StateV3),
+    Consumers = maps:map(
+                  fun (_, #consumer{checked_out = Ch0} = C) ->
+                          Ch = maps:map(
+                                 fun (_, ?MSG(I, #{delivery_count := DC} = H)) ->
+                                         ?MSG(I, H#{acquired_count => DC});
+                                     (_, Msg) ->
+                                         Msg
+                                 end, Ch0),
+                          C#consumer{checked_out = Ch}
+                  end, Consumers0),
+    Returns = lqueue:from_list(
+                lists:map(fun (?MSG(I, #{delivery_count := DC} = H)) ->
+                                  ?MSG(I, H#{acquired_count => DC});
+                              (Msg) ->
+                                  Msg
+                          end, Returns0)),
 
--spec snapshot_installed(Meta, State, OldMeta, OldState) ->
-    ra_machine:effects() when
-      Meta :: ra_snapshot:meta(),
-      State :: state(),
-      OldMeta :: ra_snapshot:meta(),
-      OldState :: state().
-snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
-                                   consumers = Consumers} = State,
-                   _OldMeta, _OldState) ->
-    %% here we need to redliver all pending consumer messages
-    %% to local consumers
-    %% TODO: with some additional state (raft indexes assigned to consumer)
-    %% we could reduce the number of resends but it is questionable if this
-    %% complexity is worth the effort. rabbit_fifo_index will de-duplicate
-    %% deliveries anyway
-    SendAcc = maps:fold(
-                fun (_ConsumerKey, #consumer{cfg = #consumer_cfg{tag = Tag,
-                                                                 pid = Pid},
-                                             checked_out = Checked},
-                     Acc) ->
-                        case node(Pid) == node() of
-                            true ->
-                                Acc#{{Tag, Pid} => maps:to_list(Checked)};
-                            false ->
-                                Acc
-                        end
-                end, #{}, Consumers),
-    Effs = add_delivery_effects([], SendAcc, State),
-    Effs.
+    Messages = rabbit_fifo_q:from_lqueue(Messages0),
+    Cfg = rabbit_fifo_v3:get_field(cfg, StateV3),
+    #?STATE{cfg = Cfg#cfg{unused_1 = ?NIL},
+            messages = Messages,
+            messages_total = rabbit_fifo_v3:get_field(messages_total, StateV3),
+            returns = Returns,
+            enqueue_count = rabbit_fifo_v3:get_field(enqueue_count, StateV3),
+            enqueuers = rabbit_fifo_v3:get_field(enqueuers, StateV3),
+            ra_indexes = rabbit_fifo_v3:get_field(ra_indexes, StateV3),
+            consumers = Consumers,
+            service_queue = rabbit_fifo_v3:get_field(service_queue, StateV3),
+            dlx = rabbit_fifo_v3:get_field(dlx, StateV3),
+            msg_bytes_enqueue = rabbit_fifo_v3:get_field(msg_bytes_enqueue, StateV3),
+            msg_bytes_checkout = rabbit_fifo_v3:get_field(msg_bytes_checkout, StateV3),
+            waiting_consumers = rabbit_fifo_v3:get_field(waiting_consumers, StateV3),
+            last_active = rabbit_fifo_v3:get_field(last_active, StateV3),
+            msg_cache = rabbit_fifo_v3:get_field(msg_cache, StateV3),
+            unused_1 = []}.
 
-convert_v7_to_v8(#{} = _Meta, StateV7) ->
-    StateV8 = StateV7,
-    StateV8#?STATE{discarded_bytes = 0,
-                   unused_0 = ?NIL}.
-
-purge_node(Meta, Node, State, Effects) ->
+purge_node(#{machine_version := Vsn} = Meta, Node, State, Effects) ->
     lists:foldl(fun(Pid, {S0, E0}) ->
                         {S, E} = handle_down(Meta, Pid, S0),
                         {S, E0 ++ E}
                 end, {State, Effects},
-                all_pids_for(Node, State)).
+                all_pids_for(Node, Vsn, State)).
 
 %% any downs that are not noconnection
-handle_down(Meta, Pid, #?STATE{consumers = Cons0,
-                               enqueuers = Enqs0} = State0) ->
+handle_down(#{machine_version := Vsn} = Meta,
+            Pid, #?STATE{consumers = Cons0,
+                         enqueuers = Enqs0} = State0) ->
     % Remove any enqueuer for the down pid
     State1 = State0#?STATE{enqueuers = maps:remove(Pid, Enqs0)},
     {Effects1, State2} = handle_waiting_consumer_down(Pid, State1),
@@ -726,7 +741,7 @@ handle_down(Meta, Pid, #?STATE{consumers = Cons0,
     DownConsumers = maps:filter(fun(_CKey, ?CONSUMER_PID(P)) ->
                                         P =:= Pid
                                 end, Cons0),
-    DownConsumerKeys = maps_ordered_keys(DownConsumers),
+    DownConsumerKeys = rabbit_fifo_maps:keys(DownConsumers, Vsn),
     lists:foldl(fun(ConsumerKey, {S, E}) ->
                         cancel_consumer(Meta, ConsumerKey, S, E, down)
                 end, {State2, Effects1}, DownConsumerKeys).
@@ -785,34 +800,40 @@ update_waiting_consumer_status(Node,
 
 -spec state_enter(ra_server:ra_state() | eol, state()) ->
     ra_machine:effects().
-state_enter(leader,
-            #?STATE{consumers = Cons,
-                    enqueuers = Enqs,
-                    waiting_consumers = WaitingConsumers,
-                    cfg = #cfg{resource = QRes,
-                               dead_letter_handler = DLH},
-                    dlx = DlxState} = State) ->
-    TimerEffs = timer_effect(erlang:system_time(millisecond), State, []),
+state_enter(RaState, #?STATE{cfg = #cfg{dead_letter_handler = DLH,
+                                        resource = QRes},
+                             dlx = DlxState} = State) ->
+    Effects = rabbit_fifo_dlx:state_enter(RaState, QRes, DLH, DlxState),
+    state_enter0(RaState, State, Effects).
+
+state_enter0(leader, #?STATE{consumers = Cons,
+                             enqueuers = Enqs,
+                             waiting_consumers = WaitingConsumers,
+                             cfg = #cfg{name = Name,
+                                        resource = Resource,
+                                        become_leader_handler = BLH}
+                            } = State,
+             Effects0) ->
+    TimerEffs = timer_effect(erlang:system_time(millisecond), State, Effects0),
     % return effects to monitor all current consumers and enqueuers
     Pids = lists:usort(maps:keys(Enqs)
-                       ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
-                       ++ [P || {_, ?CONSUMER_PID(P)} <- WaitingConsumers]),
+        ++ [P || ?CONSUMER_PID(P) <- maps:values(Cons)]
+        ++ [P || {_, ?CONSUMER_PID(P)} <- WaitingConsumers]),
     Mons = [{monitor, process, P} || P <- Pids],
     Nots = [{send_msg, P, leader_change, ra_event} || P <- Pids],
     NodeMons = lists:usort([{monitor, node, node(P)} || P <- Pids]),
-    NotifyDecs = notify_decorators_startup(QRes),
+    NotifyDecs = notify_decorators_startup(Resource),
     Effects = TimerEffs ++ Mons ++ Nots ++ NodeMons ++ [NotifyDecs],
-
-    case DLH of
-        at_least_once ->
-            ensure_worker_started(QRes, DlxState);
-        _ ->
-            ok
-    end,
-    Effects;
-state_enter(eol, #?STATE{enqueuers = Enqs,
-                         consumers = Cons0,
-                         waiting_consumers = WaitingConsumers0}) ->
+    case BLH of
+        undefined ->
+            Effects;
+        {Mod, Fun, Args} ->
+            [{mod_call, Mod, Fun, Args ++ [Name]} | Effects]
+    end;
+state_enter0(eol, #?STATE{enqueuers = Enqs,
+                          consumers = Cons0,
+                          waiting_consumers = WaitingConsumers0},
+             Effects) ->
     Custs = maps:fold(fun(_K, ?CONSUMER_PID(P) = V, S) ->
                               S#{P => V}
                       end, #{}, Cons0),
@@ -822,18 +843,11 @@ state_enter(eol, #?STATE{enqueuers = Enqs,
     AllConsumers = maps:merge(Custs, WaitingConsumers1),
     [{send_msg, P, eol, ra_event}
      || P <- maps:keys(maps:merge(Enqs, AllConsumers))] ++
-    [{aux, eol}];
-state_enter(_, #?STATE{cfg = #cfg{dead_letter_handler = DLH,
-                                  resource = _QRes},
-                       dlx = DlxState}) ->
-    case DLH of
-        at_least_once ->
-            ensure_worker_terminated(DlxState);
-        _ ->
-            ok
-    end,
+    [{aux, eol}
+     | Effects];
+state_enter0(_, _, Effects) ->
     %% catch all as not handling all states
-    [].
+    Effects.
 
 -spec tick(non_neg_integer(), state()) -> ra_machine:effects().
 tick(Ts, #?STATE{cfg = #cfg{resource = QName}} = State) ->
@@ -847,11 +861,11 @@ tick(Ts, #?STATE{cfg = #cfg{resource = QName}} = State) ->
 -spec overview(state()) -> map().
 overview(#?STATE{consumers = Cons,
                  enqueuers = Enqs,
+                 enqueue_count = EnqCount,
                  msg_bytes_enqueue = EnqueueBytes,
                  msg_bytes_checkout = CheckoutBytes,
                  cfg = Cfg,
                  dlx = DlxState,
-                 discarded_bytes = DiscardedBytes,
                  messages = Messages,
                  returns = Returns,
                  waiting_consumers = WaitingConsumers} = State) ->
@@ -865,7 +879,8 @@ overview(#?STATE{consumers = Cons,
              consumer_strategy => Cfg#cfg.consumer_strategy,
              expires => Cfg#cfg.expires,
              msg_ttl => Cfg#cfg.msg_ttl,
-             delivery_limit => Cfg#cfg.delivery_limit},
+             delivery_limit => Cfg#cfg.delivery_limit
+            },
     SacOverview = case active_consumer(Cons) of
                       {SacConsumerKey, SacCon} ->
                           SacConsumerId = consumer_id(SacCon),
@@ -891,11 +906,17 @@ overview(#?STATE{consumers = Cons,
                  num_ready_messages_normal => MsgsNo,
                  num_ready_messages_return => MsgsRet,
                  num_messages => messages_total(State),
+                 num_release_cursors => 0, %% backwards compat
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
-                 discarded_bytes => DiscardedBytes
+                 release_cursors => [], %% backwards compat
+                 in_memory_message_bytes => 0, %% backwards compat
+                 num_in_memory_ready_messages => 0, %% backwards compat
+                 release_cursor_enqueue_counter => EnqCount,
+                 smallest_raft_index => smallest_raft_index(State),
+                 smallest_raft_index_overview => smallest_raft_index_overview(State)
                  },
-    DlxOverview = dlx_overview(DlxState),
+    DlxOverview = rabbit_fifo_dlx:overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
 
 -spec get_checked_out(consumer_key(), msg_id(), msg_id(), state()) ->
@@ -904,9 +925,7 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     case find_consumer(CKey, Consumers) of
         {_CKey, #consumer{checked_out = Checked}} ->
             [begin
-                 Msg = maps:get(K, Checked),
-                 I = get_msg_idx(Msg),
-                 H = get_msg_header(Msg),
+                 ?MSG(I, H) = maps:get(K, Checked),
                  {K, {I, H}}
              end || K <- lists:seq(From, To), maps:is_key(K, Checked)];
         _ ->
@@ -914,32 +933,36 @@ get_checked_out(CKey, From, To, #?STATE{consumers = Consumers}) ->
     end.
 
 -spec version() -> pos_integer().
-version() -> 8.
+version() -> 7.
 
 which_module(0) -> rabbit_fifo_v0;
 which_module(1) -> rabbit_fifo_v1;
 which_module(2) -> rabbit_fifo_v3;
 which_module(3) -> rabbit_fifo_v3;
-which_module(4) -> rabbit_fifo_v7;
-which_module(5) -> rabbit_fifo_v7;
-which_module(6) -> rabbit_fifo_v7;
-which_module(7) -> rabbit_fifo_v7;
-which_module(8) -> ?MODULE.
+which_module(4) -> ?MODULE;
+which_module(5) -> ?MODULE;
+which_module(6) -> ?MODULE;
+which_module(7) -> ?MODULE.
 
--define(AUX, aux_v4).
+-define(AUX, aux_v3).
 
--record(snapshot, {index :: ra:index(),
-                   timestamp :: milliseconds(),
-                   messages_total = 0 :: non_neg_integer(),
-                   discarded_bytes = 0 :: non_neg_integer()}).
+-record(checkpoint, {index :: ra:index(),
+                     timestamp :: milliseconds(),
+                     smallest_index :: undefined | ra:index(),
+                     messages_total :: non_neg_integer(),
+                     indexes = ?CHECK_MIN_INDEXES :: non_neg_integer(),
+                     bytes_in = 0 :: non_neg_integer()}).
 -record(aux_gc, {last_raft_idx = 0 :: ra:index()}).
+-record(aux, {name :: atom(),
+              capacity :: term(),
+              gc = #aux_gc{} :: #aux_gc{}}).
 -record(?AUX, {name :: atom(),
                last_decorators_state :: term(),
-               unused_1 :: term(),
+               capacity :: term(),
                gc = #aux_gc{} :: #aux_gc{},
                tick_pid :: undefined | pid(),
                cache = #{} :: map(),
-               last_checkpoint :: tuple() | #snapshot{},
+               last_checkpoint :: #checkpoint{},
                bytes_in = 0 :: non_neg_integer(),
                bytes_out = 0 :: non_neg_integer()}).
 
@@ -948,48 +971,37 @@ init_aux(Name) when is_atom(Name) ->
     ok = ra_machine_ets:create_table(rabbit_fifo_usage,
                                      [named_table, set, public,
                                       {write_concurrency, true}]),
+    Now = erlang:monotonic_time(microsecond),
     #?AUX{name = Name,
-          last_checkpoint = #snapshot{index = 0,
-                                      timestamp = erlang:system_time(millisecond),
-                                      messages_total = 0}}.
+          capacity = {inactive, Now, 1, 1.0},
+          last_checkpoint = #checkpoint{index = 0,
+                                        timestamp = erlang:system_time(millisecond),
+                                        messages_total = 0,
+                                        bytes_in = 0}}.
 
+handle_aux(RaftState, Tag, Cmd, #aux{name = Name,
+                                     capacity = Cap,
+                                     gc = Gc}, RaAux) ->
+    %% convert aux state to new version
+    AuxV2 = init_aux(Name),
+    Aux = AuxV2#?AUX{capacity = Cap,
+                     gc = Gc},
+    handle_aux(RaftState, Tag, Cmd, Aux, RaAux);
 handle_aux(RaftState, Tag, Cmd, AuxV2, RaAux)
   when element(1, AuxV2) == aux_v2 ->
     Name = element(2, AuxV2),
     AuxV3 = init_aux(Name),
     handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux);
-handle_aux(RaftState, Tag, Cmd, AuxV3, RaAux)
-  when element(1, AuxV3) == aux_v3 ->
-    AuxV4 = #?AUX{name = element(2, AuxV3),
-                  last_decorators_state = element(3, AuxV3),
-                  unused_1 = undefined,
-                  gc = element(5, AuxV3),
-                  tick_pid  = element(6, AuxV3),
-                  cache = element(7, AuxV3),
-                  last_checkpoint = element(8, AuxV3),
-                  bytes_in = element(9, AuxV3),
-                  bytes_out = 0},
-    handle_aux(RaftState, Tag, Cmd, AuxV4, RaAux);
 handle_aux(leader, cast, eval,
            #?AUX{last_decorators_state = LastDec,
-                 % bytes_in = BytesIn,
-                 % bytes_out = BytesOut,
+                 bytes_in = BytesIn,
                  last_checkpoint = Check0} = Aux0,
            RaAux) ->
-    #?STATE{cfg = #cfg{resource = QName},
-            discarded_bytes = DiscardedBytes} = MacState =
+    #?STATE{cfg = #cfg{resource = QName}} = MacState =
         ra_aux:machine_state(RaAux),
 
     Ts = erlang:system_time(millisecond),
-    EffMacVer = try ra_aux:effective_machine_version(RaAux) of
-                    V -> V
-                catch _:_ ->
-                          %% this function is not available in older aux states.
-                          %% this is a guess
-                          undefined
-                end,
-    {Check, Effects0} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                    DiscardedBytes, false),
+    {Check, Effects0} = do_checkpoints(Ts, Check0, RaAux, BytesIn, false),
 
     %% this is called after each batch of commands have been applied
     %% set timer for message expire
@@ -1005,21 +1017,16 @@ handle_aux(leader, cast, eval,
                                  last_decorators_state = NewLast}, RaAux, Effects}
     end;
 handle_aux(_RaftState, cast, eval,
-           #?AUX{last_checkpoint = Check0} = Aux0, RaAux) ->
+           #?AUX{last_checkpoint = Check0,
+                 bytes_in = BytesIn} = Aux0,
+           RaAux) ->
     Ts = erlang:system_time(millisecond),
-    EffMacVer = ra_aux:effective_machine_version(RaAux),
-    #?STATE{discarded_bytes = DiscardedBytes} = ra_aux:machine_state(RaAux),
-    {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                      DiscardedBytes, false),
+    {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, BytesIn, false),
     {no_reply, Aux0#?AUX{last_checkpoint = Check}, RaAux, Effects};
 handle_aux(_RaftState, cast, {bytes_in, {MetaSize, BodySize}},
            #?AUX{bytes_in = Bytes} = Aux0,
            RaAux) ->
     {no_reply, Aux0#?AUX{bytes_in = Bytes + MetaSize + BodySize}, RaAux, []};
-handle_aux(_RaftState, cast, {bytes_out, BodySize},
-           #?AUX{bytes_out = Bytes} = Aux0,
-           RaAux) ->
-    {no_reply, Aux0#?AUX{bytes_out = Bytes + BodySize}, RaAux, []};
 handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                                       consumer_key = Key} = Ret, Corr, Pid},
            Aux0, RaAux0) ->
@@ -1030,14 +1037,12 @@ handle_aux(_RaftState, cast, {#return{msg_ids = MsgIds,
                 {ConsumerKey, #consumer{checked_out = Checked}} ->
                     {RaAux, ToReturn} =
                         maps:fold(
-                          fun (MsgId, Msg, {RA0, Acc}) ->
-                                  Idx = get_msg_idx(Msg),
-                                  Header = get_msg_header(Msg),
+                          fun (MsgId, ?MSG(Idx, Header), {RA0, Acc}) ->
                                   %% it is possible this is not found if the consumer
                                   %% crashed and the message got removed
                                   case ra_aux:log_fetch(Idx, RA0) of
                                       {{_Term, _Meta, Cmd}, RA} ->
-                                          Msg = get_msg_from_cmd(Cmd),
+                                          Msg = get_msg(Cmd),
                                           {RA, [{MsgId, Idx, Header, Msg} | Acc]};
                                       {undefined, RA} ->
                                           {RA, Acc}
@@ -1077,14 +1082,13 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         #{ConsumerKey := #consumer{checked_out = Checked}} ->
             {RaState, IdMsgs} =
                 maps:fold(
-                  fun (MsgId, Msg, {S0, Acc}) ->
-                          Idx = get_msg_idx(Msg),
-                          Header = get_msg_idx(Msg),
+                  fun (MsgId, ?MSG(Idx, Header), {S0, Acc}) ->
                           %% it is possible this is not found if the consumer
                           %% crashed and the message got removed
                           case ra_aux:log_fetch(Idx, S0) of
                               {{_Term, _Meta, Cmd}, S} ->
-                                  {S, [{MsgId, {Header, get_msg_from_cmd(Cmd)}} | Acc]};
+                                  Msg = get_msg(Cmd),
+                                  {S, [{MsgId, {Header, Msg}} | Acc]};
                               {undefined, S} ->
                                   {S, Acc}
                           end
@@ -1093,10 +1097,22 @@ handle_aux(_, _, {get_checked_out, ConsumerKey, MsgIds}, Aux0, RaAux0) ->
         _ ->
             {reply, {error, consumer_not_found}, Aux0, RaAux0}
     end;
-handle_aux(_RaState, cast, tick, #?AUX{name = _Name} = State0,
+handle_aux(_RaState, cast, Cmd, #?AUX{capacity = Use0} = Aux0, RaAux)
+  when Cmd == active orelse Cmd == inactive ->
+    {no_reply, Aux0#?AUX{capacity = update_use(Use0, Cmd)}, RaAux};
+handle_aux(_RaState, cast, tick, #?AUX{name = Name,
+                                       capacity = Use0} = State0,
            RaAux) ->
+    true = ets:insert(rabbit_fifo_usage,
+                      {Name, capacity(Use0)}),
     Aux = eval_gc(RaAux, ra_aux:machine_state(RaAux), State0),
-    {no_reply, Aux, RaAux, []};
+    Effs = case smallest_raft_index(ra_aux:machine_state(RaAux)) of
+               undefined ->
+                   [{release_cursor, ra_aux:last_applied(RaAux)}];
+               Smallest ->
+                   [{release_cursor, Smallest - 1}]
+           end,
+    {no_reply, Aux, RaAux, Effs};
 handle_aux(_RaState, cast, eol, #?AUX{name = Name} = Aux, RaAux) ->
     ets:delete(rabbit_fifo_usage, Name),
     {no_reply, Aux, RaAux};
@@ -1129,39 +1145,30 @@ handle_aux(_RaState, {call, _From}, {peek, Pos}, Aux0,
            RaAux0) ->
     MacState = ra_aux:machine_state(RaAux0),
     case query_peek(Pos, MacState) of
-        {ok, Msg} ->
-            Idx = get_msg_idx(Msg),
-            Header = get_msg_header(Msg),
+        {ok, ?MSG(Idx, Header)} ->
             %% need to re-hydrate from the log
             {{_, _, Cmd}, RaAux} = ra_aux:log_fetch(Idx, RaAux0),
-            ActualMsg = get_msg_from_cmd(Cmd),
-            {reply, {ok, {Header, ActualMsg}}, Aux0, RaAux};
+            Msg = get_msg(Cmd),
+            {reply, {ok, {Header, Msg}}, Aux0, RaAux};
         Err ->
             {reply, Err, Aux0, RaAux0}
     end;
 handle_aux(_, _, garbage_collection, Aux, RaAux) ->
     {no_reply, force_eval_gc(RaAux, Aux), RaAux};
 handle_aux(_RaState, _, force_checkpoint,
-           #?AUX{last_checkpoint  = Check0} = Aux, RaAux) ->
+           #?AUX{last_checkpoint  = Check0,
+                 bytes_in = BytesIn} = Aux, RaAux) ->
     Ts = erlang:system_time(millisecond),
-    #?STATE{cfg = #cfg{resource = QR},
-            discarded_bytes = DiscardedBytes} = ra_aux:machine_state(RaAux),
+    #?STATE{cfg = #cfg{resource = QR}} = ra_aux:machine_state(RaAux),
     ?LOG_DEBUG("~ts: rabbit_fifo: forcing checkpoint at ~b",
-               [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
-    EffMacVer = ra_aux:effective_machine_version(RaAux),
-    {Check, Effects} = do_snapshot(EffMacVer, Ts, Check0, RaAux,
-                                   DiscardedBytes, true),
+                     [rabbit_misc:rs(QR), ra_aux:last_applied(RaAux)]),
+    {Check, Effects} = do_checkpoints(Ts, Check0, RaAux, BytesIn, true),
     {no_reply, Aux#?AUX{last_checkpoint = Check}, RaAux, Effects};
-handle_aux(leader, _, {dlx, setup}, Aux, RaAux) ->
+handle_aux(RaState, _, {dlx, _} = Cmd, Aux0, RaAux) ->
     #?STATE{dlx = DlxState,
             cfg = #cfg{dead_letter_handler = DLH,
                        resource = QRes}} = ra_aux:machine_state(RaAux),
-    case DLH of
-        at_least_once ->
-            ensure_worker_started(QRes, DlxState);
-        _ ->
-            ok
-    end,
+    Aux = rabbit_fifo_dlx:handle_aux(RaState, Cmd, Aux0, QRes, DLH, DlxState),
     {no_reply, Aux, RaAux}.
 
 eval_gc(RaAux, MacState,
@@ -1222,6 +1229,9 @@ query_processes(#?STATE{enqueuers = Enqs, consumers = Cons0}) ->
                      end, #{}, Cons0),
     maps:keys(maps:merge(Enqs, Cons)).
 
+
+query_ra_indexes(#?STATE{ra_indexes = RaIndexes}) ->
+    RaIndexes.
 
 query_waiting_consumers(#?STATE{waiting_consumers = WaitingConsumers}) ->
     WaitingConsumers.
@@ -1322,7 +1332,7 @@ query_in_memory_usage(#?STATE{ }) ->
     {0, 0}.
 
 query_stat_dlx(#?STATE{dlx = DlxState}) ->
-    dlx_stat(DlxState).
+    rabbit_fifo_dlx:stat(DlxState).
 
 query_peek(Pos, State0) when Pos > 0 ->
     case take_next_msg(State0) of
@@ -1330,15 +1340,10 @@ query_peek(Pos, State0) when Pos > 0 ->
             {error, no_message_at_pos};
         {Msg, _State}
           when Pos == 1 ->
-            {ok, unpack(Msg)};
+            {ok, Msg};
         {_Msg, State} ->
             query_peek(Pos-1, State)
     end.
-
-unpack(Packed) when ?IS_PACKED(Packed) ->
-    ?MSG(?PACKED_IDX(Packed), ?PACKED_SZ(Packed));
-unpack(Msg) ->
-    Msg.
 
 query_notify_decorators_info(#?STATE{consumers = Consumers} = State) ->
     MaxActivePriority = maps:fold(
@@ -1364,6 +1369,11 @@ usage(Name) when is_atom(Name) ->
         [{_, Use}] -> Use
     end.
 
+-spec is_v4() -> boolean().
+is_v4() ->
+    %% Quorum queue v4 is introduced in RabbitMQ 4.0.0
+    rabbit_feature_flags:is_enabled('rabbitmq_4.0.0').
+
 %%% Internal
 
 messages_ready(#?STATE{messages = M,
@@ -1372,8 +1382,38 @@ messages_ready(#?STATE{messages = M,
 
 messages_total(#?STATE{messages_total = Total,
                        dlx = DlxState}) ->
-    {DlxTotal, _} = dlx_stat(DlxState),
+    {DlxTotal, _} = rabbit_fifo_dlx:stat(DlxState),
     Total + DlxTotal.
+
+update_use({inactive, _, _, _} = CUInfo, inactive) ->
+    CUInfo;
+update_use({active, _, _} = CUInfo, active) ->
+    CUInfo;
+update_use({active, Since, Avg}, inactive) ->
+    Now = erlang:monotonic_time(microsecond),
+    {inactive, Now, Now - Since, Avg};
+update_use({inactive, Since, Active, Avg},   active) ->
+    Now = erlang:monotonic_time(microsecond),
+    {active, Now, use_avg(Active, Now - Since, Avg)}.
+
+capacity({active, Since, Avg}) ->
+    use_avg(erlang:monotonic_time(microsecond) - Since, 0, Avg);
+capacity({inactive, _, 1, 1.0}) ->
+    1.0;
+capacity({inactive, Since, Active, Avg}) ->
+    use_avg(Active, erlang:monotonic_time(microsecond) - Since, Avg).
+
+use_avg(0, 0, Avg) ->
+    Avg;
+use_avg(Active, Inactive, Avg) ->
+    Time = Inactive + Active,
+    moving_average(Time, ?USE_AVG_HALF_LIFE, Active / Time, Avg).
+
+moving_average(_Time, _, Next, undefined) ->
+    Next;
+moving_average(Time, HalfLife, Next, Current) ->
+    Weight = math:exp(Time * math:log(0.5) / HalfLife),
+    Next * (1 - Weight) + Current * Weight.
 
 num_checked_out(#?STATE{consumers = Cons}) ->
     maps:fold(fun (_, #consumer{checked_out = C}, Acc) ->
@@ -1510,7 +1550,7 @@ activate_next_consumer(#?STATE{consumers = Cons0,
                                   waiting_consumers = Waiting},
             Effects1 = consumer_update_active_effects(State, Active,
                                                       false, waiting,
-                                                      Effects0),
+                                                      Effects0),                                  
             Effects = consumer_update_active_effects(State, Consumer,
                                                      true, single_active,
                                                      Effects1),
@@ -1569,7 +1609,9 @@ maybe_return_all(#{system_time := Ts} = Meta, ConsumerKey,
 apply_enqueue(#{index := RaftIdx,
                 system_time := Ts} = Meta, From,
               Seq, RawMsg, Size, State0) ->
-    case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size, [], State0) of
+    Effects0 = [{aux, {bytes_in, Size}}],
+    case maybe_enqueue(RaftIdx, Ts, From, Seq, RawMsg, Size,
+                       Effects0, State0) of
         {ok, State1, Effects1} ->
             checkout(Meta, State0, State1, Effects1);
         {out_of_sequence, State, Effects} ->
@@ -1581,18 +1623,16 @@ apply_enqueue(#{index := RaftIdx,
 decr_total(#?STATE{messages_total = Tot} = State) ->
     State#?STATE{messages_total = Tot - 1}.
 
-drop_head(#?STATE{discarded_bytes = DiscardedBytes0} = State0, Effects) ->
+drop_head(#?STATE{ra_indexes = Indexes0} = State0, Effects) ->
     case take_next_msg(State0) of
-        {Msg, State1} ->
-            Header = get_msg_header(Msg),
-            State = decr_total(add_bytes_drop(Header, State1)),
+        {?MSG(Idx, Header) = Msg, State1} ->
+            Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
+            State2 = State1#?STATE{ra_indexes = Indexes},
+            State3 = decr_total(add_bytes_drop(Header, State2)),
             #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-                    dlx = DlxState} = State,
-            {_, _RetainedBytes, DlxEffects} =
-                discard_or_dead_letter([Msg], maxlen, DLH, DlxState),
-            Size = get_header(size, Header),
-            {State#?STATE{discarded_bytes = DiscardedBytes0 + Size + ?ENQ_OVERHEAD},
-             combine_effects(DlxEffects, Effects)};
+                    dlx = DlxState} = State = State3,
+            {_, DlxEffects} = rabbit_fifo_dlx:discard([Msg], maxlen, DLH, DlxState),
+            {State, combine_effects(DlxEffects, Effects)};
         empty ->
             {State0, Effects}
     end.
@@ -1623,7 +1663,7 @@ maybe_set_msg_ttl(Msg, RaCmdTs, Header,
             TTL = min(MsgTTL, mc:ttl(Msg)),
             update_expiry_header(RaCmdTs, TTL, Header);
         false ->
-            update_expiry_header(RaCmdTs, MsgTTL, Header)
+            Header
     end.
 
 maybe_set_msg_delivery_count(Msg, Header) ->
@@ -1655,49 +1695,44 @@ update_expiry_header(RaCmdTs, TTL, Header) ->
 update_expiry_header(ExpiryTs, Header) ->
     update_header(expiry, fun(Ts) -> Ts end, ExpiryTs, Header).
 
-make_msg(Idx, Sz)
-  when Idx =< ?PACKED_IDX_MAX andalso
-       (is_integer(Sz) andalso Sz =< ?PACKED_SZ_MAX) ->
-       ?PACK(Idx, Sz);
-make_msg(Idx, Hdr) ->
-    ?MSG(Idx, Hdr).
-
 maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
-              {MetaSize, BodySize},
+              {_MetaSize, BodySize},
               Effects, #?STATE{msg_bytes_enqueue = Enqueue,
+                               enqueue_count = EnqCount,
                                messages = Messages,
                                messages_total = Total} = State0) ->
     % direct enqueue without tracking
-    Size = MetaSize + BodySize,
-    Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+    Size = BodySize,
+    Header0 = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
     Header = maybe_set_msg_delivery_count(RawMsg, Header0),
-    Msg = make_msg(RaftIdx, Header),
+    Msg = ?MSG(RaftIdx, Header),
     PTag = priority_tag(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
+                          enqueue_count = EnqCount + 1,
                           messages_total = Total + 1,
                           messages = rabbit_fifo_q:in(PTag, Msg, Messages)
                          },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
-              {MetaSize, BodySize} = MsgSize,
-              Effects0, #?STATE{msg_bytes_enqueue = BytesEnqueued,
+              {_MetaSize, BodySize} = Size,
+              Effects0, #?STATE{msg_bytes_enqueue = Enqueue,
+                                enqueue_count = EnqCount,
                                 enqueuers = Enqueuers0,
                                 messages = Messages,
-                                discarded_bytes = DiscardedBytes0,
                                 messages_total = Total} = State0) ->
-    Size = MetaSize + BodySize,
+
     case maps:get(From, Enqueuers0, undefined) of
         undefined ->
             State1 = State0#?STATE{enqueuers = Enqueuers0#{From => #enqueuer{}}},
             {Res, State, Effects} = maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo,
-                                                  RawMsg, MsgSize, Effects0,
+                                                  RawMsg, Size, Effects0,
                                                   State1),
             {Res, State, [{monitor, process, From} | Effects]};
         #enqueuer{next_seqno = MsgSeqNo} = Enq0 ->
             % it is the next expected seqno
-            Header0 = maybe_set_msg_ttl(RawMsg, Ts, Size, State0),
+            Header0 = maybe_set_msg_ttl(RawMsg, Ts, BodySize, State0),
             Header = maybe_set_msg_delivery_count(RawMsg, Header0),
-            Msg = make_msg(RaftIdx, Header),
+            Msg = ?MSG(RaftIdx, Header),
             Enq = Enq0#enqueuer{next_seqno = MsgSeqNo + 1},
             MsgCache = case can_immediately_deliver(State0) of
                            true ->
@@ -1706,7 +1741,8 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
                                undefined
                        end,
             PTag = priority_tag(RawMsg),
-            State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
+            State = State0#?STATE{msg_bytes_enqueue = Enqueue + BodySize,
+                                  enqueue_count = EnqCount + 1,
                                   messages_total = Total + 1,
                                   messages = rabbit_fifo_q:in(PTag, Msg, Messages),
                                   enqueuers = Enqueuers0#{From => Enq},
@@ -1716,17 +1752,13 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
         #enqueuer{next_seqno = Next}
           when MsgSeqNo > Next ->
             %% TODO: when can this happen?
-            State = State0#?STATE{discarded_bytes =
-                                  DiscardedBytes0 + Size + ?ENQ_OVERHEAD},
-            {out_of_sequence, State, Effects0};
+            {out_of_sequence, State0, Effects0};
         #enqueuer{next_seqno = Next} when MsgSeqNo =< Next ->
             % duplicate delivery
-            State = State0#?STATE{discarded_bytes =
-                                  DiscardedBytes0 + Size + ?ENQ_OVERHEAD},
-            {duplicate, State, Effects0}
+            {duplicate, State0, Effects0}
     end.
 
-return(Meta, ConsumerKey,
+return(#{machine_version := MacVer} = Meta, ConsumerKey,
        MsgIds, IncrDelCount, Anns, Checked, Effects0, State0)
  when is_map(Anns) ->
     %% We requeue in the same order as messages got returned by the client.
@@ -1747,55 +1779,56 @@ return(Meta, ConsumerKey,
                  _ ->
                      State1
              end,
-    {State3, Effects2} = activate_next_consumer({State2, Effects1}),
+    {State3, Effects2} = case MacVer >= 7 of
+                             true ->
+                                 activate_next_consumer({State2, Effects1});
+                             false ->
+                                 {State2, Effects1}
+                         end,
     checkout(Meta, State0, State3, Effects2).
 
 % used to process messages that are finished
 complete(Meta, ConsumerKey, [MsgId],
          #consumer{checked_out = Checked0} = Con0,
-         #?STATE{msg_bytes_checkout = BytesCheckout,
-                 discarded_bytes = DiscBytes,
-                 messages_total = Tot} = State0,
-        Effects) ->
+         #?STATE{ra_indexes = Indexes0,
+                 msg_bytes_checkout = BytesCheckout,
+                 messages_total = Tot} = State0) ->
     case maps:take(MsgId, Checked0) of
-        {Msg, Checked} ->
-            Hdr = get_msg_header(Msg),
+        {?MSG(Idx, Hdr), Checked} ->
             SettledSize = get_header(size, Hdr),
+            Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
             Con = Con0#consumer{checked_out = Checked,
                                 credit = increase_credit(Con0, 1)},
             State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
-            {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                           discarded_bytes = DiscBytes + SettledSize + ?ENQ_OVERHEAD,
-                           messages_total = Tot - 1},
-             Effects};
+            State1#?STATE{ra_indexes = Indexes,
+                          msg_bytes_checkout = BytesCheckout - SettledSize,
+                          messages_total = Tot - 1};
         error ->
-            {State0, Effects}
+            State0
     end;
 complete(Meta, ConsumerKey, MsgIds,
          #consumer{checked_out = Checked0} = Con0,
-         #?STATE{msg_bytes_checkout = BytesCheckout,
-                 discarded_bytes = DiscBytes,
-                 messages_total = Tot} = State0, Effects) ->
-    {SettledSize, Checked}
+         #?STATE{ra_indexes = Indexes0,
+                 msg_bytes_checkout = BytesCheckout,
+                 messages_total = Tot} = State0) ->
+    {SettledSize, Checked, Indexes}
         = lists:foldl(
-            fun (MsgId, {S0, Ch0}) ->
+            fun (MsgId, {S0, Ch0, Idxs}) ->
                     case maps:take(MsgId, Ch0) of
-                        {Msg, Ch} ->
-                            Hdr = get_msg_header(Msg),
+                        {?MSG(Idx, Hdr), Ch} ->
                             S = get_header(size, Hdr) + S0,
-                            {S, Ch};
+                            {S, Ch, rabbit_fifo_index:delete(Idx, Idxs)};
                         error ->
-                            {S0, Ch0}
+                            {S0, Ch0, Idxs}
                     end
-            end, {0, Checked0}, MsgIds),
+            end, {0, Checked0, Indexes0}, MsgIds),
     Len = map_size(Checked0) - map_size(Checked),
     Con = Con0#consumer{checked_out = Checked,
                         credit = increase_credit(Con0, Len)},
     State1 = update_or_remove_con(Meta, ConsumerKey, Con, State0),
-    {State1#?STATE{msg_bytes_checkout = BytesCheckout - SettledSize,
-                   discarded_bytes = DiscBytes + SettledSize + (Len *?ENQ_OVERHEAD),
-                   messages_total = Tot - Len},
-     Effects}.
+    State1#?STATE{ra_indexes = Indexes,
+                  msg_bytes_checkout = BytesCheckout - SettledSize,
+                  messages_total = Tot - Len}.
 
 increase_credit(#consumer{cfg = #consumer_cfg{lifetime = once},
                           credit = Credit}, _) ->
@@ -1822,12 +1855,11 @@ increase_credit(#consumer{credit = Current}, Credit) ->
 complete_and_checkout(#{} = Meta, MsgIds, ConsumerKey,
                       #consumer{} = Con0,
                       Effects0, State0) ->
-    {State1, Effects1} = complete(Meta, ConsumerKey, MsgIds,
-                                  Con0, State0, Effects0),
+    State1 = complete(Meta, ConsumerKey, MsgIds, Con0, State0),
     %% a completion could have removed the active/quiescing consumer
-    Effects2 = add_active_effect(Con0, State1, Effects1),
-    {State2, Effects} = activate_next_consumer(State1, Effects2),
-    checkout(Meta, State0, State2, Effects).
+    Effects1 = add_active_effect(Con0, State1, Effects0),
+    {State2, Effects2} = activate_next_consumer(State1, Effects1),
+    checkout(Meta, State0, State2, Effects2).
 
 add_active_effect(#consumer{status = quiescing} = Consumer,
                   #?STATE{cfg = #cfg{consumer_strategy = single_active},
@@ -1848,9 +1880,8 @@ cancel_consumer_effects(ConsumerId,
     [{mod_call, rabbit_quorum_queue,
       cancel_consumer_handler, [QName, ConsumerId]} | Effects].
 
-update_msg_header(Key, Fun, Def, Msg) ->
-    ?MSG(get_msg_idx(Msg),
-         update_header(Key, Fun, Def, get_msg_header(Msg))).
+update_msg_header(Key, Fun, Def, ?MSG(Idx, Header)) ->
+    ?MSG(Idx, update_header(Key, Fun, Def, Header)).
 
 update_header(expiry, _, Expiry, Size)
   when is_integer(Size) ->
@@ -1867,15 +1898,8 @@ update_header(Key, UpdateFun, Default, Header)
   when is_map_key(size, Header) ->
     maps:update_with(Key, UpdateFun, Default, Header).
 
-get_msg_idx(?MSG(Idx, _Header)) ->
-    Idx;
-get_msg_idx(Packed) when ?IS_PACKED(Packed) ->
-    ?PACKED_IDX(Packed).
-
 get_msg_header(?MSG(_Idx, Header)) ->
-    Header;
-get_msg_header(Packed) when ?IS_PACKED(Packed) ->
-    ?PACKED_SZ(Packed).
+    Header.
 
 get_header(size, Size)
   when is_integer(Size) ->
@@ -1912,31 +1936,23 @@ annotate_msg(Header, Msg0) ->
             Msg0
     end.
 
-return_one(Meta, MsgId, Msg0, DelivFailed, Anns,
+return_one(Meta, MsgId, ?MSG(_, _) = Msg0, DelivFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
-                   discarded_bytes = DiscardedBytes0,
                    cfg = #cfg{delivery_limit = DeliveryLimit,
                               dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerKey) ->
     #consumer{checked_out = Checked0} = Con0 = maps:get(ConsumerKey, Consumers),
     Msg = incr_msg(Msg0, DelivFailed, Anns),
     Header = get_msg_header(Msg),
-    %% TODO: do not use acquired count here as that includes all deliberate
-    %% returns, use delivery_count header instead
     case get_header(acquired_count, Header) of
         AcquiredCount when AcquiredCount > DeliveryLimit ->
-            {DlxState, RetainedBytes, DlxEffects} =
-                discard_or_dead_letter([Msg], delivery_limit, DLH, DlxState0),
-            %% subtract retained bytes as complete/6 will add them on irrespective
-            %% of dead letter strategy, alt, consider adding a new argument to
-            %% indicate if message ids were retained
-            State1 = State0#?STATE{dlx = DlxState,
-                                   discarded_bytes = DiscardedBytes0 - RetainedBytes},
-            {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
-                                         Con0, State1, Effects0),
-            {State, DlxEffects ++ Effects};
+            {DlxState, DlxEffects} =
+                rabbit_fifo_dlx:discard([Msg], delivery_limit, DLH, DlxState0),
+            State1 = State0#?STATE{dlx = DlxState},
+            State = complete(Meta, ConsumerKey, [MsgId], Con0, State1),
+            {State, DlxEffects ++ Effects0};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
             Con = Con0#consumer{checked_out = Checked,
@@ -1965,7 +1981,7 @@ checkout(#{index := Index} = Meta,
     {#?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0} = State1, _ExpiredMsg, Effects1} =
         checkout0(Meta, checkout_one(Meta, false, State0, Effects0), #{}),
-    {DlxState, DlxDeliveryEffects} = dlx_checkout(DLH, DlxState0),
+    {DlxState, DlxDeliveryEffects} = rabbit_fifo_dlx:checkout(DLH, DlxState0),
     %% TODO: only update dlx state if it has changed?
     %% by this time the cache should be used
     State2 = State1#?STATE{msg_cache = undefined,
@@ -1977,7 +1993,7 @@ checkout(#{index := Index} = Meta,
     end.
 
 checkout0(Meta, {success, ConsumerKey, MsgId,
-                 Msg, ExpiredMsg, State, Effects},
+                 ?MSG(_, _) = Msg, ExpiredMsg, State, Effects},
           SendAcc0) ->
     DelMsg = {MsgId, Msg},
     SendAcc = case maps:get(ConsumerKey, SendAcc0, undefined) of
@@ -1988,8 +2004,8 @@ checkout0(Meta, {success, ConsumerKey, MsgId,
               end,
     checkout0(Meta, checkout_one(Meta, ExpiredMsg, State, Effects), SendAcc);
 checkout0(_Meta, {_Activity, ExpiredMsg, State0, Effects0}, SendAcc) ->
-    Effects = add_delivery_effects([], SendAcc, State0),
-    {State0, ExpiredMsg, Effects0 ++ lists:reverse(Effects)}.
+    Effects = add_delivery_effects(Effects0, SendAcc, State0),
+    {State0, ExpiredMsg, lists:reverse(Effects)}.
 
 evaluate_limit(_Index, Result,
                #?STATE{cfg = #cfg{max_length = undefined,
@@ -2060,15 +2076,15 @@ chunk_disk_msgs([], _Bytes, [[] | Chunks]) ->
     Chunks;
 chunk_disk_msgs([], _Bytes, Chunks) ->
     Chunks;
-chunk_disk_msgs([{_MsgId, Msg} = ConsumerMsg | Rem],
+chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem],
                 Bytes, Chunks)
   when Bytes >= ?DELIVERY_CHUNK_LIMIT_B ->
-    Size = get_header(size, get_msg_header(Msg)),
-    chunk_disk_msgs(Rem, Size, [[ConsumerMsg] | Chunks]);
-chunk_disk_msgs([{_MsgId, Msg} = ConsumerMsg | Rem], Bytes,
+    Size = get_header(size, Header),
+    chunk_disk_msgs(Rem, Size, [[Msg] | Chunks]);
+chunk_disk_msgs([{_MsgId, ?MSG(_RaftIdx, Header)} = Msg | Rem], Bytes,
                 [CurChunk | Chunks]) ->
-    Size = get_header(size, get_msg_header(Msg)),
-    chunk_disk_msgs(Rem, Bytes + Size, [[ConsumerMsg | CurChunk] | Chunks]).
+    Size = get_header(size, Header),
+    chunk_disk_msgs(Rem, Bytes + Size, [[Msg | CurChunk] | Chunks]).
 
 add_delivery_effects(Effects0, AccMap, _State)
   when map_size(AccMap) == 0 ->
@@ -2084,7 +2100,9 @@ add_delivery_effects(Effects0, AccMap, State) ->
                end, Effects0, AccMap).
 
 take_next_msg(#?STATE{returns = Returns0,
-                      messages = Messages0} = State) ->
+                      messages = Messages0,
+                      ra_indexes = Indexes0
+                     } = State) ->
     case lqueue:out(Returns0) of
         {{value, NextMsg}, Returns} ->
             {NextMsg, State#?STATE{returns = Returns}};
@@ -2092,8 +2110,11 @@ take_next_msg(#?STATE{returns = Returns0,
             case rabbit_fifo_q:out(Messages0) of
                 empty ->
                     empty;
-                {Msg, Messages} ->
-                    {Msg, State#?STATE{messages = Messages}}
+                {?MSG(RaftIdx, _) = Msg, Messages} ->
+                    %% add index here
+                    Indexes = rabbit_fifo_index:append(RaftIdx, Indexes0),
+                    {Msg, State#?STATE{messages = Messages,
+                                       ra_indexes = Indexes}}
             end
     end.
 
@@ -2111,18 +2132,10 @@ delivery_effect(ConsumerKey, [{MsgId, ?MSG(Idx,  Header)}],
     {CTag, CPid} = consumer_id(ConsumerKey, State),
     {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
      ?DELIVERY_SEND_MSG_OPTS};
-delivery_effect(ConsumerKey, [{MsgId, Msg}],
-                #?STATE{msg_cache = {Idx, RawMsg}} = State)
-  when is_integer(Msg) andalso ?PACKED_IDX(Msg) == Idx ->
-    Header = get_msg_header(Msg),
-    {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {send_msg, CPid, {delivery, CTag, [{MsgId, {Header, RawMsg}}]},
-     ?DELIVERY_SEND_MSG_OPTS};
 delivery_effect(ConsumerKey, Msgs, #?STATE{} = State) ->
     {CTag, CPid} = consumer_id(ConsumerKey, State),
-    {RaftIdxs, _Num} = lists:foldr(fun ({_, Msg}, {Acc, N}) ->
-
-                                           {[get_msg_idx(Msg) | Acc], N+1}
+    {RaftIdxs, _Num} = lists:foldr(fun ({_, ?MSG(I, _)}, {Acc, N}) ->
+                                           {[I | Acc], N+1}
                                    end, {[], 0}, Msgs),
     {log_ext, RaftIdxs,
      fun (ReadPlan) ->
@@ -2149,7 +2162,7 @@ reply_log_effect(RaftIdx, MsgId, Header, Ready, From) ->
              [];
          ([Cmd]) ->
              [{reply, From, {wrap_reply,
-                             {dequeue, {MsgId, {Header, get_msg_from_cmd(Cmd)}}, Ready}}}]
+                             {dequeue, {MsgId, {Header, get_msg(Cmd)}}, Ready}}}]
      end}.
 
 checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
@@ -2235,27 +2248,25 @@ expire_msgs(RaCmdTs, Result, State, Effects) ->
           when is_integer(Expiry), RaCmdTs >= Expiry ->
             expire(RaCmdTs, State, Effects);
         _ ->
-            %% packed messages never have an expiry
             {Result, State, Effects}
     end.
 
 expire(RaCmdTs, State0, Effects) ->
-    {Msg,
+    {?MSG(Idx, Header) = Msg,
      #?STATE{cfg = #cfg{dead_letter_handler = DLH},
              dlx = DlxState0,
+             ra_indexes = Indexes0,
              messages_total = Tot,
-             discarded_bytes = DiscardedBytes0,
              msg_bytes_enqueue = MsgBytesEnqueue} = State1} =
         take_next_msg(State0),
-    {DlxState, _RetainedBytes, DlxEffects} =
-        discard_or_dead_letter([Msg], expired, DLH, DlxState0),
-    Header = get_msg_header(Msg),
-    Size = get_header(size, Header),
-    DiscardedSize = Size + ?ENQ_OVERHEAD,
+    {DlxState, DlxEffects} = rabbit_fifo_dlx:discard([Msg], expired,
+                                                     DLH, DlxState0),
+    Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
     State = State1#?STATE{dlx = DlxState,
+                          ra_indexes = Indexes,
                           messages_total = Tot - 1,
-                          discarded_bytes = DiscardedBytes0 + DiscardedSize,
-                          msg_bytes_enqueue = MsgBytesEnqueue - Size},
+                          msg_bytes_enqueue =
+                              MsgBytesEnqueue - get_header(size, Header)},
     expire_msgs(RaCmdTs, true, State, DlxEffects ++ Effects).
 
 timer_effect(RaCmdTs, State, Effects) ->
@@ -2558,7 +2569,7 @@ is_over_limit(#?STATE{cfg = #cfg{max_length = MaxLength,
                                   max_bytes = MaxBytes},
                        msg_bytes_enqueue = BytesEnq,
                        dlx = DlxState} = State) ->
-    {NumDlx, BytesDlx} = dlx_stat(DlxState),
+    {NumDlx, BytesDlx} = rabbit_fifo_dlx:stat(DlxState),
     (messages_ready(State) + NumDlx > MaxLength) orelse
     (BytesEnq + BytesDlx > MaxBytes).
 
@@ -2569,7 +2580,7 @@ is_below_soft_limit(#?STATE{cfg = #cfg{max_length = MaxLength,
                                         max_bytes = MaxBytes},
                              msg_bytes_enqueue = BytesEnq,
                              dlx = DlxState} = State) ->
-    {NumDlx, BytesDlx} = dlx_stat(DlxState),
+    {NumDlx, BytesDlx} = rabbit_fifo_dlx:stat(DlxState),
     is_below(MaxLength, messages_ready(State) + NumDlx) andalso
     is_below(MaxBytes, BytesEnq + BytesDlx).
 
@@ -2580,15 +2591,17 @@ is_below(Val, Num) when is_integer(Val) andalso is_integer(Num) ->
 
 -spec make_enqueue(option(pid()), option(msg_seqno()), raw_msg()) ->
     protocol().
-make_enqueue(undefined, undefined, Msg) ->
-    %% need to keep this old version for untracked enqueues
-    #enqueue{msg = Msg};
-make_enqueue(Pid, Seq, Msg)
-  when is_pid(Pid) andalso
-       is_integer(Seq) ->
-    #?ENQ_V2{seq = Seq,
-             msg = Msg,
-             size = ?SIZE(Msg)}.
+make_enqueue(Pid, Seq, Msg) ->
+    case is_v4() of
+        true when is_pid(Pid) andalso
+                  is_integer(Seq) ->
+            %% more compact format
+            #?ENQ_V2{seq = Seq,
+                     msg = Msg,
+                     size = ?SIZE(Msg)};
+        _ ->
+            #enqueue{pid = Pid, seq = Seq, msg = Msg}
+    end.
 
 -spec make_register_enqueuer(pid()) -> protocol().
 make_register_enqueuer(Pid) ->
@@ -2596,7 +2609,14 @@ make_register_enqueuer(Pid) ->
 
 -spec make_checkout(consumer_id(), checkout_spec(), consumer_meta()) ->
     protocol().
-make_checkout({_, _} = ConsumerId, Spec, Meta) ->
+make_checkout({_, _} = ConsumerId, Spec0, Meta) ->
+    Spec = case is_v4() of
+               false when Spec0 == remove ->
+                   %% if v4 is not active, fall back to cancel spec
+                   cancel;
+               _ ->
+                   Spec0
+           end,
     #checkout{consumer_id = ConsumerId,
               spec = Spec, meta = Meta}.
 
@@ -2631,11 +2651,18 @@ make_modify(ConsumerKey, MsgIds, DeliveryFailed, UndeliverableHere, Anns)
        is_boolean(DeliveryFailed) andalso
        is_boolean(UndeliverableHere) andalso
        is_map(Anns) ->
-    #modify{consumer_key = ConsumerKey,
-            msg_ids = MsgIds,
-            delivery_failed = DeliveryFailed,
-            undeliverable_here = UndeliverableHere,
-            annotations = Anns}.
+    case is_v4() of
+        true ->
+            #modify{consumer_key = ConsumerKey,
+                    msg_ids = MsgIds,
+                    delivery_failed = DeliveryFailed,
+                    undeliverable_here = UndeliverableHere,
+                    annotations = Anns};
+        false when UndeliverableHere ->
+            make_discard(ConsumerKey, MsgIds);
+        false ->
+            make_return(ConsumerKey, MsgIds)
+    end.
 
 
 -spec make_purge() -> protocol().
@@ -2690,45 +2717,45 @@ all_nodes(#?STATE{consumers = Cons0,
                           Acc#{node(P) => ok}
                   end, Nodes1, WaitingConsumers0)).
 
-all_pids_for(Node, #?STATE{consumers = Cons0,
-                           enqueuers = Enqs0,
-                           waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun(_, ?CONSUMER_PID(P), Acc)
-                           when node(P) =:= Node ->
-                             [P | Acc];
-                        (_, _, Acc) ->
-                             Acc
-                     end, [], maps:iterator(Cons0, ordered)),
-    Enqs = maps:fold(fun(P, _, Acc)
-                           when node(P) =:= Node ->
-                             [P | Acc];
-                        (_, _, Acc) ->
-                             Acc
-                     end, Cons, maps:iterator(Enqs0, ordered)),
+all_pids_for(Node, Vsn, #?STATE{consumers = Cons0,
+                                enqueuers = Enqs0,
+                                waiting_consumers = WaitingConsumers0}) ->
+    Cons = rabbit_fifo_maps:fold(fun(_, ?CONSUMER_PID(P), Acc)
+                                       when node(P) =:= Node ->
+                                         [P | Acc];
+                                    (_, _, Acc) ->
+                                         Acc
+                                 end, [], Cons0, Vsn),
+    Enqs = rabbit_fifo_maps:fold(fun(P, _, Acc)
+                                       when node(P) =:= Node ->
+                                         [P | Acc];
+                                    (_, _, Acc) ->
+                                         Acc
+                                 end, Cons, Enqs0, Vsn),
     lists:foldl(fun({_, ?CONSUMER_PID(P)}, Acc)
                       when node(P) =:= Node ->
                         [P | Acc];
                    (_, Acc) -> Acc
                 end, Enqs, WaitingConsumers0).
 
-suspected_pids_for(Node, #?STATE{consumers = Cons0,
-                                 enqueuers = Enqs0,
-                                 waiting_consumers = WaitingConsumers0}) ->
-    Cons = maps:fold(fun(_Key,
-                         #consumer{cfg = #consumer_cfg{pid = P},
-                                   status = suspected_down},
-                         Acc)
-                           when node(P) =:= Node ->
-                             [P | Acc];
-                        (_, _, Acc) ->
-                             Acc
-                     end, [], maps:iterator(Cons0, ordered)),
-    Enqs = maps:fold(fun(P, #enqueuer{status = suspected_down}, Acc)
+suspected_pids_for(Node, Vsn, #?STATE{consumers = Cons0,
+                                      enqueuers = Enqs0,
+                                      waiting_consumers = WaitingConsumers0}) ->
+    Cons = rabbit_fifo_maps:fold(fun(_Key,
+                                     #consumer{cfg = #consumer_cfg{pid = P},
+                                               status = suspected_down},
+                                     Acc)
                                        when node(P) =:= Node ->
                                          [P | Acc];
                                     (_, _, Acc) ->
                                          Acc
-                                 end, Cons, maps:iterator(Enqs0, ordered)),
+                                 end, [], Cons0, Vsn),
+    Enqs = rabbit_fifo_maps:fold(fun(P, #enqueuer{status = suspected_down}, Acc)
+                                       when node(P) =:= Node ->
+                                         [P | Acc];
+                                    (_, _, Acc) ->
+                                         Acc
+                                 end, Cons, Enqs0, Vsn),
     lists:foldl(fun({_Key,
                      #consumer{cfg = #consumer_cfg{pid = P},
                                status = suspected_down}}, Acc)
@@ -2782,7 +2809,7 @@ convert(Meta, 1, To, State) ->
 convert(Meta, 2, To, State) ->
     convert(Meta, 3, To, rabbit_fifo_v3:convert_v2_to_v3(State));
 convert(Meta, 3, To, State) ->
-    convert(Meta, 4, To, rabbit_fifo_v7:convert_v3_to_v4(Meta, State));
+    convert(Meta, 4, To, convert_v3_to_v4(Meta, State));
 convert(Meta, 4, To, State) ->
     %% no conversion needed, this version only includes a logic change
     convert(Meta, 5, To, State);
@@ -2791,30 +2818,22 @@ convert(Meta, 5, To, State) ->
     convert(Meta, 6, To, State);
 convert(Meta, 6, To, State) ->
     %% no conversion needed, this version only includes a logic change
-    convert(Meta, 7, To, State);
-convert(Meta, 7, To, State) ->
-    convert(Meta, 8, To, convert_v7_to_v8(Meta, State)).
+    convert(Meta, 7, To, State).
 
 smallest_raft_index(#?STATE{messages = Messages,
-                            dlx = #?DLX{discards = Discards}} = State) ->
-    SmallestDlxRaIdx = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
-                                           min(get_msg_idx(Msg), Acc)
-                                   end, undefined, Discards),
+                            ra_indexes = Indexes,
+                            dlx = DlxState}) ->
+    SmallestDlxRaIdx = rabbit_fifo_dlx:smallest_raft_index(DlxState),
     SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
-    %% scan consumers and returns queue here instead
-    smallest_checked_out(State, min(SmallestDlxRaIdx, SmallestMsgsRaIdx)).
+    SmallestRaIdx = rabbit_fifo_index:smallest(Indexes),
+    min(min(SmallestDlxRaIdx, SmallestMsgsRaIdx), SmallestRaIdx).
 
-smallest_checked_out(#?STATE{returns = Returns,
-                             consumers = Consumers}, Min) ->
-    SmallestSoFar = lqueue:fold(fun (Msg, Acc) ->
-                                        min(get_msg_idx(Msg), Acc)
-                                end, Min, Returns),
-    maps:fold(fun (_Cid, #consumer{checked_out = Ch}, Acc0) ->
-                      maps:fold(
-                        fun (_MsgId, Msg, Acc) ->
-                                min(get_msg_idx(Msg), Acc)
-                        end, Acc0, Ch)
-              end, SmallestSoFar, Consumers).
+smallest_raft_index_overview(#?STATE{messages = Messages,
+                                     ra_indexes = Indexes,
+                                     dlx = DlxState}) ->
+    #{message => rabbit_fifo_q:get_lowest_index(Messages),
+      checked_out => rabbit_fifo_index:smallest(Indexes),
+      dlx => rabbit_fifo_dlx:smallest_raft_index(DlxState)}.
 
 make_requeue(ConsumerKey, Notify, [{MsgId, Idx, Header, Msg}], Acc) ->
     lists:reverse([{append,
@@ -2852,11 +2871,11 @@ can_immediately_deliver(#?STATE{service_queue = SQ,
 incr(I) ->
    I + 1.
 
-get_msg_from_cmd(#?ENQ_V2{msg = M}) ->
+get_msg(#?ENQ_V2{msg = M}) ->
     M;
-get_msg_from_cmd(#enqueue{msg = M}) ->
+get_msg(#enqueue{msg = M}) ->
     M;
-get_msg_from_cmd(#requeue{msg = M}) ->
+get_msg(#requeue{msg = M}) ->
     M.
 
 initial_delivery_count({credited, Count}) ->
@@ -2968,63 +2987,85 @@ priority_tag(Msg) ->
             no
     end.
 
-do_snapshot(MacVer, Ts, Ch,
-               RaAux, DiscardedBytes, Force)
-  when element(1, Ch) == checkpoint andalso
-       is_integer(MacVer)  andalso
-       MacVer >= 8 ->
-    Idx = element(2, Ch),
-    LastTs = element(3, Ch),
-    do_snapshot(MacVer, Ts, #snapshot{index = Idx, timestamp = LastTs},
-                RaAux, DiscardedBytes, Force);
-do_snapshot(MacVer, Ts, #snapshot{index = _ChIdx,
-                                  timestamp = SnapTime,
-                                  discarded_bytes = LastDiscardedBytes} = Snap0,
-            RaAux, DiscardedBytes, Force)
-  when is_integer(MacVer) andalso MacVer >= 8 ->
+
+do_checkpoints(Ts, #checkpoint{index = ChIdx,
+                               timestamp = ChTime,
+                               smallest_index = LastSmallest,
+                               bytes_in = LastBytesIn,
+                               indexes = MinIndexes} = Check0,
+               RaAux, BytesIn, Force) ->
     LastAppliedIdx = ra_aux:last_applied(RaAux),
-    #?STATE{consumers = Consumers,
-            enqueuers = Enqueuers} = MacState = ra_aux:machine_state(RaAux),
-    TimeSince = Ts - SnapTime,
+    IndexesSince = LastAppliedIdx - ChIdx,
+    #?STATE{} = MacState = ra_aux:machine_state(RaAux),
+    TimeSince = Ts - ChTime,
+    NewSmallest = case smallest_raft_index(MacState) of
+                      undefined ->
+                          LastAppliedIdx;
+                      Smallest ->
+                          Smallest
+                  end,
     MsgsTot = messages_total(MacState),
-    %% if the approximate snapshot size * 2 can be reclaimed it is worth
-    %% taking a snapshot
-    %% take number of enqueues and consumers into account
-    %% message: 32 bytes
-    %% enqueuer: 96 bytes
-    %% consumer: 256 bytes
-    NumEnqueuers = map_size(Enqueuers),
-    NumConsumers = map_size(Consumers),
-    ApproxSnapSize = 4096 +
-                     (MsgsTot * 32) +
-                     (NumEnqueuers * 96) +
-                     (NumConsumers * 256),
+    %% more than 64MB (by default) of message data has been written to the log
+    %% best take a checkpoint
 
-    EnoughDataRemoved = DiscardedBytes - LastDiscardedBytes > (ApproxSnapSize * 3),
-
-    {CheckMinInterval, _CheckMinIndexes, _CheckMaxIndexes} =
+    {CheckMinInterval, CheckMinIndexes, CheckMaxIndexes} =
         persistent_term:get(quorum_queue_checkpoint_config,
                             {?CHECK_MIN_INTERVAL_MS, ?CHECK_MIN_INDEXES,
                              ?CHECK_MAX_INDEXES}),
+
+    %% scale the bytes limit as the backlog increases
+    MaxBytesFactor = max(1, MsgsTot / CheckMaxIndexes),
+    EnoughDataWritten = BytesIn - LastBytesIn > (?CHECK_MAX_BYTES * MaxBytesFactor),
     EnoughTimeHasPassed = TimeSince > CheckMinInterval,
+
     case (EnoughTimeHasPassed andalso
-          EnoughDataRemoved) orelse
-         Force of
+          (
+           %% condition 1: enough indexes have been committed since the last
+           %% checkpoint
+           (IndexesSince > MinIndexes) orelse
+           %% condition 2: the queue is empty and _some_ commands
+           %% have been applied since the last checkpoint
+           (MsgsTot == 0 andalso IndexesSince > 32)
+          )
+         ) orelse
+         %% condition 3: enough message data has been written to warrant a new
+         %% checkpoint, this ignores the time windowing
+         EnoughDataWritten orelse
+         %% force was requested, e.g. after a purge
+         Force
+    of
         true ->
-            {#snapshot{index = LastAppliedIdx,
-                       timestamp = Ts,
-                       messages_total = MsgsTot,
-                       discarded_bytes = DiscardedBytes},
-             [{release_cursor, LastAppliedIdx, MacState}]};
+            %% take fewer checkpoints the more messages there are on queue
+            NextIndexes = min(max(MsgsTot, CheckMinIndexes), CheckMaxIndexes),
+            %% take a checkpoint;
+            {#checkpoint{index = LastAppliedIdx,
+                         timestamp = Ts,
+                         smallest_index = NewSmallest,
+                         messages_total = MsgsTot,
+                         bytes_in = BytesIn,
+                         indexes = NextIndexes},
+             [{checkpoint, LastAppliedIdx, MacState} |
+              release_cursor(LastSmallest, NewSmallest)]};
         false ->
-            {Snap0, []}
+            {Check0#checkpoint{smallest_index = NewSmallest},
+             release_cursor(LastSmallest, NewSmallest)}
     end.
+
+release_cursor(LastSmallest, Smallest)
+  when is_integer(LastSmallest) andalso
+       is_integer(Smallest) andalso
+       Smallest > LastSmallest ->
+    [{release_cursor, Smallest - 1}];
+release_cursor(undefined, Smallest)
+  when is_integer(Smallest) ->
+    [{release_cursor, Smallest - 1}];
+release_cursor(_, _) ->
+    [].
 
 discard(Meta, MsgIds, ConsumerKey,
         #consumer{checked_out = Checked} = Con,
         DelFailed, Anns,
         #?STATE{cfg = #cfg{dead_letter_handler = DLH},
-                discarded_bytes = DiscardedBytes0,
                 dlx = DlxState0} = State0) ->
     %% We publish to dead-letter exchange in the same order
     %% as messages got rejected by the client.
@@ -3037,10 +3078,9 @@ discard(Meta, MsgIds, ConsumerKey,
                                     {true, incr_msg(Msg0, DelFailed, Anns)}
                             end
                     end, MsgIds),
-    {DlxState, RetainedBytes, Effects} =
-        discard_or_dead_letter(DiscardMsgs, rejected, DLH, DlxState0),
-    State = State0#?STATE{dlx = DlxState,
-                          discarded_bytes = DiscardedBytes0 - RetainedBytes},
+    {DlxState, Effects} = rabbit_fifo_dlx:discard(DiscardMsgs, rejected,
+                                                  DLH, DlxState0),
+    State = State0#?STATE{dlx = DlxState},
     complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State).
 
 incr_msg(Msg0, DelFailed, Anns) ->
@@ -3065,11 +3105,9 @@ exec_read(Flru0, ReadPlan, Msgs) ->
     try ra_log_read_plan:execute(ReadPlan, Flru0) of
         {Entries, Flru} ->
             %% return a list in original order
-            {lists:map(fun ({MsgId, Msg}) ->
-                               Idx = get_msg_idx(Msg),
-                               Header = get_msg_header(Msg),
+            {lists:map(fun ({MsgId, ?MSG(Idx,  Header)}) ->
                                Cmd = maps:get(Idx, Entries),
-                               {MsgId, {Header, get_msg_from_cmd(Cmd)}}
+                               {MsgId, {Header, get_msg(Cmd)}}
                        end, Msgs), Flru}
     catch exit:{missing_key, _}
             when Flru0 =/= undefined ->
@@ -3080,358 +3118,3 @@ exec_read(Flru0, ReadPlan, Msgs) ->
               %% retry without segment cache
               exec_read(undefined, ReadPlan, Msgs)
     end.
-
-maps_ordered_keys(Map) ->
-    lists:sort(maps:keys(Map)).
-
-%% enqueue overhead: 256b + message size
-
-estimate_discarded_size(#?ENQ_V2{}) ->
-    0;
-estimate_discarded_size(Cmd)
-  when is_record(Cmd, settle) orelse
-       is_record(Cmd, return) orelse
-       is_record(Cmd, discard) orelse
-       is_record(Cmd, credit) ->
-    128;
-estimate_discarded_size(#checkout{}) ->
-    300;
-estimate_discarded_size(#register_enqueuer{}) ->
-    200;
-estimate_discarded_size(#modify{}) ->
-    256;
-estimate_discarded_size(#update_config{}) ->
-    512;
-estimate_discarded_size(#purge{}) ->
-    64;
-estimate_discarded_size(#purge_nodes{}) ->
-    64;
-estimate_discarded_size(#requeue{}) ->
-    0;
-estimate_discarded_size(#enqueue{}) ->
-    0;
-estimate_discarded_size({nodeup, _}) ->
-    96;
-estimate_discarded_size({down, _, _}) ->
-    96;
-estimate_discarded_size({dlx, _Cmd}) ->
-    64;
-estimate_discarded_size(_Cmd) ->
-    %% something is better than nothing
-    64.
-
-
-dlx_apply(_Meta, {dlx, {settle, MsgIds}}, at_least_once,
-          #?DLX{consumer = #dlx_consumer{checked_out = Checked0}} = State0) ->
-    Acked = maps:with(MsgIds, Checked0),
-    {DBytes, State} =
-        maps:fold(
-          fun(MsgId, ?TUPLE(_Rsn, Msg),
-              {Sz, #?DLX{consumer = #dlx_consumer{checked_out = Checked} = C,
-                         msg_bytes_checkout = BytesCheckout,
-                         ra_indexes = Indexes0} = S}) ->
-                  Idx = get_msg_idx(Msg),
-                  Hdr = get_msg_header(Msg),
-                  Indexes = rabbit_fifo_index:delete(Idx, Indexes0),
-                  Size = get_header(size, Hdr),
-                  {Sz + Size + ?ENQ_OVERHEAD, 
-                   S#?DLX{consumer = C#dlx_consumer{checked_out =
-                                                    maps:remove(MsgId, Checked)},
-                          msg_bytes_checkout = BytesCheckout - Size,
-                          ra_indexes = Indexes}}
-          end, {0, State0}, Acked),
-    {State, DBytes,
-     [{mod_call, rabbit_global_counters, messages_dead_lettered_confirmed,
-       [rabbit_quorum_queue, at_least_once, maps:size(Acked)]}]};
-dlx_apply(_, {dlx, {checkout, Pid, Prefetch}},
-          at_least_once,
-          #?DLX{consumer = undefined} = State0) ->
-    State = State0#?DLX{consumer = #dlx_consumer{pid = Pid,
-                                                 prefetch = Prefetch}},
-    {State, 0, []};
-dlx_apply(_, {dlx, {checkout, ConsumerPid, Prefetch}},
-          at_least_once,
-          #?DLX{consumer = #dlx_consumer{pid = OldConsumerPid,
-                                         checked_out = CheckedOutOldConsumer},
-                discards = Discards0,
-                msg_bytes = Bytes,
-                msg_bytes_checkout = BytesCheckout} = State0) ->
-    %% Since we allow only a single consumer, the new consumer replaces the old consumer.
-    case ConsumerPid of
-        OldConsumerPid ->
-            ok;
-        _ ->
-            ?LOG_DEBUG("Terminating ~p since ~p becomes active rabbit_fifo_dlx_worker",
-                       [OldConsumerPid, ConsumerPid]),
-            %% turn into aux command
-            ensure_worker_terminated(State0)
-    end,
-    %% All checked out messages to the old consumer need to be returned to the discards queue
-    %% such that these messages will be re-delivered to the new consumer.
-    %% When inserting back into the discards queue, we respect the original order in which messages
-    %% were discarded.
-    Checked0 = maps:to_list(CheckedOutOldConsumer),
-    Checked1 = lists:keysort(1, Checked0),
-    {Discards, BytesMoved} = lists:foldr(
-                               fun({_Id, ?TUPLE(_, Msg) = RsnMsg}, {D, B}) ->
-                                       Size = get_header(size, get_msg_header(Msg)),
-                                       {lqueue:in_r(RsnMsg, D), B + Size}
-                               end, {Discards0, 0}, Checked1),
-    State = State0#?DLX{consumer = #dlx_consumer{pid = ConsumerPid,
-                                                 prefetch = Prefetch},
-                        discards = Discards,
-                        msg_bytes = Bytes + BytesMoved,
-                        msg_bytes_checkout = BytesCheckout - BytesMoved},
-    {State, 0, []};
-dlx_apply(_, Cmd, DLH, State) ->
-    ?LOG_DEBUG("Ignoring command ~tp for dead_letter_handler ~tp", [Cmd, DLH]),
-    {State, 0, []}.
-
-%% nodeup: 74 bytes
-%% down: 90 bytes
-%% enqueue overhead 210
-
-% messages_get_next_msg(#messages{returns = Returns0,
-%                             messages = Messages0}) ->
-%     case lqueue:get(Returns0, empty) of
-%         empty ->
-%             rabbit_fifo_q:get(Messages0);
-%         Msg ->
-%             Msg
-%     end.
-
-% messages_take_next_msg(#messages{returns = Returns0,
-%                                  messages = Messages0} = Msgs) ->
-%     case lqueue:out(Returns0) of
-%         {{value, NextMsg}, Returns} ->
-%             {NextMsg, Msgs#messages{returns = Returns}};
-%         {empty, _} ->
-%             case rabbit_fifo_q:out(Messages0) of
-%                 empty ->
-%                     empty;
-%                 {?MSG(_RaftIdx, _) = Msg, Messages} ->
-%                     {Msg, Msgs#messages{messages = Messages}}
-%             end
-%     end.
-
-ensure_worker_started(QRef, #?DLX{consumer = undefined}) ->
-    start_worker(QRef);
-ensure_worker_started(QRef, #?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            ?LOG_DEBUG("rabbit_fifo_dlx_worker ~tp already started for ~ts",
-                             [Pid, rabbit_misc:rs(QRef)]);
-        false ->
-            start_worker(QRef)
-    end.
-
-%% Ensure that starting the rabbit_fifo_dlx_worker succeeds.
-%% Therefore, do not use an effect.
-%% Also therefore, if starting the rabbit_fifo_dlx_worker fails, let the
-%% Ra server process crash in which case another Ra node will become leader.
-start_worker(QRef) ->
-    {ok, Pid} = supervisor:start_child(rabbit_fifo_dlx_sup, [QRef]),
-    ?LOG_DEBUG("started rabbit_fifo_dlx_worker ~tp for ~ts",
-                     [Pid, rabbit_misc:rs(QRef)]).
-
-ensure_worker_terminated(#?DLX{consumer = undefined}) ->
-    ok;
-ensure_worker_terminated(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            %% Note that we can't return a mod_call effect here
-            %% because mod_call is executed on the leader only.
-            ok = supervisor:terminate_child(rabbit_fifo_dlx_sup, Pid),
-            ?LOG_DEBUG("terminated rabbit_fifo_dlx_worker ~tp", [Pid]);
-        false ->
-            ok
-    end.
-
-local_alive_consumer_pid(#?DLX{consumer = undefined}) ->
-    undefined;
-local_alive_consumer_pid(#?DLX{consumer = #dlx_consumer{pid = Pid}}) ->
-    case is_local_and_alive(Pid) of
-        true ->
-            Pid;
-        false ->
-            undefined
-    end.
-
-is_local_and_alive(Pid)
-  when node(Pid) =:= node() ->
-    is_process_alive(Pid);
-is_local_and_alive(_) ->
-    false.
-
-update_config(at_least_once, at_least_once, _, State) ->
-    case local_alive_consumer_pid(State) of
-        undefined ->
-            {State, []};
-        Pid ->
-            %% Notify rabbit_fifo_dlx_worker about potentially updated policies.
-            {State, [{send_msg, Pid, {dlx_event, self(), lookup_topology}, cast}]}
-    end;
-update_config(SameDLH, SameDLH, _, State) ->
-    {State, []};
-update_config(OldDLH, NewDLH, QRes, State0) ->
-    LogOnLeader = {mod_call, logger, debug,
-                   ["Switching dead_letter_handler from ~tp to ~tp for ~ts",
-                    [OldDLH, NewDLH, rabbit_misc:rs(QRes)]]},
-    {State1, Effects0} = switch_from(OldDLH, QRes, State0),
-    {State, Effects} = switch_to(NewDLH, State1, Effects0),
-    {State, [LogOnLeader|Effects]}.
-
-switch_from(at_least_once, QRes, State) ->
-    %% Switch from at-least-once to some other strategy.
-    %% TODO: do worker teardown in aux handler
-    ensure_worker_terminated(State),
-    {Num, Bytes} = dlx_stat(State),
-    %% Log only on leader.
-    {#?DLX{}, [{mod_call, logger, info,
-               ["Deleted ~b dead-lettered messages (with total messages size of ~b bytes) in ~ts",
-                [Num, Bytes, rabbit_misc:rs(QRes)]]}]};
-switch_from(_, _, State) ->
-    {State, []}.
-
-switch_to(at_least_once, _, Effects) ->
-    %% Switch from some other strategy to at-least-once.
-    %% Dlx worker needs to be started on the leader.
-    %% The cleanest way to determine the Ra state of this node is delegation to handle_aux.
-    {#?DLX{}, [{aux, {dlx, setup}} | Effects]};
-switch_to(_, State, Effects) ->
-    {State, Effects}.
-
-
-dlx_stat(#?DLX{consumer = Con,
-               discards = Discards,
-               msg_bytes = MsgBytes,
-               msg_bytes_checkout = MsgBytesCheckout}) ->
-    Num0 = lqueue:len(Discards),
-    Num = case Con of
-              undefined ->
-                  Num0;
-              #dlx_consumer{checked_out = Checked} ->
-                  %% O(1) because Erlang maps maintain their own size
-                  Num0 + maps:size(Checked)
-          end,
-    Bytes = MsgBytes + MsgBytesCheckout,
-    {Num, Bytes}.
-
-
-dlx_overview(#?DLX{consumer = undefined,
-                  msg_bytes = MsgBytes,
-                  msg_bytes_checkout = 0,
-                  discards = Discards}) ->
-    dlx_overview0(Discards, #{}, MsgBytes, 0);
-dlx_overview(#?DLX{consumer = #dlx_consumer{checked_out = Checked},
-                  msg_bytes = MsgBytes,
-                  msg_bytes_checkout = MsgBytesCheckout,
-                  discards = Discards}) ->
-    dlx_overview0(Discards, Checked, MsgBytes, MsgBytesCheckout).
-
-dlx_overview0(Discards, Checked, MsgBytes, MsgBytesCheckout) ->
-    #{num_discarded => lqueue:len(Discards),
-      num_discard_checked_out => maps:size(Checked),
-      discard_message_bytes => MsgBytes,
-      discard_checkout_message_bytes => MsgBytesCheckout}.
-
-
-discard_or_dead_letter(Msgs, Reason, undefined, State) ->
-    {State, 0,
-     [{mod_call, rabbit_global_counters, messages_dead_lettered,
-       [Reason, rabbit_quorum_queue, disabled, length(Msgs)]}]};
-discard_or_dead_letter(Msgs0, Reason, {at_most_once, {Mod, Fun, Args}}, State) ->
-    Idxs = lists:map(fun get_msg_idx/1, Msgs0),
-    %% TODO: this could be turned into a log_ext effect instead to avoid
-    %% reading from disk inside the qq process
-    Effect = {log, Idxs,
-              fun (Log) ->
-                      Lookup = maps:from_list(lists:zip(Idxs, Log)),
-                      Msgs = [begin
-                                  Idx = get_msg_idx(Msg),
-                                  Hdr = get_msg_header(Msg),
-                                  Cmd = maps:get(Idx, Lookup),
-                                  %% ensure header delivery count
-                                  %% is copied to the message container
-                                  annotate_msg(Hdr, rabbit_fifo:get_msg_from_cmd(Cmd))
-                              end || Msg <- Msgs0],
-                      [{mod_call, Mod, Fun, Args ++ [Reason, Msgs]}]
-              end},
-    {State, 0, [Effect]};
-discard_or_dead_letter(Msgs, Reason, at_least_once, State0)
-  when Reason =/= maxlen ->
-    RetainedBytes = lists:foldl(fun (M, Acc) ->
-                                        Acc + size_in_bytes(M) + ?ENQ_OVERHEAD
-                                end, 0, Msgs),
-    State = lists:foldl(fun(Msg, #?DLX{discards = D0,
-                                       msg_bytes = B0,
-                                       ra_indexes = I0} = S0) ->
-                                MsgSize = size_in_bytes(Msg),
-                                D = lqueue:in(?TUPLE(Reason, Msg), D0),
-                                B = B0 + MsgSize,
-                                Idx = get_msg_idx(Msg),
-                                I = rabbit_fifo_index:append(Idx, I0),
-                                S0#?DLX{discards = D,
-                                        msg_bytes = B,
-                                        ra_indexes = I}
-                        end, State0, Msgs),
-    {State, RetainedBytes,
-     [{mod_call, rabbit_global_counters, messages_dead_lettered,
-       [Reason, rabbit_quorum_queue, at_least_once, length(Msgs)]}]}.
-
-
-size_in_bytes(Msg) ->
-    Header = get_msg_header(Msg),
-    get_header(size, Header).
-
-dlx_checkout(at_least_once, #?DLX{consumer = #dlx_consumer{}} = State) ->
-    dlx_checkout0(dlx_checkout_one(State), []);
-dlx_checkout(_, State) ->
-    {State, []}.
-
-dlx_checkout0({success, MsgId, ?TUPLE(Reason, Msg), State}, SendAcc) ->
-    Idx = get_msg_idx(Msg),
-    Hdr = get_msg_header(Msg),
-    DelMsg = {Idx, {Reason, Hdr, MsgId}},
-    dlx_checkout0(dlx_checkout_one(State), [DelMsg | SendAcc]);
-dlx_checkout0(#?DLX{consumer = #dlx_consumer{pid = Pid}} = State, SendAcc) ->
-    Effects = dlx_delivery_effects(Pid, SendAcc),
-    {State, Effects}.
-
-dlx_checkout_one(#?DLX{consumer = #dlx_consumer{checked_out = Checked,
-                                               prefetch = Prefetch}} = State)
-  when map_size(Checked) >= Prefetch ->
-    State;
-dlx_checkout_one(#?DLX{discards = Discards0,
-                       msg_bytes = Bytes,
-                       msg_bytes_checkout = BytesCheckout,
-                       consumer = #dlx_consumer{checked_out = Checked0,
-                                                next_msg_id = Next} = Con0} = State0) ->
-    case lqueue:out(Discards0) of
-        {{value, ?TUPLE(_, Msg) = ReasonMsg}, Discards} ->
-            Checked = maps:put(Next, ReasonMsg, Checked0),
-            Size = size_in_bytes(Msg),
-            State = State0#?DLX{discards = Discards,
-                                msg_bytes = Bytes - Size,
-                                msg_bytes_checkout = BytesCheckout + Size,
-                                consumer = Con0#dlx_consumer{checked_out = Checked,
-                                                             next_msg_id = Next + 1}},
-            {success, Next, ReasonMsg, State};
-        {empty, _} ->
-            State0
-    end.
-
-dlx_delivery_effects(_CPid, []) ->
-    [];
-dlx_delivery_effects(CPid, Msgs0) ->
-    Msgs1 = lists:reverse(Msgs0),
-    {RaftIdxs, RsnIds} = lists:unzip(Msgs1),
-    [{log, RaftIdxs,
-      fun(Log) ->
-              Msgs = lists:zipwith(
-                       fun (Cmd, {Reason, H, MsgId}) ->
-                               {MsgId, {Reason,
-                                        annotate_msg(H, rabbit_fifo:get_msg_from_cmd(Cmd))}}
-                       end, Log, RsnIds),
-              [{send_msg, CPid, {dlx_event, self(), {dlx_delivery, Msgs}}, [cast]}]
-      end}].
