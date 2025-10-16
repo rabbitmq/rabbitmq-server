@@ -113,7 +113,7 @@ is_auth_backend_module_enabled(Mod) when is_atom(Mod) ->
             case rabbit_plugins:which_plugin(Mod) of
                 {ok, PluginName} ->
                     %% FIXME: The definition of an "enabled plugin" in
-                    %% `rabbit_plugins' varies from funtion to function.
+                    %% `rabbit_plugins' varies from function to function.
                     %% Sometimes, it means the "rabbitmq-plugin enable
                     %% <plugin>" was executed, sometimes it means the plugin
                     %% is running.
