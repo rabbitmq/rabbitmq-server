@@ -1288,6 +1288,73 @@ fun(Conf) ->
     end
 end}.
 
+%% Per-queue-type / per-mount disk alarms
+{mapping, "disk_free_limits.$num.name", "rabbit.disk_free_limits", [
+    {datatype, [binary]}
+]}.
+{mapping, "disk_free_limits.$num.mount", "rabbit.disk_free_limits", [
+    {datatype, [string]}
+]}.
+{mapping, "disk_free_limits.$num.limit", "rabbit.disk_free_limits", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+{mapping, "disk_free_limits.$num.queue_types", "rabbit.disk_free_limits", [
+    {datatype, [binary]}
+]}.
+
+{translation, "rabbit.disk_free_limits",
+fun(Conf) ->
+    case cuttlefish_variable:filter_by_prefix("disk_free_limits", Conf) of
+        [] ->
+            cuttlefish:unset();
+        Settings ->
+            Ls = lists:foldl(
+                   fun ({["disk_free_limits", Num, Key0], Value0}, Acc) ->
+                           Idx = case string:to_integer(Num) of
+                                     {N, []} -> N;
+                                     _ -> cuttlefish:invalid(lists:flatten(io_lib:format("~p could not be parsed as a number", [Num])))
+                                 end,
+                           Key = case Key0 of
+                                     "name" -> name;
+                                     "mount" -> mount;
+                                     "limit" -> limit;
+                                     "queue_types" -> queue_types;
+                                      _ -> cuttlefish:invalid(lists:flatten(io_lib:format("~p is invalid", [Key0])))
+                                 end,
+                           Value = case Key of
+                                       queue_types -> string:split(Value0, ",");
+                                       _ -> Value0
+                                   end,
+                           maps:update_with(
+                             Idx,
+                             fun (#{Key := ExistingValue} = Limit) ->
+                                     cuttlefish:warn(
+                                       io_lib:format("Disk limit ~b has duplicate setting ~ts, "
+                                                     "using ~tp instead of ~tp",
+                                                     [Idx, Key, Value, ExistingValue])),
+                                     Limit#{Key := Value};
+                                 (Limit) ->
+                                     Limit#{Key => Value}
+                             end, #{Key => Value}, Acc);
+                       (Other, _Acc) ->
+                           cuttlefish:invalid(
+                             lists:flatten(io_lib:format("~p is invalid", [Other])))
+                   end, #{}, Settings),
+            maps:fold(
+              fun(_Idx, #{name := Name}, Names) ->
+                      case sets:is_element(Name, Names) of
+                          true ->
+                              cuttlefish:invalid(
+                                lists:flatten(io_lib:format("name ~ts is used by multiple mounts", [Name])));
+                          false ->
+                              sets:add_element(Name, Names)
+                      end
+              end, sets:new([{version, 2}]), Ls),
+            Ls
+    end
+end}.
+
 %%
 %% Clustering
 %% =====================
