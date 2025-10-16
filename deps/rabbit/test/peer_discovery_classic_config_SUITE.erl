@@ -140,12 +140,8 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
       ]),
     NodeNamesWithHostname =
       [rabbit_nodes:make({Name, "localhost"}) || Name <- [nonexistent1, nonexistent2 | NodeNames]],
-    %% reduce retry time since we know one node on the list does
-    %% not exist and not just unreachable
-    %% We no longer test non-existing nodes, it just times out
-    %% constantly in CI
-    %% To compare, this suite takes ~23min in my machine with
-    %% unreachable nodes vs ~6min without them
+    %% reduce retry time since we know two nodes on the list do
+    %% not exist and are not just unreachable
     Config3 = rabbit_ct_helpers:merge_app_env(Config2,
       {rabbit, [
           {forced_feature_flags_on_init, []},
