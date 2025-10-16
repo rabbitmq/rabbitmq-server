@@ -131,7 +131,7 @@ jobs:
       run: |
         sudo netstat -ntp
         set -o pipefail
-        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} NON_DETERMINISTIC=1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//"
+        make -C deps/${{ inputs.plugin }} ${{ inputs.make_target }} RABBITMQ_METADATA_STORE=${{ inputs.metadata_store }} NON_DETERMINISTIC=1 2>&1 | sed "s/src\//deps\/${{ inputs.plugin }}\/src\//" | sed "s/test\//deps\/${{ inputs.plugin }}\/test\//" | sed "s/src\/enough\.erl:22:2:/IGNORED src\/enough.erl:22:2:/"
 
     - name: CACHE ACTIVEMQ
       uses: actions/cache/save@v4
