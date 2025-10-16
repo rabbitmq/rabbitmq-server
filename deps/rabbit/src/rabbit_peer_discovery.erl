@@ -57,6 +57,8 @@
 -define(DEFAULT_DISCOVERY_RETRY_COUNT, 30).
 -define(DEFAULT_DISCOVERY_RETRY_INTERVAL_MS, 1000).
 
+-define(ERPC_CALL_TIMEOUT, 10_000).
+
 -define(NODENAME_PART_SEPARATOR, "@").
 
 -define(PT_PEER_DISC_BACKEND, {?MODULE, backend}).
@@ -636,7 +638,7 @@ query_node_props2([{Node, Members} | Rest], NodesAndProps, FromNode) ->
                            Node, logger, debug,
                            ["Peer discovery: temporary hidden node '~ts' "
                             "queries properties from node '~ts'",
-                            [node(), Node]], FromNode),
+                            [node(), Node]], FromNode, ?ERPC_CALL_TIMEOUT),
                          StartTime = get_node_start_time(Node, FromNode),
                          IsReady = is_node_db_ready(Node, FromNode),
                          NodeAndProps = {Node, Members, StartTime, IsReady},
@@ -726,7 +728,7 @@ is_node_db_ready(Node, FromNode) ->
     end.
 
 erpc_call(Node, Mod, Fun, Args, FromNode) ->
-    erpc_call(Node, Mod, Fun, Args, FromNode, 10000).
+    erpc_call(Node, Mod, Fun, Args, FromNode, 0).
 
 erpc_call(Node, Mod, Fun, Args, FromNode, Timeout) when Timeout >= 0 ->
     try

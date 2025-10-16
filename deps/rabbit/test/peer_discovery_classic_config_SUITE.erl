@@ -138,7 +138,8 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
         {rmq_nodes_count, tl(NodeNames)},
         {rmq_nodes_clustered, false}
       ]),
-    NodeNamesWithHostname = [rabbit_nodes:make({Name, "localhost"}) || Name <- NodeNames],
+    NodeNamesWithHostname =
+      [rabbit_nodes:make({Name, "localhost"}) || Name <- [nonexistent1, nonexistent2 | NodeNames]],
     %% reduce retry time since we know one node on the list does
     %% not exist and not just unreachable
     %% We no longer test non-existing nodes, it just times out
@@ -150,6 +151,8 @@ init_per_testcase(successful_discovery_with_a_subset_of_nodes_coming_online = Te
           {forced_feature_flags_on_init, []},
           {cluster_nodes, {NodeNamesWithHostname, disc}},
           {cluster_formation, [
+              {discovery_retry_limit, 2},
+              {discovery_retry_interval, 100},
               {internal_lock_retries, 10}
           ]}
       ]}),
