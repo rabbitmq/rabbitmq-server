@@ -805,11 +805,13 @@ stream_pub_sub_metrics(Config) ->
     ct:pal("Initial metrics: ~p", [Metrics]),
 
     Stream1 = atom_to_list(?FUNCTION_NAME) ++ "1",
-    MsgPerBatch1 = 2,
-    {ok, S1, C1} = publish_via_stream_protocol(list_to_binary(Stream1), MsgPerBatch1, Config),
+    MsgPerBatch1 = 2, %% we'll publish 2 batches
+    {ok, S1, C1, CmttdChkId1} = publish_via_stream_protocol(list_to_binary(Stream1),
+                                                            MsgPerBatch1, Config),
     Stream2 = atom_to_list(?FUNCTION_NAME) ++ "2",
-    MsgPerBatch2 = 3,
-    {ok, S2, C2} = publish_via_stream_protocol(list_to_binary(Stream2), MsgPerBatch2, Config),
+    MsgPerBatch2 = 3, %% we'll publish 2 batches
+    {ok, S2, C2, CmttdChkId2} = publish_via_stream_protocol(list_to_binary(Stream2),
+                                                            MsgPerBatch2, Config),
 
     %% aggregated metrics
 
@@ -825,12 +827,14 @@ stream_pub_sub_metrics(Config) ->
 
     %% per-object metrics
      {_, Body2} = http_get_with_pal(Config, "/metrics/detailed?family=stream_consumer_metrics",
-                                   [], 200),
+                                    [], 200),
     ParsedBody2 = parse_response(Body2),
     #{rabbitmq_detailed_stream_consumer_max_offset_lag := MaxOffsetLag} = ParsedBody2,
 
-    ?assertEqual([{#{vhost => "/", queue => Stream1}, [2]},
-                  {#{vhost => "/", queue => Stream2}, [3]}],
+    %% we published 2 batches and received a first chunk (consumer offset = 0)
+    %% so the offset lag is the last committed chunk ID
+    ?assertEqual([{#{vhost => "/", queue => Stream1}, [CmttdChkId1]},
+                  {#{vhost => "/", queue => Stream2}, [CmttdChkId2]}],
                  lists:sort(maps:to_list(MaxOffsetLag))),
     dispose_stream_connection(S1, C1, list_to_binary(Stream1)),
     dispose_stream_connection(S2, C2, list_to_binary(Stream2)),
@@ -926,8 +930,9 @@ publish_via_stream_protocol(Stream, MsgPerBatch, Config) ->
     {ok, C6} = stream_test_utils:subscribe(S, C5, Stream, SubscriptionId, _InitialCredit = 0),
     ok = stream_test_utils:credit(S, SubscriptionId, 1),
     %% delivery of first batch of messages
-    {{deliver, SubscriptionId, _Bin1}, C7} = stream_test_utils:receive_stream_commands(S, C6),
-    {ok, S, C7}.
+    {{deliver_v2, SubscriptionId, CommittedChunkId, _Bin1}, C7} =
+        stream_test_utils:receive_stream_commands(S, C6),
+    {ok, S, C7, CommittedChunkId}.
 
 dispose_stream_connection(Sock, C0, Stream) ->
     {ok, C1} = stream_test_utils:delete_stream(Sock, C0, Stream),
