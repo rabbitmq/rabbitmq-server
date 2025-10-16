@@ -1,5 +1,5 @@
 ## This example configuration file demonstrates various settings
-## available via rabbitmq.conf. It primarily focuses core broker settings
+## available via rabbitmq.conf. It primarily focuses on core broker settings
 ## but some tier 1 plugin settings are also covered.
 ##
 ## This file is AN EXAMPLE. It is NOT MEANT TO BE USED IN PRODUCTION. Instead of
@@ -99,7 +99,7 @@
 ## Relevant doc guide: https://www.rabbitmq.com/docs/ssl.
 ##
 # listeners.ssl.1                  = 5671
-# 
+#
 # ssl_options.verify               = verify_peer
 # ssl_options.fail_if_no_peer_cert = false
 # ssl_options.cacertfile           = /path/to/cacert.pem
@@ -243,7 +243,7 @@
 
 ## Authentication
 ## The built-in mechanisms are 'PLAIN',
-## 'AMQPLAIN', and 'EXTERNAL' Additional mechanisms can be added via
+## 'AMQPLAIN', and 'EXTERNAL'. Additional mechanisms can be added via
 ## plugins.
 ##
 ## Relevant doc guide: https://www.rabbitmq.com/docs/authentication.
@@ -311,7 +311,16 @@
 # password_hashing_module = rabbit_password_hashing_md5
 
 ##
-## Default User / VHost
+## Credential validation.
+##
+## These settings can help enforce password requirements for all newly created users.
+##
+# credential_validator.validation_backend = rabbit_credential_validator_min_password_length
+# credential_validator.min_length = 30
+# credential_validator.regexp = ^[a-zA-Z0-9!@#$%^&*()]+$
+
+##
+## Default User and Their Permissions
 ##
 
 ## On first start RabbitMQ will create a vhost and a user. These
@@ -342,6 +351,39 @@
 ## Define other tags like this:
 # default_user_tags.management = true
 # default_user_tags.custom_tag = true
+
+##
+## Default (pre-configured) Virtual Host Limits
+##
+## Apply limits automatically to newly created virtual host whose names match a pattern.
+## Relevant doc guide: https://www.rabbitmq.com/docs/vhosts#limits
+##
+# default_limits.vhosts.prod.pattern = ^prod-.*
+# default_limits.vhosts.prod.max_connections = 5000
+# default_limits.vhosts.prod.max_queues = 5000
+
+##
+## Default operator Policies
+##
+## Apply operator policies automatically to queues whose names match a pattern.
+## Relevant doc guide: https://www.rabbitmq.com/docs/parameters#operator-policies
+##
+# default_policies.operator.limits.vhost_pattern = ^prod-.*
+# default_policies.operator.limits.queue_pattern = .*
+# default_policies.operator.limits.max_length = 10000
+# default_policies.operator.limits.message_ttl = 86400000
+
+##
+## Default Users
+##
+## Pre-configure user permissions for newly created virtual hosts whose names match a pattern.
+## In the example below, "monitoring" is the user name.
+##
+# default_users.monitoring.vhost_pattern = .*
+# default_users.monitoring.tags = monitoring
+# default_users.monitoring.configure = ^$
+# default_users.monitoring.read = .*
+# default_users.monitoring.write = ^$
 
 ##
 ## Additional network and protocol related configuration
@@ -445,7 +487,7 @@
 # stream.listeners.ssl.default = 5553
 
 ## Number of Erlang processes that will accept RabbitMQ Stream Protocol client connections,
-## one setting for for the TCP and one for the TLS listeners.
+## one setting for the TCP and one for the TLS listeners.
 # stream.num_acceptors.tcp = 10
 # stream.num_acceptors.ssl = 1
 
@@ -468,7 +510,7 @@
 ## depend on the number of streams and their replicas (members).
 ##
 # stream.replication.port_range.min = 5000
-# stream.replication.port_range.max 10000
+# stream.replication.port_range.max = 10000
 
 ## Advertised hostname and port for stream clients. Use when RabbitMQ
 ## is behind a load balancer or in a container environment.
@@ -607,7 +649,7 @@
 ## Make clustering happen *automatically* at startup. Only applied
 ## to nodes that have just been reset or started for the first time.
 ##
-## Relevant doc guide: https://www.rabbitmq.com/docs//cluster-formation
+## Relevant doc guide: https://www.rabbitmq.com/docs/cluster-formation
 ##
 
 # cluster_formation.peer_discovery_backend     = rabbit_peer_discovery_classic_config
@@ -661,6 +703,10 @@
 # raft.wal_max_batch_size = 4096
 # raft.snapshot_chunk_size = 1000000
 
+## Metadata store (Khepri) operation timeout in milliseconds.
+##
+# metadata_store.khepri.default_timeout = 30000
+
 ##
 ## Misc and Advanced Options
 ##
@@ -669,7 +715,7 @@
 
 ## To permit or deny a deprecated feature when it is in its
 ## `permitted_by_default` or `denied_by_default` deprecation phase, the
-## default state can be overriden from the configuration.
+## default state can be overridden from the configuration.
 ##
 ## When a deprecated feature is permitted by default (first phase of the
 ## deprecation period), it means the feature is available by default and can
@@ -737,21 +783,21 @@
 ##
 # proxy_protocol = false
 
-## Overriden product name and version.
+## Overridden product name and version.
 ## They are set to "RabbitMQ" and the release version by default.
 # product.name = RabbitMQ
 # product.version = 1.2.3
 
 ## "Message of the day" file.
 ## Its content is used to expand the logged and printed banners.
-## Default to /etc/rabbitmq/motd on Unix, %APPDATA%\RabbitMQ\motd.txt
+## Defaults to /etc/rabbitmq/motd on Unix, %APPDATA%\RabbitMQ\motd.txt
 ## on Windows.
 # motd_file = /etc/rabbitmq/motd
 
 ## Consumer timeout
-## If a message delivered to a consumer has not been acknowledge before this timer
-## triggers the channel will be force closed by the broker. This ensure that
-## faultly consumers that never ack will not hold on to messages indefinitely.
+## If a message delivered to a consumer has not been acknowledged before this timer
+## triggers the channel will be force closed by the broker. This ensures that
+## faulty consumers that never ack will not hold on to messages indefinitely.
 ##
 # consumer_timeout = 900000
 
@@ -847,7 +893,7 @@
 ## lengths) is retained.
 ##
 ## Relevant doc guide: https://www.rabbitmq.com/docs/management#configuration
-## Your can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
+## You can use 'minute', 'hour' and 'day' keys or integer key (in seconds)
 # management.sample_retention_policies.global.minute    = 5
 # management.sample_retention_policies.global.hour  = 60
 # management.sample_retention_policies.global.day = 1200
@@ -913,7 +959,7 @@
 
 
 ## Number of Erlang processes that will accept AMQP 0-9-1 and AMQP 1.0 client connections,
-## one setting for for the TCP and one for the TLS listeners.
+## one setting for the TCP and one for the TLS listeners.
 ##
 # stomp.num_acceptors.tcp = 10
 # stomp.num_acceptors.ssl = 1
@@ -933,7 +979,7 @@
 # stomp.default_user = guest
 # stomp.default_pass = guest
 
-## If a default user is configured, or you have configured use TLS client
+## If a default user is configured, or you have configured to use TLS client
 ## certificate based authentication, you can choose to allow clients to
 ## omit the CONNECT frame entirely. If set to true, the client is
 ## automatically connected as the default user or user supplied in the
@@ -1038,7 +1084,7 @@
 ## Sets the durable queue type to be used for QoS 1 subscriptions.
 ##
 ## Supported types are:
-## 
+##
 ## * classic
 ## * quorum
 ##
@@ -1178,11 +1224,11 @@
 ##
 # management.oauth_client_id = rabbitmq-management
 
-## Allows disable Basic HTTP Authentication. Opt-in to use JWT tokens exclusively.
+## Allows disabling Basic HTTP Authentication. Opt-in to use JWT tokens exclusively.
 ##
 # management.oauth_disable_basic_auth = true
 
-## The scopes RabbitMq should claim during the management UI authorization flow.
+## The scopes RabbitMQ should claim during the management UI authorization flow.
 ## Defaults to "openid profile"
 ##
 # management.oauth_scopes = openid profile rabbitmq.tag:management
@@ -1266,7 +1312,7 @@
 
 ## Sets Server Name Indication for LDAP connections.
 ## If an LDAP server host is available via multiple domain names, set this value
-## to the preferred domain name target LDAP server
+## to the preferred domain name of the target LDAP server
 # auth_ldap.ssl_options.sni = ldap.identity.eng.megacorp.local
 
 ## take wildcards into account when performing hostname verification
@@ -1318,7 +1364,7 @@
 # auth_ldap.other_bind.user_dn  = User
 # auth_ldap.other_bind.password = Password
 
-## If user_dn and password defined - other options is ignored.
+## If user_dn and password are defined - other options are ignored.
 
 ##
 ## LDAP: Limitations
