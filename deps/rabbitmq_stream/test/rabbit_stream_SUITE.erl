@@ -361,26 +361,27 @@ test_publish_v2(Config) ->
     C0 = rabbit_stream_core:init(0),
     C1 = test_peer_properties(Transport, S, C0),
     C2 = test_authenticate(Transport, S, C1),
-    C3 = test_create_stream(Transport, S, Stream, C2),
+    C3 = test_exchange_command_versions(Transport, S, C2),
+    C4 = test_create_stream(Transport, S, Stream, C3),
     PublisherId = 42,
-    C4 = test_declare_publisher(Transport, S, PublisherId, Stream, C3),
+    C5 = test_declare_publisher(Transport, S, PublisherId, Stream, C4),
     Body = <<"hello">>,
-    C5 = test_publish_confirm(Transport, S, publish_v2, PublisherId, Body,
-                              publish_confirm, C4),
     C6 = test_publish_confirm(Transport, S, publish_v2, PublisherId, Body,
                               publish_confirm, C5),
+    C7 = test_publish_confirm(Transport, S, publish_v2, PublisherId, Body,
+                              publish_confirm, C6),
     SubscriptionId = 42,
-    C7 = test_subscribe(Transport, S, SubscriptionId, Stream,
+    C8 = test_subscribe(Transport, S, SubscriptionId, Stream,
                         #{<<"filter.0">> => <<"foo">>},
                         ?RESPONSE_CODE_OK,
-                        C6),
-    C8 = test_deliver(Transport, S, SubscriptionId, 0, Body, C7),
-    C8b = test_deliver(Transport, S, SubscriptionId, 1, Body, C8),
+                        C7),
+    C9 = test_deliver_v2(Transport, S, SubscriptionId, 0, Body, C8),
+    C9b = test_deliver_v2(Transport, S, SubscriptionId, 1, Body, C9),
 
-    C9 = test_unsubscribe(Transport, S, SubscriptionId, C8b),
+    C10 = test_unsubscribe(Transport, S, SubscriptionId, C9b),
 
-    C10 = test_delete_stream(Transport, S, Stream, C9),
-    _C11 = test_close(Transport, S, C10),
+    C11 = test_delete_stream(Transport, S, Stream, C10),
+    _C12 = test_close(Transport, S, C11),
     closed = wait_for_socket_close(Transport, S, 10),
     ok.
 
@@ -901,7 +902,7 @@ offset_lag_calculation(Config) ->
 
                    C03 = case ReceiveDeliver of
                              true ->
-                                 {{deliver, SubId, _}, C02} = receive_commands(S, C01),
+                                 {{deliver_v2, SubId, _, _}, C02} = receive_commands(S, C01),
                                  C02;
                              _ ->
                                  C01
