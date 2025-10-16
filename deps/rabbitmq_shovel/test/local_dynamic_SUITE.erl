@@ -58,7 +58,6 @@ groups() ->
                   local_to_local_stream_on_confirm,
                   local_to_local_delete_src_queue,
                   local_to_local_delete_dest_queue,
-                  local_to_local_vhost_access,
                   local_to_local_user_access,
                   local_to_local_credit_flow_on_confirm,
                   local_to_local_credit_flow_on_publish,
@@ -674,23 +673,6 @@ local_to_local_delete_dest_queue(Config) ->
                                                        rabbit_shovel_status, status, []),
                           30000)
       end).
-
-local_to_local_vhost_access(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    AltVHost = ?config(alt_vhost, Config),
-    ok = rabbit_ct_broker_helpers:add_vhost(Config, AltVHost),
-    Uri = shovel_test_utils:make_uri(Config, 0, AltVHost),
-    ok = rabbit_ct_broker_helpers:rpc(
-           Config, 0, rabbit_runtime_parameters, set,
-           [<<"/">>, <<"shovel">>, ?PARAM, [{<<"src-uri">>,  Uri},
-                                            {<<"dest-uri">>, [Uri]},
-                                            {<<"src-protocol">>, <<"local">>},
-                                            {<<"src-queue">>, Src},
-                                            {<<"dest-protocol">>, <<"local">>},
-                                            {<<"dest-queue">>, Dest}],
-            none]),
-    shovel_test_utils:await_no_shovel(Config, ?PARAM).
 
 local_to_local_user_access(Config) ->
     Src = ?config(srcq, Config),

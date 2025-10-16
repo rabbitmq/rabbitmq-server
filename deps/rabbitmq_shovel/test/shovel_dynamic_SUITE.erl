@@ -22,7 +22,9 @@
                             amqp10_publish_expect/5,
                             amqp10_declare_queue/3,
                             amqp10_publish/4,
-                            amqp10_expect_count/3
+                            amqp10_expect_count/3,
+                            make_uri/3,
+                            await_no_shovel/2
                            ]).
 
 -define(PARAM, <<"test">>).
@@ -78,7 +80,8 @@ tests() ->
      %% autodelete_classic_on_confirm_with_rejections,
      %% autodelete_quorum_on_confirm_with_rejections,
      autodelete_classic_on_publish_with_rejections,
-     autodelete_quorum_on_publish_with_rejections
+     autodelete_quorum_on_publish_with_rejections,
+     no_vhost_access
     ].
 
 %% -------------------------------------------------------------------
@@ -196,18 +199,21 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config0) ->
     SrcQ = list_to_binary(atom_to_list(Testcase) ++ "_src"),
     DestQ = list_to_binary(atom_to_list(Testcase) ++ "_dest"),
+    VHost = list_to_binary(atom_to_list(Testcase) ++ "_vhost"),
     ShovelArgs = [{<<"src-protocol">>, ?config(src_protocol, Config0)},
                   {<<"dest-protocol">>, ?config(dest_protocol, Config0)},
                   {?config(src_address, Config0), SrcQ},
                   {?config(dest_address, Config0), DestQ}],
     Config = rabbit_ct_helpers:set_config(
                Config0,
-               [{srcq, SrcQ}, {destq, DestQ}, {shovel_args, ShovelArgs}]),
+               [{srcq, SrcQ}, {destq, DestQ}, {shovel_args, ShovelArgs},
+                {alt_vhost, VHost}]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     shovel_test_utils:clear_param(Config, ?PARAM),
     rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_all_queues, []),
+    _ = rabbit_ct_broker_helpers:delete_vhost(Config, ?config(alt_vhost, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -382,6 +388,19 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
               amqp10_expect_count(Sess, Src, ExpSrcFun(ExpDest)),
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
+
+no_vhost_access(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    AltVHost = ?config(alt_vhost, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, AltVHost),
+    Uri = make_uri(Config, 0, AltVHost),
+    ExtraArgs = [{<<"src-uri">>,  Uri}, {<<"dest-uri">>, [Uri]}],
+    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, ?PARAM, ShovelArgs, none]),
+    await_no_shovel(Config, ?PARAM).
 
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
