@@ -62,7 +62,6 @@
          cancel/3,
          handle_event/3,
          settle/5,
-         credit_v1/5,
          credit/6,
          dequeue/5,
          state_info/1
@@ -300,9 +299,6 @@ handle_event(A1,A2,A3) ->
     ?UNSUPPORTED([A1,A2,A3]).
 
 settle(A1,A2,A3,A4,A5) ->
-    ?UNSUPPORTED([A1,A2,A3,A4,A5]).
-
-credit_v1(A1,A2,A3,A4,A5) ->
     ?UNSUPPORTED([A1,A2,A3,A4,A5]).
 
 credit(A1,A2,A3,A4,A5,A6) ->

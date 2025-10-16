@@ -244,20 +244,10 @@ merge_app_env(Config) ->
                                      }]}).
 
 start_broker(Config) ->
-    Setup0 = rabbit_ct_broker_helpers:setup_steps(),
-    Setup1 = rabbit_ct_client_helpers:setup_steps(),
-    Steps = Setup0 ++ Setup1,
-    case rabbit_ct_helpers:run_setup_steps(Config, Steps) of
-        {skip, _} = Skip ->
-            Skip;
-        Config1 ->
-            Ret = rabbit_ct_broker_helpers:enable_feature_flag(
-                    Config1, 'rabbitmq_4.0.0'),
-            case Ret of
-                ok -> Config1;
-                _  -> Ret
-            end
-    end.
+    rabbit_ct_helpers:run_setup_steps(
+      Config,
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 finish_init(Group, Config) ->
     rabbit_ct_helpers:log_environment(),

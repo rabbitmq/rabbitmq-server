@@ -1287,15 +1287,6 @@ activating_plugin_with_new_ff_enabled(Config) ->
     ok.
 
 enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
-    RabbitMQ40Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                          Config, 'rabbitmq_4.0.0'),
-    case RabbitMQ40Enabled of
-        true ->
-            ok;
-        false ->
-            throw({skip, "This test triggers a bug present in 3.13"})
-    end,
-
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),
@@ -1326,15 +1317,6 @@ enable_plugin_feature_flag_after_deactivating_plugin(Config) ->
     ok.
 
 restart_node_with_unknown_enabled_feature_flag(Config) ->
-    RabbitMQ40Enabled = rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                          Config, 'rabbitmq_4.0.0'),
-    case RabbitMQ40Enabled of
-        true ->
-            ok;
-        false ->
-            throw({skip, "This test triggers a bug present in 3.13"})
-    end,
-
     FFSubsysOk = is_feature_flag_subsystem_available(Config),
 
     log_feature_flags_of_all_nodes(Config),

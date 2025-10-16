@@ -65,13 +65,11 @@ end_per_suite(Config) ->
 init_per_group(cluster_size_1, Config) ->
     Suffix = rabbit_ct_helpers:testcase_absname(Config, "", "-"),
     Config1 = rabbit_ct_helpers:set_config(Config, {rmq_nodename_suffix, Suffix}),
-    Config2 = rabbit_ct_helpers:run_setup_steps(
-                Config1,
-                [fun build_dotnet_test_project/1] ++
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config2, 'rabbitmq_4.0.0'),
-    Config2.
+    rabbit_ct_helpers:run_setup_steps(
+      Config1,
+      [fun build_dotnet_test_project/1] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
     rabbit_ct_helpers:run_teardown_steps(

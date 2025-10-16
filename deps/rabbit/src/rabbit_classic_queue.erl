@@ -55,7 +55,6 @@
          supports_stateful_delivery/0,
          deliver/3,
          settle/5,
-         credit_v1/5,
          credit/6,
          dequeue/5,
          info/2,
@@ -72,8 +71,6 @@
 -export([confirm_to_sender/3,
          send_rejection/3,
          deliver_to_consumer/5,
-         send_credit_reply_credit_api_v1/3,
-         send_drained_credit_api_v1/4,
          send_credit_reply/7]).
 
 -export([policy_apply_to_name/0,
@@ -303,14 +300,13 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
       mode := Mode,
       consumer_tag := ConsumerTag,
       exclusive_consume := ExclusiveConsume,
-      args := Args0,
+      args := Args,
       ok_msg := OkMsg,
       acting_user :=  ActingUser} = Spec,
-    {ModeOrPrefetch, Args} = consume_backwards_compat(Mode, Args0),
     case delegate:invoke(QPid,
                          {gen_server2, call,
                           [{basic_consume, NoAck, ChPid, LimiterPid,
-                            LimiterActive, ModeOrPrefetch, ConsumerTag,
+                            LimiterActive, Mode, ConsumerTag,
                             ExclusiveConsume, Args, OkMsg, ActingUser},
                            infinity]}) of
         ok ->
@@ -324,34 +320,9 @@ consume(Q, Spec, State0) when ?amqqueue_is_classic(Q) ->
              [rabbit_misc:rs(QRef), Reason]}
     end.
 
-%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
-consume_backwards_compat({simple_prefetch, PrefetchCount} = Mode, Args) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-        true -> {Mode, Args};
-        false -> {PrefetchCount, Args}
-    end;
-consume_backwards_compat({credited, InitialDeliveryCount} = Mode, Args)
-  when is_integer(InitialDeliveryCount) ->
-    %% credit API v2
-    {Mode, Args};
-consume_backwards_compat({credited, credit_api_v1}, Args) ->
-    %% credit API v1
-    {_PrefetchCount = 0,
-     [{<<"x-credit">>, table, [{<<"credit">>, long, 0},
-                               {<<"drain">>,  bool, false}]} | Args]}.
-
 cancel(Q, Spec, State) ->
-    %% Cancel API v2 reuses feature flag rabbitmq_4.0.0.
-    Request = case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-                  true ->
-                      {stop_consumer, Spec#{pid => self()}};
-                  false ->
-                      #{consumer_tag := ConsumerTag,
-                        user := ActingUser} = Spec,
-                      OkMsg = maps:get(ok_msg, Spec, undefined),
-                      {basic_cancel, self(), ConsumerTag, OkMsg, ActingUser}
-              end,
     Pid = amqqueue:get_pid(Q),
+    Request = {stop_consumer, Spec#{pid => self()}},
     case delegate:invoke(Pid, {gen_server2, call, [Request, infinity]}) of
         ok ->
             {ok, State#?STATE{pid = Pid}};
@@ -379,11 +350,6 @@ settle(_QName, Op, _CTag, MsgIds, State = #?STATE{pid = Pid}) ->
                   {reject, Op == requeue, MsgIds, self()}
           end,
     delegate:invoke_no_result(Pid, {gen_server2, cast, [Arg]}),
-    {State, []}.
-
-credit_v1(_QName, Ctag, LinkCreditSnd, Drain, #?STATE{pid = QPid} = State) ->
-    Request = {credit, self(), Ctag, LinkCreditSnd, Drain},
-    delegate:invoke_no_result(QPid, {gen_server2, cast, [Request]}),
     {State, []}.
 
 credit(_QName, Ctag, DeliveryCountRcv, LinkCreditRcv, Drain, #?STATE{pid = QPid} = State) ->
@@ -448,11 +414,6 @@ handle_event(QName, {down, Pid, Info}, #?STATE{monitored = Monitored,
     end;
 handle_event(_QName, Action, State)
   when element(1, Action) =:= credit_reply ->
-    {ok, State, [Action]};
-handle_event(_QName, {send_drained, {Ctag, Credit}}, State) ->
-    %% This function clause should be deleted when feature flag
-    %% rabbitmq_4.0.0 becomes required.
-    Action = {credit_reply_v1, Ctag, Credit, _Available = 0, _Drain = true},
     {ok, State, [Action]}.
 
 settlement_action(_Type, _QRef, [], Acc) ->
@@ -661,11 +622,8 @@ capabilities() ->
                           <<"x-dead-letter-routing-key">>, <<"x-max-length">>,
                           <<"x-max-length-bytes">>, <<"x-max-priority">>,
                           <<"x-overflow">>, <<"x-queue-mode">>, <<"x-queue-version">>,
-                          <<"x-single-active-consumer">>, <<"x-queue-type">>, <<"x-queue-master-locator">>]
-                          ++ case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-                                 true -> [<<"x-queue-leader-locator">>];
-                                 false -> []
-                             end,
+                          <<"x-single-active-consumer">>, <<"x-queue-type">>,
+                          <<"x-queue-master-locator">>, <<"x-queue-leader-locator">>],
       consumer_arguments => [<<"x-priority">>],
       server_named => true,
       rebalance_module => undefined,
@@ -740,16 +698,6 @@ send_rejection(Pid, QName, MsgSeqNo) ->
 
 deliver_to_consumer(Pid, QName, CTag, AckRequired, Message) ->
     Evt = {deliver, CTag, AckRequired, [Message]},
-    send_queue_event(Pid, QName, Evt).
-
-%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
-send_credit_reply_credit_api_v1(Pid, QName, Available) ->
-    Evt = {send_credit_reply, Available},
-    send_queue_event(Pid, QName, Evt).
-
-%% Delete this function when feature flag rabbitmq_4.0.0 becomes required.
-send_drained_credit_api_v1(Pid, QName, Ctag, Credit) ->
-    Evt = {send_drained, {Ctag, Credit}},
     send_queue_event(Pid, QName, Evt).
 
 send_credit_reply(Pid, QName, Ctag, DeliveryCount, Credit, Available, Drain) ->

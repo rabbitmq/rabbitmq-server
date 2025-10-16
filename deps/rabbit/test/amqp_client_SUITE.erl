@@ -250,108 +250,6 @@ end_per_group(_, Config) ->
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(T, Config)
-  when T =:= message_headers_conversion orelse
-       T =:= roundtrip_with_drain_quorum_queue orelse
-       T =:= drain_many_quorum_queue orelse
-       T =:= timed_get_quorum_queue orelse
-       T =:= available_messages_quorum_queue ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "Receiving with drain from quorum queues in credit API v1 have a known "
-             "bug that they reply with send_drained before delivering the message."}
-    end;
-init_per_testcase(single_active_consumer_drain_quorum_queue = T, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "Draining a SAC inactive quorum queue consumer with credit API v1 "
-             "is known to be unsupported."}
-    end;
-init_per_testcase(T, Config)
-  when T =:= incoming_window_closed_close_link orelse
-       T =:= incoming_window_closed_rabbitmq_internal_flow_classic_queue orelse
-       T =:= incoming_window_closed_rabbitmq_internal_flow_quorum_queue orelse
-       T =:= tcp_back_pressure_rabbitmq_internal_flow_classic_queue orelse
-       T =:= tcp_back_pressure_rabbitmq_internal_flow_quorum_queue ->
-    %% The new RabbitMQ internal flow control
-    %% writer proc <- session proc <- queue proc
-    %% is only available with credit API v2.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "Feature flag rabbitmq_4.0.0 is disabled"}
-    end;
-init_per_testcase(T, Config)
-  when T =:= modified_quorum_queue orelse
-       T =:= modified_dead_letter_headers_exchange orelse
-       T =:= modified_dead_letter_history ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "Feature flag rabbitmq_4.0.0 is disabled, but needed for "
-             "the new #modify{} command being sent to quorum queues."}
-    end;
-init_per_testcase(T, Config)
-  when T =:= detach_requeues_one_session_classic_queue orelse
-       T =:= detach_requeues_drop_head_classic_queue orelse
-       T =:= detach_requeues_two_connections_classic_queue orelse
-       T =:= single_active_consumer_classic_queue ->
-    %% Cancel API v2 reuses feature flag rabbitmq_4.0.0.
-    %% In 3.13, with cancel API v1, when a receiver detaches with unacked messages, these messages
-    %% will remain unacked and unacked message state will be left behind in the server session
-    %% process state.
-    %% In contrast, cancel API v2 in 4.x will requeue any unacked messages if the receiver detaches.
-    %% We skip the single active consumer tests because these test cases assume that detaching a
-    %% receiver link will requeue unacked messages.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "Cancel API v2 is disabled due to feature flag rabbitmq_4.0.0 being disabled."}
-    end;
-init_per_testcase(T, Config)
-  when T =:= detach_requeues_one_session_quorum_queue orelse
-       T =:= single_active_consumer_quorum_queue orelse
-       T =:= detach_requeues_two_connections_quorum_queue ->
-    %% Feature flag rabbitmq_4.0.0 enables the consumer removal API.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        Skip ->
-            Skip
-    end;
-init_per_testcase(T, Config)
-  when T =:= leader_transfer_quorum_queue_credit_single orelse
-       T =:= leader_transfer_quorum_queue_credit_batches orelse
-       T =:= async_notify_unsettled_classic_queue orelse
-       T =:= leader_transfer_stream_credit_single orelse
-       T =:= dead_letter_into_stream orelse
-       T =:= classic_queue_on_new_node orelse
-       T =:= leader_transfer_quorum_queue_send orelse
-       T =:= last_queue_confirms orelse
-       T =:= leader_transfer_stream_credit_batches orelse
-       T =:= leader_transfer_stream_send ->
-    %% These test cases flake with feature flag 'rabbitmq_4.0.0' disabled.
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        Skip ->
-            Skip
-    end;
-init_per_testcase(T = immutable_bare_message, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "RabbitMQ is known to wrongfully modify the bare message with feature "
-             "flag rabbitmq_4.0.0 disabled"}
-    end;
 init_per_testcase(T = dead_letter_reject, Config) ->
     case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
         ok ->
@@ -3676,10 +3574,6 @@ async_notify_settled_stream(Config) ->
     async_notify(settled, <<"stream">>, Config).
 
 async_notify_unsettled_classic_queue(Config) ->
-    %% This test flakes with feature flag 'rabbitmq_4.0.0' disabled.
-    %% Link flow control in classic queues with credit API v1 is known to be broken:
-    %% https://github.com/rabbitmq/rabbitmq-server/issues/2597
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0'),
     async_notify(unsettled, <<"classic">>, Config).
 
 async_notify_unsettled_quorum_queue(Config) ->
@@ -3905,25 +3799,18 @@ queue_and_client_different_nodes(QueueLeaderNode, ClientNode, QueueType, Config)
            true,
            accepted),
 
-    case rpc(Config, rabbit_feature_flags, is_enabled, ['rabbitmq_4.0.0']) of
-        true ->
-            %% Send another message and drain.
-            Tag = <<"tag">>,
-            Body = <<"body">>,
-            ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Tag, Body, false)),
-            ok = wait_for_accepted(Tag),
-            ok = amqp10_client:flow_link_credit(Receiver, 999, never, true),
-            [Msg] = receive_messages(Receiver, 1),
-            ?assertEqual([Body], amqp10_msg:body(Msg)),
-            receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
-            after 30000 -> ct:fail("expected credit_exhausted")
-            end,
-            ok = amqp10_client:accept_msg(Receiver, Msg);
-        false ->
-            ct:pal("Both quorum queues and classic queues in credit API v1
-                   have a known bug that they reply with send_drained
-                   before delivering the message.")
+    %% Send another message and drain.
+    Tag = <<"tag">>,
+    Body = <<"body">>,
+    ok = amqp10_client:send_msg(Sender, amqp10_msg:new(Tag, Body, false)),
+    ok = wait_for_accepted(Tag),
+    ok = amqp10_client:flow_link_credit(Receiver, 999, never, true),
+    [Msg] = receive_messages(Receiver, 1),
+    ?assertEqual([Body], amqp10_msg:body(Msg)),
+    receive {amqp10_event, {link, Receiver, credit_exhausted}} -> ok
+    after 30000 -> ct:fail("expected credit_exhausted")
     end,
+    ok = amqp10_client:accept_msg(Receiver, Msg),
 
     ExpectedReadyMsgs = 0,
     ?assertEqual(#'queue.delete_ok'{message_count = ExpectedReadyMsgs},

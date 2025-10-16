@@ -33,8 +33,7 @@
 -record(consumer, {tag, ack_required, prefetch, args, user}).
 
 %% AMQP 1.0 link flow control state, see §2.6.7
-%% Delete atom credit_api_v1 when feature flag rabbitmq_4.0.0 becomes required.
--record(link_state, {delivery_count :: rabbit_queue_type:delivery_count() | credit_api_v1,
+-record(link_state, {delivery_count :: rabbit_queue_type:delivery_count(),
                      credit :: rabbit_queue_type:credit()}).
 
 %% These are held in our process dictionary
@@ -136,18 +135,14 @@ unacknowledged_message_count() ->
     lists:sum([?QUEUE:len(C#cr.acktags) || C <- all_ch_record()]).
 
 -spec add(ch(), rabbit_types:ctag(), boolean(), pid() | none, boolean(),
-          %% credit API v1
-          SimplePrefetch :: non_neg_integer() |
-          %% credit API v2
           {simple_prefetch, non_neg_integer()} | {credited, rabbit_queue_type:delivery_count()},
           rabbit_framing:amqp_table(),
           rabbit_types:username(), state()) ->
     state().
 
-add(ChPid, CTag, NoAck, LimiterPid, LimiterActive,
-    ModeOrPrefetch, Args,
-    Username, State = #state{consumers = Consumers,
-                             use       = CUInfo}) ->
+add(ChPid, CTag, NoAck, LimiterPid, LimiterActive, Mode, Args, Username,
+    #state{consumers = Consumers,
+           use = CUInfo} = State) ->
     C0 = #cr{consumer_count = Count,
              limiter        = Limiter,
              link_states = LinkStates} = ch_record(ChPid, LimiterPid),
@@ -157,15 +152,15 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive,
                end,
     C1 = C0#cr{consumer_count = Count + 1,
                limiter = Limiter1},
-    C = case parse_credit_mode(ModeOrPrefetch, Args) of
+    C = case parse_credit_mode(Mode) of
             {0, auto} ->
                 C1;
-            {Credit, auto = Mode} ->
+            {Credit, auto = Mode1} ->
                 case NoAck of
                     true ->
                         C1;
                     false ->
-                        Limiter2 = rabbit_limiter:credit(Limiter1, CTag, Credit, Mode),
+                        Limiter2 = rabbit_limiter:credit(Limiter1, CTag, Credit, Mode1),
                         C1#cr{limiter = Limiter2}
                 end;
             {InitialDeliveryCount, manual} ->
@@ -176,7 +171,7 @@ add(ChPid, CTag, NoAck, LimiterPid, LimiterActive,
     update_ch_record(C),
     Consumer = #consumer{tag          = CTag,
                          ack_required = not NoAck,
-                         prefetch     = parse_prefetch_count(ModeOrPrefetch),
+                         prefetch     = parse_prefetch_count(Mode),
                          args         = Args,
                          user         = Username},
     State#state{consumers = add_consumer({ChPid, Consumer}, Consumers),
@@ -293,20 +288,15 @@ deliver_to_consumer(FetchFun,
                     QName) ->
     C = #cr{link_states = LinkStates} = lookup_ch(ChPid),
     case LinkStates of
-        #{CTag := #link_state{delivery_count = DeliveryCount0,
+        #{CTag := #link_state{delivery_count = DelCount,
                               credit = Credit} = LinkState0} ->
             %% bypass credit flow for link credit consumers
             %% as it is handled separately
             case Credit > 0 of
                 true ->
-                    DeliveryCount = case DeliveryCount0 of
-                                        credit_api_v1 ->
-                                            DeliveryCount0;
-                                        _ ->
-                                            serial_number:add(DeliveryCount0, 1)
-                                    end,
-                    LinkState = LinkState0#link_state{delivery_count = DeliveryCount,
-                                                      credit = Credit - 1},
+                    LinkState = LinkState0#link_state{
+                                  delivery_count = serial_number:add(DelCount, 1),
+                                  credit = Credit - 1},
                     C1 = C#cr{link_states = maps:update(CTag, LinkState, LinkStates)},
                     {delivered, deliver_to_consumer(FetchFun, Consumer, C1, QName)};
                 false ->
@@ -474,8 +464,7 @@ deactivate_limit_fun() ->
             C#cr{limiter = rabbit_limiter:deactivate(Limiter)}
     end.
 
--spec drained(rabbit_queue_type:delivery_count() | credit_api_v1, ch(), rabbit_types:ctag()) ->
-    ok.
+-spec drained(rabbit_queue_type:delivery_count(), ch(), rabbit_types:ctag()) -> ok.
 drained(AdvancedDeliveryCount, ChPid, CTag) ->
     case lookup_ch(ChPid) of
         C0 = #cr{link_states = LinkStates = #{CTag := LinkState0}} ->
@@ -487,26 +476,24 @@ drained(AdvancedDeliveryCount, ChPid, CTag) ->
             ok
     end.
 
--spec process_credit(rabbit_queue_type:delivery_count() | credit_api_v1,
-                     rabbit_queue_type:credit(), ch(), rabbit_types:ctag(), state()) ->
+-spec process_credit(rabbit_queue_type:delivery_count(),
+                     rabbit_queue_type:credit(),
+                     ch(),
+                     rabbit_types:ctag(),
+                     state()) ->
     'unchanged' | {'unblocked', state()}.
-process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
+process_credit(DeliveryCountRcv, LinkCreditRcv, ChPid, CTag, State) ->
     case lookup_ch(ChPid) of
         #cr{link_states = LinkStates = #{CTag := LinkState =
-                                             #link_state{delivery_count = DeliveryCountSnd,
-                                                         credit = OldLinkCreditSnd}},
+                                         #link_state{delivery_count = DeliveryCountSnd,
+                                                     credit = OldLinkCreditSnd}},
             unsent_message_count = _Count} = C0 ->
-            LinkCreditSnd = case DeliveryCountSnd of
-                                credit_api_v1 ->
-                                    %% LinkCredit refers to LinkCreditSnd
-                                    LinkCredit;
-                                _ ->
-                                    %% credit API v2
-                                    %% LinkCredit refers to LinkCreditRcv
-                                    amqp10_util:link_credit_snd(
-                                      DeliveryCountRcv, LinkCredit, DeliveryCountSnd)
-                            end,
-            C = C0#cr{link_states = maps:update(CTag, LinkState#link_state{credit = LinkCreditSnd}, LinkStates)},
+            LinkCreditSnd = amqp10_util:link_credit_snd(DeliveryCountRcv,
+                                                        LinkCreditRcv,
+                                                        DeliveryCountSnd),
+            C = C0#cr{link_states = maps:update(CTag,
+                                                LinkState#link_state{credit = LinkCreditSnd},
+                                                LinkStates)},
             case OldLinkCreditSnd > 0 orelse
                  LinkCreditSnd < 1 of
                 true ->
@@ -520,7 +507,7 @@ process_credit(DeliveryCountRcv, LinkCredit, ChPid, CTag, State) ->
     end.
 
 -spec get_link_state(pid(), rabbit_types:ctag()) ->
-    {rabbit_queue_type:delivery_count() | credit_api_v1, rabbit_queue_type:credit()} | not_found.
+    {rabbit_queue_type:delivery_count(), rabbit_queue_type:credit()} | not_found.
 get_link_state(ChPid, CTag) ->
     case lookup_ch(ChPid) of
         #cr{link_states = #{CTag := #link_state{delivery_count = DeliveryCount,
@@ -577,40 +564,17 @@ consumer_tag(#consumer{tag = CTag}) ->
 
 %%----------------------------------------------------------------------------
 
-%% credit API v2 uses mode
 parse_prefetch_count({simple_prefetch, Prefetch}) ->
     Prefetch;
 parse_prefetch_count({credited, _InitialDeliveryCount}) ->
-    0;
-%% credit API v1 uses prefetch
-parse_prefetch_count(Prefetch)
-  when is_integer(Prefetch) ->
-    Prefetch.
+    0.
 
--spec parse_credit_mode(rabbit_queue_type:consume_mode(), rabbit_framing:amqp_table()) ->
+-spec parse_credit_mode(rabbit_queue_type:consume_mode()) ->
     {Prefetch :: non_neg_integer(), auto | manual}.
-
-%% credit API v2
-parse_credit_mode({simple_prefetch, Prefetch}, _Args) ->
-    {Prefetch, auto};
-parse_credit_mode({credited, InitialDeliveryCount}, _Args) ->
+parse_credit_mode({credited, InitialDeliveryCount}) ->
     {InitialDeliveryCount, manual};
-%% credit API v1
-%% i.e. below function clause should be deleted when feature flag rabbitmq_4.0.0 becomes required:
-parse_credit_mode(Prefetch, Args)
-  when is_integer(Prefetch) ->
-    case rabbit_misc:table_lookup(Args, <<"x-credit">>) of
-        {table, T} ->
-            case {rabbit_misc:table_lookup(T, <<"credit">>),
-                  rabbit_misc:table_lookup(T, <<"drain">>)} of
-                {{long, 0}, {bool, false}} ->
-                    {credit_api_v1, manual};
-                _ ->
-                    {Prefetch, auto}
-            end;
-        undefined ->
-            {Prefetch, auto}
-    end.
+parse_credit_mode({simple_prefetch, Prefetch}) ->
+    {Prefetch, auto}.
 
 lookup_ch(ChPid) ->
     case get({ch, ChPid}) of

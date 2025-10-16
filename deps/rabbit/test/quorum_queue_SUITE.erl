@@ -266,9 +266,6 @@ init_per_group(Group, Config) ->
                 {skip, _} ->
                     Ret;
                 Config2 ->
-                    Res = rabbit_ct_broker_helpers:enable_feature_flag(
-                            Config2, 'rabbitmq_4.0.0'),
-                    ct:pal("rabbitmq_4.0.0 enable result ~p", [Res]),
                     ok = rabbit_ct_broker_helpers:rpc(
                            Config2, 0, application, set_env,
                            [rabbit, channel_tick_interval, 100]),
@@ -324,10 +321,6 @@ init_per_testcase(T, Config)
 init_per_testcase(Testcase, Config) ->
     ClusterSize = ?config(rmq_nodes_count, Config),
     IsMixed = rabbit_ct_helpers:is_mixed_versions(),
-    RabbitMQ3 = case rabbit_ct_broker_helpers:enable_feature_flag(Config, 'rabbitmq_4.0.0') of
-                    ok -> false;
-                    _ -> true
-                end,
     SameKhepriMacVers = (
       rabbit_ct_broker_helpers:do_nodes_run_same_ra_machine_version(
         Config, khepri_machine)),
@@ -365,8 +358,6 @@ init_per_testcase(Testcase, Config) ->
             {skip, "reclaim_memory_with_wrong_queue_type isn't mixed versions compatible"};
         peek_with_wrong_queue_type when IsMixed ->
             {skip, "peek_with_wrong_queue_type isn't mixed versions compatible"};
-        cancel_consumer_gh_3729 when IsMixed andalso RabbitMQ3 ->
-            {skip, "this test is not compatible with RabbitMQ 3.13.x"};
         _ ->
             Config1 = rabbit_ct_helpers:testcase_started(Config, Testcase),
             rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queues, []),
@@ -1114,8 +1105,6 @@ get_in_minority(Config) ->
     ok = rabbit_quorum_queue:restart_server({RaName, Server2}).
 
 single_active_consumer_priority_take_over(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server0, Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch1 = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1163,8 +1152,6 @@ single_active_consumer_priority_take_over_requeue(Config) ->
     single_active_consumer_priority_take_over_base(-1, Config).
 
 single_active_consumer_priority_take_over_base(DelLimit, Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server0, Server1, _Server2] = Nodes =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1223,7 +1210,6 @@ single_active_consumer_priority_take_over_base(DelLimit, Config) ->
     ok.
 
 single_active_consumer_priority(Config) ->
-    check_quorum_queues_v4_compat(Config),
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -1444,8 +1430,6 @@ force_vhost_queues_shrink_member_to_current_member(Config) ->
     end.
 
 force_checkpoint_on_queue(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server0, Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1512,8 +1496,6 @@ force_checkpoint_on_queue(Config) ->
       end).
 
 force_checkpoint(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server0, _Server1, _Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1735,8 +1717,6 @@ subscribe_from_each(Config) ->
     ok.
 
 dont_leak_file_handles(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server0 | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
@@ -1784,8 +1764,6 @@ dont_leak_file_handles(Config) ->
     ok.
 
 gh_12635(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     % https://github.com/rabbitmq/rabbitmq-server/issues/12635
     [Server0, _Server1, Server2] =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -1851,7 +1829,6 @@ gh_12635(Config) ->
 priority_queue_fifo(Config) ->
     %% testing: if hi priority messages are published before lo priority
     %% messages they are always consumed first (fifo)
-    check_quorum_queues_v4_compat(Config),
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Queue = ?config(queue_name, Config),
@@ -1883,7 +1860,6 @@ priority_queue_fifo(Config) ->
 priority_queue_2_1_ratio(Config) ->
     %% testing: if lo priority messages are published before hi priority
     %% messages are consumed in a 2:1 hi to lo ratio
-    check_quorum_queues_v4_compat(Config),
     [Server0 | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server0),
     Queue = ?config(queue_name, Config),
@@ -3329,8 +3305,6 @@ subscribe_redelivery_limit(Config) ->
     end.
 
 subscribe_redelivery_limit_disable(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -3727,8 +3701,6 @@ queue_length_limit_reject_publish(Config) ->
     ok.
 
 queue_length_limit_policy_cleared(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     [Server | _] = Servers = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
@@ -4787,8 +4759,6 @@ select_nodes_with_least_replicas_node_down(Config) ->
      || Q <- Qs].
 
 requeue_multiple_true(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -4827,8 +4797,6 @@ requeue_multiple_true(Config) ->
                  amqp_channel:call(Ch, #'queue.delete'{queue = QQ})).
 
 requeue_multiple_false(Config) ->
-    check_quorum_queues_v4_compat(Config),
-
     Ch = rabbit_ct_client_helpers:open_channel(Config),
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
@@ -5112,14 +5080,6 @@ basic_get(Ch, Q, NoAck, Attempt) ->
         _ ->
             timer:sleep(100),
             basic_get(Ch, Q, NoAck, Attempt - 1)
-    end.
-
-check_quorum_queues_v4_compat(Config) ->
-    case rabbit_ct_broker_helpers:is_feature_flag_enabled(Config, 'rabbitmq_4.0.0') of
-        true ->
-            ok;
-        false ->
-            throw({skip, "test needs feature flag rabbitmq_4.0.0"})
     end.
 
 lists_interleave([], _List) ->

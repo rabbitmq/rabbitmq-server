@@ -103,16 +103,15 @@ init_per_group(amqp10, Config) ->
        {src_address, <<"src-address">>},
        {dest_address, <<"dest-address">>}
       ]);    
-init_per_group(local, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {src_protocol, <<"local">>},
-                {dest_protocol, <<"local">>},
-                {src_address, <<"src-queue">>},
-                {dest_address, <<"dest-queue">>}
-               ]),
-    maybe_skip_local_protocol(Config);
+init_per_group(local, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {src_protocol, <<"local">>},
+       {dest_protocol, <<"local">>},
+       {src_address, <<"src-queue">>},
+       {dest_address, <<"dest-queue">>}
+      ]);
 init_per_group(amqp091_to_amqp10, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -122,16 +121,15 @@ init_per_group(amqp091_to_amqp10, Config) ->
        {src_address, <<"src-queue">>},
        {dest_address, <<"dest-address">>}
       ]);
-init_per_group(amqp091_to_local, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {src_protocol, <<"amqp091">>},
-                {dest_protocol, <<"local">>},
-                {src_address, <<"src-queue">>},
-                {dest_address, <<"dest-queue">>}
-               ]),
-    maybe_skip_local_protocol(Config);
+init_per_group(amqp091_to_local, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {src_protocol, <<"amqp091">>},
+       {dest_protocol, <<"local">>},
+       {src_address, <<"src-queue">>},
+       {dest_address, <<"dest-queue">>}
+      ]);
 init_per_group(amqp10_to_amqp091, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
@@ -141,36 +139,33 @@ init_per_group(amqp10_to_amqp091, Config) ->
        {src_address, <<"src-address">>},
        {dest_address, <<"dest-queue">>}
       ]);
-init_per_group(amqp10_to_local, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {src_protocol, <<"amqp10">>},
-                {dest_protocol, <<"local">>},
-                {src_address, <<"src-address">>},
-                {dest_address, <<"dest-queue">>}
-               ]),
-    maybe_skip_local_protocol(Config);
-init_per_group(local_to_amqp091, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {src_protocol, <<"local">>},
-                {dest_protocol, <<"amqp091">>},
-                {src_address, <<"src-queue">>},
-                {dest_address, <<"dest-queue">>}
-              ]),
-    maybe_skip_local_protocol(Config);
-init_per_group(local_to_amqp10, Config0) ->
-    Config = rabbit_ct_helpers:set_config(
-               Config0,
-               [
-                {src_protocol, <<"local">>},
-                {dest_protocol, <<"amqp10">>},
-                {src_address, <<"src-queue">>},
-                {dest_address, <<"dest-address">>}
-               ]),
-    maybe_skip_local_protocol(Config).
+init_per_group(amqp10_to_local, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {src_protocol, <<"amqp10">>},
+       {dest_protocol, <<"local">>},
+       {src_address, <<"src-address">>},
+       {dest_address, <<"dest-queue">>}
+      ]);
+init_per_group(local_to_amqp091, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {src_protocol, <<"local">>},
+       {dest_protocol, <<"amqp091">>},
+       {src_address, <<"src-queue">>},
+       {dest_address, <<"dest-queue">>}
+      ]);
+init_per_group(local_to_amqp10, Config) ->
+    rabbit_ct_helpers:set_config(
+      Config,
+      [
+       {src_protocol, <<"local">>},
+       {dest_protocol, <<"amqp10">>},
+       {src_address, <<"src-queue">>},
+       {dest_address, <<"dest-address">>}
+      ]).
 
 end_per_group(_, Config) ->
     Config.
@@ -239,14 +234,3 @@ simple_queue_type_ack_mode(Config, Type, AckMode) ->
               set_param(Config, ?PARAM, ShovelArgs),
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 10)
       end).
-
-%%----------------------------------------------------------------------------
-maybe_skip_local_protocol(Config) ->
-    [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
-    case rabbit_ct_broker_helpers:enable_feature_flag(
-           Config, [Node], 'rabbitmq_4.0.0') of
-        ok ->
-            Config;
-        _ ->
-            {skip, "This group requires rabbitmq_4.0.0 feature flag"}
-    end.

@@ -128,35 +128,6 @@ enq_enq_checkout_test(Config, Spec) ->
                  rabbit_fifo:overview(State4)),
     ok.
 
-credit_enq_enq_checkout_settled_credit_v1_test(Config) ->
-    Cid = {?FUNCTION_NAME, self()},
-    {State1, _} = enq(Config, 1, 1, first, test_init(test)),
-    {State2, _} = enq(Config, 2, 2, second, State1),
-    {State3, #{key := CKey,
-               next_msg_id := NextMsgId}, Effects3} =
-        checkout(Config, ?LINE, Cid, {auto, 0, credited}, State2),
-    ?ASSERT_EFF({monitor, _, _}, Effects3),
-    {State4, Effects4} = credit(Config, CKey, ?LINE, 1, 0, false, State3),
-    ?ASSERT_EFF({log_ext, [1], _Fun, _Local}, Effects4),
-    %% settle the delivery this should _not_ result in further messages being
-    %% delivered
-    {State5, SettledEffects} = settle(Config, CKey, ?LINE, NextMsgId, State4),
-    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
-                                          true;
-                                      (_) ->
-                                          false
-                                  end, SettledEffects)),
-    %% granting credit (3) should deliver the second msg if the receivers
-    %% delivery count is (1)
-    {State6, CreditEffects} = credit(Config, CKey, ?LINE, 1, 1, false, State5),
-    ?ASSERT_EFF({log_ext, [2], _, _}, CreditEffects),
-    {_State, FinalEffects} = enq(Config, 6, 3, third, State6),
-    ?assertEqual(false, lists:any(fun ({log_ext, _, _, _}) ->
-                                          true;
-                                      (_) -> false
-                                  end, FinalEffects)),
-    ok.
-
 credit_enq_enq_checkout_settled_credit_v2_test(Config) ->
     InitDelCnt = 16#ff_ff_ff_ff,
     Ctag = ?FUNCTION_NAME,

@@ -58,12 +58,12 @@ init(#content{} = Content0) ->
     Content = strip_header(Content1, ?DELETED_HEADER),
     {Content, Anns}.
 
-convert_from(mc_amqp, Sections, Env) ->
-    {H, MAnn, Prop, AProp, BodyRev, Footer} =
+convert_from(mc_amqp, Sections, _Env) ->
+    {H, MAnn, Prop, AProp, BodyRev} =
     lists:foldl(
       fun(#'v1_0.header'{} = S, Acc) ->
               setelement(1, Acc, S);
-         (_Ignore = #'v1_0.delivery_annotations'{}, Acc) ->
+         (#'v1_0.delivery_annotations'{}, Acc) ->
               Acc;
          (#'v1_0.message_annotations'{} = S, Acc) ->
               setelement(2, Acc, S);
@@ -81,10 +81,10 @@ convert_from(mc_amqp, Sections, Env) ->
               %% assertions
               [] = element(5, Acc),
               setelement(5, Acc, Body);
-         (#'v1_0.footer'{} = S, Acc) ->
-              setelement(6, Acc, S)
+         (#'v1_0.footer'{}, Acc) ->
+              Acc
       end,
-      {undefined, undefined, undefined, undefined, [], undefined},
+      {undefined, undefined, undefined, undefined, []},
       Sections),
 
     {PFR, Type0} = case BodyRev of
@@ -181,42 +181,7 @@ convert_from(mc_amqp, Sections, Env) ->
                                        false
                                end, MA),
     {Headers1, MsgId091} = message_id(MsgId, <<"x-message-id">>, Headers0),
-    {Headers2, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
-
-    Headers = case Env of
-                  #{'rabbitmq_4.0.0' := false} ->
-                      Headers3 = case AProp of
-                                     undefined ->
-                                         Headers2;
-                                     #'v1_0.application_properties'{} ->
-                                         APropBin = amqp_encoded_binary(AProp),
-                                         [{?AMQP10_APP_PROPERTIES_HEADER, longstr, APropBin} | Headers2]
-                                 end,
-                      Headers4 = case Prop of
-                                     undefined ->
-                                         Headers3;
-                                     #'v1_0.properties'{} ->
-                                         PropBin = amqp_encoded_binary(Prop),
-                                         [{?AMQP10_PROPERTIES_HEADER, longstr, PropBin} | Headers3]
-                                 end,
-                      Headers5 = case MAnn of
-                                     undefined ->
-                                         Headers4;
-                                     #'v1_0.message_annotations'{} ->
-                                         MAnnBin = amqp_encoded_binary(MAnn),
-                                         [{?AMQP10_MESSAGE_ANNOTATIONS_HEADER, longstr, MAnnBin} | Headers4]
-                                 end,
-                      Headers6 = case Footer of
-                                     undefined ->
-                                         Headers5;
-                                     #'v1_0.footer'{} ->
-                                         FootBin = amqp_encoded_binary(Footer),
-                                         [{?AMQP10_FOOTER, longstr, FootBin} | Headers5]
-                                 end,
-                      Headers6;
-                  _ ->
-                      Headers2
-              end,
+    {Headers, CorrId091} = message_id(CorrId, <<"x-correlation-id">>, Headers1),
 
     UserId1 = unwrap(UserId0),
     %% user-id is a binary type so we need to validate

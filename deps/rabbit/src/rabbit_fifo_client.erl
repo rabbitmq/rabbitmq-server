@@ -27,7 +27,6 @@
          return/3,
          discard/3,
          modify/6,
-         credit_v1/4,
          credit/5,
          handle_ra_event/4,
          untracked_enqueue/2,
@@ -55,10 +54,7 @@
 -record(consumer, {key :: rabbit_fifo:consumer_key(),
                    % status = up :: up | cancelled,
                    last_msg_id :: seq() | -1 | undefined,
-                   ack = false :: boolean(),
-                   %% Remove this field when feature flag rabbitmq_4.0.0 becomes required.
-                   delivery_count :: {credit_api_v1, rabbit_queue_type:delivery_count()} |
-                                     credit_api_v2
+                   ack = false :: boolean()
                   }).
 
 -record(cfg, {servers = [] :: [ra:server_id()],
@@ -366,7 +362,7 @@ modify(ConsumerTag, [_|_] = MsgIds, DelFailed, Undel, Anns,
 %%
 %% @returns `{ok, State}' or `{error | timeout, term()}'
 -spec checkout(rabbit_types:ctag(),
-               CreditMode :: rabbit_fifo:credit_mode(),
+               rabbit_fifo:credit_mode(),
                Meta :: rabbit_fifo:consumer_meta(),
                state()) ->
     {ok, ConsumerInfos :: map(), state()} |
@@ -418,18 +414,13 @@ checkout(ConsumerTag, CreditMode, #{} = Meta,
                                         NextMsgId - 1
                                 end
                         end,
-            DeliveryCount = case rabbit_fifo:is_v4() of
-                                true -> credit_api_v2;
-                                false -> {credit_api_v1, 0}
-                            end,
             ConsumerKey = maps:get(key, Reply, ConsumerId),
             SDels = maps:update_with(
                       ConsumerTag,
                       fun (C) -> C#consumer{ack = Ack} end,
                       #consumer{key = ConsumerKey,
                                 last_msg_id = LastMsgId,
-                                ack = Ack,
-                                delivery_count = DeliveryCount},
+                                ack = Ack},
                       CDels0),
             {ok, Reply, State0#state{leader = Leader,
                                      consumers = SDels}};
@@ -449,16 +440,6 @@ query_single_active_consumer(#state{leader = Leader}) ->
         Err ->
             Err
     end.
-
--spec credit_v1(rabbit_types:ctag(),
-                Credit :: non_neg_integer(),
-                Drain :: boolean(),
-                state()) ->
-    {state(), rabbit_queue_type:actions()}.
-credit_v1(ConsumerTag, Credit, Drain,
-          #state{consumers = CDels} = State) ->
-    #consumer{delivery_count = {credit_api_v1, Count}} = maps:get(ConsumerTag, CDels),
-    credit(ConsumerTag, Count, Credit, Drain, State).
 
 %% @doc Provide credit to the queue
 %%
@@ -690,8 +671,7 @@ handle_ra_event(QName, From, {machine, Del}, State0)
       when element(1, Del) == delivery ->
     handle_delivery(QName, From, Del, State0);
 handle_ra_event(_QName, _From, {machine, Action}, State)
-  when element(1, Action) =:= credit_reply orelse
-       element(1, Action) =:= credit_reply_v1 ->
+  when element(1, Action) =:= credit_reply ->
     {ok, State, [Action]};
 handle_ra_event(_QName, _, {machine, {queue_status, Status}},
                 #state{} = State) ->
@@ -836,12 +816,6 @@ maybe_add_action({multi, Actions}, Acc0, State0) ->
     lists:foldl(fun (Act, {Acc, State}) ->
                         maybe_add_action(Act, Acc, State)
                 end, {Acc0, State0}, Actions);
-maybe_add_action({send_drained, {Tag, Credit}}, Acc, State0) ->
-    %% This function clause should be deleted when
-    %% feature flag rabbitmq_4.0.0 becomes required.
-    State = add_delivery_count(Credit, Tag, State0),
-    Action = {credit_reply_v1, Tag, Credit, _Avail = 0, _Drain = true},
-    {[Action | Acc], State};
 maybe_add_action(Action, Acc, State) ->
     %% anything else is assumed to be an action
     {[Action | Acc], State}.
@@ -885,14 +859,10 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
             %% for a previously cancelled consumer that still had pending messages
             %% In this case we can't reliably know what the next expected message
             %% id should be so have to accept whatever message comes next
-            maybe_auto_ack(Ack, Del,
-                           State0#state{consumers =
-                                        update_consumer(Tag, LastId,
-                                                        length(IdMsgs), C,
-                                                        CDels0)});
+            Cons = update_consumer(Tag, LastId, C, CDels0),
+            maybe_auto_ack(Ack, Del, State0#state{consumers = Cons});
         #consumer{last_msg_id = Prev} = C
           when FstId > Prev+1 ->
-            NumMissing = FstId - Prev + 1,
             %% there may actually be fewer missing messages returned than expected
             %% This can happen when a node the channel is on gets disconnected
             %% from the node the leader is on and then reconnected afterwards.
@@ -905,11 +875,8 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
                 Missing ->
                     XDel = {deliver, Tag, Ack, transform_msgs(QName, QRef,
                                                               Missing ++ IdMsgs)},
-                    maybe_auto_ack(Ack, XDel,
-                                   State0#state{consumers =
-                                                    update_consumer(Tag, LastId,
-                                                                    length(IdMsgs) + NumMissing,
-                                                                    C, CDels0)})
+                    Cons = update_consumer(Tag, LastId, C, CDels0),
+                    maybe_auto_ack(Ack, XDel, State0#state{consumers = Cons})
             end;
         #consumer{last_msg_id = Prev}
           when FstId =< Prev ->
@@ -921,12 +888,9 @@ handle_delivery(QName, Leader, {delivery, Tag, [{FstId, _} | _] = IdMsgs},
             end;
         C when FstId =:= 0 ->
             % the very first delivery
-            maybe_auto_ack(Ack, Del,
-                           State0#state{consumers =
-                                        update_consumer(Tag, LastId,
-                                                        length(IdMsgs),
-                                                        C#consumer{last_msg_id = LastId},
-                                                        CDels0)})
+            Cons = update_consumer(Tag, LastId, C#consumer{last_msg_id = LastId},
+                                   CDels0),
+            maybe_auto_ack(Ack, Del, State0#state{consumers = Cons})
     end;
 handle_delivery(_QName, _Leader, {delivery, Tag, [_ | _] = IdMsgs},
                 #state{consumers = CDels0} = State0)
@@ -978,20 +942,8 @@ transform_msgs(QName, QRef, Msgs) ->
               {QName, QRef, MsgId, Redelivered, Msg}
       end, Msgs).
 
-update_consumer(Tag, LastId, DelCntIncr, Consumer, Consumers) ->
-    D = case Consumer#consumer.delivery_count of
-            credit_api_v2 -> credit_api_v2;
-            {credit_api_v1, Count} -> {credit_api_v1, Count + DelCntIncr}
-        end,
-    maps:update(Tag,
-                Consumer#consumer{last_msg_id = LastId,
-                                  delivery_count = D},
-                Consumers).
-
-add_delivery_count(DelCntIncr, Tag, #state{consumers = CDels0} = State) ->
-    Con = #consumer{last_msg_id = LastMsgId} = maps:get(Tag, CDels0),
-    CDels = update_consumer(Tag, LastMsgId, DelCntIncr, Con, CDels0),
-    State#state{consumers = CDels}.
+update_consumer(Tag, LastId, Consumer, Consumers) ->
+    maps:update(Tag, Consumer#consumer{last_msg_id = LastId}, Consumers).
 
 get_missing_deliveries(State, From, To, ConsumerTag) ->
     %% find local server

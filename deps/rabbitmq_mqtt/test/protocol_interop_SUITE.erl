@@ -366,14 +366,8 @@ amqp_mqtt_amqp(Config) ->
                   payload := RequestBody,
                   properties := Props = #{'Correlation-Data' := Correlation}
                  } = MqttMsg,
-                case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                       Config, 'rabbitmq_4.0.0') of
-                    true ->
-                        ?assertEqual({ok, ResponseTopic},
-                                     maps:find('Response-Topic', Props));
-                    false ->
-                        ok
-                end
+                ?assertEqual({ok, ResponseTopic},
+                             maps:find('Response-Topic', Props))
     after ?TIMEOUT -> ct:fail("did not receive request")
     end,
 
@@ -458,14 +452,8 @@ amqp_mqtt(Qos, Config) ->
                   properties := Props
                  } = MqttMsg1,
                 ?assertEqual([Body1], amqp10_framing:decode_bin(Payload1)),
-                case rabbit_ct_broker_helpers:is_feature_flag_enabled(
-                       Config, 'rabbitmq_4.0.0') of
-                    true ->
-                        ?assertEqual({ok, <<"message/vnd.rabbitmq.amqp">>},
-                                     maps:find('Content-Type', Props));
-                    false ->
-                        ok
-                end
+                ?assertEqual({ok, <<"message/vnd.rabbitmq.amqp">>},
+                             maps:find('Content-Type', Props))
     after ?TIMEOUT -> ct:fail({missing_publish, ?LINE})
     end,
     receive {publish, #{payload := Payload2}} ->

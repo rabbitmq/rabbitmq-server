@@ -102,12 +102,6 @@ parse(_Name, {destination, Dest}) ->
 connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
                                            queue := QName0,
                                            uris := [Uri | _]}}) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-        true ->
-            ok;
-        false ->
-            exit({shutdown, feature_flag_rabbitmq_4_0_0_is_disabled})
-    end,
     QState = rabbit_queue_type:init(),
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     %% We handle the most recently declared queue to use anonymous functions
@@ -129,12 +123,6 @@ connect_source(State = #{source := Src = #{resource_decl := {M, F, MFArgs},
 connect_dest(State = #{dest := Dest = #{resource_decl := {M, F, MFArgs},
                                         uris := [Uri | _]},
                        ack_mode := AckMode}) ->
-    case rabbit_feature_flags:is_enabled('rabbitmq_4.0.0') of
-        true ->
-            ok;
-        false ->
-            exit({shutdown, feature_flag_rabbitmq_4_0_0_is_disabled})
-    end,
     {User, VHost} = get_user_vhost_from_amqp_param(Uri),
     apply(M, F, MFArgs ++ [VHost, User]),
 

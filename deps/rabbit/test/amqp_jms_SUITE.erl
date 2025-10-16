@@ -77,13 +77,11 @@ init_per_group(cluster_size_1, Config) ->
                    #{amqp_address_v1 => false}
                   }]
                 }),
-    Config3 = rabbit_ct_helpers:run_setup_steps(
-                Config2,
-                [fun build_maven_test_project/1] ++
-                rabbit_ct_broker_helpers:setup_steps() ++
-                rabbit_ct_client_helpers:setup_steps()),
-    ok = rabbit_ct_broker_helpers:enable_feature_flag(Config3, 'rabbitmq_4.0.0'),
-    Config3.
+    rabbit_ct_helpers:run_setup_steps(
+      Config2,
+      [fun build_maven_test_project/1] ++
+      rabbit_ct_broker_helpers:setup_steps() ++
+      rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_Group, Config) ->
     rabbit_ct_helpers:run_teardown_steps(
