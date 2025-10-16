@@ -490,6 +490,26 @@ tcp_listen_options.exit_on_close = false",
   "total_memory_available_override_value = 1024MB",
   [{rabbit,[{total_memory_available_override_value, "1024MB"}]}],
   []},
+ {disk_free_limits_per_mount,
+  "disk_free_limits.1.name = messaging
+   disk_free_limits.1.mount = /data/queues
+   disk_free_limits.1.limit = 2GB
+   disk_free_limits.1.queue_types = classic,quorum
+
+   disk_free_limits.2.name = streaming
+   disk_free_limits.2.mount = /data/streams
+   disk_free_limits.2.limit = 2GB
+   disk_free_limits.2.queue_types = stream",
+  [{rabbit,[{disk_free_limits,
+             #{1 => #{name => <<"messaging">>,
+                      mount => "/data/queues",
+                      limit => "2GB",
+                      queue_types => [<<"classic">>, <<"quorum">>]},
+               2 => #{name => <<"streaming">>,
+                      mount => "/data/streams",
+                      limit => "2GB",
+                      queue_types => [<<"stream">>]}}}]}],
+  []},
  {ranch_connection_max,
   "ranch_connection_max = 999",
   [{rabbit,[{ranch_connection_max, 999}]}],
