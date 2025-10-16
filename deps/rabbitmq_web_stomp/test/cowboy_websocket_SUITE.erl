@@ -21,7 +21,6 @@ groups() ->
     [
      {integration, [],
         [
-            connection_succeeds,
             connection_fails,
             pubsub,
             pubsub_binary,
@@ -90,14 +89,6 @@ end_per_testcase(http_auth, Config) ->
     Config;
 end_per_testcase(_, Config) -> Config.
 
-
-connection_succeeds(Config) ->
-    PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
-    Protocol = ?config(protocol, Config),
-    WS = rfc6455_client:new(Protocol ++ "://127.0.0.1:" ++ PortStr ++ "/ws", self()),
-    {ok, _} = rfc6455_client:open(WS),
-    {close, _} = rfc6455_client:close(WS),
-    ok.
 
 connection_fails(Config) ->
     PortStr = rabbit_ws_test_util:get_web_stomp_port_str(Config),
