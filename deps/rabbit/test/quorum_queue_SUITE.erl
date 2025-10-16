@@ -2810,10 +2810,8 @@ add_member(Config) ->
 
 add_member_2(Config) ->
     %% this tests a scenario where an older node version is running a QQ
-    %% and a member is added on a newer node version (for mixe testing)
+    %% and a member is added on a newer node version (for mixed testing)
 
-    %% we dont validate the ff was enabled as this test should pass either way
-    _ = rabbit_ct_broker_helpers:enable_feature_flag(Config, quorum_queue_non_voters),
     [Server0, Server1 | _] = _Servers0 =
         rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
     Ch = rabbit_ct_client_helpers:open_channel(Config, Server1),

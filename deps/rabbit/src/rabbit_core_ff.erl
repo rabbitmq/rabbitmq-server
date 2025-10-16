@@ -177,9 +177,8 @@
 
 -rabbit_feature_flag(
    {quorum_queue_non_voters,
-    #{desc =>
-          "Allows new quorum queue members to be added as non voters initially.",
-      stability => stable,
+    #{desc => "Allows new quorum queue members to be added as non voters initially.",
+      stability => required,
       depends_on => [quorum_queue]
      }}).
 
