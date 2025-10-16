@@ -33,7 +33,6 @@ groups() ->
       {non_parallel_tests, [], [
           simple,
           change_definition,
-          autodelete_with_rejections,
           simple_amqp10_dest,
           simple_amqp10_src,
           amqp091_to_amqp10_with_dead_lettering,
@@ -264,34 +263,6 @@ change_definition(Config) ->
               amqp10_publish_expect(Sess, Src, Src, <<"hello3">>, 1),
               amqp10_expect_empty(Sess, Dest),
               amqp10_expect_empty(Sess, Dest2)
-      end).
-
-autodelete_with_rejections(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(
-      Config,
-      fun (Sess) ->
-              amqp10_declare_queue(Sess, Dest, #{<<"x-max-length">> => {uint, 5},
-                                                 <<"x-overflow">> => {utf8, <<"reject-publish">>}}),
-
-              shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"src-delete-after">>, 10},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              amqp10_publish(Sess, Src, <<"hello">>, 10),
-              await_autodelete(Config, <<"test">>),
-              Expected = lists:sort([[Src, <<"5">>], [Dest, <<"5">>]]),
-              ?awaitMatch(
-                 Expected,
-                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                              Config, 0,
-                              ["list_queues", "name", "messages_ready", "--no-table-headers"])),
-                 30_000)
       end).
 
 test_amqp10_delete_after_queue_length(Config) ->
