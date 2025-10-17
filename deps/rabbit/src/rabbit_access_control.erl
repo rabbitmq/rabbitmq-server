@@ -113,7 +113,7 @@ is_auth_backend_module_enabled(Mod) when is_atom(Mod) ->
             case rabbit_plugins:which_plugin(Mod) of
                 {ok, PluginName} ->
                     %% FIXME: The definition of an "enabled plugin" in
-                    %% `rabbit_plugins' varies from funtion to function.
+                    %% `rabbit_plugins' varies from function to function.
                     %% Sometimes, it means the "rabbitmq-plugin enable
                     %% <plugin>" was executed, sometimes it means the plugin
                     %% is running.
@@ -141,7 +141,7 @@ is_auth_backend_module_enabled(Mod) when is_atom(Mod) ->
                                "it will be skipped during "
                                "authentication/authorization",
                                [Mod, PluginName]),
-                            false
+                            is_test_auth_backend_module(Mod)
                     end;
                 {error, no_provider} ->
                     ?LOG_INFO(
@@ -150,9 +150,13 @@ is_auth_backend_module_enabled(Mod) when is_atom(Mod) ->
                        "module. Until then it will be skipped during "
                        "authentication/authorization",
                        [Mod]),
-                    false
+                    is_test_auth_backend_module(Mod)
             end
     end.
+
+is_test_auth_backend_module(Mod) ->
+    Mods = application:get_env(rabbit, test_auth_backends, []),
+    lists:member(Mod, Mods).
 
 -spec check_user_pass_login
         (rabbit_types:username(), rabbit_types:password()) ->
