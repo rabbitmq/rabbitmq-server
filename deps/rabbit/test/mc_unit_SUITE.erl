@@ -29,8 +29,7 @@ all_tests() ->
      amqpl_compat,
      amqpl_table_x_header,
      amqpl_table_x_header_array_of_tbls,
-     amqpl_death_v1_records,
-     amqpl_death_v2_records,
+     amqpl_death_records,
      is_death_cycle,
      amqpl_amqp_bin_amqpl,
      amqpl_cc_amqp_bin_amqpl,
@@ -198,50 +197,39 @@ amqpl_table_x_header_array_of_tbls(_Config) ->
                   ]},
                  mc:x_header(<<"x-fruit">>, Msg)).
 
-amqpl_death_v1_records(_Config) ->
-    ok = amqpl_death_records(#{?FF_MC_DEATHS_V2 => false}).
-
-amqpl_death_v2_records(_Config) ->
-    ok = amqpl_death_records(#{?FF_MC_DEATHS_V2 => true}).
-
-amqpl_death_records(Env) ->
+amqpl_death_records(_Config) ->
     Content = #content{class_id = 60,
                        properties = #'P_basic'{headers = []},
                        payload_fragments_rev = [<<"data">>]},
     Msg0 = mc:prepare(store, mc:init(mc_amqpl, Content, annotations())),
 
-    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0, Env),
-    ?assertEqual([<<"q1">>], mc:death_queue_names(Msg1)),
-    ?assertEqual(false, mc:is_death_cycle(<<"q1">>, Msg1)),
+    Msg1 = mc:record_death(rejected, <<"q">>, Msg0),
+    ?assertEqual([<<"q">>], mc:death_queue_names(Msg1)),
+    ?assertEqual(false, mc:is_death_cycle(<<"q">>, Msg1)),
 
     #content{properties = #'P_basic'{headers = H1}} = mc:protocol_state(Msg1),
     ?assertMatch({_, array, [_]}, header(<<"x-death">>, H1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-first-death-queue">>, H1)),
+    ?assertMatch({_, longstr, <<"q">>}, header(<<"x-first-death-queue">>, H1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-first-death-exchange">>, H1)),
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-first-death-reason">>, H1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"x-last-death-queue">>, H1)),
+    ?assertMatch({_, longstr, <<"q">>}, header(<<"x-last-death-queue">>, H1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"x-last-death-exchange">>, H1)),
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"x-last-death-reason">>, H1)),
     {_, array, [{table, T1}]} = header(<<"x-death">>, H1),
     ?assertMatch({_, long, 1}, header(<<"count">>, T1)),
     ?assertMatch({_, longstr, <<"rejected">>}, header(<<"reason">>, T1)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T1)),
+    ?assertMatch({_, longstr, <<"q">>}, header(<<"queue">>, T1)),
     ?assertMatch({_, longstr, <<"exch">>}, header(<<"exchange">>, T1)),
     ?assertMatch({_, timestamp, _}, header(<<"time">>, T1)),
     ?assertMatch({_, array, [{longstr, <<"apple">>}]}, header(<<"routing-keys">>, T1)),
 
-
-    %% second dead letter, e.g. an expired reason returning to source queue
-
-    %% record_death uses a timestamp for death record ordering, ensure
-    %% it is definitely higher than the last timestamp taken
-    timer:sleep(2),
-    Msg2 = mc:record_death(expired, <<"dl">>, Msg1, Env),
-
+    %% 2nd dead letter, e.g. an expired reason
+    Msg2 = mc:record_death(expired, <<"dead letter queue">>, Msg1),
     #content{properties = #'P_basic'{headers = H2}} = mc:protocol_state(Msg2),
+    %% We expect deaths to be ordered by recency
     {_, array, [{table, T2a}, {table, T2b}]} = header(<<"x-death">>, H2),
-    ?assertMatch({_, longstr, <<"dl">>}, header(<<"queue">>, T2a)),
-    ?assertMatch({_, longstr, <<"q1">>}, header(<<"queue">>, T2b)),
+    ?assertMatch({_, longstr, <<"dead letter queue">>}, header(<<"queue">>, T2a)),
+    ?assertMatch({_, longstr, <<"q">>}, header(<<"queue">>, T2b)),
     ok.
 
 is_death_cycle(_Config) ->
@@ -254,29 +242,29 @@ is_death_cycle(_Config) ->
     %% Q1 --rejected--> Q2 --expired--> Q3 --expired-->
     %% Q1 --rejected--> Q2 --expired--> Q3
 
-    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0, #{}),
+    Msg1 = mc:record_death(rejected, <<"q1">>, Msg0),
     ?assertNot(mc:is_death_cycle(<<"q1">>, Msg1),
                "A queue that dead letters to itself due to rejected is not considered a cycle."),
     ?assertNot(mc:is_death_cycle(<<"q2">>, Msg1)),
     ?assertNot(mc:is_death_cycle(<<"q3">>, Msg1)),
 
-    Msg2 = mc:record_death(expired, <<"q2">>, Msg1, #{}),
+    Msg2 = mc:record_death(expired, <<"q2">>, Msg1),
     ?assertNot(mc:is_death_cycle(<<"q1">>, Msg2)),
     ?assert(mc:is_death_cycle(<<"q2">>, Msg2),
             "A queue that dead letters to itself due to expired is considered a cycle."),
     ?assertNot(mc:is_death_cycle(<<"q3">>, Msg2)),
 
-    Msg3 = mc:record_death(expired, <<"q3">>, Msg2, #{}),
+    Msg3 = mc:record_death(expired, <<"q3">>, Msg2),
     ?assertNot(mc:is_death_cycle(<<"q1">>, Msg3)),
     ?assert(mc:is_death_cycle(<<"q2">>, Msg3)),
     ?assert(mc:is_death_cycle(<<"q3">>, Msg3)),
 
-    Msg4 = mc:record_death(rejected, <<"q1">>, Msg3, #{}),
+    Msg4 = mc:record_death(rejected, <<"q1">>, Msg3),
     ?assertNot(mc:is_death_cycle(<<"q1">>, Msg4)),
     ?assertNot(mc:is_death_cycle(<<"q2">>, Msg4)),
     ?assertNot(mc:is_death_cycle(<<"q3">>, Msg4)),
 
-    Msg5 = mc:record_death(expired, <<"q2">>, Msg4, #{}),
+    Msg5 = mc:record_death(expired, <<"q2">>, Msg4),
     ?assertNot(mc:is_death_cycle(<<"q1">>, Msg5)),
     ?assert(mc:is_death_cycle(<<"q2">>, Msg5)),
     ?assertNot(mc:is_death_cycle(<<"q3">>, Msg5)),

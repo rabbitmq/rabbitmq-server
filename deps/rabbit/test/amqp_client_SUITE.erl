@@ -246,18 +246,11 @@ init_per_group(Group, Config) ->
       rabbit_ct_client_helpers:setup_steps()).
 
 end_per_group(_, Config) ->
-    rabbit_ct_helpers:run_teardown_steps(Config,
+    rabbit_ct_helpers:run_teardown_steps(
+      Config,
       rabbit_ct_client_helpers:teardown_steps() ++
       rabbit_ct_broker_helpers:teardown_steps()).
 
-init_per_testcase(T = dead_letter_reject, Config) ->
-    case rabbit_ct_broker_helpers:enable_feature_flag(Config, message_containers_deaths_v2) of
-        ok ->
-            rabbit_ct_helpers:testcase_started(Config, T);
-        _ ->
-            {skip, "This test is known to fail with feature flag message_containers_deaths_v2 disabled "
-             "due bug https://github.com/rabbitmq/rabbitmq-server/issues/11159"}
-    end;
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
@@ -5116,34 +5109,29 @@ dead_letter_headers_exchange(Config) ->
     ?assertEqual(<<"m2">>, amqp10_msg:body_bin(Msg2)),
     ?assertEqual(#{message_id => <<"my ID">>}, amqp10_msg:properties(Msg1)),
     ?assertEqual(0, maps:size(amqp10_msg:properties(Msg2))),
-    case rpc(Config, rabbit_feature_flags, is_enabled, [message_containers_deaths_v2]) of
-        true ->
-            ?assertMatch(
-               #{<<"x-first-death-queue">> := QName1,
-                 <<"x-first-death-exchange">> := <<>>,
-                 <<"x-first-death-reason">> := <<"expired">>,
-                 <<"x-last-death-queue">> := QName1,
-                 <<"x-last-death-exchange">> := <<>>,
-                 <<"x-last-death-reason">> := <<"expired">>,
-                 <<"x-opt-deaths">> := {array,
-                                        map,
-                                        [{map,
-                                          [
-                                           {{symbol, <<"queue">>}, {utf8, QName1}},
-                                           {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
-                                           {{symbol, <<"count">>}, {ulong, 1}},
-                                           {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
-                                           {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
-                                           {{symbol, <<"exchange">>},{utf8, <<>>}},
-                                           {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
-                                          ]}]}
-                } when is_integer(Timestamp) andalso
-                       Timestamp > Now - 5000 andalso
-                       Timestamp < Now + 5000,
-                       amqp10_msg:message_annotations(Msg1));
-        false ->
-            ok
-    end,
+    ?assertMatch(
+       #{<<"x-first-death-queue">> := QName1,
+         <<"x-first-death-exchange">> := <<>>,
+         <<"x-first-death-reason">> := <<"expired">>,
+         <<"x-last-death-queue">> := QName1,
+         <<"x-last-death-exchange">> := <<>>,
+         <<"x-last-death-reason">> := <<"expired">>,
+         <<"x-opt-deaths">> := {array,
+                                map,
+                                [{map,
+                                  [
+                                   {{symbol, <<"queue">>}, {utf8, QName1}},
+                                   {{symbol, <<"reason">>}, {symbol, <<"expired">>}},
+                                   {{symbol, <<"count">>}, {ulong, 1}},
+                                   {{symbol, <<"first-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"last-time">>}, {timestamp, Timestamp}},
+                                   {{symbol, <<"exchange">>},{utf8, <<>>}},
+                                   {{symbol, <<"routing-keys">>}, {array, utf8, [{utf8, QName1}]}}
+                                  ]}]}
+        } when is_integer(Timestamp) andalso
+               Timestamp > Now - 5000 andalso
+               Timestamp < Now + 5000,
+               amqp10_msg:message_annotations(Msg1)),
 
     %% We expect M3 and M4 to get dropped.
     receive Unexp -> ct:fail({unexpected, Unexp})

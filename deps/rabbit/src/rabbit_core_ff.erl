@@ -187,7 +187,7 @@
    {message_containers_deaths_v2,
     #{desc          => "Bug fix for dead letter cycle detection",
       doc_url       => "https://github.com/rabbitmq/rabbitmq-server/issues/11159",
-      stability     => stable,
+      stability     => required,
       depends_on    => [message_containers]
      }}).
 

@@ -28,7 +28,7 @@
          protocol_state/1,
          %serialize/1,
          prepare/2,
-         record_death/4,
+         record_death/3,
          is_death_cycle/2,
          %deaths/1,
          death_queue_names/1
@@ -166,7 +166,7 @@ prepare(store, Msg) ->
 record_death(Reason, SourceQueue,
              #basic_message{content = Content,
                             exchange_name = Exchange,
-                            routing_keys = RoutingKeys} = Msg, _Env) ->
+                            routing_keys = RoutingKeys} = Msg) ->
     % HeadersFun1 = fun (H) -> lists:keydelete(<<"CC">>, 1, H) end,
     ReasonBin = atom_to_binary(Reason),
     TimeSec = os:system_time(seconds),
