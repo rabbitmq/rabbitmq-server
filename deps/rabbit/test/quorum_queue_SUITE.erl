@@ -3686,6 +3686,21 @@ subscribe_redelivery_count(Config) ->
               exit(basic_deliver_timeout_3)
     end.
 
+simulate_consumer_crash(Self, QQ, Config, Server) ->
+    Conn = rabbit_ct_client_helpers:open_unmanaged_connection(Config, Server),
+    {ok, Chan} = amqp_connection:open_channel(Conn),
+    qos(Chan, 2, false),
+    subscribe(Chan, QQ, false),
+    receive
+        {_, _} = All ->
+            %% need to do this to trigger the right channel
+            %% conditions
+            amqp_channel:close(Chan, 541, <<"oh no">>),
+            Self ! All
+    after 1000 ->
+              exit(timeout)
+    end.
+
 subscribe_redelivery_limit(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
 
@@ -3697,37 +3712,35 @@ subscribe_redelivery_limit(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QQ, false),
+
+    Self = self(),
+    FailedMsgFun = fun () -> simulate_consumer_crash(Self, QQ, Config, Server) end,
+
+    _ = spawn_monitor(FailedMsgFun),
 
     DCHeader = <<"x-delivery-count">>,
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag,
-                          redelivered  = false},
+        {#'basic.deliver'{redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple = false,
-                                                requeue = true})
-    end,
-
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
-    receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag1,
-                          redelivered  = true},
-         #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple = false,
-                                                requeue = true})
-    end,
-
-    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
-    receive
-        {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
-            throw(unexpected_redelivery)
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0))
     after 5000 ->
-            ok
-    end.
+              flush(1),
+              ct:fail(no_delivery)
+    end,
+
+    %% one more consumer failure should cause the message to be dropped
+    _ = spawn_monitor(FailedMsgFun),
+
+    receive
+        {#'basic.deliver'{redelivered  = true},
+         #amqp_msg{props = #'P_basic'{headers = H1}}} ->
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1))
+    after 5000 ->
+              flush(1),
+              ct:fail(no_delivery)
+    end,
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    ok.
 
 subscribe_redelivery_limit_disable(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -3739,39 +3752,32 @@ subscribe_redelivery_limit_disable(Config) ->
                                   {<<"x-delivery-limit">>, long, -1}])),
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QQ, false),
+    Self = self(),
+    FailedMsgFun = fun () -> simulate_consumer_crash(Self, QQ, Config, Server) end,
+
+    _ = spawn_monitor(FailedMsgFun),
 
     DCHeader = <<"x-delivery-count">>,
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag,
-                          redelivered  = false},
+        {#'basic.deliver'{redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple = false,
-                                                requeue = true})
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0))
+    after 5000 ->
+              flush(1),
+              ct:fail(no_delivery)
     end,
 
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
-    %% set an operator policy, this should always win
-    ok = rabbit_ct_broker_helpers:set_operator_policy(
-           Config, 0, <<"delivery-limit">>, QQ, <<"queues">>,
-           [{<<"delivery-limit">>, 0}]),
-
+    _ = spawn_monitor(FailedMsgFun),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag2,
-                          redelivered = true},
+        {#'basic.deliver'{redelivered = true},
          #amqp_msg{props = #'P_basic'{}}} ->
-            % ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag2,
-                                                multiple = false,
-                                                requeue = true})
+            ok
     after ?TIMEOUT ->
               flush(1),
               ct:fail("message did not arrive as expected")
     end,
-    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
-    ok = rabbit_ct_broker_helpers:clear_operator_policy(Config, 0, <<"delivery-limit">>),
+    timer:sleep(100),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
     ok.
 
 %% Test that consumer credit is increased correctly.
@@ -3784,35 +3790,37 @@ subscribe_redelivery_limit_many(Config) ->
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>},
                                   {<<"x-delivery-limit">>, long, 1}])),
 
+    SomePid = spawn(fun() -> ok end),
+    FailedMsgFun = fun () -> simulate_consumer_crash(SomePid, QQ, Config, Server) end,
+
     publish_many(Ch, QQ, 5),
     wait_for_messages(Config, [[QQ, <<"5">>, <<"5">>, <<"0">>]]),
 
-    qos(Ch, 2, false),
-    subscribe(Ch, QQ, false),
-    wait_for_messages(Config, [[QQ, <<"5">>, <<"3">>, <<"2">>]]),
+    spawn(FailedMsgFun),
+    wait_for_messages(Config, [[QQ, <<"5">>, <<"5">>, <<"0">>]]),
 
-    nack(Ch, false, true),
-    nack(Ch, false, true),
-    wait_for_messages(Config, [[QQ, <<"5">>, <<"3">>, <<"2">>]]),
+    spawn(FailedMsgFun),
+    wait_for_messages(Config, [[QQ, <<"3">>, <<"3">>, <<"0">>]]),
 
-    nack(Ch, false, true),
-    nack(Ch, false, true),
-    wait_for_messages(Config, [[QQ, <<"3">>, <<"1">>, <<"2">>]]),
+    spawn_and_wait(FailedMsgFun),
+    spawn_and_wait(FailedMsgFun),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
 
-    nack(Ch, false, true),
-    nack(Ch, false, true),
-    wait_for_messages(Config, [[QQ, <<"3">>, <<"1">>, <<"2">>]]),
-
-    nack(Ch, false, true),
-    nack(Ch, false, true),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
-
-    nack(Ch, false, true),
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
-
-    nack(Ch, false, true),
+    spawn_and_wait(FailedMsgFun),
+    spawn_and_wait(FailedMsgFun),
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
     ok.
+
+spawn_and_wait(Fun) ->
+    {_, Ref} = spawn_monitor(Fun),
+    receive
+        {'DOWN', Ref, _, _, _} ->
+            ok
+    after 5000 ->
+              flush(1),
+              ct:fail(spawn_and_wait_timout)
+    end.
+
 
 subscribe_redelivery_policy(Config) ->
     [Server | _] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -3828,37 +3836,32 @@ subscribe_redelivery_policy(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QQ, false),
+    Self = self(),
+    FailedMsgFun = fun () -> simulate_consumer_crash(Self, QQ, Config, Server) end,
 
     DCHeader = <<"x-delivery-count">>,
+    spawn(FailedMsgFun),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag,
-                          redelivered  = false},
+        {#'basic.deliver'{redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple = false,
-                                                requeue = true})
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0))
+    after 5000 ->
+              flush(1),
+              ct:fail(timeout)
     end,
 
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    spawn(FailedMsgFun),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag1,
-                          redelivered  = true},
+        {#'basic.deliver'{redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple = false,
-                                                requeue = true})
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1))
+    after 5000 ->
+              flush(1),
+              ct:fail(timeout)
     end,
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
-    receive
-        {#'basic.deliver'{redelivered  = true}, #amqp_msg{}} ->
-            throw(unexpected_redelivery)
-    after 5000 ->
-            ok
-    end,
     ok = rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"delivery-limit">>).
 
 subscribe_redelivery_limit_with_dead_letter(Config) ->
@@ -3878,28 +3881,29 @@ subscribe_redelivery_limit_with_dead_letter(Config) ->
 
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    subscribe(Ch, QQ, false),
 
     DCHeader = <<"x-delivery-count">>,
+    Self = self(),
+    FailedMsgFun = fun () -> simulate_consumer_crash(Self, QQ, Config, Server) end,
+    spawn(FailedMsgFun),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag,
-                          redelivered  = false},
+        {#'basic.deliver'{redelivered  = false},
          #amqp_msg{props = #'P_basic'{headers = H0}}} ->
-            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag,
-                                                multiple = false,
-                                                requeue = true})
+            ?assertMatch(undefined, rabbit_basic:header(DCHeader, H0))
+    after 5000 ->
+              flush(1),
+              ct:fail(timeout)
     end,
 
-    wait_for_messages(Config, [[QQ, <<"1">>, <<"0">>, <<"1">>]]),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    spawn(FailedMsgFun),
     receive
-        {#'basic.deliver'{delivery_tag = DeliveryTag1,
-                          redelivered  = true},
+        {#'basic.deliver'{redelivered  = true},
          #amqp_msg{props = #'P_basic'{headers = H1}}} ->
-            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1)),
-            amqp_channel:cast(Ch, #'basic.nack'{delivery_tag = DeliveryTag1,
-                                                multiple = false,
-                                                requeue = true})
+            ?assertMatch({DCHeader, _, 1}, rabbit_basic:header(DCHeader, H1))
+    after 5000 ->
+              flush(1),
+              ct:fail(timeout)
     end,
 
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),

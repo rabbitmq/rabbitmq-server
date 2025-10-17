@@ -303,20 +303,20 @@ apply_(Meta, #return{consumer_key = ConsumerKey,
             {State, ok}
     end;
 apply_(Meta, #modify{consumer_key = ConsumerKey,
-                     delivery_failed = DelFailed,
-                     undeliverable_here = Undel,
+                     delivery_failed = DeliveryFailed,
+                     undeliverable_here = UndelHere,
                      annotations = Anns,
                      msg_ids = MsgIds},
        #?STATE{consumers = Cons} = State) ->
     case find_consumer(ConsumerKey, Cons) of
         {ActualConsumerKey, #consumer{checked_out = Checked}}
-          when Undel == false ->
-            return(Meta, ActualConsumerKey, MsgIds, DelFailed,
+          when UndelHere == false ->
+            return(Meta, ActualConsumerKey, MsgIds, DeliveryFailed,
                    Anns, Checked, [], State);
         {ActualConsumerKey, #consumer{} = Con}
-          when Undel == true ->
+          when UndelHere == true ->
             discard(Meta, MsgIds, ActualConsumerKey,
-                    Con, DelFailed, Anns, State);
+                    Con, DeliveryFailed, Anns, State);
         _ ->
             {State, ok}
     end;
@@ -499,7 +499,10 @@ apply_(#{system_time := Ts} = Meta,
                   %% and checked out messages should be returned
                   Effs = consumer_update_active_effects(
                            S0, C0, false, suspected_down, E0),
-                  {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, true),
+                  %% TODO: set a timer instead of reaturn all here to allow
+                  %% a disconnected node a configurable bit of time to be
+                  %% reconnected
+                  {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, false),
                   %% if the consumer was cancelled there is a chance it got
                   %% removed when returning hence we need to be defensive here
                   Waiting = case St#?STATE.consumers of
@@ -549,7 +552,7 @@ apply_(#{system_time := Ts} = Meta,
                               status = up} = C0,
               {St0, Eff}) when node(P) =:= Node ->
                   C = C0#consumer{status = suspected_down},
-                  {St, Eff0} = return_all(Meta, St0, Eff, CKey, C, true),
+                  {St, Eff0} = return_all(Meta, St0, Eff, CKey, C, false),
                   Eff1 = consumer_update_active_effects(St, C, false,
                                                         suspected_down, Eff0),
                   {St, Eff1};
@@ -1900,7 +1903,7 @@ annotate_msg(Header, Msg0) ->
             Msg0
     end.
 
-return_one(Meta, MsgId, Msg0, DelivFailed, Anns,
+return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
            #?STATE{returns = Returns,
                    consumers = Consumers,
                    dlx = DlxState0,
@@ -1909,12 +1912,14 @@ return_one(Meta, MsgId, Msg0, DelivFailed, Anns,
                               dead_letter_handler = DLH}} = State0,
            Effects0, ConsumerKey) ->
     #consumer{checked_out = Checked0} = Con0 = maps:get(ConsumerKey, Consumers),
-    Msg = incr_msg(Msg0, DelivFailed, Anns),
+    Msg = incr_msg_headers(Msg0, DeliveryFailed, Anns),
     Header = get_msg_header(Msg),
     %% TODO: do not use acquired count here as that includes all deliberate
     %% returns, use delivery_count header instead
-    case get_header(acquired_count, Header) of
-        AcquiredCount when AcquiredCount > DeliveryLimit ->
+    case get_header(delivery_count, Header) of
+        DeliveryCount
+          when is_integer(DeliveryCount) andalso
+               DeliveryCount > DeliveryLimit ->
             {DlxState, RetainedBytes, DlxEffects} =
                 discard_or_dead_letter([Msg], delivery_limit, DLH, DlxState0),
             %% subtract retained bytes as complete/6 will add them on irrespective
@@ -1937,10 +1942,10 @@ return_one(Meta, MsgId, Msg0, DelivFailed, Anns,
     end.
 
 return_all(Meta, #?STATE{consumers = Cons} = State0, Effects0, ConsumerKey,
-           #consumer{checked_out = Checked} = Con, DelivFailed) ->
+           #consumer{checked_out = Checked} = Con, DeliveryFailed) ->
     State = State0#?STATE{consumers = Cons#{ConsumerKey => Con}},
     lists:foldl(fun ({MsgId, Msg}, {S, E}) ->
-                        return_one(Meta, MsgId, Msg, DelivFailed, #{},
+                        return_one(Meta, MsgId, Msg, DeliveryFailed, #{},
                                    S, E, ConsumerKey)
                 end, {State, Effects0}, lists:sort(maps:to_list(Checked))).
 
@@ -3028,7 +3033,7 @@ discard(Meta, MsgIds, ConsumerKey,
                                 undefined ->
                                     false;
                                 Msg0 ->
-                                    {true, incr_msg(Msg0, DelFailed, Anns)}
+                                    {true, incr_msg_headers(Msg0, DelFailed, Anns)}
                             end
                     end, MsgIds),
     {DlxState, RetainedBytes, Effects} =
@@ -3037,7 +3042,7 @@ discard(Meta, MsgIds, ConsumerKey,
                           discarded_bytes = DiscardedBytes0 - RetainedBytes},
     complete_and_checkout(Meta, MsgIds, ConsumerKey, Con, Effects, State).
 
-incr_msg(Msg0, DelFailed, Anns) ->
+incr_msg_headers(Msg0, DeliveryFailed, Anns) ->
     Msg1 = update_msg_header(acquired_count, fun incr/1, 1, Msg0),
     Msg2 = case map_size(Anns) > 0 of
                true ->
@@ -3048,7 +3053,7 @@ incr_msg(Msg0, DelFailed, Anns) ->
                false ->
                    Msg1
            end,
-    case DelFailed of
+    case DeliveryFailed of
         true ->
             update_msg_header(delivery_count, fun incr/1, 1, Msg2);
         false ->
