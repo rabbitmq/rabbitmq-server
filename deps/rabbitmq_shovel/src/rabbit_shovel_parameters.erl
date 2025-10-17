@@ -113,7 +113,7 @@ internal_owner(Def) ->
 validate_src(Def) ->
     case protocols(Def)  of
         {amqp091, _} -> validate_amqp091_src(Def);
-        {amqp10, _} -> [];
+        {amqp10, _} -> validate_amqp10_src(Def);
         {local, _} -> validate_local_src(Def)
     end.
 
@@ -131,6 +131,14 @@ validate_amqp091_src(Def) ->
          both -> {error, "Cannot specify 'src-exchange' and 'src-queue'", []}
      end,
      case {pget(<<"src-delete-after">>, Def, pget(<<"delete-after">>, Def)), pget(<<"ack-mode">>, Def)} of
+         {N, <<"no-ack">>} when is_integer(N) ->
+             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
+         _ ->
+             ok
+     end].
+
+validate_amqp10_src(Def) ->
+    [case {pget(<<"src-delete-after">>, Def, pget(<<"delete-after">>, Def)), pget(<<"ack-mode">>, Def)} of
          {N, <<"no-ack">>} when is_integer(N) ->
              {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
          _ ->
