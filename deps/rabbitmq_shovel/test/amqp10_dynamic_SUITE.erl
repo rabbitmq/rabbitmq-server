@@ -33,11 +33,6 @@ groups() ->
       {non_parallel_tests, [], [
           simple,
           change_definition,
-          autodelete_amqp091_src_on_confirm,
-          autodelete_amqp091_src_on_publish,
-          autodelete_amqp091_dest_on_confirm,
-          autodelete_amqp091_dest_on_publish,
-          autodelete_with_rejections,
           simple_amqp10_dest,
           simple_amqp10_src,
           amqp091_to_amqp10_with_dead_lettering,
@@ -268,117 +263,6 @@ change_definition(Config) ->
               amqp10_publish_expect(Sess, Src, Src, <<"hello3">>, 1),
               amqp10_expect_empty(Sess, Dest),
               amqp10_expect_empty(Sess, Dest2)
-      end).
-
-autodelete_amqp091_src_on_confirm(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50},
-                    fun autodelete_amqp091_src/2),
-    ok.
-
-autodelete_amqp091_src_on_publish(Config) ->
-    autodelete_case(Config, {<<"on-publish">>, 50, 50, 50},
-                    fun autodelete_amqp091_src/2),
-    ok.
-
-autodelete_amqp091_dest_on_confirm(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50},
-                    fun autodelete_amqp091_dest/2),
-    ok.
-
-autodelete_amqp091_dest_on_publish(Config) ->
-    autodelete_case(Config, {<<"on-publish">>, 50, 50, 50},
-                    fun autodelete_amqp091_dest/2),
-    ok.
-
-autodelete_case(Config, Args, CaseFun) ->
-    with_amqp10_session(Config, CaseFun(Config, Args)).
-
-autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    fun (Session) ->
-            amqp10_publish(Session, Src, <<"hello">>, 100),
-            shovel_test_utils:set_param_nowait(
-              Config,
-              ?PARAM, [{<<"src-address">>,    Src},
-                       {<<"src-protocol">>,   <<"amqp10">>},
-                       {<<"src-delete-after">>, After},
-                       {<<"src-prefetch-count">>, 5},
-                       {<<"dest-address">>,   Dest},
-                       {<<"dest-protocol">>,   <<"amqp10">>},
-                       {<<"ack-mode">>,     AckMode}
-                      ]),
-            await_autodelete(Config, <<"test">>),
-            amqp10_expect_count(Session, Dest, ExpDest),
-            amqp10_expect_count(Session, Src, ExpSrc)
-    end.
-
-autodelete_amqp091_src(Config, {AckMode, After, ExpSrc, ExpDest}) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    fun (Session) ->
-            amqp10_publish(Session, Src, <<"hello">>, 100),
-            shovel_test_utils:set_param_nowait(
-              Config,
-              ?PARAM, [{<<"src-queue">>, Src},
-                       {<<"src-protocol">>, <<"amqp091">>},
-                       {<<"src-delete-after">>, After},
-                       {<<"src-prefetch-count">>, 5},
-                       {<<"dest-address">>, Dest},
-                       {<<"dest-protocol">>, <<"amqp10">>},
-                       {<<"ack-mode">>, AckMode}
-                      ]),
-            await_autodelete(Config, <<"test">>),
-            amqp10_expect_count(Session, Dest, ExpDest),
-            amqp10_expect_count(Session, Src, ExpSrc)
-    end.
-
-autodelete_amqp091_dest(Config, {AckMode, After, ExpSrc, ExpDest}) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    fun (Session) ->
-            amqp10_publish(Session, Src, <<"hello">>, 100),
-            shovel_test_utils:set_param_nowait(
-              Config,
-              ?PARAM, [{<<"src-address">>, Src},
-                       {<<"src-protocol">>, <<"amqp10">>},
-                       {<<"src-delete-after">>, After},
-                       {<<"src-prefetch-count">>, 5},
-                       {<<"dest-queue">>, Dest},
-                       {<<"dest-protocol">>, <<"amqp091">>},
-                       {<<"ack-mode">>, AckMode}
-                      ]),
-            await_autodelete(Config, <<"test">>),
-            amqp10_expect_count(Session, Dest, ExpDest),
-            amqp10_expect_count(Session, Src, ExpSrc)
-    end.
-
-autodelete_with_rejections(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(
-      Config,
-      fun (Sess) ->
-              amqp10_declare_queue(Sess, Dest, #{<<"x-max-length">> => {uint, 5},
-                                                 <<"x-overflow">> => {utf8, <<"reject-publish">>}}),
-
-              shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"src-delete-after">>, 10},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              amqp10_publish(Sess, Src, <<"hello">>, 10),
-              await_autodelete(Config, <<"test">>),
-              Expected = lists:sort([[Src, <<"5">>], [Dest, <<"5">>]]),
-              ?awaitMatch(
-                 Expected,
-                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                              Config, 0,
-                              ["list_queues", "name", "messages_ready", "--no-table-headers"])),
-                 30_000)
       end).
 
 test_amqp10_delete_after_queue_length(Config) ->

@@ -14,10 +14,16 @@
 
 -compile(export_all).
 
--import(shovel_test_utils, [set_param/3,
+-import(rabbit_ct_helpers, [eventually/3]).
+-import(shovel_test_utils, [await_autodelete/2,
+                            set_param/3,
+                            set_param_nowait/3,
                             with_amqp10_session/2,
                             amqp10_publish_expect/5,
-                            amqp10_declare_queue/3]).
+                            amqp10_declare_queue/3,
+                            amqp10_publish/4,
+                            amqp10_expect_count/3
+                           ]).
 
 -define(PARAM, <<"test">>).
 
@@ -55,7 +61,20 @@ tests() ->
      simple_classic_on_publish,
      simple_quorum_no_ack,
      simple_quorum_on_confirm,
-     simple_quorum_on_publish
+     simple_quorum_on_publish,
+     autodelete_classic_on_confirm,
+     autodelete_quorum_on_confirm,
+     autodelete_classic_on_publish,
+     autodelete_quorum_on_publish,
+     autodelete_no_ack,
+     autodelete_classic_on_confirm_no_transfer,
+     autodelete_quorum_on_confirm_no_transfer,
+     autodelete_classic_on_publish_no_transfer,
+     autodelete_quorum_on_publish_no_transfer,
+     autodelete_classic_on_confirm_with_rejections,
+     autodelete_quorum_on_confirm_with_rejections,
+     autodelete_classic_on_publish_with_rejections,
+     autodelete_quorum_on_publish_with_rejections
     ].
 
 %% -------------------------------------------------------------------
@@ -240,6 +259,137 @@ simple_queue_type_ack_mode(Config, Type, AckMode) ->
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 10)
       end).
 
+<<<<<<< HEAD
+=======
+autodelete_classic_on_confirm_no_transfer(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-confirm">>, 0, 100, 0).
+
+autodelete_quorum_on_confirm_no_transfer(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-confirm">>, 0, 100, 0).
+
+autodelete_classic_on_publish_no_transfer(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-publish">>, 0, 100, 0).
+
+autodelete_quorum_on_publish_no_transfer(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-publish">>, 0, 100, 0).
+
+autodelete_classic_on_confirm(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-confirm">>, 50, 50, 50).
+
+autodelete_quorum_on_confirm(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-confirm">>, 50, 50, 50).
+
+autodelete_classic_on_publish(Config) ->
+    autodelete(Config, <<"classic">>, <<"on-publish">>, 50, 50, 50).
+
+autodelete_quorum_on_publish(Config) ->
+    autodelete(Config, <<"quorum">>, <<"on-publish">>, 50, 50, 50).
+
+autodelete_no_ack(Config) ->
+    ExtraArgs = [{<<"ack-mode">>, <<"no-ack">>},
+                 {<<"src-delete-after">>, 100}],
+    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+    Uri = shovel_test_utils:make_uri(Config, 0),
+    ?assertMatch({error_string, _},
+                 rabbit_ct_broker_helpers:rpc(
+                   Config, 0, rabbit_runtime_parameters, set,
+                   [<<"/">>, <<"shovel">>, ?PARAM,
+                    [{<<"src-uri">>,  Uri},
+                     {<<"dest-uri">>, [Uri]}] ++ ShovelArgs,
+                    none])).
+
+autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_publish(Sess, Src, <<"hello">>, 100),
+              ExtraArgs = [{<<"ack-mode">>, AckMode},
+                           {<<"src-delete-after">>, After}],
+              ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+              set_param_nowait(Config, ?PARAM, ShovelArgs),
+              await_autodelete(Config, ?PARAM),
+              amqp10_expect_count(Sess, Src, ExpSrc),
+              amqp10_expect_count(Sess, Dest, ExpDest)
+      end).
+
+<<<<<<< HEAD
+>>>>>>> d5f9ff27b (Shovel tests: tests for autodelete common to all protocols)
+=======
+autodelete_classic_on_confirm_with_rejections(Config) ->
+    autodelete_with_rejections(Config, <<"classic">>, <<"on-confirm">>, 5, 5).
+
+autodelete_quorum_on_confirm_with_rejections(Config) ->
+    ExpSrc = fun(ExpDest) -> 100 - ExpDest end,
+    autodelete_with_quorum_rejections(Config, <<"on-confirm">>, ExpSrc).
+
+autodelete_classic_on_publish_with_rejections(Config) ->
+    autodelete_with_rejections(Config, <<"classic">>, <<"on-publish">>, 0, 5).
+
+autodelete_quorum_on_publish_with_rejections(Config) ->
+    ExpSrc = fun(_) -> 0 end,
+    autodelete_with_quorum_rejections(Config, <<"on-publish">>, ExpSrc).
+
+autodelete_with_rejections(Config, Type, AckMode, ExpSrc, ExpDest) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type},
+                                                 <<"x-overflow">> => {utf8, <<"reject-publish">>},
+                                                 <<"x-max-length">> => {ulong, 5}
+                                                }),
+              amqp10_publish(Sess, Src, <<"hello">>, 10),
+              ExtraArgs = [{<<"ack-mode">>, AckMode},
+                           {<<"src-delete-after">>, 10}],
+              ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+              set_param_nowait(Config, ?PARAM, ShovelArgs),
+              await_autodelete(Config, ?PARAM),
+              Expected = lists:sort([[Src, integer_to_binary(ExpSrc)],
+                                     [Dest, integer_to_binary(ExpDest)]]),
+              ?awaitMatch(
+                 Expected,
+                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0,
+                              ["list_queues", "name", "messages", "--no-table-headers"])),
+                 45_000),
+              amqp10_expect_count(Sess, Src, ExpSrc),
+              amqp10_expect_count(Sess, Dest, ExpDest)
+      end).
+
+autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    Type = <<"quorum">>,
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_declare_queue(Sess, Src, #{<<"x-queue-type">> => {utf8, Type}}),
+              amqp10_declare_queue(Sess, Dest, #{<<"x-queue-type">> => {utf8, Type},
+                                                 <<"x-overflow">> => {utf8, <<"reject-publish">>},
+                                                 <<"x-max-length">> => {ulong, 5}
+                                                }),
+              amqp10_publish(Sess, Src, <<"hello">>, 100),
+              ExtraArgs = [{<<"ack-mode">>, AckMode},
+                           {<<"src-delete-after">>, 50}],
+              ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+              set_param_nowait(Config, ?PARAM, ShovelArgs),
+              await_autodelete(Config, ?PARAM),
+              eventually(
+                ?_assert(
+                   list_queue_messages(Config, Dest) >= 5),
+                1000, 45),
+              ExpDest = list_queue_messages(Config, Dest),
+              amqp10_expect_count(Sess, Src, ExpSrcFun(ExpDest)),
+              amqp10_expect_count(Sess, Dest, ExpDest)
+      end).
+
+>>>>>>> 059813a83 (Shovel: more common testcases)
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -250,3 +400,12 @@ maybe_skip_local_protocol(Config) ->
         _ ->
             {skip, "This group requires rabbitmq_4.0.0 feature flag"}
     end.
+
+list_queue_messages(Config, QName) ->
+    List = rabbit_ct_broker_helpers:rabbitmqctl_list(
+             Config, 0,
+             ["list_queues", "name", "messages", "--no-table-headers"]),
+    [[_, Messages]] = lists:filter(fun([Q, _]) ->
+                                           Q == QName
+                                   end, List),
+    binary_to_integer(Messages).

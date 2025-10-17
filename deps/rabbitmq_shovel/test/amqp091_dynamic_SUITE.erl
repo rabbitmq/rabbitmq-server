@@ -40,7 +40,6 @@ groups() ->
           restart,
           change_definition,
           autodelete,
-          autodelete_with_rejections,
           validation,
           security_validation,
           get_connection_name,
@@ -490,11 +489,8 @@ change_definition(Config) ->
       end).
 
 autodelete(Config) ->
-    autodelete_case(Config, {<<"on-confirm">>, 0, 100, 0}),
-    autodelete_case(Config, {<<"on-confirm">>, 50, 50, 50}),
     autodelete_case(Config, {<<"on-confirm">>, <<"queue-length">>,  0, 100}),
     autodelete_case(Config, {<<"on-publish">>, <<"queue-length">>,  0, 100}),
-    autodelete_case(Config, {<<"on-publish">>, 50,                 50,  50}),
     %% no-ack is not compatible with explicit count
     autodelete_case(Config, {<<"no-ack">>,     <<"queue-length">>,  0, 100}),
     ok.
@@ -519,35 +515,6 @@ autodelete_do(Config, {AckMode, After, ExpSrc, ExpDest}) ->
             expect_count(Ch, <<"dest">>, <<"hello">>, ExpDest),
             expect_count(Ch, <<"src">>, <<"hello">>, ExpSrc)
     end.
-
-autodelete_with_rejections(Config) ->
-    Src = <<"src">>,
-    Dest = <<"dst">>,
-    Args = [{<<"x-max-length">>, long, 5},
-            {<<"x-overflow">>, longstr, <<"reject-publish">>}],
-    with_ch(Config,
-      fun (Ch) ->
-              amqp_channel:call(Ch, #'queue.declare'{queue   = Dest,
-                                                     durable = true,
-                                                     arguments = Args}),
-              shovel_test_utils:set_param(Config, <<"test">>,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"src-delete-after">>, 10},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-predeclared">>, true},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              publish_count(Ch, <<>>, Src, <<"hello">>, 10),
-              await_autodelete(Config, <<"test">>),
-              Expected = lists:sort([[Src, <<"5">>], [Dest, <<"5">>]]),
-              eventually(
-                 ?_assertMatch(
-                    Expected,
-                    lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
-                                 Config, 0,
-                                 ["list_queues", "name", "messages_ready", "--no-table-headers"]))))
-      end).
 
 validation(Config) ->
     URIs = [{<<"src-uri">>,  <<"amqp://">>},
