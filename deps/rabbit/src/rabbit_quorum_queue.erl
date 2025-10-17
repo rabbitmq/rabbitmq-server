@@ -1389,13 +1389,7 @@ do_add_member(Q, Node, Membership, Timeout)
     Conf = make_ra_conf(Q, ServerId, Membership, MachineVersion),
     case ra:start_server(?RA_SYSTEM, Conf) of
         ok ->
-            ServerIdSpec  =
-            case rabbit_feature_flags:is_enabled(quorum_queue_non_voters) of
-                true ->
-                    maps:with([id, uid, membership], Conf);
-                false ->
-                    maps:get(id, Conf)
-            end,
+            ServerIdSpec = maps:with([id, uid, membership], Conf),
             case ra:add_member(Members, ServerIdSpec, Timeout) of
                 {ok, {RaIndex, RaTerm}, Leader} ->
                     Fun = fun(Q1) ->
