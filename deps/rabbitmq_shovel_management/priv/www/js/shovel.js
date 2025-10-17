@@ -159,6 +159,16 @@ HELP['shovel-amqp10-auto-delete'] =
        <dd>The shovel will delete itself after the given number of messages have been transferred.</dd>\
 </dl>';
 
+HELP['shovel-local-auto-delete'] =
+    '<dl>\
+       <dt><code>Never</code></dt>\
+       <dd>The shovel never deletes itself; it will persist until it is explicitly removed.</dd>\
+       <dt><code>After initial length transferred</code></dt>\
+       <dd>The shovel will check the length of the queue when it starts up. It will transfer that many messages, and then delete itself.</dd>\
+       <dt><code>After num messages</code></dt>\
+       <dd>The shovel will delete itself after the given number of messages have been transferred.</dd>\
+</dl>';
+
 HELP['shovel-remaining-counter'] =
     'When not <code>unlimited</code>: number of messages left to transfer before this shovel will be deleted.';
 
