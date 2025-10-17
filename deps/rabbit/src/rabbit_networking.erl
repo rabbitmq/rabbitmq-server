@@ -33,8 +33,8 @@
          close_all_user_connections/2,
          force_connection_event_refresh/1, force_non_amqp_connection_event_refresh/1,
          handshake/2, handshake/3, tcp_host/1,
-         ranch_ref/1, ranch_ref/2, ranch_ref_of_protocol/1, ranch_ref_to_protocol/1,
-         listener_of_protocol/1, stop_ranch_listener_of_protocol/1,
+         ranch_ref/1, ranch_ref/2, ranch_refs_of_protocol/1, ranch_ref_to_protocol/1,
+         listeners_of_protocol/1, stop_ranch_listeners_of_protocol/1,
          list_local_connections_of_protocol/1]).
 
 %% Used by TCP-based transports, e.g. STOMP adapter
@@ -197,8 +197,7 @@ tcp_listener_spec(NamePrefix, {IPAddress, Port, Family}, SocketOpts,
      transient, infinity, supervisor, [tcp_listener_sup]}.
 
 -spec ranch_ref(#listener{} | [{atom(), any()}] | 'undefined') -> ranch:ref() | undefined.
-ranch_ref(#listener{port = Port}) ->
-    [{IPAddress, Port, _Family} | _] = tcp_listener_addresses(Port),
+ranch_ref(#listener{ip_address = IPAddress, port = Port}) ->
     {acceptor, IPAddress, Port};
 ranch_ref(Listener) when is_list(Listener) ->
     Port = rabbit_misc:pget(port, Listener),
@@ -230,9 +229,9 @@ ranch_ref(undefined) ->
 ranch_ref(IPAddress, Port) ->
     {acceptor, IPAddress, Port}.
 
--spec ranch_ref_of_protocol(atom()) -> ranch:ref() | undefined.
-ranch_ref_of_protocol(Protocol) ->
-    ranch_ref(listener_of_protocol(Protocol)).
+-spec ranch_refs_of_protocol(atom()) -> [ranch:ref()].
+ranch_refs_of_protocol(Protocol) ->
+    [ranch_ref(Listener) || Listener <- listeners_of_protocol(Protocol)].
 
 -spec ranch_ref_to_protocol(ranch:ref()) -> atom() | undefined.
 ranch_ref_to_protocol({acceptor, IPAddress, Port}) ->
@@ -249,32 +248,32 @@ ranch_ref_to_protocol({acceptor, IPAddress, Port}) ->
 ranch_ref_to_protocol(_) ->
     undefined.
 
--spec listener_of_protocol(atom()) -> #listener{}.
-listener_of_protocol(Protocol) ->
+-spec listeners_of_protocol(atom()) -> [#listener{}].
+listeners_of_protocol(Protocol) ->
     MatchSpec = #listener{
                    protocol = Protocol,
                    _ = '_'
                   },
-    case ets:match_object(?ETS_TABLE, MatchSpec) of
-        []    -> undefined;
-        [Row] -> Row
-    end.
+    ets:match_object(?ETS_TABLE, MatchSpec).
 
--spec stop_ranch_listener_of_protocol(atom()) -> ok | {error, not_found}.
-stop_ranch_listener_of_protocol(Protocol) ->
-    case ranch_ref_of_protocol(Protocol) of
-        undefined -> ok;
-        Ref       ->
-            ?LOG_DEBUG("Stopping Ranch listener for protocol ~ts", [Protocol]),
-            ranch:stop_listener(Ref)
+-spec stop_ranch_listeners_of_protocol(atom()) -> ok.
+stop_ranch_listeners_of_protocol(Protocol) ->
+    case ranch_refs_of_protocol(Protocol) of
+        [] ->
+            ok;
+        Refs ->
+            ?LOG_DEBUG("Stopping Ranch listeners for protocol ~ts", [Protocol]),
+            lists:foreach(fun ranch:stop_listener/1, Refs)
     end.
 
 -spec list_local_connections_of_protocol(atom()) -> [pid()].
 list_local_connections_of_protocol(Protocol) ->
-    case ranch_ref_of_protocol(Protocol) of
-        undefined   -> [];
-        AcceptorRef -> ranch:procs(AcceptorRef, connections)
-    end.
+    Refs = ranch_refs_of_protocol(Protocol),
+    lists:flatten(
+      lists:map(
+        fun(Ref) ->
+                ranch:procs(Ref, connections)
+        end, Refs)).
 
 -spec start_tcp_listener(
         listener_config(), integer()) -> 'ok' | {'error', term()}.
