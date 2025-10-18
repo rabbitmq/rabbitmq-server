@@ -126,7 +126,7 @@ define PROJECT_ENV
 	  ]
 endef
 
-LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools xmerl
+LOCAL_DEPS = sasl os_mon inets compiler public_key crypto ssl syntax_tools
 
 BUILD_DEPS = rabbitmq_cli
 DEPS = ranch cowlib rabbit_common amqp10_common rabbitmq_prelaunch ra sysmon_handler stdout_formatter recon redbug observer_cli osiris syslog systemd seshat horus khepri khepri_mnesia_migration cuttlefish gen_batch_server

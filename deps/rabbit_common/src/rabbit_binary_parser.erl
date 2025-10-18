@@ -164,9 +164,11 @@ assert_utf8(B) ->
     end.
 
 validate_utf8(Bin) ->
-    try
-        _ = xmerl_ucs:from_utf8(Bin),
-        ok
-    catch exit:{ucs, _} ->
+    case unicode:characters_to_binary(Bin, unicode, unicode) of
+        B when is_binary(B) ->
+            ok;
+        {error, _, _} ->
+            error;
+        {incomplete, _, _} ->
             error
     end.

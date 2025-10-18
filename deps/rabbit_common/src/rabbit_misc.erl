@@ -505,10 +505,13 @@ b64decode_or_throw(B64) ->
     end.
 
 utf8_safe(V) ->
-    try
-        _ = xmerl_ucs:from_utf8(V),
-        V
-    catch exit:{ucs, _} ->
+    case unicode:characters_to_binary(V, unicode, unicode) of
+        B when is_binary(B) ->
+            B;
+        {error, _, _} ->
+            Enc = split_lines(base64:encode(V)),
+            <<"Not UTF-8, base64 is: ", Enc/binary>>;
+        {incomplete, _, _} ->
             Enc = split_lines(base64:encode(V)),
             <<"Not UTF-8, base64 is: ", Enc/binary>>
     end.

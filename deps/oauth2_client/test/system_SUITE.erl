@@ -598,14 +598,14 @@ get_oauth_provider_given_oauth_provider_id(Config) ->
                 Jwks_uri)
     end.
 
-jwks_url_is_used_in_absense_of_jwks_uri(Config) ->
+jwks_url_is_used_in_absense_of_jwks_uri(_Config) ->
     {ok, #oauth_provider{
         jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
     ?assertEqual(
         proplists:get_value(jwks_url, get_env(key_config, []), undefined),
         Jwks_uri).
 
-jwks_uri_takes_precedence_over_jwks_url(Config) ->
+jwks_uri_takes_precedence_over_jwks_url(_Config) ->
     {ok, #oauth_provider{
         jwks_uri = Jwks_uri}} = oauth2_client:get_oauth_provider([jwks_uri]),
     ?assertEqual(get_env(jwks_uri), Jwks_uri).
