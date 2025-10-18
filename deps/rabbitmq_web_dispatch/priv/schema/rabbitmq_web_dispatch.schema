@@ -16,14 +16,15 @@
 fun(Conf) ->
     Settings = cuttlefish_variable:filter_by_prefix("http_dispatch.auth_backends", Conf),
     BackendModule = fun
-        (internal) -> rabbit_auth_backend_internal;
-        (ldap)     -> rabbit_auth_backend_ldap;
-        (http)     -> rabbit_auth_backend_http;
-        (oauth)    -> rabbit_auth_backend_oauth2;
-        (oauth2)   -> rabbit_auth_backend_oauth2;
-        (cache)    -> rabbit_auth_backend_cache;
-        (amqp)     -> rabbit_auth_backend_amqp;
-        (dummy)    -> rabbit_auth_backend_dummy;
+        (internal)          -> rabbit_auth_backend_internal;
+        (internal_loopback) -> rabbit_auth_backend_internal_loopback;
+        (ldap)              -> rabbit_auth_backend_ldap;
+        (http)              -> rabbit_auth_backend_http;
+        (oauth)             -> rabbit_auth_backend_oauth2;
+        (oauth2)            -> rabbit_auth_backend_oauth2;
+        (cache)             -> rabbit_auth_backend_cache;
+        (amqp)              -> rabbit_auth_backend_amqp;
+        (dummy)             -> rabbit_auth_backend_dummy;
         (Other) when is_atom(Other) -> Other;
         (_) -> cuttlefish:invalid("Unknown/unsupported auth backend")
     end,
