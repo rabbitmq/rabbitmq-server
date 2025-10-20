@@ -259,8 +259,6 @@ simple_queue_type_ack_mode(Config, Type, AckMode) ->
               amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 10)
       end).
 
-<<<<<<< HEAD
-=======
 autodelete_classic_on_confirm_no_transfer(Config) ->
     autodelete(Config, <<"classic">>, <<"on-confirm">>, 0, 100, 0).
 
@@ -316,9 +314,6 @@ autodelete(Config, Type, AckMode, After, ExpSrc, ExpDest) ->
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
 
-<<<<<<< HEAD
->>>>>>> d5f9ff27b (Shovel tests: tests for autodelete common to all protocols)
-=======
 autodelete_classic_on_confirm_with_rejections(Config) ->
     autodelete_with_rejections(Config, <<"classic">>, <<"on-confirm">>, 5, 5).
 
@@ -389,7 +384,6 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
 
->>>>>>> 059813a83 (Shovel: more common testcases)
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
