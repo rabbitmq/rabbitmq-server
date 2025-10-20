@@ -306,12 +306,12 @@ ack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
 -spec nack(Tag :: tag(), Multi :: boolean(), state()) -> state().
 nack(Tag, false, State = #{source := #{current := #{link := LinkRef}} = Src}) ->
     % the tag is the same as the deliveryid
-    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, released),
+    ok = amqp10_client_session:disposition(LinkRef, Tag, Tag, true, rejected),
     State#{source => Src#{last_nacked_tag => Tag}};
 nack(Tag, true, State = #{source := #{current := #{link := LinkRef},
                                       last_nacked_tag := LastTag} = Src}) ->
     First = LastTag + 1,
-    ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, released),
+    ok = amqp10_client_session:disposition(LinkRef, First, Tag, true, rejected),
     State#{source => Src#{last_nacked_tag => Tag}}.
 
 status(#{dest := #{current := #{link_state := attached}}}) ->
