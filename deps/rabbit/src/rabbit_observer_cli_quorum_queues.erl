@@ -12,6 +12,8 @@
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 
+-define(QQ_RA_SYSTEM, quorum_queues).
+
 -rabbit_boot_step({?MODULE,
                    [{description, "Quorum queues observer_cli plugin"},
                     {mfa,         {?MODULE, add_plugin, []}},
@@ -34,7 +36,7 @@ attributes(State) ->
     Content2 = "SS - snapshots sent, SW - snapshots written, MS - messages sent",
     Content3 = "E - elections, WOp - write operations, WRe - write resends, GC - Ra forced GC",
     Content4 = "CT - current term, SnapIdx - snapshot index, LA - last applied, CI - current index, LW - last written log entry index, CL - commit latency",
-    RaCounters = ra_counters:overview(),
+    RaCounters = ra_counters:overview(?QQ_RA_SYSTEM),
     {
     [ra_log_wal_header()] ++ [ra_log_wal_sheet(RaCounters)] ++
     [ra_log_segment_writer_header()] ++ [ra_log_segment_writer_sheet(RaCounters)] ++
@@ -137,14 +139,14 @@ sheet_body(PrevState) ->
                                     undefined ->
                                         empty_row(Name);
                                     _ ->
-                                        QQCounters = maps:get({QName, node()}, ra_counters:overview()),
+                                        QQCounters = maps:get({QName, node()}, ra_counters:overview(?QQ_RA_SYSTEM)),
                                         {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
                                         #{snapshot_index := SnapIdx,
                                             last_written_index := LW,
                                             term := CT,
                                             commit_latency := CL,
                                             commit_index := CI,
-                                            last_applied := LA} = ra:key_metrics(ServerId),
+                                            last_applied := LA} = ra:key_metrics(?QQ_RA_SYSTEM, ServerId),
                                         [
                                          Pid,
                                          QName,

@@ -63,6 +63,11 @@ collect_per_object_metrics(Prefix, Callback) ->
 collect_detailed_metrics(Prefix, Callback) ->
     VHostFilterFun = case get(prometheus_vhost_filter) of
                          undefined ->
+                             %% we only publish Raft metrics of
+                             %% key components when the family
+                             %% was requested, but there's not vhost
+                             %% filter (components don't match the filter)
+                             collect_key_component_metrics(?DETAILED_METRIC_NAME_PREFIX, Callback),
                              fun(_) -> true end;
                          VHosts ->
                              fun(#{vhost := V}) ->
@@ -89,7 +94,7 @@ collect_key_per_object_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra,
+      seshat:format(quorum_queues,
                     #{labels => as_binary,
                       metrics => QQMetrics,
                       filter_fun => fun onlyQueues/1})).
@@ -107,7 +112,7 @@ collect_all_matching_metrics(Prefix, Callback, VHostFilterFun) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra,
+      seshat:format(quorum_queues,
                     #{labels => as_binary,
                       metrics => all,
                       filter_fun => VHostFilterFun})).
@@ -132,7 +137,7 @@ collect_max_values(Prefix, Callback) ->
                           #{#{ra_system => quorum_queues} => Max}))
 
       end,
-      seshat:format(ra,
+      seshat:format(quorum_queues,
                     #{labels => as_binary,
                       metrics => QQMetrics,
                       filter_fun => fun onlyQueues/1})).
@@ -149,7 +154,7 @@ collect_key_component_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra,
+      seshat:format(quorum_queues,
                     #{labels => as_binary,
                       metrics => WALMetrics ++ SegmentWriterMetrics,
                       filter_fun => fun onlyQueues/1})),
@@ -162,7 +167,7 @@ collect_key_component_metrics(Prefix, Callback) ->
                           Type,
                           Values))
       end,
-      seshat:format(ra,
+      seshat:format(coordination,
                     #{labels => as_binary,
                       filter_fun => fun onlyCoordinationSystem/1})).
 

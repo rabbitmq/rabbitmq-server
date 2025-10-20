@@ -211,6 +211,8 @@
     tcp_port_prometheus
   ]).
 
+-define(KHEPRI_RA_SYSTEM, quorum_queues).
+
 %% -------------------------------------------------------------------
 %% Broker setup/teardown steps.
 %% -------------------------------------------------------------------
@@ -1169,7 +1171,7 @@ await_metadata_store_consistent(Config, Node) ->
     end.
 
 ra_last_applied(ServerId) ->
-    #{last_applied := LastApplied} = ra:key_metrics(ServerId),
+    #{last_applied := LastApplied} = ra:key_metrics(?KHEPRI_RA_SYSTEM, ServerId),
     LastApplied.
 
 do_nodes_run_same_ra_machine_version(Config, RaMachineMod) ->

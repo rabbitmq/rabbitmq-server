@@ -1100,7 +1100,7 @@ status() ->
 
 get_ra_key_metrics(Node) ->
     ServerId = {?RA_CLUSTER_NAME, Node},
-    Metrics0 = ra:key_metrics(ServerId),
+    Metrics0 = ra:key_metrics(?RA_SYSTEM, ServerId),
     MacVer = try
                  erpc:call(Node, khepri_machine, version, [])
              catch
