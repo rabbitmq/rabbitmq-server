@@ -72,9 +72,9 @@ tests() ->
      autodelete_classic_on_publish_no_transfer,
      autodelete_quorum_on_publish_no_transfer,
      %% AMQP091 and local shovels requeue messages on reject
-     %% AMQP10 discards messages on reject
-     %% These two tests will remain commented out until the
-     %% behaviour is unified.
+     %% while AMQP10 discards messages on reject.
+     %% These two tests will remain commented out until a decision on
+     %% which behavior to adopt for both is made and implemented.
      %% autodelete_classic_on_confirm_with_rejections,
      %% autodelete_quorum_on_confirm_with_rejections,
      autodelete_classic_on_publish_with_rejections,
@@ -125,7 +125,7 @@ init_per_group(amqp10, Config) ->
        {dest_protocol, <<"amqp10">>},
        {src_address, <<"src-address">>},
        {dest_address, <<"dest-address">>}
-      ]);    
+      ]);
 init_per_group(local, Config) ->
     rabbit_ct_helpers:set_config(
       Config,
