@@ -278,7 +278,7 @@ run_make_dist(Config) ->
                     Config;
                 _ ->
                     global:del_lock(LockId, [node()]),
-                    {skip, "Failed to run \"make test-dist\""}
+                    error("Failed to run \"make test-dist\"")
             end;
         _ ->
             global:del_lock(LockId, [node()]),
@@ -651,11 +651,11 @@ write_config_file(Config, NodeConfig, _I) ->
         {{error, eexist}, ok} ->
             NodeConfig;
         {{error, Reason}, _} when Reason =/= eexist ->
-            {skip, "Failed to create Erlang node config directory \"" ++
-             ConfigDir ++ "\": " ++ file:format_error(Reason)};
+            error("Failed to create Erlang node config directory \"" ++
+             ConfigDir ++ "\": " ++ file:format_error(Reason));
         {_, {error, Reason}} ->
-            {skip, "Failed to create Erlang node config file \"" ++
-             ConfigFile ++ "\": " ++ file:format_error(Reason)}
+            error("Failed to create Erlang node config file \"" ++
+             ConfigFile ++ "\": " ++ file:format_error(Reason))
     end.
 
 -define(REQUIRED_FEATURE_FLAGS, [
@@ -847,7 +847,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                     AbortCmd = ["stop-node" | MakeVars],
                     _ = rabbit_ct_helpers:make(Config, SrcDir, AbortCmd),
                     %% @todo Need to stop all nodes in the cluster, not just the one node.
-                    {skip, "Failed to initialize RabbitMQ"}
+                    error("Failed to initialize RabbitMQ")
             end;
         RunCmd ->
             UseSecondary = CanUseSecondary andalso
@@ -878,7 +878,7 @@ do_start_rabbitmq_node(Config, NodeConfig, I) ->
                 _ ->
                     AbortCmd = ["stop-node" | MakeVars],
                     _ = rabbit_ct_helpers:exec([RunCmd | AbortCmd]),
-                    {skip, "Failed to initialize RabbitMQ"}
+                    error("Failed to initialize RabbitMQ")
             end
     end.
 
