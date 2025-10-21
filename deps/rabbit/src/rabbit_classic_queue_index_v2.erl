@@ -22,6 +22,9 @@
 -export([sync/1, needs_sync/1, flush/1,
          bounds/2, next_segment_boundary/1]).
 
+%% Called by rabbit_vhost.
+-export([all_queue_directory_names/1]).
+
 %% Shared with rabbit_classic_queue_store_v2.
 -export([queue_dir/2]).
 

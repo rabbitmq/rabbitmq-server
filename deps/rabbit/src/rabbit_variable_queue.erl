@@ -229,7 +229,6 @@
 
 -type msg_location() :: memory
                       | rabbit_msg_store
-                      | rabbit_queue_index
                       | rabbit_classic_queue_store_v2:msg_location().
 -export_type([msg_location/0]).
 
@@ -239,7 +238,7 @@
           msg,
           is_persistent,
           is_delivered,
-          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_QUEUE_INDEX | ?IN_MEMORY
+          msg_location, %% ?IN_SHARED_STORE | ?IN_QUEUE_STORE | ?IN_MEMORY
           index_on_disk,
           persist_to,
           msg_props
@@ -260,7 +259,6 @@
 
 -define(IN_SHARED_STORE, rabbit_msg_store).
 -define(IN_QUEUE_STORE, {rabbit_classic_queue_store_v2, _, _}).
--define(IN_QUEUE_INDEX, rabbit_queue_index).
 -define(IN_MEMORY, memory).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
@@ -975,14 +973,10 @@ beta_msg_status({Msg, SeqId, MsgLocation, MsgProps, IsPersistent}) ->
     MS0#msg_status{msg_id       = MsgId,
                    msg          = Msg,
                    persist_to   = case MsgLocation of
-                                      rabbit_queue_index -> queue_index;
                                       {rabbit_classic_queue_store_v2, _, _} -> queue_store;
                                       rabbit_msg_store -> msg_store
                                   end,
-                   msg_location = case MsgLocation of
-                                      rabbit_queue_index -> memory;
-                                      _ -> MsgLocation
-                                  end}.
+                   msg_location = MsgLocation}.
 
 beta_msg_status0(SeqId, MsgProps, IsPersistent) ->
   #msg_status{seq_id        = SeqId,
@@ -1396,7 +1390,6 @@ remove_from_disk(#msg_status {
                     {StoreState0, record_confirms(sets:add_element(MsgId, sets:new([{version,2}])), State)}
             end;
         ?IN_QUEUE_STORE   -> {rabbit_classic_queue_store_v2:remove(SeqId, StoreState0), State};
-        ?IN_QUEUE_INDEX   -> {StoreState0, State};
         ?IN_MEMORY        -> {StoreState0, State}
     end,
     StoreState = rabbit_classic_queue_store_v2:delete_segments(DeletedSegments, StoreState1),
@@ -1407,7 +1400,7 @@ remove_from_disk(#msg_status {
 
 %% This function exists as a way to improve dropwhile/2
 %% performance. The idea of having this function is to optimise calls
-%% to rabbit_queue_index by batching delivers and acks, instead of
+%% to the queue index by batching delivers and acks, instead of
 %% sending them one by one.
 %%
 %% Instead of removing every message as their are popped from the
@@ -1449,7 +1442,7 @@ remove_by_predicate(Pred, State = #vqstate {out_counter = OutCount}) ->
 
 %% This function exists as a way to improve fetchwhile/4
 %% performance. The idea of having this function is to optimise calls
-%% to rabbit_queue_index by batching delivers, instead of sending them
+%% to the queue index by batching delivers, instead of sending them
 %% one by one.
 %%
 %% Fun is the function passed to fetchwhile/4 that's
@@ -1472,7 +1465,7 @@ fetch_by_predicate(Pred, Fun, FetchAcc,
 
 %% We try to do here the same as what remove(true, State) does but
 %% processing several messages at the same time. The idea is to
-%% optimize rabbit_queue_index:deliver/2 calls by sending a list of
+%% optimize IndexMod:deliver/2 calls by sending a list of
 %% SeqIds instead of one by one, thus process_queue_entries1 will
 %% accumulate the required deliveries, will record_pending_ack for
 %% each message, and will update stats, like remove/2 does.
@@ -1716,8 +1709,7 @@ maybe_write_msg_to_disk(Force, MsgStatus = #msg_status {
         queue_store -> {MsgLocation, StoreState} = rabbit_classic_queue_store_v2:write(SeqId, prepare_to_store(Msg), Props, StoreState0),
                        {MsgStatus#msg_status{ msg_location = MsgLocation },
                         State#vqstate{ store_state = StoreState,
-                                       disk_write_count = Count + 1}};
-        queue_index -> {MsgStatus, State}
+                                       disk_write_count = Count + 1}}
     end;
 maybe_write_msg_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
@@ -1738,8 +1730,7 @@ maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
     {MsgOrId, DiskWriteCount1} =
         case persist_to(MsgStatus) of
             msg_store   -> {MsgId, DiskWriteCount};
-            queue_store -> {MsgId, DiskWriteCount};
-            queue_index -> {prepare_to_store(Msg), DiskWriteCount + 1}
+            queue_store -> {MsgId, DiskWriteCount}
         end,
     IndexState2 = rabbit_classic_queue_index_v2:publish(
                     MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
@@ -1907,7 +1898,6 @@ accumulate_ack(#msg_status { seq_id        = SeqId,
      end,
      case MsgLocation of
          ?IN_QUEUE_STORE -> [SeqId|SeqIdsInStore];
-         ?IN_QUEUE_INDEX -> [SeqId|SeqIdsInStore];
          _               -> SeqIdsInStore
      end,
      [MsgId | AllMsgIds]}.
