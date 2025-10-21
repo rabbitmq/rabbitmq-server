@@ -257,9 +257,8 @@ wipe() ->
     %% Erlang system with nodes while not being in an Mnesia cluster
     %% with them. We don't handle that well.
     [erlang:disconnect_node(N) || N <- cluster_nodes(all)],
-    %% remove persisted messages and any other garbage we find
-    ok = rabbit_file:recursive_delete(filelib:wildcard(dir() ++ "/*")),
-    ok = rabbit_node_monitor:reset_cluster_status(),
+    %% Historically performed by this function, the data dir is wiped by
+    %% `rabbit_db' now. Likewise for the cluster status reset.
     ok.
 
 -spec change_cluster_node_type(rabbit_db_cluster:node_type()) -> 'ok'.

@@ -21,6 +21,7 @@
          is_virgin_node/0, is_virgin_node/1,
          dir/0,
          ensure_dir_exists/0,
+         wipe_data_dir/0,
          is_init_finished/0,
          clear_init_finished/0]).
 
@@ -128,21 +129,11 @@ clear_init_finished() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    IsVirgin = is_virgin_node(),
-    case IsVirgin of
-        true ->
-            ?LOG_INFO(
-               "DB: skipping resetting; node already virgin",
-               #{domain => ?RMQLOG_DOMAIN_DB}),
-            ok;
-        false ->
-            IsKhepriEnabled = rabbit_khepri:is_enabled(),
-            ok = case IsKhepriEnabled of
-                     true  -> reset_using_khepri();
-                     false -> reset_using_mnesia()
-                 end,
-            post_reset()
-    end.
+    ok = case rabbit_khepri:is_enabled() of
+             true  -> reset_using_khepri();
+             false -> reset_using_mnesia()
+         end,
+    post_reset().
 
 reset_using_mnesia() ->
     ?LOG_INFO(
@@ -205,7 +196,14 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
+    %% We stop all Ra systems because their files are about to be removed.
+    rabbit_ra_systems:ensure_stopped(),
+
+    %% We reset the state of feature flags, both in memory and on disk. The
+    %% state recorded on disk would be deleted with the wipe below anyway.
     rabbit_feature_flags:reset(),
+
+    wipe_data_dir(),
 
     %% The cluster status files that RabbitMQ uses when Mnesia is the database
     %% are initially created from rabbit_prelaunch_cluster. However, it will
@@ -217,6 +215,17 @@ post_reset() ->
     ThisNode = node(),
     rabbit_node_monitor:write_cluster_status({[ThisNode], [ThisNode], []}),
 
+    ok.
+
+wipe_data_dir() ->
+    DataDir = dir(),
+    Glob = filename:join(DataDir, "*"),
+    FilesToRemove = filelib:wildcard(Glob),
+    ?LOG_DEBUG(
+       "DB: wipe files in data directory `~ts`:~p",
+       [DataDir, FilesToRemove],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = rabbit_file:recursive_delete(FilesToRemove),
     ok.
 
 %% -------------------------------------------------------------------
