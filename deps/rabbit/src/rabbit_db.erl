@@ -223,9 +223,9 @@ post_reset() ->
 wipe_data_dir() ->
     DataDir = dir(),
     Glob = filename:join(DataDir, "*"),
-    FilesToRemove = filelib:wildcard(Glob),
+    FilesToRemove = lists:sort(filelib:wildcard(Glob)),
     ?LOG_DEBUG(
-       "DB: wipe files in data directory `~ts`:~p",
+       "DB: wipe files in data directory `~ts`:~n~p",
        [DataDir, FilesToRemove],
        #{domain => ?RMQLOG_DOMAIN_DB}),
     ok = rabbit_file:recursive_delete(FilesToRemove),
