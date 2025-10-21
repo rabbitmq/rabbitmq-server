@@ -96,7 +96,6 @@ join(RemoteNode, NodeType)
             %% database because we might change it during the join.
             RestartMnesia = rabbit_mnesia:is_running(),
             RestartFFCtl = rabbit_ff_controller:is_running(),
-            RestartRaSystems = rabbit_ra_systems:are_running(),
             RestartRabbit = rabbit:is_running(),
             case RestartRabbit of
                 true ->
@@ -107,10 +106,7 @@ join(RemoteNode, NodeType)
                     %% Therefore, there are files in the data directory. They
                     %% will go away with the reset and we will need to restart
                     %% Ra systems afterwards.
-                    case RestartRaSystems of
-                        true  -> ok = rabbit_ra_systems:ensure_stopped();
-                        false -> ok
-                    end,
+                    ok = rabbit_ra_systems:ensure_stopped(),
 
                     case RestartFFCtl of
                         true ->
@@ -135,7 +131,7 @@ join(RemoteNode, NodeType)
             %% `rabbit_ff_registry_wrapper'.
             rabbit_ff_registry_factory:acquire_state_change_lock(),
             try
-                ok = rabbit_db:reset(),
+                rabbit_db:reset(),
                 rabbit_feature_flags:copy_feature_states_after_reset(
                   RemoteNode)
             after
@@ -153,20 +149,8 @@ join(RemoteNode, NodeType)
 
             ok = rabbit_node_monitor:notify_left_cluster(node()),
 
-            %% Now that the files are all gone after the reset above, restart
-            %% the Ra systems. They will recreate their folder in the process.
-            case RestartRabbit of
-                true ->
-                    ok;
-                false ->
-                    case RestartRaSystems of
-                        true ->
-                            ok = rabbit_ra_systems:ensure_started(),
-                            ok = rabbit_khepri:setup();
-                        false ->
-                            ok
-                    end
-            end,
+            %% We might need Khepri to add this node to the cluster.
+            ok = rabbit_khepri:setup(),
 
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
