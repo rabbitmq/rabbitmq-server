@@ -173,7 +173,7 @@ parse_tags(Val) when is_list(Val) ->
 -spec add(vhost:name(), rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
 add(VHost, ActingUser) ->
-    add(VHost, #{}, ActingUser).
+    add(VHost, <<>>, [], ActingUser).
 
 -spec add(vhost:name(), binary(), [atom()], rabbit_types:username()) ->
     rabbit_types:ok_or_error(any()).
