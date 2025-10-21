@@ -1049,10 +1049,11 @@ list_queues() ->
 queue_definition(Q) ->
     #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
     TypeModule =  amqqueue:get_type(Q),
+    {ok, Type} = rabbit_registry:lookup_type_name(queue, TypeModule),
     #{
         <<"vhost">> => VHost,
         <<"name">> => Name,
-        <<"type">> => rabbit_registry:lookup_type_name(queue, TypeModule),
+        <<"type">> => Type,
         <<"durable">> => amqqueue:is_durable(Q),
         <<"auto_delete">> => amqqueue:is_auto_delete(Q),
         <<"arguments">> => rabbit_misc:amqp_table(amqqueue:get_arguments(Q))
