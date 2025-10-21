@@ -1718,27 +1718,19 @@ maybe_write_index_to_disk(_Force, MsgStatus = #msg_status {
                                     index_on_disk = true }, State) ->
     {MsgStatus, State};
 maybe_write_index_to_disk(Force, MsgStatus = #msg_status {
-                                   msg           = Msg,
                                    msg_id        = MsgId,
                                    seq_id        = SeqId,
                                    is_persistent = IsPersistent,
                                    msg_location  = MsgLocation,
                                    msg_props     = MsgProps},
-                          State = #vqstate{disk_write_count = DiskWriteCount,
-                                           index_state      = IndexState})
+                          State = #vqstate{index_state = IndexState})
   when Force orelse IsPersistent ->
-    {MsgOrId, DiskWriteCount1} =
-        case persist_to(MsgStatus) of
-            msg_store   -> {MsgId, DiskWriteCount};
-            queue_store -> {MsgId, DiskWriteCount}
-        end,
     IndexState2 = rabbit_classic_queue_index_v2:publish(
-                    MsgOrId, SeqId, MsgLocation, MsgProps, IsPersistent,
+                    MsgId, SeqId, MsgLocation, MsgProps, IsPersistent,
                     persist_to(MsgStatus) =:= msg_store,
                     IndexState),
     {MsgStatus#msg_status{index_on_disk = true},
-     State#vqstate{index_state      = IndexState2,
-                   disk_write_count = DiskWriteCount1}};
+     State#vqstate{index_state = IndexState2}};
 
 maybe_write_index_to_disk(_Force, MsgStatus, State) ->
     {MsgStatus, State}.
