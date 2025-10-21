@@ -231,10 +231,7 @@ is_virgin_node_using_mnesia() ->
     rabbit_mnesia:is_virgin_node().
 
 is_virgin_node_using_khepri() ->
-    case rabbit_khepri:is_empty() of
-        {error, _} -> true;
-        IsEmpty    -> IsEmpty
-    end.
+    rabbit_khepri:is_virgin_node().
 
 -spec is_virgin_node(Node) -> IsVirgin | undefined when
       Node :: node(),

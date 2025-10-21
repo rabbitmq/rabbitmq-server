@@ -14,6 +14,7 @@
 -export([setup/0,
          setup/1,
          all_ra_systems/0,
+         is_running/1,
          are_running/0,
          ensure_ra_system_started/1,
          ensure_ra_system_stopped/1,
@@ -45,6 +46,20 @@ setup(_) ->
 all_ra_systems() ->
     [coordination,
      quorum_queues].
+
+-spec is_running(RaSystem) -> IsRunning when
+      RaSystem :: ra_system_name(),
+      IsRunning :: boolean().
+
+is_running(RaSystem) ->
+    try
+        %% FIXME: We hard-code the name of an internal Ra process here.
+        Children = supervisor:which_children(ra_systems_sup),
+        is_ra_system_running(Children, RaSystem)
+    catch
+        exit:{noproc, _} ->
+            false
+    end.
 
 -spec are_running() -> AreRunning when
       AreRunning :: boolean().

@@ -104,6 +104,7 @@
          setup/1,
          init/1,
          reset/0,
+         is_virgin_node/0,
 
          dir/0,
          get_ra_cluster_name/0,
@@ -297,9 +298,15 @@ setup(_Context) ->
             exit(Error)
     end.
 
+is_ra_system_running() ->
+    rabbit_ra_systems:is_running(?RA_SYSTEM).
+
 ensure_ra_system_started() ->
     {ok, _} = application:ensure_all_started(khepri),
     ok = rabbit_ra_systems:ensure_ra_system_started(?RA_SYSTEM).
+
+ensure_ra_system_stopped() ->
+    ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM).
 
 retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
@@ -384,6 +391,30 @@ reset() ->
         true ->
             throw({error, rabbitmq_unexpectedly_running})
     end.
+
+is_virgin_node() ->
+    IsSystemRunning = is_ra_system_running(),
+    IsStoreRunning = khepri_cluster:is_store_running(?STORE_ID),
+    case IsSystemRunning of
+        true  -> ok;
+        false -> ensure_ra_system_started()
+    end,
+    case IsStoreRunning of
+        true  -> ok;
+        false -> setup()
+    end,
+
+    IsEmpty = is_empty() =:= true,
+
+    case IsStoreRunning of
+        true  -> ok;
+        false -> _ = khepri:stop(?RA_CLUSTER_NAME)
+    end,
+    case IsSystemRunning of
+        true  -> ok;
+        false -> ensure_ra_system_stopped()
+    end,
+    IsEmpty.
 
 -spec dir() -> Dir when
       Dir :: file:filename_all().
