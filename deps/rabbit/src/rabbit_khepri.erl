@@ -397,22 +397,22 @@ is_virgin_node() ->
     IsStoreRunning = khepri_cluster:is_store_running(?STORE_ID),
     case IsSystemRunning of
         true  -> ok;
-        false -> ensure_ra_system_started()
+        false -> ok = ensure_ra_system_started()
     end,
     case IsStoreRunning of
         true  -> ok;
-        false -> setup()
+        false -> ok = setup()
     end,
 
     IsEmpty = is_empty() =:= true,
 
     case IsStoreRunning of
         true  -> ok;
-        false -> _ = khepri:stop(?RA_CLUSTER_NAME)
+        false -> ok = khepri:stop(?RA_CLUSTER_NAME)
     end,
     case IsSystemRunning of
         true  -> ok;
-        false -> ensure_ra_system_stopped()
+        false -> ok = ensure_ra_system_stopped()
     end,
     IsEmpty.
 
