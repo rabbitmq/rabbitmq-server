@@ -806,7 +806,6 @@ index_mod() ->
     rabbit_classic_queue_index_v2.
 
 bq_queue_index1(_Config) ->
-    init_queue_index(),
     IndexMod = index_mod(),
     SegmentSize = IndexMod:next_segment_boundary(0),
     TwoSegs = SegmentSize + SegmentSize,
@@ -984,7 +983,7 @@ bq_queue_index_props1(_Config) ->
               MsgId = rabbit_guid:gen(),
               Props = #message_properties{expiry=12345, size = 10},
               Qi1 = IndexMod:publish(
-                      MsgId, 0, memory, Props, true, infinity, Qi0),
+                      MsgId, 0, memory, Props, true, true, Qi0),
               {[{MsgId, 0, _, Props, _}], Qi2} =
                   IndexMod:read(0, 1, Qi1),
               Qi2
@@ -1115,7 +1114,6 @@ bq_queue_recover(Config) ->
       ?MODULE, bq_queue_recover1, [Config]).
 
 bq_queue_recover1(Config) ->
-    init_queue_index(),
     IndexMod = index_mod(),
     Count = 2 * IndexMod:next_segment_boundary(0),
     QName0 = queue_name(Config, <<"bq_queue_recover-q">>),
@@ -1684,8 +1682,7 @@ init_test_queue(QName) ->
             fun (MsgId) ->
                     rabbit_msg_store:contains(MsgId, PersistentClient)
             end,
-            fun nop/1, fun nop/1,
-            main),
+            fun nop/1),
     ok = rabbit_msg_store:client_delete_and_terminate(PersistentClient),
     Res.
 
@@ -1717,13 +1714,6 @@ with_empty_test_queue(Fun) ->
     IndexMod = index_mod(),
     IndexMod:delete_and_terminate(Fun(Qi, QName)).
 
-init_queue_index() ->
-    %% We must set the segment entry count in the process dictionary
-    %% for tests that call the v1 queue index directly to have a correct
-    %% value.
-    put(segment_entry_count, 2048),
-    ok.
-
 restart_app() ->
     rabbit:stop(),
     rabbit:start().
@@ -1743,7 +1733,7 @@ queue_index_publish(SeqIds, Persistent, Qi) ->
                   QiM = IndexMod:publish(
                           MsgId, SeqId, rabbit_msg_store,
                           #message_properties{size = 10},
-                          Persistent, infinity, QiN),
+                          Persistent, true, QiN),
                   ok = rabbit_msg_store:write(SeqId, MsgId, MsgId, MSCState),
                   {QiM, [{SeqId, MsgId} | SeqIdsMsgIdsAcc]}
           end, {Qi, []}, SeqIds),
@@ -1764,7 +1754,7 @@ variable_queue_init(Q, Recover) ->
              true  -> non_clean_shutdown;
              false -> new;
              Terms -> Terms
-         end, fun nop/2, fun nop/1, fun nop/1).
+         end, fun nop/2, fun nop/1).
 
 variable_queue_read_terms(QName) ->
     #resource { kind = queue,
