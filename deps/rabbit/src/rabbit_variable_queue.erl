@@ -1993,11 +1993,8 @@ delta_merge(SeqIds, Delta, MsgIds, State) ->
                                 Acc;
                         {#msg_status { msg_id = MsgId,
                                        is_persistent = IsPersistent } = MsgStatus, State1} ->
-%                                {_MsgStatus, State2} =
-%                                    maybe_prepare_write_to_disk(true, true, MsgStatus, State1),
-                                State2 = State1,
                                 {expand_delta(SeqId, Delta0, IsPersistent), [MsgId | MsgIds0],
-                                 stats_requeued_disk(MsgStatus, State2)}
+                                 stats_requeued_disk(MsgStatus, State1)}
                         end
                 end, {Delta, MsgIds, State}, SeqIds).
 

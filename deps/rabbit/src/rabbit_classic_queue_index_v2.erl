@@ -448,7 +448,7 @@ info(#qi{ write_buffer = WriteBuffer, write_buffer_updates = NumUpdates }) ->
 -spec publish(rabbit_types:msg_id(), rabbit_variable_queue:seq_id(),
               rabbit_variable_queue:msg_location(),
               rabbit_types:message_properties(), boolean(),
-              non_neg_integer() | infinity, State) -> State when State::state().
+              boolean(), State) -> State when State::state().
 
 %% Because we always persist to the msg_store, the Msg(Or)Id argument
 %% here is always a binary, never a record.
