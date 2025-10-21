@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-KEYCLOAK_DOCKER_IMAGE=quay.io/keycloak/keycloak:20.0
+KEYCLOAK_DOCKER_IMAGE=${KEYCLOAK_DOCKER_IMAGE:-quay.io/keycloak/keycloak:20.0}
 
 ensure_keycloak() {
   if docker ps | grep keycloak &> /dev/null; then
