@@ -1046,12 +1046,17 @@ list_queues() ->
 
 queue_definition(Q) ->
     #resource{virtual_host = VHost, name = Name} = amqqueue:get_name(Q),
+<<<<<<< HEAD
     Type = case amqqueue:get_type(Q) of
                rabbit_classic_queue -> classic;
                rabbit_quorum_queue -> quorum;
                rabbit_stream_queue -> stream;
                T -> T
            end,
+=======
+    TypeModule =  amqqueue:get_type(Q),
+    {ok, Type} = rabbit_registry:lookup_type_name(queue, TypeModule),
+>>>>>>> ae31a444b (Definitions: fix queue type)
     #{
         <<"vhost">> => VHost,
         <<"name">> => Name,
