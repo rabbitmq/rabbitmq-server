@@ -24,6 +24,7 @@
          amqp10_expect_count/3, amqp10_expect/3,
          amqp10_publish_expect/5, amqp10_declare_queue/3,
          amqp10_subscribe/2, amqp10_expect/2,
+         amqp10_publish_msg/4,
          await_autodelete/2, await_autodelete1/2,
          invalid_param/2, invalid_param/3,
          valid_param/2, valid_param/3, valid_param1/3]).
@@ -209,6 +210,9 @@ amqp10_publish(Sender, Tag, Payload) when is_binary(Payload) ->
     Headers = #{durable => true},
     Msg = amqp10_msg:set_headers(Headers,
                                  amqp10_msg:new(Tag, Payload, false)),
+    amqp10_publish_msg(Sender, Tag, Msg).
+
+amqp10_publish_msg(Sender, Tag, Msg) ->
     ok = amqp10_client:send_msg(Sender, Msg),
     receive
         {amqp10_disposition, {accepted, Tag}} -> ok
@@ -229,6 +233,15 @@ amqp10_expect_empty(Session, Dest) ->
             ok
     end,
     amqp10_client:detach_link(Receiver).
+
+amqp10_publish_msg(Session, Address, Tag, Msg) ->
+    LinkName = <<"dynamic-sender-", Address/binary>>,
+    {ok, Sender} = amqp10_client:attach_sender_link(Session, LinkName, Address,
+                                                    unsettled, unsettled_state),
+    ok = await_amqp10_event(link, Sender, attached),
+    ok = await_credit(Sender),
+    amqp10_publish_msg(Sender, Tag, Msg),
+    amqp10_client:detach_link(Sender).
 
 amqp10_publish(Session, Address, Payload, Count) ->
     LinkName = <<"dynamic-sender-", Address/binary>>,

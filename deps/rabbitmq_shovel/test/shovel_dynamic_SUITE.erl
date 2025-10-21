@@ -22,6 +22,8 @@
                             amqp10_publish_expect/5,
                             amqp10_declare_queue/3,
                             amqp10_publish/4,
+                            amqp10_publish_msg/4,
+                            amqp10_expect_one/2,
                             amqp10_expect_count/3,
                             make_uri/3,
                             await_no_shovel/2
@@ -81,7 +83,8 @@ tests() ->
      %% autodelete_quorum_on_confirm_with_rejections,
      autodelete_classic_on_publish_with_rejections,
      autodelete_quorum_on_publish_with_rejections,
-     no_vhost_access
+     no_vhost_access,
+     application_properties
     ].
 
 %% -------------------------------------------------------------------
@@ -401,6 +404,26 @@ no_vhost_access(Config) ->
            Config, 0, rabbit_runtime_parameters, set,
            [<<"/">>, <<"shovel">>, ?PARAM, ShovelArgs, none]),
     await_no_shovel(Config, ?PARAM).
+
+application_properties(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              Tag = <<"tag1">>,
+              Msg = amqp10_msg:set_application_properties(
+                      #{<<"key">> => <<"value">>},
+                      amqp10_msg:set_headers(
+                        #{durable => true},
+                        amqp10_msg:new(Tag, <<"hello">>, false))),
+              amqp10_publish_msg(Sess, Src, Tag, Msg),
+              MsgRcv = amqp10_expect_one(Sess, Dest),
+              AppProps = amqp10_msg:application_properties(MsgRcv),
+              ?assertMatch(#{<<"key">> := <<"value">>},
+                           AppProps)
+      end).
 
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
