@@ -96,7 +96,7 @@ end
 
 # Elixir 1.15 compiler optimizations require that we explicitly
 # add the csv code path
-true = Code.append_path(Path.join(["..", "csv", "ebin"]))
+_ = Code.append_path(Path.join(["..", "csv", "ebin"]))
 
 defimpl CSV.Encode, for: PID do
   def encode(pid, env \\ []) do
