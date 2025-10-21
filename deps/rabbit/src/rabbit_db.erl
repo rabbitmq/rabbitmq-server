@@ -128,11 +128,21 @@ clear_init_finished() ->
 %% @doc Resets the database and the node.
 
 reset() ->
-    ok = case rabbit_khepri:is_enabled() of
-             true  -> reset_using_khepri();
-             false -> reset_using_mnesia()
-         end,
-    post_reset().
+    IsVirgin = is_virgin_node(),
+    case IsVirgin of
+        true ->
+            ?LOG_INFO(
+               "DB: skipping resetting; node already virgin",
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            ok;
+        false ->
+            IsKhepriEnabled = rabbit_khepri:is_enabled(),
+            ok = case IsKhepriEnabled of
+                     true  -> reset_using_khepri();
+                     false -> reset_using_mnesia()
+                 end,
+            post_reset()
+    end.
 
 reset_using_mnesia() ->
     ?LOG_INFO(
