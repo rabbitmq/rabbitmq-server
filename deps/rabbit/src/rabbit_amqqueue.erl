@@ -80,7 +80,6 @@
 -export([are_transient_nonexcl_used/1]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
--include_lib("stdlib/include/qlc.hrl").
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
 

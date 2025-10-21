@@ -101,7 +101,6 @@
                                  qname_to_internal_name/1,
                                  erpc_call/5]).
 
--include_lib("stdlib/include/qlc.hrl").
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
 -include_lib("kernel/include/logger.hrl").
