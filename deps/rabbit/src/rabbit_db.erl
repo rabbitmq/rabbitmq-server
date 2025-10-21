@@ -196,8 +196,11 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
-    %% We stop all Ra systems because their files are about to be removed.
-    rabbit_ra_systems:ensure_stopped(),
+    %% We assert all Ra systems are stopped because their files are about to
+    %% be removed.
+    false = lists:any(
+              fun rabbit_ra_systems:is_running/1,
+              rabbit_ra_systems:all_ra_systems()),
 
     %% We reset the state of feature flags, both in memory and on disk. The
     %% state recorded on disk would be deleted with the wipe below anyway.
