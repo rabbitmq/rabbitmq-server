@@ -382,9 +382,11 @@ reset() ->
         false ->
             %% Rabbit should be stopped, but Khepri needs to be running.
             %% Restart it.
+            RaSystemRunning = is_ra_system_running(),
             ok = setup(),
             ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
             ok = khepri:stop(?RA_CLUSTER_NAME),
+            RaSystemRunning orelse ensure_ra_system_stopped(),
 
             _ = file:delete(rabbit_guid:filename()),
             ok;
