@@ -75,7 +75,8 @@ dispatcher_add(function(sammy) {
             //copy the correct delete-after value
             if (this.params['src-delete-after-selector'] == 'never') {
                 this.params['src-delete-after'] = 'never';
-            } else if (this.params['src-delete-after-selector'] == 'number') {
+            } else if (this.params['src-delete-after-selector'] == 'number' ||
+                       this.params['src-delete-after-selector'] == 'local-number') {
                 num_keys.push('src-delete-after');
             }
 
