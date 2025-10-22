@@ -120,6 +120,8 @@ sheet_header() ->
         #{title => "", width => 5, shortcut => "CL"}
     ].
 
+%% Part of the observer CLI integration for queues
+%% https://github.com/rabbitmq/rabbitmq-server/pull/8358
 sheet_body(PrevState) ->
     {_, RaStates} = rabbit_quorum_queue:all_replica_states(),
     Body = [begin
@@ -127,7 +129,7 @@ sheet_body(PrevState) ->
                 case rabbit_amqqueue:pid_of(Q) of
                     none ->
                         empty_row(Name);
-                    {QName, _QNode} = ServerId ->
+                    {QName, _QNode} ->
                         case whereis(QName) of
                             undefined ->
                                 empty_row(Name);
@@ -138,13 +140,8 @@ sheet_body(PrevState) ->
                                         empty_row(Name);
                                     _ ->
                                         QQCounters = maps:get({QName, node()}, ra_counters:overview()),
-                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(#resource{virtual_host = Vhost, name= Name}),
-                                        #{snapshot_index := SnapIdx,
-                                            last_written_index := LW,
-                                            term := CT,
-                                            commit_latency := CL,
-                                            commit_index := CI,
-                                            last_applied := LA} = ra:key_metrics(ServerId),
+                                        {ok, InternalName} = rabbit_queue_type_util:qname_to_internal_name(rabbit_misc:queue_resource(Vhost, Name)),
+                                        [{_, CT, SnapIdx, LA, CI, LW, CL}] = ets:lookup(ra_metrics, InternalName),
                                         [
                                          Pid,
                                          QName,

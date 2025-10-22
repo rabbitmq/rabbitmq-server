@@ -75,7 +75,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
         other -> args ++ [other]
       end
 
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :grow, args) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_command, :grow, args) do
       {:error, _} = error ->
         error
 
@@ -151,6 +151,14 @@ defmodule RabbitMQ.CLI.Queues.Commands.GrowCommand do
   defp format_size({:error, _size, :timeout}) do
     # the actual size is uncertain here
     "?"
+  end
+
+  def output({:error, :not_found}, %{vhost: vhost, formatter: "json"}) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Target queue was not found in virtual host '#{vhost}'"
+     }}
   end
 
   defp format_size({:error, size, _}) do

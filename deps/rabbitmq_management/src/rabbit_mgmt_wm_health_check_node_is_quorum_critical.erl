@@ -34,12 +34,19 @@ to_json(ReqData, Context) ->
             rabbit_mgmt_util:reply(#{status => ok,
                                      reason => <<"single node cluster">>}, ReqData, Context);
         false ->
-            case rabbit_upgrade_preparation:list_with_minimum_quorum_for_cli() of
-                [] ->
+            case rabbit_upgrade_preparation:with_minimum_quorum() of
+                {[], []} ->
                     rabbit_mgmt_util:reply(#{status => ok}, ReqData, Context);
-                Qs when length(Qs) > 0 ->
-                    Msg = <<"There are quorum queues that would lose their quorum if the target node is shut down">>,
-                    failure(Msg, Qs, ReqData, Context)
+                {Queues, Components} when length(Queues) > 0 orelse length(Components)> 0 ->
+                    Msg = <<"There are queues and/or critical components that would lose their quorum if the target node is shut down">>,
+                    QueuesAndComponents = [amqqueue:to_printable(Q) || Q <- Queues] ++
+                        [#{
+                           <<"readable_name">> => C,
+                           <<"name">> => C,
+                           <<"virtual_host">> => <<"(not applicable)">>,
+                           <<"type">> => process
+                          } || C <- Components],
+                    failure(Msg, QueuesAndComponents, ReqData, Context)
             end
     end.
 

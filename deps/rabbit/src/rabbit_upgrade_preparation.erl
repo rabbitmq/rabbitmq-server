@@ -11,7 +11,7 @@
 
 
 -export([await_online_quorum_plus_one/1,
-         list_with_minimum_quorum_for_cli/0]).
+         with_minimum_quorum/0]).
 
 %%
 %% API
@@ -59,8 +59,8 @@ endangered_critical_components() ->
 do_await_safe_online_quorum(0) ->
     false;
 do_await_safe_online_quorum(IterationsLeft) ->
-    EndangeredQueues = rabbit_queue_type:list_with_minimum_quorum(),
-    case EndangeredQueues =:= [] andalso endangered_critical_components() =:= [] of
+    {EndangeredQueues, EndangeredCriticalComponents} = with_minimum_quorum(),
+    case EndangeredQueues =:= [] andalso EndangeredCriticalComponents =:= [] of
         true -> true;
         false ->
             case IterationsLeft rem ?LOGGING_FREQUENCY of
@@ -70,7 +70,7 @@ do_await_safe_online_quorum(IterationsLeft) ->
                         N -> ?LOG_INFO("Waiting for ~p queues and streams to have quorum+1 replicas online. "
                                              "You can list them with `rabbitmq-diagnostics check_if_node_is_quorum_critical`", [N])
                     end,
-                    case endangered_critical_components() of
+                    case EndangeredCriticalComponents of
                         [] -> ok;
                         _ -> ?LOG_INFO("Waiting for the following critical components to have quorum+1 replicas online: ~p.",
                                              [endangered_critical_components()])
@@ -82,13 +82,8 @@ do_await_safe_online_quorum(IterationsLeft) ->
             do_await_safe_online_quorum(IterationsLeft - 1)
     end.
 
--spec list_with_minimum_quorum_for_cli() -> [#{binary() => term()}].
-list_with_minimum_quorum_for_cli() ->
+-spec with_minimum_quorum() -> {[amqqueue:amqqueue()], [atom()]}.
+with_minimum_quorum() ->
     EndangeredQueues = rabbit_queue_type:list_with_minimum_quorum(),
-    [amqqueue:to_printable(Q) || Q <- EndangeredQueues] ++
-    [#{
-           <<"readable_name">> => C,
-           <<"name">> => C,
-           <<"virtual_host">> => <<"(not applicable)">>,
-           <<"type">> => process
-      } || C <- endangered_critical_components()].
+    EndangeredCriticalComponents = endangered_critical_components(),
+    {EndangeredQueues, EndangeredCriticalComponents}.

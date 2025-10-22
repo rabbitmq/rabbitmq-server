@@ -15,7 +15,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.ReclaimQuorumMemoryCommand do
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
   def run([name] = _args, %{node: node_name, vhost: vhost}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :reclaim_memory, [vhost, name]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_commands, :reclaim_memory, [vhost, name]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "This operation is not applicable to classic queues"}
 

@@ -9,6 +9,7 @@
 -feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_queue_commands).
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
@@ -31,7 +32,7 @@
 -export([supports_stateful_delivery/0,
          deliver/3]).
 -export([dead_letter_publish/5]).
--export([cluster_state/1, status/2]).
+-export([cluster_state/1, status/1]).
 -export([update_consumer_handler/8, update_consumer/9]).
 -export([cancel_consumer_handler/2, cancel_consumer/3]).
 -export([become_leader/2, handle_tick/3, spawn_deleter/1]).
@@ -55,14 +56,13 @@
 -export([transfer_leadership/2, get_replicas/1, queue_length/1]).
 -export([list_with_minimum_quorum/0,
          list_with_local_promotable/0,
-         list_with_local_promotable_for_cli/0,
          filter_quorum_critical/3,
          all_replica_states/0]).
 -export([capabilities/0]).
 -export([repair_amqqueue_nodes/1,
          repair_amqqueue_nodes/2
          ]).
--export([reclaim_memory/2,
+-export([reclaim_memory/1,
          wal_force_roll_over/1]).
 -export([notify_decorators/1,
          notify_decorators/3,
@@ -495,11 +495,6 @@ list_with_local_promotable() ->
     Queues = rabbit_amqqueue:list_local_quorum_queues(),
     #{node() := ReplicaStates} = get_replica_states([node()]),
     filter_promotable(Queues, ReplicaStates).
-
--spec list_with_local_promotable_for_cli() -> [#{binary() => any()}].
-list_with_local_promotable_for_cli() ->
-    Qs = list_with_local_promotable(),
-    lists:map(fun amqqueue:to_printable/1, Qs).
 
 -spec get_replica_states([node()]) -> #{node() => replica_states()}.
 get_replica_states(Nodes) ->
@@ -1246,11 +1241,10 @@ key_metrics_rpc(ServerId) ->
     Metrics = ra:key_metrics(ServerId),
     Metrics#{machine_version => rabbit_fifo:version()}.
 
--spec status(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) ->
+-spec status(rabbit_types:r(queue)) ->
     [[{binary(), term()}]] | {error, term()}.
-status(Vhost, QueueName) ->
+status(QName) ->
     %% Handle not found queues
-    QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};
@@ -1617,9 +1611,8 @@ matches_strategy(even, Members) ->
 is_match(Subj, E) ->
    nomatch /= re:run(Subj, E).
 
--spec reclaim_memory(rabbit_types:vhost(), Name :: rabbit_misc:resource_name()) -> ok | {error, term()}.
-reclaim_memory(Vhost, QueueName) ->
-    QName = #resource{virtual_host = Vhost, name = QueueName, kind = queue},
+-spec reclaim_memory(rabbit_amqqueue:name()) -> ok | {error, term()}.
+reclaim_memory(QName) ->
     case rabbit_amqqueue:lookup(QName) of
         {ok, Q} when ?amqqueue_is_classic(Q) ->
             {error, classic_queue_not_supported};

@@ -43,7 +43,7 @@ defmodule RabbitMQ.CLI.Queues.Commands.PeekCommand do
   def run([name, pos] = _args, %{node: node_name, vhost: vhost}) do
     {pos, _} = Integer.parse(pos)
 
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :peek, [vhost, name, pos]) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_commands, :peek, [pos, :rabbit_misc.queue_resource(vhost, name)]) do
       {:error, :classic_queue_not_supported} ->
         {:error, "Cannot peek into a classic queue"}
 

@@ -1,5 +1,6 @@
 -module(rabbit_classic_queue).
 -behaviour(rabbit_queue_type).
+-behaviour(rabbit_queue_commands).
 -behaviour(rabbit_policy_validator).
 
 -include("amqqueue.hrl").
@@ -85,6 +86,15 @@
          queue_vm_ets/0]).
 
 -export([validate_policy/1]).
+
+%% commands
+-export([add_member/5,
+         list_with_local_promotable/0,
+         delete_member/3,
+         peek/2,
+         status/1,
+         reclaim_memory/1,
+         shrink_all/1]).
 
 -rabbit_boot_step(
    {rabbit_classic_queue_type,
@@ -788,3 +798,24 @@ queue_vm_stats_sups() ->
 %% Other as usual by substraction.
 queue_vm_ets() ->
     {[], []}.
+
+add_member(_VHost, _Name, _Node, _Membership, _Timeout) ->
+    {error, classic_queue_not_supported}.
+
+list_with_local_promotable() ->
+    {error, classic_queue_not_supported}.
+
+delete_member(_VHost, _Name, _Node) ->
+    {error, classic_queue_not_supported}.
+
+peek(_Pos, _QName) ->
+    {error, classic_queue_not_supported}.
+
+status(_QName) ->
+    {error, classic_queue_not_supported}.
+
+reclaim_memory(_QName) ->
+    {error, classic_queue_not_supported}.
+
+shrink_all(_Node) ->
+    {error, classic_queue_not_supported}.

@@ -41,7 +41,7 @@ accept_content(ReqData, Context) ->
       rabbit_amqqueue:with(
         rabbit_misc:r(VHost, queue, QName),
         fun(_Q) ->
-                rabbit_quorum_queue:add_member(
+                rabbit_queue_commands:add_member(
                   VHost,
                   QName,
                   rabbit_data_coercion:to_atom(NewReplicaNode),

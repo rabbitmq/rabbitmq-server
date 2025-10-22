@@ -43,12 +43,18 @@ defmodule RabbitMQ.CLI.Queues.Commands.CheckIfNodeIsQuorumCriticalCommand do
             case :rabbit_misc.rpc_call(
                    node_name,
                    :rabbit_upgrade_preparation,
-                   :list_with_minimum_quorum_for_cli,
+                   :list_with_minimum_quorum,
                    [],
                    timeout
                  ) do
               [] -> {:ok, []}
-              qs when is_list(qs) -> {:ok, qs}
+              {qs, ps} when is_list(qs) -> {:ok, Enum.map(qs, &:amqqueue.to_printable/1)
+                                            ++ Enum.map(ps, fn p -> %{
+                                                                    "readable_name" => p,
+                                                                    "name" => p,
+                                                                    "virtual_host" => "(not applicable)",
+                                                                    "type" => "process"
+                                                                } end)}
               other -> other
             end
         end

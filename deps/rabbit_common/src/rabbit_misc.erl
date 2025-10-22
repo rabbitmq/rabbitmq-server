@@ -101,7 +101,6 @@
 
 -type ok_or_error() :: rabbit_types:ok_or_error(any()).
 -type thunk(T) :: fun(() -> T).
--type resource_name() :: binary().
 -type channel_or_connection_exit()
       :: rabbit_types:channel_exit() | rabbit_types:connection_exit().
 -type digraph_label() :: term().

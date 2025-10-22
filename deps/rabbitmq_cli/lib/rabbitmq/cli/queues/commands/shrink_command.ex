@@ -10,19 +10,22 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
 
   @behaviour RabbitMQ.CLI.CommandBehaviour
 
+  defp default_opts, do: %{type: "quorum", errors_only: false}
+
   def switches() do
-    [errors_only: :boolean]
+    [errors_only: :boolean,
+     type: :string]
   end
 
   def merge_defaults(args, opts) do
-    {args, Map.merge(%{errors_only: false}, opts)}
+    {args, Map.merge(default_opts(), opts)}
   end
 
   use RabbitMQ.CLI.Core.AcceptsOnePositionalArgument
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
 
-  def run([node], %{node: node_name, errors_only: errs}) do
-    case :rabbit_misc.rpc_call(node_name, :rabbit_quorum_queue, :shrink_all, [to_atom(node)]) do
+  def run([node], %{node: node_name, errors_only: errs, type: type}) do
+    case :rabbit_misc.rpc_call(node_name, :rabbit_queue_commands, :shrink_all, [to_atom(node), type]) do
       {:error, _} = error ->
         error
 
@@ -54,15 +57,16 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def formatter(), do: RabbitMQ.CLI.Formatters.Table
 
   def banner([node], _) do
-    "Shrinking quorum queues on #{node}..."
+    "Shrinking queues on #{node}..."
   end
 
-  def usage, do: "shrink <node> [--errors-only]"
+  def usage, do: "shrink <node> [--errors-only] --type[ quorum]"
 
   def usage_additional() do
     [
       ["<node>", "node name to remove replicas from"],
-      ["--errors-only", "only list queues which reported an error"]
+      ["--errors-only", "only list queues which reported an error"],
+      ["--type", "only shrink queues of specific type. Default is 'quorum'. Accept 'all' to shrink all types"]
     ]
   end
 
@@ -75,11 +79,19 @@ defmodule RabbitMQ.CLI.Queues.Commands.ShrinkCommand do
   def help_section, do: :cluster_management
 
   def description,
-    do: "Shrinks quorum queue clusters by removing any members (replicas) on the given node."
+    do: "Shrinks --type queue clusters by removing any members (replicas) on the given node."
 
   #
   # Implementation
   #
+
+  def format_output({:error, {:unknown_queue_type, type}}, args) do
+    {:error,
+     %{
+       "result" => "error",
+       "message" => "Unknown queue type #{args}"
+     }}
+  end
 
   defp format_size({:ok, size}) do
     size
