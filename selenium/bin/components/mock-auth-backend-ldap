@@ -9,8 +9,10 @@ ensure_mock-auth-backend-ldap() {
 }
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
+  OPENLDAP_DOCKER_IMAGE=${OPENLDAP_DOCKER_IMAGE:-osixia/openldap:1.5.0}
 
   print "> AUTH_BACKEND_LDAP_DIR: ${AUTH_BACKEND_LDAP_DIR}"
+  print "> OPENLDAP_DOCKER_IMAGE: ${OPENLDAP_DOCKER_IMAGE}"
 }
 start_mock-auth-backend-ldap() {
   begin "Starting mock-auth-backend-ldap ..."
@@ -28,7 +30,7 @@ start_mock-auth-backend-ldap() {
     --publish 389:389 \
     --publish 636:636 \
     -v ${AUTH_BACKEND_LDAP_DIR}:/config \
-    osixia/openldap:1.5.0
+    ${OPENLDAP_DOCKER_IMAGE}
 
   wait_for_message mock-auth-backend-ldap "starting"
   docker exec mock-auth-backend-ldap ldapadd \
