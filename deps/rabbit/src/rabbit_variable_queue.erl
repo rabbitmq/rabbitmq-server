@@ -717,6 +717,17 @@ handle_pre_hibernate(State = #vqstate{ msg_store_clients = MSCState0 }) ->
     MSCState = msg_store_pre_hibernate(MSCState0),
     sync(State#vqstate{ msg_store_clients = MSCState }).
 
+sync(State = #vqstate { index_state = IndexState0,
+                        store_state = StoreState0,
+                        unconfirmed_simple = UCS,
+                        confirmed   = C }) ->
+    IndexState = rabbit_classic_queue_index_v2:sync(IndexState0),
+    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
+    State #vqstate { index_state = IndexState,
+                     store_state = StoreState,
+                     unconfirmed_simple = sets:new([{version,2}]),
+                     confirmed   = sets:union(C, UCS) }.
+
 resume(State) -> a(timeout(State)).
 
 msg_rates(#vqstate { rates = #rates { in  = AvgIngressRate,
