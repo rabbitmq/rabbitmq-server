@@ -11,7 +11,6 @@
 -include("mc.hrl").
 
 -behaviour(rabbit_queue_type).
--behaviour(rabbit_queue_commands).
 
 -export([is_enabled/0,
          is_compatible/3,
@@ -1555,3 +1554,6 @@ reclaim_memory(_QName) ->
 
 shrink_all(_Node) ->
     {error, not_quorum_queue}.
+
+read_ahead_on() ->
+    application:get_env(rabbit, stream_read_ahead, true).
