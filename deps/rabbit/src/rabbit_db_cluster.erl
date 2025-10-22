@@ -149,9 +149,6 @@ join(RemoteNode, NodeType)
 
             ok = rabbit_node_monitor:notify_left_cluster(node()),
 
-            %% We might need Khepri to add this node to the cluster.
-            ok = rabbit_khepri:setup(),
-
             ?LOG_INFO(
                "DB: joining cluster using remote nodes:~n~tp", [ClusterNodes],
                #{domain => ?RMQLOG_DOMAIN_DB}),
