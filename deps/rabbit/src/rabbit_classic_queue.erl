@@ -1,6 +1,5 @@
 -module(rabbit_classic_queue).
 -behaviour(rabbit_queue_type).
--behaviour(rabbit_queue_commands).
 -behaviour(rabbit_policy_validator).
 
 -include("amqqueue.hrl").

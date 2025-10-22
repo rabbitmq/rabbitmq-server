@@ -9,7 +9,6 @@
 -feature(maybe_expr, enable).
 
 -behaviour(rabbit_queue_type).
--behaviour(rabbit_queue_commands).
 -behaviour(rabbit_policy_validator).
 -behaviour(rabbit_policy_merge_strategy).
 
