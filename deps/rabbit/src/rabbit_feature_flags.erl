@@ -1331,6 +1331,7 @@ copy_feature_states_after_reset(RemoteNode) ->
        #{domain => ?RMQLOG_DOMAIN_FEAT_FLAGS}),
     case do_write_enabled_feature_flags_list(EnabledFeatureNames) of
         ok ->
+            ok = reset_registry(),
             ok;
         {error, Reason} ->
             File = enabled_feature_flags_list_file(),
