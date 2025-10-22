@@ -278,7 +278,7 @@ change_cluster_node_type(Type) ->
                []        -> e(no_online_cluster_nodes);
                [Node0|_] -> Node0
            end,
-    ok = reset(),
+    ok = rabbit_db:reset(),
     ok = join_cluster(Node, Type).
 
 %% We proceed like this: try to remove the node locally. If the node
