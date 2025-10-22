@@ -710,30 +710,12 @@ needs_timeout(#vqstate { index_state = IndexState,
         {false, true}  -> false
     end.
 
-timeout(State = #vqstate { index_state = IndexState0,
-                           store_state = StoreState0,
-                           unconfirmed_simple = UCS,
-                           confirmed   = C }) ->
-    IndexState = rabbit_classic_queue_index_v2:sync(IndexState0),
-    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
-    State #vqstate { index_state = IndexState,
-                     store_state = StoreState,
-                     unconfirmed_simple = sets:new([{version,2}]),
-                     confirmed   = sets:union(C, UCS) }.
+timeout(State) ->
+    sync(State).
 
-handle_pre_hibernate(State = #vqstate { index_state = IndexState0,
-                                        store_state = StoreState0,
-                                        msg_store_clients = MSCState0,
-                                        unconfirmed_simple = UCS,
-                                        confirmed   = C }) ->
+handle_pre_hibernate(State = #vqstate{ msg_store_clients = MSCState0 }) ->
     MSCState = msg_store_pre_hibernate(MSCState0),
-    IndexState = rabbit_classic_queue_index_v2:flush(IndexState0),
-    StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
-    State #vqstate { index_state = IndexState,
-                     store_state = StoreState,
-                     msg_store_clients = MSCState,
-                     unconfirmed_simple = sets:new([{version,2}]),
-                     confirmed   = sets:union(C, UCS) }.
+    sync(State#vqstate{ msg_store_clients = MSCState }).
 
 resume(State) -> a(timeout(State)).
 

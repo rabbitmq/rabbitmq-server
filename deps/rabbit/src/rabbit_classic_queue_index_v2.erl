@@ -19,7 +19,7 @@
 %% Implementation details from the queue index leaking into the
 %% queue implementation itself.
 %% @todo TODO
--export([sync/1, needs_sync/1, flush/1,
+-export([sync/1, needs_sync/1,
          bounds/2, next_segment_boundary/1]).
 
 %% Called by rabbit_vhost.
@@ -947,15 +947,6 @@ needs_sync(State = #qi{ confirms = Confirms }) ->
         true -> false;
         false -> confirms
     end.
-
--spec flush(State) -> State when State::state().
-
-flush(State) ->
-    ?DEBUG("~0p", [State]),
-    %% Flushing to disk is the same operation as sync
-    %% except it is called before hibernating or when
-    %% reducing memory use.
-    sync(State).
 
 %% ----
 
