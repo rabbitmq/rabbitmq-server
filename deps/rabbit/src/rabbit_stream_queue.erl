@@ -66,16 +66,9 @@
          drain/1,
          revive/0,
          queue_vm_stats_sups/0,
-         queue_vm_ets/0]).
-
-%% commands
--export([add_member/5,
-         list_with_local_promotable/0,
-         delete_member/3,
-         peek/2,
-         status/1,
-         reclaim_memory/1,
-         shrink_all/1]).
+         queue_vm_ets/0,
+         shrink_all/1
+        ]).
 
 -include_lib("rabbit_common/include/rabbit.hrl").
 -include("amqqueue.hrl").
@@ -1533,24 +1526,6 @@ queue_vm_stats_sups() ->
 queue_vm_ets() ->
     {[],
      []}.
-
-add_member(_VHost, _Name, _Node, _Membership, _Timeout) ->
-    {error, not_quorum_queue}.
-
-list_with_local_promotable() ->
-    {error, not_quorum_queue}.
-
-delete_member(_VHost, _Name, _Node) ->
-    {error, not_quorum_queue}.
-
-peek(_Pos, _QName) ->
-    {error, not_quorum_queue}.
-
-status(_QName) ->
-    {error, not_quorum_queue}.
-
-reclaim_memory(_QName) ->
-    {error, not_quorum_queue}.
 
 shrink_all(_Node) ->
     {error, not_quorum_queue}.
