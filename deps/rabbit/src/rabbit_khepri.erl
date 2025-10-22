@@ -694,13 +694,8 @@ remove_reachable_member(NodeToRemove) ->
        [NodeToRemove, ?RA_CLUSTER_NAME],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-    %% We need the Khepri store to run on the node to remove, to be
-    %% able to reset it.
-    ok = rabbit_misc:rpc_call(
-           NodeToRemove, ?MODULE, setup, []),
-
     Ret = rabbit_misc:rpc_call(
-            NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
+            NodeToRemove, rabbit_db, reset, []),
     case Ret of
         ok ->
             rabbit_amqqueue:forget_all(NodeToRemove),
