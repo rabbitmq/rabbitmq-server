@@ -54,21 +54,25 @@ init_per_suite(Config) ->
 end_per_suite(Config) ->
     Config.
 
-init_per_group(Group, Config) ->
+init_per_group(_Group, Config) ->
     Config1 = rabbit_ct_helpers:run_setup_steps(
                 Config,
                 [fun rabbit_ct_broker_helpers:configure_dist_proxy/1]),
     rabbit_ct_helpers:set_config(Config1,
-                                 [{rmq_nodename_suffix, Group},
-                                  {net_ticktime, ?NET_TICKTIME_S}]).
+                                 [{net_ticktime, ?NET_TICKTIME_S}]).
 end_per_group(_, Config) ->
     Config.
 
 init_per_testcase(TestCase, Config) ->
     Config1 = rabbit_ct_helpers:testcase_started(Config, TestCase),
+    ClusterSize = 3,
+    TestNumber = rabbit_ct_helpers:testcase_number(Config, ?MODULE, TestCase),
     Config2 = rabbit_ct_helpers:set_config(
-                Config1, [{rmq_nodes_clustered, true},
-                          {rmq_nodes_count, 3},
+                Config1, [{rmq_nodename_suffix, TestCase},
+                          {tcp_ports_base,
+                           {skip_n_nodes, TestNumber * ClusterSize}},
+                          {rmq_nodes_clustered, true},
+                          {rmq_nodes_count, ClusterSize},
                           {tcp_ports_base}
                          ]),
     rabbit_ct_helpers:run_setup_steps(
