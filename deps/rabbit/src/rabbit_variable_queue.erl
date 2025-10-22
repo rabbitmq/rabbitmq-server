@@ -12,7 +12,7 @@
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -648,14 +648,6 @@ ackfold(MsgFun, Acc, State, AckTags) ->
                             {MsgFun(Msg, SeqId, Acc0), State1}
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
-
-%% @todo I think this is never used. Was CMQ.
-fold(Fun, Acc, State = #vqstate{index_state = IndexState}) ->
-    {Its, IndexState1} = lists:foldl(fun inext/2, {[], IndexState},
-                                     [msg_iterator(State),
-                                      disk_ack_iterator(State),
-                                      ram_ack_iterator(State)]),
-    ifold(Fun, Acc, Its, State#vqstate{index_state = IndexState1}).
 
 len(#vqstate { len = Len }) -> Len.
 
@@ -1984,89 +1976,6 @@ msg_from_pending_ack(SeqId, State) ->
 
 delta_limit(?BLANK_DELTA_PATTERN(_))              -> undefined;
 delta_limit(#delta { start_seq_id = StartSeqId }) -> StartSeqId.
-
-%%----------------------------------------------------------------------------
-%% Iterator
-%%----------------------------------------------------------------------------
-
-ram_ack_iterator(State) ->
-    {ack, maps:iterator(State#vqstate.ram_pending_ack)}.
-
-disk_ack_iterator(State) ->
-    {ack, maps:iterator(State#vqstate.disk_pending_ack)}.
-
-msg_iterator(State) -> istate(start, State).
-
-istate(start, State) -> {q3,    State#vqstate.q3,    State};
-istate(q3,    State) -> {delta, State#vqstate.delta, State};
-istate(delta, _State) -> done.
-
-next({ack, It}, IndexState) ->
-    case maps:next(It) of
-        none                     -> {empty, IndexState};
-        {_SeqId, MsgStatus, It1} -> Next = {ack, It1},
-                                    {value, MsgStatus, true, Next, IndexState}
-    end;
-next(done, IndexState) -> {empty, IndexState};
-next({delta, #delta{start_seq_id = SeqId,
-                    end_seq_id   = SeqId}, State}, IndexState) ->
-    next(istate(delta, State), IndexState);
-next({delta, #delta{start_seq_id = SeqId,
-                    end_seq_id   = SeqIdEnd} = Delta, State}, IndexState) ->
-    SeqIdB = rabbit_classic_queue_index_v2:next_segment_boundary(SeqId),
-    %% It may make sense to limit this based on rate. But this
-    %% is not called outside of CMQs so I will leave it alone
-    %% for the time being.
-    SeqId1 = lists:min([SeqIdB,
-                        %% We must limit the number of messages read at once
-                        %% otherwise the queue will attempt to read up to segment_entry_count()
-                        %% messages from the index each time. The value
-                        %% chosen here is arbitrary.
-                        SeqId + 2048,
-                        SeqIdEnd]),
-    {List, IndexState1} = rabbit_classic_queue_index_v2:read(SeqId, SeqId1, IndexState),
-    next({delta, Delta#delta{start_seq_id = SeqId1}, List, State}, IndexState1);
-next({delta, Delta, [], State}, IndexState) ->
-    next({delta, Delta, State}, IndexState);
-next({delta, Delta, [{_, SeqId, _, _, _} = M | Rest], State}, IndexState) ->
-    case is_msg_in_pending_acks(SeqId, State) of
-        false -> Next = {delta, Delta, Rest, State},
-                 {value, beta_msg_status(M), false, Next, IndexState};
-        true  -> next({delta, Delta, Rest, State}, IndexState)
-    end;
-next({Key, Q, State}, IndexState) ->
-    case ?QUEUE:out(Q) of
-        {empty, _Q}              -> next(istate(Key, State), IndexState);
-        {{value, MsgStatus}, QN} -> Next = {Key, QN, State},
-                                    {value, MsgStatus, false, Next, IndexState}
-    end.
-
-inext(It, {Its, IndexState}) ->
-    case next(It, IndexState) of
-        {empty, IndexState1} ->
-            {Its, IndexState1};
-        {value, MsgStatus1, Unacked, It1, IndexState1} ->
-            {[{MsgStatus1, Unacked, It1} | Its], IndexState1}
-    end.
-
-ifold(_Fun, Acc, [], State0) ->
-    {Acc, State0};
-ifold(Fun, Acc, Its0, State0) ->
-    [{MsgStatus, Unacked, It} | Rest] =
-        lists:sort(fun ({#msg_status{seq_id = SeqId1}, _, _},
-                        {#msg_status{seq_id = SeqId2}, _, _}) ->
-                           SeqId1 =< SeqId2
-                   end, Its0),
-    {Msg, State1} = read_msg(MsgStatus, State0),
-    case Fun(Msg, MsgStatus#msg_status.msg_props, Unacked, Acc) of
-        {stop, Acc1} ->
-            {Acc1, State1};
-        {cont, Acc1} ->
-            IndexState0 = State1#vqstate.index_state,
-            {Its1, IndexState1} = inext(It, {Rest, IndexState0}),
-            State2 = State1#vqstate{index_state = IndexState1},
-            ifold(Fun, Acc1, Its1, State2)
-    end.
 
 %%----------------------------------------------------------------------------
 %% Phase changes

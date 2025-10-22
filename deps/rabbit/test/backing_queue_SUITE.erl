@@ -33,8 +33,7 @@
     variable_queue_ack_limiting,
     variable_queue_purge,
     variable_queue_requeue,
-    variable_queue_requeue_ram_beta,
-    variable_queue_fold
+    variable_queue_requeue_ram_beta
   ]).
 
 -define(BACKING_QUEUE_TESTCASES, [
@@ -162,15 +161,9 @@ orelse Group =:= backing_queue_embed_limit_1024 ->
 end_per_group1(_, Config) ->
     Config.
 
-init_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
-                                         Testcase == variable_queue_fold ->
-    rabbit_ct_helpers:testcase_started(Config, Testcase);
 init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
-end_per_testcase(Testcase, Config) when Testcase == variable_queue_requeue;
-                                        Testcase == variable_queue_fold ->
-    rabbit_ct_helpers:testcase_finished(Config, Testcase);
 end_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
@@ -1575,39 +1568,6 @@ variable_queue_requeue_ram_beta2(VQ0, _Config) ->
     {VQ7, AcksAll} = variable_queue_fetch(Count, false, true, Count, VQ6),
     {_, VQ8} = rabbit_variable_queue:ack(AcksAll, VQ7),
     VQ8.
-
-variable_queue_fold(Config) ->
-    passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_fold1, [Config]).
-
-variable_queue_fold1(Config) ->
-    with_fresh_variable_queue(
-      fun variable_queue_fold2/2,
-      ?config(variable_queue_type, Config)).
-
-variable_queue_fold2(VQ0, _Config) ->
-    {PendingMsgs, RequeuedMsgs, FreshMsgs, VQ1} =
-        variable_queue_with_holes(VQ0),
-    Count = rabbit_variable_queue:depth(VQ1),
-    Msgs = lists:sort(PendingMsgs ++ RequeuedMsgs ++ FreshMsgs),
-    lists:foldl(fun (Cut, VQ2) ->
-                        test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ2)
-                end, VQ1, [0, 1, 2, Count div 2,
-                           Count - 1, Count, Count + 1, Count * 2]).
-
-test_variable_queue_fold(Cut, Msgs, PendingMsgs, VQ0) ->
-    {Acc, VQ1} = rabbit_variable_queue:fold(
-                   fun (M, _, Pending, A) ->
-                           MInt = msg2int(M),
-                           Pending = lists:member(MInt, PendingMsgs), %% assert
-                           case MInt =< Cut of
-                               true  -> {cont, [MInt | A]};
-                               false -> {stop, A}
-                           end
-                   end, [], VQ0),
-    Expected = lists:takewhile(fun (I) -> I =< Cut end, Msgs),
-    Expected = lists:reverse(Acc), %% assertion
-    VQ1.
 
 %% same as test_variable_queue_requeue_ram_beta but randomly changing
 %% the queue mode after every step.
