@@ -173,13 +173,6 @@
 %% each message, its ack tag, and an accumulator.
 -callback ackfold(msg_fun(A), A, state(), [ack()]) -> {A, state()}.
 
-%% Fold over all the messages in a queue and return the accumulated
-%% results, leaving the queue undisturbed.
--callback fold(fun((mc:state(),
-                    rabbit_types:message_properties(),
-                    boolean(), A) -> {('stop' | 'cont'), A}),
-               A, state()) -> {A, state()}.
-
 %% How long is my queue?
 -callback len(state()) -> non_neg_integer().
 
