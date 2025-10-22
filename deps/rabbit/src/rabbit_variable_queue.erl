@@ -649,6 +649,7 @@ ackfold(MsgFun, Acc, State, AckTags) ->
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
+%% @todo I think this is never used. Was CMQ.
 fold(Fun, Acc, State = #vqstate{index_state = IndexState}) ->
     {Its, IndexState1} = lists:foldl(fun inext/2, {[], IndexState},
                                      [msg_iterator(State),

@@ -851,7 +851,7 @@ bq_queue_index1(_Config) ->
                       Qi13
               end,
               {_DeletedSegments, Qi16} = IndexMod:ack(SeqIdsB, Qi15),
-              Qi17 = IndexMod:flush(Qi16),
+              Qi17 = IndexMod:sync(Qi16),
               %% Everything will have gone now because #pubs == #acks
               {NextSeqIdB, NextSeqIdB, Qi18} = IndexMod:bounds(Qi17, NextSeqIdB),
               %% should get length back as 0 because all persistent
@@ -872,7 +872,7 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsC, Qi2),
-              Qi4 = IndexMod:flush(Qi3),
+              Qi4 = IndexMod:sync(Qi3),
               {Qi5, _SeqIdsMsgIdsC1} = queue_index_publish([SegmentSize],
                                                            false, Qi4),
               Qi5
@@ -890,7 +890,7 @@ bq_queue_index1(_Config) ->
               {Qi3, _SeqIdsMsgIdsC3} = queue_index_publish([SegmentSize],
                                                            false, Qi2),
               {_DeletedSegments, Qi4} = IndexMod:ack(SeqIdsC, Qi3),
-              IndexMod:flush(Qi4)
+              IndexMod:sync(Qi4)
       end),
 
     %% c) just fill up several segments of all pubs, then +acks
@@ -903,7 +903,7 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments, Qi3} = IndexMod:ack(SeqIdsD, Qi2),
-              IndexMod:flush(Qi3)
+              IndexMod:sync(Qi3)
       end),
 
     %% d) get messages in all states to a segment, then flush, then do
@@ -917,7 +917,7 @@ bq_queue_index1(_Config) ->
                   _ -> Qi1
               end,
               {_DeletedSegments3, Qi3} = IndexMod:ack([0], Qi2),
-              Qi4 = IndexMod:flush(Qi3),
+              Qi4 = IndexMod:sync(Qi3),
               {Qi5, [Eight,Six|_]} = queue_index_publish([3,6,8], false, Qi4),
               Qi6 = case IndexMod of
                   rabbit_queue_index -> IndexMod:deliver([2,3,5,6], Qi5);
