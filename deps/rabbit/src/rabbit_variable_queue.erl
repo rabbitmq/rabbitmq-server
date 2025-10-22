@@ -251,7 +251,6 @@
           end_seq_id    %% end_seq_id is exclusive
         }).
 
--define(HEADER_GUESS_SIZE, 100). %% see determine_persist_to/2
 -define(PERSISTENT_MSG_STORE, msg_store_persistent).
 -define(TRANSIENT_MSG_STORE,  msg_store_transient).
 
@@ -953,7 +952,7 @@ msg_status(IsPersistent, IsDelivered, SeqId,
                 is_delivered  = IsDelivered,
                 msg_location  = memory,
                 index_on_disk = false,
-                persist_to    = determine_persist_to(Msg, MsgProps, IndexMaxSize),
+                persist_to    = determine_persist_to(Msg, IndexMaxSize),
                 msg_props     = MsgProps}.
 
 beta_msg_status({MsgId, SeqId, MsgLocation, MsgProps, IsPersistent})
@@ -1739,33 +1738,13 @@ maybe_write_to_disk(ForceMsg, ForceIndex, MsgStatus, State) ->
     {MsgStatus1, State1} = maybe_write_msg_to_disk(ForceMsg, MsgStatus, State),
     maybe_write_index_to_disk(ForceIndex, MsgStatus1, State1).
 
-determine_persist_to(Msg,
-                     #message_properties{size = BodySize},
-                     IndexMaxSize) ->
+determine_persist_to(Msg, IndexMaxSize) ->
     %% The >= is so that you can set the env to 0 and never persist
     %% to the index.
-    %%
-    %% We want this to be fast, so we avoid size(term_to_binary())
-    %% here, or using the term size estimation from truncate.erl, both
-    %% of which are too slow. So instead, if the message body size
-    %% goes over the limit then we avoid any other checks.
-    %%
-    %% If it doesn't we need to decide if the properties will push
-    %% it past the limit. If we have the encoded properties (usual
-    %% case) we can just check their size. If we don't (message came
-    %% via the direct client), we make a guess based on the number of
-    %% headers.
-
-    %% @todo We can probably simplify this.
-    {MetaSize, _BodySize} = mc:size(Msg),
-     case BodySize >= IndexMaxSize of
+    {MetaSize, BodySize} = mc:size(Msg),
+     case MetaSize + BodySize >= IndexMaxSize of
          true  -> msg_store;
-         false ->
-             Est = MetaSize + BodySize,
-             case Est >= IndexMaxSize of
-                 true  -> msg_store;
-                 false -> queue_store
-             end
+         false -> queue_store
      end.
 
 persist_to(#msg_status{persist_to = To}) -> To.

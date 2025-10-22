@@ -31,6 +31,7 @@
 
 -spec start_link() -> rabbit_types:ok_pid_or_error().
 
+%% @todo Serial can be in persistent_term instead of process.
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE,
                           [update_disk_serial()], []).
