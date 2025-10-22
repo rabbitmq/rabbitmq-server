@@ -131,22 +131,22 @@ end}.
 
 {translation, "rabbit.cluster_formation.peer_discovery_aws.aws_hostname_paths",
 fun(Conf) ->
-    Settings = cuttlefish_variable:filter_by_prefix("cluster_formation.aws.hostname_path", Conf),
-    %% Helper function for number validation
-    IsNumberString = fun(Str) ->
-        case string:to_integer(Str) of
-            {_, ""} -> true;
-            _ -> false
-        end
-    end,
-    %% Extract and sort numbered paths (hostname_path.1, hostname_path.2, etc.)
-    NumberedPaths = [{list_to_integer(N), V} || 
-                     {["cluster_formation", "aws", "hostname_path", N], V} <- Settings,
-                     IsNumberString(N)],
-    case NumberedPaths of
-        [] -> cuttlefish:unset();
-        _ ->
-            SortedPaths = lists:sort(NumberedPaths),
-            [rabbit_peer_discovery_util:as_list(V) || {_, V} <- SortedPaths]
+    case cuttlefish_variable:filter_by_prefix("cluster_formation.aws.hostname_path", Conf) of
+        [] ->
+            cuttlefish:unset();
+        L ->
+            %% Extract and sort numbered paths (hostname_path.1, hostname_path.2, etc.)
+            L1 = lists:map(
+                   fun ({["cluster_formation", "aws", "hostname_path", N], V}) ->
+                           case string:to_integer(N) of
+                               {I, ""} ->
+                                   {I, V};
+                               _ ->
+                                   cuttlefish:invalid(io_lib:format("Cannot convert ~p to an integer", [N]))
+                           end;
+                       (Other) ->
+                           cuttlefish:invalid(io_lib:format("~p is invalid", [Other]))
+                   end, L),
+            [rabbit_peer_discovery_util:as_list(V) || {_, V} <- lists:sort(L1)]
     end
 end}.
