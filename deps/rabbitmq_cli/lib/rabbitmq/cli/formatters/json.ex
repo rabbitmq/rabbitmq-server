@@ -91,11 +91,27 @@ defmodule RabbitMQ.CLI.Formatters.Json do
     "Ref(#{inspect(data)})"
   end
 
+  defp convert_erlang_strings(data) when is_binary(data) do
+    convert_binary(data)
+  end
+
   defp convert_erlang_strings([]),  do: []
 
-  defp convert_erlang_strings([b | _rest]=data) when is_binary(b) do
-    # Assume this is a list of strings already converted
+  defp convert_erlang_strings([val]=data) when is_integer(val) and val > 255 do
+    # This is likely a value like [5672], which we don't want
+    # to convert to the equivalent unicode codepoint.
     data
+  end
+
+  defp convert_erlang_strings([v0, v1]=data) when
+    is_integer(v0) and v0 > 255 and is_integer(v1) and v1 > 255 do
+    # This is likely a value like [5672, 5682], which we don't want
+    # to convert to the equivalent unicode codepoint.
+    data
+  end
+
+  defp convert_erlang_strings([b | rest]) when is_binary(b) do
+      [convert_binary(b) | convert_erlang_strings(rest)]
   end
 
   defp convert_erlang_strings(data) when is_list(data) do
@@ -129,4 +145,21 @@ defmodule RabbitMQ.CLI.Formatters.Json do
   end
 
   defp convert_erlang_strings(data), do: data
+
+  defp convert_binary(data) when is_binary(data) do
+    try do
+      case :unicode.characters_to_binary(data, :utf8) do
+        binary when is_binary(binary) ->
+          # Successfully converted - it was a valid Unicode string
+          binary
+        _ ->
+          # Conversion failed - not a Unicode string
+          Base.encode64(data)
+      end
+    rescue
+      ArgumentError ->
+        # badarg exception - just base64 encode it.
+        Base.encode64(data)
+    end
+  end
 end
