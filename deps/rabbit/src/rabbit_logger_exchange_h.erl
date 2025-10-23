@@ -180,7 +180,13 @@ wait_for_initial_pass(N) ->
     end.
 
 setup_proc(
-  #{config := #{exchange := Exchange}} = Config) ->
+  #{id := Id,
+    config := #{exchange := Exchange}} = Config) ->
+    %% We register this process using the logger handler ID. It makes
+    %% debugging convenient but it's not critical. That's why we catch any
+    %% exceptions and ignore the return value.
+    _ = catch erlang:register(Id, self()),
+
     case declare_exchange(Config) of
         ok ->
             ?LOG_INFO(
