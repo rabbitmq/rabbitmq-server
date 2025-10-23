@@ -1,0 +1,77 @@
+{
+  "rabbit_version": "4.2.0",
+  "users": [
+    {
+      "name": "guest",
+      "password_hash": "J+UiUxNQ3I8uPn6Lo2obWcl93VgXgbw4R+xhl3L5zHwkRFZG",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "read": ".*",
+      "write": ".*"
+    }
+  ],
+  "topic_permissions": [],
+  "parameters": [
+    {
+      "value": {
+        "pattern": "^transient\\.",
+        "definition": {
+          "expires": 300000,
+          "message-ttl": 60000
+        },
+        "priority": 10,
+        "apply-to": "queues"
+      },
+      "vhost": "/",
+      "component": "operator_policy",
+      "name": "transient-queues"
+    },
+    {
+      "value": {
+        "pattern": "^limited\\.",
+        "definition": {
+          "max-length": 5000,
+          "max-length-bytes": 10485760
+        },
+        "priority": 5,
+        "apply-to": "queues"
+      },
+      "vhost": "/",
+      "component": "operator_policy",
+      "name": "limited-queues"
+    },
+    {
+      "value": {
+        "pattern": "^archive\\.",
+        "definition": {
+          "expires": 2592000000,
+          "max-length": 100000,
+          "message-ttl": 86400000,
+          "max-length-bytes": 1073741824
+        },
+        "priority": 1,
+        "apply-to": "queues"
+      },
+      "vhost": "/",
+      "component": "operator_policy",
+      "name": "archive-queues"
+    }
+  ],
+  "global_parameters": [],
+  "policies": [],
+  "queues": [],
+  "exchanges": [],
+  "bindings": []
+}
