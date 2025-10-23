@@ -100,5 +100,9 @@ defmodule JSONFormattingTest do
     assert Map.has_key?(rabbit, "data_dir")
     data_dir = rabbit["data_dir"]
     assert is_binary(data_dir)
+
+    assert Map.has_key?(rabbit, "tcp_listeners")
+    tcp_listeners = rabbit["tcp_listeners"]
+    assert is_list(tcp_listeners)
   end
 end
