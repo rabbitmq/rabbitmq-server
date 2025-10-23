@@ -170,7 +170,9 @@
              interceptor_state,
              queue_states,
              tick_timer,
-             publishing_mode = false :: boolean()
+             publishing_mode = false :: boolean(),
+             queue_types_published = sets:new([{version, 2}]) ::
+                                     sets:set(rabbit_queue_type:queue_type())
             }).
 
 -define(QUEUE, lqueue).
@@ -2097,9 +2099,10 @@ deliver_to_queues(XName,
             ok = process_routing_mandatory(Mandatory, RoutedToQueues, Message, XName, State0),
             MsgSeqNo = maps:get(correlation, Options, undefined),
             State1 = process_routing_confirm(MsgSeqNo, QueueNames, XName, State0),
+            State2 = notify_published_queue_types(Qs, State1),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes
-            State = handle_queue_actions(Actions, State1#ch{queue_states = QueueStates}),
+            State = handle_queue_actions(Actions, State2#ch{queue_states = QueueStates}),
             case rabbit_event:stats_level(State, #ch.stats_timer) of
                 fine ->
                     ?INCR_STATS(exchange_stats, XName, 1, publish),
@@ -2164,6 +2167,27 @@ process_routing_confirm(MsgSeqNo, QRefs, XName, State)
   when is_integer(MsgSeqNo) ->
     State#ch{unconfirmed =
              rabbit_confirms:insert(MsgSeqNo, QRefs, XName, State#ch.unconfirmed)}.
+
+notify_published_queue_types(Qs, #ch{cfg = #conf{conn_pid = ConnPid},
+                                     queue_types_published = QTs0} = State0) ->
+    QTs = lists:foldl(
+            fun(Q0, Acc) ->
+                    Q = case Q0 of
+                            {Q1, _RouteInfo} -> Q1;
+                            _ -> Q0
+                        end,
+                    QT = amqqueue:get_type(Q),
+                    case sets:is_element(QT, Acc) of
+                        true ->
+                            Acc;
+                        false ->
+                            gen_server:cast(
+                              ConnPid,
+                              {channel_published_to_queue_type, self(), QT}),
+                            sets:add_element(QT, Acc)
+                    end
+            end, QTs0, Qs),
+    State0#ch{queue_types_published = QTs}.
 
 confirm(MsgSeqNos, QRef, State = #ch{unconfirmed = UC}) ->
     %% NOTE: if queue name does not exist here it's likely that the ref also
