@@ -53,6 +53,7 @@
 
          logging_to_exchange_works/1,
          update_log_exchange_config/1,
+         use_exchange_logger_when_enabling_khepri_db/1,
 
          logging_to_syslog_works/1]).
 
@@ -99,7 +100,8 @@ groups() ->
 
      {exchange_output, [],
       [logging_to_exchange_works,
-       update_log_exchange_config]},
+       update_log_exchange_config,
+       use_exchange_logger_when_enabling_khepri_db]},
 
      {syslog_output, [],
       [logging_to_syslog_works]}
@@ -150,17 +152,27 @@ init_per_testcase(Testcase, Config) ->
         %% group will run in the context of that RabbitMQ node.
         exchange_output ->
             ExchProps = [{enabled, true},
-                         {level, debug}] ,
+                         {level, debug}],
             Config1 = rabbit_ct_helpers:set_config(
                         Config,
-                        [{rmq_nodes_count, 1},
-                         {rmq_nodename_suffix, Testcase}]),
-            Config2 = rabbit_ct_helpers:merge_app_env(
-                        Config1,
+                        [{rmq_nodename_suffix, Testcase}]),
+            Config2 = case Testcase of
+                          use_exchange_logger_when_enabling_khepri_db ->
+                              rabbit_ct_helpers:set_config(
+                                Config1,
+                                [{rmq_nodes_count, 3},
+                                 {metadata_store, mnesia}]);
+                          _ ->
+                              rabbit_ct_helpers:set_config(
+                                Config1,
+                                [{rmq_nodes_count, 1}])
+                      end,
+            Config3 = rabbit_ct_helpers:merge_app_env(
+                        Config2,
                         {rabbit, [{log, [{exchange, ExchProps},
                                          {file, [{level, debug}]}]}]}),
             rabbit_ct_helpers:run_steps(
-              Config2,
+              Config3,
               rabbit_ct_broker_helpers:setup_steps() ++
               rabbit_ct_client_helpers:setup_steps());
 
@@ -1101,6 +1113,14 @@ update_log_exchange_config(Config) ->
           logger, get_handler_config, [rmq_1_exchange]),
     ?assertEqual(HandlerConfig1, HandlerConfig2),
     ok.
+
+use_exchange_logger_when_enabling_khepri_db(Config) ->
+    ?assertNot(rabbit_ct_broker_helpers:rpc(
+                 Config, 0,
+                 rabbit_feature_flags, is_enabled, [khepri_db])),
+    ?assertEqual(
+       ok,
+       rabbit_ct_broker_helpers:enable_feature_flag(Config, khepri_db)).
 
 logging_to_syslog_works(Config) ->
     Context = default_context(Config),
