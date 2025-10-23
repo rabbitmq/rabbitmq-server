@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-UAA_DOCKER_IMAGE=cloudfoundry/uaa:75.21.0
+UAA_DOCKER_IMAGE=${UAA_DOCKER_IMAGE:-cloudfoundry/uaa:75.21.0}
 
 ensure_uaa() {
   if docker ps | grep uaa &> /dev/null; then
