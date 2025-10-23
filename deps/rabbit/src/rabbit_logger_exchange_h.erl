@@ -43,8 +43,16 @@ filter_config(Config) ->
 log(#{meta := #{mfa := {?MODULE, _, _}}}, _) ->
     ok;
 log(LogEvent, Config) ->
+    %% Publishing the log message to an exchange might trigger more logging,
+    %% triggering an infinite logging loop. To prevent that, we make use the
+    %% process dictionary to record the fact that this logger was already
+    %% entered. If that's the case when this function is called, we just drop
+    %% the log event.
+    Key = ?MODULE,
+    ReEntered = erlang:get(Key) =/= undefined,
     case rabbit_boot_state:get() of
-        ready ->
+        ready when not ReEntered ->
+            erlang:put(Key, ?FUNCTION_NAME),
             try
                 do_log(LogEvent, Config)
             catch
@@ -53,22 +61,30 @@ log(LogEvent, Config) ->
                     %% removes the logger_exchange handler, which in
                     %% turn deletes the log exchange and its bindings
                     erlang:display({?MODULE, crashed, {C, R, S}})
+            after
+                erlang:erase(Key)
             end,
             ok;
         _ -> ok
     end.
 
-do_log(LogEvent, #{config := #{exchange := Exchange}} = Config) ->
+do_log(
+  LogEvent,
+  #{config := #{exchange := Exchange,
+                setup_proc := Pid}} = Config) ->
     RoutingKey = make_routing_key(LogEvent, Config),
     PBasic = log_event_to_amqp_msg(LogEvent, Config),
     Body = try_format_body(LogEvent, Config),
     Content = rabbit_basic:build_content(PBasic, Body),
     case mc_amqpl:message(Exchange, RoutingKey, Content) of
         {ok, Msg} ->
-            case rabbit_queue_type:publish_at_most_once(Exchange, Msg) of
-                ok -> ok;
-                {error, not_found} -> ok
-            end;
+            %% Publishing a message might involve a Erlang process, like a Ra
+            %% server process, to log something and call itself. We need to
+            %% publish the message asynchronously from a separate process and
+            %% ignore the fate of that publish, to not block an Erlang
+            %% process.
+            Pid ! {publish, Msg},
+            ok;
         {error, _Reason} ->
             %% it would be good to log this error but can we?
             ok
@@ -164,12 +180,19 @@ wait_for_initial_pass(N) ->
     end.
 
 setup_proc(
-  #{config := #{exchange := Exchange}} = Config) ->
+  #{id := Id,
+    config := #{exchange := Exchange}} = Config) ->
+    %% We register this process using the logger handler ID. It makes
+    %% debugging convenient but it's not critical. That's why we catch any
+    %% exceptions and ignore the return value.
+    _ = catch erlang:register(Id, self()),
+
     case declare_exchange(Config) of
         ok ->
             ?LOG_INFO(
                "Logging to ~ts ready", [rabbit_misc:rs(Exchange)],
-               #{domain => ?RMQLOG_DOMAIN_GLOBAL});
+               #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
+            loop(Config);
         error ->
             ?LOG_DEBUG(
                "Logging to ~ts not ready, trying again in ~b second(s)",
@@ -180,6 +203,15 @@ setup_proc(
             after ?DECL_EXCHANGE_INTERVAL_SECS * 1000 ->
                       setup_proc(Config)
             end
+    end.
+
+loop(#{config := #{exchange := Exchange}} = Config) ->
+    receive
+        {publish, Msg} ->
+            _ = rabbit_queue_type:publish_at_most_once(Exchange, Msg),
+            loop(Config);
+        stop ->
+            ok
     end.
 
 declare_exchange(#{config := #{exchange := Exchange}}) ->
