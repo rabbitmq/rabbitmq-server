@@ -1711,13 +1711,10 @@ send_error_on_channel0_and_close(Channel, Reason, State) ->
 blocked_by_message(#throttle{blocked_by = Reasons}) ->
   %% we don't want to report internal flow as a reason here since
   %% it is entirely transient
-  Reasons1 = sets:del_element(flow, Reasons),
-  RStr = string:join([format_blocked_by(R) || R <- sets:to_list(Reasons1)], " & "),
+  RStr = lists:join([rabbit_alarm:format_resource_alarm_source(R) ||
+                     {resource, R} <- sets:to_list(Reasons)],
+                    " & "),
   list_to_binary(rabbit_misc:format("low on ~ts", [RStr])).
-
-format_blocked_by({resource, memory}) -> "memory";
-format_blocked_by({resource, disk})   -> "disk";
-format_blocked_by({resource, disc})   -> "disk".
 
 update_last_blocked_at(Throttle) ->
     Throttle#throttle{last_blocked_at = erlang:monotonic_time()}.
