@@ -13,6 +13,8 @@
 
 -include("rabbit.hrl").
 
+-import(rabbit_data_coercion, [to_map_recursive/1]).
+
 -compile(export_all).
 
 %% This cipher is listed as supported, but doesn't actually work.
@@ -35,6 +37,17 @@ groups() ->
             data_coercion_to_proplist,
             data_coercion_to_list,
             data_coercion_to_map,
+            data_coercion_to_map_recursive_proplist,
+            data_coercion_to_map_recursive_nested_proplist,
+            data_coercion_to_map_recursive_mixed_structures,
+            data_coercion_to_map_recursive_bare_atoms,
+            data_coercion_to_map_recursive_empty_list,
+            data_coercion_to_map_recursive_list_of_maps,
+            data_coercion_to_map_recursive_deep_nesting,
+            data_coercion_to_map_recursive_atomic_values,
+            data_coercion_to_map_recursive_binary_keys,
+            data_coercion_to_map_recursive_atom_list_limitation,
+            data_coercion_to_map_recursive_property,
             data_coercion_atomize_keys_proplist,
             data_coercion_atomize_keys_map,
             pget,
@@ -277,6 +290,98 @@ data_coercion_atomize_keys_proplist(_Config) ->
 data_coercion_to_list(_Config) ->
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list([{a, 1}])),
     ?assertEqual([{a, 1}], rabbit_data_coercion:to_list(#{a => 1})).
+
+data_coercion_to_map_recursive_proplist(_Config) ->
+    ?assertEqual(#{a => 1, b => 2},
+                 to_map_recursive([{a, 1}, {b, 2}])),
+    ?assertEqual(#{a => 1},
+                 to_map_recursive(#{a => 1})).
+
+data_coercion_to_map_recursive_nested_proplist(_Config) ->
+    Input = [{pattern, <<"^amq\\.">>},
+             {definition, [{expires, 1800000}, {ttl, 60000}]},
+             {priority, 1}],
+    Expected = #{pattern => <<"^amq\\.">>,
+                 definition => #{expires => 1800000, ttl => 60000},
+                 priority => 1},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_mixed_structures(_Config) ->
+    Input = [{vhost, <<"/">>},
+             {upstreams, [[{uri, <<"amqp://server1">>}],
+                          [{uri, <<"amqp://server2">>}]]}],
+    Expected = #{vhost => <<"/">>,
+                 upstreams => [#{uri => <<"amqp://server1">>},
+                               #{uri => <<"amqp://server2">>}]},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_bare_atoms(_Config) ->
+    Input = [{durable, true}, auto_delete, {exclusive, false}],
+    Expected = #{durable => true, auto_delete => true, exclusive => false},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_empty_list(_Config) ->
+    ?assertEqual([], to_map_recursive([])).
+
+data_coercion_to_map_recursive_list_of_maps(_Config) ->
+    Input = [#{a => 1}, #{b => 2}, #{c => [{nested, 3}]}],
+    Expected = [#{a => 1}, #{b => 2}, #{c => #{nested => 3}}],
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_deep_nesting(_Config) ->
+    Input = [{level1, [{level2, [{level3, [{level4, value}]}]}]}],
+    Expected = #{level1 => #{level2 => #{level3 => #{level4 => value}}}},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_atomic_values(_Config) ->
+    ?assertEqual(42, to_map_recursive(42)),
+    ?assertEqual(<<"binary">>, to_map_recursive(<<"binary">>)),
+    ?assertEqual(atom, to_map_recursive(atom)),
+    ?assertEqual("string", to_map_recursive("string")).
+
+data_coercion_to_map_recursive_binary_keys(_Config) ->
+    Input = [{<<"apply-to">>, <<"queues">>},
+             {<<"pattern">>, <<"^abc">>},
+             {<<"definition">>, [{<<"expires">>, 1800000}]}],
+    Expected = #{<<"apply-to">> => <<"queues">>,
+                 <<"pattern">> => <<"^abc">>,
+                 <<"definition">> => #{<<"expires">> => 1800000}},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_atom_list_limitation(_Config) ->
+    Input = [admin, monitoring],
+    Expected = #{admin => true, monitoring => true},
+    ?assertEqual(Expected, to_map_recursive(Input)).
+
+data_coercion_to_map_recursive_property(_Config) ->
+    ?assert(
+       proper:quickcheck(
+         ?FORALL(Input, proplist_or_value(),
+                 begin
+                     Result = to_map_recursive(Input),
+                     to_map_recursive(Result) =:= Result
+                 end),
+         [{numtests, 100},
+          {max_size, 10},
+          {on_output, fun(".", _) -> ok;
+                         (F, A) -> ct:pal(?LOW_IMPORTANCE, F, A)
+                      end}])).
+
+proplist_or_value() ->
+    ?LAZY(oneof([
+        oneof([key1, key2, key3]),
+        binary(),
+        integer(),
+        ?SIZED(Size, resize(Size div 2, proplist_gen())),
+        ?SIZED(Size, resize(Size div 2, list(proplist_or_value())))
+    ])).
+
+proplist_gen() ->
+    list(oneof([
+        {oneof([key1, key2, key3]), proplist_or_value()},
+        {binary(), proplist_or_value()},
+        oneof([enabled, disabled, auto])
+    ])).
 
 pget(_Config) ->
     ?assertEqual(1, rabbit_misc:pget(a, [{a, 1}])),
