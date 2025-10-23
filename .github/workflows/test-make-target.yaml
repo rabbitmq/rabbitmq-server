@@ -66,7 +66,7 @@ jobs:
 
     # We install Erlang problem matchers from ci.erlang.mk.
     - name: CHECKOUT ERLANG PROBLEM MATCHERS
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: ninenines/ci.erlang.mk
         path: ci.erlang.mk
