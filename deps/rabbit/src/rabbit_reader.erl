@@ -335,7 +335,7 @@ start_connection(Parent, HelperSups, RanchRef, Deb, Sock) ->
                 throttle            = #throttle{
                                          last_blocked_at = never,
                                          should_block = false,
-                                         blocked_by = sets:new(),
+                                         blocked_by = sets:new([{version, 2}]),
                                          connection_blocked_message_sent = false
                                          },
                 proxy_socket = rabbit_net:maybe_get_proxy_socket(Sock)},
@@ -1310,7 +1310,7 @@ handle_method0(#'connection.open'{virtual_host = VHost},
     ok = send_on_channel0(Sock, #'connection.open_ok'{}, Protocol),
 
     Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
-    BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms]),
+    BlockedBy = sets:from_list([{resource, Alarm} || Alarm <- Alarms], [{version, 2}]),
     Throttle1 = Throttle#throttle{blocked_by = BlockedBy},
 
     {ok, ChannelSupSupPid} =
