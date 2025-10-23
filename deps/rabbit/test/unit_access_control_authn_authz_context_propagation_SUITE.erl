@@ -43,7 +43,8 @@ end_per_group(_, Config) ->
 
 init_per_testcase(Testcase, Config) ->
     AuthConfig = {rabbit, [
-      {auth_backends, [rabbit_auth_backend_context_propagation_mock]}
+      {auth_backends, [rabbit_auth_backend_context_propagation_mock]},
+      {test_auth_backends, [rabbit_auth_backend_context_propagation_mock]}
     ]
     },
     rabbit_ct_helpers:testcase_started(Config, Testcase),
