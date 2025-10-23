@@ -35,9 +35,11 @@ collect_mf(_Registry, Callback) ->
         Alarms = rabbit_alarm:get_local_alarms(500), %% TODO: figure out timeout
         ActiveAlarms =
             lists:foldl(fun ({{resource_limit, disk, _}, _}, Acc) ->
-                                maps:put(disk_limit, 1, Acc);
+                                Acc#{disk_limit => 1};
+                            ({{resource_limit, {disk, QT}, _}, _}, Acc) ->
+                                Acc#{{disk, QT} => 1};
                             ({{resource_limit, memory, _}, _}, Acc) ->
-                                maps:put(memory_limit, 1, Acc)
+                                Acc#{memory_limit => 1}
                         end,
                         #{},
                         Alarms),
@@ -50,6 +52,15 @@ collect_mf(_Registry, Callback) ->
                            <<"is 1 if VM memory watermark alarm is in effect">>,
                            untyped,
                            [untyped_metric(maps:get(memory_limit, ActiveAlarms, 0))])),
+
+        Callback(create_mf(?METRIC_NAME(<<"queue_type_free_disk_space_watermark">>),
+                           <<"is 1 if the queue type disk-space alarm is in effect">>,
+                           untyped,
+                           [prometheus_model_helpers:untyped_metric(
+                              #{queue_type => QT},
+                              maps:get({disk, QT}, ActiveAlarms, 0)) ||
+                            {_, QT} <- rabbit_registry:lookup_all(queue)])),
+
         ok
     catch
         exit:{timeout, _} ->

@@ -49,7 +49,10 @@
                  alarmed_nodes = #{} :: #{node() => [resource_alarm_source()]}}).
 
 -export_type([alarm/0]).
--type resource_alarm_source() :: 'disk' | 'memory'.
+-type resource_alarm_source() ::
+    memory
+    | disk
+    | {disk, rabbit_queue_type:queue_type()}.
 -type resource_alarm() :: {resource_limit, resource_alarm_source(), node()}.
 -type alarm() :: resource_alarm().
 -type resource_alert() :: {WasAlarmSetForNode :: boolean(),
@@ -127,6 +130,8 @@ is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
 -spec format_resource_alarm_source(resource_alarm_source()) -> iodata().
 format_resource_alarm_source(disk) ->
     ?DISK_SPACE_RESOURCE;
+format_resource_alarm_source({disk, QueueType}) ->
+    io_lib:format("disk for queue type '~ts'", [QueueType]);
 format_resource_alarm_source(memory) ->
     ?MEMORY_RESOURCE;
 format_resource_alarm_source(Unknown) ->
