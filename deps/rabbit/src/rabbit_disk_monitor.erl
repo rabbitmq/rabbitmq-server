@@ -66,8 +66,14 @@
           max_interval,
           %% timer that drives periodic checks
           timer,
-          %% is free disk space alarm currently in effect?
+          %% is the data directory free disk space alarm currently in effect?
           alarmed,
+          %% set of mount paths for which a free disk space alarm is currently
+          %% in effect
+          alarmed_mounts = sets:new([{version, 2}]) :: sets:set(file:filename()),
+          %% set of queue types for which a free disk space alarm is currently
+          %% in effect
+          alarmed_queue_types = sets:new([{version, 2}]) :: sets:set(module()),
           %% is monitoring enabled? false on unsupported
           %% platforms
           enabled,
@@ -283,7 +289,9 @@ set_disk_limits(State, Limit0) ->
 internal_update(#state{limit = DataDirLimit,
                        dir = Dir,
                        mounts = Mounts,
-                       alarmed = Alarmed} = State) ->
+                       alarmed = Alarmed,
+                       alarmed_mounts = AlarmedMs,
+                       alarmed_queue_types = AlarmedQTs} = State) ->
     DiskFree = get_disk_free(State),
     DataDirFree = maps:get(Dir, DiskFree, 'NaN'),
     %% note: 'NaN' is considered to be less than a number
@@ -307,11 +315,18 @@ internal_update(#state{limit = DataDirLimit,
                  end, Mounts),
     ets:insert(?MOUNT_ETS_NAME, [M || _Path := M <- NewMounts]),
 
-    AlarmedMs = alarmed_mounts(Mounts),
+    %% The "before" sets are the alarms actually in effect, persisted in the
+    %% state, rather than a value recomputed from the current mounts. The
+    %% latter would use the current limits and therefore miss transitions
+    %% caused by a limit change (e.g. lowering a limit would never clear a
+    %% standing alarm).
     NewAlarmedMs = alarmed_mounts(NewMounts),
+    NewAlarmedQTs = alarmed_queue_types(NewMounts),
 
     NewlyClearedMs = sets:subtract(AlarmedMs, NewAlarmedMs),
+    NewlyClearedQTs = sets:subtract(AlarmedQTs, NewAlarmedQTs),
     NewlyAlarmedMs = sets:subtract(NewAlarmedMs, AlarmedMs),
+    NewlyAlarmedQTs = sets:subtract(NewAlarmedQTs, AlarmedQTs),
 
     lists:foreach(
       fun(Path) ->
@@ -320,7 +335,11 @@ internal_update(#state{limit = DataDirLimit,
                      available = Available} = maps:get(Path, NewMounts),
               emit_update_info(Name, "insufficient", Available, Limit)
       end, lists:sort(sets:to_list(NewlyAlarmedMs))),
-    %% TODO: rabbit_alarm:set_alarm/1 for affected queue types
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:set_alarm({Alarm, []})
+      end, lists:sort(sets:to_list(NewlyAlarmedQTs))),
     lists:foreach(
       fun(Path) ->
               #mount{name = Name,
@@ -328,11 +347,17 @@ internal_update(#state{limit = DataDirLimit,
                      available = Available} = maps:get(Path, NewMounts),
               emit_update_info(Name, "sufficient", Available, Limit)
       end, lists:sort(sets:to_list(NewlyClearedMs))),
-    %% TODO: rabbit_alarm:clear_alarm/1 for affected queue types
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:clear_alarm(Alarm)
+      end, lists:sort(sets:to_list(NewlyClearedQTs))),
 
     State#state{alarmed = NewAlarmed,
                 actual = DataDirFree,
-                mounts = NewMounts}.
+                mounts = NewMounts,
+                alarmed_mounts = NewAlarmedMs,
+                alarmed_queue_types = NewAlarmedQTs}.
 
 emit_update_info(StateStr, CurrentFree, Limit) ->
     ?LOG_INFO(
@@ -352,6 +377,18 @@ alarmed_mounts(Mounts) ->
           (_Path, _Mount, Acc) ->
               Acc
       end, sets:new([{version, 2}]), Mounts).
+
+-spec alarmed_queue_types(mounts()) ->
+    sets:set(module()).
+alarmed_queue_types(MountPoints) ->
+    maps:fold(
+      fun (_Path, #mount{available = Available,
+                         limit = Limit,
+                         queue_types = QTs}, Acc) when Available < Limit ->
+              sets:union(QTs, Acc);
+          (_Path, _Mount, Acc) ->
+              Acc
+      end, sets:new([{version, 2}]), MountPoints).
 
 -spec get_disk_free(#state{}) ->
     #{file:filename() => AvailableB :: non_neg_integer()}.
