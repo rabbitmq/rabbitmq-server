@@ -27,6 +27,7 @@
 
 -export([start_link/0, start/0, stop/0, register/2, set_alarm/1,
          clear_alarm/1, get_alarms/0, get_alarms/1, get_local_alarms/0, get_local_alarms/1, on_node_up/1, on_node_down/1,
+         format_resource_alarm_source/1,
          format_as_map/1, format_as_maps/1, is_local/1]).
 
 -export([init/1, handle_call/2, handle_event/2, handle_info/2,
@@ -123,6 +124,14 @@ filter_local_alarms(Alarms) ->
 is_local({{resource_limit, _Resource, Node}, _}) when Node =:= node() -> true;
 is_local({{resource_limit, _Resource, Node}, _}) when Node =/= node() -> false.
 
+-spec format_resource_alarm_source(resource_alarm_source()) -> iodata().
+format_resource_alarm_source(disk) ->
+    ?DISK_SPACE_RESOURCE;
+format_resource_alarm_source(memory) ->
+    ?MEMORY_RESOURCE;
+format_resource_alarm_source(Unknown) ->
+    io_lib:format("~w", [Unknown]).
+
 -spec format_as_map(alarm()) -> #{binary() => term()}.
 format_as_map({resource_limit, disk, Node}) ->
     #{
@@ -136,7 +145,7 @@ format_as_map({resource_limit, memory, Node}) ->
     };
 format_as_map({resource_limit, Limit, Node}) ->
     #{
-        <<"resource">> => rabbit_data_coercion:to_binary(Limit),
+        <<"resource">> => iolist_to_binary(format_resource_alarm_source(Limit)),
         <<"node">> => Node
     }.
 
@@ -216,7 +225,7 @@ handle_event({node_down, Node}, #alarms{alarmed_nodes = AN} = State) ->
     AlarmsForDeadNode = maps:get(Node, AN, []),
     {ok, lists:foldr(fun(Source, AccState) ->
                              ?LOG_WARNING("~ts resource limit alarm cleared for dead node ~tp",
-                                          [Source, Node]),
+                                          [format_resource_alarm_source(Source), Node]),
                              maybe_alert(fun map_unappend/3, Node, Source, false, AccState)
                      end, State, AlarmsForDeadNode)};
 
@@ -262,7 +271,8 @@ maybe_alert(UpdateFun, Node, Source, WasAlertAdded,
                        end, AN1),
     case StillHasAlerts of
         true -> ok;
-        false -> ?LOG_WARNING("~ts resource limit alarm cleared across the cluster", [Source])
+        false -> ?LOG_WARNING("~ts resource limit alarm cleared across the cluster",
+                              [format_resource_alarm_source(Source)])
     end,
     Alert = {WasAlertAdded, StillHasAlerts, Node},
     case node() of
@@ -305,12 +315,12 @@ handle_set_resource_alarm(Source, Node, State) ->
       "**********************************************************~n"
       "*** Publishers will be blocked until this alarm clears ***~n"
       "**********************************************************~n",
-      [Source, Node]),
+      [format_resource_alarm_source(Source), Node]),
     {ok, maybe_alert(fun map_append/3, Node, Source, true, State)}.
 
 handle_clear_resource_alarm(Source, Node, State) ->
     ?LOG_WARNING("~ts resource limit alarm cleared on node ~tp",
-                 [Source, Node]),
+                 [format_resource_alarm_source(Source), Node]),
     {ok, maybe_alert(fun map_unappend/3, Node, Source, false, State)}.
 
 is_node_alarmed(Source, Node, #alarms{alarmed_nodes = AN}) ->
