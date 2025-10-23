@@ -538,9 +538,6 @@ end_per_group(with_oauth_disable_basic_auth_false, Config) ->
 end_per_group(with_resource_server_id_rabbit, Config) ->
   unset_env(rabbitmq_auth_backend_oauth2, resource_server_id),
   Config;
-end_per_group(with_default_oauth_provider_idp1, Config) ->
-  unset_env(rabbitmq_auth_backend_oauth2, default_oauth_provider),
-  Config;
 end_per_group(with_mgt_oauth_provider_url_url0, Config) ->
   unset_env(rabbitmq_management, oauth_provider_url),
   Config;
