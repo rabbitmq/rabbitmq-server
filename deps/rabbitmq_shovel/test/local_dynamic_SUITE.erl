@@ -56,7 +56,6 @@ groups() ->
                   local_to_local_stream_no_ack,
                   local_to_local_stream_on_publish,
                   local_to_local_stream_on_confirm,
-                  local_to_local_delete_src_queue,
                   local_to_local_delete_dest_queue,
                   local_to_local_user_access,
                   local_to_local_credit_flow_on_confirm,
@@ -624,30 +623,6 @@ local_to_local_stream_on_publish(Config) ->
                           30000),
               _ = amqp10_expect(Receiver, 10, []),
               amqp10_client:detach_link(Receiver)
-      end).
-
-local_to_local_delete_src_queue(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-             shovel_test_utils:set_param(Config, ?PARAM,
-                                          [{<<"src-protocol">>, <<"local">>},
-                                           {<<"src-queue">>, Src},
-                                           {<<"dest-protocol">>, <<"local">>},
-                                           {<<"dest-queue">>, Dest}
-                                          ]),
-              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
-              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1}, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
-                          30000),
-              rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queue,
-                                           [Src, <<"/">>]),
-              ?awaitMatch([{_Name, dynamic, {terminated,source_queue_down}, _, _}],
-                          rabbit_ct_broker_helpers:rpc(Config, 0,
-                                                       rabbit_shovel_status, status, []),
-                          30000)
       end).
 
 local_to_local_delete_dest_queue(Config) ->

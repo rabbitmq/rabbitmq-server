@@ -84,7 +84,8 @@ tests() ->
      autodelete_classic_on_publish_with_rejections,
      autodelete_quorum_on_publish_with_rejections,
      no_vhost_access,
-     application_properties
+     application_properties,
+     delete_src_queue
     ].
 
 %% -------------------------------------------------------------------
@@ -100,7 +101,8 @@ init_per_suite(Config0) ->
           "server_initiated_close,404",
           "writer,send_failed,closed",
           "source_queue_down",
-          "dest_queue_down"
+          "dest_queue_down",
+          "inbound_link_detached"
         ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(
@@ -393,8 +395,6 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
       end).
 
 no_vhost_access(Config) ->
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
     AltVHost = ?config(alt_vhost, Config),
     ok = rabbit_ct_broker_helpers:add_vhost(Config, AltVHost),
     Uri = make_uri(Config, 0, AltVHost),
@@ -425,6 +425,33 @@ application_properties(Config) ->
                            AppProps)
       end).
 
+delete_src_queue(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1}, _}],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30000),
+              rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queue,
+                                           [Src, <<"/">>]),
+              ?awaitMatch(
+                 [[Dest, _],
+                  [Src, _]],
+                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0,
+                              ["list_queues", "name", "messages", "--no-table-headers"])),
+                 45_000),
+              ?awaitMatch([{_Name, dynamic, {running, _}, _, _}],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30000),
+              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+      end).
+
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -444,3 +471,12 @@ list_queue_messages(Config, QName) ->
                                            Q == QName
                                    end, List),
     binary_to_integer(Messages).
+
+delete_queue(Name, VHost) ->
+    QName = rabbit_misc:r(VHost, queue, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>);
+        _ ->
+            ok
+    end.
