@@ -2,7 +2,7 @@
 
 # selenium/standalone-chromium is multi-arch
 # https://hub.docker.com/r/selenium/standalone-chromium/tags
-SELENIUM_DOCKER_IMAGE=${SELENIUM_DOCKER_IMAGE:-selenium/standalone-chromium:133.0}
+SELENIUM_DOCKER_IMAGE=${SELENIUM_DOCKER_IMAGE:-selenium/standalone-chromium:141.0}
 
 start_selenium() {
   begin "Starting selenium  ..."
