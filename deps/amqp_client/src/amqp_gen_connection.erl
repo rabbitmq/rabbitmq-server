@@ -32,6 +32,7 @@
                 %% connection.block, connection.unblock handler
                 block_handler,
                 blocked_by = sets:new([{version, 2}]),
+                queue_types_published = sets:new([{version, 2}]),
                 closing = false %% #closing{} | false
                }).
 
@@ -214,7 +215,6 @@ handle_cast({register_blocked_handler, HandlerPid},
     {noreply, State1};
 handle_cast({conserve_resources, Source, Conserve},
             #state{blocked_by = BlockedBy} = State) ->
-    WasNotBlocked = sets:is_empty(BlockedBy),
     BlockedBy1 = case Conserve of
                      true ->
                          sets:add_element(Source, BlockedBy);
@@ -222,14 +222,11 @@ handle_cast({conserve_resources, Source, Conserve},
                          sets:del_element(Source, BlockedBy)
                  end,
     State1 = State#state{blocked_by = BlockedBy1},
-    case sets:is_empty(BlockedBy1) of
-        true ->
-            handle_method(#'connection.unblocked'{}, State1);
-        false when WasNotBlocked ->
-            handle_method(#'connection.blocked'{}, State1);
-        false ->
-            {noreply, State1}
-    end.
+    maybe_block(State, State1);
+handle_cast({channel_published_to_queue_type, _ChPid, QT},
+            #state{queue_types_published = QTs} = State) ->
+    State1 = State#state{queue_types_published = sets:add_element(QT, QTs)},
+    maybe_block(State, State1).
 
 %% @private
 handle_info({'DOWN', _, process, BlockHandler, Reason},
@@ -273,6 +270,24 @@ i(Item, #state{module = Mod, module_state = MState}) -> Mod:i(Item, MState).
 
 register_blocked_handler(Pid, HandlerPid) ->
     gen_server:cast(Pid, {register_blocked_handler, HandlerPid}).
+
+maybe_block(State0, State1) ->
+    WasBlocked = should_block(State0),
+    case should_block(State1) of
+        true when not WasBlocked ->
+            handle_method(#'connection.blocked'{}, State1);
+        false when WasBlocked ->
+            handle_method(#'connection.unblocked'{}, State1);
+        _ ->
+            {noreply, State1}
+    end.
+
+should_block(#state{blocked_by = BlockedBy, queue_types_published = QTs}) ->
+    lists:any(fun ({disk, QT}) ->
+                      sets:is_element(QT, QTs);
+                  (_Resource) ->
+                      true
+              end, sets:to_list(BlockedBy)).
 
 %%---------------------------------------------------------------------------
 %% Command handling
