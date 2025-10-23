@@ -2,7 +2,8 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
+%% Copyright (c) 2023-2025 Broadcom. All Rights Reserved. The term “Broadcom”
+%% refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 %%
 
 -module(rabbit_db_cluster).
@@ -50,7 +51,8 @@ ensure_feature_flags_are_in_sync(Nodes, NodeIsVirgin) ->
       RemoteNode :: node(),
       Ret :: Ok | Error,
       Ok :: {ok, [node()]} | {ok, already_member},
-      Error :: {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
+      Error :: {error, {inconsistent_cluster, string()} |
+                       {error, {erpc, noconnection}}}.
 
 can_join(RemoteNode) ->
     ?LOG_INFO(
@@ -82,7 +84,8 @@ can_join_using_khepri(RemoteNode) ->
       NodeType :: node_type(),
       Ret :: Ok | Error,
       Ok :: ok | {ok, already_member},
-      Error :: {error, {inconsistent_cluster, string()} | {error, {erpc, noconnection}}}.
+      Error :: {error, {inconsistent_cluster, string()} |
+                       {error, {erpc, noconnection}}}.
 %% @doc Adds this node to a cluster using `RemoteNode' to reach it.
 
 join(ThisNode, _NodeType) when ThisNode =:= node() ->
@@ -219,15 +222,18 @@ join(RemoteNode, NodeType)
                 true  ->
                     Error;
                 false ->
-                    %% rabbit_mnesia:can_join_cluster/1 notice inconsistent_cluster,
-                    %% as RemoteNode thinks this node is already in the cluster.
-                    %% Attempt to leave the RemoteNode cluster, the discovery cluster,
-                    %% and simply retry the operation.
-                    ?LOG_INFO("Mnesia: node ~tp thinks it's clustered "
-                                    "with node ~tp, but ~tp disagrees. ~tp will ask "
-                                    "to leave the cluster and try again.",
-                                    [RemoteNode, node(), node(), node()]),
-                    ok = rabbit_mnesia:leave_then_rediscover_cluster(RemoteNode),
+                    %% rabbit_mnesia:can_join_cluster/1 notice
+                    %% inconsistent_cluster, as RemoteNode thinks this node is
+                    %% already in the cluster. Attempt to leave the RemoteNode
+                    %% cluster, the discovery cluster, and simply retry the
+                    %% operation.
+                    ?LOG_INFO(
+                       "Mnesia: node ~tp thinks it's clustered "
+                       "with node ~tp, but ~tp disagrees. ~tp will ask "
+                       "to leave the cluster and try again.",
+                       [RemoteNode, node(), node(), node()]),
+                    ok = rabbit_mnesia:leave_then_rediscover_cluster(
+                           RemoteNode),
                     join(RemoteNode, NodeType)
             end;
         {error, _} = Error ->
