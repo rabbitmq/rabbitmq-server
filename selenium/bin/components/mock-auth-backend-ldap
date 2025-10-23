@@ -28,7 +28,7 @@ start_mock-auth-backend-ldap() {
     --publish 389:389 \
     --publish 636:636 \
     -v ${AUTH_BACKEND_LDAP_DIR}:/config \
-    osixia/openldap:1.2.1
+    osixia/openldap:1.5.0
 
   wait_for_message mock-auth-backend-ldap "starting"
   docker exec mock-auth-backend-ldap ldapadd \
