@@ -288,10 +288,14 @@ internal_update(#state{limit = DataDirLimit,
                                 limit = Limit} <- NewMountPoints]),
 
     AlarmedMPs = alarmed_mount_points(MountPoints),
+    AlarmedQTs = alarmed_queue_types(MountPoints),
     NewAlarmedMPs = alarmed_mount_points(NewMountPoints),
+    NewAlarmedQTs = alarmed_queue_types(NewMountPoints),
 
     NewlyClearedMPs = sets:subtract(AlarmedMPs, NewAlarmedMPs),
+    NewlyClearedQTs = sets:subtract(AlarmedQTs, NewAlarmedQTs),
     NewlyAlarmedMPs = sets:subtract(NewAlarmedMPs, AlarmedMPs),
+    NewlyAlarmedQTs = sets:subtract(NewAlarmedQTs, AlarmedQTs),
 
     lists:foreach(
       fun(Path) ->
@@ -301,7 +305,11 @@ internal_update(#state{limit = DataDirLimit,
                                                              NewMountPoints),
               emit_update_info(Id, "insufficient", Available, Limit)
       end, lists:sort(sets:to_list(NewlyAlarmedMPs))),
-    %% TODO: rabbit_alarm:set_alarm/1 for affected queue types
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:set_alarm({Alarm, []})
+      end, lists:sort(sets:to_list(NewlyAlarmedQTs))),
     lists:foreach(
       fun(Path) ->
               #mount_point{id = Id,
@@ -310,7 +318,11 @@ internal_update(#state{limit = DataDirLimit,
                                                              NewMountPoints),
               emit_update_info(Id, "sufficient", Available, Limit)
       end, lists:sort(sets:to_list(NewlyClearedMPs))),
-    %% TODO: rabbit_alarm:clear_alarm/1 for affected queue types
+    lists:foreach(
+      fun(QT) ->
+              Alarm = {resource_limit, {disk, QT}, node()},
+              rabbit_alarm:clear_alarm(Alarm)
+      end, lists:sort(sets:to_list(NewlyClearedQTs))),
 
     State#state{alarmed = NewAlarmed,
                 actual = DataDirFree,
@@ -332,6 +344,19 @@ alarmed_mount_points(MountPoints) ->
       fun (Path, #mount_point{available = Available, limit = Limit}, Acc)
             when Available < Limit ->
               sets:add_element(Path, Acc);
+          (_Path, _MP, Acc) ->
+              Acc
+      end, sets:new([{version, 2}]), MountPoints).
+
+-spec alarmed_queue_types(mount_points()) ->
+    sets:set(module()).
+alarmed_queue_types(MountPoints) ->
+    maps:fold(
+      fun (_Path, #mount_point{available = Available,
+                               limit = Limit,
+                               queue_types = QTs}, Acc)
+            when Available < Limit ->
+              sets:union(QTs, Acc);
           (_Path, _MP, Acc) ->
               Acc
       end, sets:new([{version, 2}]), MountPoints).
