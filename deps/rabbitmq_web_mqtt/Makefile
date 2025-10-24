@@ -27,7 +27,7 @@ PLT_APPS += rabbitmq_cli elixir cowlib
 # See rabbitmq-components.mk.
 BUILD_DEPS += ranch
 
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.11.0
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
 
 DEP_EARLY_PLUGINS = rabbit_common/mk/rabbitmq-early-plugin.mk
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk

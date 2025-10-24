@@ -106,11 +106,7 @@ block_connack_timeout(Config) ->
                                      {proto_ver, ?config(mqtt_version, Config)},
                                      {connect_timeout, 1}]),
     unlink(Client),
-    ClientMRef = monitor(process, Client),
-    {error, connack_timeout} = emqtt:connect(Client),
-    receive {'DOWN', ClientMRef, process, Client, connack_timeout} -> ok
-    after 30_000 -> ct:fail("missing connack_timeout in client")
-    end,
+    ?assertEqual({error, connack_timeout}, emqtt:connect(Client)),
 
     MqttReader = rpc(Config, ?MODULE, mqtt_connection_pid, [Ports]),
     MqttReaderMRef = monitor(process, MqttReader),

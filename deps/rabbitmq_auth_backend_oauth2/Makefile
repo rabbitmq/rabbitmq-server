@@ -17,7 +17,7 @@ DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
 dep_base64url = hex 1.0.1
 
-dep_emqtt = git https://github.com/emqx/emqtt.git 1.11.0
+dep_emqtt = git https://github.com/emqx/emqtt.git 1.14.6
 
 # Required to properly autopatch jose.
 ELIXIR = system
