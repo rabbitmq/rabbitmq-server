@@ -11,6 +11,7 @@
 -compile(inline_list_funcs).
 -compile(inline).
 -compile({no_auto_import, [apply/3]}).
+-dialyzer({nowarn_function, convert_v7_to_v8/2}).
 -dialyzer(no_improper_lists).
 
 -include("rabbit_fifo.hrl").
@@ -482,95 +483,146 @@ apply_(#{index := _Idx}, #garbage_collection{}, State) ->
     {State, ok, [{aux, garbage_collection}]};
 apply_(Meta, {timeout, expire_msgs}, State) ->
     checkout(Meta, State, State, []);
+% apply_(#{system_time := Ts} = Meta,
+%        {down, Pid, noconnection},
+%        #?STATE{consumers = Cons0,
+%                cfg = #cfg{consumer_strategy = single_active},
+%                waiting_consumers = Waiting0,
+%                enqueuers = Enqs0} = State0) ->
+%     Node = node(Pid),
+%     %% if the pid refers to an active or cancelled consumer,
+%     %% mark it as suspected and return it to the waiting queue
+%     {State1, Effects0} =
+%         maps:fold(
+%           fun(CKey, ?CONSUMER_PID(P) = #consumer{status = Status} = C0, {S0, E0})
+%                 when is_atom(Status) andalso node(P) =:= Node ->
+%                   %% the consumer should be returned to waiting
+%                   %% and checked out messages should be returned
+%                   Effs = consumer_update_active_effects(
+%                            S0, C0, false, {suspected_down, Status} , E0),
+%                   %% TODO: set a timer instead of reaturn all here to allow
+%                   %% a disconnected node a configurable bit of time to be
+%                   %% reconnected
+%                   {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, false),
+%                   %% if the consumer was cancelled there is a chance it got
+%                   %% removed when returning hence we need to be defensive here
+%                   Waiting = case St#?STATE.consumers of
+%                                 #{CKey := C} ->
+%                                     Waiting0 ++ [{CKey, C}];
+%                                 _ ->
+%                                     Waiting0
+%                             end,
+%                   {St#?STATE{consumers = maps:remove(CKey, St#?STATE.consumers),
+%                              waiting_consumers = Waiting,
+%                              last_active = Ts},
+%                    Effs1};
+%              (_, _, S) ->
+%                   S
+%           end, {State0, []}, maps:iterator(Cons0, ordered)),
+%     WaitingConsumers = update_waiting_consumer_status(Node, State1,
+%                                                       {suspected_down, up}),
+
+%     %% select a new consumer from the waiting queue and run a checkout
+%     State2 = State1#?STATE{waiting_consumers = WaitingConsumers},
+%     {State, Effects1} = activate_next_consumer(State2, Effects0),
+
+%     %% mark any enquers as suspected
+%     Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
+%                             E#enqueuer{status = suspected_down};
+%                        (_, E) -> E
+%                     end, Enqs0),
+%     Effects = [{monitor, node, Node} | Effects1],
+%     checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
 apply_(#{system_time := Ts} = Meta,
        {down, Pid, noconnection},
        #?STATE{consumers = Cons0,
-               cfg = #cfg{consumer_strategy = single_active},
-               waiting_consumers = Waiting0,
                enqueuers = Enqs0} = State0) ->
-    Node = node(Pid),
-    %% if the pid refers to an active or cancelled consumer,
-    %% mark it as suspected and return it to the waiting queue
-    {State1, Effects0} =
-        maps:fold(
-          fun(CKey, ?CONSUMER_PID(P) = C0, {S0, E0})
-                when node(P) =:= Node ->
-                  %% the consumer should be returned to waiting
-                  %% and checked out messages should be returned
-                  Effs = consumer_update_active_effects(
-                           S0, C0, false, suspected_down, E0),
-                  %% TODO: set a timer instead of reaturn all here to allow
-                  %% a disconnected node a configurable bit of time to be
-                  %% reconnected
-                  {St, Effs1} = return_all(Meta, S0, Effs, CKey, C0, false),
-                  %% if the consumer was cancelled there is a chance it got
-                  %% removed when returning hence we need to be defensive here
-                  Waiting = case St#?STATE.consumers of
-                                #{CKey := C} ->
-                                    Waiting0 ++ [{CKey, C}];
-                                _ ->
-                                    Waiting0
-                            end,
-                  {St#?STATE{consumers = maps:remove(CKey, St#?STATE.consumers),
-                             waiting_consumers = Waiting,
-                             last_active = Ts},
-                   Effs1};
-             (_, _, S) ->
-                  S
-          end, {State0, []}, maps:iterator(Cons0, ordered)),
-    WaitingConsumers = update_waiting_consumer_status(Node, State1,
-                                                      suspected_down),
 
-    %% select a new consumer from the waiting queue and run a checkout
-    State2 = State1#?STATE{waiting_consumers = WaitingConsumers},
-    {State, Effects1} = activate_next_consumer(State2, Effects0),
-
-    %% mark any enquers as suspected
-    Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
-                            E#enqueuer{status = suspected_down};
-                       (_, E) -> E
-                    end, Enqs0),
-    Effects = [{monitor, node, Node} | Effects1],
-    checkout(Meta, State0, State#?STATE{enqueuers = Enqs}, Effects);
-apply_(#{system_time := Ts} = Meta,
-       {down, Pid, noconnection},
-       #?STATE{consumers = Cons0,
-               enqueuers = Enqs0} = State0) ->
     %% A node has been disconnected. This doesn't necessarily mean that
     %% any processes on this node are down, they _may_ come back so here
     %% we just mark them as suspected (effectively deactivated)
     %% and return all checked out messages to the main queue for delivery to any
     %% live consumers
-    %%
-    %% all pids for the disconnected node will be marked as suspected not just
-    %% the one we got the `down' command for
+
     Node = node(Pid),
 
-    {State, Effects1} =
+    {Cons, Effects1} =
         maps:fold(
           fun(CKey, #consumer{cfg = #consumer_cfg{pid = P},
-                              status = up} = C0,
-              {St0, Eff}) when node(P) =:= Node ->
-                  C = C0#consumer{status = suspected_down},
-                  {St, Eff0} = return_all(Meta, St0, Eff, CKey, C, false),
-                  Eff1 = consumer_update_active_effects(St, C, false,
+                              status = Status} = C0,
+              {Cns0, Eff}) when P =:= Pid ->
+                  TargetStatus = case Status of
+                                     {suspected_down, T} -> T;
+                                     _ ->
+                                         Status
+                                 end,
+                  C = C0#consumer{status = {suspected_down, TargetStatus}},
+                  % down consumer still has messages assigned
+                  % TODO: make timeout configurable
+                  Eff0 = [{timer, {consumer_down_timeout, CKey}, 10_000} | Eff],
+                  Eff1 = consumer_update_active_effects(State0, C, false,
                                                         suspected_down, Eff0),
-                  {St, Eff1};
-             (_, _, {St, Eff}) ->
-                  {St, Eff}
-          end, {State0, []}, maps:iterator(Cons0, ordered)),
-    Enqs = maps:map(fun(P, E) when node(P) =:= Node ->
-                            E#enqueuer{status = suspected_down};
-                       (_, E) -> E
-                    end, Enqs0),
+                  {Cns0#{CKey => C}, Eff1};
+             (_, _, St) ->
+                  St
+          end, {Cons0, []}, maps:iterator(Cons0, ordered)),
+    Enqs = case Enqs0 of
+               #{Pid := E} ->
+                   Enqs0#{Pid := E#enqueuer{status = suspected_down}};
+               _ ->
+                   Enqs0
+           end,
 
+    WaitingConsumers = update_waiting_consumer_status(Pid, State0,
+                                                      {suspected_down, up}),
     % Monitor the node so that we can "unsuspect" these processes when the node
     % comes back, then re-issue all monitors and discover the final fate of
     % these processes
-
     Effects = [{monitor, node, Node} | Effects1],
-    checkout(Meta, State0, State#?STATE{enqueuers = Enqs,
-                                        last_active = Ts}, Effects);
+    checkout(Meta, State0, State0#?STATE{enqueuers = Enqs,
+                                         waiting_consumers = WaitingConsumers,
+                                         consumers = Cons,
+                                         last_active = Ts}, Effects);
+apply_(Meta, {timeout, {consumer_down_timeout, CKey}},
+       #?STATE{cfg = #cfg{consumer_strategy = competing},
+               consumers = Consumers} = State0) ->
+
+    case find_consumer(CKey, Consumers) of
+        {_CKey, #consumer{status = {suspected_down, _}} = Consumer} ->
+            %% the consumer is still suspected and has timed out
+            %% return all messages
+            {State1, Effects0} = return_all(Meta, State0, [], CKey,
+                                            Consumer, false),
+            checkout(Meta, State0, State1, Effects0);
+        _ ->
+            {State0, []}
+    end;
+apply_(#{system_time := Ts} = Meta, {timeout, {consumer_down_timeout, CKey}},
+       #?STATE{cfg = #cfg{consumer_strategy = single_active},
+               waiting_consumers = Waiting0,
+               consumers = Consumers} = State0) ->
+
+    case find_consumer(CKey, Consumers) of
+        {_CKey, #consumer{status = {suspected_down, Status}} = Consumer} ->
+            %% the consumer is still suspected and has timed out
+            %% return all messages
+            {State1, Effects0} = return_all(Meta, State0, [], CKey,
+                                            Consumer, false),
+            Waiting = case State1#?STATE.consumers of
+                          #{CKey := C} when Status =/= cancelled ->
+                              Waiting0 ++
+                              [{CKey, C#consumer{status = {suspected_down, up}}}];
+                          _ ->
+                              Waiting0
+                      end,
+            State2 = State1#?STATE{consumers = maps:remove(CKey, State1#?STATE.consumers),
+                                   waiting_consumers = Waiting,
+                                   last_active = Ts},
+            {State, Effects1} = activate_next_consumer(State2, Effects0),
+            checkout(Meta, State0, State, Effects1);
+        _ ->
+            {State0, []}
+    end;
 apply_(Meta, {down, Pid, _Info}, State0) ->
     {State1, Effects1} = activate_next_consumer(handle_down(Meta, Pid, State0)),
     checkout(Meta, State0, State1, Effects1);
@@ -580,33 +632,37 @@ apply_(Meta, {nodeup, Node}, #?STATE{consumers = Cons0,
     %% If we have suspected any processes of being
     %% down we should now re-issue the monitors for them to detect if they're
     %% actually down or not
-    Monitors = [{monitor, process, P}
-                || P <- suspected_pids_for(Node, State0)],
+    %% send leader change events to all disconnected enqueuers to prompt them
+    %% to resend any messages stuck during disconnection,
+    %% ofc it may not be a leader change per se but it has the same effect
+    Effects0 = lists:flatten([[{monitor, process, P},
+                               {send_msg, P, leader_change, ra_event}]
+                              || P <- suspected_pids_for(Node, State0)]),
 
     Enqs1 = maps:map(fun(P, E) when node(P) =:= Node ->
                              E#enqueuer{status = up};
                         (_, E) -> E
                      end, Enqs0),
-    %% send leader change events to all disconnected enqueuers to prompt them
-    %% to resend any messages stuck during disconnection,
-    %% ofc it may not be a leader change per se
-    Effects0 = maps:fold(fun(P, _E, Acc) when node(P) =:= Node ->
-                                 [{send_msg, P, leader_change, ra_event} | Acc];
-                            (_, _E, Acc) -> Acc
-                         end, Monitors, Enqs0),
 
     ConsumerUpdateActiveFun = consumer_active_flag_update_function(State0),
     %% mark all consumers as up
     {State1, Effects1} =
         maps:fold(
-          fun(ConsumerKey, ?CONSUMER_PID(P) = C, {SAcc, EAcc})
-                when (node(P) =:= Node) and
-                     (C#consumer.status =/= cancelled) ->
+          fun(ConsumerKey,
+              ?CONSUMER_PID(P) =
+              #consumer{status = {suspected_down, NextStatus}} = C,
+              {SAcc, EAcc0})
+                when node(P) =:= Node ->
                   EAcc1 = ConsumerUpdateActiveFun(SAcc, ConsumerKey,
-                                                  C, true, up, EAcc),
+                                                  C, true, NextStatus, EAcc0),
+                  %% cancel timers
+                  EAcc = [{timer,
+                           {consumer_down_timeout, ConsumerKey},
+                           infinity} | EAcc1],
+
                   {update_or_remove_con(Meta, ConsumerKey,
-                                        C#consumer{status = up},
-                                        SAcc), EAcc1};
+                                        C#consumer{status = NextStatus},
+                                        SAcc), EAcc};
              (_, _, Acc) ->
                   Acc
           end, {State0, Effects0}, maps:iterator(Cons0, ordered)),
@@ -696,8 +752,16 @@ snapshot_installed(_Meta, #?MODULE{cfg = #cfg{},
     Effs.
 
 convert_v7_to_v8(#{} = _Meta, StateV7) ->
+    %% the structure is intact for now
+    Cons0 = element(#?STATE.consumers, StateV7),
+    Cons = maps:map(fun (_CKey, #consumer{status = suspected_down} = C) ->
+                            C#consumer{status = {suspected_down, up}};
+                        (_CKey, C) ->
+                            C
+                    end, Cons0),
     StateV8 = StateV7,
     StateV8#?STATE{discarded_bytes = 0,
+                   consumers = Cons,
                    unused_0 = ?NIL}.
 
 purge_node(Meta, Node, State, Effects) ->
@@ -763,15 +827,16 @@ handle_waiting_consumer_down(Pid,
     State = State0#?STATE{waiting_consumers = StillUp},
     {Effects, State}.
 
-update_waiting_consumer_status(Node,
+update_waiting_consumer_status(DownPidOrNode,
                                #?STATE{waiting_consumers = WaitingConsumers},
                                Status) ->
     sort_waiting(
-      [case node(Pid) of
-           Node ->
-               {ConsumerKey, Consumer#consumer{status = Status}};
-           _ ->
-               {ConsumerKey, Consumer}
+      [if is_pid(DownPidOrNode) andalso DownPidOrNode == Pid ->
+              {ConsumerKey, Consumer#consumer{status = Status}};
+          is_atom(DownPidOrNode) andalso DownPidOrNode == node(Pid) ->
+              {ConsumerKey, Consumer#consumer{status = Status}};
+          true ->
+              {ConsumerKey, Consumer}
        end || {ConsumerKey, ?CONSUMER_PID(Pid) =  Consumer}
               <- WaitingConsumers, Consumer#consumer.status =/= cancelled]).
 
@@ -1221,7 +1286,9 @@ query_waiting_consumers(#?STATE{waiting_consumers = WaitingConsumers}) ->
 query_consumer_count(#?STATE{consumers = Consumers,
                              waiting_consumers = WaitingConsumers}) ->
     Up = maps:filter(fun(_ConsumerKey, #consumer{status = Status}) ->
-                             Status =/= suspected_down
+                             %% TODO: should this really not include suspected
+                             %% consumers?
+                             is_atom(Status)
                      end, Consumers),
     maps:size(Up) + length(WaitingConsumers).
 
@@ -1234,8 +1301,8 @@ query_consumers(#?STATE{consumers = Consumers,
             competing ->
                 fun(_ConsumerKey, #consumer{status = Status}) ->
                         case Status of
-                            suspected_down  ->
-                                {false, Status};
+                            {suspected_down, _}  ->
+                                {false, suspected_down};
                             _ ->
                                 {true, Status}
                         end
@@ -1522,7 +1589,10 @@ activate_next_consumer(#?STATE{consumers = Cons0,
     end.
 
 active_consumer({CKey, #consumer{status = Status} = Consumer, _I})
-  when Status == up orelse Status == quiescing ->
+  when Status == up orelse
+       Status == quiescing orelse
+       Status == {suspected_down, up} orelse
+       Status == {suspected_down, quiescing} ->
     {CKey, Consumer};
 active_consumer({_CKey, #consumer{status = _}, I}) ->
     active_consumer(maps:next(I));
@@ -1928,7 +1998,7 @@ return_one(Meta, MsgId, Msg0, DeliveryFailed, Anns,
             State1 = State0#?STATE{dlx = DlxState,
                                    discarded_bytes = DiscardedBytes0 - RetainedBytes},
             {State, Effects} = complete(Meta, ConsumerKey, [MsgId],
-                                         Con0, State1, Effects0),
+                                        Con0, State1, Effects0),
             {State, DlxEffects ++ Effects};
         _ ->
             Checked = maps:remove(MsgId, Checked0),
@@ -2715,7 +2785,7 @@ suspected_pids_for(Node, #?STATE{consumers = Cons0,
                                  waiting_consumers = WaitingConsumers0}) ->
     Cons = maps:fold(fun(_Key,
                          #consumer{cfg = #consumer_cfg{pid = P},
-                                   status = suspected_down},
+                                   status = {suspected_down, _}},
                          Acc)
                            when node(P) =:= Node ->
                              [P | Acc];
@@ -2730,7 +2800,7 @@ suspected_pids_for(Node, #?STATE{consumers = Cons0,
                                  end, Cons, maps:iterator(Enqs0, ordered)),
     lists:foldl(fun({_Key,
                      #consumer{cfg = #consumer_cfg{pid = P},
-                               status = suspected_down}}, Acc)
+                               status = {suspected_down, _}}}, Acc)
                       when node(P) =:= Node ->
                         [P | Acc];
                    (_, Acc) -> Acc
@@ -2741,7 +2811,7 @@ is_expired(Ts, #?STATE{cfg = #cfg{expires = Expires},
                        consumers = Consumers})
   when is_number(LastActive) andalso is_number(Expires) ->
     %% TODO: should it be active consumers?
-    Active = maps:filter(fun (_, #consumer{status = suspected_down}) ->
+    Active = maps:filter(fun (_, #consumer{status = {suspected_down, _}}) ->
                                  false;
                              (_, _) ->
                                  true

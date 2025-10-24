@@ -3498,6 +3498,7 @@ reconnect_consumer_and_publish(Config) ->
     Up = [Leader, F2],
     rabbit_ct_broker_helpers:block_traffic_between(F1, Leader),
     rabbit_ct_broker_helpers:block_traffic_between(F1, F2),
+
     wait_for_messages_ready(Up, RaName, 1),
     wait_for_messages_pending_ack(Up, RaName, 0),
     wait_for_messages_ready([F1], RaName, 0),

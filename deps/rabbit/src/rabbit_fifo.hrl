@@ -153,9 +153,11 @@
          lifetime = once :: once | auto,
          priority = 0 :: integer()}).
 
+-type consumer_status() :: up | cancelled | quiescing.
+
 -record(consumer,
         {cfg = #consumer_cfg{},
-         status = up :: up | suspected_down | cancelled | quiescing,
+         status = up :: consumer_status() | {suspected_down, consumer_status()},
          next_msg_id = 0 :: msg_id(),
          checked_out = #{} :: #{msg_id() => msg()},
          %% max number of messages that can be sent
