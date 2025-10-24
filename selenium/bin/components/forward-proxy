@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 HTTPD_DOCKER_IMAGE=${HTTPD_DOCKER_IMAGE:-httpd:latest}
 
 ensure_forward-proxy() {

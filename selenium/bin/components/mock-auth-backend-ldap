@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+OPENLDAP_DOCKER_IMAGE=${OPENLDAP_DOCKER_IMAGE:-osixia/openldap:1.5.0}
+
 ensure_mock-auth-backend-ldap() {
   if docker ps | grep mock-auth-backend-ldap &> /dev/null; then
      print "mock-auth-backend-ldap already running ..."
@@ -9,7 +11,6 @@ ensure_mock-auth-backend-ldap() {
 }
 init_mock-auth-backend-ldap() {
   AUTH_BACKEND_LDAP_DIR=${TEST_CONFIG_DIR}/mock-auth-backend-ldap
-  OPENLDAP_DOCKER_IMAGE=${OPENLDAP_DOCKER_IMAGE:-osixia/openldap:1.5.0}
 
   print "> AUTH_BACKEND_LDAP_DIR: ${AUTH_BACKEND_LDAP_DIR}"
   print "> OPENLDAP_DOCKER_IMAGE: ${OPENLDAP_DOCKER_IMAGE}"
