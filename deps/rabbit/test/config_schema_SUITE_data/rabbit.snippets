@@ -1278,6 +1278,7 @@ credential_validator.regexp = ^abc\\d+",
       {stream_read_ahead, false}
      ]}],
    []},
+<<<<<<< HEAD
   {stream_read_ahead_limit_bytes,
    "
     stream.read_ahead = 8192
@@ -1292,6 +1293,16 @@ credential_validator.regexp = ^abc\\d+",
    ",
    [{rabbit, [
       {stream_read_ahead, "8KiB"}
+=======
+
+  %%
+  %% Stream data dir
+  %%
+  {stream_data_dir,
+   "stream.data_dir = /data/rabbitmq/stream",
+   [{osiris, [
+      {data_dir, "/data/rabbitmq/stream"}
+>>>>>>> c81fbc5dc (Allow configuring osiris data_dir in Cuttlefish config)
      ]}],
    []}
 ].
