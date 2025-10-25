@@ -467,6 +467,14 @@ tcp_listen_options.exit_on_close = false",
   "total_memory_available_override_value = 1024MB",
   [{rabbit,[{total_memory_available_override_value, "1024MB"}]}],
   []},
+ {disk_free_limits_per_mount_point,
+  "disk_free_limits.replicated.mount_point = /data/replicated
+   disk_free_limits.replicated.absolute = 2GB
+   disk_free_limits.replicated.queue_types = stream,quorum",
+  [{rabbit,[{disk_free_limits,
+             #{<<"replicated">> => {"/data/replicated", "2GB",
+                                    [<<"stream">>, <<"quorum">>]}}}]}],
+  []},
  {ranch_connection_max,
   "ranch_connection_max = 999",
   [{rabbit,[{ranch_connection_max, 999}]}],
@@ -1252,6 +1260,16 @@ credential_validator.regexp = ^abc\\d+",
    ",
    [{rabbit, [
       {stream_read_ahead, false}
+     ]}],
+   []},
+
+  %%
+  %% Stream data dir
+  %%
+  {stream_data_dir,
+   "stream.data_dir = /data/rabbitmq/stream",
+   [{osiris, [
+      {data_dir, "/data/rabbitmq/stream"}
      ]}],
    []}
 
