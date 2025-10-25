@@ -104,6 +104,7 @@
          setup/1,
          init/1,
          reset/0,
+         is_virgin_node/0,
 
          dir/0,
          get_ra_cluster_name/0,
@@ -297,9 +298,15 @@ setup(_Context) ->
             exit(Error)
     end.
 
+is_ra_system_running() ->
+    rabbit_ra_systems:is_running(?RA_SYSTEM).
+
 ensure_ra_system_started() ->
     {ok, _} = application:ensure_all_started(khepri),
     ok = rabbit_ra_systems:ensure_ra_system_started(?RA_SYSTEM).
+
+ensure_ra_system_stopped() ->
+    ok = rabbit_ra_systems:ensure_ra_system_stopped(?RA_SYSTEM).
 
 retry_timeout() ->
     case application:get_env(rabbit, khepri_leader_wait_retry_timeout) of
@@ -375,15 +382,41 @@ reset() ->
         false ->
             %% Rabbit should be stopped, but Khepri needs to be running.
             %% Restart it.
+            RaSystemRunning = is_ra_system_running(),
             ok = setup(),
             ok = khepri_cluster:reset(?RA_CLUSTER_NAME),
             ok = khepri:stop(?RA_CLUSTER_NAME),
+            RaSystemRunning orelse ensure_ra_system_stopped(),
 
             _ = file:delete(rabbit_guid:filename()),
             ok;
         true ->
             throw({error, rabbitmq_unexpectedly_running})
     end.
+
+is_virgin_node() ->
+    IsSystemRunning = is_ra_system_running(),
+    IsStoreRunning = khepri_cluster:is_store_running(?STORE_ID),
+    case IsSystemRunning of
+        true  -> ok;
+        false -> ok = ensure_ra_system_started()
+    end,
+    case IsStoreRunning of
+        true  -> ok;
+        false -> ok = setup()
+    end,
+
+    IsEmpty = is_empty() =:= true,
+
+    case IsStoreRunning of
+        true  -> ok;
+        false -> ok = khepri:stop(?RA_CLUSTER_NAME)
+    end,
+    case IsSystemRunning of
+        true  -> ok;
+        false -> ok = ensure_ra_system_stopped()
+    end,
+    IsEmpty.
 
 -spec dir() -> Dir when
       Dir :: file:filename_all().
@@ -661,13 +694,8 @@ remove_reachable_member(NodeToRemove) ->
        [NodeToRemove, ?RA_CLUSTER_NAME],
        #{domain => ?RMQLOG_DOMAIN_GLOBAL}),
 
-    %% We need the Khepri store to run on the node to remove, to be
-    %% able to reset it.
-    ok = rabbit_misc:rpc_call(
-           NodeToRemove, ?MODULE, setup, []),
-
     Ret = rabbit_misc:rpc_call(
-            NodeToRemove, khepri_cluster, reset, [?RA_CLUSTER_NAME]),
+            NodeToRemove, rabbit_db, reset, []),
     case Ret of
         ok ->
             rabbit_amqqueue:forget_all(NodeToRemove),

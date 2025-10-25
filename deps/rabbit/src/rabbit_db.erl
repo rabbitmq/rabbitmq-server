@@ -21,6 +21,7 @@
          is_virgin_node/0, is_virgin_node/1,
          dir/0,
          ensure_dir_exists/0,
+         wipe_data_dir/0,
          is_init_finished/0,
          clear_init_finished/0]).
 
@@ -195,7 +196,31 @@ force_load_on_next_boot_using_mnesia() ->
     rabbit_mnesia:force_load_next_boot().
 
 post_reset() ->
+    %% We assert all Ra systems are stopped because their files are about to
+    %% be removed.
+    lists:foreach(
+      fun(RaSystem) ->
+              case rabbit_ra_systems:is_running(RaSystem) of
+                  false ->
+                      ok;
+                  true ->
+                      Reason = rabbit_misc:format(
+                                 "Ra system '~s' is still running during "
+                                 "reset",
+                                 [RaSystem]),
+                      ?LOG_ERROR(
+                         "DB: ~ts",
+                         [Reason],
+                         #{domain => ?RMQLOG_DOMAIN_DB}),
+                      throw({error, Reason})
+              end
+      end, rabbit_ra_systems:all_ra_systems()),
+
+    %% We reset the state of feature flags, both in memory and on disk. The
+    %% state recorded on disk would be deleted with the wipe below anyway.
     rabbit_feature_flags:reset(),
+
+    wipe_data_dir(),
 
     %% The cluster status files that RabbitMQ uses when Mnesia is the database
     %% are initially created from rabbit_prelaunch_cluster. However, it will
@@ -207,6 +232,17 @@ post_reset() ->
     ThisNode = node(),
     rabbit_node_monitor:write_cluster_status({[ThisNode], [ThisNode], []}),
 
+    ok.
+
+wipe_data_dir() ->
+    DataDir = dir(),
+    Glob = filename:join(DataDir, "*"),
+    FilesToRemove = lists:sort(filelib:wildcard(Glob)),
+    ?LOG_DEBUG(
+       "DB: wipe files in data directory `~ts`:~n~p",
+       [DataDir, FilesToRemove],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    ok = rabbit_file:recursive_delete(FilesToRemove),
     ok.
 
 %% -------------------------------------------------------------------
@@ -231,10 +267,7 @@ is_virgin_node_using_mnesia() ->
     rabbit_mnesia:is_virgin_node().
 
 is_virgin_node_using_khepri() ->
-    case rabbit_khepri:is_empty() of
-        {error, _} -> true;
-        IsEmpty    -> IsEmpty
-    end.
+    rabbit_khepri:is_virgin_node().
 
 -spec is_virgin_node(Node) -> IsVirgin | undefined when
       Node :: node(),
