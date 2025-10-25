@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+MOCKSERVER_DOCKER_IMAGE=${MOCKSERVER_DOCKER_IMAGE:-mockserver/mockserver}
+
 ensure_mock-auth-backend-http() {
   if docker ps | grep mock-auth-backend-http &> /dev/null; then
      print "mock-auth-backend-http already running ..."
@@ -10,7 +12,6 @@ ensure_mock-auth-backend-http() {
 init_mock-auth-backend-http() {
   AUTH_BACKEND_HTTP_BASEURL=${AUTH_BACKEND_HTTP_BASEURL:-http://localhost:8888}
   AUTH_BACKEND_HTTP_DIR=${TEST_CASES_DIR}/mock-auth-backend-http
-  MOCKSERVER_DOCKER_IMAGE=${MOCKSERVER_DOCKER_IMAGE:-mockserver/mockserver}
 
   print "> AUTH_BACKEND_HTTP_BASEURL: ${AUTH_BACKEND_HTTP_BASEURL}"
   print "> AUTH_BACKEND_HTTP_DIR: ${AUTH_BACKEND_HTTP_DIR}"
