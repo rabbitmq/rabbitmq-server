@@ -36,7 +36,7 @@
          proc_state = connect_packet_unprocessed :: connect_packet_unprocessed |
                                                     rabbit_mqtt_processor:state(),
          connection_state :: running | blocked,
-         conserve :: boolean(),
+         blocked_by :: sets:set(rabbit_alarm:resource_alarm_source()),
          stats_timer :: rabbit_event:state(),
          keepalive = rabbit_mqtt_keepalive:init() :: rabbit_mqtt_keepalive:state(),
          conn_name :: binary()
@@ -53,8 +53,8 @@ start_link(Ref, _Transport, []) ->
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
                          rabbit_alarm:resource_alert()) -> ok.
-conserve_resources(Pid, _, {_, Conserve, _}) ->
-    Pid ! {conserve_resources, Conserve},
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Source, Conserve},
     ok.
 
 -spec info(pid(), rabbit_types:info_keys()) ->
@@ -78,7 +78,7 @@ init(Ref) ->
         {ok, ConnStr} ->
             ConnName = rabbit_data_coercion:to_binary(ConnStr),
             ?LOG_DEBUG("MQTT accepting TCP connection ~tp (~ts)", [self(), ConnName]),
-            _ = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+            Alarms = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
             LoginTimeout = application:get_env(?APP_NAME, login_timeout, 10_000),
             erlang:send_after(LoginTimeout, self(), login_timeout),
             State0 = #state{socket = RealSocket,
@@ -86,7 +86,7 @@ init(Ref) ->
                             conn_name = ConnName,
                             await_recv = false,
                             connection_state = running,
-                            conserve = false,
+                            blocked_by = sets:from_list(Alarms, [{version, 2}]),
                             parse_state = rabbit_mqtt_packet:init_state(),
                             stats_timer = rabbit_event:init_stats_timer()},
             State = control_throttle(State0),
@@ -185,9 +185,16 @@ handle_info({Tag, Sock, Reason}, State = #state{socket = Sock})
             when Tag =:= tcp_error; Tag =:= ssl_error ->
     network_error(Reason, State);
 
-handle_info({conserve_resources, Conserve}, State) ->
+handle_info({conserve_resources, Source, Conserve},
+            #state{blocked_by = BlockedBy0} = State) ->
+    BlockedBy = case Conserve of
+                    true ->
+                        sets:add_element(Source, BlockedBy0);
+                    false ->
+                        sets:del_element(Source, BlockedBy0)
+                end,
     maybe_process_deferred_recv(
-        control_throttle(State #state{ conserve = Conserve }));
+        control_throttle(State #state{ blocked_by = BlockedBy }));
 
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -417,10 +424,11 @@ run_socket(State = #state{ socket = Sock }) ->
     State#state{ await_recv = true }.
 
 control_throttle(State = #state{connection_state = ConnState,
-                                conserve = Conserve,
+                                blocked_by = BlockedBy,
                                 proc_state = PState,
                                 keepalive = KState
                                }) ->
+    Conserve = not sets:is_empty(BlockedBy),
     Throttle = case PState of
                    connect_packet_unprocessed -> Conserve;
                    _ -> rabbit_mqtt_processor:throttle(Conserve, PState)
@@ -537,7 +545,7 @@ format_state(#state{socket = Socket,
                     parse_state = _,
                     proc_state = PState,
                     connection_state = ConnectionState,
-                    conserve = Conserve,
+                    blocked_by = BlockedBy,
                     stats_timer = StatsTimer,
                     keepalive = Keepalive,
                     conn_name = ConnName
@@ -552,7 +560,7 @@ format_state(#state{socket = Socket,
                            rabbit_mqtt_processor:format_status(PState)
                     end,
       connection_state => ConnectionState,
-      conserve => Conserve,
+      blocked_by => lists:sort(sets:to_list(BlockedBy)),
       stats_timer => StatsTimer,
       keepalive => Keepalive,
       conn_name => ConnName}.
