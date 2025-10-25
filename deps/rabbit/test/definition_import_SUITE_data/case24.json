@@ -1,0 +1,49 @@
+{
+  "rabbit_version": "4.2.0",
+  "users": [
+    {
+      "name": "guest",
+      "password_hash": "J+UiUxNQ3I8uPn6Lo2obWcl93VgXgbw4R+xhl3L5zHwkRFZG",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "read": ".*",
+      "write": ".*"
+    }
+  ],
+  "topic_permissions": [],
+  "parameters": [
+    {
+      "value": {
+        "pattern": "^regulated\\.",
+        "definition": {
+          "expires": 3600000,
+          "message-ttl": 300000,
+          "max-length": 10000,
+          "max-length-bytes": 104857600
+        },
+        "priority": 1,
+        "apply-to": "queues"
+      },
+      "vhost": "/",
+      "component": "operator_policy",
+      "name": "regulated-queues"
+    }
+  ],
+  "global_parameters": [],
+  "policies": [],
+  "queues": [],
+  "exchanges": [],
+  "bindings": []
+}
