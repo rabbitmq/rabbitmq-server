@@ -36,7 +36,6 @@ groups() ->
           simple_amqp10_dest,
           simple_amqp10_src,
           amqp091_to_amqp10_with_dead_lettering,
-          amqp10_to_amqp091_application_properties,
           test_amqp10_delete_after_queue_length
         ]},
       {with_map_config, [], [
@@ -201,42 +200,6 @@ simple_amqp10_src(Config) ->
               % the fidelity loss is quite high when consuming using the amqp10
               % plugin. For example custom headers aren't current translated.
               % This isn't due to the shovel though.
-              ok
-      end).
-
-amqp10_to_amqp091_application_properties(Config) ->
-    MapConfig = ?config(map_config, Config),
-    Src = ?config(srcq, Config),
-    Dest = ?config(destq, Config),
-    with_amqp10_session(Config,
-      fun (Sess) ->
-              shovel_test_utils:set_param(
-                Config,
-                ?PARAM, [{<<"src-protocol">>, <<"amqp10">>},
-                         {<<"src-address">>,  Src},
-                         {<<"dest-protocol">>, <<"amqp091">>},
-                         {<<"dest-queue">>, Dest},
-                         {<<"add-forward-headers">>, true},
-                         {<<"dest-add-timestamp-header">>, true},
-                         {<<"publish-properties">>,
-                          case MapConfig of
-                              true -> #{<<"cluster_id">> => <<"x">>};
-                              _    -> [{<<"cluster_id">>, <<"x">>}]
-                          end}
-                        ]),
-
-              MsgSent = amqp10_msg:set_application_properties(
-                      #{<<"key">> => <<"value">>},
-                      amqp10_msg:set_headers(
-                        #{durable => true},
-                        amqp10_msg:new(<<"tag1">>, <<"hello">>, false))),
-
-              Msg = publish_expect_msg(Sess, Src, Dest, MsgSent),
-              AppProps = amqp10_msg:application_properties(Msg),
-              ct:pal("MSG ~p", [Msg]),
-
-              ?assertMatch(#{<<"key">> := <<"value">>},
-                           AppProps),
               ok
       end).
 

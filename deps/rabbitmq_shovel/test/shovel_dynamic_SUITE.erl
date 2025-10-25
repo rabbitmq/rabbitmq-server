@@ -22,7 +22,11 @@
                             amqp10_publish_expect/5,
                             amqp10_declare_queue/3,
                             amqp10_publish/4,
-                            amqp10_expect_count/3
+                            amqp10_publish_msg/4,
+                            amqp10_expect_one/2,
+                            amqp10_expect_count/3,
+                            make_uri/3,
+                            await_no_shovel/2
                            ]).
 
 -define(PARAM, <<"test">>).
@@ -78,7 +82,10 @@ tests() ->
      %% autodelete_classic_on_confirm_with_rejections,
      %% autodelete_quorum_on_confirm_with_rejections,
      autodelete_classic_on_publish_with_rejections,
-     autodelete_quorum_on_publish_with_rejections
+     autodelete_quorum_on_publish_with_rejections,
+     no_vhost_access,
+     application_properties,
+     delete_src_queue
     ].
 
 %% -------------------------------------------------------------------
@@ -94,7 +101,8 @@ init_per_suite(Config0) ->
           "server_initiated_close,404",
           "writer,send_failed,closed",
           "source_queue_down",
-          "dest_queue_down"
+          "dest_queue_down",
+          "inbound_link_detached"
         ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(
@@ -196,18 +204,21 @@ end_per_group(_, Config) ->
 init_per_testcase(Testcase, Config0) ->
     SrcQ = list_to_binary(atom_to_list(Testcase) ++ "_src"),
     DestQ = list_to_binary(atom_to_list(Testcase) ++ "_dest"),
+    VHost = list_to_binary(atom_to_list(Testcase) ++ "_vhost"),
     ShovelArgs = [{<<"src-protocol">>, ?config(src_protocol, Config0)},
                   {<<"dest-protocol">>, ?config(dest_protocol, Config0)},
                   {?config(src_address, Config0), SrcQ},
                   {?config(dest_address, Config0), DestQ}],
     Config = rabbit_ct_helpers:set_config(
                Config0,
-               [{srcq, SrcQ}, {destq, DestQ}, {shovel_args, ShovelArgs}]),
+               [{srcq, SrcQ}, {destq, DestQ}, {shovel_args, ShovelArgs},
+                {alt_vhost, VHost}]),
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
     shovel_test_utils:clear_param(Config, ?PARAM),
     rabbit_ct_broker_helpers:rpc(Config, 0, shovel_test_utils, delete_all_queues, []),
+    _ = rabbit_ct_broker_helpers:delete_vhost(Config, ?config(alt_vhost, Config)),
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -383,6 +394,64 @@ autodelete_with_quorum_rejections(Config, AckMode, ExpSrcFun) ->
               amqp10_expect_count(Sess, Dest, ExpDest)
       end).
 
+no_vhost_access(Config) ->
+    AltVHost = ?config(alt_vhost, Config),
+    ok = rabbit_ct_broker_helpers:add_vhost(Config, AltVHost),
+    Uri = make_uri(Config, 0, AltVHost),
+    ExtraArgs = [{<<"src-uri">>,  Uri}, {<<"dest-uri">>, [Uri]}],
+    ShovelArgs = ?config(shovel_args, Config) ++ ExtraArgs,
+    ok = rabbit_ct_broker_helpers:rpc(
+           Config, 0, rabbit_runtime_parameters, set,
+           [<<"/">>, <<"shovel">>, ?PARAM, ShovelArgs, none]),
+    await_no_shovel(Config, ?PARAM).
+
+application_properties(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              Tag = <<"tag1">>,
+              Msg = amqp10_msg:set_application_properties(
+                      #{<<"key">> => <<"value">>},
+                      amqp10_msg:set_headers(
+                        #{durable => true},
+                        amqp10_msg:new(Tag, <<"hello">>, false))),
+              amqp10_publish_msg(Sess, Src, Tag, Msg),
+              MsgRcv = amqp10_expect_one(Sess, Dest),
+              AppProps = amqp10_msg:application_properties(MsgRcv),
+              ?assertMatch(#{<<"key">> := <<"value">>},
+                           AppProps)
+      end).
+
+delete_src_queue(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              set_param(Config, ?PARAM, ?config(shovel_args, Config)),
+              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1),
+              ?awaitMatch([{_Name, dynamic, {running, _}, #{forwarded := 1}, _}],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30000),
+              rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, delete_queue,
+                                           [Src, <<"/">>]),
+              ?awaitMatch(
+                 [[Dest, _],
+                  [Src, _]],
+                 lists:sort(rabbit_ct_broker_helpers:rabbitmqctl_list(
+                              Config, 0,
+                              ["list_queues", "name", "messages", "--no-table-headers"])),
+                 45_000),
+              ?awaitMatch([{_Name, dynamic, {running, _}, _, _}],
+                          rabbit_ct_broker_helpers:rpc(Config, 0,
+                                                       rabbit_shovel_status, status, []),
+                          30000),
+              _ = amqp10_publish_expect(Sess, Src, Dest, <<"hello">>, 1)
+      end).
+
 %%----------------------------------------------------------------------------
 maybe_skip_local_protocol(Config) ->
     [Node] = rabbit_ct_broker_helpers:get_node_configs(Config, nodename),
@@ -402,3 +471,12 @@ list_queue_messages(Config, QName) ->
                                            Q == QName
                                    end, List),
     binary_to_integer(Messages).
+
+delete_queue(Name, VHost) ->
+    QName = rabbit_misc:r(VHost, queue, Name),
+    case rabbit_amqqueue:lookup(QName) of
+        {ok, Q} ->
+            {ok, _} = rabbit_amqqueue:delete(Q, false, false, <<"dummy">>);
+        _ ->
+            ok
+    end.
