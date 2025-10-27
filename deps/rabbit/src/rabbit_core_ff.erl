@@ -215,6 +215,5 @@
    {'rabbitmq_4.2.0',
     #{desc          => "Allows rolling upgrades to 4.2.x",
       stability     => stable,
-      depends_on    => ['rabbitmq_4.1.0'],
-      callbacks     => #{enable => {rabbit_khepri, enable_feature_flag}}
+      depends_on    => ['rabbitmq_4.1.0', 'khepri_db']
      }}).
