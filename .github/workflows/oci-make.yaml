@@ -84,7 +84,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Download package-generic-unix
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: package-generic-unix-otp${{ matrix.otp_version }}
           path: PACKAGES
