@@ -1465,7 +1465,7 @@ pkg_eunit_formatters_description = Because eunit's output sucks. Let's make it b
 pkg_eunit_formatters_homepage = https://github.com/seancribbs/eunit_formatters
 pkg_eunit_formatters_fetch = git
 pkg_eunit_formatters_repo = https://github.com/seancribbs/eunit_formatters
-pkg_eunit_formatters_commit = master
+pkg_eunit_formatters_commit = main
 
 PACKAGES += euthanasia
 pkg_euthanasia_name = euthanasia
