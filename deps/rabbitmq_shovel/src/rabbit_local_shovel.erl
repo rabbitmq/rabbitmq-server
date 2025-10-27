@@ -244,12 +244,10 @@ source_protocol(_State) ->
 dest_protocol(_State) ->
     local.
 
-source_endpoint(#{source := #{queue := Queue,
-                              exchange := SrcX,
+source_endpoint(#{source := #{exchange := SrcX,
                               routing_key := SrcXKey}}) ->
     [{src_exchange, SrcX},
-     {src_exchange_key, SrcXKey},
-     {src_queue, Queue}];
+     {src_exchange_key, SrcXKey}];
 source_endpoint(#{source := #{queue := Queue}}) ->
     [{src_queue, Queue}];
 source_endpoint(_Config) ->
