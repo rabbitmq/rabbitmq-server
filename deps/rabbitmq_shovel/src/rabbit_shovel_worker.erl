@@ -279,13 +279,15 @@ report_running(#state{config = Config} = State) ->
     OutProto = rabbit_shovel_behaviour:dest_protocol(Config),
     InEndpoint = rabbit_shovel_behaviour:source_endpoint(Config),
     OutEndpoint = rabbit_shovel_behaviour:dest_endpoint(Config),
+    {_, Metrics} = rabbit_shovel_behaviour:status(Config),
     rabbit_shovel_status:report(State#state.name, State#state.type,
                                 {running, [{src_uri,  rabbit_data_coercion:to_binary(InUri)},
                                            {src_protocol, rabbit_data_coercion:to_binary(InProto)},
                                            {dest_protocol, rabbit_data_coercion:to_binary(OutProto)},
                                            {dest_uri, rabbit_data_coercion:to_binary(OutUri)}]
                                  ++ props_to_binary(InEndpoint) ++ props_to_binary(OutEndpoint)
-                                }).
+                                },
+                               Metrics).
 
 props_to_binary(Props) ->
     [{K, rabbit_data_coercion:to_binary(V)} || {K, V} <- Props].
