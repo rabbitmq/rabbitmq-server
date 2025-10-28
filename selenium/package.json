@@ -19,7 +19,7 @@
     "http-proxy": "^1.18.1",
     "mqtt": "^5.3.3",
     "path": "^0.12.7",
-    "proxy": "^1.0.2",
+    "proxy": "^2.2.0",
     "rhea": "^3.0.3",
     "selenium-webdriver": "^4.19.0",
     "xmlhttprequest": "^1.8.0"
