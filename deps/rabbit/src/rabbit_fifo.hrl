@@ -22,9 +22,9 @@
 -define(DELIVERY_SEND_MSG_OPTS, [local, ra_event]).
 
 %% constants for packed msg references where both the raft index and the size
-%% is packed into a single immidate term
+%% is packed into a single immediate term
 %%
-%% 59 bytes as immedate ints are signed
+%% 59 bits as immediate ints are signed
 -define(PACKED_MAX, 16#7FFF_FFFF_FFFF_FFF).
 %% index bits - enough for 2000 days at 100k indexes p/sec
 -define(PACKED_IDX_BITS, 44).
@@ -77,7 +77,7 @@
 -type msg_size() :: non_neg_integer().
 %% the size in bytes of the msg payload
 
-%% 60 byte integer, immediate
+%% small integer, immediate
 -type packed_msg() :: 0..?PACKED_MAX.
 
 -type msg() :: packed_msg() | optimised_tuple(ra:index(), msg_header()).
