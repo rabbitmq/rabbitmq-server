@@ -14,7 +14,7 @@
   "dependencies": {
     "chromedriver": "^134.0",
     "ejs": "^3.1.8",
-    "express": "^4.18.2",
+    "express": "^5.1.0",
     "geckodriver": "^3.0.2",
     "http-proxy": "^1.18.1",
     "mqtt": "^5.3.3",
