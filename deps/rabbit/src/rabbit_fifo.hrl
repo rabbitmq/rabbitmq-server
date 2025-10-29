@@ -5,7 +5,7 @@
 %% Copyright (c) 2007-2025 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
 
 %% macros for memory optimised tuple structures
-%% [A|B] saves 1 byte compared to {A,B}
+%% [A|B] saves 1 word compared to {A,B}
 -define(TUPLE(A, B), [A | B]).
 
 %% We only hold Raft index and message header in memory.
@@ -175,7 +175,6 @@
 
 -record(enqueuer,
         {next_seqno = 1 :: msg_seqno(),
-         % out of order enqueues - sorted list
          unused = ?NIL,
          status = up :: up | suspected_down,
          %% it is useful to have a record of when this was blocked
