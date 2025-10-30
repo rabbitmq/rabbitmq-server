@@ -33,7 +33,7 @@
     parse_state,
     processor_state,
     state,
-    conserve_resources,
+    blocked_by :: sets:set(rabbit_alarm:resource_alarm_source()),
     recv_outstanding,
     max_frame_size,
     current_frame_size,
@@ -82,7 +82,7 @@ init([SupHelperPid, Ref, Configuration]) ->
                 [self(), ConnName]),
 
             ParseState = rabbit_stomp_frame:initial_state(),
-            _ = register_resource_alarm(),
+            Alarms = register_resource_alarm(),
 
             LoginTimeout = application:get_env(rabbitmq_stomp, login_timeout, 10_000),
             MaxFrameSize = application:get_env(rabbitmq_stomp, max_frame_size, ?DEFAULT_MAX_FRAME_SIZE),
@@ -100,7 +100,7 @@ init([SupHelperPid, Ref, Configuration]) ->
                                 max_frame_size     = MaxFrameSize,
                                 current_frame_size = 0,
                                 state              = running,
-                                conserve_resources = false,
+                                blocked_by         = sets:from_list(Alarms, [{version, 2}]),
                                 recv_outstanding   = false})), #reader_state.stats_timer),
               {backoff, 1000, 1000, 10000});
         {error, enotconn} ->
@@ -146,8 +146,15 @@ handle_info({Tag, Sock, Reason}, State=#reader_state{socket=Sock})
     {stop, {inet_error, Reason}, State};
 handle_info(emit_stats, State) ->
     {noreply, emit_stats(State), hibernate};
-handle_info({conserve_resources, Conserve}, State) ->
-    NewState = State#reader_state{conserve_resources = Conserve},
+handle_info({conserve_resources, Source, Conserve},
+            #reader_state{blocked_by = BlockedBy0} = State) ->
+    BlockedBy = case Conserve of
+                    true ->
+                        sets:add_element(Source, BlockedBy0);
+                    false ->
+                        sets:del_element(Source, BlockedBy0)
+                end,
+    NewState = State#reader_state{blocked_by = BlockedBy},
     {noreply, run_socket(control_throttle(NewState)), hibernate};
 handle_info({bump_credit, Msg}, State) ->
     credit_flow:handle_bump_msg(Msg),
@@ -288,18 +295,19 @@ process_received_bytes(Bytes,
 -spec conserve_resources(pid(),
                          rabbit_alarm:resource_alarm_source(),
                          rabbit_alarm:resource_alert()) -> ok.
-conserve_resources(Pid, _Source, {_, Conserve, _}) ->
-    Pid ! {conserve_resources, Conserve},
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    Pid ! {conserve_resources, Source, Conserve},
     ok.
 
 register_resource_alarm() ->
     rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}).
 
 
-control_throttle(State = #reader_state{state              = CS,
-                                       conserve_resources = Mem,
+control_throttle(State = #reader_state{state = CS,
+                                       blocked_by = BlockedBy,
                                        heartbeat = Heartbeat}) ->
-    case {CS, Mem orelse credit_flow:blocked()} of
+    Conserve = not sets:is_empty(BlockedBy),
+    case {CS, Conserve orelse credit_flow:blocked()} of
         {running,   true} -> State#reader_state{state = blocking};
         {blocking, false} -> rabbit_heartbeat:resume_monitor(Heartbeat),
                              State#reader_state{state = running};
