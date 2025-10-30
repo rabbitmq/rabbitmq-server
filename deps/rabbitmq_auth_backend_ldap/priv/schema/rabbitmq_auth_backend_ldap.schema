@@ -1,3 +1,5 @@
+%% vim:ft=erlang:
+%% -*- mode: erlang; -*-
 %% ----------------------------------------------------------------------------
 %% RabbitMQ LDAP Plugin
 %%
@@ -5,8 +7,6 @@
 %%
 %% ----------------------------------------------------------------------------
 
-%  {rabbitmq_auth_backend_ldap,
-%   [
 %%
 %% Connecting to the LDAP server(s)
 %% ================================
@@ -191,25 +191,6 @@ end}.
 {mapping, "auth_ldap.group_lookup_base", "rabbitmq_auth_backend_ldap.group_lookup_base",
     [{datatype, [{enum, [none]}, string]}]}.
 
-%% The LDAP plugin can perform a variety of queries against your
-%% LDAP server to determine questions of authorisation. See
-%% https://www.rabbitmq.com/ldap.html#authorisation for more
-%% information.
-
-%% Set the query to use when determining vhost access
-%%
-%% {vhost_access_query, {in_group,
-%%                       "ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}},
-
-%% Set the query to use when determining resource (e.g., queue) access
-%%
-%% {resource_access_query, {constant, true}},
-
-%% Set queries to determine which tags a user has
-%%
-%% {tag_queries, []}
-%   ]},
-
 %% Connect to the LDAP server using TLS
 %%
 %% {use_ssl, false},
@@ -341,6 +322,62 @@ fun(Conf) ->
     end
 end}.
 
-
 {mapping, "auth_ldap.ssl_options.hostname_verification", "rabbitmq_auth_backend_ldap.ssl_hostname_verification", [
     {datatype, {enum, [wildcard, none]}}]}.
+
+%% The LDAP plugin can perform a variety of queries against your
+%% LDAP server to determine questions of authorisation. See
+%% https://rabbitmq.com/docs/ldap#authorisation for more
+%% information.
+
+{mapping, "auth_ldap.queries.vhost_access", "rabbitmq_auth_backend_ldap.vhost_access_query",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.vhost_access_query",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.queries.vhost_access", Conf, undefined) of
+        undefined ->
+            cuttlefish:unset();
+        Query ->
+            rabbit_auth_backend_ldap_util:parse_query(Query)
+    end
+end}.
+
+{mapping, "auth_ldap.queries.resource_access", "rabbitmq_auth_backend_ldap.resource_access_query",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.resource_access_query",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.queries.resource_access", Conf, undefined) of
+        undefined ->
+            cuttlefish:unset();
+        Query ->
+            rabbit_auth_backend_ldap_util:parse_query(Query)
+    end
+end}.
+
+{mapping, "auth_ldap.queries.topic_access", "rabbitmq_auth_backend_ldap.topic_access_query",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.topic_access_query",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.queries.topic_access", Conf, undefined) of
+        undefined ->
+            cuttlefish:unset();
+        Query ->
+            rabbit_auth_backend_ldap_util:parse_query(Query)
+    end
+end}.
+
+{mapping, "auth_ldap.queries.tags", "rabbitmq_auth_backend_ldap.tag_queries",
+    [{datatype, string}]}.
+
+{translation, "rabbitmq_auth_backend_ldap.tag_queries",
+fun(Conf) ->
+    case cuttlefish:conf_get("auth_ldap.queries.tags", Conf, undefined) of
+        undefined ->
+            cuttlefish:unset();
+        Query ->
+            rabbit_auth_backend_ldap_util:parse_query(Query)
+    end
+end}.
