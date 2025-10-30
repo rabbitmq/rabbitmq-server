@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 HTTPD_DOCKER_IMAGE=${HTTPD_DOCKER_IMAGE:-httpd:latest}
 
 ensure_prodkeycloak-proxy() {
@@ -7,6 +9,7 @@ ensure_prodkeycloak-proxy() {
    start_prodkeycloak-proxy
  fi
 }
+
 init_prodkeycloak-proxy() {
   HTTPD_CONFIG_DIR=${TEST_CONFIG_DIR}/prodkeycloak-proxy
   PROXY_HOSTNAME=prodkeycloak-proxy 
@@ -17,6 +20,7 @@ init_prodkeycloak-proxy() {
   print "> PROXY_PORT: ${PROXY_PORT}"
   
   print "> HTTPD_DOCKER_IMAGE: ${HTTPD_DOCKER_IMAGE}"
+}
 
 start_prodkeycloak-proxy() {
   begin "Starting prodkeycloak-proxy ..."
@@ -27,7 +31,7 @@ start_prodkeycloak-proxy() {
   MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
 
   mkdir -p $MOUNT_HTTPD_CONFIG_DIR
-  ${BIN_DIR}/gen-httpd-conf ${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
+  ${BIN_DIR}/gen-httpd-conf" "${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
   print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
   cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
   
