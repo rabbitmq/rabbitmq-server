@@ -36,7 +36,8 @@ groups() ->
                   local_to_local_delete_dest_queue,
                   local_to_local_stream_credit_flow_no_ack,
                   local_to_local_simple_uri,
-                  local_to_local_counters
+                  local_to_local_counters,
+                  local_to_local_alarms
                  ]}
     ].
 
@@ -240,6 +241,41 @@ local_to_local_counters(Config) ->
                           get_global_counters(Config), 30_000)
       end).
 
+local_to_local_alarms(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    ShovelArgs = [{<<"src-protocol">>, <<"local">>},
+                  {<<"src-queue">>, Src},
+                  {<<"dest-protocol">>, <<"local">>},
+                  {<<"dest-queue">>, Dest}],
+    with_amqp10_session(
+      Config,
+      fun (Sess) ->
+              amqp10_publish(Sess, Src, <<"hello">>, 1000),
+              rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
+              rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
+              shovel_test_utils:set_param(Config, ?PARAM, ShovelArgs),
+              ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
+              amqp10_expect_empty(Sess, Dest),
+              rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
+              ?awaitMatch({running, running}, get_blocked_status(Config), 30000),
+              amqp10_expect_count(Sess, Dest, 1000),
+
+              shovel_test_utils:clear_param(Config, ?PARAM),
+
+              amqp10_publish(Sess, Src, <<"hello">>, 1000),
+              rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
+              rabbit_ct_broker_helpers:set_alarm(Config, 0, memory),
+              shovel_test_utils:set_param(Config, ?PARAM, ShovelArgs),
+              ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
+              amqp10_expect_empty(Sess, Dest),
+              rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
+              ?awaitMatch({running, blocked}, get_blocked_status(Config), 30000),
+              amqp10_expect_empty(Sess, Dest),
+              rabbit_ct_broker_helpers:clear_alarm(Config, 0, memory),
+              ?awaitMatch({running, running}, get_blocked_status(Config), 30000),
+              amqp10_expect_count(Sess, Dest, 1000)
+      end).
 %%----------------------------------------------------------------------------
 declare_queue(Config, VHost, QName) ->
     declare_queue(Config, VHost, QName, []).
@@ -296,3 +332,11 @@ get_global_counters(Config) ->
 get_global_counters0(Config, Key) ->
     Overview = rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_global_counters, overview, []),
     maps:get(Key, Overview).
+
+get_blocked_status(Config) ->
+    case rabbit_ct_broker_helpers:rpc(Config, 0, rabbit_shovel_status, status, []) of
+        [{_, _, {Status, PropList}, _, _}] ->
+            {Status, proplists:get_value(blocked_status, PropList)};
+        _ ->
+            empty
+    end.
