@@ -30,7 +30,8 @@ all() ->
         {group, detailed_metrics},
         {group, special_chars},
         {group, authentication},
-        {group, memory_breakdown_endpoint_metrics}
+        {group, memory_breakdown_endpoint_metrics},
+        {group, mount_metrics}
     ].
 
 groups() ->
@@ -60,6 +61,9 @@ groups() ->
         ]},
         {memory_breakdown_endpoint_metrics, [], [
             memory_breakdown_metrics_test
+        ]},
+        {mount_metrics, [], [
+            mount_metrics_label_format_test
         ]},
         {commercial, [], [
             build_info_product_test
@@ -278,8 +282,22 @@ init_per_group(authentication, Config) ->
                 Config, {rabbitmq_prometheus, [{authentication, [{enabled, true}]}]}),
     init_per_group(authentication, Config1, []);
 init_per_group(memory_breakdown_endpoint_metrics, Config) ->
-    init_per_group(memory_breakdown_endpoint_metrics, Config, []).
-
+    init_per_group(memory_breakdown_endpoint_metrics, Config, []);
+init_per_group(mount_metrics, Config0) ->
+    %% Use the first mount point known to disksup on the CT node, which runs on
+    %% the same host as the broker node under test.
+    ok = application:ensure_started(sasl),
+    ok = application:ensure_started(os_mon),
+    [{MountPoint, _, _, _} | _] = disksup:get_disk_info(),
+    MountName = "test_mount",
+    MountConfig = {rabbit, [{disk_free_limits,
+                             #{1 => #{name        => list_to_binary(MountName),
+                                      mount       => MountPoint,
+                                      limit       => "1MB",
+                                      queue_types => [<<"classic">>]}}}]},
+    Config1 = rabbit_ct_helpers:merge_app_env(Config0, MountConfig),
+    Config2 = init_per_group(mount_metrics, Config1, [{mount_name, MountName}]),
+    Config2.
 
 
 init_per_group(Group, Config0, Extra) ->
@@ -328,6 +346,10 @@ end_per_group(special_chars, Config) ->
 end_per_group(authentication, Config) ->
     ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, unset_env,
                                       [rabbitmq_prometheus, authentication]),
+    end_per_group_(Config);
+end_per_group(mount_metrics, Config) ->
+    application:stop(os_mon),
+    application:stop(sasl),
     end_per_group_(Config);
 end_per_group(_, Config) ->
     end_per_group_(Config).
@@ -1164,3 +1186,9 @@ assert_no_duplicate_type_lines(Body, MetricNames) ->
                            lists:flatten(
                              io_lib:format("expected exactly one TYPE line for ~s", [MetricName])))
       end, MetricNames).
+
+mount_metrics_label_format_test(Config) ->
+    MountName = ?config(mount_name, Config),
+    {_Headers, Body} = http_get_with_pal(Config, [], 200),
+    Pattern = "^rabbitmq_mount_space_available_bytes{disk=\"" ++ MountName ++ "\"",
+    ?assertEqual(match, re:run(Body, Pattern, [{capture, none}, multiline])).
