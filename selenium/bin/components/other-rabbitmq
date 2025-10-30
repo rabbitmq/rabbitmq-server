@@ -69,7 +69,7 @@ start_local_other_rabbitmq() {
 
   print "> EFFECTIVE RABBITMQ_CONFIG_FILE: /tmp/other$MOUNT_RABBITMQ_CONF"
   cp ${RABBITMQ_CONFIG_DIR}/enabled_plugins /tmp/other/etc/rabbitmq/
-  RABBITMQ_ENABLED_PLUGINS=`cat /tmp/other/etc/rabbitmq/enabled_plugins | tr -d " \t\n\r" | awk -F'[][]' '{print $2}'`
+  RABBITMQ_ENABLED_PLUGINS=$(cat /tmp/other/etc/rabbitmq/enabled_plugins | tr -d " \t\n\r" | awk -F'[][]' '{print $2}')
   print "> EFFECTIVE PLUGINS: $RABBITMQ_ENABLED_PLUGINS"
 
   ${BIN_DIR}/gen-advanced-config "${PROFILES_FOR_OTHER}" ${RABBITMQ_CONFIG_DIR} $OTHER_ENV_FILE /tmp/other$MOUNT_ADVANCED_CONFIG
