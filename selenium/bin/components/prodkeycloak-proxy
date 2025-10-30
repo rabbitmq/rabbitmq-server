@@ -30,18 +30,18 @@ start_prodkeycloak-proxy() {
 
   MOUNT_HTTPD_CONFIG_DIR=$CONF_DIR/httpd
 
-  mkdir -p "$MOUNT_HTTPD_CONFIG_DIR"
-  "${BIN_DIR}/gen-httpd-conf" "${HTTPD_CONFIG_DIR}" "$ENV_FILE" "$MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
+  mkdir -p $MOUNT_HTTPD_CONFIG_DIR
+  ${BIN_DIR}/gen-httpd-conf" "${HTTPD_CONFIG_DIR} $ENV_FILE $MOUNT_HTTPD_CONFIG_DIR/httpd.conf
   print "> EFFECTIVE HTTPD_CONFIG_FILE: $MOUNT_HTTPD_CONFIG_DIR/httpd.conf"
-  cp "${HTTPD_CONFIG_DIR}/.htpasswd" "$MOUNT_HTTPD_CONFIG_DIR"
+  cp ${HTTPD_CONFIG_DIR}/.htpasswd $MOUNT_HTTPD_CONFIG_DIR
   
   docker run \
     --detach \
     --name prodkeycloak-proxy \
-    --net "${DOCKER_NETWORK}" \
+    --net ${DOCKER_NETWORK} \
     --publish 9091:9091 \
     --mount "type=bind,source=${MOUNT_HTTPD_CONFIG_DIR},target=/usr/local/apache2/conf" \
-    "${HTTPD_DOCKER_IMAGE}"
+    ${HTTPD_DOCKER_IMAGE}
 
   wait_for_message prodkeycloak-proxy "initializing worker proxy:forward local"
   end "prodkeycloak-proxy is ready"
