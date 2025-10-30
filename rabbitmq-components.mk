@@ -49,9 +49,15 @@ dep_jose = hex 1.11.10
 dep_khepri = hex 0.16.0
 dep_khepri_mnesia_migration = hex 0.7.2
 dep_meck = hex 1.0.0
+<<<<<<< HEAD
 dep_osiris = git https://github.com/rabbitmq/osiris v1.8.8
 dep_prometheus = hex 4.11.0
 dep_ra = hex 2.16.13
+=======
+dep_osiris = git https://github.com/rabbitmq/osiris v1.10.2
+dep_prometheus = hex 6.1.1
+dep_ra = hex 2.17.1
+>>>>>>> 8e15d152b (rabbit_prometheus_handler: Stream identity-encoded HTTP replies)
 dep_ranch = hex 2.2.0
 dep_recon = hex 2.5.6
 dep_redbug = hex 2.1.0
