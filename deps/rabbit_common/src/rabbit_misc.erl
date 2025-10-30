@@ -1058,7 +1058,14 @@ otp_release() ->
     end.
 
 platform_and_version() ->
-    string:join(["Erlang/OTP", otp_release()], " ").
+    case persistent_term:get(platform_and_version, undefined) of
+        undefined ->
+            PV = string:join(["Erlang/OTP", otp_release()], " "),
+            persistent_term:put(platform_and_version, PV),
+            PV;
+        PV ->
+            PV
+    end.
 
 otp_system_version() ->
     string:strip(erlang:system_info(system_version), both, $\n).
