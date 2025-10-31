@@ -26,6 +26,7 @@
          terminate/2, code_change/3]).
 
 -export([get_disk_free_limit/0, set_disk_free_limit/1,
+         set_disk_free_limit/2,
          get_min_check_interval/0, set_min_check_interval/1,
          get_max_check_interval/0, set_max_check_interval/1,
          get_disk_free/0, get_mount_free/0, set_enabled/1]).
@@ -104,6 +105,11 @@ get_disk_free_limit() ->
 -spec set_disk_free_limit(disk_free_limit()) -> 'ok'.
 set_disk_free_limit(Limit) ->
     gen_server:call(?MODULE, {set_disk_free_limit, Limit}).
+
+-spec set_disk_free_limit(MountName :: binary(), integer()) -> 'ok'.
+set_disk_free_limit(MountName, Limit)
+  when is_binary(MountName) andalso is_integer(Limit) ->
+    gen_server:call(?MODULE, {set_disk_free_limit, MountName, Limit}).
 
 -spec get_min_check_interval() -> integer().
 get_min_check_interval() ->
@@ -188,6 +194,23 @@ handle_call({set_disk_free_limit, _}, _From, #state{enabled = false} = State) ->
 
 handle_call({set_disk_free_limit, Limit}, _From, State) ->
     {reply, ok, set_disk_limits(State, Limit)};
+
+handle_call({set_disk_free_limit, Name, Limit}, _From,
+            #state{mounts = Mounts0} = State) ->
+    MatchingMount = lists:search(
+                      fun({_Path, #mount{name = N}}) ->
+                              Name =:= N
+                      end, maps:to_list(Mounts0)),
+    case MatchingMount of
+        {value, {Path, Mount}} ->
+            ?LOG_INFO("Updated disk free limit of mount '~ts'", [Name]),
+            Mounts = Mounts0#{Path := Mount#mount{limit = Limit}},
+            {reply, ok, State#state{mounts = Mounts}};
+        false ->
+            ?LOG_WARNING("Cannot set disk free limit for mount '~ts' since "
+                         "the name does not match any known mounts.", [Name]),
+            {reply, ok, State}
+    end;
 
 handle_call(get_max_check_interval, _From, State) ->
     {reply, State#state.max_interval, State};
