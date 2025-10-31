@@ -36,8 +36,6 @@
 -define(DEFAULT_MIN_DISK_CHECK_INTERVAL, 100).
 -define(DEFAULT_MAX_DISK_CHECK_INTERVAL, 10000).
 -define(DEFAULT_DISK_FREE_LIMIT, 50000000).
-%% 250MB/s i.e. 250kB/ms
--define(FAST_RATE, (250 * 1000)).
 
 -record(mount,
         {%% name set in configuration
@@ -164,6 +162,10 @@ start_link(Args) ->
 init([Limit]) ->
     {ok, Retries} = application:get_env(rabbit, disk_monitor_failure_retries),
     {ok, Interval} = application:get_env(rabbit, disk_monitor_failure_retry_interval),
+    MinInterval = application:get_env(rabbit, disk_monitor_min_interval,
+                                      ?DEFAULT_MIN_DISK_CHECK_INTERVAL),
+    MaxInterval = application:get_env(rabbit, disk_monitor_max_interval,
+                                      ?DEFAULT_MAX_DISK_CHECK_INTERVAL),
     ?ETS_NAME = ets:new(?ETS_NAME, [protected, set, named_table]),
     ?MOUNT_ETS_NAME = ets:new(?MOUNT_ETS_NAME, [protected, set, named_table,
                                                 {keypos, #mount.name}]),
@@ -172,8 +174,8 @@ init([Limit]) ->
                     limit        = Limit,
                     retries      = Retries,
                     interval     = Interval},
-    State1 = set_min_check_interval(?DEFAULT_MIN_DISK_CHECK_INTERVAL, State0),
-    State2 = set_max_check_interval(?DEFAULT_MAX_DISK_CHECK_INTERVAL, State1),
+    State1 = set_min_check_interval(MinInterval, State0),
+    State2 = set_max_check_interval(MaxInterval, State1),
 
     State3 = enable(State2),
 
@@ -420,8 +422,12 @@ interval(#state{actual = DataDirAvailable,
                         (_Path, _Mount, Min) ->
                             Min
                     end, DataDirGap, Mounts),
-    IdealInterval = 2 * SmallestGap / ?FAST_RATE,
+    IdealInterval = 2 * SmallestGap / fast_rate(),
     trunc(erlang:max(MinInterval, erlang:min(MaxInterval, IdealInterval))).
+
+fast_rate() ->
+    %% 250MB/s i.e. 250kB/ms
+    application:get_env(rabbit, disk_monitor_fast_rate, 250_000).
 
 -spec mounts() -> mounts().
 mounts() ->
