@@ -661,7 +661,8 @@ node_stats(Ranges, Objs, Interval) ->
      StatsD = [{cluster_links, NodeNodeStats}],
      MgmtStats = maps:get(mgmt_stats, NData),
      Details = augment_details(Obj, []), % augmentation needs to be node local
-     combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats
+     MountStats = [{mount_stats, maps:get(mount_stats, NData, [])}],
+     combine(Props, Obj) ++ Details ++ Stats ++ StatsD ++ MgmtStats ++ MountStats
      end || Obj <- Objs].
 
 combine(New, Old) ->

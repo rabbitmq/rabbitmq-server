@@ -93,6 +93,24 @@
   <% if (show_column('overview', 'disk_space')) { %>
     <th>Disk space</th>
   <% } %>
+  <% if (show_column('overview', 'mount_space')) { %>
+    <%
+      var other_disk_names = [];
+      var unique_disk_names = {};
+      for (var i = 0; i < nodes.length; i++) {
+        for (var j = 0; j < nodes[i].mount_stats.length; j++) {
+          var name = nodes[i].mount_stats[j].name;
+          if (!unique_disk_names.hasOwnProperty(name)) {
+            unique_disk_names[name] = true;
+            other_disk_names.push(name);
+          }
+        }
+      }
+    %>
+    <% for (var i = 0; i < other_disk_names.length; i++) { %>
+      <th><%= fmt_string(other_disk_names[i]) %> disk space</th>
+    <% } %>
+  <% } %>
   <% if (show_column('overview', 'uptime')) { %>
     <th>Uptime</th>
   <% } %>
@@ -179,6 +197,20 @@
          (not available)
     <% } %>
      </td>
+  <% } %>
+  <% if (show_column('overview', 'mount_space')) { %>
+     <% for (var j = 0; j < other_disk_names.length; j++) {
+          var mount = node.mount_stats.find((m) => m.name == other_disk_names[j]);
+     %>
+       <td>
+         <% if (mount) { %>
+           <%= node_stat_bar('available', 'limit', 'low watermark',
+                             mount, fmt_bytes_axis,
+                             mount.available < mount.limit ? 'red' : 'green',
+                             null, true) %>
+         <% } %>
+       </td>
+     <% } %>
   <% } %>
   <% if (show_column('overview', 'uptime')) { %>
      <td><span><%= fmt_uptime(node.uptime) %></span></td>
