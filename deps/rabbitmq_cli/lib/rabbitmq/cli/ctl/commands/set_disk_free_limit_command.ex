@@ -24,6 +24,14 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     {:validation_failure, :too_many_args}
   end
 
+  def validate(["mount" | _] = args, _) when length(args) < 3 do
+    {:validation_failure, :not_enough_args}
+  end
+
+  def validate(["mount" | _] = args, _) when length(args) > 3 do
+    {:validation_failure, :too_many_args}
+  end
+
   def validate([limit], _) do
     case Integer.parse(limit) do
       {_, ""} ->
@@ -47,11 +55,40 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
     end
   end
 
+  def validate(["mount", _name, limit], _) do
+    case Integer.parse(limit) do
+      {_, ""} ->
+        :ok
+
+      {limit_val, units} ->
+        case memory_unit_absolute(limit_val, units) do
+          scaled_limit when is_integer(scaled_limit) -> :ok
+          _ -> {:validation_failure, :bad_argument}
+        end
+
+      _ ->
+        {:validation_failure, :bad_argument}
+    end
+  end
+
   def validate([_ | rest], _) when length(rest) > 0 do
     {:validation_failure, :too_many_args}
   end
 
   use RabbitMQ.CLI.Core.RequiresRabbitAppRunning
+
+  def run(["mount", mount_name, limit], %{node: node_name}) do
+    limit =
+      case Integer.parse(limit) do
+        {limit, ""} -> limit
+        {limit, units} ->
+          case memory_unit_absolute(limit, units) do
+            scaled_limit when is_integer(scaled_limit) ->
+              scaled_limit
+          end
+      end
+    make_rpc_call(node_name, [mount_name, limit])
+  end
 
   def run(["mem_relative", _] = args, opts) do
     set_disk_free_limit_relative(args, opts)
@@ -70,6 +107,10 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
 
   use RabbitMQ.CLI.DefaultOutput
 
+  def banner(["mount", mount, limit], %{node: node_name}) do
+    "Setting disk free limit for mount #{mount} on #{node_name} to #{limit} ..."
+  end
+
   def banner(["mem_relative", arg], %{node: node_name}) do
     "Setting disk free limit on #{node_name} to #{arg} times the total RAM ..."
   end
@@ -77,12 +118,13 @@ defmodule RabbitMQ.CLI.Ctl.Commands.SetDiskFreeLimitCommand do
   def banner([arg], %{node: node_name}),
     do: "Setting disk free limit on #{node_name} to #{arg} bytes ..."
 
-  def usage, do: "set_disk_free_limit <disk_limit> | mem_relative <fraction>"
+  def usage, do: "set_disk_free_limit <disk_limit> | mem_relative <fraction> | mount <name> <disk_limit>"
 
   def usage_additional() do
     [
       ["<disk_limit>", "New limit as an absolute value with units, e.g. 1GB"],
-      ["mem_relative <fraction>", "New limit as a fraction of total memory reported by the OS"]
+      ["mem_relative <fraction>", "New limit as a fraction of total memory reported by the OS"],
+      ["mount <name> <disk_limit>", "New limit for the given mount name as an absolute value with units, e.g. 1GB"]
     ]
   end
 
