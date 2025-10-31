@@ -1323,5 +1323,15 @@ credential_validator.regexp = ^abc\\d+",
    [{osiris, [
       {data_dir, "/data/rabbitmq/stream"}
      ]}],
+   []},
+
+  %%
+  %% Stream data dir
+  %%
+  {stream_data_dir,
+   "stream.data_dir = /data/rabbitmq/stream",
+   [{osiris, [
+      {data_dir, "/data/rabbitmq/stream"}
+     ]}],
    []}
 ].
