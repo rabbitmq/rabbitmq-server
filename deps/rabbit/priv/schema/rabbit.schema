@@ -2668,6 +2668,20 @@ end}.
     {datatype, {enum, [true, false]}}
 ]}.
 
+%% Classic queue data directory
+{mapping, "classic_queue.data_dir", "rabbit.classic_queue_data_dir", [
+  {datatype, string}
+]}.
+
+{translation, "rabbit.classic_queue_data_dir",
+    fun(Conf) ->
+        case cuttlefish:conf_get("classic_queue.data_dir", Conf, undefined) of
+            undefined -> cuttlefish:unset();
+            Val       -> Val
+        end
+    end
+}.
+
 %%
 %% Backing queue version
 %%
