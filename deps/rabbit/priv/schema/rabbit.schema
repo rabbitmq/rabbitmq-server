@@ -1288,6 +1288,20 @@ fun(Conf) ->
     end
 end}.
 
+%% Tuning of disk monitor polling parameters
+{mapping, "disk_monitor.fast_rate", "rabbit.disk_monitor_fast_rate", [
+    %% Unit: KB/second, for example 250_000 for 250MB/sec.
+    {datatype, [integer]}
+]}.
+{mapping, "disk_monitor.min_interval", "rabbit.disk_monitor_min_interval", [
+    %% Unit: milliseconds.
+    {datatype, [integer]}
+]}.
+{mapping, "disk_monitor.max_interval", "rabbit.disk_monitor_max_interval", [
+    %% Unit: milliseconds.
+    {datatype, [integer]}
+]}.
+
 %% Per-queue-type / per-mount disk alarms
 {mapping, "disk_free_limits.$num.name", "rabbit.disk_free_limits", [
     {datatype, [binary]}
