@@ -361,6 +361,15 @@
   ],
   [rabbitmq_auth_backend_ldap]},
 
+ {vhost_access_query_single_line,
+  "auth_ldap.queries.vhost_access = {in_group,\"ou=${vhost}-users,ou=vhosts,dc=example,dc=com\"}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {vhost_access_query, {in_group,"ou=${vhost}-users,ou=vhosts,dc=example,dc=com"}}
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
  {resource_access_query,
   "auth_ldap.queries.resource_access = '''
        {for, [
@@ -394,6 +403,17 @@
   ],
   [rabbitmq_auth_backend_ldap]},
 
+ {resource_access_query_single_line,
+  "auth_ldap.queries.resource_access = {for, [{permission, configure, {constant, true}}]}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {resource_access_query,
+           {for, [{permission, configure, {constant, true}}]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
  {topic_access_query,
   "auth_ldap.queries.topic_access = '''
        {for, [
@@ -408,6 +428,17 @@
                {permission, write, {match, {string, "${routing_key}"}, {string, "^a"}}},
                {permission, read,  {constant, true}}
            ]}
+       }
+    ]}
+  ],
+  [rabbitmq_auth_backend_ldap]},
+
+ {topic_access_query_single_line,
+  "auth_ldap.queries.topic_access = {for, [{permission, write, {constant, true}}, {permission, read, {constant, true}}]}",
+  [
+    {rabbitmq_auth_backend_ldap, [
+       {topic_access_query,
+           {for, [{permission, write, {constant, true}}, {permission, read, {constant, true}}]}
        }
     ]}
   ],
