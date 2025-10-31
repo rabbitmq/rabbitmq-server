@@ -208,6 +208,15 @@ ssl_options.crl_sources.1.path = /var/lib/rabbitmq/crls",
     "disk_free_limit.absolute = 2P",
     [{rabbit,[{disk_free_limit, "2P"}]}],
     []},
+  %% Disk monitor polling
+  {disk_monitor_tune_polling_parameters,
+    "disk_monitor.fast_rate = 1000000 # 1 GB/sec
+     disk_monitor.min_interval = 50
+     disk_monitor.max_interval = 20000",
+    [{rabbit,[{disk_monitor_fast_rate, 1_000_000},
+              {disk_monitor_min_interval, 50},
+              {disk_monitor_max_interval, 20_000}]}],
+    []},
 
  {default_users,
  "
