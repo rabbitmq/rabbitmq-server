@@ -1127,6 +1127,16 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
+  %% Classic queue data dir
+  %%
+  {classic_queue_data_dir,
+   "classic_queue.data_dir = /data/rabbitmq/classic",
+   [{rabbit, [
+      {classic_queue_data_dir, "/data/rabbitmq/classic"}
+     ]}],
+   []},
+
+  %%
   %% Quorum queue
   %%
 
