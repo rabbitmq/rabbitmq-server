@@ -131,6 +131,22 @@
 <% } %>
       </td>
     </tr>
+<%
+   for (var i = 0; i < node.mount_stats.length; i++) {
+     var mount = node.mount_stats[i];
+%>
+    <tr>
+      <th>
+        <%= fmt_string(mount.name) %> disk space
+      </th>
+      <td>
+<%= node_stat_bar('available', 'limit', 'low watermark', mount, fmt_bytes_axis,
+                  mount.available < mount.limit ? 'red' : 'green',
+                  mount.available < mount.limit ? 'disk_free-alarm' : null,
+                  true) %>
+      </td>
+    </tr>
+<% } %>
   </table>
 </div>
 </div>
