@@ -1112,10 +1112,10 @@ runtime_parameter_definition(Param) ->
 
 maybe_map(Value) ->
     %% Not all definitions are maps. `federation-upstream-set` is
-    %% a list of maps, and it should be exported as it has been
-    %% imported
+    %% a list of maps. We also need to recursively convert nested
+    %% proplists to maps (e.g. policy and operator policy definitions).
     try
-        rabbit_data_coercion:to_map(Value)
+        rabbit_data_coercion:to_map_recursive(Value)
     catch
         error:badarg ->
             Value
