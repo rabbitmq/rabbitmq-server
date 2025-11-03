@@ -108,7 +108,8 @@ tests() ->
      application_properties,
      delete_src_queue,
      shovel_status,
-     change_definition
+     change_definition,
+     disk_alarm
     ].
 
 %% -------------------------------------------------------------------
@@ -592,6 +593,20 @@ change_definition(Config) ->
               amqp10_publish_expect(Sess, Src, Src, <<"hello">>, 1),
               amqp10_expect_empty(Sess, Dest),
               amqp10_expect_empty(Sess, Dest2)
+      end).
+
+disk_alarm(Config) ->
+    Src = ?config(srcq, Config),
+    Dest = ?config(destq, Config),
+    with_amqp10_session(Config,
+      fun (Sess) ->
+              ShovelArgs = ?config(shovel_args, Config),
+              amqp10_publish(Sess, Src, <<"hello">>, 10),
+              rabbit_ct_broker_helpers:set_alarm(Config, 0, disk),
+              set_param(Config, ?PARAM, ShovelArgs),
+              amqp10_expect_empty(Sess, Dest),
+              rabbit_ct_broker_helpers:clear_alarm(Config, 0, disk),
+              amqp10_expect_count(Sess, Dest, 10)
       end).
 
 %%----------------------------------------------------------------------------

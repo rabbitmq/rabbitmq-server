@@ -24,6 +24,7 @@
 
 -export([
          boot_step/0,
+         conserve_resources/3,
          parse/2,
          connect_source/1,
          connect_dest/1,
@@ -75,6 +76,12 @@ boot_step() ->
     rabbit_global_counters:init(Labels#{queue_type => rabbit_classic_queue}),
     rabbit_global_counters:init(Labels#{queue_type => rabbit_quorum_queue}),
     rabbit_global_counters:init(Labels#{queue_type => rabbit_stream_queue}).
+
+-spec conserve_resources(pid(),
+                         rabbit_alarm:resource_alarm_source(),
+                         rabbit_alarm:resource_alert()) -> ok.
+conserve_resources(Pid, Source, {_, Conserve, _}) ->
+    gen_server:cast(Pid, {conserve_resources, Source, Conserve}).
 
 parse(_Name, {source, Source}) ->
     Queue = parse_parameter(queue, fun parse_binary/1,
@@ -234,14 +241,17 @@ init_dest(#{name := Name,
             dest := #{add_forward_headers := AFH} = Dst} = State) ->
     rabbit_global_counters:publisher_created(?PROTOCOL),
     _TRef = erlang:send_after(1000, self(), send_confirms_and_nacks),
+    Alarms0 = rabbit_alarm:register(self(), {?MODULE, conserve_resources, []}),
+    Alarms = sets:from_list(Alarms0),
     case AFH of
         true ->
             Props = #{<<"x-opt-shovelled-by">> => rabbit_nodes:cluster_name(),
                       <<"x-opt-shovel-type">> => rabbit_data_coercion:to_binary(Type),
                       <<"x-opt-shovel-name">> => rabbit_data_coercion:to_binary(Name)},
-            State#{dest => Dst#{cached_forward_headers => Props}};
+            State#{dest => Dst#{cached_forward_headers => Props,
+                                alarms => Alarms}};
         false ->
-            State
+            State#{dest => Dst#{alarms => Alarms}}
     end.
 
 source_uri(_State) ->
@@ -359,6 +369,19 @@ handle_dest({{'DOWN', #resource{kind = queue,
         {eol, QState1, _QRef} ->
             State0#{dest => Dest#{current => Current#{queue_states => QState1}}}
     end;
+handle_dest({conserve_resources, Alarm, Conserve}, #{dest := #{alarms := Alarms0} = Dest} = State0) ->
+    Alarms = case Conserve of
+                 true -> sets:add_element(Alarm, Alarms0);
+                 false -> sets:del_element(Alarm, Alarms0)
+             end,
+    State = State0#{dest => Dest#{alarms => Alarms}},
+    case {sets:is_empty(Alarms0), sets:is_empty(Alarms)} of
+        {false, true} ->
+            %% All alarms cleared
+            forward_pending_delivery(State);
+        {_, _} ->
+            State
+    end;
 handle_dest(_Msg, State) ->
     State.
 
@@ -374,7 +397,16 @@ forward(_, _, #{source := #{remaining_unacked := 0}} = State) ->
     %% come back. So drop subsequent messages on the floor to be
     %% requeued later
     State;
-forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} = Dest,
+forward(Tag, Msg, State) ->
+    case is_blocked(State) of
+        true ->
+            PendingEntry = {Tag, Msg},
+            add_pending_delivery(PendingEntry, State);
+        false ->
+            do_forward(Tag, Msg, State)
+    end.
+
+do_forward(Tag, Msg0, #{dest := #{current := #{queue_states := QState} = Current} = Dest,
                      ack_mode := AckMode} = State0) ->
     {Options, #{dest := #{current := Current1} = Dest1} = State} =
         case AckMode of
@@ -437,10 +469,15 @@ add_routing(Msg0, Dest) ->
         RK -> mc:set_annotation(?ANN_ROUTING_KEYS, [RK], Msg)
     end.
 
-status(_) ->
-    running.
+status(State) ->
+    case is_blocked(State) of
+        true -> blocked;
+        false -> running
+    end.
 
-pending_count(_State) ->
+pending_count(#{dest := #{pending_delivery := Pending}}) ->
+    queue:len(Pending);
+pending_count(_) ->
     0.
 
 %% Internal
@@ -902,4 +939,36 @@ messages_delivered(QName, S0) ->
             rabbit_global_counters:messages_delivered(?PROTOCOL, QType, 1);
         _ ->
             ok
+    end.
+
+is_blocked(#{dest := #{alarms := Alarms}}) ->
+    not sets:is_empty(Alarms);
+is_blocked(_) ->
+    false.
+
+add_pending_delivery(Elem, State = #{dest := Dest}) ->
+    Pending = maps:get(pending_delivery, Dest, queue:new()),
+    State#{dest => Dest#{pending_delivery => queue:in(Elem, Pending)}}.
+
+pop_pending_delivery(State = #{dest := Dest}) ->
+    Pending = maps:get(pending_delivery, Dest, queue:new()),
+    case queue:out(Pending) of
+        {empty, _} ->
+            empty;
+        {{value, Elem}, Pending2} ->
+            {Elem, State#{dest => Dest#{pending_delivery => Pending2}}}
+    end.
+
+forward_pending_delivery(State) ->
+    case pop_pending_delivery(State) of
+        empty ->
+            State;
+        {{Tag, Mc}, S} ->
+            S2 = do_forward(Tag, Mc, S),
+            case is_blocked(S2) of
+                true ->
+                    S2;
+                false ->
+                    forward_pending_delivery(S2)
+            end
     end.
