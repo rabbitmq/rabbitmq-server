@@ -429,6 +429,7 @@ public class FailureTest {
 
   @Test
   void consumerReattachesToOtherReplicaWhenReplicaGoesAway() throws Exception {
+    LOGGER.info("Stream name is {}", stream);
     executorService = Executors.newCachedThreadPool();
     Client metadataClient = cf.get(new Client.ClientParameters().port(streamPortNode1()));
     Map<String, Client.StreamMetadata> metadata = metadataClient.metadata(stream);
@@ -514,42 +515,64 @@ public class FailureTest {
 
     CountDownLatch reconnectionLatch = new CountDownLatch(1);
     AtomicReference<Client.ShutdownListener> shutdownListenerReference = new AtomicReference<>();
+    Runnable resubscribe =
+        () -> {
+          AtomicInteger newReplicaPort = new AtomicInteger(-1);
+          waitAtMost(
+              Duration.ofSeconds(5),
+              () -> {
+                try {
+                  Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
+                  newReplicaPort.set(m.getReplicas().get(0).getPort());
+                  LOGGER.info("Metadata: {}", m);
+                  return true;
+                } catch (Exception e) {
+                  return false;
+                }
+              });
+          LOGGER.info("Replica port is {}", newReplicaPort);
+
+          Client newConsumer =
+              cf.get(
+                  new Client.ClientParameters()
+                      .port(newReplicaPort.get())
+                      .shutdownListener(shutdownListenerReference.get())
+                      .chunkListener(credit())
+                      .messageListener(messageListener));
+
+          LOGGER.info("Subscribing...");
+          newConsumer.subscribe(
+              (byte) 1, stream, OffsetSpecification.offset(lastProcessedOffset.get() + 1), 10);
+          LOGGER.info("Subscribed");
+
+          generation.incrementAndGet();
+          reconnectionLatch.countDown();
+          LOGGER.info("Shutdown listener done");
+        };
     Client.ShutdownListener shutdownListener =
         shutdownContext -> {
+          LOGGER.info("Shutdown reason: {}", shutdownContext.getShutdownReason());
           if (shutdownContext.getShutdownReason()
               == Client.ShutdownContext.ShutdownReason.UNKNOWN) {
             // avoid long-running task in the IO thread
             executorService.submit(
                 () -> {
-                  AtomicInteger newReplicaPort = new AtomicInteger(-1);
-                  waitAtMost(
-                      Duration.ofSeconds(5),
-                      () -> {
-                        try {
-                          Client.StreamMetadata m = metadataClient.metadata(stream).get(stream);
-                          newReplicaPort.set(m.getReplicas().get(0).getPort());
-                          return true;
-                        } catch (Exception e) {
-                          return false;
-                        }
-                      });
-
-                  Client newConsumer =
-                      cf.get(
-                          new Client.ClientParameters()
-                              .port(newReplicaPort.get())
-                              .shutdownListener(shutdownListenerReference.get())
-                              .chunkListener(credit())
-                              .messageListener(messageListener));
-
-                  newConsumer.subscribe(
-                      (byte) 1,
-                      stream,
-                      OffsetSpecification.offset(lastProcessedOffset.get() + 1),
-                      10);
-
-                  generation.incrementAndGet();
-                  reconnectionLatch.countDown();
+                  int attempts = 0;
+                  while (attempts < 3) {
+                    try {
+                      resubscribe.run();
+                      break;
+                    } catch (RuntimeException e) {
+                      LOGGER.warn("Error while re-subscribing: {}", e.getMessage());
+                      try {
+                        Thread.sleep(1000);
+                      } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                        break;
+                      }
+                      attempts++;
+                    }
+                  }
                 });
           }
         };
