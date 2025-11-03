@@ -1532,9 +1532,6 @@ shrink_all(_Node) ->
     {error, not_quorum_queue}.
 
 read_ahead_on() ->
-<<<<<<< HEAD
-    application:get_env(rabbit, stream_read_ahead, true).
-=======
     application:get_env(rabbit, stream_read_ahead, true).
 
 -spec read_ahead_limit() -> integer() | undefined.
@@ -1554,4 +1551,3 @@ read_ahead_limit() ->
                     undefined
             end
     end.
->>>>>>> f40cecd0a (Add `stream.read_ahead_limit` config option)
