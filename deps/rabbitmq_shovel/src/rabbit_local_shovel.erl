@@ -476,7 +476,7 @@ status(State) ->
     end.
 
 pending_count(#{dest := #{pending_delivery := Pending}}) ->
-    queue:len(Pending);
+    lqueue:len(Pending);
 pending_count(_) ->
     0.
 
@@ -947,12 +947,12 @@ is_blocked(_) ->
     false.
 
 add_pending_delivery(Elem, State = #{dest := Dest}) ->
-    Pending = maps:get(pending_delivery, Dest, queue:new()),
-    State#{dest => Dest#{pending_delivery => queue:in(Elem, Pending)}}.
+    Pending = maps:get(pending_delivery, Dest, lqueue:new()),
+    State#{dest => Dest#{pending_delivery => lqueue:in(Elem, Pending)}}.
 
 pop_pending_delivery(State = #{dest := Dest}) ->
-    Pending = maps:get(pending_delivery, Dest, queue:new()),
-    case queue:out(Pending) of
+    Pending = maps:get(pending_delivery, Dest, lqueue:new()),
+    case lqueue:out(Pending) of
         {empty, _} ->
             empty;
         {{value, Elem}, Pending2} ->
