@@ -42,6 +42,7 @@
 -include_lib("kernel/include/logger.hrl").
 
 -define(LINK_CREDIT_TIMEOUT, 20_000).
+-define(AWAIT_SEND_MSG_TIMEOUT, 1_000).
 
 -type state() :: rabbit_shovel_behaviour:state().
 -type uri() :: rabbit_shovel_behaviour:uri().
@@ -374,7 +375,11 @@ send_msg(Link, Msg) ->
                     send_msg(Link, Msg)
             after ?LINK_CREDIT_TIMEOUT ->
                       {stop, credited_timeout}
-            end
+            end;
+        {error, remote_incoming_window_exceeded} ->
+            %% We could be blocked because of an alarm
+            timer:sleep(?AWAIT_SEND_MSG_TIMEOUT),
+            send_msg(Link, Msg)
     end.
 
 add_timestamp_header(#{dest := #{add_timestamp_header := true}}, Msg) ->
