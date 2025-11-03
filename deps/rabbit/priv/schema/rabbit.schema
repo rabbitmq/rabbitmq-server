@@ -2859,6 +2859,11 @@ end}.
 {mapping, "stream.read_ahead", "rabbit.stream_read_ahead",
     [{datatype, [{enum, [true, false]}, integer, string]}]}.
 
+{mapping, "stream.read_ahead_limit", "rabbit.stream_read_ahead_limit", [
+    {datatype, [integer, string]},
+    {validators, ["is_supported_information_unit"]}
+]}.
+
 {mapping, "cluster_tags.$tag", "rabbit.cluster_tags", [
     {datatype, [binary]}
 ]}.
