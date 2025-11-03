@@ -34,6 +34,7 @@ all_tests() ->
      add_replica,
      restart_stream,
      delete_stream,
+     delete_stream_idempotent,
      delete_replica_leader,
      delete_replica,
      delete_two_replicas,
@@ -949,8 +950,29 @@ delete_stream(_) ->
     S7 = update_stream(meta(?LINE), {member_deleted, StreamId, #{node => N3}},
                        S6),
     ?assertEqual(undefined, S7),
-    %% idempotency test
-    _ = update_stream(Meta1, {delete_stream, StreamId, #{}}, S7),
+    ok.
+
+delete_stream_idempotent(_) ->
+    S0 = rabbit_stream_coordinator:init(#{machine_version => 5}),
+    StreamId = atom_to_list(?FUNCTION_NAME),
+
+    TypeState = #{name => StreamId,
+                  retention => [],
+                  nodes => [node()]},
+    Q = new_q(list_to_binary(StreamId), TypeState),
+    Cmd0 = {new_stream, StreamId, #{leader_node => node(),
+                                    retention => [],
+                                    queue => Q}},
+    {S1, _, _} = apply_cmd(meta(?LINE), Cmd0, S0),
+
+    Cmd1 = {delete_stream, StreamId, #{}},
+    {S2, ok, []} = apply_cmd(meta(?LINE), Cmd1, S1),
+
+    Cmd2 = {member_deleted, StreamId, #{node => node()}},
+    {S3, '$ra_no_reply', []} = apply_cmd(meta(?LINE), Cmd2, S2),
+
+    {S3, ok, []} = apply_cmd(meta(?LINE), Cmd1, S3),
+
     ok.
 
 add_replica(_) ->
