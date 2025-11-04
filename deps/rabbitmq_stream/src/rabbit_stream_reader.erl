@@ -162,6 +162,12 @@ init([KeepaliveSup,
             DeliverVersion = ?VERSION_1,
             RequestTimeout = application:get_env(rabbitmq_stream,
                                                  request_timeout, 60_000),
+            Sources = rabbit_alarm:register(self(),
+                                            {?MODULE, resource_alarm, []}),
+            Alarms = sets:from_list([S || S <- Sources,
+                                          S =:= disk orelse
+                                          S =:= ?STREAM_DISK_ALARM],
+                                    [{version, 2}]),
             Connection =
                 #stream_connection{name =
                                        rabbit_data_coercion:to_binary(ConnStr),
@@ -181,7 +187,7 @@ init([KeepaliveSup,
                                    authentication_state = none,
                                    connection_step = tcp_connected,
                                    frame_max = FrameMax,
-                                   resource_alarm = false,
+                                   resource_alarms = Alarms,
                                    send_file_oct = SendFileOct,
                                    transport = ConnTransport,
                                    proxy_socket =
@@ -192,11 +198,10 @@ init([KeepaliveSup,
                                    deliver_version = DeliverVersion},
             State =
                 #stream_connection_state{consumers = #{},
-                                         blocked = false,
+                                         blocked = not sets:is_empty(Alarms),
                                          data =
                                              rabbit_stream_core:init(undefined)},
             Transport:setopts(RealSocket, [{active, once}]),
-            _ = rabbit_alarm:register(self(), {?MODULE, resource_alarm, []}),
             ConnectionNegotiationStepTimeout =
                 application:get_env(rabbitmq_stream,
                                     connection_negotiation_step_timeout,
@@ -423,6 +428,8 @@ handle_info(Msg,
             #statem_data{transport = Transport,
                          connection =
                              #stream_connection{socket = S,
+                                                resource_alarms =
+                                                    ResourceAlarms,
                                                 connection_step =
                                                     PreviousConnectionStep} =
                                  Connection,
@@ -451,12 +458,18 @@ handle_info(Msg,
         {Error, S, Reason} ->
             ?LOG_WARNING("Socket error ~tp [~w]", [Reason, S]),
             stop;
-        {resource_alarm, IsThereAlarm} ->
+        {resource_alarm, Source, Conserve} ->
+            ResourceAlarms1 = case Conserve of
+                                  true ->
+                                      sets:add_element(Source, ResourceAlarms);
+                                  false ->
+                                      sets:del_element(Source, ResourceAlarms)
+                              end,
             {keep_state,
              StatemData#statem_data{connection =
-                                        Connection#stream_connection{resource_alarm
+                                        Connection#stream_connection{resource_alarms
                                                                          =
-                                                                         IsThereAlarm},
+                                                                         ResourceAlarms1},
                                     connection_state =
                                         State#stream_connection_state{blocked =
                                                                           true}}};
@@ -502,8 +515,9 @@ invalid_transition(Transport, Socket, From, To) ->
 -spec resource_alarm(pid(),
                      rabbit_alarm:resource_alarm_source(),
                      rabbit_alarm:resource_alert()) -> ok.
-resource_alarm(ConnectionPid, disk, {_, Conserve, _}) ->
-    ConnectionPid ! {resource_alarm, Conserve},
+resource_alarm(ConnectionPid, Source, {_, Conserve, _})
+  when Source =:= disk orelse Source =:= ?STREAM_DISK_ALARM ->
+    ConnectionPid ! {resource_alarm, Source, Conserve},
     ok;
 resource_alarm(_ConnectionPid, _Resource, _Alert) ->
     ok.
@@ -525,17 +539,12 @@ should_unblock(#stream_connection{publishers = Publishers}, _)
     %% always unblock a connection without publishers
     true;
 should_unblock(#stream_connection{credits = Credits,
-                                  resource_alarm = ResourceAlarm},
+                                  resource_alarms = ResourceAlarms},
                #configuration{credits_required_for_unblocking =
                                   CreditsRequiredForUnblocking}) ->
-    case {ResourceAlarm,
-          has_enough_credits_to_unblock(Credits, CreditsRequiredForUnblocking)}
-    of
-        {true, _} ->
-            false;
-        {false, EnoughCreditsToUnblock} ->
-            EnoughCreditsToUnblock
-    end.
+    sets:is_empty(ResourceAlarms) andalso
+        has_enough_credits_to_unblock(Credits,
+                                      CreditsRequiredForUnblocking).
 
 init_credit(CreditReference, Credits) ->
     atomics:put(CreditReference, 1, Credits).
@@ -624,12 +633,13 @@ close_immediately(Transport, S) ->
 
 open(enter, _OldState, _StateData) ->
     keep_state_and_data;
-open(info, {resource_alarm, IsThereAlarm},
+open(info, {resource_alarm, Source, Conserve},
      #statem_data{transport = Transport,
                   connection =
                       #stream_connection{socket = S,
                                          name = ConnectionName,
                                          credits = Credits,
+                                         resource_alarms = ResourceAlarms,
                                          heartbeater = Heartbeater} =
                           Connection,
                   connection_state =
@@ -638,6 +648,13 @@ open(info, {resource_alarm, IsThereAlarm},
                       #configuration{credits_required_for_unblocking =
                                          CreditsRequiredForUnblocking}} =
          StatemData) ->
+    ResourceAlarms1 = case Conserve of
+                          true ->
+                              sets:add_element(Source, ResourceAlarms);
+                          false ->
+                              sets:del_element(Source, ResourceAlarms)
+                      end,
+    IsThereAlarm = not sets:is_empty(ResourceAlarms1),
     ?LOG_DEBUG("Connection ~tp received resource alarm. Alarm "
                                 "on? ~tp",
                                 [ConnectionName, IsThereAlarm]),
@@ -668,8 +685,8 @@ open(info, {resource_alarm, IsThereAlarm},
     end,
     {keep_state,
      StatemData#statem_data{connection =
-                                Connection#stream_connection{resource_alarm =
-                                                                 IsThereAlarm},
+                                Connection#stream_connection{resource_alarms =
+                                                                 ResourceAlarms1},
                             connection_state =
                                 State#stream_connection_state{blocked =
                                                                   NewBlockedState}}};
@@ -1190,15 +1207,23 @@ close_sent(info, {tcp_error, S, Reason}, #statem_data{}) ->
                                 "[~w] [~w]",
                                 [Reason, S, self()]),
     stop;
-close_sent(info, {resource_alarm, IsThereAlarm},
+close_sent(info, {resource_alarm, Source, Conserve},
            StatemData = #statem_data{connection = Connection}) ->
+    ResourceAlarms = Connection#stream_connection.resource_alarms,
+    ResourceAlarms1 = case Conserve of
+                          true ->
+                              sets:add_element(Source, ResourceAlarms);
+                          false ->
+                              sets:del_element(Source, ResourceAlarms)
+                      end,
+    IsThereAlarm = not sets:is_empty(ResourceAlarms1),
     ?LOG_WARNING("Stream protocol connection ignored a resource "
                        "alarm ~tp in state ~ts",
                        [IsThereAlarm, ?FUNCTION_NAME]),
     {keep_state,
      StatemData#statem_data{connection =
-                                Connection#stream_connection{resource_alarm =
-                                                                 IsThereAlarm}}};
+                                Connection#stream_connection{resource_alarms =
+                                                                 ResourceAlarms1}}};
 close_sent(info, Msg, _StatemData) ->
     ?LOG_WARNING("Ignored unknown message ~tp in state ~ts",
                                   [Msg, ?FUNCTION_NAME]),
@@ -1550,13 +1575,15 @@ notify_auth_result(Username,
                         [P || {_, V} = P <- EventProps, V =/= '']).
 
 handle_frame_post_auth(Transport,
-                       #stream_connection{resource_alarm = true} = Connection0,
+                       #stream_connection{resource_alarms =
+                                              ResourceAlarms} = Connection0,
                        State,
                        {request, CorrelationId,
                         {declare_publisher,
                          PublisherId,
                          _WriterRef,
-                         Stream}}) ->
+                         Stream}})
+  when map_size(ResourceAlarms) =/= 0 ->
     ?LOG_INFO("Cannot create publisher ~tp on stream ~tp, connection "
                                "is blocked because of resource alarm",
                                [PublisherId, Stream]),
@@ -1574,10 +1601,12 @@ handle_frame_post_auth(Transport,
                                           host = Host,
                                           auth_mechanism = Auth_Mechanism,
                                           authentication_state = AuthState,
-                                          resource_alarm = false} = C1,
+                                          resource_alarms = ResourceAlarms
+                                         } = C1,
                        S1,
                        {request, CorrelationId,
-                        {sasl_authenticate, NewMechanism, NewSaslBin}}) ->
+                        {sasl_authenticate, NewMechanism, NewSaslBin}})
+  when map_size(ResourceAlarms) =:= 0 ->
     ?LOG_DEBUG("Received sasl_authenticate for username '~ts'", [Username]),
 
     {Connection1, State1} =
@@ -1656,33 +1685,35 @@ handle_frame_post_auth(Transport,
     {Connection1, State1};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
-                                          resource_alarm = false} = C,
+                                          resource_alarms = ResourceAlarms
+                                         } = C,
                        State,
                        {request, CorrelationId,
                         {declare_publisher, _PublisherId, WriterRef, S}})
-                      when ?IS_INVALID_REF(WriterRef) ->
-  {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
-                      ok ->
-                        {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
-                      error ->
-                        {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
-                    end,
-  response(Transport,
-           C,
-           declare_publisher,
-           CorrelationId,
-           Code),
-  increase_protocol_counter(Counter),
-  {C, State};
+  when ?IS_INVALID_REF(WriterRef) andalso map_size(ResourceAlarms) =:= 0 ->
+    {Code, Counter} = case check_write_permitted(stream_r(S, C), User) of
+                        ok ->
+                          {?RESPONSE_CODE_PRECONDITION_FAILED, ?PRECONDITION_FAILED};
+                        error ->
+                          {?RESPONSE_CODE_ACCESS_REFUSED, ?ACCESS_REFUSED}
+                      end,
+    response(Transport,
+             C,
+             declare_publisher,
+             CorrelationId,
+             Code),
+    increase_protocol_counter(Counter),
+    {C, State};
 handle_frame_post_auth(Transport,
                        #stream_connection{user = User,
                                           publishers = Publishers0,
                                           publisher_to_ids = RefIds0,
-                                          resource_alarm = false} =
+                                          resource_alarms = ResourceAlarms} =
                            Connection0,
                        State,
                        {request, CorrelationId,
-                        {declare_publisher, PublisherId, WriterRef, Stream}}) ->
+                        {declare_publisher, PublisherId, WriterRef, Stream}})
+  when map_size(ResourceAlarms) =:= 0 ->
     case check_write_permitted(stream_r(Stream,
                                                             Connection0),
                                                    User)
