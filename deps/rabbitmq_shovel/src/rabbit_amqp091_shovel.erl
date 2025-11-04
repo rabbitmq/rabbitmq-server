@@ -362,16 +362,16 @@ status(_) ->
     running.
 
 pending_count(#{dest := Dest}) ->
-    Pending = maps:get(pending, Dest, queue:new()),
-    queue:len(Pending).
+    Pending = maps:get(pending, Dest, lqueue:new()),
+    lqueue:len(Pending).
 
 add_pending(Elem, State = #{dest := Dest}) ->
-    Pending = maps:get(pending, Dest, queue:new()),
-    State#{dest => Dest#{pending => queue:in(Elem, Pending)}}.
+    Pending = maps:get(pending, Dest, lqueue:new()),
+    State#{dest => Dest#{pending => lqueue:in(Elem, Pending)}}.
 
 pop_pending(State = #{dest := Dest}) ->
-    Pending = maps:get(pending, Dest, queue:new()),
-    case queue:out(Pending) of
+    Pending = maps:get(pending, Dest, lqueue:new()),
+    case lqueue:out(Pending) of
         {empty, _} ->
             empty;
         {{value, Elem}, Pending2} ->
