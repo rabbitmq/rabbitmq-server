@@ -1266,6 +1266,26 @@ credential_validator.regexp = ^abc\\d+",
    [{rabbit, [
       {stream_read_ahead, false}
      ]}],
+   []},
+
+  %%
+  %% Stream read limit
+  %%
+  {stream_read_ahead_limit_bytes,
+   "
+    stream.read_ahead_limit = 8192
+   ",
+   [{rabbit, [
+      {stream_read_ahead_limit, 8192}
+     ]}],
+   []},
+  {stream_read_ahead_limit_information_unit,
+   "
+    stream.read_ahead_limit = 8KiB
+   ",
+   [{rabbit, [
+      {stream_read_ahead_limit, "8KiB"}
+     ]}],
    []}
 
 ].
