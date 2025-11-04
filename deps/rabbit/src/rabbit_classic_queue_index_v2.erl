@@ -7,7 +7,7 @@
 
 -module(rabbit_classic_queue_index_v2).
 
--export([erase/1, init/2, reset_state/1, recover/5,
+-export([erase/1, init/1, reset_state/1, recover/4,
          terminate/3, delete_and_terminate/1,
          info/1, publish/7, ack/2, read/3]).
 
@@ -144,17 +144,11 @@
 
     %% File descriptors. We will keep up to 4 FDs
     %% at a time. See comments in reduce_fd_usage/2.
-    fds = #{} :: #{non_neg_integer() => file:fd()},
-
-    %% This fun must be called when messages that expect
-    %% confirms have either an ack or their entry
-    %% written to disk and file:sync/1 has been called.
-    on_sync :: on_sync_fun()
+    fds = #{} :: #{non_neg_integer() => file:fd()}
 }).
 
 -type state() :: #qi{}.
 
--type on_sync_fun() :: fun ((sets:set()) -> ok).
 -type contains_predicate() :: fun ((rabbit_types:msg_id()) -> boolean()).
 -type shutdown_terms() :: list() | 'non_clean_shutdown'.
 
@@ -168,24 +162,21 @@ erase(#resource{ virtual_host = VHost } = Name) ->
     Dir = queue_dir(VHostDir, Name),
     erase_index_dir(Dir).
 
--spec init(rabbit_amqqueue:name(), on_sync_fun()) -> state().
+-spec init(rabbit_amqqueue:name()) -> state().
 
-%% We do not embed messages and as a result never need the OnSyncMsgFun.
-
-init(#resource{ virtual_host = VHost } = Name, OnSyncFun) ->
-    ?DEBUG("~0p ~0p ~0p", [Name, OnSyncFun]),
+init(#resource{ virtual_host = VHost } = Name) ->
+    ?DEBUG("~0p", [Name]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
     false = rabbit_file:is_file(Dir), %% is_file == is file or dir
-    init1(Name, Dir, OnSyncFun).
+    init1(Name, Dir).
 
-init1(Name, Dir, OnSyncFun) ->
+init1(Name, Dir) ->
     ensure_queue_name_stub_file(Name, Dir),
     DirBin = rabbit_file:filename_to_binary(Dir),
     #qi{
         queue_name = Name,
-        dir = << DirBin/binary, "/" >>,
-        on_sync = OnSyncFun
+        dir = << DirBin/binary, "/" >>
     }.
 
 ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) ->
@@ -197,15 +188,13 @@ ensure_queue_name_stub_file(#resource{virtual_host = VHost, name = QName}, Dir) 
 -spec reset_state(State) -> State when State::state().
 
 reset_state(State = #qi{ queue_name     = Name,
-                         dir            = Dir,
-                         on_sync        = OnSyncFun }) ->
+                         dir            = Dir }) ->
     ?DEBUG("~0p", [State]),
     _ = delete_and_terminate(State),
-    init1(Name, rabbit_file:binary_to_filename(Dir), OnSyncFun).
+    init1(Name, rabbit_file:binary_to_filename(Dir)).
 
 -spec recover(rabbit_amqqueue:name(), shutdown_terms(), boolean(),
-                    contains_predicate(),
-                    on_sync_fun()) ->
+                    contains_predicate()) ->
                         {'undefined' | non_neg_integer(),
                          'undefined' | non_neg_integer(), state()}.
 
@@ -218,12 +207,11 @@ reset_state(State = #qi{ queue_name     = Name,
 -define(RECOVER_COUNTER_SIZE, 6).
 
 recover(#resource{ virtual_host = VHost, name = QueueName } = Name, Terms,
-        IsMsgStoreClean, ContainsCheckFun, OnSyncFun) ->
-    ?DEBUG("~0p ~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean,
-                                   ContainsCheckFun, OnSyncFun]),
+        IsMsgStoreClean, ContainsCheckFun) ->
+    ?DEBUG("~0p ~0p ~0p ~0p", [Name, Terms, IsMsgStoreClean, ContainsCheckFun]),
     VHostDir = rabbit_vhost:msg_store_dir_path(VHost),
     Dir = queue_dir(VHostDir, Name),
-    State0 = init1(Name, Dir, OnSyncFun),
+    State0 = init1(Name, Dir),
     %% We go over all segments if either the index or the
     %% message store has/had to recover. Otherwise we just
     %% take our state from Terms.
@@ -922,22 +910,14 @@ parse_entries(<< Status:8,
 
 %% ----
 %%
-%% Syncing and flushing to disk requested by the queue.
-%% Note: the v2 no longer calls fsync, it only flushes.
+%% Flushing to disk requested by the queue.
 
--spec sync(State) -> State when State::state().
+-spec sync(State) -> {sets:set(), State} when State::state().
 
-sync(State0 = #qi{ confirms = Confirms,
-                   on_sync = OnSyncFun }) ->
+sync(State0 = #qi{ confirms = Confirms }) ->
     ?DEBUG("~0p", [State0]),
     State = flush_buffer(State0, full, segment_entry_count()),
-    _ = case sets:is_empty(Confirms) of
-        true ->
-            ok;
-        false ->
-            OnSyncFun(Confirms)
-    end,
-    State#qi{ confirms = sets:new([{version,2}]) }.
+    {Confirms, State#qi{ confirms = sets:new([{version,2}]) }}.
 
 -spec needs_sync(state()) -> 'false' | 'confirms'.
 

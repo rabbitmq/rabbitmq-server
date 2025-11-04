@@ -13,7 +13,7 @@
          publish/5, publish_delivered/4,
          discard/3, drain_confirmed/1,
          dropwhile/2, fetchwhile/4, fetch/2, drop/2, ack/2, requeue/2,
-         ackfold/4, fold/3, len/1, is_empty/1, depth/1,
+         ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
          info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
@@ -260,9 +260,6 @@ requeue(AckTags, State) ->
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     rabbit_variable_queue:ackfold(MsgFun, Acc, State, AckTags).
-
-fold(Fun, Acc, State) ->
-    rabbit_variable_queue:fold(Fun, Acc, State).
 
 len(#vqstate { ram_pending_ack = QPA } = State) ->
     maybe_delay(QPA),

@@ -22,7 +22,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/4]).
+-export([start_msg_store/3, stop_msg_store/1, init/3]).
 
 -include("mc.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -404,17 +404,16 @@ stop_msg_store(VHost) ->
     ok.
 
 init(Queue, Recover, Callback) ->
-    init(
+    init1(
       Queue, Recover,
       fun (MsgIds, ActionTaken) ->
               msgs_written_to_disk(Callback, MsgIds, ActionTaken)
-      end,
-      fun (MsgIds) -> msg_indices_written_to_disk(Callback, MsgIds) end).
+      end).
 
-init(Q, new, MsgOnDiskFun, MsgIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init1(Q, new, MsgOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
-    IndexState = rabbit_classic_queue_index_v2:init(QueueName, MsgIdxOnDiskFun),
+    IndexState = rabbit_classic_queue_index_v2:init(QueueName),
     StoreState = rabbit_classic_queue_store_v2:init(QueueName),
     VHost = QueueName#resource.virtual_host,
     init(IsDurable, IndexState, StoreState, 0, 0, [],
@@ -427,7 +426,7 @@ init(Q, new, MsgOnDiskFun, MsgIdxOnDiskFun) when ?is_amqqueue(Q) ->
                                VHost), VHost);
 
 %% We can be recovering a transient queue if it crashed
-init(Q, Terms, MsgOnDiskFun, MsgIdxOnDiskFun) when ?is_amqqueue(Q) ->
+init1(Q, Terms, MsgOnDiskFun) when ?is_amqqueue(Q) ->
     QueueName = amqqueue:get_name(Q),
     IsDurable = amqqueue:is_durable(Q),
     {PRef, RecoveryTerms} = process_recovery_terms(Terms),
@@ -451,7 +450,7 @@ init(Q, Terms, MsgOnDiskFun, MsgIdxOnDiskFun) when ?is_amqqueue(Q) ->
           rabbit_vhost_msg_store:successfully_recovered_state(
               VHost,
               ?PERSISTENT_MSG_STORE),
-          ContainsCheckFun, MsgIdxOnDiskFun),
+          ContainsCheckFun),
     StoreState = rabbit_classic_queue_store_v2:init(QueueName),
     init(IsDurable, IndexState, StoreState,
          DeltaCount, DeltaBytes, RecoveryTerms,
@@ -714,12 +713,28 @@ sync(State = #vqstate { index_state = IndexState0,
                         store_state = StoreState0,
                         unconfirmed_simple = UCS,
                         confirmed   = C }) ->
-    IndexState = rabbit_classic_queue_index_v2:sync(IndexState0),
+    {MsgIdSet, IndexState} = rabbit_classic_queue_index_v2:sync(IndexState0),
     StoreState = rabbit_classic_queue_store_v2:sync(StoreState0),
-    State #vqstate { index_state = IndexState,
-                     store_state = StoreState,
-                     unconfirmed_simple = sets:new([{version,2}]),
-                     confirmed   = sets:union(C, UCS) }.
+    State1 = State #vqstate { index_state = IndexState,
+                              store_state = StoreState,
+                              unconfirmed_simple = sets:new([{version,2}]),
+                              confirmed   = sets:union(C, UCS) },
+    index_synced(MsgIdSet, State1).
+
+index_synced(MsgIdSet, State = #vqstate{
+        msgs_on_disk        = MOD,
+        msg_indices_on_disk = MIOD,
+        unconfirmed         = UC }) ->
+    case sets:is_empty(MsgIdSet) of
+        true ->
+            State;
+        false ->
+            Confirmed = sets:intersection(UC, MsgIdSet),
+            record_confirms(sets:intersection(MsgIdSet, MOD),
+                            State #vqstate {
+                              msg_indices_on_disk =
+                                  sets:union(MIOD, Confirmed) })
+    end.
 
 resume(State) -> a(timeout(State)).
 
@@ -1901,19 +1916,6 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
                                      State #vqstate {
                                        msgs_on_disk =
                                            sets:union(MOD, Confirmed) })
-             end).
-
-%% @todo Having to call run_backing_queue is probably reducing performance...
-msg_indices_written_to_disk(Callback, MsgIdSet) ->
-    Callback(?MODULE,
-             fun (?MODULE, State = #vqstate { msgs_on_disk        = MOD,
-                                              msg_indices_on_disk = MIOD,
-                                              unconfirmed         = UC }) ->
-                     Confirmed = sets:intersection(UC, MsgIdSet),
-                     record_confirms(sets:intersection(MsgIdSet, MOD),
-                                     State #vqstate {
-                                       msg_indices_on_disk =
-                                           sets:union(MIOD, Confirmed) })
              end).
 
 %%----------------------------------------------------------------------------
