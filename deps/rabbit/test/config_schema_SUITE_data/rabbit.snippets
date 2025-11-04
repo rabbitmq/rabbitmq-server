@@ -1234,7 +1234,7 @@ credential_validator.regexp = ^abc\\d+",
    []},
 
   %%
-  %% Stream read ahead on/off
+  %% Stream read ahead on/off/limit
   %%
 
   {stream_read_ahead,
@@ -1254,24 +1254,20 @@ credential_validator.regexp = ^abc\\d+",
       {stream_read_ahead, false}
      ]}],
    []},
-
-  %%
-  %% Stream read limit
-  %%
   {stream_read_ahead_limit_bytes,
    "
-    stream.read_ahead_limit = 8192
+    stream.read_ahead = 8192
    ",
    [{rabbit, [
-      {stream_read_ahead_limit, 8192}
+      {stream_read_ahead, 8192}
      ]}],
    []},
   {stream_read_ahead_limit_information_unit,
    "
-    stream.read_ahead_limit = 8KiB
+    stream.read_ahead = 8KiB
    ",
    [{rabbit, [
-      {stream_read_ahead_limit, "8KiB"}
+      {stream_read_ahead, "8KiB"}
      ]}],
    []}
 

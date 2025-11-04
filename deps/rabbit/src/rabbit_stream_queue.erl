@@ -49,7 +49,7 @@
 -export([format_osiris_event/2]).
 -export([update_stream_conf/2]).
 -export([readers/1]).
--export([read_ahead_on/0, read_ahead_limit/0]).
+-export([read_ahead/0]).
 
 -export([parse_offset_arg/1,
          filter_spec/1]).
@@ -465,8 +465,7 @@ begin_stream(#stream_client{name = QName,
              Tag, Offset, Mode, AckRequired, Filter, Options0)
   when is_pid(LocalPid) ->
     CounterSpec = {{?MODULE, QName, Tag, self()}, []},
-    Options1 = Options0#{read_ahead => read_ahead_on(),
-                         read_ahead_limit => read_ahead_limit()},
+    Options1 = Options0#{read_ahead => read_ahead()},
     {ok, Seg0} = osiris:init_reader(LocalPid, Offset, CounterSpec, Options1),
     NextOffset = osiris_log:next_offset(Seg0) - 1,
     osiris:register_offset_listener(LocalPid, NextOffset),
@@ -1521,16 +1520,13 @@ queue_vm_ets() ->
     {[],
      []}.
 
-read_ahead_on() ->
-    application:get_env(rabbit, stream_read_ahead, true).
-
--spec read_ahead_limit() -> integer() | undefined.
-read_ahead_limit() ->
-    case application:get_env(rabbit, stream_read_ahead_limit, undefined) of
-        undefined ->
-            undefined;
-        Bytes when is_integer(Bytes) ->
-            Bytes;
+-spec read_ahead() -> boolean() | non_neg_integer().
+read_ahead() ->
+    case application:get_env(rabbit, stream_read_ahead, true) of
+        Toggle when is_boolean(Toggle) ->
+            Toggle;
+        LimitBytes when is_integer(LimitBytes) ->
+            LimitBytes;
         Limit when is_list(Limit) ->
             case rabbit_resource_monitor_misc:parse_information_unit(Limit) of
                 {ok, ParsedLimit} ->
@@ -1538,6 +1534,6 @@ read_ahead_limit() ->
                 {error, parse_error} ->
                     ?LOG_ERROR("Unable to parse stream read ahead limit value "
                                "~tp", [Limit]),
-                    undefined
+                    true
             end
     end.
