@@ -856,9 +856,9 @@ restart_server({_, _} = Ref) ->
 -spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
              rabbit_types:username()) ->
-                {ok, QLen :: non_neg_integer()} |
-                rabbit_types:error('not_empty') |
-                {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+    {ok, QLen :: non_neg_integer()} |
+    rabbit_types:error('not_empty') |
+    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
      "cannot delete ~ts. queue.delete operations with if-unused flag set are not supported by quorum queues",
