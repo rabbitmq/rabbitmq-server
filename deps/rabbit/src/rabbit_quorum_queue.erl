@@ -856,69 +856,75 @@ restart_server({_, _} = Ref) ->
 -spec delete(amqqueue:amqqueue(),
              boolean(), boolean(),
              rabbit_types:username()) ->
-    {ok, QLen :: non_neg_integer()} |
-    {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
+                {ok, QLen :: non_neg_integer()} |
+                rabbit_types:error('not_empty') |
+                {protocol_error, Type :: atom(), Reason :: string(), Args :: term()}.
 delete(Q, true, _IfEmpty, _ActingUser) when ?amqqueue_is_quorum(Q) ->
     {protocol_error, not_implemented,
      "cannot delete ~ts. queue.delete operations with if-unused flag set are not supported by quorum queues",
      [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, true, _ActingUser) when ?amqqueue_is_quorum(Q) ->
-    {protocol_error, not_implemented,
-     "cannot delete ~ts. queue.delete operations with if-empty flag set are not supported by quorum queues",
-     [rabbit_misc:rs(amqqueue:get_name(Q))]};
-delete(Q, _IfUnused, _IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+delete(Q, _IfUnused, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
+    do_delete(Q, IfEmpty, ActingUser).
+
+do_delete(Q, IfEmpty, ActingUser) when ?amqqueue_is_quorum(Q) ->
     {Name, _} = amqqueue:get_pid(Q),
     QName = amqqueue:get_name(Q),
     QNodes = get_nodes(Q),
     %% TODO Quorum queue needs to support consumer tracking for IfUnused
     Timeout = ?DELETE_TIMEOUT,
-    {ok, ReadyMsgs, _} = stat(Q),
-    Servers = [{Name, Node} || Node <- QNodes],
-    case ra:delete_cluster(Servers, Timeout) of
-        {ok, {_, LeaderNode} = Leader} ->
-            MRef = erlang:monitor(process, Leader),
-            receive
-                {'DOWN', MRef, process, _, _} ->
-                    %% leader is down,
-                    %% force delete remaining members
-                    ok = force_delete_queue(lists:delete(Leader, Servers)),
-                    ok
-            after Timeout ->
-                    erlang:demonitor(MRef, [flush]),
-                    ok = force_delete_queue(Servers)
-            end,
-            notify_decorators(QName, shutdown),
-            case delete_queue_data(Q, ActingUser) of
-                ok ->
-                    _ = erpc_call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
-                                  ?RPC_TIMEOUT),
-                    {ok, ReadyMsgs};
-                {error, timeout} = Err ->
-                    Err
-            end;
-        {error, {no_more_servers_to_try, Errs}} ->
-            case lists:all(fun({{error, noproc}, _}) -> true;
-                              (_) -> false
-                           end, Errs) of
-                true ->
-                    %% If all ra nodes were already down, the delete
-                    %% has succeed
-                    ok;
-                false ->
-                    %% attempt forced deletion of all servers
-                    ?LOG_WARNING(
-                      "Could not delete quorum '~ts', not enough nodes "
-                       " online to reach a quorum: ~255p."
-                       " Attempting force delete.",
-                      [rabbit_misc:rs(QName), Errs]),
-                    ok = force_delete_queue(Servers),
-                    notify_decorators(QName, shutdown)
-            end,
-            case delete_queue_data(Q, ActingUser) of
-                ok ->
-                    {ok, ReadyMsgs};
-                {error, timeout} = Err ->
-                    Err
+    {ok, ReadyMsgs, UnackedMsgs} = stat(Q),
+    %% Early return if IfEmpty flag is set and queue is not empty
+    case IfEmpty of
+        true when ReadyMsgs > 0 orelse UnackedMsgs > 0 ->
+            {error, not_empty};
+        _ ->
+            Servers = [{Name, Node} || Node <- QNodes],
+            case ra:delete_cluster(Servers, Timeout) of
+                {ok, {_, LeaderNode} = Leader} ->
+                    MRef = erlang:monitor(process, Leader),
+                    receive
+                        {'DOWN', MRef, process, _, _} ->
+                            %% leader is down,
+                            %% force delete remaining members
+                            ok = force_delete_queue(lists:delete(Leader, Servers)),
+                            ok
+                    after Timeout ->
+                        erlang:demonitor(MRef, [flush]),
+                        ok = force_delete_queue(Servers)
+                    end,
+                    notify_decorators(QName, shutdown),
+                    case delete_queue_data(Q, ActingUser) of
+                        ok ->
+                            _ = erpc_call(LeaderNode, rabbit_core_metrics, queue_deleted, [QName],
+                                          ?RPC_TIMEOUT),
+                            {ok, ReadyMsgs};
+                        {error, timeout} = Err ->
+                            Err
+                    end;
+                {error, {no_more_servers_to_try, Errs}} ->
+                    case lists:all(fun({{error, noproc}, _}) -> true;
+                                      (_) -> false
+                                   end, Errs) of
+                        true ->
+                            %% If all ra nodes were already down, the delete
+                            %% has succeed
+                            ok;
+                        false ->
+                            %% attempt forced deletion of all servers
+                            ?LOG_WARNING(
+                                "Could not delete quorum '~ts', not enough nodes "
+                                " online to reach a quorum: ~255p."
+                                " Attempting force delete.",
+                                [rabbit_misc:rs(QName), Errs]),
+                            ok = force_delete_queue(Servers),
+                            notify_decorators(QName, shutdown)
+                    end,
+                    case delete_queue_data(Q, ActingUser) of
+                        ok ->
+                            {ok, ReadyMsgs};
+                        {error, timeout} = Err ->
+                            Err
+                    end
             end
     end.
 

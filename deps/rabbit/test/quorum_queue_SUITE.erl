@@ -4157,12 +4157,29 @@ delete_if_empty(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Test 1: Delete fails when queue has messages (error 406 PRECONDITION_FAILED)
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 406, _}}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_empty = true})).
+                                                      if_empty = true})),
+
+    %% Test 2: Delete succeeds when queue is empty
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    %% Consume the message to empty the queue
+    subscribe(Ch2, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = Tag}, _} ->
+            amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = Tag})
+    after 5000 ->
+        ct:fail("Timeout waiting for message")
+    end,
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Now delete should succeed
+    ?assertMatch(#'queue.delete_ok'{},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                        if_empty = true})).
 
 delete_if_unused(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
