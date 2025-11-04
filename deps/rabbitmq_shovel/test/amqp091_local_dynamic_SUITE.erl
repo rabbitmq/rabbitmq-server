@@ -108,7 +108,8 @@ init_per_suite(Config0) ->
           "source_queue_down",
           "dest_queue_down",
           "inbound_link_detached",
-          "not_found"
+          "not_found",
+          "dependent process"
         ]}
       ]),
     rabbit_ct_helpers:run_setup_steps(
@@ -318,7 +319,7 @@ missing_src_queue_with_src_predeclared(Config) ->
                 Ch, #'queue.bind'{queue = Dest,
                                   exchange = <<"dest-ex">>,
                                   routing_key = <<"dest-key">>}),
-              
+
               set_param_nowait(Config,
                                ?PARAM, ?config(shovel_args, Config) ++
                                    [{<<"src-queue">>, Src},
@@ -327,7 +328,7 @@ missing_src_queue_with_src_predeclared(Config) ->
                                     {<<"dest-exchange-key">>, <<"dest-key">>}]),
               await_shovel(Config, 0, ?PARAM, terminated),
               expect_missing_queue(Ch, Src),
-              
+
               with_amqp091_ch(
                 Config,
                 fun(Ch2) ->
@@ -368,7 +369,7 @@ missing_dest_queue_with_dest_predeclared(Config) ->
                 fun(Ch2) ->
                         amqp_channel:call(
                           Ch2, #'queue.declare'{queue = Dest,
-                                                durable = true}),                        
+                                                durable = true}),
                         await_shovel(Config, 0, ?PARAM, running),
                         amqp091_publish_expect(Ch2, <<"amq.direct">>, <<"src-key">>, Dest, <<"hello!">>)
                 end)
@@ -392,7 +393,7 @@ missing_src_queue_without_src_predeclared(Config) ->
                 Ch, #'queue.bind'{queue = Dest,
                                   exchange = <<"dest-ex">>,
                                   routing_key = <<"dest-key">>}),
-              
+
               set_param_nowait(Config, ?PARAM,
                                ?config(shovel_args, Config) ++
                                    [{<<"src-queue">>, Src},
@@ -400,7 +401,7 @@ missing_src_queue_without_src_predeclared(Config) ->
                                     {<<"dest-exchange-key">>, <<"dest-key">>}]),
               await_shovel(Config, 0, ?PARAM, terminated),
               expect_missing_queue(Ch, Src),
-              
+
               with_amqp091_ch(
                 Config,
                 fun(Ch2) ->
