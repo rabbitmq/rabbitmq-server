@@ -379,19 +379,42 @@ forget_member_locked(Node, RemoveWhenOffline)
         ok -> post_forget_member_locked(Node, RemoveWhenOffline);
         _  -> ok
     end,
-    Ret.
+    Ret;
+forget_member_locked(Node, RemoveWhenOffline)
+  when is_atom(Node) andalso Node =:= node() ->
+    OtherNodes = members() -- [Node],
+    forget_member_locked_remotely(OtherNodes, Node, RemoveWhenOffline).
 
-post_forget_member_locked(Node, false = _RemoveWhenOffline) ->
-    ?LOG_DEBUG(
-       "DB: removing node `~s` from various Ra clusters", [Node],
-       #{domain => ?RMQLOG_DOMAIN_DB}),
-    _ = rabbit_amqqueue:forget_all(Node),
-    _ = rabbit_quorum_queue:shrink_all(Node),
-    _ = rabbit_stream_queue:delete_all_replicas(Node),
-    _ = rabbit_stream_coordinator:forget_node(Node),
-    rabbit_node_monitor:notify_left_cluster(Node),
-    ok;
-post_forget_member_locked(_Node, true = _RemoveWhenOffline) ->
+forget_member_locked_remotely([OtherNode | Rest], Node, RemoveWhenOffline) ->
+    try
+        ?LOG_DEBUG(
+           "DB: removing cluster member `~ts` (this node); doing it from "
+           "remote node `~s`",
+           [Node, OtherNode],
+           #{domain => ?RMQLOG_DOMAIN_DB}),
+        Ret = erpc:call(
+                OtherNode,
+                ?MODULE, forget_member_locked, [Node, RemoveWhenOffline]),
+        case Ret of
+            ok  ->
+                ok;
+            Error ->
+                ?LOG_DEBUG(
+                   "DB: failed to remove cluster member `~ts` from node "
+                   "`~s`: ~0p",
+                   [Node, OtherNode, Error],
+                   #{domain => ?RMQLOG_DOMAIN_DB}),
+                forget_member_locked_remotely(Rest, Node, RemoveWhenOffline)
+        end
+    catch
+        _:Reason ->
+            ?LOG_DEBUG(
+               "DB: failed to remove cluster member `~ts` from node `~s`: ~0p",
+               [Node, OtherNode, Reason],
+               #{domain => ?RMQLOG_DOMAIN_DB}),
+            forget_member_locked_remotely(Rest, Node, RemoveWhenOffline)
+    end;
+forget_member_locked_remotely([], _Node, _RemoveWhenOffline) ->
     ok.
 
 forget_member_using_mnesia(Node, RemoveWhenOffline) ->
@@ -405,6 +428,19 @@ forget_member_using_khepri(_Node, true) ->
     {error, not_supported};
 forget_member_using_khepri(Node, false = _RemoveWhenOffline) ->
     rabbit_khepri:remove_member(Node).
+
+post_forget_member_locked(Node, false = _RemoveWhenOffline) ->
+    ?LOG_DEBUG(
+       "DB: removing node `~s` from various Ra clusters", [Node],
+       #{domain => ?RMQLOG_DOMAIN_DB}),
+    _ = rabbit_amqqueue:forget_all(Node),
+    _ = rabbit_quorum_queue:shrink_all(Node),
+    _ = rabbit_stream_queue:delete_all_replicas(Node),
+    _ = rabbit_stream_coordinator:forget_node(Node),
+    rabbit_node_monitor:notify_left_cluster(Node),
+    ok;
+post_forget_member_locked(_Node, true = _RemoveWhenOffline) ->
+    ok.
 
 lock_cluster_changes(ChangingNode) ->
     RabbitWasRunning = stop_rabbit_if_running(ChangingNode),
