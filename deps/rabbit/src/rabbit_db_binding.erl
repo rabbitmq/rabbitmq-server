@@ -35,7 +35,8 @@
          has_for_source_in_mnesia/1,
          has_for_source_in_khepri/1,
          match_source_and_destination_in_khepri_tx/2,
-         clear_in_khepri/0
+         clear_in_khepri/0,
+         khepri_ret_to_deletions/2
         ]).
 
 -export([
@@ -201,6 +202,14 @@ create_in_khepri(#binding{source = SrcName,
             case ChecksFun(Src, Dst) of
                 ok ->
                     RoutePath = khepri_route_path(Binding),
+                    DstPath = case DstName of
+                                  #resource{kind = queue} ->
+                                      rabbit_db_queue:khepri_queue_path(DstName);
+                                  #resource{kind = exchange} ->
+                                      rabbit_db_exchange:khepri_exchange_path(DstName)
+                              end,
+                    KeepWhile = #{DstPath => #if_node_exists{}},
+                    PutOptions = #{keep_while => KeepWhile},
                     MaybeSerial = rabbit_exchange:serialise_events(Src),
                     Serial = rabbit_khepri:transaction(
                                fun() ->
@@ -210,11 +219,17 @@ create_in_khepri(#binding{source = SrcName,
                                                    true ->
                                                        already_exists;
                                                    false ->
-                                                       ok = khepri_tx:put(RoutePath, sets:add_element(Binding, Set)),
+                                                       ok = khepri_tx:put(
+                                                              RoutePath,
+                                                              sets:add_element(Binding, Set),
+                                                              PutOptions),
                                                        serial_in_khepri(MaybeSerial, Src)
                                                end;
                                            _ ->
-                                               ok = khepri_tx:put(RoutePath, sets:add_element(Binding, sets:new([{version, 2}]))),
+                                               ok = khepri_tx:put(
+                                                      RoutePath,
+                                                      sets:add_element(Binding, sets:new([{version, 2}])),
+                                                      PutOptions),
                                                serial_in_khepri(MaybeSerial, Src)
                                        end
                                end, rw),
@@ -906,6 +921,7 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
                 Name,
                 ?KHEPRI_WILDCARD_STAR), %% RoutingKey
     {ok, BindingsMap} = khepri_tx_adv:delete_many(Pattern),
+    % logger:alert("BindingsMap = ~p", [BindingsMap]),
     Bindings = maps:fold(
                  fun(Path, Props, Acc) ->
                          case {Path, Props} of
@@ -919,6 +935,38 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
                  end, [], BindingsMap),
     rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
+
+khepri_ret_to_deletions(Deleted, OnlyDurable) ->
+    Bindings0 = maps:fold(
+                  fun(Path, Props, Acc) ->
+                          case {Path, Props} of
+                              {?RABBITMQ_KHEPRI_ROUTE_PATH(
+                                  _VHost, _SrcName, _Kind, _Name, _RoutingKey),
+                               #{data := Set}} ->
+                                  sets:to_list(Set) ++ Acc;
+                              {_, _} ->
+                                  Acc
+                          end
+                  end, [], Deleted),
+    Bindings1 = lists:keysort(#binding.source, Bindings0),
+    rabbit_binding:group_bindings_fold(
+      fun(XName, Bindings, Deletions, _OnlyDurable) ->
+              ExchangePath = rabbit_db_exchange:khepri_exchange_path(XName),
+              case Deleted of
+                  #{ExchangePath := #{data := X}} ->
+                      rabbit_binding:add_deletion(
+                        XName, X, deleted, Bindings, Deletions);
+                  _ ->
+                      case rabbit_db_exchange:get(XName) of
+                          {ok, X} ->
+                              rabbit_binding:add_deletion(
+                                XName, X, not_deleted, Bindings, Deletions);
+                          _ ->
+                              Deletions
+                      end
+              end
+      end,
+      Bindings1, OnlyDurable).
 
 %% -------------------------------------------------------------------
 %% delete_transient_for_destination_in_mnesia().

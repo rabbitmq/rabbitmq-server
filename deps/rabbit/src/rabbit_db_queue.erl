@@ -411,28 +411,46 @@ delete_in_khepri(QueueName) ->
     delete_in_khepri(QueueName, false).
 
 delete_in_khepri(QueueName, OnlyDurable) ->
-    rabbit_khepri:transaction(
-      fun () ->
-              Path = khepri_queue_path(QueueName),
-              UsesUniformWriteRet = try
-                                        khepri_tx:does_api_comply_with(uniform_write_ret)
-                                    catch
-                                        error:undef ->
-                                            false
-                                    end,
-              case khepri_tx_adv:delete(Path) of
-                  {ok, #{Path := #{data := _}}} when UsesUniformWriteRet ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, #{data := _}} when not UsesUniformWriteRet ->
-                      %% we want to execute some things, as decided by rabbit_exchange,
-                      %% after the transaction.
-                      rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
-                  {ok, _} ->
-                      ok
-              end
-      end, rw).
+    Path = khepri_queue_path(QueueName),
+    FeatureFlag = true,
+    case FeatureFlag of
+        true ->
+            case khepri_adv:delete(Path) of
+                {ok, #{Path := #{data := _}} = Deleted} ->
+                    %% we want to execute some things, as decided by
+                    %% rabbit_exchange, after the transaction.
+                    rabbit_db_binding:khepri_ret_to_deletions(
+                      Deleted, OnlyDurable);
+                {ok, _} ->
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end;
+        false ->
+            UsesUniformWriteRet = try
+                                      khepri_tx:does_api_comply_with(uniform_write_ret)
+                                  catch
+                                      error:undef ->
+                                          false
+                                  end,
+            rabbit_khepri:transaction(
+              fun () ->
+                      Ret1 = khepri_tx_adv:delete(Path),
+                      % logger:alert("Deleted queue ret = ~p", [Ret1]),
+                      case Ret1 of
+                          {ok, #{Path := #{data := _}}} when UsesUniformWriteRet ->
+                              %% we want to execute some things, as decided by rabbit_exchange,
+                              %% after the transaction.
+                              rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+                          {ok, #{data := _}} when not UsesUniformWriteRet ->
+                              %% we want to execute some things, as decided by rabbit_exchange,
+                              %% after the transaction.
+                              rabbit_db_binding:delete_for_destination_in_khepri(QueueName, OnlyDurable);
+                          {ok, _} ->
+                              ok
+                      end
+              end, rw)
+    end.
 
 %% -------------------------------------------------------------------
 %% internal_delete().
