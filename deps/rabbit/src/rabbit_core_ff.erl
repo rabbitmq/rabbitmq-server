@@ -232,3 +232,12 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.3.0']
      }}).
+
+-rabbit_feature_flag(
+   {replaced_delete_queue_transaction,
+    #{desc          => "Delete queues using a simple delete instead of a transaction",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.3.0'],
+      callbacks     => #{enable =>
+                         {rabbit_db_queue, replaced_delete_queue_transaction_enable}}
+     }}).
