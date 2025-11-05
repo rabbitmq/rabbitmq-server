@@ -232,3 +232,15 @@
       stability     => stable,
       depends_on    => ['rabbitmq_4.3.0']
      }}).
+
+-rabbit_feature_flag(
+   {tie_binding_to_dest_with_keep_while_cond,
+    #{desc          =>
+      "Use keep_while condition to tie a binding record lifetime to its "
+      "destination record in Khepri",
+      stability     => stable,
+      depends_on    => ['rabbitmq_4.3.0'],
+      callbacks     => #{enable =>
+                         {rabbit_db_queue,
+                          tie_binding_to_dest_with_keep_while_cond_enable}}
+     }}).

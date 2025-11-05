@@ -31,7 +31,9 @@
          delete_for_destination_in_khepri/2,
          delete_all_for_exchange_in_khepri/3,
          has_for_source_in_khepri/1,
-         match_source_and_destination_in_khepri_tx/2
+         match_source_and_destination_in_khepri_tx/2,
+         khepri_ret_to_deletions/2,
+         put_options/1
         ]).
 
 -export([
@@ -123,6 +125,12 @@ create(#binding{source = SrcName,
             case ChecksFun(Src, Dst) of
                 ok ->
                     RoutePath = khepri_route_path(Binding),
+                    FeatureFlag = rabbit_feature_flags:is_enabled(
+                                    tie_binding_to_dest_with_keep_while_cond),
+                    PutOptions = case FeatureFlag of
+                                     true  -> put_options(DstName);
+                                     false -> #{}
+                                 end,
                     MaybeSerial = rabbit_exchange:serialise_events(Src),
                     Serial = rabbit_khepri:transaction(
                                fun() ->
@@ -132,11 +140,17 @@ create(#binding{source = SrcName,
                                                    true ->
                                                        already_exists;
                                                    false ->
-                                                       ok = khepri_tx:put(RoutePath, sets:add_element(Binding, Set)),
+                                                       ok = khepri_tx:put(
+                                                              RoutePath,
+                                                              sets:add_element(Binding, Set),
+                                                              PutOptions),
                                                        serial_in_khepri(MaybeSerial, Src)
                                                end;
                                            _ ->
-                                               ok = khepri_tx:put(RoutePath, sets:add_element(Binding, sets:new([{version, 2}]))),
+                                               ok = khepri_tx:put(
+                                                      RoutePath,
+                                                      sets:add_element(Binding, sets:new([{version, 2}])),
+                                                      PutOptions),
                                                serial_in_khepri(MaybeSerial, Src)
                                        end
                                end, rw),
@@ -166,6 +180,30 @@ lookup_resource(#resource{kind = exchange} = Name) ->
         _ -> []
     end.
 
+put_options(#resource{virtual_host = VHost, name = DstName, kind = Kind}) ->
+    put_options(VHost, DstName, Kind);
+put_options(BindingPath) when is_list(BindingPath) ->
+    {
+     VHost,
+     _SrcName,
+     Kind,
+     DstName,
+     _RoutingKey
+    } = rabbit_db_binding:khepri_route_path_to_args(BindingPath),
+    put_options(VHost, DstName, Kind).
+
+put_options(VHost, DstName, Kind) ->
+    DstPath = case Kind of
+                  queue ->
+                      rabbit_db_queue:khepri_queue_path(
+                        VHost, DstName);
+                  exchange ->
+                      rabbit_db_exchange:khepri_exchange_path(
+                        VHost, DstName)
+              end,
+    KeepWhile = #{DstPath => #if_node_exists{}},
+    #{keep_while => KeepWhile}.
+
 serial_in_khepri(false, _) ->
     none;
 serial_in_khepri(true, X) ->
@@ -190,8 +228,18 @@ serial_in_khepri(true, X) ->
 %%
 %% @private
 
-delete(#binding{source = SrcName,
-                destination = DstName} = Binding, ChecksFun) ->
+delete(Binding, ChecksFun) ->
+    FeatureFlag = rabbit_feature_flags:is_enabled(
+                    tie_binding_to_dest_with_keep_while_cond),
+    case FeatureFlag of
+        true ->
+            delete_v2(Binding, ChecksFun);
+        false ->
+            delete_v1(Binding, ChecksFun)
+    end.
+
+delete_v1(#binding{source = SrcName,
+                   destination = DstName} = Binding, ChecksFun) ->
     Path = khepri_route_path(Binding),
     case rabbit_khepri:transaction(
            fun () ->
@@ -204,7 +252,7 @@ delete(#binding{source = SrcName,
                                true ->
                                    case ChecksFun(Src, Dst) of
                                        ok ->
-                                           ok = delete_in_khepri(Binding),
+                                           ok = delete_in_khepri_tx_v1(Binding),
                                            maybe_auto_delete_exchange_in_khepri(Binding#binding.source, [Binding], rabbit_binding:new_deletions(), false);
                                        {error, _} = Err ->
                                            Err
@@ -224,6 +272,40 @@ delete(#binding{source = SrcName,
             {ok, Deletions}
     end.
 
+delete_v2(#binding{source = SrcName,
+                   destination = DstName} = Binding, ChecksFun) ->
+    Path = khepri_route_path(Binding),
+    case rabbit_khepri:transaction(
+           fun () ->
+                   case {lookup_resource_in_khepri_tx(SrcName),
+                         lookup_resource_in_khepri_tx(DstName)} of
+                       {[Src], [Dst]} ->
+                           case exists_in_khepri(Path, Binding) of
+                               false ->
+                                   ok;
+                               true ->
+                                   case ChecksFun(Src, Dst) of
+                                       ok ->
+                                           delete_in_khepri_tx_v2(Binding);
+                                       {error, _} = Err ->
+                                           Err
+                                   end
+                           end;
+                       _Errs ->
+                           %% No absent queues, always present on disk
+                           ok
+                   end
+           end) of
+        ok ->
+            ok;
+        {error, _} = Err ->
+            Err;
+        {ok, Deleted} ->
+            Deletions = khepri_ret_to_deletions(Deleted, false),
+            ok = rabbit_binding:process_deletions(Deletions),
+            {ok, Deletions}
+    end.
+
 exists_in_khepri(Path, Binding) ->
     case khepri_tx:get(Path) of
         {ok, Set} ->
@@ -232,7 +314,7 @@ exists_in_khepri(Path, Binding) ->
             false
     end.
 
-delete_in_khepri(Binding) ->
+delete_in_khepri_tx_v1(Binding) ->
     Path = khepri_route_path(Binding),
     case khepri_tx:get(Path) of
         {ok, Set0} ->
@@ -240,6 +322,21 @@ delete_in_khepri(Binding) ->
             case sets:is_empty(Set) of
                 true ->
                     ok = khepri_tx:delete(Path);
+                false ->
+                    ok = khepri_tx:put(Path, Set)
+            end;
+        _ ->
+            ok
+    end.
+
+delete_in_khepri_tx_v2(Binding) ->
+    Path = khepri_route_path(Binding),
+    case khepri_tx:get(Path) of
+        {ok, Set0} ->
+            Set = sets:del_element(Binding, Set0),
+            case sets:is_empty(Set) of
+                true ->
+                    khepri_tx_adv:delete(Path);
                 false ->
                     ok = khepri_tx:put(Path, Set)
             end;
@@ -561,6 +658,38 @@ delete_for_destination_in_khepri(#resource{virtual_host = VHost, kind = Kind, na
                  end, [], BindingsMap),
     rabbit_binding:group_bindings_fold(fun maybe_auto_delete_exchange_in_khepri/4,
                                        lists:keysort(#binding.source, Bindings), OnlyDurable).
+
+khepri_ret_to_deletions(Deleted, OnlyDurable) ->
+    Bindings0 = maps:fold(
+                  fun(Path, Props, Acc) ->
+                          case {Path, Props} of
+                              {?RABBITMQ_KHEPRI_ROUTE_PATH(
+                                  _VHost, _SrcName, _Kind, _Name, _RoutingKey),
+                               #{data := Set}} ->
+                                  sets:to_list(Set) ++ Acc;
+                              {_, _} ->
+                                  Acc
+                          end
+                  end, [], Deleted),
+    Bindings1 = lists:keysort(#binding.source, Bindings0),
+    rabbit_binding:group_bindings_fold(
+      fun(XName, Bindings, Deletions, _OnlyDurable) ->
+              ExchangePath = rabbit_db_exchange:khepri_exchange_path(XName),
+              case Deleted of
+                  #{ExchangePath := #{data := X}} ->
+                      rabbit_binding:add_deletion(
+                        XName, X, deleted, Bindings, Deletions);
+                  _ ->
+                      case rabbit_db_exchange:get(XName) of
+                          {ok, X} ->
+                              rabbit_binding:add_deletion(
+                                XName, X, not_deleted, Bindings, Deletions);
+                          _ ->
+                              Deletions
+                      end
+              end
+      end,
+      Bindings1, OnlyDurable).
 
 %% -------------------------------------------------------------------
 %% has_for_source_in_khepri().
