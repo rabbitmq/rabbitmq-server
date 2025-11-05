@@ -13,14 +13,20 @@
          restart_shovel/2,
          get_shovel_parameter/1,
          gen_unique_name/2,
-         decl_fun/2]).
+         decl_fun/2,
+         pget2count/3,
+         validate_uri_fun/1,
+         validate_queue_args/2,
+         validate_consumer_args/2,
+         validate_delete_after/2,
+         deobfuscated_uris/2
+        ]).
 
 -export([
     dynamic_shovel_supervisor_mod/0
 ]).
 
--include_lib("rabbit_common/include/rabbit_framing.hrl").
--include_lib("rabbit_common/include/rabbit.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 -include_lib("kernel/include/logger.hrl").
 
 -define(APP, rabbitmq_shovel).
@@ -166,3 +172,72 @@ parse_declaration({[Method | Rest], Acc}) ->
 
 -spec fail(term()) -> no_return().
 fail(Reason) -> throw({error, Reason}).
+
+%% Used in validation, to ensure just one key is defined
+pget2count(K1, K2, Defs) ->
+    case {rabbit_misc:pget(K1, Defs), rabbit_misc:pget(K2, Defs)} of
+        {undefined, undefined} -> zero;
+        {undefined, _}         -> one;
+        {_,         undefined} -> one;
+        {_,         _}         -> both
+    end.
+
+validate_uri_fun(User) ->
+    fun (Name, Term) -> validate_uri(Name, Term, User) end.
+
+validate_uri(Name, Term, User) when is_binary(Term) ->
+    case rabbit_parameter_validation:binary(Name, Term) of
+        ok -> case amqp_uri:parse(binary_to_list(Term)) of
+                  {ok, P}    -> validate_params_user(P, User);
+                  {error, E} -> {error, "\"~ts\" not a valid URI: ~tp", [Term, E]}
+              end;
+        E  -> E
+    end;
+validate_uri(Name, Term, User) ->
+    case rabbit_parameter_validation:list(Name, Term) of
+        ok -> case [V || URI <- Term,
+                         V <- [validate_uri(Name, URI, User)],
+                         element(1, V) =:= error] of
+                  []      -> ok;
+                  [E | _] -> E
+              end;
+        E  -> E
+    end.
+
+validate_params_user(#amqp_params_direct{}, none) ->
+    ok;
+validate_params_user(#amqp_params_direct{virtual_host = VHost},
+                     User = #user{username = Username}) ->
+    VHostAccess = case catch rabbit_access_control:check_vhost_access(User, VHost, undefined, #{}) of
+                      ok -> ok;
+                      NotOK ->
+                          ?LOG_DEBUG("rabbit_access_control:check_vhost_access result: ~tp", [NotOK]),
+                          NotOK
+                  end,
+    case rabbit_vhost:exists(VHost) andalso VHostAccess of
+        ok -> ok;
+        _ ->
+            {error, "user \"~ts\" may not connect to vhost \"~ts\"", [Username, VHost]}
+    end;
+validate_params_user(#amqp_params_network{}, _User) ->
+    ok.
+
+validate_queue_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:declare_args(), Term).
+
+validate_consumer_args(Name, Term0) ->
+    Term = rabbit_data_coercion:to_proplist(Term0),
+    rabbit_parameter_validation:proplist(Name, rabbit_amqqueue:consume_args(), Term).
+
+validate_delete_after(_Name, <<"never">>)          -> ok;
+validate_delete_after(_Name, <<"queue-length">>)   -> ok;
+validate_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
+validate_delete_after(Name,  Term) ->
+    {error, "~ts should be a number greater than or equal to 0, \"never\" or \"queue-length\", actually was "
+     "~tp", [Name, Term]}.
+
+deobfuscated_uris(Key, Def) ->
+    ObfuscatedURIs = rabbit_misc:pget(Key, Def),
+    URIs = [credentials_obfuscation:decrypt(ObfuscatedURI) || ObfuscatedURI <- ObfuscatedURIs],
+    [binary_to_list(URI) || URI <- URIs].

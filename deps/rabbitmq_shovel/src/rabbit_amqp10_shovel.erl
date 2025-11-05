@@ -15,6 +15,12 @@
 
 -export([
          parse/2,
+         parse_source/1,
+         parse_dest/4,
+         validate_src/1,
+         validate_dest/1,
+         validate_src_funs/2,
+         validate_dest_funs/2,
          source_uri/1,
          dest_uri/1,
          source_protocol/1,
@@ -36,8 +42,19 @@
          pending_count/1
         ]).
 
+-rabbit_boot_step(
+   {rabbit_amqp10_shovel_protocol,
+    [{description, "AMQP10 shovel protocol"},
+     {mfa,      {rabbit_registry, register,
+                 [shovel_protocol, <<"amqp10">>, ?MODULE]}},
+     {cleanup,  {rabbit_registry, unregister,
+                 [shovel_protocol, <<"amqp10">>]}},
+     {requires, rabbit_registry}]}).
+
 -import(rabbit_misc, [pget/2, pget/3]).
 -import(rabbit_data_coercion, [to_binary/1]).
+-import(rabbit_shovel_util, [validate_uri_fun/1,
+                             deobfuscated_uris/2]).
 
 -include_lib("kernel/include/logger.hrl").
 
@@ -73,6 +90,82 @@ parse(_Name, {source, Conf}) ->
       delete_after => pget(delete_after, Conf, never),
       source_address => pget(source_address, Conf),
       consumer_args => pget(consumer_args, Conf, [])}.
+
+parse_source(Def) ->
+    Uris = deobfuscated_uris(<<"src-uri">>, Def),
+    Address = pget(<<"src-address">>, Def),
+    DeleteAfter = pget(<<"src-delete-after">>, Def, <<"never">>),
+    PrefetchCount = pget(<<"src-prefetch-count">>, Def, 1000),
+    Headers = [],
+    {#{module => rabbit_amqp10_shovel,
+       uris => Uris,
+       source_address => Address,
+       delete_after => opt_b2a(DeleteAfter),
+       prefetch_count => PrefetchCount,
+       consumer_args => []}, Headers}.
+
+parse_dest({_VHost, _Name}, _ClusterName, Def, SourceHeaders) ->
+    Uris = deobfuscated_uris(<<"dest-uri">>, Def),
+    Address = pget(<<"dest-address">>, Def),
+    Properties =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-properties">>, Def, [])),
+    AppProperties =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-application-properties">>, Def, [])),
+    MessageAnns =
+        rabbit_data_coercion:to_proplist(
+            pget(<<"dest-message-annotations">>, Def, [])),
+    #{module => rabbit_amqp10_shovel,
+      uris => Uris,
+      target_address => Address,
+      message_annotations => maps:from_list(MessageAnns),
+      application_properties => maps:from_list(AppProperties ++ SourceHeaders),
+      properties => maps:from_list(
+                      lists:map(fun({K, V}) ->
+                                        {rabbit_data_coercion:to_atom(K), V}
+                                end, Properties)),
+      add_timestamp_header => pget(<<"dest-add-timestamp-header">>, Def, false),
+      add_forward_headers => pget(<<"dest-add-forward-headers">>, Def, false),
+      unacked => #{}
+     }.
+
+validate_src(Def) ->
+    [case {pget(<<"src-delete-after">>, Def, pget(<<"delete-after">>, Def)), pget(<<"ack-mode">>, Def)} of
+         {N, <<"no-ack">>} when is_integer(N) ->
+             {error, "Cannot specify 'no-ack' and numerical 'delete-after'", []};
+         _ ->
+             ok
+     end].
+
+validate_dest(_Def) ->
+    [].
+
+validate_src_funs(_Def, User) ->
+    [
+     {<<"src-uri">>, validate_uri_fun(User), mandatory},
+     {<<"src-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"src-prefetch-count">>, fun rabbit_parameter_validation:number/2, optional},
+     {<<"src-delete-after">>, fun validate_amqp10_delete_after/2, optional}
+    ].
+
+validate_dest_funs(_Def, User) ->
+    [{<<"dest-uri">>, validate_uri_fun(User), mandatory},
+     {<<"dest-address">>, fun rabbit_parameter_validation:binary/2, mandatory},
+     {<<"dest-add-forward-headers">>, fun rabbit_parameter_validation:boolean/2, optional},
+     {<<"dest-add-timestamp-header">>, fun rabbit_parameter_validation:boolean/2, optional},
+     %% The bare message should be inmutable in the AMQP network.
+     %% Before RabbitMQ 4.2, we allowed to set application properties, message
+     %% annotations and any property. This is wrong.
+     %% From 4.2, the only message modification allowed is the optional
+     %% addition of forward headers and shovelled timestamp inside message
+     %% annotations.
+     %% To avoid breaking existing deployments, the following configuration
+     %% keys are still accepted but will be ignored.
+     {<<"dest-application-properties">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-message-annotations">>, fun validate_amqp10_map/2, optional},
+     {<<"dest-properties">>, fun validate_amqp10_map/2, optional}
+    ].
 
 -spec connect_source(state()) -> state().
 connect_source(State = #{name := Name,
@@ -393,3 +486,18 @@ add_forward_headers(#{dest := #{cached_forward_headers := Anns}}, Msg) ->
                       mc:set_annotation(K, V, Acc)
               end, Msg, Anns);
 add_forward_headers(_, Msg) -> Msg.
+
+validate_amqp10_delete_after(_Name, <<"never">>)          -> ok;
+validate_amqp10_delete_after(_Name, N) when is_integer(N), N >= 0 -> ok;
+validate_amqp10_delete_after(Name,  Term) ->
+    {error, "~ts should be a number greater than or equal to 0 or \"never\", actually was "
+     "~tp", [Name, Term]}.
+
+validate_amqp10_map(Name, Terms0) ->
+    Terms = rabbit_data_coercion:to_proplist(Terms0),
+    Str = fun rabbit_parameter_validation:binary/2,
+    Validation = [{K, Str, optional} || {K, _} <- Terms],
+    rabbit_parameter_validation:proplist(Name, Validation, Terms).
+
+opt_b2a(B) when is_binary(B) -> list_to_atom(binary_to_list(B));
+opt_b2a(N)                   -> N.
