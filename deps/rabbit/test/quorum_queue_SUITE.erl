@@ -4161,7 +4161,7 @@ delete_if_empty(Config) ->
     %% Test 1: Delete fails when queue has messages (error 406 PRECONDITION_FAILED)
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 406, _}}}, _},
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
                                                       if_empty = true})),
 
@@ -4176,6 +4176,8 @@ delete_if_empty(Config) ->
         ct:fail("Timeout waiting for message")
     end,
     wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Cancel the subscription before trying to delete
+    amqp_channel:call(Ch2, #'basic.cancel'{consumer_tag = <<"ctag">>}),
     %% Now delete should succeed
     ?assertMatch(#'queue.delete_ok'{},
                  amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
