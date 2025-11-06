@@ -180,6 +180,7 @@ all_tests() ->
      pre_existing_invalid_policy,
      delete_if_empty,
      delete_if_unused,
+     delete_if_empty_and_unused,
      queue_ttl,
      peek,
      oldest_entry_timestamp,
@@ -4190,12 +4191,65 @@ delete_if_unused(Config) ->
     QQ = ?config(queue_name, Config),
     ?assertEqual({'queue.declare_ok', QQ, 0, 0},
                  declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Test 1: Delete fails when queue has active consumer (error 406 PRECONDITION_FAILED)
+    subscribe(Ch, QQ, false),
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
+                                                      if_unused = true})),
+
+    %% Test 2: Delete succeeds when queue has no consumers
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    %% Publish a message (queue can have messages, just no consumers)
+    publish(Ch2, QQ),
+    wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
+    %% Delete with if_unused should succeed since there are no consumers
+    ?assertMatch(#'queue.delete_ok'{message_count = 1},
+                 amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                        if_unused = true})).
+delete_if_empty_and_unused(Config) ->
+    Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
+
+    Ch = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ = <<"test-queue-both-flags">>,
+    ?assertEqual({'queue.declare_ok', QQ, 0, 0},
+                 declare(Ch, QQ, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+
+    %% Test 1: Delete fails when queue has messages (if_empty check fails first)
     publish(Ch, QQ),
     wait_for_messages(Config, [[QQ, <<"1">>, <<"1">>, <<"0">>]]),
-    %% Try to delete the quorum queue
-    ?assertExit({{shutdown, {connection_closing, {server_initiated_close, 540, _}}}, _},
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
                 amqp_channel:call(Ch, #'queue.delete'{queue = QQ,
-                                                      if_unused = true})).
+                                                       if_empty = true,
+                                                       if_unused = true})),
+
+    %% Test 2: Delete fails when queue has consumers (if_unused check fails)
+    Ch2 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    %% Consume the message to empty the queue
+    subscribe(Ch2, QQ, false),
+    receive
+        {#'basic.deliver'{delivery_tag = Tag2}, _} ->
+            amqp_channel:cast(Ch2, #'basic.ack'{delivery_tag = Tag2})
+    after 5000 ->
+        ct:fail("Timeout waiting for message in test 3b")
+    end,
+    wait_for_messages(Config, [[QQ, <<"0">>, <<"0">>, <<"0">>]]),
+    %% Queue is empty but has a consumer, should fail with in_use
+    ?assertExit({{shutdown, {server_initiated_close, 406, _}}, _},
+                amqp_channel:call(Ch2, #'queue.delete'{queue = QQ,
+                                                       if_empty = true,
+                                                       if_unused = true})),
+
+    %% Test 3: Delete succeeds when queue is empty and has no consumers
+    Ch3 = rabbit_ct_client_helpers:open_channel(Config, Server),
+    QQ2 = <<"test-queue-both-flags-ok">>,
+    ?assertEqual({'queue.declare_ok', QQ2, 0, 0},
+                 declare(Ch3, QQ2, [{<<"x-queue-type">>, longstr, <<"quorum">>}])),
+    %% Now delete should succeed (no consumers, no messages)
+    ?assertMatch(#'queue.delete_ok'{message_count = 0},
+                 amqp_channel:call(Ch3, #'queue.delete'{queue = QQ2,
+                                                        if_empty = true,
+                                                        if_unused = true})).
 
 queue_ttl(Config) ->
     Server = rabbit_ct_broker_helpers:get_node_config(Config, 0, nodename),
