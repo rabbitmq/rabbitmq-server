@@ -54,5 +54,4 @@ PLT_APPS = ssl public_key
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-HEX_TARBALL_FILES += ../../rabbitmq-components.mk \
-		     git-revisions.txt
+HEX_TARBALL_FILES += git-revisions.txt
