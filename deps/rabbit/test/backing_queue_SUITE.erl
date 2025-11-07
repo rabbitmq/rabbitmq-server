@@ -21,7 +21,7 @@
 -define(VHOST, <<"/">>).
 
 -define(VARIABLE_QUEUE_TESTCASES, [
-    variable_queue_partial_segments_delta_thing,
+    variable_queue_partial_segments_q_tail_thing,
     variable_queue_all_the_bits_not_covered_elsewhere_A,
     variable_queue_all_the_bits_not_covered_elsewhere_B,
     variable_queue_drop,
@@ -1164,16 +1164,16 @@ get_queue_sup_pid([{_, SupPid, _, _} | Rest], QueuePid) ->
 get_queue_sup_pid([], _QueuePid) ->
     undefined.
 
-variable_queue_partial_segments_delta_thing(Config) ->
+variable_queue_partial_segments_q_tail_thing(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
-      ?MODULE, variable_queue_partial_segments_delta_thing1, [Config]).
+      ?MODULE, variable_queue_partial_segments_q_tail_thing1, [Config]).
 
-variable_queue_partial_segments_delta_thing1(Config) ->
+variable_queue_partial_segments_q_tail_thing1(Config) ->
     with_fresh_variable_queue(
-      fun variable_queue_partial_segments_delta_thing2/2,
+      fun variable_queue_partial_segments_q_tail_thing2/2,
       ?config(variable_queue_type, Config)).
 
-variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
+variable_queue_partial_segments_q_tail_thing2(VQ0, _QName) ->
     IndexMod = index_mod(),
     SegmentSize = IndexMod:next_segment_boundary(0),
     HalfSegment = SegmentSize div 2,
@@ -1184,25 +1184,25 @@ variable_queue_partial_segments_delta_thing2(VQ0, _QName) ->
             VQ2,
             %% We only have one message in memory because the amount in memory
             %% depends on the consume rate, which is nil in this test.
-            [{delta, {delta, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
-             {q3, 1},
+            [{q_head, 1},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment - 1, 0, OneAndAHalfSegment}},
              {len, OneAndAHalfSegment}]),
     VQ5 = check_variable_queue_status(
             variable_queue_publish(true, 1, VQ3),
-            %% one alpha, but it's in the same segment as the deltas
+            %% one alpha, but it's in the same segment as the q_tail
             %% @todo That's wrong now! v1/v2
-            [{delta, {delta, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
-             {q3, 1},
+            [{q_head, 1},
+             {q_tail, {q_tail, 1, OneAndAHalfSegment, 0, OneAndAHalfSegment + 1}},
              {len, OneAndAHalfSegment + 1}]),
     {VQ6, AckTags} = variable_queue_fetch(SegmentSize, true, false,
                                           SegmentSize + HalfSegment + 1, VQ5),
     VQ7 = check_variable_queue_status(
             VQ6,
-            %% We only read from delta up to the end of the segment, so
+            %% We only read from q_tail up to the end of the segment, so
             %% after fetching exactly one segment, we should have no
             %% messages in memory.
-            [{delta, {delta, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
-             {q3, 0},
+            [{q_head, 0},
+             {q_tail, {q_tail, SegmentSize, HalfSegment + 1, 0, OneAndAHalfSegment + 1}},
              {len, HalfSegment + 1}]),
     {VQ8, AckTags1} = variable_queue_fetch(HalfSegment + 1, true, false,
                                            HalfSegment + 1, VQ7),
@@ -1548,7 +1548,7 @@ variable_queue_requeue2(VQ0, _Config) ->
     {empty, VQ3} = rabbit_variable_queue:fetch(true, VQ2),
     VQ3.
 
-%% requeue from ram_pending_ack into q3, move to delta and then empty queue
+%% requeue from ram_pending_ack into q_head, move to q_tail and then empty queue
 variable_queue_requeue_ram_beta(Config) ->
     passed = rabbit_ct_broker_helpers:rpc(Config, 0,
       ?MODULE, variable_queue_requeue_ram_beta1, [Config]).
@@ -1768,10 +1768,8 @@ with_fresh_variable_queue(Fun, Mode) ->
                        ok = unin_empty_test_queue(QName),
                        VQ = variable_queue_init(test_amqqueue(QName, true), false),
                        S0 = variable_queue_status(VQ),
-                       assert_props(S0, [{q1, 0}, {q2, 0},
-                                         {delta,
-                                          {delta, undefined, 0, 0, undefined}},
-                                         {q3, 0}, {q4, 0},
+                       assert_props(S0, [{q_head, 0},
+                                         {q_tail, {q_tail, undefined, 0, 0, undefined}},
                                          {len, 0}]),
                        VQ1 = set_queue_mode(Mode, VQ),
                        try
@@ -1878,8 +1876,8 @@ requeue_one_by_one(Acks, VQ) ->
                         VQM
                 end, VQ, Acks).
 
-%% Create a vq with messages in q1, delta, and q3, and holes (in the
-%% form of pending acks) in the latter two.
+%% Historical test case that exercised the many different
+%% internal queues. Kept for completeness.
 variable_queue_with_holes(VQ0) ->
     Interval = 2048, %% should match vq:IO_BATCH_SIZE
     IndexMod = index_mod(),
@@ -1898,7 +1896,7 @@ variable_queue_with_holes(VQ0) ->
     {_MsgIds, VQ4} = rabbit_variable_queue:requeue(
                        Acks -- (Subset1 ++ Subset2 ++ Subset3), VQ3),
     VQ5 = requeue_one_by_one(Subset1, VQ4),
-    %% by now we have some messages (and holes) in delta
+    %% by now we have some messages (and holes) in q_tail
     VQ6 = requeue_one_by_one(Subset2, VQ5),
     %% add the q1 tail
     VQ8 = variable_queue_publish(
@@ -1916,11 +1914,11 @@ variable_queue_with_holes(VQ0) ->
 vq_with_holes_assertions(VQ) ->
     [false =
          case V of
-             {delta, _, 0, _, _} -> true;
-             0                   -> true;
-             _                   -> false
+             {q_tail, _, 0, _, _} -> true;
+             0                    -> true;
+             _                    -> false
          end || {K, V} <- variable_queue_status(VQ),
-                lists:member(K, [delta, q3])].
+                lists:member(K, [q_head, q_tail])].
 
 check_variable_queue_status(VQ0, Props) ->
     VQ1 = variable_queue_wait_for_shuffling_end(VQ0),
