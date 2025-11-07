@@ -856,7 +856,7 @@ cancelled_checkout_out_test(Config) ->
     % cancelled checkout should not return pending messages to queue
     {State2, _, _} = apply(meta(Config, 4),
                            rabbit_fifo:make_checkout(Cid, cancel, #{}), State1),
-    ?assertEqual(1, rabbit_fifo_q:len(State2#rabbit_fifo.messages)),
+    ?assertEqual(1, rabbit_fifo_pq:len(State2#rabbit_fifo.messages)),
     ?assertEqual(0, lqueue:len(State2#rabbit_fifo.returns)),
     ?assertEqual(0, priority_queue:len(State2#rabbit_fifo.service_queue)),
 
@@ -1056,7 +1056,7 @@ enqueued_msg_with_delivery_count_test(Config) ->
                      {at_most_once, {somemod, somefun, [somearg]}}}),
     Mc = mc:set_annotation(delivery_count, 2, mk_mc(<<"first">>)),
     {#rabbit_fifo{messages = Msgs}, _} = enq(Config, 1, 1, Mc, State00),
-    ?assertMatch(?MSG(_, #{delivery_count := 2}), rabbit_fifo_q:get(Msgs)),
+    ?assertMatch(?MSG(_, #{delivery_count := 2}), rabbit_fifo_pq:get(Msgs)),
     ok.
 
 get_log_eff(Effs) ->
@@ -1140,7 +1140,7 @@ duplicate_delivery_test(Config) ->
     {#rabbit_fifo{messages = Messages} = State, _} =
         enq(Config, 2, 1, first, State0),
     ?assertEqual(1, rabbit_fifo:query_messages_total(State)),
-    ?assertEqual(1, rabbit_fifo_q:len(Messages)),
+    ?assertEqual(1, rabbit_fifo_pq:len(Messages)),
     ok.
 
 state_enter_monitors_and_notifications_test(Config) ->
@@ -1240,7 +1240,7 @@ down_noproc_returns_checked_out_in_order_test(Config) ->
                          {FS, _} = enq(Config, Num, Num, Num, FS0),
                          FS
                      end, S0, lists:seq(1, 100)),
-    ?assertEqual(100, rabbit_fifo_q:len(S1#rabbit_fifo.messages)),
+    ?assertEqual(100, rabbit_fifo_pq:len(S1#rabbit_fifo.messages)),
     Cid = {<<"cid">>, self()},
     {S2, #{key := CKey}, _} = checkout(Config, ?LINE, Cid, 1000, S1),
     #consumer{checked_out = Checked} = maps:get(CKey, S2#rabbit_fifo.consumers),

@@ -1,3 +1,10 @@
+%% This Source Code Form is subject to the terms of the Mozilla Public
+%% License, v. 2.0. If a copy of the MPL was not distributed with this
+%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
+%%
+%% Copyright (c) 2007-2025 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+%% All rights reserved.
 -module(rabbit_fifo_q).
 
 -include("rabbit_fifo.hrl").
@@ -7,6 +14,7 @@
          out/1,
          get/1,
          len/1,
+         to_queues/1,
          from_lqueue/1,
          indexes/1,
          get_lowest_index/1,
@@ -19,8 +27,10 @@
 
 %% a weighted priority queue with only two priorities
 
--record(?MODULE, {hi = ?EMPTY :: {list(msg()), list(msg())}, %% high
-                  no = ?EMPTY :: {list(msg()), list(msg())}, %% normal
+-type queue() :: {list(msg()), list(msg())}.
+
+-record(?MODULE, {hi = ?EMPTY :: queue(), %% high
+                  no = ?EMPTY :: queue(), %% normal
                   len = 0 :: non_neg_integer(),
                   dequeue_counter = 0 :: non_neg_integer()}).
 
@@ -75,6 +85,13 @@ get(#?MODULE{} = State) ->
 -spec len(state()) -> non_neg_integer().
 len(#?MODULE{len = Len}) ->
     Len.
+
+-spec to_queues(state()) -> {High :: queue(),
+                             Normal :: queue()}.
+to_queues(#?MODULE{hi = Hi,
+                   no = No}) ->
+    {Hi, No}.
+
 
 -spec from_lqueue(lqueue:lqueue(msg())) -> state().
 from_lqueue(LQ) ->
