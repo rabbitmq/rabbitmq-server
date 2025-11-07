@@ -34,8 +34,12 @@ groups() ->
         choose_verify_over_peer_verification,
         verify_set_to_verify_none,
         peer_verification_set_to_verify_none,
+        peer_verification_set_to_verify_peer_with_cacerts,
         peer_verification_set_to_verify_peer_with_cacertfile,
-        verify_set_to_verify_peer_with_cacertfile
+        peer_verification_set_to_verify_peer_without_cacerts_or_cacertfile,
+        verify_set_to_verify_peer_with_cacerts,
+        verify_set_to_verify_peer_with_cacertfile,
+        verify_set_to_verify_peer_without_cacerts_or_cacertfile
     ]},
     {get_expiration_time, [], [
         access_token_response_without_expiration_time,
@@ -230,13 +234,50 @@ peer_verification_set_to_verify_none(_) ->
         cacertfile => "/tmp"
     })).
 
+peer_verification_set_to_verify_peer_without_cacerts_or_cacertfile(_) ->
+    CaCerts = try public_key:cacerts_get() of
+                  CaCerts0 when is_list(CaCerts0) ->
+                      CaCerts0;
+                  _ -> []
+              catch _ ->
+                  []
+              end,
+    Expected = [
+        {verify, verify_peer},
+        {depth, 10},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
+        {cacerts, CaCerts}
+    ],
+    ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+        peer_verification => verify_peer
+    })).
+
+verify_set_to_verify_peer_without_cacerts_or_cacertfile(_) ->
+    CaCerts = try public_key:cacerts_get() of
+                  CaCerts0 when is_list(CaCerts0) ->
+                      CaCerts0;
+                  _ -> []
+              catch _ ->
+                  []
+              end,
+    Expected = [
+        {verify, verify_peer},
+        {depth, 10},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
+        {cacerts, CaCerts}
+    ],
+    ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+        verify => verify_peer
+    })).
 
 peer_verification_set_to_verify_peer_with_cacertfile(_) ->
     Expected = [
         {verify, verify_peer},
         {depth, 10},
-        {crl_check,false},
-        {fail_if_no_peer_cert,false},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
         {cacertfile, "/tmp"}
     ],
     ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
@@ -244,17 +285,44 @@ peer_verification_set_to_verify_peer_with_cacertfile(_) ->
         peer_verification => verify_peer
     })).
 
-
 verify_set_to_verify_peer_with_cacertfile(_) ->
     Expected = [
         {verify, verify_peer},
         {depth, 10},
-        {crl_check,false},
-        {fail_if_no_peer_cert,false},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
         {cacertfile, "/tmp"}
     ],
     ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
         cacertfile => "/tmp",
+        verify => verify_peer
+    })).
+
+peer_verification_set_to_verify_peer_with_cacerts(_) ->
+    CaCerts = [<<1,2,3,4>>, <<5,6,7,8>>],
+    Expected = [
+        {verify, verify_peer},
+        {depth, 10},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
+        {cacerts, CaCerts}
+    ],
+    ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+        cacerts => CaCerts,
+        peer_verification => verify_peer
+    })).
+
+verify_set_to_verify_peer_with_cacerts(_) ->
+    CaCerts = [<<1,2,3,4>>, <<5,6,7,8>>],
+    Expected = [
+        {verify, verify_peer},
+        {depth, 10},
+        {crl_check, false},
+        {fail_if_no_peer_cert, false},
+        {cacerts, CaCerts}
+    ],
+    ?assertEqual(Expected, oauth2_client:extract_ssl_options_as_list(#{
+        cacerts => CaCerts,
         verify => verify_peer
     })).
 
