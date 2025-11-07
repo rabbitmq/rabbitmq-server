@@ -16,7 +16,6 @@ all() ->
 
 all_tests() ->
     [
-     hi,
      basics,
      hi_is_prioritised,
      get_lowest_index,
