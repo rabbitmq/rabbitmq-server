@@ -2,8 +2,9 @@
 %% License, v. 2.0. If a copy of the MPL was not distributed with this
 %% file, You can obtain one at https://mozilla.org/MPL/2.0/.
 %%
-%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries. All rights reserved.
-
+%% Copyright (c) 2007-2026 Broadcom. All Rights Reserved.
+%% The term “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
+%% All rights reserved.
 -module(rabbit_fifo).
 
 -behaviour(ra_machine).
@@ -339,9 +340,9 @@ apply_(#{index := Idx} = Meta,
             State0 = add_bytes_return(Header, State00),
             Con = Con0#consumer{checked_out = maps:remove(MsgId, Checked0),
                                 credit = increase_credit(Con0, 1)},
-            State1 = State0#?STATE{messages = rabbit_fifo_q:in(no,
-                                                               ?MSG(Idx, Header),
-                                                               Messages)},
+            State1 = State0#?STATE{messages = rabbit_fifo_pq:in(4,
+                                                                ?MSG(Idx, Header),
+                                                                Messages)},
             State2 = update_or_remove_con(Meta, ConsumerKey, Con, State1),
             {State3, Effects} = activate_next_consumer({State2, []}),
             checkout(Meta, State0, State3, Effects);
@@ -470,7 +471,7 @@ apply_(#{index := Idx} = Meta,
 apply_(#{index := Index}, #purge{},
        #?STATE{messages_total = Total} = State0) ->
     NumReady = messages_ready(State0),
-    State1 = State0#?STATE{messages = rabbit_fifo_q:new(),
+    State1 = State0#?STATE{messages = rabbit_fifo_pq:new(),
                            messages_total = Total - NumReady,
                            returns = lqueue:new(),
                            msg_bytes_enqueue = 0
@@ -707,7 +708,7 @@ live_indexes(#?STATE{cfg = #cfg{},
                      messages = Messages,
                      consumers = Consumers,
                      dlx = #?DLX{discards = Discards}}) ->
-    MsgsIdxs = rabbit_fifo_q:indexes(Messages),
+    MsgsIdxs = rabbit_fifo_pq:indexes(Messages),
     DlxIndexes = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
                                      I = get_msg_idx(Msg),
                                      [I | Acc]
@@ -759,8 +760,17 @@ convert_v7_to_v8(#{} = _Meta, StateV7) ->
                         (_CKey, C) ->
                             C
                     end, Cons0),
+    Msgs = element(#?STATE.messages, StateV7),
+    {Hi, No} = rabbit_fifo_q:to_queues(Msgs),
+    Pq0 = queue:fold(fun (I, Acc) ->
+                             rabbit_fifo_pq:in(9, I, Acc)
+                     end, rabbit_fifo_pq:new(), Hi),
+    Pq = queue:fold(fun (I, Acc) ->
+                            rabbit_fifo_pq:in(4, I, Acc)
+                    end, Pq0, No),
     StateV8 = StateV7,
     StateV8#?STATE{discarded_bytes = 0,
+                   messages = Pq,
                    consumers = Cons,
                    unused_0 = ?NIL}.
 
@@ -934,8 +944,11 @@ overview(#?STATE{consumers = Cons,
                           #{}
                   end,
     MsgsRet = lqueue:len(Returns),
-    #{num_hi := MsgsHi,
-      num_no := MsgsNo} = rabbit_fifo_q:overview(Messages),
+    %% TODO emit suitable overview metrics
+    #{
+      % num_hi := MsgsHi,
+      % num_no := MsgsNo
+     } = rabbit_fifo_pq:overview(Messages),
 
     Overview = #{type => ?STATE,
                  config => Conf,
@@ -944,13 +957,14 @@ overview(#?STATE{consumers = Cons,
                  num_checked_out => num_checked_out(State),
                  num_enqueuers => maps:size(Enqs),
                  num_ready_messages => messages_ready(State),
-                 num_ready_messages_high => MsgsHi,
-                 num_ready_messages_normal => MsgsNo,
+                 % num_ready_messages_high => MsgsHi,
+                 % num_ready_messages_normal => MsgsNo,
                  num_ready_messages_return => MsgsRet,
                  num_messages => messages_total(State),
                  enqueue_message_bytes => EnqueueBytes,
                  checkout_message_bytes => CheckoutBytes,
-                 discarded_bytes => DiscardedBytes
+                 discarded_bytes => DiscardedBytes,
+                 smallest_raft_index => smallest_raft_index(State)
                  },
     DlxOverview = dlx_overview(DlxState),
     maps:merge(maps:merge(Overview, DlxOverview), SacOverview).
@@ -1427,7 +1441,7 @@ usage(Name) when is_atom(Name) ->
 
 messages_ready(#?STATE{messages = M,
                        returns = R}) ->
-    rabbit_fifo_q:len(M) + lqueue:len(R).
+    rabbit_fifo_pq:len(M) + lqueue:len(R).
 
 messages_total(#?STATE{messages_total = Total,
                        dlx = DlxState}) ->
@@ -1736,7 +1750,7 @@ maybe_enqueue(RaftIdx, Ts, undefined, undefined, RawMsg,
     PTag = priority_tag(RawMsg),
     State = State0#?STATE{msg_bytes_enqueue = Enqueue + Size,
                           messages_total = Total + 1,
-                          messages = rabbit_fifo_q:in(PTag, Msg, Messages)
+                          messages = rabbit_fifo_pq:in(PTag, Msg, Messages)
                          },
     {ok, State, Effects};
 maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
@@ -1769,7 +1783,7 @@ maybe_enqueue(RaftIdx, Ts, From, MsgSeqNo, RawMsg,
             PTag = priority_tag(RawMsg),
             State = State0#?STATE{msg_bytes_enqueue = BytesEnqueued + Size,
                                   messages_total = Total + 1,
-                                  messages = rabbit_fifo_q:in(PTag, Msg, Messages),
+                                  messages = rabbit_fifo_pq:in(PTag, Msg, Messages),
                                   enqueuers = Enqueuers0#{From => Enq},
                                   msg_cache = MsgCache
                                  },
@@ -2158,7 +2172,7 @@ take_next_msg(#?STATE{returns = Returns0,
         {{value, NextMsg}, Returns} ->
             {NextMsg, State#?STATE{returns = Returns}};
         {empty, _} ->
-            case rabbit_fifo_q:out(Messages0) of
+            case rabbit_fifo_pq:out(Messages0) of
                 empty ->
                     empty;
                 {Msg, Messages} ->
@@ -2170,7 +2184,7 @@ get_next_msg(#?STATE{returns = Returns0,
                      messages = Messages0}) ->
     case lqueue:get(Returns0, empty) of
         empty ->
-            rabbit_fifo_q:get(Messages0);
+            rabbit_fifo_pq:get(Messages0);
         Msg ->
             Msg
     end.
@@ -2283,7 +2297,7 @@ checkout_one(#{system_time := Ts} = Meta, ExpiredMsg0, InitState0, Effects0) ->
             checkout_one(Meta, ExpiredMsg,
                          InitState#?STATE{service_queue = SQ1}, Effects1);
         {empty, _} ->
-            case rabbit_fifo_q:len(Messages0) of
+            case rabbit_fifo_pq:len(Messages0) of
                 0 ->
                     {nochange, ExpiredMsg, InitState, Effects1};
                 _ ->
@@ -2869,7 +2883,7 @@ smallest_raft_index(#?STATE{messages = Messages,
     SmallestDlxRaIdx = lqueue:fold(fun (?TUPLE(_, Msg), Acc) ->
                                            min(get_msg_idx(Msg), Acc)
                                    end, undefined, Discards),
-    SmallestMsgsRaIdx = rabbit_fifo_q:get_lowest_index(Messages),
+    SmallestMsgsRaIdx = rabbit_fifo_pq:get_lowest_index(Messages),
     %% scan consumers and returns queue here instead
     smallest_checked_out(State, min(SmallestDlxRaIdx, SmallestMsgsRaIdx)).
 
@@ -3027,14 +3041,13 @@ priority_tag(Msg) ->
     case mc:is(Msg) of
         true ->
             case mc:priority(Msg) of
-                P when is_integer(P) andalso
-                       P > 4 ->
-                    hi;
+                P when is_integer(P) ->
+                    min(P, 31);
                 _ ->
-                    no
+                    4
             end;
         false ->
-            no
+            4
     end.
 
 do_snapshot(MacVer, Ts, Ch,
@@ -3259,29 +3272,6 @@ dlx_apply(_, Cmd, DLH, State) ->
 %% nodeup: 74 bytes
 %% down: 90 bytes
 %% enqueue overhead 210
-
-% messages_get_next_msg(#messages{returns = Returns0,
-%                             messages = Messages0}) ->
-%     case lqueue:get(Returns0, empty) of
-%         empty ->
-%             rabbit_fifo_q:get(Messages0);
-%         Msg ->
-%             Msg
-%     end.
-
-% messages_take_next_msg(#messages{returns = Returns0,
-%                                  messages = Messages0} = Msgs) ->
-%     case lqueue:out(Returns0) of
-%         {{value, NextMsg}, Returns} ->
-%             {NextMsg, Msgs#messages{returns = Returns}};
-%         {empty, _} ->
-%             case rabbit_fifo_q:out(Messages0) of
-%                 empty ->
-%                     empty;
-%                 {?MSG(_RaftIdx, _) = Msg, Messages} ->
-%                     {Msg, Msgs#messages{messages = Messages}}
-%             end
-%     end.
 
 ensure_worker_started(QRef, #?DLX{consumer = undefined}) ->
     start_worker(QRef);
