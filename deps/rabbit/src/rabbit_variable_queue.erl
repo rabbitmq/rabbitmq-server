@@ -22,7 +22,7 @@
 -export([start/2, stop/1]).
 
 %% exported for testing only
--export([start_msg_store/3, stop_msg_store/1, init/3]).
+-export([start_msg_store/3, stop_msg_store/1]).
 
 -include("mc.hrl").
 -include_lib("stdlib/include/qlc.hrl").
@@ -144,7 +144,6 @@
           unacked_bytes,
           persistent_count,   %% w   unacked
           persistent_bytes,   %% w   unacked
-          delta_transient_bytes,        %%
 
           ram_msg_count,      %% w/o unacked
           ram_msg_count_prev,
@@ -204,7 +203,6 @@
 -record(q_tail,
         { start_seq_id, %% start_seq_id is inclusive
           count,
-          transient,
           end_seq_id    %% end_seq_id is exclusive
         }).
 
@@ -285,11 +283,9 @@
 
 -define(BLANK_Q_TAIL, #q_tail { start_seq_id = undefined,
                                 count        = 0,
-                                transient    = 0,
                                 end_seq_id   = undefined }).
 -define(BLANK_Q_TAIL_PATTERN(Z), #q_tail { start_seq_id = Z,
                                            count        = 0,
-                                           transient    = 0,
                                            end_seq_id   = Z }).
 
 -define(MICROS_PER_SECOND, 1000000.0).
@@ -698,9 +694,6 @@ info(messages_ram, State) ->
     info(messages_ready_ram, State) + info(messages_unacknowledged_ram, State);
 info(messages_persistent, #vqstate{persistent_count = PersistentCount}) ->
     PersistentCount;
-%% @todo Remove.
-info(messages_paged_out, #vqstate{q_tail = #q_tail{transient = Count}}) ->
-    Count;
 info(message_bytes, #vqstate{bytes         = Bytes,
                              unacked_bytes = UBytes}) ->
     Bytes + UBytes;
@@ -712,9 +705,6 @@ info(message_bytes_ram, #vqstate{ram_bytes = RamBytes}) ->
     RamBytes;
 info(message_bytes_persistent, #vqstate{persistent_bytes = PersistentBytes}) ->
     PersistentBytes;
-%% @todo Remove.
-info(message_bytes_paged_out, #vqstate{delta_transient_bytes = PagedOutBytes}) ->
-    PagedOutBytes;
 info(head_message_timestamp, #vqstate{
           q_head          = QHead,
           ram_pending_ack = RPA}) ->
@@ -994,28 +984,18 @@ is_msg_in_pending_acks(SeqId, #vqstate { ram_pending_ack  = RPA,
     maps:is_key(SeqId, RPA) orelse
     maps:is_key(SeqId, DPA).
 
-expand_q_tail(SeqId, ?BLANK_Q_TAIL_PATTERN(X), IsPersistent) ->
-    qt(#q_tail{ start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1,
-                transient = one_if(not IsPersistent)});
+expand_q_tail(SeqId, ?BLANK_Q_TAIL_PATTERN(X)) ->
+    qt(#q_tail{ start_seq_id = SeqId, count = 1, end_seq_id = SeqId + 1 });
 expand_q_tail(SeqId, #q_tail{ start_seq_id = StartSeqId,
-                              count        = Count,
-                              transient    = Transient } = QTail,
-             IsPersistent )
+                              count        = Count } = QTail)
   when SeqId < StartSeqId ->
-    qt(QTail #q_tail{ start_seq_id = SeqId, count = Count + 1,
-                      transient = Transient + one_if(not IsPersistent)});
+    qt(QTail #q_tail{ start_seq_id = SeqId, count = Count + 1 });
 expand_q_tail(SeqId, #q_tail{ count        = Count,
-                              end_seq_id   = EndSeqId,
-                              transient    = Transient } = QTail,
-             IsPersistent)
+                              end_seq_id   = EndSeqId } = QTail)
   when SeqId >= EndSeqId ->
-    qt(QTail #q_tail{ count = Count + 1, end_seq_id = SeqId + 1,
-                      transient = Transient + one_if(not IsPersistent)});
-expand_q_tail(_SeqId, #q_tail{ count       = Count,
-                               transient   = Transient } = QTail,
-             IsPersistent ) ->
-    qt(QTail #q_tail{ count = Count + 1,
-                      transient = Transient + one_if(not IsPersistent) }).
+    qt(QTail #q_tail{ count = Count + 1, end_seq_id = SeqId + 1 });
+expand_q_tail(_SeqId, #q_tail{ count       = Count } = QTail) ->
+    qt(QTail #q_tail{ count = Count + 1 }).
 
 %%----------------------------------------------------------------------------
 %% Internal major helpers for Public API
@@ -1048,7 +1028,6 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
                 true  -> ?BLANK_Q_TAIL;
                 false -> qt(#q_tail { start_seq_id = LowSeqId,
                                       count        = DiskCount1,
-                                      transient    = 0,
                                       end_seq_id   = NextSeqId })
             end,
     Now = erlang:monotonic_time(),
@@ -1073,7 +1052,6 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       persistent_count    = DiskCount1,
       bytes               = DiskBytes1,
       persistent_bytes    = DiskBytes1,
-      delta_transient_bytes = 0,
 
       ram_msg_count       = 0,
       ram_msg_count_prev  = 0,
@@ -1163,7 +1141,7 @@ stats_published_disk(MS = #msg_status{is_persistent = true}, St) ->
                ?UP(bytes, persistent_bytes, +msg_size(MS))};
 stats_published_disk(MS = #msg_status{is_persistent = false}, St) ->
     St#vqstate{?UP(len, +1),
-               ?UP(bytes, delta_transient_bytes, +msg_size(MS))}.
+               ?UP(bytes, +msg_size(MS))}.
 
 %% Pending acks do not add to len. Messages are kept in memory.
 stats_published_pending_acks(MS = #msg_status{is_persistent = true}, St) ->
@@ -1186,8 +1164,6 @@ stats_pending_acks(MS, St) ->
 
 %% Message may or may not be persistent and the contents
 %% may or may not be in memory.
-%%
-%% Removal from delta_transient_bytes is done by read_from_q_tail.
 stats_removed(MS = #msg_status{is_persistent = true, msg = undefined}, St) ->
     St#vqstate{?UP(len, persistent_count, -1),
                ?UP(bytes, persistent_bytes, -msg_size(MS))};
@@ -1237,7 +1213,6 @@ stats_requeued_disk(MS = #msg_status{is_persistent = true}, St) ->
                ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
 stats_requeued_disk(MS = #msg_status{is_persistent = false}, St) ->
     St#vqstate{?UP(len, +1),
-               ?UP(bytes, delta_transient_bytes, +msg_size(MS)),
                ?UP(unacked_bytes, -msg_size(MS))}.
 
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
@@ -1541,7 +1516,7 @@ publish1(Msg,
                      stats_published_memory(MsgStatus1, State2);
                  _ ->
                      {MsgStatus1, State1} = PersistFun(true, true, MsgStatus, State),
-                     QTail1 = expand_q_tail(SeqId, QTail, IsPersistent),
+                     QTail1 = expand_q_tail(SeqId, QTail),
                      State2 = State1 #vqstate { q_tail = QTail1 },
                      stats_published_disk(MsgStatus1, State2)
              end,
@@ -1865,9 +1840,8 @@ q_tail_merge(SeqIds, QTail, MsgIds, State) ->
                         case msg_from_pending_ack(SeqId, State0) of
                             {none, _} ->
                                 Acc;
-                        {#msg_status { msg_id = MsgId,
-                                       is_persistent = IsPersistent } = MsgStatus, State1} ->
-                                {expand_q_tail(SeqId, QTail0, IsPersistent), [MsgId | MsgIds0],
+                        {#msg_status { msg_id = MsgId } = MsgStatus, State1} ->
+                                {expand_q_tail(SeqId, QTail0), [MsgId | MsgIds0],
                                  stats_requeued_disk(MsgStatus, State1)}
                         end
                 end, {QTail, MsgIds, State}, SeqIds).
@@ -1930,12 +1904,10 @@ read_from_q_tail(DelsAndAcksFun,
                         ram_msg_count        = RamMsgCount,
                         ram_bytes            = RamBytes,
                         disk_read_count      = DiskReadCount,
-                        delta_transient_bytes = DeltaTransientBytes,
                         transient_threshold  = TransientThreshold },
                       MemoryLimit, WhatToRead) ->
     #q_tail { start_seq_id = QTailSeqId,
               count        = QTailCount,
-              transient    = Transient,
               end_seq_id   = QTailSeqIdEnd } = QTail,
     %% For v2 we want to limit the number of messages read at once to lower
     %% the memory footprint. We use the consume rate to determine how many
@@ -2012,7 +1984,7 @@ read_from_q_tail(DelsAndAcksFun,
         metadata_only ->
             {List0, StoreState, MCStateP, MCStateT}
     end,
-    {QHead1, RamCountsInc, RamBytesInc, State1, TransientCount, TransientBytes} =
+    {QHead1, RamCountsInc, RamBytesInc, State1} =
         become_q_head(List, TransientThreshold,
                       DelsAndAcksFun,
                       State #vqstate { index_state = IndexState1,
@@ -2036,17 +2008,13 @@ read_from_q_tail(DelsAndAcksFun,
                 0 ->
                     %% q_tail is now empty
                     State2 #vqstate { q_tail  = ?BLANK_Q_TAIL,
-                                      q_head = QHead,
-                                      delta_transient_bytes = 0};
+                                      q_head = QHead };
                 N when N > 0 ->
                     QTail1 = qt(#q_tail { start_seq_id = QTailSeqId1,
-                                         count        = N,
-                                         %% @todo Probably something wrong, seen it become negative...
-                                         transient    = Transient - TransientCount,
-                                         end_seq_id   = QTailSeqIdEnd }),
+                                          count        = N,
+                                          end_seq_id   = QTailSeqIdEnd }),
                     State2 #vqstate { q_head = QHead,
-                                      q_tail = QTail1,
-                                      delta_transient_bytes = DeltaTransientBytes - TransientBytes }
+                                      q_tail = QTail1 }
             end
     end.
 
@@ -2070,14 +2038,14 @@ merge_sh_read_msgs(MTail, _Reads) ->
     MTail.
 
 become_q_head(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_deliver_seq_id = NextDeliverSeqId0 }) ->
-    {Filtered, NextDeliverSeqId, Acks, RamReadyCount, RamBytes, TransientCount, TransientBytes} =
+    {Filtered, NextDeliverSeqId, Acks, RamReadyCount, RamBytes} =
         lists:foldr(
           fun ({_MsgOrId, SeqId, _MsgLocation, _MsgProps, IsPersistent} = M,
-               {Filtered1, NextDeliverSeqId1, Acks1, RRC, RB, TC, TB} = Acc) ->
+               {Filtered1, NextDeliverSeqId1, Acks1, RRC, RB} = Acc) ->
                   case SeqId < TransientThreshold andalso not IsPersistent of
                       true  -> {Filtered1,
                                 next_deliver_seq_id(SeqId, NextDeliverSeqId1),
-                                [SeqId | Acks1], RRC, RB, TC, TB};
+                                [SeqId | Acks1], RRC, RB};
                       false -> MsgStatus = m(msg_status(M)),
                                HaveMsg = msg_in_ram(MsgStatus),
                                Size = msg_size(MsgStatus),
@@ -2085,15 +2053,12 @@ become_q_head(List, TransientThreshold, DelsAndAcksFun, State = #vqstate{ next_d
                                    false -> {?QUEUE:in_r(MsgStatus, Filtered1),
                                              NextDeliverSeqId1, Acks1,
                                              RRC + one_if(HaveMsg),
-                                             RB + one_if(HaveMsg) * Size,
-                                             TC + one_if(not IsPersistent),
-                                             TB + one_if(not IsPersistent) * Size};
+                                             RB + one_if(HaveMsg) * Size};
                                    true  -> Acc %% [0]
                                end
                   end
-          end, {?QUEUE:new(), NextDeliverSeqId0, [], 0, 0, 0, 0}, List),
-    {Filtered, RamReadyCount, RamBytes, DelsAndAcksFun(NextDeliverSeqId, Acks, State),
-     TransientCount, TransientBytes}.
+          end, {?QUEUE:new(), NextDeliverSeqId0, [], 0, 0}, List),
+    {Filtered, RamReadyCount, RamBytes, DelsAndAcksFun(NextDeliverSeqId, Acks, State)}.
 %% [0] We don't increase RamBytes here, even though it pertains to
 %% unacked messages too, since if HaveMsg then the message must have
 %% been stored in the QI, thus the message must have been in
