@@ -139,7 +139,6 @@
           transient_threshold,
           qi_embed_msgs_below,
 
-          len,                %% w/o unacked @todo No longer needed, is q_head+q_tail.
           bytes,              %% w/o unacked
           unacked_bytes,
           persistent_count,   %% w   unacked
@@ -256,10 +255,8 @@
              transient_threshold   :: non_neg_integer(),
              qi_embed_msgs_below   :: non_neg_integer(),
 
-             len                   :: non_neg_integer(),
              bytes                 :: non_neg_integer(),
              unacked_bytes         :: non_neg_integer(),
-
              persistent_count      :: non_neg_integer(),
              persistent_bytes      :: non_neg_integer(),
 
@@ -455,12 +452,12 @@ delete_crashed(Q) when ?is_amqqueue(Q) ->
     QName = amqqueue:get_name(Q),
     ok = rabbit_classic_queue_index_v2:erase(QName).
 
-purge(State = #vqstate { len = Len }) ->
+purge(State) ->
     case is_pending_ack_empty(State) and is_unconfirmed_empty(State) of
         true ->
-            {Len, purge_and_index_reset(State)};
+            {len(State), purge_and_index_reset(State)};
         false ->
-            {Len, purge_when_pending_acks(State)}
+            {len(State), purge_when_pending_acks(State)}
     end.
 
 purge_acks(State) -> a(purge_pending_ack(false, State)).
@@ -566,12 +563,7 @@ ack(AckTags, State) ->
 
 requeue(AckTags, #vqstate { q_head     = QHead0,
                             q_tail     = QTail,
-                            in_counter = InCounter,
-                            len        = Len } = State) ->
-    %% @todo This can be heavily simplified: if the message falls into q_tail,
-    %%       add it there. Otherwise just add it to q_head in the correct position.
-    %% @todo I think if the message falls within q_head we must add it back there,
-    %%       otherwise there's nothing to do? Except update stats.
+                            in_counter = InCounter } = State) ->
     {SeqIds, QHead, MsgIds, State1} = requeue_merge(lists:sort(AckTags), QHead0, [],
                                                     q_tail_limit(QTail), State),
     {QTail1, MsgIds1, State2}     = q_tail_merge(SeqIds, QTail, MsgIds, State1),
@@ -580,8 +572,7 @@ requeue(AckTags, #vqstate { q_head     = QHead0,
                   maybe_update_rates(
                     State2 #vqstate { q_head     = QHead,
                                       q_tail     = QTail1,
-                                      in_counter = InCounter + MsgCount,
-                                      len        = Len + MsgCount }))}.
+                                      in_counter = InCounter + MsgCount }))}.
 
 ackfold(MsgFun, Acc, State, AckTags) ->
     {AccN, StateN} =
@@ -592,7 +583,8 @@ ackfold(MsgFun, Acc, State, AckTags) ->
                     end, {Acc, State}, AckTags),
     {AccN, a(StateN)}.
 
-len(#vqstate { len = Len }) -> Len.
+len(#vqstate { q_head = QHead, q_tail = #q_tail{ count = QTailCount }}) ->
+    ?QUEUE:len(QHead) + QTailCount.
 
 is_empty(State) -> 0 == len(State).
 
@@ -717,10 +709,9 @@ info(disk_reads, #vqstate{disk_read_count = Count}) ->
     Count;
 info(disk_writes, #vqstate{disk_write_count = Count}) ->
     Count;
-info(backing_queue_status, #vqstate {
+info(backing_queue_status, State = #vqstate {
           q_head           = QHead,
           q_tail           = QTail,
-          len              = Len,
           next_seq_id      = NextSeqId,
           next_deliver_seq_id = NextDeliverSeqId,
           ram_pending_ack  = RPA,
@@ -736,7 +727,7 @@ info(backing_queue_status, #vqstate {
     [ {version             , 2},
       {q_head              , ?QUEUE:len(QHead)},
       {q_tail              , QTail},
-      {len                 , Len},
+      {len                 , len(State)},
       {next_seq_id         , NextSeqId},
       {next_deliver_seq_id , NextDeliverSeqId},
       {num_pending_acks    , map_size(RPA) + map_size(DPA)},
@@ -828,33 +819,19 @@ get_pa_head(PA) ->
             map_get(Smallest, PA)
     end.
 
-a(State = #vqstate { q_head           = QHead,
-                     q_tail           = QTail,
-                     len              = Len,
-                     bytes            = Bytes,
+a(State = #vqstate { bytes            = Bytes,
                      unacked_bytes    = UnackedBytes,
                      persistent_count = PersistentCount,
                      persistent_bytes = PersistentBytes,
                      ram_msg_count    = RamMsgCount,
                      ram_bytes        = RamBytes}) ->
-    ED = QTail#q_tail.count == 0,
-    E3 = ?QUEUE:is_empty(QHead),
-    LZ = Len == 0,
-    L3 = ?QUEUE:len(QHead),
 
-    %% If the queue is empty, then q_head and q_tail are both empty.
-    true = LZ == (ED and E3),
-
-    %% All messages are in q_head or q_tail.
-    true = QTail#q_tail.count + L3 == Len,
-
-    true = Len             >= 0,
     true = Bytes           >= 0,
     true = UnackedBytes    >= 0,
     true = PersistentCount >= 0,
     true = PersistentBytes >= 0,
     true = RamMsgCount     >= 0,
-    true = RamMsgCount     =< Len,
+    %% Requeues may lead to RamMsgCount > 2048.
     true = RamBytes        >= 0,
     true = RamBytes        =< Bytes + UnackedBytes,
 
@@ -1048,7 +1025,6 @@ init(IsDurable, IndexState, StoreState, DiskCount, DiskBytes, Terms,
       transient_threshold = NextSeqId,
       qi_embed_msgs_below = IndexMaxSize,
 
-      len                 = DiskCount1,
       persistent_count    = DiskCount1,
       bytes               = DiskBytes1,
       persistent_bytes    = DiskBytes1,
@@ -1129,21 +1105,20 @@ read_msg(_, MsgId, IsPersistent, rabbit_msg_store, State = #vqstate{msg_store_cl
 %% When publishing to memory, transient messages do not get written to disk.
 %% On the other hand, persistent messages are kept in memory as well as disk.
 stats_published_memory(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(len, ram_msg_count, persistent_count, +1),
+    St#vqstate{?UP(ram_msg_count, persistent_count, +1),
                ?UP(bytes, ram_bytes, persistent_bytes, +msg_size(MS))};
 stats_published_memory(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(len, ram_msg_count, +1),
+    St#vqstate{?UP(ram_msg_count, +1),
                ?UP(bytes, ram_bytes, +msg_size(MS))}.
 
 %% Messages published directly to disk are not kept in memory.
 stats_published_disk(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(len, persistent_count, +1),
+    St#vqstate{?UP(persistent_count, +1),
                ?UP(bytes, persistent_bytes, +msg_size(MS))};
 stats_published_disk(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(len, +1),
-               ?UP(bytes, +msg_size(MS))}.
+    St#vqstate{?UP(bytes, +msg_size(MS))}.
 
-%% Pending acks do not add to len. Messages are kept in memory.
+%% Pending acks messages are kept in memory.
 stats_published_pending_acks(MS = #msg_status{is_persistent = true}, St) ->
     St#vqstate{?UP(persistent_count, +1),
                ?UP(persistent_bytes, unacked_bytes, ram_bytes, +msg_size(MS))};
@@ -1156,24 +1131,23 @@ stats_published_pending_acks(MS = #msg_status{is_persistent = false}, St) ->
 %% was fully on disk the content will not be read immediately).
 %% The contents stay where they are during this operation.
 stats_pending_acks(MS = #msg_status{msg = undefined}, St) ->
-    St#vqstate{?UP(len, -1),
-               ?UP(bytes, -msg_size(MS)), ?UP(unacked_bytes, +msg_size(MS))};
+    St#vqstate{?UP(bytes, -msg_size(MS)), ?UP(unacked_bytes, +msg_size(MS))};
 stats_pending_acks(MS, St) ->
-    St#vqstate{?UP(len, ram_msg_count, -1),
+    St#vqstate{?UP(ram_msg_count, -1),
                ?UP(bytes, -msg_size(MS)), ?UP(unacked_bytes, +msg_size(MS))}.
 
 %% Message may or may not be persistent and the contents
 %% may or may not be in memory.
 stats_removed(MS = #msg_status{is_persistent = true, msg = undefined}, St) ->
-    St#vqstate{?UP(len, persistent_count, -1),
+    St#vqstate{?UP(persistent_count, -1),
                ?UP(bytes, persistent_bytes, -msg_size(MS))};
 stats_removed(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(len, ram_msg_count, persistent_count, -1),
+    St#vqstate{?UP(ram_msg_count, persistent_count, -1),
                ?UP(bytes, ram_bytes, persistent_bytes, -msg_size(MS))};
 stats_removed(MS = #msg_status{is_persistent = false, msg = undefined}, St) ->
-    St#vqstate{?UP(len, -1), ?UP(bytes, -msg_size(MS))};
+    St#vqstate{?UP(bytes, -msg_size(MS))};
 stats_removed(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(len, ram_msg_count, -1),
+    St#vqstate{?UP(ram_msg_count, -1),
                ?UP(bytes, ram_bytes, -msg_size(MS))}.
 
 %% @todo Very confusing that ram_msg_count is without unacked but ram_bytes is with.
@@ -1194,26 +1168,15 @@ stats_acked_pending(MS = #msg_status{is_persistent = false}, St) ->
 
 %% Notice that this is the reverse of stats_pending_acks.
 stats_requeued_memory(MS = #msg_status{msg = undefined}, St) ->
-    St#vqstate{?UP(len, +1),
-               ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
+    St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
 stats_requeued_memory(MS, St) ->
-    St#vqstate{?UP(len, ram_msg_count, +1),
+    St#vqstate{?UP(ram_msg_count, +1),
                ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))}.
 
-%% TODO!!!
-%% @todo For v2 since we don't remove from disk until we ack, we don't need
-%%       to write to disk again on requeue. If the message falls within q_tail
-%%       we can just drop the MsgStatus. Otherwise we just put it in q_head and
-%%       we don't do any disk writes.
-%%
-%%       So we don't need to change anything except how we count stats as
-%%       well as q_tail stats if the message falls within q_tail.
 stats_requeued_disk(MS = #msg_status{is_persistent = true}, St) ->
-    St#vqstate{?UP(len, +1),
-               ?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
+    St#vqstate{?UP(bytes, +msg_size(MS)), ?UP(unacked_bytes, -msg_size(MS))};
 stats_requeued_disk(MS = #msg_status{is_persistent = false}, St) ->
-    St#vqstate{?UP(len, +1),
-               ?UP(unacked_bytes, -msg_size(MS))}.
+    St#vqstate{?UP(unacked_bytes, -msg_size(MS))}.
 
 msg_size(#msg_status{msg_props = #message_properties{size = Size}}) -> Size.
 
@@ -1491,7 +1454,6 @@ publish1(Msg,
          IsDelivered, _ChPid, PersistFun,
          State = #vqstate { q_head = QHead,
                             q_tail = QTail = #q_tail { count = QTailCount },
-                            len                 = Len,
                             qi_embed_msgs_below = IndexMaxSize,
                             next_seq_id         = SeqId,
                             next_deliver_seq_id = NextDeliverSeqId,
@@ -1508,9 +1470,9 @@ publish1(Msg,
     %% limit is at 1 because the queue process will need to access this message to know
     %% expiration information.
     MemoryLimit = min(1 + floor(2 * OutRate), 2048),
+    QHeadLen = ?QUEUE:len(QHead),
     State3 = case QTailCount of
-                 %% Len is the same as QHead length when QTailCount =:= 0.
-                 0 when Len < MemoryLimit ->
+                 0 when QHeadLen < MemoryLimit ->
                      {MsgStatus1, State1} = PersistFun(false, false, MsgStatus, State),
                      State2 = State1 #vqstate { q_head = ?QUEUE:in(m(MsgStatus1), QHead) },
                      stats_published_memory(MsgStatus1, State2);
@@ -1791,8 +1753,6 @@ msgs_written_to_disk(Callback, MsgIdSet, written) ->
                      %%       for all message IDs. This is a waste. We should only
                      %%       call it for messages that need confirming, and avoid
                      %%       this intersection call.
-                     %%
-                     %%       The same may apply to msg_indices_written_to_disk as well.
                      Confirmed = sets:intersection(UC, MsgIdSet),
                      record_confirms(sets:intersection(MsgIdSet, MIOD),
                                      State #vqstate {
