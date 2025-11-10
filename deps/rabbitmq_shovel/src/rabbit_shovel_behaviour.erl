@@ -34,6 +34,10 @@
          incr_forwarded/1
         ]).
 
+%% It's a rabbit registry class, to easily support new protocols
+-export([added_to_rabbit_registry/2,
+         removed_from_rabbit_registry/1]).
+
 -include_lib("kernel/include/logger.hrl").
 
 -type tag() :: non_neg_integer().
@@ -52,10 +56,26 @@
                    ack_mode => ack_mode(),
                    atom() => term()}.
 
+-type definition() :: proplists:proplist().
+-type mandatory() :: mandatory | optional.
+
+-rabbit_registry_class(shovel_protocol).
+
 -export_type([state/0, source_config/0, dest_config/0, uri/0, tag/0]).
 
 -callback parse(binary(), {source | destination, Conf :: proplists:proplist()}) ->
     source_config() | dest_config().
+
+-callback parse_source(definition()) -> {source_config(), Headers :: proplists:proplist()}.
+-callback parse_dest({VHost :: binary(), Name :: binary()}, ClusterName :: atom(), definition(), Headers :: proplists:proplist()) -> dest_config().
+
+-callback validate_src(definition()) -> [ok | {error, Reason :: string()}].
+-callback validate_dest(definition()) -> [ok | {error, Reason :: string()}].
+
+-callback validate_src_funs(definition(), User :: binary()) ->
+    [{Tag :: binary(), fun((Name :: atom(), Value :: term()) -> ok | {error, string()}), mandatory()}].
+-callback validate_dest_funs(definition(), User :: binary()) ->
+    [{Tag :: binary(), fun((Name :: atom(), Value :: term()) -> ok | {error, string()}), mandatory()}].
 
 -callback connect_source(state()) -> state().
 -callback connect_dest(state()) -> state().
@@ -86,6 +106,11 @@
     state() | {stop, any()}.
 -callback status(state()) -> rabbit_shovel_status:shovel_status().
 -callback pending_count(state()) -> non_neg_integer().
+
+added_to_rabbit_registry(_Type, _ModuleName) ->
+    ok.
+removed_from_rabbit_registry(_Type) ->
+    ok.
 
 -spec parse(atom(), binary(), {source | destination, proplists:proplist()}) ->
     source_config() | dest_config().

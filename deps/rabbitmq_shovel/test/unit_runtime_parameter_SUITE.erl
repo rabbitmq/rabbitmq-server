@@ -43,19 +43,22 @@ groups() ->
 %% -------------------------------------------------------------------
 
 init_per_suite(Config) ->
-    {ok, _} = application:ensure_all_started(credentials_obfuscation),
     Secret = crypto:strong_rand_bytes(128),
-    ok = credentials_obfuscation:set_secret(Secret),
-    Config.
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(
+                Config, [{rmq_nodename_suffix, ?MODULE}]),
+    Config2 = rabbit_ct_helpers:run_setup_steps(
+                Config1,
+                rabbit_ct_broker_helpers:setup_steps() ++
+                    rabbit_ct_client_helpers:setup_steps()),
+    ok = rabbit_ct_broker_helpers:rpc(Config2, 0, credentials_obfuscation,
+                                      set_secret, [Secret]),
+    Config2.
 
 end_per_suite(Config) ->
-    case application:stop(credentials_obfuscation) of
-      ok ->
-        ok;
-      {error, {not_started, credentials_obfuscation}} ->
-        ok
-    end,
-    Config.
+    rabbit_ct_helpers:run_teardown_steps(Config,
+      rabbit_ct_client_helpers:teardown_steps() ++
+      rabbit_ct_broker_helpers:teardown_steps()).
 
 init_per_group(_, Config) ->
     Config.
@@ -74,7 +77,10 @@ end_per_testcase(_Testcase, Config) ->
 %% Testcases.
 %% -------------------------------------------------------------------
 
-parse_amqp091_maps(_Config) ->
+parse_amqp091_maps(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp091_maps_0, []).
+
+parse_amqp091_maps_0() ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -94,7 +100,10 @@ parse_amqp091_maps(_Config) ->
 
     test_parse_amqp091(Params).
 
-parse_amqp091_proplists(_Config) ->
+parse_amqp091_proplists(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp091_proplists_0, []).
+
+parse_amqp091_proplists_0() ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -113,7 +122,10 @@ parse_amqp091_proplists(_Config) ->
         ],
     test_parse_amqp091(Params).
 
-parse_amqp091_empty_maps(_Config) ->
+parse_amqp091_empty_maps(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp091_empty_maps_0, []).
+
+parse_amqp091_empty_maps_0() ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -131,7 +143,10 @@ parse_amqp091_empty_maps(_Config) ->
         ],
     test_parse_amqp091_with_blank_proprties(Params).
 
-parse_amqp091_empty_proplists(_Config) ->
+parse_amqp091_empty_proplists(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp091_empty_proplists_0, []).
+
+parse_amqp091_empty_proplists_0() ->
     Params =
         [{<<"src-uri">>, <<"amqp://localhost:5672">>},
          {<<"src-protocol">>, <<"amqp091">>},
@@ -219,7 +234,10 @@ assert_amqp901_headers(ActualHeaders) ->
                   end, ExpectedHeaders),
     ok.
 
-parse_amqp10(_Config) ->
+parse_amqp10(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp10_0, []).
+        
+parse_amqp10_0() ->
     Params =
         [
          {<<"ack-mode">>, <<"on-publish">>},
@@ -268,7 +286,10 @@ parse_amqp10(_Config) ->
                                        ObfuscatedParams)),
     ok.
 
-parse_amqp10_minimal(_Config) ->
+parse_amqp10_minimal(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, parse_amqp10_minimal_0, []).
+
+parse_amqp10_minimal_0() ->
     Params =
         [
          {<<"src-protocol">>, <<"amqp10">>},
@@ -298,7 +319,10 @@ parse_amqp10_minimal(_Config) ->
                                        ObfuscatedParams)),
     ok.
 
-validate_amqp10(_Config) ->
+validate_amqp10(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, validate_amqp10_0, []).
+
+validate_amqp10_0() ->
     Params =
         [
          {<<"ack-mode">>, <<"on-publish">>},
@@ -327,7 +351,10 @@ validate_amqp10(_Config) ->
         [] = validate_ok(Res),
         ok.
 
-validate_amqp10_with_a_map(_Config) ->
+validate_amqp10_with_a_map(Config) ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, ?MODULE, validate_amqp10_with_a_map_0, []).
+
+validate_amqp10_with_a_map_0() ->
     Params =
         #{
          <<"ack-mode">> => <<"on-publish">>,
