@@ -32,8 +32,7 @@
          ackfold/4, len/1, is_empty/1, depth/1,
          update_rates/1, needs_timeout/1, timeout/1,
          handle_pre_hibernate/1, resume/1, msg_rates/1,
-         info/2, invoke/3, is_duplicate/2, set_queue_mode/2,
-         set_queue_version/2,
+         info/2, invoke/3, is_duplicate/2,
          zip_msgs_and_acks/4,
          format_state/1]).
 
@@ -389,16 +388,6 @@ is_duplicate(Msg, State = #state{bq = BQ}) ->
     pick2(fun (_P, BQSN) -> BQ:is_duplicate(Msg, BQSN) end, Msg, State);
 is_duplicate(Msg, State = #passthrough{bq = BQ, bqs = BQS}) ->
     ?passthrough2(is_duplicate(Msg, BQS)).
-
-set_queue_mode(Mode, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) -> BQ:set_queue_mode(Mode, BQSN) end, State);
-set_queue_mode(Mode, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(set_queue_mode(Mode, BQS)).
-
-set_queue_version(Version, State = #state{bq = BQ}) ->
-    foreach1(fun (_P, BQSN) -> BQ:set_queue_version(Version, BQSN) end, State);
-set_queue_version(Version, State = #passthrough{bq = BQ, bqs = BQS}) ->
-    ?passthrough1(set_queue_version(Version, BQS)).
 
 zip_msgs_and_acks(Msgs, AckTags, Accumulator, #state{bqss = [{MaxP, _} |_]}) ->
     MsgsByPriority = partition_publish_delivered_batch(Msgs, MaxP),
