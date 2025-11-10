@@ -217,10 +217,18 @@ read_enabled(PluginsFile) ->
 
 dependencies(Reverse, Sources, AllPlugins) ->
     {ok, G} = rabbit_misc:build_acyclic_graph(
-                fun ({App, _Deps}) -> [{App, App}] end,
-                fun ({App,  Deps}) -> [{App, Dep} || Dep <- Deps] end,
-                [{Name, Deps} || #plugin{name         = Name,
-                                         dependencies = Deps} <- AllPlugins]),
+                %% Every plugin becomes a DAG vertex
+                fun ({App, _BundlesDeps, _Deps}) -> [{App, App}] end,
+                %% Only those plugins that do not bundle their dependencies are used to populate the
+                %% edges of the dependency DAG
+                fun ({App,  BundlesDeps, Deps}) -> [{App, Dep} || Dep <- Deps, not BundlesDeps] end,
+                %% the value returned here are passed to the VertexFun and EdgeFun functions
+                [{Name, BundlesDeps, Deps} ||
+                    #plugin{
+                      name  = Name,
+                      ez_bundles_dependencies = BundlesDeps,
+                      dependencies = Deps
+                    } <- AllPlugins]),
     Dests = case Reverse of
                 false -> digraph_utils:reachable(Sources, G);
                 true  -> digraph_utils:reaching(Sources, G)
