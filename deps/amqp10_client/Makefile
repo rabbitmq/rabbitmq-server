@@ -44,8 +44,6 @@ dep_elvis_mk = git https://github.com/inaka/elvis.mk.git master
 include ../../rabbitmq-components.mk
 include ../../erlang.mk
 
-HEX_TARBALL_FILES += git-revisions.txt
-
 # --------------------------------------------------------------------
 # ActiveMQ for the testsuite.
 # --------------------------------------------------------------------
