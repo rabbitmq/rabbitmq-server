@@ -18,6 +18,7 @@
 -export([which_plugin/1]).
 
 % Export for testing purpose.
+-export([does_bundle_dependencies/1, does_not_bundle_dependencies/1]).
 -export([is_version_supported/2, validate_plugins/2]).
 %%----------------------------------------------------------------------------
 
@@ -261,9 +262,21 @@ is_plugin_provided_by_otp(#plugin{name = eldap}) ->
 is_plugin_provided_by_otp(_) ->
     false.
 
+does_bundle_dependencies(#plugin{ez_bundles_dependencies = true}) ->
+    true;
+does_bundle_dependencies(_) ->
+    false.
+
+does_not_bundle_dependencies(Plugin) ->
+    not does_bundle_dependencies(Plugin).
+
 %% Make sure we don't list OTP apps in here, and also that we detect
 %% missing dependencies.
-ensure_dependencies(Plugins) ->
+ensure_dependencies(Plugins0) ->
+    %% Filter out plugins marked as bundling dependencies: they
+    %% are packaged as single EZ files and this dependency validation
+    %% does not make sense for them. MK.
+    Plugins = lists:filter(fun does_not_bundle_dependencies/1, Plugins0),
     Names = plugin_names(Plugins),
     NotThere = [Dep || #plugin{dependencies = Deps} <- Plugins,
                        Dep                          <- Deps,
@@ -278,9 +291,10 @@ ensure_dependencies(Plugins) ->
                                          end, Deps)],
               throw({error, {missing_dependencies, Missing, Blame}})
     end,
+    %% Unlike with the validation above, all plugins must be considered here. MK.
     [P#plugin{dependencies = Deps -- OTP,
               extra_dependencies = Deps -- (Deps -- OTP)}
-     || P = #plugin{dependencies = Deps} <- Plugins].
+     || P = #plugin{dependencies = Deps} <- Plugins0].
 
 is_loadable(App) ->
     case application:load(App) of
@@ -594,10 +608,21 @@ mkplugin(Name, Props, Type, Location) ->
     Dependencies = proplists:get_value(applications, Props, []),
     BrokerVersions = proplists:get_value(broker_version_requirements, Props, []),
     DepsVersions = proplists:get_value(dependency_version_requirements, Props, []),
-    #plugin{name = Name, version = Version, description = Description,
-            dependencies = Dependencies, location = Location, type = Type,
-            broker_version_requirements = BrokerVersions,
-            dependency_version_requirements = DepsVersions}.
+    %% Plugins that bundle their dependencies (into the same .ez file)
+    %% will have this field set to `true`. MK.
+    BundlesDependencies = proplists:get_value(ez_bundles_dependencies, Props, false),
+
+    #plugin{
+        name = Name,
+        version = Version,
+        description = Description,
+        dependencies = Dependencies,
+        location = Location,
+        type = Type,
+        broker_version_requirements = BrokerVersions,
+        dependency_version_requirements = DepsVersions,
+        ez_bundles_dependencies = BundlesDependencies
+    }.
 
 read_app_file(EZ) ->
     case zip:list_dir(EZ) of
