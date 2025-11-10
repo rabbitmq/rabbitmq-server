@@ -1639,29 +1639,31 @@ drop_head(#?STATE{ra_indexes = Indexes0} = State0, Effects) ->
             #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                     dlx = DlxState} = State = State3,
             {_, DlxEffects} = rabbit_fifo_dlx:discard([Msg], maxlen, DLH, DlxState),
-            {State, combine_effects(DlxEffects, Effects)};
+            {State, add_drop_head_effects(DlxEffects, Effects)};
         empty ->
             {State0, Effects}
     end.
 
-%% combine global counter update effects to avoid bulding a huge list of
-%% effects if many messages are dropped at the same time as could happen
-%% when the `max_length' is changed via a configuration update.
-combine_effects([{mod_call,
-                  rabbit_global_counters,
-                  messages_dead_lettered,
-                  [Reason, rabbit_quorum_queue, Type, NewLen]}],
-                [{mod_call,
-                  rabbit_global_counters,
-                  messages_dead_lettered,
-                  [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
+add_drop_head_effects([{mod_call,
+                        rabbit_global_counters,
+                        messages_dead_lettered,
+                        [Reason, rabbit_quorum_queue, Type, NewLen]}],
+                      [{mod_call,
+                        rabbit_global_counters,
+                        messages_dead_lettered,
+                        [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
+    %% combine global counter update effects to avoid bulding a huge list of
+    %% effects if many messages are dropped at the same time as could happen
+    %% when the `max_length' is changed via a configuration update.
     [{mod_call,
       rabbit_global_counters,
       messages_dead_lettered,
       [Reason, rabbit_quorum_queue, Type, PrevLen + NewLen]} | Rem];
-combine_effects(New, Old) ->
+add_drop_head_effects([{log, _, _}] = DlxEffs, Effs) ->
+    %% dead letter in the correct order
+    Effs ++ DlxEffs;
+add_drop_head_effects(New, Old) ->
     New ++ Old.
-
 
 maybe_set_msg_ttl(Msg, RaCmdTs, Header,
                   #?STATE{cfg = #cfg{msg_ttl = MsgTTL}}) ->
