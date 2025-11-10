@@ -99,6 +99,8 @@
 -record(state,
         {cfg :: #cfg{},
          queue_states = rabbit_queue_type:init() :: rabbit_queue_type:state(),
+         queue_types_published = sets:new([{version, 2}]) ::
+                                 sets:set(rabbit_queue_type:queue_type()),
          %% Packet IDs published to queues but not yet confirmed.
          unacked_client_pubs = rabbit_mqtt_confirms:init() :: rabbit_mqtt_confirms:state(),
          %% Packet IDs published to MQTT subscribers but not yet acknowledged.
@@ -1702,14 +1704,19 @@ deliver_to_queues(Message,
                   Options,
                   RoutedToQNames,
                   State0 = #state{queue_states = QStates0,
+                                  queue_types_published = QTs0,
                                   cfg = #cfg{proto_ver = ProtoVer}}) ->
     Qs0 = rabbit_db_queue:get_targets(RoutedToQNames),
     Qs = rabbit_amqqueue:prepend_extra_bcc(Qs0),
     case rabbit_queue_type:deliver(Qs, Message, Options, QStates0) of
         {ok, QStates, Actions} ->
             rabbit_global_counters:messages_routed(ProtoVer, length(Qs)),
-            State = process_routing_confirm(Options, Qs,
-                                            State0#state{queue_states = QStates}),
+            QTs1 = sets:from_list(rabbit_amqqueue:queue_types(Qs),
+                                  [{version, 2}]),
+            QTs = sets:union(QTs0, QTs1),
+            State1 = State0#state{queue_states = QStates,
+                                  queue_types_published = QTs},
+            State = process_routing_confirm(Options, Qs, State1),
             %% Actions must be processed after registering confirms as actions may
             %% contain rejections of publishes.
             {ok, handle_queue_actions(Actions, State)};
@@ -2389,10 +2396,18 @@ is_socket_busy(Socket) ->
             false
     end.
 
--spec throttle(boolean(), state()) -> boolean().
-throttle(Conserve, #state{queues_soft_limit_exceeded = QSLE,
-                          cfg = #cfg{published = Published}}) ->
-    Conserve andalso Published orelse
+-spec throttle(sets:set(rabbit_alarm:resource_alarm_source()), state()) ->
+    boolean().
+throttle(BlockedBy, #state{queues_soft_limit_exceeded = QSLE,
+                           queue_types_published = QTs,
+                           cfg = #cfg{published = Published}}) ->
+    Alarmed = sets:fold(
+                fun ({disk, QT}, Acc) ->
+                        Acc orelse sets:is_element(QT, QTs);
+                    (_, _) ->
+                        true
+                end, false, BlockedBy),
+    Alarmed andalso Published orelse
     not sets:is_empty(QSLE) orelse
     credit_flow:blocked().
 
