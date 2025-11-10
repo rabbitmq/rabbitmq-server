@@ -1639,30 +1639,27 @@ drop_head(#?STATE{ra_indexes = Indexes0} = State0, Effects) ->
             #?STATE{cfg = #cfg{dead_letter_handler = DLH},
                     dlx = DlxState} = State = State3,
             {_, DlxEffects} = rabbit_fifo_dlx:discard([Msg], maxlen, DLH, DlxState),
-            {State, add_drop_head_effects(DlxEffects, Effects)};
+            {State, combine_effects(DlxEffects, Effects)};
         empty ->
             {State0, Effects}
     end.
 
-add_drop_head_effects([{mod_call,
-                        rabbit_global_counters,
-                        messages_dead_lettered,
-                        [Reason, rabbit_quorum_queue, Type, NewLen]}],
-                      [{mod_call,
-                        rabbit_global_counters,
-                        messages_dead_lettered,
-                        [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
-    %% combine global counter update effects to avoid bulding a huge list of
-    %% effects if many messages are dropped at the same time as could happen
-    %% when the `max_length' is changed via a configuration update.
+%% combine global counter update effects to avoid bulding a huge list of
+%% effects if many messages are dropped at the same time as could happen
+%% when the `max_length' is changed via a configuration update.
+combine_effects([{mod_call,
+                  rabbit_global_counters,
+                  messages_dead_lettered,
+                  [Reason, rabbit_quorum_queue, Type, NewLen]}],
+                [{mod_call,
+                  rabbit_global_counters,
+                  messages_dead_lettered,
+                  [Reason, rabbit_quorum_queue, Type, PrevLen]} | Rem]) ->
     [{mod_call,
       rabbit_global_counters,
       messages_dead_lettered,
       [Reason, rabbit_quorum_queue, Type, PrevLen + NewLen]} | Rem];
-add_drop_head_effects([{log, _, _}] = DlxEffs, Effs) ->
-    %% dead letter in the correct order
-    Effs ++ DlxEffs;
-add_drop_head_effects(New, Old) ->
+combine_effects(New, Old) ->
     New ++ Old.
 
 maybe_set_msg_ttl(Msg, RaCmdTs, Header,
@@ -2032,13 +2029,21 @@ evaluate_limit(_Index, Result, _BeforeState,
     {Enqs, Effects} = unblock_enqueuers(Enqs0, Effects0),
     {State0#?STATE{enqueuers = Enqs}, Result, Effects};
 evaluate_limit(Index, Result, BeforeState,
-               #?STATE{cfg = #cfg{overflow_strategy = Strategy},
+               #?STATE{cfg = #cfg{overflow_strategy = Strategy,
+                                  dead_letter_handler = DLH},
                        enqueuers = Enqs0} = State0,
                Effects0) ->
     case is_over_limit(State0) of
         true when Strategy == drop_head ->
             {State, Effects} = drop_head(State0, Effects0),
             evaluate_limit(Index, true, BeforeState, State, Effects);
+        false when Strategy == drop_head andalso
+                   Result =:= true andalso
+                   element(1, DLH) =:= at_most_once ->
+            %% At most once dead letter in the correct order.
+            Dropped = BeforeState#?STATE.messages_total - State0#?STATE.messages_total,
+            {LogEffects, Effects} = lists:split(Dropped, Effects0),
+            {State0, Result, Effects ++ lists:reverse(LogEffects)};
         true when Strategy == reject_publish ->
             %% generate send_msg effect for each enqueuer to let them know
             %% they need to block
